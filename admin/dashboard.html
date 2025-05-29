@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表板 - 管理后台</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="page-content" id="dashboard">
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-info">
+                    <h3 id="userCount">--</h3>
+                    <p>注册用户</p>
+                </div>
+                <div class="stat-change" id="userChange">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                    <h3 id="stockCount">--</h3>
+                    <p>股票数量</p>
+                </div>
+                <div class="stat-change" id="stockChange">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔄</div>
+                <div class="stat-info">
+                    <h3 id="dataSuccessRate">--</h3>
+                    <p>数据采集成功率</p>
+                </div>
+                <div class="stat-change" id="dataChange">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-info">
+                    <h3 id="responseTime">--</h3>
+                    <p>平均响应时间</p>
+                </div>
+                <div class="stat-change" id="responseChange">--</div>
+            </div>
+        </div>
+
+        <div class="dashboard-charts">
+            <div class="chart-card">
+                <h3>用户活跃度</h3>
+                <div class="chart-container">
+                    <canvas id="userActivityChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>数据采集状态</h3>
+                <div class="chart-container">
+                    <canvas id="dataCollectionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="recent-activities">
+            <h3>最近活动</h3>
+            <div class="activity-list" id="activityList">
+                <!-- 活动列表将通过JavaScript动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html> 

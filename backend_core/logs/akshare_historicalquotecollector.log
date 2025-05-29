@@ -1,0 +1,520 @@
+2025-05-26 14:15:15,320 - HistoricalQuoteCollector - INFO - 开始采集 20250523 的历史行情数据，共 5720 只股票
+2025-05-26 14:16:32,990 - HistoricalQuoteCollector - INFO - 已处理 100/5720 只股票
+2025-05-26 14:17:50,316 - HistoricalQuoteCollector - INFO - 已处理 200/5720 只股票
+2025-05-26 14:17:55,706 - HistoricalQuoteCollector - WARNING - 股票 002289 在 20250523 没有交易数据
+2025-05-26 14:19:05,052 - HistoricalQuoteCollector - INFO - 已处理 300/5720 只股票
+2025-05-26 14:20:25,500 - HistoricalQuoteCollector - INFO - 已处理 400/5720 只股票
+2025-05-26 14:21:33,335 - HistoricalQuoteCollector - INFO - 已处理 500/5720 只股票
+2025-05-26 14:22:52,792 - HistoricalQuoteCollector - INFO - 已处理 600/5720 只股票
+2025-05-26 14:24:02,697 - HistoricalQuoteCollector - INFO - 已处理 700/5720 只股票
+2025-05-26 14:25:27,692 - HistoricalQuoteCollector - INFO - 已处理 800/5720 只股票
+2025-05-26 14:26:44,098 - HistoricalQuoteCollector - INFO - 已处理 900/5720 只股票
+2025-05-26 14:27:51,782 - HistoricalQuoteCollector - INFO - 已处理 1000/5720 只股票
+2025-05-26 14:29:02,779 - HistoricalQuoteCollector - INFO - 已处理 1100/5720 只股票
+2025-05-26 14:30:13,940 - HistoricalQuoteCollector - INFO - 已处理 1200/5720 只股票
+2025-05-26 14:31:28,032 - HistoricalQuoteCollector - INFO - 已处理 1300/5720 只股票
+2025-05-26 14:32:36,819 - HistoricalQuoteCollector - INFO - 已处理 1400/5720 只股票
+2025-05-26 14:33:52,536 - HistoricalQuoteCollector - INFO - 已处理 1500/5720 只股票
+2025-05-26 14:35:04,428 - HistoricalQuoteCollector - INFO - 已处理 1600/5720 只股票
+2025-05-26 14:36:10,702 - HistoricalQuoteCollector - INFO - 已处理 1700/5720 只股票
+2025-05-26 14:37:20,637 - HistoricalQuoteCollector - INFO - 已处理 1800/5720 只股票
+2025-05-26 14:38:33,088 - HistoricalQuoteCollector - INFO - 已处理 1900/5720 只股票
+2025-05-26 14:39:36,236 - HistoricalQuoteCollector - INFO - 已处理 2000/5720 只股票
+2025-05-26 14:40:50,047 - HistoricalQuoteCollector - INFO - 已处理 2100/5720 只股票
+2025-05-26 14:41:46,925 - HistoricalQuoteCollector - INFO - 已处理 2200/5720 只股票
+2025-05-26 14:42:49,041 - HistoricalQuoteCollector - INFO - 已处理 2300/5720 只股票
+2025-05-26 14:44:11,418 - HistoricalQuoteCollector - INFO - 已处理 2400/5720 只股票
+2025-05-26 14:45:19,947 - HistoricalQuoteCollector - INFO - 已处理 2500/5720 只股票
+2025-05-26 14:46:34,241 - HistoricalQuoteCollector - INFO - 已处理 2600/5720 只股票
+2025-05-26 14:47:52,415 - HistoricalQuoteCollector - INFO - 已处理 2700/5720 只股票
+2025-05-26 14:49:02,145 - HistoricalQuoteCollector - INFO - 已处理 2800/5720 只股票
+2025-05-26 14:50:08,418 - HistoricalQuoteCollector - INFO - 已处理 2900/5720 只股票
+2025-05-26 14:51:17,393 - HistoricalQuoteCollector - INFO - 已处理 3000/5720 只股票
+2025-05-26 14:52:32,476 - HistoricalQuoteCollector - INFO - 已处理 3100/5720 只股票
+2025-05-26 14:53:56,145 - HistoricalQuoteCollector - INFO - 已处理 3200/5720 只股票
+2025-05-26 14:55:47,844 - HistoricalQuoteCollector - INFO - 已处理 3300/5720 只股票
+2025-05-26 14:57:16,415 - HistoricalQuoteCollector - INFO - 已处理 3400/5720 只股票
+2025-05-26 14:58:47,257 - HistoricalQuoteCollector - INFO - 已处理 3500/5720 只股票
+2025-05-26 15:00:12,646 - HistoricalQuoteCollector - INFO - 已处理 3600/5720 只股票
+2025-05-26 15:01:43,621 - HistoricalQuoteCollector - INFO - 已处理 3700/5720 只股票
+2025-05-26 15:03:12,011 - HistoricalQuoteCollector - INFO - 已处理 3800/5720 只股票
+2025-05-26 15:05:09,678 - HistoricalQuoteCollector - INFO - 已处理 3900/5720 只股票
+2025-05-26 15:06:19,052 - HistoricalQuoteCollector - INFO - 已处理 4000/5720 只股票
+2025-05-26 15:07:30,022 - HistoricalQuoteCollector - INFO - 已处理 4100/5720 只股票
+2025-05-26 15:08:35,525 - HistoricalQuoteCollector - INFO - 已处理 4200/5720 只股票
+2025-05-26 15:09:52,249 - HistoricalQuoteCollector - INFO - 已处理 4300/5720 只股票
+2025-05-26 15:11:10,677 - HistoricalQuoteCollector - INFO - 已处理 4400/5720 只股票
+2025-05-26 15:12:22,628 - HistoricalQuoteCollector - INFO - 已处理 4500/5720 只股票
+2025-05-26 15:13:30,087 - HistoricalQuoteCollector - INFO - 已处理 4600/5720 只股票
+2025-05-26 15:14:43,890 - HistoricalQuoteCollector - INFO - 已处理 4700/5720 只股票
+2025-05-26 15:16:01,718 - HistoricalQuoteCollector - INFO - 已处理 4800/5720 只股票
+2025-05-26 15:16:47,957 - HistoricalQuoteCollector - WARNING - 股票 000878 在 20250523 没有交易数据
+2025-05-26 15:17:11,723 - HistoricalQuoteCollector - INFO - 已处理 4900/5720 只股票
+2025-05-26 15:18:30,737 - HistoricalQuoteCollector - INFO - 已处理 5000/5720 只股票
+2025-05-26 15:19:54,491 - HistoricalQuoteCollector - INFO - 已处理 5100/5720 只股票
+2025-05-26 15:21:33,719 - HistoricalQuoteCollector - INFO - 已处理 5200/5720 只股票
+2025-05-26 15:22:48,608 - HistoricalQuoteCollector - INFO - 已处理 5300/5720 只股票
+2025-05-26 15:23:28,943 - HistoricalQuoteCollector - WARNING - 股票 300368 在 20250523 没有交易数据
+2025-05-26 15:23:55,336 - HistoricalQuoteCollector - WARNING - 股票 920027 在 20250523 没有交易数据
+2025-05-26 15:23:56,876 - HistoricalQuoteCollector - WARNING - 股票 833994 在 20250523 没有交易数据
+2025-05-26 15:23:57,577 - HistoricalQuoteCollector - WARNING - 股票 833874 在 20250523 没有交易数据
+2025-05-26 15:23:58,185 - HistoricalQuoteCollector - WARNING - 股票 832317 在 20250523 没有交易数据
+2025-05-26 15:23:58,871 - HistoricalQuoteCollector - WARNING - 股票 688775 在 20250523 没有交易数据
+2025-05-26 15:23:59,471 - HistoricalQuoteCollector - WARNING - 股票 688555 在 20250523 没有交易数据
+2025-05-26 15:24:00,101 - HistoricalQuoteCollector - WARNING - 股票 688086 在 20250523 没有交易数据
+2025-05-26 15:24:01,387 - HistoricalQuoteCollector - WARNING - 股票 603996 在 20250523 没有交易数据
+2025-05-26 15:24:02,029 - HistoricalQuoteCollector - WARNING - 股票 603963 在 20250523 没有交易数据
+2025-05-26 15:24:02,620 - HistoricalQuoteCollector - WARNING - 股票 603603 在 20250523 没有交易数据
+2025-05-26 15:24:03,214 - HistoricalQuoteCollector - WARNING - 股票 603555 在 20250523 没有交易数据
+2025-05-26 15:24:03,823 - HistoricalQuoteCollector - WARNING - 股票 603382 在 20250523 没有交易数据
+2025-05-26 15:24:04,411 - HistoricalQuoteCollector - WARNING - 股票 603306 在 20250523 没有交易数据
+2025-05-26 15:24:04,992 - HistoricalQuoteCollector - WARNING - 股票 603157 在 20250523 没有交易数据
+2025-05-26 15:24:05,640 - HistoricalQuoteCollector - WARNING - 股票 603133 在 20250523 没有交易数据
+2025-05-26 15:24:06,264 - HistoricalQuoteCollector - WARNING - 股票 603049 在 20250523 没有交易数据
+2025-05-26 15:24:07,848 - HistoricalQuoteCollector - WARNING - 股票 603003 在 20250523 没有交易数据
+2025-05-26 15:24:08,483 - HistoricalQuoteCollector - WARNING - 股票 601558 在 20250523 没有交易数据
+2025-05-26 15:24:09,121 - HistoricalQuoteCollector - WARNING - 股票 601299 在 20250523 没有交易数据
+2025-05-26 15:24:09,795 - HistoricalQuoteCollector - WARNING - 股票 601268 在 20250523 没有交易数据
+2025-05-26 15:24:10,408 - HistoricalQuoteCollector - WARNING - 股票 601258 在 20250523 没有交易数据
+2025-05-26 15:24:10,999 - HistoricalQuoteCollector - WARNING - 股票 601028 在 20250523 没有交易数据
+2025-05-26 15:24:11,643 - HistoricalQuoteCollector - WARNING - 股票 600991 在 20250523 没有交易数据
+2025-05-26 15:24:12,327 - HistoricalQuoteCollector - WARNING - 股票 600978 在 20250523 没有交易数据
+2025-05-26 15:24:12,954 - HistoricalQuoteCollector - WARNING - 股票 600899 在 20250523 没有交易数据
+2025-05-26 15:24:13,549 - HistoricalQuoteCollector - WARNING - 股票 600898 在 20250523 没有交易数据
+2025-05-26 15:24:14,163 - HistoricalQuoteCollector - WARNING - 股票 600896 在 20250523 没有交易数据
+2025-05-26 15:24:14,746 - HistoricalQuoteCollector - WARNING - 股票 600891 在 20250523 没有交易数据
+2025-05-26 15:24:15,401 - HistoricalQuoteCollector - WARNING - 股票 600890 在 20250523 没有交易数据
+2025-05-26 15:24:16,052 - HistoricalQuoteCollector - WARNING - 股票 600878 在 20250523 没有交易数据
+2025-05-26 15:24:16,646 - HistoricalQuoteCollector - WARNING - 股票 600870 在 20250523 没有交易数据
+2025-05-26 15:24:17,276 - HistoricalQuoteCollector - WARNING - 股票 600856 在 20250523 没有交易数据
+2025-05-26 15:24:17,871 - HistoricalQuoteCollector - WARNING - 股票 600852 在 20250523 没有交易数据
+2025-05-26 15:24:18,458 - HistoricalQuoteCollector - WARNING - 股票 600849 在 20250523 没有交易数据
+2025-05-26 15:24:19,172 - HistoricalQuoteCollector - WARNING - 股票 600842 在 20250523 没有交易数据
+2025-05-26 15:24:20,396 - HistoricalQuoteCollector - WARNING - 股票 600840 在 20250523 没有交易数据
+2025-05-26 15:24:21,043 - HistoricalQuoteCollector - WARNING - 股票 600837 在 20250523 没有交易数据
+2025-05-26 15:24:21,775 - HistoricalQuoteCollector - WARNING - 股票 600836 在 20250523 没有交易数据
+2025-05-26 15:24:22,371 - HistoricalQuoteCollector - WARNING - 股票 600832 在 20250523 没有交易数据
+2025-05-26 15:24:22,945 - HistoricalQuoteCollector - WARNING - 股票 600823 在 20250523 没有交易数据
+2025-05-26 15:24:23,539 - HistoricalQuoteCollector - WARNING - 股票 600813 在 20250523 没有交易数据
+2025-05-26 15:24:24,128 - HistoricalQuoteCollector - WARNING - 股票 600811 在 20250523 没有交易数据
+2025-05-26 15:24:24,703 - HistoricalQuoteCollector - WARNING - 股票 600806 在 20250523 没有交易数据
+2025-05-26 15:24:25,314 - HistoricalQuoteCollector - WARNING - 股票 600804 在 20250523 没有交易数据
+2025-05-26 15:24:25,893 - HistoricalQuoteCollector - WARNING - 股票 600799 在 20250523 没有交易数据
+2025-05-26 15:24:26,469 - HistoricalQuoteCollector - WARNING - 股票 600788 在 20250523 没有交易数据
+2025-05-26 15:24:27,077 - HistoricalQuoteCollector - WARNING - 股票 600786 在 20250523 没有交易数据
+2025-05-26 15:24:27,685 - HistoricalQuoteCollector - WARNING - 股票 600781 在 20250523 没有交易数据
+2025-05-26 15:24:28,266 - HistoricalQuoteCollector - WARNING - 股票 600777 在 20250523 没有交易数据
+2025-05-26 15:24:28,857 - HistoricalQuoteCollector - WARNING - 股票 600772 在 20250523 没有交易数据
+2025-05-26 15:24:29,490 - HistoricalQuoteCollector - WARNING - 股票 600767 在 20250523 没有交易数据
+2025-05-26 15:24:30,097 - HistoricalQuoteCollector - WARNING - 股票 600766 在 20250523 没有交易数据
+2025-05-26 15:24:30,748 - HistoricalQuoteCollector - WARNING - 股票 600762 在 20250523 没有交易数据
+2025-05-26 15:24:31,578 - HistoricalQuoteCollector - WARNING - 股票 600752 在 20250523 没有交易数据
+2025-05-26 15:24:32,288 - HistoricalQuoteCollector - WARNING - 股票 600747 在 20250523 没有交易数据
+2025-05-26 15:24:33,085 - HistoricalQuoteCollector - WARNING - 股票 600723 在 20250523 没有交易数据
+2025-05-26 15:24:34,182 - HistoricalQuoteCollector - WARNING - 股票 600709 在 20250523 没有交易数据
+2025-05-26 15:24:34,825 - HistoricalQuoteCollector - WARNING - 股票 600705 在 20250523 没有交易数据
+2025-05-26 15:24:35,510 - HistoricalQuoteCollector - WARNING - 股票 600701 在 20250523 没有交易数据
+2025-05-26 15:24:36,307 - HistoricalQuoteCollector - WARNING - 股票 600700 在 20250523 没有交易数据
+2025-05-26 15:24:36,969 - HistoricalQuoteCollector - WARNING - 股票 600695 在 20250523 没有交易数据
+2025-05-26 15:24:37,559 - HistoricalQuoteCollector - WARNING - 股票 600687 在 20250523 没有交易数据
+2025-05-26 15:24:38,134 - HistoricalQuoteCollector - WARNING - 股票 600680 在 20250523 没有交易数据
+2025-05-26 15:24:38,726 - HistoricalQuoteCollector - WARNING - 股票 600677 在 20250523 没有交易数据
+2025-05-26 15:24:39,306 - HistoricalQuoteCollector - WARNING - 股票 600672 在 20250523 没有交易数据
+2025-05-26 15:24:39,968 - HistoricalQuoteCollector - WARNING - 股票 600670 在 20250523 没有交易数据
+2025-05-26 15:24:40,571 - HistoricalQuoteCollector - WARNING - 股票 600669 在 20250523 没有交易数据
+2025-05-26 15:24:41,177 - HistoricalQuoteCollector - WARNING - 股票 600659 在 20250523 没有交易数据
+2025-05-26 15:24:41,935 - HistoricalQuoteCollector - WARNING - 股票 600656 在 20250523 没有交易数据
+2025-05-26 15:24:42,592 - HistoricalQuoteCollector - WARNING - 股票 600652 在 20250523 没有交易数据
+2025-05-26 15:24:43,177 - HistoricalQuoteCollector - WARNING - 股票 600647 在 20250523 没有交易数据
+2025-05-26 15:24:43,798 - HistoricalQuoteCollector - WARNING - 股票 600646 在 20250523 没有交易数据
+2025-05-26 15:24:44,387 - HistoricalQuoteCollector - WARNING - 股票 600634 在 20250523 没有交易数据
+2025-05-26 15:24:45,063 - HistoricalQuoteCollector - WARNING - 股票 600632 在 20250523 没有交易数据
+2025-05-26 15:24:45,753 - HistoricalQuoteCollector - WARNING - 股票 600631 在 20250523 没有交易数据
+2025-05-26 15:24:46,596 - HistoricalQuoteCollector - WARNING - 股票 600627 在 20250523 没有交易数据
+2025-05-26 15:24:49,306 - HistoricalQuoteCollector - WARNING - 股票 600625 在 20250523 没有交易数据
+2025-05-26 15:24:50,186 - HistoricalQuoteCollector - WARNING - 股票 600614 在 20250523 没有交易数据
+2025-05-26 15:24:50,928 - HistoricalQuoteCollector - WARNING - 股票 600607 在 20250523 没有交易数据
+2025-05-26 15:24:51,854 - HistoricalQuoteCollector - WARNING - 股票 600591 在 20250523 没有交易数据
+2025-05-26 15:24:52,640 - HistoricalQuoteCollector - WARNING - 股票 600565 在 20250523 没有交易数据
+2025-05-26 15:24:54,980 - HistoricalQuoteCollector - WARNING - 股票 600555 在 20250523 没有交易数据
+2025-05-26 15:24:57,377 - HistoricalQuoteCollector - WARNING - 股票 600553 在 20250523 没有交易数据
+2025-05-26 15:24:58,643 - HistoricalQuoteCollector - WARNING - 股票 600532 在 20250523 没有交易数据
+2025-05-26 15:24:59,687 - HistoricalQuoteCollector - WARNING - 股票 600485 在 20250523 没有交易数据
+2025-05-26 15:25:00,606 - HistoricalQuoteCollector - WARNING - 股票 600472 在 20250523 没有交易数据
+2025-05-26 15:25:01,510 - HistoricalQuoteCollector - WARNING - 股票 600466 在 20250523 没有交易数据
+2025-05-26 15:25:02,540 - HistoricalQuoteCollector - WARNING - 股票 600462 在 20250523 没有交易数据
+2025-05-26 15:25:03,840 - HistoricalQuoteCollector - WARNING - 股票 600432 在 20250523 没有交易数据
+2025-05-26 15:25:05,091 - HistoricalQuoteCollector - WARNING - 股票 600401 在 20250523 没有交易数据
+2025-05-26 15:25:06,352 - HistoricalQuoteCollector - WARNING - 股票 600393 在 20250523 没有交易数据
+2025-05-26 15:25:07,227 - HistoricalQuoteCollector - WARNING - 股票 600387 在 20250523 没有交易数据
+2025-05-26 15:25:07,934 - HistoricalQuoteCollector - WARNING - 股票 600385 在 20250523 没有交易数据
+2025-05-26 15:25:09,612 - HistoricalQuoteCollector - WARNING - 股票 600358 在 20250523 没有交易数据
+2025-05-26 15:25:10,457 - HistoricalQuoteCollector - WARNING - 股票 600357 在 20250523 没有交易数据
+2025-05-26 15:25:11,058 - HistoricalQuoteCollector - WARNING - 股票 600321 在 20250523 没有交易数据
+2025-05-26 15:25:11,678 - HistoricalQuoteCollector - WARNING - 股票 600317 在 20250523 没有交易数据
+2025-05-26 15:25:12,347 - HistoricalQuoteCollector - WARNING - 股票 600311 在 20250523 没有交易数据
+2025-05-26 15:25:13,003 - HistoricalQuoteCollector - WARNING - 股票 600306 在 20250523 没有交易数据
+2025-05-26 15:25:13,577 - HistoricalQuoteCollector - WARNING - 股票 600297 在 20250523 没有交易数据
+2025-05-26 15:25:14,167 - HistoricalQuoteCollector - WARNING - 股票 600296 在 20250523 没有交易数据
+2025-05-26 15:25:14,696 - HistoricalQuoteCollector - WARNING - 股票 600291 在 20250523 没有交易数据
+2025-05-26 15:25:15,386 - HistoricalQuoteCollector - WARNING - 股票 600290 在 20250523 没有交易数据
+2025-05-26 15:25:15,929 - HistoricalQuoteCollector - WARNING - 股票 600286 在 20250523 没有交易数据
+2025-05-26 15:25:16,473 - HistoricalQuoteCollector - WARNING - 股票 600277 在 20250523 没有交易数据
+2025-05-26 15:25:16,994 - HistoricalQuoteCollector - WARNING - 股票 600275 在 20250523 没有交易数据
+2025-05-26 15:25:17,812 - HistoricalQuoteCollector - WARNING - 股票 600270 在 20250523 没有交易数据
+2025-05-26 15:25:18,504 - HistoricalQuoteCollector - WARNING - 股票 600263 在 20250523 没有交易数据
+2025-05-26 15:25:19,287 - HistoricalQuoteCollector - WARNING - 股票 600260 在 20250523 没有交易数据
+2025-05-26 15:25:20,159 - HistoricalQuoteCollector - WARNING - 股票 600253 在 20250523 没有交易数据
+2025-05-26 15:25:20,862 - HistoricalQuoteCollector - WARNING - 股票 600247 在 20250523 没有交易数据
+2025-05-26 15:25:21,580 - HistoricalQuoteCollector - WARNING - 股票 600242 在 20250523 没有交易数据
+2025-05-26 15:25:22,229 - HistoricalQuoteCollector - WARNING - 股票 600240 在 20250523 没有交易数据
+2025-05-26 15:25:22,862 - HistoricalQuoteCollector - WARNING - 股票 600225 在 20250523 没有交易数据
+2025-05-26 15:25:23,582 - HistoricalQuoteCollector - WARNING - 股票 600220 在 20250523 没有交易数据
+2025-05-26 15:25:24,441 - HistoricalQuoteCollector - WARNING - 股票 600213 在 20250523 没有交易数据
+2025-05-26 15:25:25,051 - HistoricalQuoteCollector - WARNING - 股票 600209 在 20250523 没有交易数据
+2025-05-26 15:25:25,990 - HistoricalQuoteCollector - WARNING - 股票 600205 在 20250523 没有交易数据
+2025-05-26 15:25:26,685 - HistoricalQuoteCollector - WARNING - 股票 600181 在 20250523 没有交易数据
+2025-05-26 15:25:27,421 - HistoricalQuoteCollector - WARNING - 股票 600175 在 20250523 没有交易数据
+2025-05-26 15:25:28,124 - HistoricalQuoteCollector - WARNING - 股票 600146 在 20250523 没有交易数据
+2025-05-26 15:25:28,757 - HistoricalQuoteCollector - WARNING - 股票 600145 在 20250523 没有交易数据
+2025-05-26 15:25:29,379 - HistoricalQuoteCollector - WARNING - 股票 600139 在 20250523 没有交易数据
+2025-05-26 15:25:30,098 - HistoricalQuoteCollector - WARNING - 股票 600122 在 20250523 没有交易数据
+2025-05-26 15:25:30,775 - HistoricalQuoteCollector - WARNING - 股票 600112 在 20250523 没有交易数据
+2025-05-26 15:25:31,422 - HistoricalQuoteCollector - WARNING - 股票 600102 在 20250523 没有交易数据
+2025-05-26 15:25:32,218 - HistoricalQuoteCollector - WARNING - 股票 600093 在 20250523 没有交易数据
+2025-05-26 15:25:33,087 - HistoricalQuoteCollector - WARNING - 股票 600092 在 20250523 没有交易数据
+2025-05-26 15:25:34,401 - HistoricalQuoteCollector - WARNING - 股票 600091 在 20250523 没有交易数据
+2025-05-26 15:25:35,078 - HistoricalQuoteCollector - WARNING - 股票 600090 在 20250523 没有交易数据
+2025-05-26 15:25:36,262 - HistoricalQuoteCollector - WARNING - 股票 600087 在 20250523 没有交易数据
+2025-05-26 15:25:36,950 - HistoricalQuoteCollector - WARNING - 股票 600086 在 20250523 没有交易数据
+2025-05-26 15:25:37,675 - HistoricalQuoteCollector - WARNING - 股票 600083 在 20250523 没有交易数据
+2025-05-26 15:25:38,790 - HistoricalQuoteCollector - WARNING - 股票 600077 在 20250523 没有交易数据
+2025-05-26 15:25:39,641 - HistoricalQuoteCollector - WARNING - 股票 600074 在 20250523 没有交易数据
+2025-05-26 15:25:40,611 - HistoricalQuoteCollector - WARNING - 股票 600070 在 20250523 没有交易数据
+2025-05-26 15:25:41,598 - HistoricalQuoteCollector - WARNING - 股票 600069 在 20250523 没有交易数据
+2025-05-26 15:25:42,315 - HistoricalQuoteCollector - WARNING - 股票 600068 在 20250523 没有交易数据
+2025-05-26 15:25:43,044 - HistoricalQuoteCollector - WARNING - 股票 600065 在 20250523 没有交易数据
+2025-05-26 15:25:43,918 - HistoricalQuoteCollector - WARNING - 股票 600005 在 20250523 没有交易数据
+2025-05-26 15:25:44,788 - HistoricalQuoteCollector - WARNING - 股票 600003 在 20250523 没有交易数据
+2025-05-26 15:25:45,496 - HistoricalQuoteCollector - WARNING - 股票 600002 在 20250523 没有交易数据
+2025-05-26 15:25:46,151 - HistoricalQuoteCollector - WARNING - 股票 600001 在 20250523 没有交易数据
+2025-05-26 15:25:46,894 - HistoricalQuoteCollector - WARNING - 股票 301590 在 20250523 没有交易数据
+2025-05-26 15:25:48,272 - HistoricalQuoteCollector - WARNING - 股票 301033 在 20250523 没有交易数据
+2025-05-26 15:25:48,876 - HistoricalQuoteCollector - WARNING - 股票 300799 在 20250523 没有交易数据
+2025-05-26 15:25:49,535 - HistoricalQuoteCollector - WARNING - 股票 300742 在 20250523 没有交易数据
+2025-05-26 15:25:50,287 - HistoricalQuoteCollector - WARNING - 股票 300691 在 20250523 没有交易数据
+2025-05-26 15:25:51,221 - HistoricalQuoteCollector - WARNING - 股票 300672 在 20250523 没有交易数据
+2025-05-26 15:25:52,000 - HistoricalQuoteCollector - WARNING - 股票 300630 在 20250523 没有交易数据
+2025-05-26 15:25:52,865 - HistoricalQuoteCollector - WARNING - 股票 300526 在 20250523 没有交易数据
+2025-05-26 15:25:53,572 - HistoricalQuoteCollector - WARNING - 股票 300495 在 20250523 没有交易数据
+2025-05-26 15:25:54,307 - HistoricalQuoteCollector - WARNING - 股票 300431 在 20250523 没有交易数据
+2025-05-26 15:25:55,927 - HistoricalQuoteCollector - WARNING - 股票 300392 在 20250523 没有交易数据
+2025-05-26 15:25:56,712 - HistoricalQuoteCollector - WARNING - 股票 300372 在 20250523 没有交易数据
+2025-05-26 15:25:57,481 - HistoricalQuoteCollector - WARNING - 股票 300367 在 20250523 没有交易数据
+2025-05-26 15:25:58,409 - HistoricalQuoteCollector - WARNING - 股票 300362 在 20250523 没有交易数据
+2025-05-26 15:25:59,144 - HistoricalQuoteCollector - WARNING - 股票 300356 在 20250523 没有交易数据
+2025-05-26 15:26:00,084 - HistoricalQuoteCollector - WARNING - 股票 300336 在 20250523 没有交易数据
+2025-05-26 15:26:00,802 - HistoricalQuoteCollector - WARNING - 股票 300330 在 20250523 没有交易数据
+2025-05-26 15:26:01,548 - HistoricalQuoteCollector - WARNING - 股票 300325 在 20250523 没有交易数据
+2025-05-26 15:26:02,538 - HistoricalQuoteCollector - WARNING - 股票 300312 在 20250523 没有交易数据
+2025-05-26 15:26:03,324 - HistoricalQuoteCollector - WARNING - 股票 300309 在 20250523 没有交易数据
+2025-05-26 15:26:04,125 - HistoricalQuoteCollector - WARNING - 股票 300307 在 20250523 没有交易数据
+2025-05-26 15:26:05,074 - HistoricalQuoteCollector - WARNING - 股票 300297 在 20250523 没有交易数据
+2025-05-26 15:26:06,081 - HistoricalQuoteCollector - WARNING - 股票 300282 在 20250523 没有交易数据
+2025-05-26 15:26:06,893 - HistoricalQuoteCollector - WARNING - 股票 300280 在 20250523 没有交易数据
+2025-05-26 15:26:08,019 - HistoricalQuoteCollector - WARNING - 股票 300273 在 20250523 没有交易数据
+2025-05-26 15:26:08,892 - HistoricalQuoteCollector - WARNING - 股票 300262 在 20250523 没有交易数据
+2025-05-26 15:26:09,880 - HistoricalQuoteCollector - WARNING - 股票 300225 在 20250523 没有交易数据
+2025-05-26 15:26:10,789 - HistoricalQuoteCollector - WARNING - 股票 300216 在 20250523 没有交易数据
+2025-05-26 15:26:11,756 - HistoricalQuoteCollector - WARNING - 股票 300208 在 20250523 没有交易数据
+2025-05-26 15:26:12,592 - HistoricalQuoteCollector - WARNING - 股票 300202 在 20250523 没有交易数据
+2025-05-26 15:26:13,453 - HistoricalQuoteCollector - WARNING - 股票 300186 在 20250523 没有交易数据
+2025-05-26 15:26:15,160 - HistoricalQuoteCollector - WARNING - 股票 300178 在 20250523 没有交易数据
+2025-05-26 15:26:16,291 - HistoricalQuoteCollector - WARNING - 股票 300156 在 20250523 没有交易数据
+2025-05-26 15:26:17,995 - HistoricalQuoteCollector - WARNING - 股票 300117 在 20250523 没有交易数据
+2025-05-26 15:26:18,862 - HistoricalQuoteCollector - WARNING - 股票 300116 在 20250523 没有交易数据
+2025-05-26 15:26:20,094 - HistoricalQuoteCollector - WARNING - 股票 300108 在 20250523 没有交易数据
+2025-05-26 15:26:21,308 - HistoricalQuoteCollector - WARNING - 股票 300104 在 20250523 没有交易数据
+2025-05-26 15:26:22,438 - HistoricalQuoteCollector - WARNING - 股票 300090 在 20250523 没有交易数据
+2025-05-26 15:26:23,359 - HistoricalQuoteCollector - WARNING - 股票 300089 在 20250523 没有交易数据
+2025-05-26 15:26:24,596 - HistoricalQuoteCollector - WARNING - 股票 300064 在 20250523 没有交易数据
+2025-05-26 15:26:25,409 - HistoricalQuoteCollector - WARNING - 股票 300038 在 20250523 没有交易数据
+2025-05-26 15:26:26,274 - HistoricalQuoteCollector - WARNING - 股票 300028 在 20250523 没有交易数据
+2025-05-26 15:26:27,102 - HistoricalQuoteCollector - WARNING - 股票 300023 在 20250523 没有交易数据
+2025-05-26 15:26:29,625 - HistoricalQuoteCollector - WARNING - 股票 002781 在 20250523 没有交易数据
+2025-05-26 15:26:30,557 - HistoricalQuoteCollector - WARNING - 股票 002776 在 20250523 没有交易数据
+2025-05-26 15:26:31,265 - HistoricalQuoteCollector - WARNING - 股票 002770 在 20250523 没有交易数据
+2025-05-26 15:26:32,363 - HistoricalQuoteCollector - WARNING - 股票 002751 在 20250523 没有交易数据
+2025-05-26 15:26:33,263 - HistoricalQuoteCollector - WARNING - 股票 002750 在 20250523 没有交易数据
+2025-05-26 15:26:33,934 - HistoricalQuoteCollector - WARNING - 股票 002740 在 20250523 没有交易数据
+2025-05-26 15:26:34,671 - HistoricalQuoteCollector - WARNING - 股票 002711 在 20250523 没有交易数据
+2025-05-26 15:26:35,673 - HistoricalQuoteCollector - WARNING - 股票 002708 在 20250523 没有交易数据
+2025-05-26 15:26:36,276 - HistoricalQuoteCollector - WARNING - 股票 002699 在 20250523 没有交易数据
+2025-05-26 15:26:37,010 - HistoricalQuoteCollector - WARNING - 股票 002684 在 20250523 没有交易数据
+2025-05-26 15:26:37,834 - HistoricalQuoteCollector - WARNING - 股票 002680 在 20250523 没有交易数据
+2025-05-26 15:26:38,378 - HistoricalQuoteCollector - WARNING - 股票 002665 在 20250523 没有交易数据
+2025-05-26 15:26:38,990 - HistoricalQuoteCollector - WARNING - 股票 002621 在 20250523 没有交易数据
+2025-05-26 15:26:39,565 - HistoricalQuoteCollector - WARNING - 股票 002619 在 20250523 没有交易数据
+2025-05-26 15:26:40,140 - HistoricalQuoteCollector - WARNING - 股票 002618 在 20250523 没有交易数据
+2025-05-26 15:26:40,704 - HistoricalQuoteCollector - WARNING - 股票 002610 在 20250523 没有交易数据
+2025-05-26 15:26:41,257 - HistoricalQuoteCollector - WARNING - 股票 002604 在 20250523 没有交易数据
+2025-05-26 15:26:41,829 - HistoricalQuoteCollector - WARNING - 股票 002509 在 20250523 没有交易数据
+2025-05-26 15:26:42,474 - HistoricalQuoteCollector - WARNING - 股票 002505 在 20250523 没有交易数据
+2025-05-26 15:26:43,047 - HistoricalQuoteCollector - WARNING - 股票 002504 在 20250523 没有交易数据
+2025-05-26 15:26:43,695 - HistoricalQuoteCollector - WARNING - 股票 002503 在 20250523 没有交易数据
+2025-05-26 15:26:44,303 - HistoricalQuoteCollector - WARNING - 股票 002502 在 20250523 没有交易数据
+2025-05-26 15:26:44,894 - HistoricalQuoteCollector - WARNING - 股票 002499 在 20250523 没有交易数据
+2025-05-26 15:26:46,434 - HistoricalQuoteCollector - WARNING - 股票 002477 在 20250523 没有交易数据
+2025-05-26 15:26:47,006 - HistoricalQuoteCollector - WARNING - 股票 002473 在 20250523 没有交易数据
+2025-05-26 15:26:47,556 - HistoricalQuoteCollector - WARNING - 股票 002464 在 20250523 没有交易数据
+2025-05-26 15:26:48,079 - HistoricalQuoteCollector - WARNING - 股票 002450 在 20250523 没有交易数据
+2025-05-26 15:26:48,672 - HistoricalQuoteCollector - WARNING - 股票 002447 在 20250523 没有交易数据
+2025-05-26 15:26:49,342 - HistoricalQuoteCollector - WARNING - 股票 002435 在 20250523 没有交易数据
+2025-05-26 15:26:49,918 - HistoricalQuoteCollector - WARNING - 股票 002433 在 20250523 没有交易数据
+2025-05-26 15:26:50,461 - HistoricalQuoteCollector - WARNING - 股票 002417 在 20250523 没有交易数据
+2025-05-26 15:26:50,985 - HistoricalQuoteCollector - WARNING - 股票 002411 在 20250523 没有交易数据
+2025-05-26 15:26:51,513 - HistoricalQuoteCollector - WARNING - 股票 002359 在 20250523 没有交易数据
+2025-05-26 15:26:52,109 - HistoricalQuoteCollector - WARNING - 股票 002341 在 20250523 没有交易数据
+2025-05-26 15:26:52,660 - HistoricalQuoteCollector - WARNING - 股票 002336 在 20250523 没有交易数据
+2025-05-26 15:26:53,314 - HistoricalQuoteCollector - WARNING - 股票 002325 在 20250523 没有交易数据
+2025-05-26 15:26:54,186 - HistoricalQuoteCollector - WARNING - 股票 002308 在 20250523 没有交易数据
+2025-05-26 15:26:54,842 - HistoricalQuoteCollector - WARNING - 股票 002288 在 20250523 没有交易数据
+2025-05-26 15:26:55,512 - HistoricalQuoteCollector - WARNING - 股票 002280 在 20250523 没有交易数据
+2025-05-26 15:26:56,347 - HistoricalQuoteCollector - WARNING - 股票 002260 在 20250523 没有交易数据
+2025-05-26 15:26:57,100 - HistoricalQuoteCollector - WARNING - 股票 002220 在 20250523 没有交易数据
+2025-05-26 15:26:58,021 - HistoricalQuoteCollector - WARNING - 股票 002147 在 20250523 没有交易数据
+2025-05-26 15:26:58,748 - HistoricalQuoteCollector - WARNING - 股票 002143 在 20250523 没有交易数据
+2025-05-26 15:26:59,389 - HistoricalQuoteCollector - WARNING - 股票 002118 在 20250523 没有交易数据
+2025-05-26 15:27:00,021 - HistoricalQuoteCollector - WARNING - 股票 002113 在 20250523 没有交易数据
+2025-05-26 15:27:00,794 - HistoricalQuoteCollector - WARNING - 股票 002089 在 20250523 没有交易数据
+2025-05-26 15:27:01,553 - HistoricalQuoteCollector - WARNING - 股票 002087 在 20250523 没有交易数据
+2025-05-26 15:27:02,338 - HistoricalQuoteCollector - WARNING - 股票 002071 在 20250523 没有交易数据
+2025-05-26 15:27:03,460 - HistoricalQuoteCollector - WARNING - 股票 002070 在 20250523 没有交易数据
+2025-05-26 15:27:04,238 - HistoricalQuoteCollector - WARNING - 股票 002018 在 20250523 没有交易数据
+2025-05-26 15:27:05,398 - HistoricalQuoteCollector - WARNING - 股票 002013 在 20250523 没有交易数据
+2025-05-26 15:27:06,573 - HistoricalQuoteCollector - WARNING - 股票 002002 在 20250523 没有交易数据
+2025-05-26 15:27:07,344 - HistoricalQuoteCollector - WARNING - 股票 001390 在 20250523 没有交易数据
+2025-05-26 15:27:08,081 - HistoricalQuoteCollector - WARNING - 股票 000996 在 20250523 没有交易数据
+2025-05-26 15:27:08,827 - HistoricalQuoteCollector - WARNING - 股票 000982 在 20250523 没有交易数据
+2025-05-26 15:27:09,445 - HistoricalQuoteCollector - WARNING - 股票 000979 在 20250523 没有交易数据
+2025-05-26 15:27:10,253 - HistoricalQuoteCollector - WARNING - 股票 000976 在 20250523 没有交易数据
+2025-05-26 15:27:10,786 - HistoricalQuoteCollector - WARNING - 股票 000971 在 20250523 没有交易数据
+2025-05-26 15:27:11,329 - HistoricalQuoteCollector - WARNING - 股票 000961 在 20250523 没有交易数据
+2025-05-26 15:27:11,869 - HistoricalQuoteCollector - WARNING - 股票 000956 在 20250523 没有交易数据
+2025-05-26 15:27:12,494 - HistoricalQuoteCollector - WARNING - 股票 000939 在 20250523 没有交易数据
+2025-05-26 15:27:13,072 - HistoricalQuoteCollector - WARNING - 股票 000918 在 20250523 没有交易数据
+2025-05-26 15:27:13,674 - HistoricalQuoteCollector - WARNING - 股票 000916 在 20250523 没有交易数据
+2025-05-26 15:27:14,302 - HistoricalQuoteCollector - WARNING - 股票 000866 在 20250523 没有交易数据
+2025-05-26 15:27:14,934 - HistoricalQuoteCollector - WARNING - 股票 000861 在 20250523 没有交易数据
+2025-05-26 15:27:15,730 - HistoricalQuoteCollector - WARNING - 股票 000836 在 20250523 没有交易数据
+2025-05-26 15:27:16,346 - HistoricalQuoteCollector - WARNING - 股票 000835 在 20250523 没有交易数据
+2025-05-26 15:27:17,085 - HistoricalQuoteCollector - WARNING - 股票 000832 在 20250523 没有交易数据
+2025-05-26 15:27:18,036 - HistoricalQuoteCollector - WARNING - 股票 000827 在 20250523 没有交易数据
+2025-05-26 15:27:18,749 - HistoricalQuoteCollector - WARNING - 股票 000817 在 20250523 没有交易数据
+2025-05-26 15:27:19,435 - HistoricalQuoteCollector - WARNING - 股票 000806 在 20250523 没有交易数据
+2025-05-26 15:27:20,319 - HistoricalQuoteCollector - WARNING - 股票 000805 在 20250523 没有交易数据
+2025-05-26 15:27:21,117 - HistoricalQuoteCollector - WARNING - 股票 000787 在 20250523 没有交易数据
+2025-05-26 15:27:21,835 - HistoricalQuoteCollector - WARNING - 股票 000780 在 20250523 没有交易数据
+2025-05-26 15:27:22,543 - HistoricalQuoteCollector - WARNING - 股票 000769 在 20250523 没有交易数据
+2025-05-26 15:27:23,255 - HistoricalQuoteCollector - WARNING - 股票 000765 在 20250523 没有交易数据
+2025-05-26 15:27:23,944 - HistoricalQuoteCollector - WARNING - 股票 000763 在 20250523 没有交易数据
+2025-05-26 15:27:24,610 - HistoricalQuoteCollector - WARNING - 股票 000760 在 20250523 没有交易数据
+2025-05-26 15:27:25,339 - HistoricalQuoteCollector - WARNING - 股票 000748 在 20250523 没有交易数据
+2025-05-26 15:27:26,079 - HistoricalQuoteCollector - WARNING - 股票 000732 在 20250523 没有交易数据
+2025-05-26 15:27:26,771 - HistoricalQuoteCollector - WARNING - 股票 000730 在 20250523 没有交易数据
+2025-05-26 15:27:27,494 - HistoricalQuoteCollector - WARNING - 股票 000699 在 20250523 没有交易数据
+2025-05-26 15:27:28,240 - HistoricalQuoteCollector - WARNING - 股票 000693 在 20250523 没有交易数据
+2025-05-26 15:27:28,955 - HistoricalQuoteCollector - WARNING - 股票 000689 在 20250523 没有交易数据
+2025-05-26 15:27:29,668 - HistoricalQuoteCollector - WARNING - 股票 000687 在 20250523 没有交易数据
+2025-05-26 15:27:30,382 - HistoricalQuoteCollector - WARNING - 股票 000675 在 20250523 没有交易数据
+2025-05-26 15:27:31,235 - HistoricalQuoteCollector - WARNING - 股票 000673 在 20250523 没有交易数据
+2025-05-26 15:27:32,005 - HistoricalQuoteCollector - WARNING - 股票 000671 在 20250523 没有交易数据
+2025-05-26 15:27:32,912 - HistoricalQuoteCollector - WARNING - 股票 000667 在 20250523 没有交易数据
+2025-05-26 15:27:33,603 - HistoricalQuoteCollector - WARNING - 股票 000666 在 20250523 没有交易数据
+2025-05-26 15:27:34,513 - HistoricalQuoteCollector - WARNING - 股票 000662 在 20250523 没有交易数据
+2025-05-26 15:27:35,177 - HistoricalQuoteCollector - WARNING - 股票 000660 在 20250523 没有交易数据
+2025-05-26 15:27:35,965 - HistoricalQuoteCollector - WARNING - 股票 000658 在 20250523 没有交易数据
+2025-05-26 15:27:36,758 - HistoricalQuoteCollector - WARNING - 股票 000653 在 20250523 没有交易数据
+2025-05-26 15:27:37,564 - HistoricalQuoteCollector - WARNING - 股票 000627 在 20250523 没有交易数据
+2025-05-26 15:27:38,314 - HistoricalQuoteCollector - WARNING - 股票 000622 在 20250523 没有交易数据
+2025-05-26 15:27:39,067 - HistoricalQuoteCollector - WARNING - 股票 000621 在 20250523 没有交易数据
+2025-05-26 15:27:39,790 - HistoricalQuoteCollector - WARNING - 股票 000618 在 20250523 没有交易数据
+2025-05-26 15:27:40,485 - HistoricalQuoteCollector - WARNING - 股票 000616 在 20250523 没有交易数据
+2025-05-26 15:27:41,195 - HistoricalQuoteCollector - WARNING - 股票 000613 在 20250523 没有交易数据
+2025-05-26 15:27:41,972 - HistoricalQuoteCollector - WARNING - 股票 000611 在 20250523 没有交易数据
+2025-05-26 15:27:42,684 - HistoricalQuoteCollector - WARNING - 股票 000606 在 20250523 没有交易数据
+2025-05-26 15:27:43,625 - HistoricalQuoteCollector - WARNING - 股票 000602 在 20250523 没有交易数据
+2025-05-26 15:27:45,865 - HistoricalQuoteCollector - WARNING - 股票 000594 在 20250523 没有交易数据
+2025-05-26 15:27:46,831 - HistoricalQuoteCollector - WARNING - 股票 000588 在 20250523 没有交易数据
+2025-05-26 15:27:47,588 - HistoricalQuoteCollector - WARNING - 股票 000587 在 20250523 没有交易数据
+2025-05-26 15:27:48,375 - HistoricalQuoteCollector - WARNING - 股票 000585 在 20250523 没有交易数据
+2025-05-26 15:27:49,491 - HistoricalQuoteCollector - WARNING - 股票 000584 在 20250523 没有交易数据
+2025-05-26 15:27:50,198 - HistoricalQuoteCollector - WARNING - 股票 000583 在 20250523 没有交易数据
+2025-05-26 15:27:50,910 - HistoricalQuoteCollector - WARNING - 股票 000578 在 20250523 没有交易数据
+2025-05-26 15:27:52,055 - HistoricalQuoteCollector - WARNING - 股票 000569 在 20250523 没有交易数据
+2025-05-26 15:27:52,840 - HistoricalQuoteCollector - WARNING - 股票 000562 在 20250523 没有交易数据
+2025-05-26 15:27:53,573 - HistoricalQuoteCollector - WARNING - 股票 000556 在 20250523 没有交易数据
+2025-05-26 15:27:55,058 - HistoricalQuoteCollector - WARNING - 股票 000549 在 20250523 没有交易数据
+2025-05-26 15:27:56,098 - HistoricalQuoteCollector - WARNING - 股票 000542 在 20250523 没有交易数据
+2025-05-26 15:27:57,009 - HistoricalQuoteCollector - WARNING - 股票 000540 在 20250523 没有交易数据
+2025-05-26 15:27:57,935 - HistoricalQuoteCollector - WARNING - 股票 000535 在 20250523 没有交易数据
+2025-05-26 15:27:58,804 - HistoricalQuoteCollector - WARNING - 股票 000527 在 20250523 没有交易数据
+2025-05-26 15:27:59,573 - HistoricalQuoteCollector - WARNING - 股票 000522 在 20250523 没有交易数据
+2025-05-26 15:28:00,494 - HistoricalQuoteCollector - WARNING - 股票 000515 在 20250523 没有交易数据
+2025-05-26 15:28:01,235 - HistoricalQuoteCollector - WARNING - 股票 000511 在 20250523 没有交易数据
+2025-05-26 15:28:02,148 - HistoricalQuoteCollector - WARNING - 股票 000508 在 20250523 没有交易数据
+2025-05-26 15:28:02,865 - HistoricalQuoteCollector - WARNING - 股票 000502 在 20250523 没有交易数据
+2025-05-26 15:28:03,565 - HistoricalQuoteCollector - WARNING - 股票 000418 在 20250523 没有交易数据
+2025-05-26 15:28:04,256 - HistoricalQuoteCollector - WARNING - 股票 000416 在 20250523 没有交易数据
+2025-05-26 15:28:05,029 - HistoricalQuoteCollector - WARNING - 股票 000413 在 20250523 没有交易数据
+2025-05-26 15:28:05,831 - HistoricalQuoteCollector - WARNING - 股票 000412 在 20250523 没有交易数据
+2025-05-26 15:28:06,654 - HistoricalQuoteCollector - WARNING - 股票 000406 在 20250523 没有交易数据
+2025-05-26 15:28:07,462 - HistoricalQuoteCollector - WARNING - 股票 000405 在 20250523 没有交易数据
+2025-05-26 15:28:08,222 - HistoricalQuoteCollector - WARNING - 股票 000151 在 20250523 没有交易数据
+2025-05-26 15:28:08,971 - HistoricalQuoteCollector - WARNING - 股票 000150 在 20250523 没有交易数据
+2025-05-26 15:28:09,714 - HistoricalQuoteCollector - WARNING - 股票 000047 在 20250523 没有交易数据
+2025-05-26 15:28:10,455 - HistoricalQuoteCollector - WARNING - 股票 000046 在 20250523 没有交易数据
+2025-05-26 15:28:11,239 - HistoricalQuoteCollector - WARNING - 股票 000040 在 20250523 没有交易数据
+2025-05-26 15:28:11,995 - HistoricalQuoteCollector - WARNING - 股票 000038 在 20250523 没有交易数据
+2025-05-26 15:28:12,699 - HistoricalQuoteCollector - WARNING - 股票 000033 在 20250523 没有交易数据
+2025-05-26 15:28:13,373 - HistoricalQuoteCollector - WARNING - 股票 000024 在 20250523 没有交易数据
+2025-05-26 15:28:14,043 - HistoricalQuoteCollector - WARNING - 股票 000023 在 20250523 没有交易数据
+2025-05-26 15:28:14,737 - HistoricalQuoteCollector - WARNING - 股票 000018 在 20250523 没有交易数据
+2025-05-26 15:28:15,420 - HistoricalQuoteCollector - WARNING - 股票 000015 在 20250523 没有交易数据
+2025-05-26 15:28:16,169 - HistoricalQuoteCollector - WARNING - 股票 000013 在 20250523 没有交易数据
+2025-05-26 15:28:16,840 - HistoricalQuoteCollector - WARNING - 股票 000005 在 20250523 没有交易数据
+2025-05-26 15:28:17,527 - HistoricalQuoteCollector - WARNING - 股票 000003 在 20250523 没有交易数据
+2025-05-26 15:28:17,527 - HistoricalQuoteCollector - INFO - 历史行情数据采集完成。成功: 5388, 失败: 0
+2025-05-27 16:35:46,937 - HistoricalQuoteCollector - INFO - 开始采集 20250526 的历史行情数据，共 5720 只股票
+2025-05-27 16:36:51,913 - HistoricalQuoteCollector - INFO - 已处理 100/5720 只股票
+2025-05-27 16:37:38,481 - HistoricalQuoteCollector - INFO - 接收到中断信号，正在安全退出...
+2025-05-27 16:37:38,590 - HistoricalQuoteCollector - INFO - 检测到中断信号，正在安全退出...
+2025-05-27 16:37:38,590 - HistoricalQuoteCollector - INFO - 历史行情数据采集完成。成功: 180, 失败: 0
+2025-05-27 16:37:38,590 - HistoricalQuoteCollector - INFO - 程序被用户中断
+2025-05-27 16:40:59,010 - HistoricalQuoteCollector - INFO - 开始采集 20250526 的历史行情数据，共 5720 只股票
+2025-05-27 16:42:00,754 - HistoricalQuoteCollector - INFO - 已处理 100/5720 只股票
+2025-05-27 16:42:55,103 - HistoricalQuoteCollector - INFO - 已处理 200/5720 只股票
+2025-05-27 16:43:49,763 - HistoricalQuoteCollector - INFO - 已处理 300/5720 只股票
+2025-05-27 16:44:46,624 - HistoricalQuoteCollector - INFO - 已处理 400/5720 只股票
+2025-05-27 16:45:42,522 - HistoricalQuoteCollector - INFO - 已处理 500/5720 只股票
+2025-05-27 16:46:43,591 - HistoricalQuoteCollector - INFO - 已处理 600/5720 只股票
+2025-05-27 16:47:36,371 - HistoricalQuoteCollector - INFO - 已处理 700/5720 只股票
+2025-05-27 16:48:27,037 - HistoricalQuoteCollector - INFO - 已处理 800/5720 只股票
+2025-05-27 16:49:17,469 - HistoricalQuoteCollector - INFO - 已处理 900/5720 只股票
+2025-05-27 16:50:07,669 - HistoricalQuoteCollector - INFO - 已处理 1000/5720 只股票
+2025-05-27 16:50:59,138 - HistoricalQuoteCollector - INFO - 已处理 1100/5720 只股票
+2025-05-27 16:52:16,171 - HistoricalQuoteCollector - INFO - 已处理 1200/5720 只股票
+2025-05-27 16:52:58,464 - HistoricalQuoteCollector - INFO - 接收到中断信号，正在安全退出...
+2025-05-27 16:52:58,555 - HistoricalQuoteCollector - INFO - 检测到中断信号，正在安全退出...
+2025-05-27 16:52:58,555 - HistoricalQuoteCollector - INFO - 历史行情数据采集完成。成功: 1274, 失败: 0
+2025-05-27 16:52:58,555 - HistoricalQuoteCollector - INFO - 程序被用户中断
+2025-05-28 09:31:31,042 - HistoricalQuoteCollector - INFO - 开始采集 20250525 的历史行情数据，共 5720 只股票
+2025-05-28 09:31:31,561 - HistoricalQuoteCollector - WARNING - 股票 831370 在 20250525 没有交易数据
+2025-05-28 09:31:32,101 - HistoricalQuoteCollector - WARNING - 股票 688455 在 20250525 没有交易数据
+2025-05-28 09:31:32,577 - HistoricalQuoteCollector - WARNING - 股票 870436 在 20250525 没有交易数据
+2025-05-28 09:31:33,044 - HistoricalQuoteCollector - WARNING - 股票 300422 在 20250525 没有交易数据
+2025-05-28 09:31:33,531 - HistoricalQuoteCollector - WARNING - 股票 300575 在 20250525 没有交易数据
+2025-05-28 09:31:33,987 - HistoricalQuoteCollector - WARNING - 股票 300815 在 20250525 没有交易数据
+2025-05-28 09:31:34,455 - HistoricalQuoteCollector - WARNING - 股票 300804 在 20250525 没有交易数据
+2025-05-28 09:31:34,917 - HistoricalQuoteCollector - WARNING - 股票 300532 在 20250525 没有交易数据
+2025-05-28 09:31:35,387 - HistoricalQuoteCollector - WARNING - 股票 300240 在 20250525 没有交易数据
+2025-05-28 09:31:35,836 - HistoricalQuoteCollector - WARNING - 股票 002258 在 20250525 没有交易数据
+2025-05-28 09:31:36,301 - HistoricalQuoteCollector - WARNING - 股票 002277 在 20250525 没有交易数据
+2025-05-28 09:31:36,752 - HistoricalQuoteCollector - WARNING - 股票 000903 在 20250525 没有交易数据
+2025-05-28 09:31:37,201 - HistoricalQuoteCollector - WARNING - 股票 603577 在 20250525 没有交易数据
+2025-05-28 09:31:37,672 - HistoricalQuoteCollector - WARNING - 股票 002829 在 20250525 没有交易数据
+2025-05-28 09:31:38,162 - HistoricalQuoteCollector - WARNING - 股票 605388 在 20250525 没有交易数据
+2025-05-28 09:31:38,644 - HistoricalQuoteCollector - WARNING - 股票 603693 在 20250525 没有交易数据
+2025-05-28 09:31:39,087 - HistoricalQuoteCollector - WARNING - 股票 603639 在 20250525 没有交易数据
+2025-05-28 09:31:39,552 - HistoricalQuoteCollector - WARNING - 股票 001230 在 20250525 没有交易数据
+2025-05-28 09:31:40,097 - HistoricalQuoteCollector - WARNING - 股票 603686 在 20250525 没有交易数据
+2025-05-28 09:31:41,095 - HistoricalQuoteCollector - WARNING - 股票 603390 在 20250525 没有交易数据
+2025-05-28 09:31:41,623 - HistoricalQuoteCollector - WARNING - 股票 002366 在 20250525 没有交易数据
+2025-05-28 09:31:42,228 - HistoricalQuoteCollector - WARNING - 股票 002250 在 20250525 没有交易数据
+2025-05-28 09:31:42,795 - HistoricalQuoteCollector - WARNING - 股票 002973 在 20250525 没有交易数据
+2025-05-28 09:31:43,359 - HistoricalQuoteCollector - WARNING - 股票 603056 在 20250525 没有交易数据
+2025-05-28 09:31:43,859 - HistoricalQuoteCollector - WARNING - 股票 688211 在 20250525 没有交易数据
+2025-05-28 09:31:44,330 - HistoricalQuoteCollector - WARNING - 股票 002556 在 20250525 没有交易数据
+2025-05-28 09:31:44,806 - HistoricalQuoteCollector - WARNING - 股票 000539 在 20250525 没有交易数据
+2025-05-28 09:31:45,193 - HistoricalQuoteCollector - INFO - 接收到中断信号，正在安全退出...
+2025-05-28 09:31:45,269 - HistoricalQuoteCollector - WARNING - 股票 920819 在 20250525 没有交易数据
+2025-05-28 09:31:45,270 - HistoricalQuoteCollector - INFO - 检测到中断信号，正在安全退出...
+2025-05-28 09:31:45,271 - HistoricalQuoteCollector - INFO - 历史行情数据采集完成。成功: 0, 失败: 0
+2025-05-28 09:31:45,272 - HistoricalQuoteCollector - INFO - 程序被用户中断
+2025-05-28 09:32:29,773 - HistoricalQuoteCollector - INFO - 开始采集 20250523 的历史行情数据，共 5720 只股票
+2025-05-28 09:32:58,450 - HistoricalQuoteCollector - WARNING - 股票 000151 在 20250523 没有交易数据
+2025-05-28 09:33:17,768 - HistoricalQuoteCollector - INFO - 已处理 100/5720 只股票
+2025-05-28 09:34:03,537 - HistoricalQuoteCollector - INFO - 已处理 200/5720 只股票
+2025-05-28 09:34:16,058 - HistoricalQuoteCollector - WARNING - 股票 002289 在 20250523 没有交易数据
+2025-05-28 09:34:49,880 - HistoricalQuoteCollector - INFO - 已处理 300/5720 只股票
+2025-05-28 09:35:40,177 - HistoricalQuoteCollector - INFO - 已处理 400/5720 只股票
+2025-05-28 09:36:36,475 - HistoricalQuoteCollector - INFO - 已处理 500/5720 只股票
+2025-05-28 09:37:23,429 - HistoricalQuoteCollector - INFO - 已处理 600/5720 只股票
+2025-05-28 09:38:10,281 - HistoricalQuoteCollector - INFO - 已处理 700/5720 只股票
+2025-05-28 09:38:58,362 - HistoricalQuoteCollector - INFO - 已处理 800/5720 只股票
+2025-05-28 09:39:52,763 - HistoricalQuoteCollector - INFO - 已处理 900/5720 只股票
+2025-05-28 09:40:41,484 - HistoricalQuoteCollector - INFO - 已处理 1000/5720 只股票
+2025-05-28 09:41:32,927 - HistoricalQuoteCollector - INFO - 已处理 1100/5720 只股票
+2025-05-28 09:42:20,828 - HistoricalQuoteCollector - INFO - 已处理 1200/5720 只股票
+2025-05-28 09:43:11,069 - HistoricalQuoteCollector - INFO - 已处理 1300/5720 只股票
+2025-05-28 09:43:58,544 - HistoricalQuoteCollector - INFO - 已处理 1400/5720 只股票
+2025-05-28 09:44:50,599 - HistoricalQuoteCollector - INFO - 已处理 1500/5720 只股票
+2025-05-28 09:45:40,164 - HistoricalQuoteCollector - INFO - 已处理 1600/5720 只股票
+2025-05-28 09:46:34,311 - HistoricalQuoteCollector - INFO - 已处理 1700/5720 只股票
+2025-05-28 09:47:23,702 - HistoricalQuoteCollector - INFO - 已处理 1800/5720 只股票
+2025-05-28 09:48:13,402 - HistoricalQuoteCollector - INFO - 已处理 1900/5720 只股票
+2025-05-28 09:49:06,128 - HistoricalQuoteCollector - INFO - 已处理 2000/5720 只股票
+2025-05-28 09:49:50,879 - HistoricalQuoteCollector - INFO - 已处理 2100/5720 只股票
+2025-05-28 09:50:38,729 - HistoricalQuoteCollector - INFO - 已处理 2200/5720 只股票
+2025-05-28 09:51:35,464 - HistoricalQuoteCollector - INFO - 已处理 2300/5720 只股票
+2025-05-28 09:52:25,491 - HistoricalQuoteCollector - INFO - 已处理 2400/5720 只股票
+2025-05-28 09:52:58,208 - HistoricalQuoteCollector - WARNING - 股票 000878 在 20250523 没有交易数据
+2025-05-28 09:53:17,873 - HistoricalQuoteCollector - INFO - 已处理 2500/5720 只股票
+2025-05-28 09:54:12,750 - HistoricalQuoteCollector - INFO - 已处理 2600/5720 只股票
+2025-05-28 09:55:15,496 - HistoricalQuoteCollector - INFO - 已处理 2700/5720 只股票
+2025-05-28 09:56:06,466 - HistoricalQuoteCollector - INFO - 已处理 2800/5720 只股票
+2025-05-28 09:56:53,185 - HistoricalQuoteCollector - INFO - 已处理 2900/5720 只股票
+2025-05-28 09:57:42,646 - HistoricalQuoteCollector - INFO - 已处理 3000/5720 只股票
+2025-05-28 09:58:31,739 - HistoricalQuoteCollector - INFO - 已处理 3100/5720 只股票
+2025-05-28 09:59:24,714 - HistoricalQuoteCollector - INFO - 已处理 3200/5720 只股票
+2025-05-28 09:59:34,458 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 09:59:39,932 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 09:59:45,385 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 09:59:45,385 - HistoricalQuoteCollector - ERROR - 网络连接错误 (1/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 09:59:50,828 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 09:59:56,555 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:01,990 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:01,990 - HistoricalQuoteCollector - ERROR - 网络连接错误 (2/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:07,450 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:12,905 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:18,336 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:18,336 - HistoricalQuoteCollector - ERROR - 网络连接错误 (3/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:23,780 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:29,218 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:34,681 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:34,681 - HistoricalQuoteCollector - ERROR - 网络连接错误 (4/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:40,124 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:45,600 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:51,193 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:51,193 - HistoricalQuoteCollector - ERROR - 网络连接错误 (5/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:00:56,702 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:02,148 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:07,604 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:07,604 - HistoricalQuoteCollector - ERROR - 网络连接错误 (6/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:13,078 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:18,740 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:24,192 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:24,192 - HistoricalQuoteCollector - ERROR - 网络连接错误 (7/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:29,661 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:35,124 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:40,589 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:40,593 - HistoricalQuoteCollector - ERROR - 网络连接错误 (8/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:46,463 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:51,924 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:57,455 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:01:57,459 - HistoricalQuoteCollector - ERROR - 网络连接错误 (9/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:02:02,935 - HistoricalQuoteCollector - WARNING - 第 1 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:02:08,386 - HistoricalQuoteCollector - WARNING - 第 2 次重试失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:02:13,829 - HistoricalQuoteCollector - ERROR - 函数 stock_zh_a_hist 执行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:02:13,833 - HistoricalQuoteCollector - ERROR - 网络连接错误 (10/10): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2025-05-28 10:02:13,833 - HistoricalQuoteCollector - ERROR - 连接错误次数过多，程序退出

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票分析系统 - 管理后台</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <!-- 登录页面 -->
+    <div class="login-container" id="loginPage">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>📊 管理后台</h1>
+                <p>股票行情数据分析系统</p>
+            </div>
+            <form class="login-form" id="loginForm">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" name="username" placeholder="请输入管理员用户名" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" name="password" placeholder="请输入密码" required>
+                </div>
+                <button type="submit" class="login-btn">登录</button>
+            </form>
+            <div class="login-info">
+                <p>演示账号：admin / 123456</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 管理主界面 -->
+    <div class="admin-container" id="adminPage" style="display: none;">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 管理后台</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="dashboard.html" class="nav-link active" data-page="dashboard">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-text">仪表板</span>
+                </a>
+                <a href="users.html" class="nav-link" data-page="users">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">用户管理</span>
+                </a>
+                <a href="quotes.html" class="nav-link" data-page="quotes">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">行情数据</span>
+                </a>
+                <a href="datasource.html" class="nav-link" data-page="datasource">
+                    <span class="nav-icon">🔗</span>
+                    <span class="nav-text">数据源配置</span>
+                </a>
+                <a href="datacollect.html" class="nav-link" data-page="datacollect">
+                    <span class="nav-icon">📡</span>
+                    <span class="nav-text">数据采集</span>
+                </a>
+                <a href="monitoring.html" class="nav-link" data-page="monitoring">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">系统监控</span>
+                </a>
+                <a href="models.html" class="nav-link" data-page="models">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-text">预测模型</span>
+                </a>
+                <a href="logs.html" class="nav-link" data-page="logs">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-text">系统日志</span>
+                </a>
+                <a href="content.html" class="nav-link" data-page="content">
+                    <span class="nav-icon">📰</span>
+                    <span class="nav-text">内容管理</span>
+                </a>
+                <a href="announcements.html" class="nav-link" data-page="announcements">
+                    <span class="nav-icon">📢</span>
+                    <span class="nav-text">公告发布</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 头部 -->
+            <header class="content-header">
+                <div class="header-left">
+                    <h1 id="pageTitle">仪表板</h1>
+                    <div class="breadcrumb">
+                        <span>管理后台</span>
+                        <span>/</span>
+                        <span id="currentPage">仪表板</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="user-info">
+                        <span class="user-name">管理员</span>
+                        <div class="user-avatar">A</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 页面内容 -->
+            <div class="content-body" id="contentFrame">
+                <!-- 内容将通过iframe加载 -->
+            </div>
+        </main>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/frame.js"></script>
+</body>
+</html> 

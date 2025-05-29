@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 股票分析系统</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/login.css">
+    <script>
+        localStorage.clear();
+        sessionStorage.clear();
+        document.cookie.split(';').forEach(function(c) {
+          document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+        });
+    </script>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <!-- Logo区域 -->
+            <div class="login-header">
+                <div class="logo">
+                    <h1>📈 股票分析系统</h1>
+                    <p>专业的股票分析平台</p>
+                </div>
+            </div>
+
+            <!-- 登录表单 -->
+            <div class="login-form-container">
+                <h2>登录账户</h2>
+                <form class="login-form" id="loginForm">
+                    <div class="form-group">
+                        <label for="username">用户名</label>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            placeholder="请输入用户名"
+                            required
+                        >
+                        <span class="input-icon">👤</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">密码</label>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            placeholder="请输入密码"
+                            required
+                        >
+                        <span class="input-icon">🔒</span>
+                        <button type="button" class="password-toggle" id="passwordToggle">
+                            👁️
+                        </button>
+                    </div>
+
+                    <div class="form-options">
+                        <label class="remember-me">
+                            <input type="checkbox" id="rememberMe">
+                            <span class="checkmark"></span>
+                            记住我
+                        </label>
+                        <a href="#" class="forgot-password">忘记密码？</a>
+                    </div>
+
+                    <button type="submit" class="login-btn" id="loginBtn">
+                        <span class="btn-text">登录</span>
+                        <span class="btn-loading" style="display: none;">登录中...</span>
+                    </button>
+
+                    <div class="divider">
+                        <span>或</span>
+                    </div>
+
+                    <!-- div class="other-actions">
+                        <button type="button" class="demo-login-btn" id="demoLoginBtn">
+                            体验演示账户
+                        </button>
+                        <p class="register-link">
+                            还没有账户？ <a href="#" id="registerLink">立即注册</a>
+                        </p>
+                    </div -->
+                </form>
+            </div>
+
+            <!-- 特性介绍 -->
+
+        </div>
+
+        <!-- 背景装饰 -->
+        <div class="background-decoration">
+            <div class="floating-shapes">
+                <div class="shape shape-1"></div>
+                <div class="shape shape-2"></div>
+                <div class="shape shape-3"></div>
+                <div class="shape shape-4"></div>
+                <div class="shape shape-5"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示信息 -->
+    <div id="toast" class="toast"></div>
+
+    <!-- 注册弹窗 -->
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>注册新账户</h3>
+                <button class="close-btn" id="closeRegister">&times;</button>
+            </div>
+            <form class="register-form" id="registerForm">
+                <div class="form-group">
+                    <label for="regUsername">用户名</label>
+                    <input type="text" id="regUsername" name="username" placeholder="请输入用户名" required>
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">邮箱</label>
+                    <input type="email" id="regEmail" name="email" placeholder="请输入邮箱地址" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">密码</label>
+                    <input type="password" id="regPassword" name="password" placeholder="请输入密码" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">确认密码</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" placeholder="请再次输入密码" required>
+                </div>
+                <div class="form-group">
+                    <label class="agreement">
+                        <input type="checkbox" id="agreement" required>
+                        <span class="checkmark"></span>
+                        我已阅读并同意 <a href="#">服务条款</a> 和 <a href="#">隐私政策</a>
+                    </label>
+                </div>
+                <button type="submit" class="register-btn">注册</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/login.js"></script>
+</body>
+</html> 

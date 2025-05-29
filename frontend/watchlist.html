@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的自选股 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/watchlist.css">
+</head>
+<body>
+<script src="components/header.js"></script>
+<script>loadHeader('watchlist');</script>
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <!-- 工具栏 -->
+        <section class="toolbar">
+            <div class="container">
+                <div class="toolbar-left">
+                    <h1>我的自选股</h1>
+                    <span class="stock-count">共 <span id="stockCount">6</span> 只股票</span>
+                </div>
+                <div class="toolbar-right">
+                    <button class="btn btn-primary add-stock-btn">+ 添加自选股</button>
+                    <div class="view-controls">
+                        <button class="view-btn active" data-view="grid">⊞</button>
+                        <button class="view-btn" data-view="list">☰</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 分组标签 -->
+        <section class="group-tabs">
+            <div class="container">
+                <div class="tabs-nav">
+                    <!--<button class="tab-btn active" data-group="all">全部 (6)</button>
+                    <button class="tab-btn" data-group="bank">银行股 (2)</button>
+                    <button class="tab-btn" data-group="tech">科技股 (2)</button>
+                    <button class="tab-btn" data-group="consumption">消费股 (2)</button>
+                    <button class="add-group-btn">+ 新建分组</button>-->
+                </div>
+            </div>
+        </section>
+
+        <!-- 自选股列表 -->
+        <section class="watchlist-content">
+            <div class="container">
+                <!-- 网格视图 -->
+                <div class="stocks-grid" id="stocksGrid">
+                    <div class="stock-card" data-code="000001" data-group="bank">
+                        <div class="stock-header">
+                            <div class="stock-basic">
+                                <h3 class="stock-name">平安银行</h3>
+                                <span class="stock-code">000001</span>
+                            </div>
+                            <button class="remove-btn">×</button>
+                        </div>
+                        <div class="stock-price">
+                            <span class="current-price">12.34</span>
+                            <span class="price-change positive">+0.56</span>
+                            <span class="change-percent positive">+4.76%</span>
+                        </div>
+                        <div class="stock-details">
+                            <div class="detail-row">
+                                <span>今开</span>
+                                <span>11.89</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>昨收</span>
+                                <span>11.78</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最高</span>
+                                <span class="positive">12.45</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最低</span>
+                                <span class="negative">11.85</span>
+                            </div>
+                        </div>
+                        <div class="stock-actions">
+                            <button class="action-btn" onclick="goToStock('000001')">详情</button>
+                            <button class="action-btn trade-btn">交易</button>
+                        </div>
+                    </div>
+
+                    <div class="stock-card" data-code="600036" data-group="bank">
+                        <div class="stock-header">
+                            <div class="stock-basic">
+                                <h3 class="stock-name">招商银行</h3>
+                                <span class="stock-code">600036</span>
+                            </div>
+                            <button class="remove-btn">×</button>
+                        </div>
+                        <div class="stock-price">
+                            <span class="current-price">45.67</span>
+                            <span class="price-change positive">+1.23</span>
+                            <span class="change-percent positive">+2.77%</span>
+                        </div>
+                        <div class="stock-details">
+                            <div class="detail-row">
+                                <span>今开</span>
+                                <span>44.50</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>昨收</span>
+                                <span>44.44</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最高</span>
+                                <span class="positive">45.89</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最低</span>
+                                <span class="negative">44.23</span>
+                            </div>
+                        </div>
+                        <div class="stock-actions">
+                            <button class="action-btn" onclick="goToStock('600036')">详情</button>
+                            <button class="action-btn trade-btn">交易</button>
+                        </div>
+                    </div>
+
+                    <div class="stock-card" data-code="600519" data-group="consumption">
+                        <div class="stock-header">
+                            <div class="stock-basic">
+                                <h3 class="stock-name">贵州茅台</h3>
+                                <span class="stock-code">600519</span>
+                            </div>
+                            <button class="remove-btn">×</button>
+                        </div>
+                        <div class="stock-price">
+                            <span class="current-price">1865.00</span>
+                            <span class="price-change negative">-12.50</span>
+                            <span class="change-percent negative">-0.67%</span>
+                        </div>
+                        <div class="stock-details">
+                            <div class="detail-row">
+                                <span>今开</span>
+                                <span>1875.00</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>昨收</span>
+                                <span>1877.50</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最高</span>
+                                <span class="positive">1890.00</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最低</span>
+                                <span class="negative">1860.00</span>
+                            </div>
+                        </div>
+                        <div class="stock-actions">
+                            <button class="action-btn" onclick="goToStock('600519')">详情</button>
+                            <button class="action-btn trade-btn">交易</button>
+                        </div>
+                    </div>
+
+                    <div class="stock-card" data-code="000858" data-group="consumption">
+                        <div class="stock-header">
+                            <div class="stock-basic">
+                                <h3 class="stock-name">五粮液</h3>
+                                <span class="stock-code">000858</span>
+                            </div>
+                            <button class="remove-btn">×</button>
+                        </div>
+                        <div class="stock-price">
+                            <span class="current-price">156.78</span>
+                            <span class="price-change positive">+3.45</span>
+                            <span class="change-percent positive">+2.25%</span>
+                        </div>
+                        <div class="stock-details">
+                            <div class="detail-row">
+                                <span>今开</span>
+                                <span>154.20</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>昨收</span>
+                                <span>153.33</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最高</span>
+                                <span class="positive">158.90</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最低</span>
+                                <span class="negative">153.10</span>
+                            </div>
+                        </div>
+                        <div class="stock-actions">
+                            <button class="action-btn" onclick="goToStock('000858')">详情</button>
+                            <button class="action-btn trade-btn">交易</button>
+                        </div>
+                    </div>
+
+                    <div class="stock-card" data-code="002415" data-group="tech">
+                        <div class="stock-header">
+                            <div class="stock-basic">
+                                <h3 class="stock-name">海康威视</h3>
+                                <span class="stock-code">002415</span>
+                            </div>
+                            <button class="remove-btn">×</button>
+                        </div>
+                        <div class="stock-price">
+                            <span class="current-price">32.45</span>
+                            <span class="price-change positive">+1.56</span>
+                            <span class="change-percent positive">+5.05%</span>
+                        </div>
+                        <div class="stock-details">
+                            <div class="detail-row">
+                                <span>今开</span>
+                                <span>31.20</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>昨收</span>
+                                <span>30.89</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最高</span>
+                                <span class="positive">32.67</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最低</span>
+                                <span class="negative">30.95</span>
+                            </div>
+                        </div>
+                        <div class="stock-actions">
+                            <button class="action-btn" onclick="goToStock('002415')">详情</button>
+                            <button class="action-btn trade-btn">交易</button>
+                        </div>
+                    </div>
+
+                    <div class="stock-card" data-code="300750" data-group="tech">
+                        <div class="stock-header">
+                            <div class="stock-basic">
+                                <h3 class="stock-name">宁德时代</h3>
+                                <span class="stock-code">300750</span>
+                            </div>
+                            <button class="remove-btn">×</button>
+                        </div>
+                        <div class="stock-price">
+                            <span class="current-price">187.50</span>
+                            <span class="price-change positive">+8.90</span>
+                            <span class="change-percent positive">+4.99%</span>
+                        </div>
+                        <div class="stock-details">
+                            <div class="detail-row">
+                                <span>今开</span>
+                                <span>180.00</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>昨收</span>
+                                <span>178.60</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最高</span>
+                                <span class="positive">189.90</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>最低</span>
+                                <span class="negative">178.20</span>
+                            </div>
+                        </div>
+                        <div class="stock-actions">
+                            <button class="action-btn" onclick="goToStock('300750')">详情</button>
+                            <button class="action-btn trade-btn">交易</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 列表视图 -->
+                <div class="stocks-list" id="stocksList" style="display: none;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>股票</th>
+                                <th>最新价</th>
+                                <th>涨跌额</th>
+                                <th>涨跌幅</th>
+                                <th>今开</th>
+                                <th>最高</th>
+                                <th>最低</th>
+                                <th>成交量</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stocksTableBody">
+                            <!-- 动态生成内容 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 价格提醒设置 -->
+        <section class="price-alerts">
+            <div class="container">
+                <div class="alerts-header">
+                    <h2>价格提醒</h2>
+                    <button class="btn btn-secondary add-alert-btn">+ 添加提醒</button>
+                </div>
+                <div class="alerts-list">
+                    <div class="alert-item">
+                        <div class="alert-stock">
+                            <span class="stock-name">平安银行</span>
+                            <span class="stock-code">000001</span>
+                        </div>
+                        <div class="alert-condition">
+                            <span>价格 ≥ 13.00</span>
+                        </div>
+                        <div class="alert-status">
+                            <span class="badge badge-info">监控中</span>
+                        </div>
+                        <div class="alert-actions">
+                            <button class="btn btn-sm btn-secondary">编辑</button>
+                            <button class="btn btn-sm btn-danger">删除</button>
+                        </div>
+                    </div>
+                    <div class="alert-item">
+                        <div class="alert-stock">
+                            <span class="stock-name">贵州茅台</span>
+                            <span class="stock-code">600519</span>
+                        </div>
+                        <div class="alert-condition">
+                            <span>价格 ≤ 1800.00</span>
+                        </div>
+                        <div class="alert-status">
+                            <span class="badge badge-warning">待触发</span>
+                        </div>
+                        <div class="alert-actions">
+                            <button class="btn btn-sm btn-secondary">编辑</button>
+                            <button class="btn btn-sm btn-danger">删除</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="输入股票代码或名称" class="search-input">
+                <button class="close-search">×</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <!-- 添加自选股弹窗 -->
+    <div class="add-stock-modal" id="addStockModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加自选股</h3>
+                <button class="close-modal">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-section">
+                    <input type="text" placeholder="输入股票代码或名称搜索" class="stock-search-input">
+                    <div class="search-suggestions">
+                        <!-- 搜索建议将在这里显示 -->
+                    </div>
+                </div>
+                <div class="group-selection">
+                    <label>选择分组：</label>
+                    <select class="group-select">
+                        <option value="default">默认分组</option>
+                        <option value="bank">银行股</option>
+                        <option value="tech">科技股</option>
+                        <option value="consumption">消费股</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary cancel-btn">取消</button>
+                <button class="btn btn-primary confirm-btn">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/watchlist.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+        WatchlistPage.init();
+        });
+    </script>
+</body>
+</html> 

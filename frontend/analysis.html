@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能分析 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/analysis.css">
+</head>
+<body>
+<script src="components/header.js"></script>
+<script>loadHeader('analyze');</script>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <div class="container">
+            <h1>智能分析中心</h1>
+            
+            <!-- 快速分析工具 -->
+            <section class="quick-analysis">
+                <div class="analysis-header">
+                    <h2>🔍 快速分析</h2>
+                    <div class="stock-selector">
+                        <input type="text" placeholder="输入股票代码或名称" class="stock-input">
+                        <button class="analyze-btn">开始分析</button>
+                    </div>
+                </div>
+                
+                <div class="analysis-result" id="analysisResult">
+                    <div class="result-placeholder">
+                        <div class="placeholder-icon">📊</div>
+                        <p>请输入股票代码开始智能分析</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 功能标签 -->
+            <section class="analysis-tabs">
+                <div class="tab-nav">
+                    <button class="analysis-tab active" data-tab="market-analysis">市场分析</button>
+                    <button class="analysis-tab" data-tab="technical-tools">技术工具</button>
+                    <button class="analysis-tab" data-tab="strategy">投资策略</button>
+                    <button class="analysis-tab" data-tab="reports">分析报告</button>
+                </div>
+
+                <!-- 市场分析 -->
+                <div class="tab-panel active" id="market-analysis">
+                    <div class="market-analysis-grid">
+                        <div class="analysis-card">
+                            <h3>🌡️ 市场温度</h3>
+                            <div class="market-temperature">
+                                <div class="temperature-meter">
+                                    <div class="meter-bg">
+                                        <div class="meter-fill" style="width: 72%;"></div>
+                                    </div>
+                                    <div class="temperature-value">72°C 偏热</div>
+                                </div>
+                                <div class="temperature-desc">
+                                    <p>当前市场情绪较为乐观，成交活跃度高，建议控制仓位风险</p>
+                                    <div class="temperature-details" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                                        <h4 style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">市场特征</h4>
+                                        <ul style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
+                                            <li>涨停板数量: 45只</li>
+                                            <li>跌停板数量: 12只</li>
+                                            <li>成交量比昨日: +18%</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-card">
+                            <h3>💰 资金流向</h3>
+                            <div class="fund-flow">
+                                <div class="flow-chart">
+                                    <canvas id="fundFlowChart" width="300" height="200"></canvas>
+                                </div>
+                                <div class="flow-summary">
+                                    <div class="flow-item">
+                                        <span class="label">主力资金</span>
+                                        <span class="value positive">+156.8亿</span>
+                                    </div>
+                                    <div class="flow-item">
+                                        <span class="label">散户资金</span>
+                                        <span class="value negative">-89.2亿</span>
+                                    </div>
+                                    <div class="flow-analysis" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                                        <h4 style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">资金分析</h4>
+                                        <p style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0;">主力资金持续净流入，表明机构对后市谨慎乐观，建议关注资金持续流入的优质标的。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-card">
+                            <h3>📈 趋势研判</h3>
+                            <div class="trend-analysis">
+                                <div class="trend-indicators">
+                                    <div class="trend-item">
+                                        <span class="trend-label">短期趋势</span>
+                                        <span class="trend-signal bullish">看多</span>
+                                    </div>
+                                    <div class="trend-item">
+                                        <span class="trend-label">中期趋势</span>
+                                        <span class="trend-signal neutral">震荡</span>
+                                    </div>
+                                    <div class="trend-item">
+                                        <span class="trend-label">长期趋势</span>
+                                        <span class="trend-signal bullish">看多</span>
+                                    </div>
+                                </div>
+                                <div class="trend-summary">
+                                    <p>整体趋势向好，建议逢低布局优质标的</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-card">
+                            <h3>⚠️ 风险提示</h3>
+                            <div class="risk-alerts">
+                                <div class="risk-item high">
+                                    <span class="risk-level">高风险</span>
+                                    <span class="risk-desc">创业板估值偏高，注意回调风险</span>
+                                </div>
+                                <div class="risk-item medium">
+                                    <span class="risk-level">中风险</span>
+                                    <span class="risk-desc">外围市场波动，关注政策面变化</span>
+                                </div>
+                                <div class="risk-item low">
+                                    <span class="risk-level">低风险</span>
+                                    <span class="risk-desc">蓝筹股估值合理，适合配置</span>
+                                </div>
+                                <div class="risk-summary" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                                    <h4 style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">风险控制建议</h4>
+                                    <ul style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
+                                        <li>合理控制仓位，避免重仓单一标的</li>
+                                        <li>关注市场流动性变化</li>
+                                        <li>设置止损止盈位置</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 技术工具 -->
+                <div class="tab-panel" id="technical-tools">
+                    <div class="tools-grid">
+                        <div class="tool-card">
+                            <div class="tool-header">
+                                <h3>📊 技术指标筛选</h3>
+                                <button class="tool-btn">使用工具</button>
+                            </div>
+                            <div class="tool-desc">
+                                <p>基于多种技术指标筛选符合条件的股票</p>
+                                <ul>
+                                    <li>MA均线系统分析</li>
+                                    <li>MACD金叉死叉</li>
+                                    <li>RSI超买超卖</li>
+                                    <li>布林带突破</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="tool-card">
+                            <div class="tool-header">
+                                <h3>🎯 阻力支撑位</h3>
+                                <button class="tool-btn">使用工具</button>
+                            </div>
+                            <div class="tool-desc">
+                                <p>智能计算个股关键价位信息</p>
+                                <ul>
+                                    <li>斐波那契回调位</li>
+                                    <li>历史高低点</li>
+                                    <li>成交密集区</li>
+                                    <li>整数关口位</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="tool-card">
+                            <div class="tool-header">
+                                <h3>🔄 形态识别</h3>
+                                <button class="tool-btn">使用工具</button>
+                            </div>
+                            <div class="tool-desc">
+                                <p>自动识别K线图表技术形态</p>
+                                <ul>
+                                    <li>头肩顶底形态</li>
+                                    <li>双顶双底</li>
+                                    <li>三角形整理</li>
+                                    <li>楔形旗形</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="tool-card">
+                            <div class="tool-header">
+                                <h3>📋 选股器</h3>
+                                <button class="tool-btn">使用工具</button>
+                            </div>
+                            <div class="tool-desc">
+                                <p>多维度条件筛选优质股票</p>
+                                <ul>
+                                    <li>财务指标筛选</li>
+                                    <li>技术指标组合</li>
+                                    <li>行业概念筛选</li>
+                                    <li>资金流向筛选</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 投资策略 -->
+                <div class="tab-panel" id="strategy">
+                    <div class="strategy-section">
+                        <div class="strategy-recommendations">
+                            <h3>📋 当前推荐策略</h3>
+                            <div class="strategy-list">
+                                <div class="strategy-item">
+                                    <div class="strategy-header">
+                                        <h4>价值投资策略</h4>
+                                        <span class="strategy-tag recommended">推荐</span>
+                                    </div>
+                                    <div class="strategy-content">
+                                        <p><strong>适用环境：</strong>市场震荡或下跌阶段</p>
+                                        <p><strong>核心思路：</strong>寻找被低估的优质公司，长期持有</p>
+                                        <p><strong>选股标准：</strong>PE<15、ROE>15%、负债率<50%</p>
+                                        <div class="strategy-stocks">
+                                            <span class="stock-tag">招商银行</span>
+                                            <span class="stock-tag">万科A</span>
+                                            <span class="stock-tag">格力电器</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="strategy-item">
+                                    <div class="strategy-header">
+                                        <h4>成长投资策略</h4>
+                                        <span class="strategy-tag hot">热门</span>
+                                    </div>
+                                    <div class="strategy-content">
+                                        <p><strong>适用环境：</strong>牛市或科技股活跃期</p>
+                                        <p><strong>核心思路：</strong>投资高成长性公司，分享成长红利</p>
+                                        <p><strong>选股标准：</strong>营收增长>30%、ROE>20%、毛利率>40%</p>
+                                        <div class="strategy-stocks">
+                                            <span class="stock-tag">宁德时代</span>
+                                            <span class="stock-tag">比亚迪</span>
+                                            <span class="stock-tag">海康威视</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="strategy-item">
+                                    <div class="strategy-header">
+                                        <h4>动量投资策略</h4>
+                                        <span class="strategy-tag">适中</span>
+                                    </div>
+                                    <div class="strategy-content">
+                                        <p><strong>适用环境：</strong>趋势明确的市场环境</p>
+                                        <p><strong>核心思路：</strong>追踪强势股，顺势而为</p>
+                                        <p><strong>选股标准：</strong>近期涨幅>市场、成交量放大、技术面良好</p>
+                                        <div class="strategy-stocks">
+                                            <span class="stock-tag">中芯国际</span>
+                                            <span class="stock-tag">药明康德</span>
+                                            <span class="stock-tag">隆基绿能</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="portfolio-suggestions">
+                            <h3>💼 组合建议</h3>
+                            <div class="portfolio-card">
+                                <div class="portfolio-header">
+                                    <h4>稳健型组合</h4>
+                                    <span class="portfolio-return">预期收益: 8-12%</span>
+                                </div>
+                                <div class="portfolio-allocation">
+                                    <div class="allocation-item">
+                                        <span class="allocation-label">银行板块</span>
+                                        <span class="allocation-percent">30%</span>
+                                    </div>
+                                    <div class="allocation-item">
+                                        <span class="allocation-label">消费板块</span>
+                                        <span class="allocation-percent">25%</span>
+                                    </div>
+                                    <div class="allocation-item">
+                                        <span class="allocation-label">医药板块</span>
+                                        <span class="allocation-percent">20%</span>
+                                    </div>
+                                    <div class="allocation-item">
+                                        <span class="allocation-label">科技板块</span>
+                                        <span class="allocation-percent">15%</span>
+                                    </div>
+                                    <div class="allocation-item">
+                                        <span class="allocation-label">现金</span>
+                                        <span class="allocation-percent">10%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分析报告 -->
+                <div class="tab-panel" id="reports">
+                    <div class="reports-section">
+                        <div class="reports-filter">
+                            <select class="filter-select">
+                                <option value="all">全部报告</option>
+                                <option value="daily">每日复盘</option>
+                                <option value="weekly">周度策略</option>
+                                <option value="special">专题研究</option>
+                            </select>
+                            <select class="filter-select">
+                                <option value="all">全部行业</option>
+                                <option value="tech">科技</option>
+                                <option value="finance">金融</option>
+                                <option value="healthcare">医药</option>
+                            </select>
+                        </div>
+
+                        <div class="reports-list">
+                            <div class="report-item">
+                                <div class="report-header">
+                                    <h4>A股市场周度策略：把握结构性机会</h4>
+                                    <div class="report-meta">
+                                        <span class="report-date">2025-01-20</span>
+                                        <span class="report-author">智能分析团队</span>
+                                        <span class="report-views">1.2万阅读</span>
+                                    </div>
+                                </div>
+                                <div class="report-summary">
+                                    <p>本周A股呈现震荡上行态势，科技板块表现突出。建议关注新能源、人工智能等高景气度赛道，同时关注低估值蓝筹股的配置机会...</p>
+                                </div>
+                                <div class="report-tags">
+                                    <span class="tag">市场策略</span>
+                                    <span class="tag">科技股</span>
+                                    <span class="tag">新能源</span>
+                                </div>
+                            </div>
+
+                            <div class="report-item">
+                                <div class="report-header">
+                                    <h4>新能源汽车行业深度：渗透率提升驱动成长</h4>
+                                    <div class="report-meta">
+                                        <span class="report-date">2025-01-19</span>
+                                        <span class="report-author">行业分析师</span>
+                                        <span class="report-views">8.5千阅读</span>
+                                    </div>
+                                </div>
+                                <div class="report-summary">
+                                    <p>新能源汽车产业链持续景气，预计2025年渗透率将达到35%。重点关注电池技术升级、充电基础设施建设等投资机会...</p>
+                                </div>
+                                <div class="report-tags">
+                                    <span class="tag">行业研究</span>
+                                    <span class="tag">新能源汽车</span>
+                                    <span class="tag">产业链</span>
+                                </div>
+                            </div>
+
+                            <div class="report-item">
+                                <div class="report-header">
+                                    <h4>AI概念股投资价值分析</h4>
+                                    <div class="report-meta">
+                                        <span class="report-date">2025-01-18</span>
+                                        <span class="report-author">科技分析师</span>
+                                        <span class="report-views">1.5万阅读</span>
+                                    </div>
+                                </div>
+                                <div class="report-summary">
+                                    <p>人工智能技术快速发展，相关概念股受到市场关注。从技术实力、商业化进度、估值水平等维度筛选优质标的...</p>
+                                </div>
+                                <div class="report-tags">
+                                    <span class="tag">专题研究</span>
+                                    <span class="tag">人工智能</span>
+                                    <span class="tag">概念股</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="输入股票代码或名称" class="search-input">
+                <button class="close-search">×</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/analysis.js"></script>
+</body>
+</html> 

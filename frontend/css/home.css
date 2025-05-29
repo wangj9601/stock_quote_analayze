@@ -1,0 +1,484 @@
+/* 首页样式 - 专业股票交易风格 */
+
+/* 主要内容区域 */
+.main-content {
+    padding: 20px 0;
+    background: #f5f5f5;
+    min-height: calc(100vh - 60px);
+}
+
+/* 市场概览样式 */
+.market-overview {
+    background: #ffffff;
+    border-bottom: 1px solid var(--color-border);
+    padding: 20px 0;
+    margin-bottom: 20px;
+}
+
+.market-overview h2 {
+    margin-bottom: 1.5rem;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.index-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.index-card {
+    background: #ffffff;
+    padding: 1.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    text-align: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+}
+
+.index-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--color-primary);
+}
+
+.index-name {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.index-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5rem;
+    font-family: "Courier New", monospace;
+}
+
+.index-change {
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: "Courier New", monospace;
+}
+
+.index-extra-info {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-text-light);
+}
+
+/* 功能区域样式 */
+.function-area {
+    margin-bottom: 2rem;
+    padding: 0 20px;
+}
+
+.function-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.function-card {
+    background: #ffffff;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.function-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.function-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.function-card h3 {
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.more-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.3s ease;
+}
+
+.more-link:hover {
+    color: var(--color-primary);
+    opacity: 0.8;
+}
+
+/* 自选股列表样式 */
+.stock-list {
+    margin-bottom: 1rem;
+}
+
+.stock-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.stock-item:hover {
+    background-color: #f8f9fa;
+}
+
+.stock-item:last-child {
+    border-bottom: none;
+}
+
+.stock-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.stock-code {
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    font-weight: 500;
+    font-family: "Courier New", monospace;
+}
+
+.stock-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.stock-price {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.price {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    font-family: "Courier New", monospace;
+}
+
+.change {
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: "Courier New", monospace;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--color-text-light);
+}
+
+.empty-state p {
+    margin-bottom: 1rem;
+}
+
+/* 板块列表样式 */
+.sector-list {
+    margin-bottom: 1rem;
+}
+
+.sector-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.3s ease;
+}
+
+.sector-item:hover {
+    background-color: #f8f9fa;
+}
+
+.sector-item:last-child {
+    border-bottom: none;
+}
+
+.sector-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.sector-change {
+    font-weight: 600;
+    font-size: 0.9rem;
+    font-family: "Courier New", monospace;
+}
+
+/* 排行榜样式 */
+.gainer-list {
+    margin-bottom: 1rem;
+}
+
+.rank-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.3s ease;
+}
+
+.rank-item:hover {
+    background-color: #f8f9fa;
+}
+
+.rank-item:last-child {
+    border-bottom: none;
+}
+
+.rank {
+    width: 24px;
+    height: 24px;
+    background: var(--color-text-light);
+    color: #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.rank-item:nth-child(1) .rank {
+    background: #ff4d4f;
+}
+
+.rank-item:nth-child(2) .rank {
+    background: #fa8c16;
+}
+
+.rank-item:nth-child(3) .rank {
+    background: #faad14;
+}
+
+.change-pct {
+    font-weight: 600;
+    font-size: 0.9rem;
+    font-family: "Courier New", monospace;
+    margin-left: auto;
+}
+
+/* 新闻样式 */
+.news-list {
+    margin-bottom: 1rem;
+}
+
+.news-item {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.3s ease;
+}
+
+.news-item:hover {
+    background-color: #f8f9fa;
+}
+
+.news-item:last-child {
+    border-bottom: none;
+}
+
+.news-time {
+    flex-shrink: 0;
+    color: var(--color-text-light);
+    font-size: 0.8rem;
+    width: 60px;
+}
+
+.news-content {
+    flex: 1;
+}
+
+.news-title {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 0.25rem;
+    line-height: 1.4;
+}
+
+.news-summary {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+/* 搜索弹窗样式 */
+.search-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 10vh;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.search-modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.search-content {
+    background: #ffffff;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.search-header {
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.search-modal .search-input {
+    flex: 1;
+    border: none;
+    padding: 1rem 0;
+    font-size: 1rem;
+    outline: none;
+}
+
+.search-modal .search-input:focus {
+    outline: none;
+}
+
+.close-search {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: var(--color-text-light);
+    transition: color 0.3s ease;
+}
+
+.close-search:hover {
+    color: var(--color-text-primary);
+}
+
+.search-results {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.search-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.search-item:hover {
+    background: #f8f9fa;
+}
+
+.search-item .code {
+    font-family: "Courier New", monospace;
+    font-weight: 600;
+    color: var(--color-primary);
+    min-width: 60px;
+}
+
+.search-item .name {
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+/* 增强涨跌颜色样式 - 确保显示正确 */.positive,.index-change.positive,.change.positive,.sector-change.positive,.change-pct.positive {    color: #ff4d4f !important;    font-weight: 600 !important;}.negative,.index-change.negative,.change.negative,.sector-change.negative,.change-pct.negative {    color: #52c41a !important;    font-weight: 600 !important;}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .index-cards {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .function-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .index-card {
+        padding: 1rem;
+    }
+
+    .function-card {
+        padding: 1rem;
+    }
+
+    .stock-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .stock-price {
+        align-items: flex-start;
+        width: 100%;
+    }
+
+    .news-item {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .news-time {
+        width: auto;
+    }
+
+    .search-content {
+        width: 95%;
+        margin: 0 auto;
+    }
+
+    .search-header {
+        padding: 0 0.75rem;
+    }
+
+    .search-modal .search-input {
+        font-size: 16px; /* 防止iOS缩放 */
+    }
+} 

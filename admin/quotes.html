@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行情数据 - 管理后台</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="page-content" id="quotes">
+        <div class="page-header">
+            <h2>行情数据管理</h2>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="QuotesManager.exportQuotesData()">导出数据</button>
+            </div>
+        </div>
+
+        <div class="quotes-tabs">
+            <button class="tab-btn active" data-tab="realtime">实时行情</button>
+            <button class="tab-btn" data-tab="historical">历史行情</button>
+        </div>
+
+        <div class="filter-bar">
+            <div class="search-group">
+                <input type="text" id="stockSearch" placeholder="输入股票代码或名称搜索..." class="search-input">
+                <button class="btn btn-secondary" onclick="QuotesManager.searchStocks()">搜索</button>
+            </div>
+            <div class="filter-group">
+                <select id="dateRange" class="filter-select" onchange="QuotesManager.filterByDate(this.value)">
+                    <option value="today">今日</option>
+                    <option value="week">本周</option>
+                    <option value="month">本月</option>
+                    <option value="custom">自定义</option>
+                </select>
+                <div id="customDateRange" style="display: none;">
+                    <input type="date" id="startDate" class="date-input">
+                    <span>至</span>
+                    <input type="date" id="endDate" class="date-input">
+                    <button class="btn btn-sm" onclick="QuotesManager.applyCustomDateRange()">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 实时行情表格 -->
+        <div class="quotes-content active" id="realtimeQuotes">
+            <div class="data-table">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>股票代码</th>
+                            <th>股票名称</th>
+                            <th>最新价</th>
+                            <th>涨跌幅</th>
+                            <th>涨跌额</th>
+                            <th>成交量</th>
+                            <th>成交额</th>
+                            <th>最高</th>
+                            <th>最低</th>
+                            <th>今开</th>
+                            <th>昨收</th>
+                            <th>更新时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="realtimeQuotesBody">
+                        <!-- 数据将通过JavaScript动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="realtimePagination">
+                <!-- 分页控件将通过JavaScript动态加载 -->
+            </div>
+        </div>
+
+        <!-- 历史行情表格 -->
+        <div class="quotes-content" id="historicalQuotes">
+            <div class="data-table">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>股票代码</th>
+                            <th>股票名称</th>
+                            <th>交易日期</th>
+                            <th>开盘价</th>
+                            <th>最高价</th>
+                            <th>最低价</th>
+                            <th>收盘价</th>
+                            <th>涨跌幅</th>
+                            <th>成交量</th>
+                            <th>成交额</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historicalQuotesBody">
+                        <!-- 数据将通过JavaScript动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="historicalPagination">
+                <!-- 分页控件将通过JavaScript动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/quotes.js"></script>
+</body>
+</html> 

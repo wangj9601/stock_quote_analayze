@@ -1,0 +1,31 @@
+/* 专门的涨跌颜色样式文件 */
+
+/* 确保涨跌颜色正确显示 */
+.positive,
+.index-change.positive,
+.change.positive,
+.sector-change.positive,
+.change-pct.positive {
+    color: #ff4d4f !important;
+    font-weight: 600 !important;
+}
+
+.negative,
+.index-change.negative,
+.change.negative,
+.sector-change.negative,
+.change-pct.negative {
+    color: #52c41a !important;
+    font-weight: 600 !important;
+}
+
+/* 覆盖可能的其他样式 */
+.stock-item .change.positive,
+.rank-item .change-pct.positive {
+    color: #ff4d4f !important;
+}
+
+.stock-item .change.negative,
+.rank-item .change-pct.negative {
+    color: #52c41a !important;
+} 

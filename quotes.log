@@ -1,0 +1,129 @@
+2025-05-28 12:28:39,975 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:28:39,978 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 44, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 91, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:29:42,263 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:29:42,277 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 91, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:29:51,584 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:29:51,687 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:29:54,379 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:29:54,381 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 91, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:31:20,609 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:31:20,610 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:31:25,478 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:31:25,488 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:31:27,314 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:31:27,314 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:31:35,233 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:31:35,233 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:31:36,516 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:31:36,517 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:32:11,626 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:32:47,396 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:32:47,396 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:32:54,394 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:32:54,470 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:32:57,111 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:32:57,111 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 62, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+2025-05-28 12:34:07,819 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:34:07,830 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录
+2025-05-28 12:34:08,427 - backend_api.auth_routes - INFO - 尝试登录用户: wangxw
+2025-05-28 12:34:08,427 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 63, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+
+2025-05-28 12:37:03,257 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录 - IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-28 12:37:03,257 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录 - IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-28 12:37:04,136 - backend_api.auth_routes - INFO - 收到登录请求 - 用户名: wangxw, IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+2025-05-28 12:37:04,147 - backend_api.auth_routes - INFO - 开始验证用户: wangxw
+2025-05-28 12:37:04,149 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 143, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+ - 用户: wangxw, IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.013秒
+2025-05-28 12:37:09,101 - backend_api.auth_routes - INFO - 获取认证状态: 用户未登录 - IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-28 12:37:25,563 - backend_api.auth_routes - INFO - 收到登录请求 - 用户名: wangxw, IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+2025-05-28 12:37:25,570 - backend_api.auth_routes - INFO - 开始验证用户: wangxw
+2025-05-28 12:37:25,572 - backend_api.auth_routes - ERROR - 登录过程发生错误: '_GeneratorContextManager' object has no attribute 'query'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth_routes.py", line 143, in login
+    user = authenticate_user(db, login_data.username, login_data.password)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\wangxw\股票分析软件\设计\原型\cursor\backend_api\auth.py", line 98, in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'query'
+ - 用户: wangxw, IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.009秒

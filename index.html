@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票行情数据分析系统 - 原型演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        h1 {
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            color: #718096;
+            margin-bottom: 2.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .nav-button {
+            display: inline-block;
+            text-decoration: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .nav-button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: 2px solid transparent;
+        }
+        
+        .nav-button.secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        .nav-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .nav-button.primary:hover {
+            opacity: 0.9;
+        }
+        
+        .nav-button.secondary:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .features {
+            margin-top: 2rem;
+            text-align: left;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        .feature-item {
+            margin: 0.5rem 0;
+            padding-left: 1rem;
+            position: relative;
+        }
+        
+        .feature-item:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #48bb78;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>股票行情数据分析系统</h1>
+        <p class="subtitle">原型演示平台</p>
+        
+        <div class="nav-buttons">
+            <a href="frontend/index.html" class="nav-button primary">
+                📱 前端用户界面
+            </a>
+            <a href="admin/index.html" class="nav-button secondary">
+                ⚙️ 管理后台界面
+            </a>
+        </div>
+        
+        <div class="features">
+            <h3 style="margin-bottom: 1rem; color: #2d3748;">系统功能概览</h3>
+            <div class="feature-item">实时行情数据展示</div>
+            <div class="feature-item">个股详细分析</div>
+            <div class="feature-item">自选股管理</div>
+            <div class="feature-item">智能分析预测</div>
+            <div class="feature-item">技术指标图表</div>
+            <div class="feature-item">后台数据管理</div>
+        </div>
+    </div>
+</body>
+</html> 

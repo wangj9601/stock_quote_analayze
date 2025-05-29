@@ -1,0 +1,428 @@
+// 首页主要功能
+class HomePage {
+    constructor() {
+        this.init();
+        this.loadMarketData();
+        this.loadWatchlist();
+        this.loadHotSectors();
+        this.loadTopGainers();
+        this.loadNews();
+        this.loadRecommendations();
+        
+        // 设置自动刷新
+        this.startAutoRefresh();
+    }
+
+    init() {
+        // 初始化搜索功能
+        this.initSearch();
+        
+        // 检查登录状态
+        this.checkAuthStatus();
+    }
+
+    async checkAuthStatus() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+                credentials: 'include'
+            });
+            const result = await response.json();
+            
+            if (result.success && result.logged_in) {
+                this.updateUserInfo(result.user);
+            } else {
+                this.showLoginPrompt();
+            }
+        } catch (error) {
+            console.error('检查登录状态失败:', error);
+            this.showLoginPrompt();
+        }
+    }
+
+    updateUserInfo(user) {
+        const userNameElement = document.querySelector('.user-name');
+        if (userNameElement) {
+            userNameElement.textContent = user.username;
+        }
+    }
+
+    showLoginPrompt() {
+        const userNameElement = document.querySelector('.user-name');
+        if (userNameElement) {
+            userNameElement.innerHTML = '<a href="login.html" style="color: var(--color-primary);">登录</a>';
+        }
+    }
+
+    async loadMarketData() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/market/indices`);
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayMarketIndices(result.data);
+            }
+        } catch (error) {
+            console.error('加载市场数据失败:', error);
+        }
+    }
+
+    displayMarketIndices(indices) {        console.log('接收到指数数据:', indices);                indices.forEach(index => {            // 根据指数代码精确匹配卡片            const card = document.querySelector(`[data-index-code="${index.code}"]`);            if (!card) {                console.warn(`未找到指数代码 ${index.code} 对应的卡片`);                return;            }                        const nameElement = card.querySelector('.index-name');            const valueElement = card.querySelector('.index-value');            const changeElement = card.querySelector('.index-change');            const volumeElement = card.querySelector('.index-volume');            const timeElement = card.querySelector('.index-time');                        // 更新指数名称            if (nameElement) nameElement.textContent = index.name;                        // 更新指数数值            if (valueElement) {                valueElement.textContent = parseFloat(index.current).toLocaleString('zh-CN', {                    minimumFractionDigits: 2,                    maximumFractionDigits: 2                });            }                        // 更新涨跌信息            if (changeElement) {                const changeValue = parseFloat(index.change);                const changePercent = parseFloat(index.change_percent);                const changeText = `${changeValue >= 0 ? '+' : ''}${changeValue.toFixed(2)} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%)`;                changeElement.textContent = changeText;                changeElement.className = `index-change ${changeValue >= 0 ? 'positive' : 'negative'}`;            }                        // 更新成交量            if (volumeElement && index.volume) {                const volume = parseFloat(index.volume);                let volumeText;                if (volume >= 100000000) {                    volumeText = `${(volume / 100000000).toFixed(1)}亿`;                } else if (volume >= 10000) {                    volumeText = `${(volume / 10000).toFixed(1)}万`;                } else {                    volumeText = volume.toString();                }                volumeElement.textContent = `成交量: ${volumeText}`;            }                        // 更新时间            if (timeElement && index.timestamp) {                const time = new Date(index.timestamp);                const timeStr = time.toLocaleTimeString('zh-CN', {                     hour: '2-digit',                     minute: '2-digit',                    second: '2-digit'                });                timeElement.textContent = `更新时间: ${timeStr}`;            } else if (timeElement) {                const now = new Date();                const timeStr = now.toLocaleTimeString('zh-CN', {                     hour: '2-digit',                     minute: '2-digit',                    second: '2-digit'                });                timeElement.textContent = `更新时间: ${timeStr}`;            }        });    }
+
+    async loadWatchlist() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/watchlist`, {
+                credentials: 'include'
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayWatchlist(result.data.slice(0, 3)); // 只显示前3个
+            } else if (result.message === '请先登录') {
+                this.displayDefaultWatchlist();
+            }
+        } catch (error) {
+            console.error('加载自选股失败:', error);
+            this.displayDefaultWatchlist();
+        }
+    }
+
+    displayWatchlist(stocks) {
+        const stockList = document.querySelector('.stock-list');
+        if (!stockList) return;
+
+        if (stocks.length === 0) {
+            stockList.innerHTML = '<div class="empty-message">暂无自选股，<a href="watchlist.html">去添加</a></div>';
+            return;
+        }
+
+        stockList.innerHTML = stocks.map(stock => `
+            <div class="stock-item" data-code="${stock.code}">
+                <div class="stock-info">
+                    <span class="stock-code">${stock.code}</span>
+                    <span class="stock-name">${stock.name}</span>
+                </div>
+                <div class="stock-price">
+                    <span class="price">${stock.current_price || '0.00'}</span>
+                    <span class="change ${(stock.change_amount || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(stock.change_amount || 0) >= 0 ? '+' : ''}${stock.change_amount || 0}
+                    </span>
+                </div>
+            </div>
+        `).join('');
+
+        // 添加点击事件
+        stockList.querySelectorAll('.stock-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const code = item.dataset.code;
+                window.location.href = `stock.html?code=${code}`;
+            });
+        });
+    }
+
+    displayDefaultWatchlist() {
+        // 显示默认的股票数据
+        const defaultStocks = [
+            { code: '000001', name: '平安银行', price: '12.34', change: '+0.56' },
+            { code: '000002', name: '万科A', price: '23.45', change: '-0.12' },
+            { code: '600036', name: '招商银行', price: '45.67', change: '+1.23' }
+        ];
+
+        const stockList = document.querySelector('.stock-list');
+        if (!stockList) return;
+
+        stockList.innerHTML = defaultStocks.map(stock => `
+            <div class="stock-item" data-code="${stock.code}">
+                <div class="stock-info">
+                    <span class="stock-code">${stock.code}</span>
+                    <span class="stock-name">${stock.name}</span>
+                </div>
+                <div class="stock-price">
+                    <span class="price">${stock.price}</span>
+                    <span class="change ${stock.change.startsWith('+') ? 'positive' : 'negative'}">
+                        ${stock.change}
+                    </span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async loadHotSectors() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/market/sectors`);
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayHotSectors(result.data.slice(0, 4));
+            }
+        } catch (error) {
+            console.error('加载热门板块失败:', error);
+        }
+    }
+
+    displayHotSectors(sectors) {
+        const sectorList = document.querySelector('.sector-list');
+        if (!sectorList) return;
+
+        sectorList.innerHTML = sectors.map(sector => `
+            <div class="sector-item">
+                <span class="sector-name">${sector.name}</span>
+                <span class="sector-change ${sector.change_percent >= 0 ? 'positive' : 'negative'}">
+                    ${sector.change_percent >= 0 ? '+' : ''}${sector.change_percent}%
+                </span>
+            </div>
+        `).join('');
+    }
+
+    async loadTopGainers() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/stocks/list?limit=4`);
+            const result = await response.json();
+            
+            if (result.success) {
+                // 按涨幅排序
+                const sortedStocks = result.data
+                    .filter(stock => stock.change_percent > 0)
+                    .sort((a, b) => b.change_percent - a.change_percent)
+                    .slice(0, 4);
+                
+                this.displayTopGainers(sortedStocks);
+            }
+        } catch (error) {
+            console.error('加载涨幅榜失败:', error);
+        }
+    }
+
+    displayTopGainers(stocks) {
+        const rankList = document.querySelector('.rank-list');
+        if (!rankList) return;
+
+        rankList.innerHTML = stocks.map((stock, index) => `
+            <div class="rank-item" data-code="${stock.code}">
+                <span class="rank">${index + 1}</span>
+                <span class="stock-name">${stock.name}</span>
+                <span class="change-pct positive">+${stock.change_percent}%</span>
+            </div>
+        `).join('');
+
+        // 添加点击事件
+        rankList.querySelectorAll('.rank-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const code = item.dataset.code;
+                window.location.href = `stock.html?code=${code}`;
+            });
+        });
+    }
+
+    async loadNews() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/news?limit=3`);
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayNews(result.data);
+            }
+        } catch (error) {
+            console.error('加载新闻失败:', error);
+        }
+    }
+
+    displayNews(newsItems) {
+        const newsList = document.querySelector('.news-list');
+        if (!newsList) return;
+
+        newsList.innerHTML = newsItems.map(news => {
+            const publishTime = new Date(news.publish_time);
+            const timeStr = `${publishTime.getHours().toString().padStart(2, '0')}:${publishTime.getMinutes().toString().padStart(2, '0')}`;
+            
+            return `
+                <div class="news-item" data-id="${news.id}">
+                    <span class="news-time">${timeStr}</span>
+                    <span class="news-content">${news.title}</span>
+                </div>
+            `;
+        }).join('');
+
+        // 添加点击事件
+        newsList.querySelectorAll('.news-item').forEach(item => {
+            item.addEventListener('click', () => {
+                window.location.href = 'news.html';
+            });
+        });
+    }
+
+    async loadRecommendations() {
+        try {
+            // 获取一些股票的预测数据
+            const stockCodes = ['000858', '600519'];
+            const recommendations = [];
+            
+            for (const code of stockCodes) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/analysis/predict/${code}`);
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        recommendations.push({
+                            code: result.data.stock_code,
+                            name: this.getStockName(code),
+                            recommendation: result.data.recommendation,
+                            reason: result.data.key_factors[0] || '基于技术分析'
+                        });
+                    }
+                } catch (error) {
+                    console.error(`获取${code}预测失败:`, error);
+                }
+            }
+            
+            this.displayRecommendations(recommendations);
+        } catch (error) {
+            console.error('加载智能推荐失败:', error);
+        }
+    }
+
+    getStockName(code) {
+        const stockNames = {
+            '000858': '五粮液',
+            '600519': '贵州茅台'
+        };
+        return stockNames[code] || '未知股票';
+    }
+
+    displayRecommendations(recommendations) {
+        const recommendationContainer = document.querySelector('.recommendation');
+        if (!recommendationContainer) return;
+
+        recommendationContainer.innerHTML = recommendations.map(rec => `
+            <div class="rec-item" data-code="${rec.code}">
+                <div class="rec-stock">
+                    <span class="stock-code">${rec.code}</span>
+                    <span class="stock-name">${rec.name}</span>
+                </div>
+                <div class="rec-action ${this.getActionClass(rec.recommendation)}">${rec.recommendation}</div>
+                <div class="rec-reason">${rec.reason}</div>
+            </div>
+        `).join('');
+
+        // 添加点击事件
+        recommendationContainer.querySelectorAll('.rec-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const code = item.dataset.code;
+                window.location.href = `stock.html?code=${code}`;
+            });
+        });
+    }
+
+    getActionClass(recommendation) {
+        switch (recommendation) {
+            case '买入': return 'buy';
+            case '卖出': return 'sell';
+            case '持有': return 'hold';
+            default: return 'neutral';
+        }
+    }
+
+    initSearch() {
+        const searchBtn = document.querySelector('.search-btn');
+        const searchModal = document.getElementById('searchModal');
+        const closeSearch = document.querySelector('.close-search');
+        const searchInput = document.querySelector('.search-input');
+
+        if (searchBtn && searchModal) {
+            searchBtn.addEventListener('click', () => {
+                searchModal.style.display = 'flex';
+                if (searchInput) searchInput.focus();
+            });
+        }
+
+        if (closeSearch && searchModal) {
+            closeSearch.addEventListener('click', () => {
+                searchModal.style.display = 'none';
+            });
+        }
+
+        if (searchModal) {
+            searchModal.addEventListener('click', (e) => {
+                if (e.target === searchModal) {
+                    searchModal.style.display = 'none';
+                }
+            });
+        }
+
+        if (searchInput) {
+            let searchTimeout;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    this.performSearch(e.target.value);
+                }, 300);
+            });
+        }
+    }
+
+    async performSearch(keyword) {
+        if (!keyword.trim()) {
+            this.clearSearchResults();
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/stocks/search?q=${encodeURIComponent(keyword)}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displaySearchResults(result.data);
+            }
+        } catch (error) {
+            console.error('搜索失败:', error);
+        }
+    }
+
+    displaySearchResults(stocks) {
+        const resultsContainer = document.querySelector('.search-results');
+        if (!resultsContainer) return;
+
+        if (stocks.length === 0) {
+            resultsContainer.innerHTML = '<div class="no-results">未找到相关股票</div>';
+            return;
+        }
+
+        resultsContainer.innerHTML = stocks.map(stock => `
+            <div class="search-item" data-code="${stock.code}">
+                <span class="code">${stock.code}</span>
+                <span class="name">${stock.name}</span>
+                <span class="price">${stock.current_price}</span>
+                <span class="change ${stock.change_percent >= 0 ? 'positive' : 'negative'}">
+                    ${stock.change_percent >= 0 ? '+' : ''}${stock.change_percent}%
+                </span>
+            </div>
+        `).join('');
+
+        // 添加点击事件
+        resultsContainer.querySelectorAll('.search-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const code = item.dataset.code;
+                window.location.href = `stock.html?code=${code}`;
+            });
+        });
+    }
+
+    clearSearchResults() {
+        const resultsContainer = document.querySelector('.search-results');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '';
+        }
+    }
+
+    startAutoRefresh() {
+        // 每30秒刷新一次数据
+        setInterval(() => {
+            this.loadMarketData();
+            this.loadWatchlist();
+        }, 30000);
+    }
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', () => {
+    new HomePage();
+}); 

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行情中心 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/markets.css">
+</head>
+<body>
+<script src="components/header.js"></script>
+<script>loadHeader('quotes');</script>
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <!-- 市场总览 -->
+        <section class="market-overview">
+            <div class="container">
+                <h1>行情中心</h1>
+                <div class="market-indices">
+                    <div class="index-card">
+                        <div class="index-header">
+                            <h3>上证指数</h3>
+                            <span class="index-code">000001</span>
+                        </div>
+                        <div class="index-data">
+                            <span class="index-value">3,234.56</span>
+                            <div class="index-change positive">
+                                <span class="change-value">+12.34</span>
+                                <span class="change-percent">+0.38%</span>
+                            </div>
+                        </div>
+                        <div class="index-chart">
+                            <canvas id="sh000001Chart" width="200" height="60"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="index-card">
+                        <div class="index-header">
+                            <h3>深证成指</h3>
+                            <span class="index-code">399001</span>
+                        </div>
+                        <div class="index-data">
+                            <span class="index-value">10,876.43</span>
+                            <div class="index-change negative">
+                                <span class="change-value">-45.67</span>
+                                <span class="change-percent">-0.42%</span>
+                            </div>
+                        </div>
+                        <div class="index-chart">
+                            <canvas id="sz399001Chart" width="200" height="60"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="index-card">
+                        <div class="index-header">
+                            <h3>创业板指</h3>
+                            <span class="index-code">399006</span>
+                        </div>
+                        <div class="index-data">
+                            <span class="index-value">2,345.78</span>
+                            <div class="index-change positive">
+                                <span class="change-value">+23.45</span>
+                                <span class="change-percent">+1.01%</span>
+                            </div>
+                        </div>
+                        <div class="index-chart">
+                            <canvas id="sz399006Chart" width="200" height="60"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="index-card">
+                        <div class="index-header">
+                            <h3>沪深300</h3>
+                            <span class="index-code">000300</span>
+                        </div>
+                        <div class="index-data">
+                            <span class="index-value">4,123.89</span>
+                            <div class="index-change positive">
+                                <span class="change-value">+8.90</span>
+                                <span class="change-percent">+0.22%</span>
+                            </div>
+                        </div>
+                        <div class="index-chart">
+                            <canvas id="csi000300Chart" width="200" height="60"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 内容标签区 -->
+        <section class="content-tabs">
+            <div class="container">
+                <div class="tab-nav">
+                    <button class="content-tab active" data-tab="rankings">涨跌排行</button>
+                    <button class="content-tab" data-tab="sectors">行业板块</button>
+                    <button class="content-tab" data-tab="hot">热门关注</button>
+                    <button class="content-tab" data-tab="stats">市场统计</button>
+                </div>
+
+                <div class="tab-content">
+                    <!-- 涨跌排行 -->
+                    <div class="tab-panel active" id="rankings">
+                        <div class="rankings-header">
+                            <div class="ranking-types">
+                                <button class="ranking-type-btn active" data-type="rise">涨幅榜</button>
+                                <button class="ranking-type-btn" data-type="fall">跌幅榜</button>
+                                <button class="ranking-type-btn" data-type="volume">成交量榜</button>
+                                <button class="ranking-type-btn" data-type="turnover">换手率榜</button>
+                            </div>
+                            <div class="market-filter">
+                                <select class="filter-select">
+                                    <option value="all">全部市场</option>
+                                    <option value="sh">沪市A股</option>
+                                    <option value="sz">深市A股</option>
+                                    <option value="cy">创业板</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="rankings-content">
+                            <table class="table rankings-table">
+                                <thead>
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>股票</th>
+                                        <th>最新价</th>
+                                        <th>涨跌幅</th>
+                                        <th>涨跌额</th>
+                                        <th>成交量</th>
+                                        <th>成交额</th>
+                                        <th>换手率</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rankingsTableBody">
+                                    <!-- 动态生成内容 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 行业板块 -->
+                    <div class="tab-panel" id="sectors">
+                        <div class="sectors-grid">
+                            <div class="sector-card">
+                                <div class="sector-header">
+                                    <h3>新能源汽车</h3>
+                                    <span class="sector-change positive">+3.45%</span>
+                                </div>
+                                <div class="sector-stats">
+                                    <div class="stat-item">
+                                        <span class="label">上涨</span>
+                                        <span class="value positive">45</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">下跌</span>
+                                        <span class="value negative">12</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">平盘</span>
+                                        <span class="value">3</span>
+                                    </div>
+                                </div>
+                                <div class="sector-leaders">
+                                    <div class="leader-stock">
+                                        <span class="stock-name">比亚迪</span>
+                                        <span class="stock-change positive">+5.67%</span>
+                                    </div>
+                                    <div class="leader-stock">
+                                        <span class="stock-name">宁德时代</span>
+                                        <span class="stock-change positive">+4.32%</span>
+                                    </div>
+                                </div>
+                                <button class="sector-detail-btn" onclick="goToSectorDetail('新能源汽车')">查看详情</button>
+                            </div>
+
+                            <div class="sector-card">
+                                <div class="sector-header">
+                                    <h3>人工智能</h3>
+                                    <span class="sector-change positive">+2.87%</span>
+                                </div>
+                                <div class="sector-stats">
+                                    <div class="stat-item">
+                                        <span class="label">上涨</span>
+                                        <span class="value positive">38</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">下跌</span>
+                                        <span class="value negative">15</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">平盘</span>
+                                        <span class="value">2</span>
+                                    </div>
+                                </div>
+                                <div class="sector-leaders">
+                                    <div class="leader-stock">
+                                        <span class="stock-name">科大讯飞</span>
+                                        <span class="stock-change positive">+6.89%</span>
+                                    </div>
+                                    <div class="leader-stock">
+                                        <span class="stock-name">百度</span>
+                                        <span class="stock-change positive">+4.56%</span>
+                                    </div>
+                                </div>
+                                <button class="sector-detail-btn" onclick="goToSectorDetail('人工智能')">查看详情</button>
+                            </div>
+
+                            <div class="sector-card">
+                                <div class="sector-header">
+                                    <h3>生物医药</h3>
+                                    <span class="sector-change negative">-1.23%</span>
+                                </div>
+                                <div class="sector-stats">
+                                    <div class="stat-item">
+                                        <span class="label">上涨</span>
+                                        <span class="value positive">18</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">下跌</span>
+                                        <span class="value negative">35</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">平盘</span>
+                                        <span class="value">4</span>
+                                    </div>
+                                </div>
+                                <div class="sector-leaders">
+                                    <div class="leader-stock">
+                                        <span class="stock-name">药明康德</span>
+                                        <span class="stock-change positive">+2.34%</span>
+                                    </div>
+                                    <div class="leader-stock">
+                                        <span class="stock-name">恒瑞医药</span>
+                                        <span class="stock-change negative">-1.45%</span>
+                                    </div>
+                                </div>
+                                <button class="sector-detail-btn" onclick="goToSectorDetail('生物医药')">查看详情</button>
+                            </div>
+
+                            <div class="sector-card">
+                                <div class="sector-header">
+                                    <h3>半导体</h3>
+                                    <span class="sector-change positive">+4.12%</span>
+                                </div>
+                                <div class="sector-stats">
+                                    <div class="stat-item">
+                                        <span class="label">上涨</span>
+                                        <span class="value positive">52</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">下跌</span>
+                                        <span class="value negative">8</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="label">平盘</span>
+                                        <span class="value">3</span>
+                                    </div>
+                                </div>
+                                <div class="sector-leaders">
+                                    <div class="leader-stock">
+                                        <span class="stock-name">中芯国际</span>
+                                        <span class="stock-change positive">+7.89%</span>
+                                    </div>
+                                    <div class="leader-stock">
+                                        <span class="stock-name">韦尔股份</span>
+                                        <span class="stock-change positive">+6.23%</span>
+                                    </div>
+                                </div>
+                                <button class="sector-detail-btn" onclick="goToSectorDetail('半导体')">查看详情</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 热门关注 -->
+                    <div class="tab-panel" id="hot">
+                        <div class="hot-content">
+                            <div class="hot-section">
+                                <h3>热搜股票</h3>
+                                <div class="hot-stocks-list">
+                                    <div class="hot-stock-item">
+                                        <span class="rank">1</span>
+                                        <div class="stock-info">
+                                            <span class="stock-name">比亚迪</span>
+                                            <span class="stock-code">002594</span>
+                                        </div>
+                                        <span class="hot-indicator">🔥</span>
+                                        <span class="stock-price positive">+8.90%</span>
+                                    </div>
+                                    
+                                    <div class="hot-stock-item">
+                                        <span class="rank">2</span>
+                                        <div class="stock-info">
+                                            <span class="stock-name">贵州茅台</span>
+                                            <span class="stock-code">600519</span>
+                                        </div>
+                                        <span class="hot-indicator">🔥</span>
+                                        <span class="stock-price negative">-2.34%</span>
+                                    </div>
+                                    
+                                    <div class="hot-stock-item">
+                                        <span class="rank">3</span>
+                                        <div class="stock-info">
+                                            <span class="stock-name">宁德时代</span>
+                                            <span class="stock-code">300750</span>
+                                        </div>
+                                        <span class="hot-indicator">🔥</span>
+                                        <span class="stock-price positive">+5.67%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="hot-section">
+                                <h3>资金流向</h3>
+                                <div class="capital-flow">
+                                    <div class="flow-item">
+                                        <span class="flow-label">主力净流入</span>
+                                        <span class="flow-value positive">+123.45亿</span>
+                                    </div>
+                                    <div class="flow-item">
+                                        <span class="flow-label">超大单净流入</span>
+                                        <span class="flow-value positive">+78.90亿</span>
+                                    </div>
+                                    <div class="flow-item">
+                                        <span class="flow-label">大单净流入</span>
+                                        <span class="flow-value positive">+44.55亿</span>
+                                    </div>
+                                    <div class="flow-item">
+                                        <span class="flow-label">中单净流出</span>
+                                        <span class="flow-value negative">-67.89亿</span>
+                                    </div>
+                                    <div class="flow-item">
+                                        <span class="flow-label">小单净流出</span>
+                                        <span class="flow-value negative">-55.56亿</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="hot-section">
+                                <h3>市场情绪</h3>
+                                <div class="market-sentiment">
+                                    <div class="sentiment-meter">
+                                        <div class="meter-label">看多情绪</div>
+                                        <div class="meter-bar">
+                                            <div class="meter-fill positive" style="width: 68%;"></div>
+                                        </div>
+                                        <div class="meter-value">68%</div>
+                                    </div>
+                                    <div class="sentiment-stats">
+                                        <div class="sentiment-item">
+                                            <span class="label">上涨股票</span>
+                                            <span class="value positive">2,847</span>
+                                        </div>
+                                        <div class="sentiment-item">
+                                            <span class="label">下跌股票</span>
+                                            <span class="value negative">1,523</span>
+                                        </div>
+                                        <div class="sentiment-item">
+                                            <span class="label">平盘股票</span>
+                                            <span class="value">156</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 市场统计 -->
+                    <div class="tab-panel" id="stats">
+                        <div class="stats-grid">
+                            <div class="stats-card">
+                                <h3>交易统计</h3>
+                                <div class="stats-content">
+                                    <div class="stat-row">
+                                        <span class="stat-label">总成交额</span>
+                                        <span class="stat-value">8,567.89亿</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">沪市成交额</span>
+                                        <span class="stat-value">4,234.56亿</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">深市成交额</span>
+                                        <span class="stat-value">4,333.33亿</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">北向资金净流入</span>
+                                        <span class="stat-value positive">+45.67亿</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="stats-card">
+                                <h3>涨跌分布</h3>
+                                <div class="distribution-chart">
+                                    <canvas id="distributionChart" width="300" height="200"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="stats-card">
+                                <h3>市场热度</h3>
+                                <div class="heat-indicators">
+                                    <div class="heat-item">
+                                        <span class="heat-label">新高股票数</span>
+                                        <span class="heat-value">234</span>
+                                        <span class="heat-trend positive">↑</span>
+                                    </div>
+                                    <div class="heat-item">
+                                        <span class="heat-label">新低股票数</span>
+                                        <span class="heat-value">45</span>
+                                        <span class="heat-trend negative">↓</span>
+                                    </div>
+                                    <div class="heat-item">
+                                        <span class="heat-label">涨停股票数</span>
+                                        <span class="heat-value">89</span>
+                                        <span class="heat-trend positive">↑</span>
+                                    </div>
+                                    <div class="heat-item">
+                                        <span class="heat-label">跌停股票数</span>
+                                        <span class="heat-value">12</span>
+                                        <span class="heat-trend negative">↓</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="输入股票代码或名称" class="search-input">
+                <button class="close-search">×</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/markets.js"></script>
+</body>
+</html> 

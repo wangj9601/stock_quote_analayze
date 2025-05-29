@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个股详情 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <!-- <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script> -->
+    <script src="js/echarts.min.js"></script>
+</head>
+<body>
+    <!-- 头部导航 -->
+    <header class="header">
+        <div class="container">
+            <div class="nav-brand">
+                <a href="index.html" style="text-decoration: none; color: inherit;">
+                    <h1>📈 股票分析</h1>
+                </a>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item">首页</a>
+                <a href="watchlist.html" class="nav-item">自选股</a>
+                <a href="markets.html" class="nav-item">行情</a>
+                <a href="analysis.html" class="nav-item">分析</a>
+                <a href="news.html" class="nav-item">资讯</a>
+                <a href="profile.html" class="nav-item">我的</a>
+            </nav>
+            <div class="user-actions">
+                <button class="search-btn">🔍</button>
+                <div class="user-menu">
+                    <!-- 这里将由JavaScript动态填充用户信息 -->
+                    <div class="user-info">
+                        <span class="user-avatar">👤</span>
+                        <span class="user-name">加载中...</span>
+                        <div class="user-dropdown">
+                            <a href="profile.html">个人中心</a>
+                            <a href="#" onclick="CommonUtils.auth.logout()">退出登录</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <!-- 股票基本信息 -->
+        <section class="stock-header">
+            <div class="container">
+                <div class="stock-info">
+                    <div class="stock-name-section">
+                        <h1 class="stock-name">平安银行</h1>
+                        <span class="stock-code">000001</span>
+                        <button class="watchlist-toggle">⭐ 自选</button>
+                    </div>
+                    <div class="stock-price-section">
+                        <div class="current-price">12.34</div>
+                        <div class="price-change positive">+0.56 (+4.76%)</div>
+                        <div class="price-time">15:00:00</div>
+                    </div>
+                </div>
+                
+                <div class="stock-details">
+                    <div class="detail-item">
+                        <span class="label">今开</span>
+                        <span class="value">11.89</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">昨收</span>
+                        <span class="value">11.78</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">最高</span>
+                        <span class="value positive">12.45</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">最低</span>
+                        <span class="value negative">11.85</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">成交量</span>
+                        <span class="value">1.23亿</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">成交额</span>
+                        <span class="value">15.2亿</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">换手率</span>
+                        <span class="value">2.34%</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="label">市盈率</span>
+                        <span class="value">8.56</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 图表区域 -->
+        <section class="chart-section">
+            <div class="container">
+                <div class="chart-container">
+                    <div class="chart-controls">
+                        <div class="chart-type-tabs">
+                            <button class="tab-btn active" data-type="kline">K线</button>
+                            <button class="tab-btn" data-type="minute">分时</button>
+                        </div>
+                        <div class="chart-period-tabs">
+                            <button class="period-btn" data-period="1m">1分</button>
+                            <button class="period-btn" data-period="5m">5分</button>
+                            <button class="period-btn" data-period="15m">15分</button>
+                            <button class="period-btn" data-period="30m">30分</button>
+                            <button class="period-btn" data-period="1h">1小时</button>
+                            <button class="period-btn active" data-period="1d">日K</button>
+                            <button class="period-btn" data-period="1w">周K</button>
+                            <button class="period-btn" data-period="1M">月K</button>
+                        </div>
+                        <div class="chart-indicators">
+                            <select class="indicator-select">
+                                <option value="ma">MA均线</option>
+                                <option value="ema">EMA均线</option>
+                                <option value="boll">布林带</option>
+                            </select>
+                            <select class="sub-indicator-select">
+                                <option value="vol">成交量</option>
+                                <option value="macd">MACD</option>
+                                <option value="kdj">KDJ</option>
+                                <option value="rsi">RSI</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <div id="klineChart" class="chart"></div>
+                        <div id="minuteChart" class="chart" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 内容标签区域 -->
+        <section class="content-tabs">
+            <div class="container">
+                <div class="tab-nav">
+                    <button class="content-tab active" data-tab="analysis">智能分析</button>
+                    <button class="content-tab" data-tab="finance">财务数据</button>
+                    <button class="content-tab" data-tab="news">新闻公告</button>
+                    <button class="content-tab" data-tab="research">研报</button>
+                    <button class="content-tab" data-tab="flow">资金流向</button>
+                </div>
+                
+                <div class="tab-content">
+                    <!-- 智能分析 -->
+                    <div class="tab-panel active" id="analysis">
+                        <div class="analysis-grid">
+                            <div class="analysis-card">
+                                <h3>🎯 价格预测</h3>
+                                <div class="prediction-result">
+                                    <div class="prediction-price">
+                                        <span class="target-price">13.50</span>
+                                        <span class="prediction-change positive">+9.41%</span>
+                                    </div>
+                                    <div class="prediction-range">
+                                        <span>预测区间：12.80 - 14.20</span>
+                                    </div>
+                                    <div class="confidence">
+                                        <span>置信度：75%</span>
+                                        <span>预测周期：30天</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="analysis-card">
+                                <h3>📊 交易建议</h3>
+                                <div class="recommendation-result">
+                                    <div class="action-badge buy">建议买入</div>
+                                    <div class="recommendation-reasons">
+                                        <div class="reason-item positive">✓ 技术指标看多</div>
+                                        <div class="reason-item positive">✓ 成交量持续放大</div>
+                                        <div class="reason-item positive">✓ 突破重要阻力位</div>
+                                        <div class="reason-item warning">⚠ 注意大盘风险</div>
+                                    </div>
+                                    <div class="risk-level">
+                                        <span>风险等级：</span>
+                                        <span class="risk-badge medium">中等</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="analysis-card">
+                                <h3>📈 技术指标</h3>
+                                <div class="technical-indicators">
+                                    <div class="indicator-row">
+                                        <span class="indicator-name">RSI(14)</span>
+                                        <span class="indicator-value">65.4</span>
+                                        <span class="indicator-signal neutral">中性</span>
+                                    </div>
+                                    <div class="indicator-row">
+                                        <span class="indicator-name">MACD</span>
+                                        <span class="indicator-value">0.124</span>
+                                        <span class="indicator-signal bullish">看多</span>
+                                    </div>
+                                    <div class="indicator-row">
+                                        <span class="indicator-name">KDJ</span>
+                                        <span class="indicator-value">75.2</span>
+                                        <span class="indicator-signal bearish">看空</span>
+                                    </div>
+                                    <div class="indicator-row">
+                                        <span class="indicator-name">布林带</span>
+                                        <span class="indicator-value">上轨</span>
+                                        <span class="indicator-signal bullish">看多</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="analysis-card">
+                                <h3>🎯 关键价位</h3>
+                                <div class="key-levels">
+                                    <div class="level-item">
+                                        <span class="level-label">阻力位3</span>
+                                        <span class="level-value resistance">13.80</span>
+                                    </div>
+                                    <div class="level-item">
+                                        <span class="level-label">阻力位2</span>
+                                        <span class="level-value resistance">13.20</span>
+                                    </div>
+                                    <div class="level-item">
+                                        <span class="level-label">阻力位1</span>
+                                        <span class="level-value resistance">12.65</span>
+                                    </div>
+                                    <div class="level-item current">
+                                        <span class="level-label">当前价</span>
+                                        <span class="level-value">12.34</span>
+                                    </div>
+                                    <div class="level-item">
+                                        <span class="level-label">支撑位1</span>
+                                        <span class="level-value support">11.90</span>
+                                    </div>
+                                    <div class="level-item">
+                                        <span class="level-label">支撑位2</span>
+                                        <span class="level-value support">11.45</span>
+                                    </div>
+                                    <div class="level-item">
+                                        <span class="level-label">支撑位3</span>
+                                        <span class="level-value support">10.98</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 财务数据 -->
+                    <div class="tab-panel" id="finance">
+                        <div class="finance-grid">
+                            <div class="finance-section">
+                                <h3>主要财务指标</h3>
+                                <table class="finance-table">
+                                    <tr>
+                                        <td>市盈率(TTM)</td>
+                                        <td>8.56</td>
+                                        <td>市净率</td>
+                                        <td>0.89</td>
+                                    </tr>
+                                    <tr>
+                                        <td>净资产收益率</td>
+                                        <td>12.34%</td>
+                                        <td>资产收益率</td>
+                                        <td>1.23%</td>
+                                    </tr>
+                                    <tr>
+                                        <td>营业收入(亿)</td>
+                                        <td>1,234.56</td>
+                                        <td>净利润(亿)</td>
+                                        <td>345.67</td>
+                                    </tr>
+                                    <tr>
+                                        <td>每股收益</td>
+                                        <td>1.85</td>
+                                        <td>每股净资产</td>
+                                        <td>13.67</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <div class="finance-section">
+                                <h3>盈利能力</h3>
+                                <div class="chart-placeholder">
+                                    <div id="profitChart" style="height: 300px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 新闻公告 -->
+                    <div class="tab-panel" id="news">
+                        <div class="news-list-container">
+                            <div class="news-filter">
+                                <button class="filter-btn active" data-filter="all">全部</button>
+                                <button class="filter-btn" data-filter="announcement">公告</button>
+                                <button class="filter-btn" data-filter="news">新闻</button>
+                            </div>
+                            <div class="news-items">
+                                <div class="news-card">
+                                    <div class="news-meta">
+                                        <span class="news-date">2025-01-20</span>
+                                        <span class="news-type announcement">公告</span>
+                                    </div>
+                                    <h4 class="news-title">平安银行2024年年度业绩预告</h4>
+                                    <p class="news-summary">公司预计2024年归属于上市公司股东的净利润为350-360亿元，同比增长5%-8%...</p>
+                                </div>
+                                
+                                <div class="news-card">
+                                    <div class="news-meta">
+                                        <span class="news-date">2025-01-19</span>
+                                        <span class="news-type news">新闻</span>
+                                    </div>
+                                    <h4 class="news-title">银行股集体走强，平安银行涨超5%</h4>
+                                    <p class="news-summary">受利好政策影响，银行板块今日表现强劲，平安银行领涨...</p>
+                                </div>
+                                
+                                <div class="news-card">
+                                    <div class="news-meta">
+                                        <span class="news-date">2025-01-18</span>
+                                        <span class="news-type announcement">公告</span>
+                                    </div>
+                                    <h4 class="news-title">关于召开2024年度股东大会的通知</h4>
+                                    <p class="news-summary">公司定于2025年3月15日召开2024年度股东大会...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 研报 -->
+                    <div class="tab-panel" id="research">
+                        <div class="research-list">
+                            <div class="research-item">
+                                <div class="research-header">
+                                    <h4>平安银行：业绩稳健增长，维持买入评级</h4>
+                                    <div class="research-meta">
+                                        <span class="research-firm">中信证券</span>
+                                        <span class="research-date">2025-01-20</span>
+                                        <span class="research-rating buy">买入</span>
+                                    </div>
+                                </div>
+                                <div class="research-target">
+                                    <span>目标价：15.00元</span>
+                                    <span class="target-upside positive">+21.6%</span>
+                                </div>
+                                <p class="research-summary">公司2024年业绩表现稳健，资产质量持续改善，建议买入...</p>
+                            </div>
+                            
+                            <div class="research-item">
+                                <div class="research-header">
+                                    <h4>平安银行：零售转型成效显著</h4>
+                                    <div class="research-meta">
+                                        <span class="research-firm">招商证券</span>
+                                        <span class="research-date">2025-01-18</span>
+                                        <span class="research-rating hold">持有</span>
+                                    </div>
+                                </div>
+                                <div class="research-target">
+                                    <span>目标价：13.50元</span>
+                                    <span class="target-upside positive">+9.4%</span>
+                                </div>
+                                <p class="research-summary">零售业务转型成效明显，但需关注息差收窄压力...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 资金流向 -->
+                    <div class="tab-panel" id="flow">
+                        <div class="flow-summary">
+                            <div class="flow-item">
+                                <span class="flow-label">今日主力流入</span>
+                                <span class="flow-value positive">+2.34亿</span>
+                            </div>
+                            <div class="flow-item">
+                                <span class="flow-label">今日超大单流入</span>
+                                <span class="flow-value positive">+1.56亿</span>
+                            </div>
+                            <div class="flow-item">
+                                <span class="flow-label">今日大单流入</span>
+                                <span class="flow-value positive">+0.78亿</span>
+                            </div>
+                            <div class="flow-item">
+                                <span class="flow-label">今日中单流出</span>
+                                <span class="flow-value negative">-1.23亿</span>
+                            </div>
+                            <div class="flow-item">
+                                <span class="flow-label">今日小单流出</span>
+                                <span class="flow-value negative">-1.11亿</span>
+                            </div>
+                        </div>
+                        <div class="flow-chart">
+                            <div id="flowChart" style="height: 400px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="输入股票代码或名称" class="search-input">
+                <button class="close-search">×</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/stock.js"></script>
+</body>
+</html> 

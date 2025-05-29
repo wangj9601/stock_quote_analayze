@@ -1,0 +1,436 @@
+/* 通用样式 - 股票交易风格 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    background-color: #f5f5f5;
+    color: #333333;
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+/* 股票经典颜色定义 */
+:root {
+    --color-rise: #ff4d4f;     /* 涨红色 */
+    --color-fall: #52c41a;     /* 跌绿色 */
+    --color-primary: #1890ff;  /* 主题蓝 */
+    --color-bg-dark: #001529;  /* 深色背景 */
+    --color-bg-light: #ffffff; /* 浅色背景 */
+    --color-text-primary: #333333;
+    --color-text-secondary: #666666;
+    --color-text-light: #999999;
+    --color-border: #e8e8e8;
+    --color-warning: #faad14;  /* 橙色警告 */
+}
+
+/* 头部导航 - 深色专业风格 */
+.header {
+    background: linear-gradient(135deg, #001529 0%, #002140 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.header .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+}
+
+.nav-brand h1 {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-brand h1::before {
+    content: "📈";
+    font-size: 24px;
+}
+
+.nav-menu {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.nav-item {
+    display: block;
+    padding: 18px 20px;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-bottom: 3px solid transparent;
+}
+
+.nav-item:hover,
+.nav-item.active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom-color: var(--color-primary);
+}
+
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.search-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.search-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* 用户菜单 */
+.user-info {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background-color 0.3s ease;
+    color: #ffffff;
+}
+
+.user-info:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.user-avatar {
+    width: 28px;
+    height: 28px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #ffffff;
+}
+
+.user-name {
+    color: #ffffff;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.user-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 150px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    z-index: 1000;
+    border: 1px solid var(--color-border);
+}
+
+.user-info:hover .user-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.user-dropdown a {
+    display: block;
+    padding: 12px 16px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+}
+
+.user-dropdown a:last-child {
+    border-bottom: none;
+}
+
+.user-dropdown a:hover {
+    background: #f8f9fa;
+    color: var(--color-primary);
+}
+
+/* 主要内容区域 */
+.main-content {
+    min-height: calc(100vh - 60px);
+    background: #f5f5f5;
+}
+
+/* 涨跌颜色样式 */
+.positive {
+    color: var(--color-rise) !important;
+}
+
+.negative {
+    color: var(--color-fall) !important;
+}
+
+/* 卡片样式 - 专业交易风格 */
+.card {
+    background: #ffffff;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+    background: #fafafa;
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+/* 数据表格 - 金融数据专用 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.data-table th,
+.data-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.data-table th {
+    background: #fafafa;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+
+.data-table td {
+    color: var(--color-text-primary);
+}
+
+/* 股票价格颜色 */
+.price-rise {
+    color: var(--color-rise) !important;
+}
+
+.price-fall {
+    color: var(--color-fall) !important;
+}
+
+.price-neutral {
+    color: var(--color-text-secondary) !important;
+}
+
+/* 百分比显示 */
+.percent {
+    font-family: "Courier New", monospace;
+    font-weight: 600;
+}
+
+.percent.rise::before {
+    content: "+";
+}
+
+.percent.fall::before {
+    content: "-";
+}
+
+/* 按钮样式 */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.btn-primary {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    background: #40a9ff;
+    border-color: #40a9ff;
+    color: #ffffff;
+}
+
+.btn-danger {
+    background: var(--color-rise);
+    border-color: var(--color-rise);
+    color: #ffffff;
+}
+
+.btn-success {
+    background: var(--color-fall);
+    border-color: var(--color-fall);
+    color: #ffffff;
+}
+
+/* 标签 */
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.tag-rise {
+    background: #fff2f0;
+    color: var(--color-rise);
+    border: 1px solid #ffccc7;
+}
+
+.tag-fall {
+    background: #f6ffed;
+    color: var(--color-fall);
+    border: 1px solid #b7eb8f;
+}
+
+/* 加载动画 */
+.loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+    
+    .header .container {
+        height: 50px;
+    }
+    
+    .nav-menu {
+        display: none;
+    }
+    
+    .user-info span {
+        display: none;
+    }
+    
+    .nav-brand h1 {
+        font-size: 18px;
+    }
+    
+    .card-body {
+        padding: 15px;
+    }
+}
+
+/* 搜索框样式 */
+.search-container {
+    position: relative;
+    display: inline-block;
+}
+
+.search-input {
+    padding: 8px 35px 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 14px;
+    width: 200px;
+    transition: border-color 0.3s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.search-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-light);
+    font-size: 14px;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+} 

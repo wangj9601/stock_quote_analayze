@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>财经资讯 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/news.css">
+</head>
+<body>
+<script src="components/header.js"></script>
+<script>loadHeader('news');</script>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <div class="container">
+            <h1>财经资讯</h1>
+            
+            <!-- 头条新闻 -->
+            <section class="headline-news">
+                <div class="headline-card">
+                    <div class="headline-image">
+                        <div class="placeholder-image">📰</div>
+                    </div>
+                    <div class="headline-content">
+                        <div class="headline-badge">头条</div>
+                        <h2>A股三大指数集体收涨 科技板块领涨</h2>
+                        <p>今日A股三大指数集体收涨，沪指涨0.8%，深成指涨1.2%，创业板指涨1.5%。科技股表现突出，新能源汽车、人工智能等概念股涨幅居前...</p>
+                        <div class="headline-meta">
+                            <span class="source">财经日报</span>
+                            <span class="time">2小时前</span>
+                            <span class="views">1.2万阅读</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 资讯分类 -->
+            <section class="news-categories">
+                <div class="category-tabs">
+                    <button class="category-tab active" data-category="all">全部</button>
+                    <button class="category-tab" data-category="market">市场动态</button>
+                    <button class="category-tab" data-category="policy">政策解读</button>
+                    <button class="category-tab" data-category="company">公司资讯</button>
+                    <button class="category-tab" data-category="international">国际财经</button>
+                    <button class="category-tab" data-category="analysis">分析研判</button>
+                </div>
+            </section>
+
+            <!-- 内容区域 -->
+            <section class="news-content">
+                <div class="news-layout">
+                    <!-- 主要新闻区域 -->
+                    <div class="main-news">
+                        <div class="news-list" id="newsList">
+                            <article class="news-item" data-category="market">
+                                <div class="news-image">
+                                    <div class="placeholder-image">📊</div>
+                                </div>
+                                <div class="news-content">
+                                    <div class="news-header">
+                                        <h3>央行降准0.5个百分点 释放长期流动性约1万亿元</h3>
+                                        <span class="news-tag hot">热点</span>
+                                    </div>
+                                    <p class="news-summary">中国人民银行宣布，为支持实体经济发展，决定于本月25日下调存款准备金率0.5个百分点，此次降准将释放长期流动性约1万亿元...</p>
+                                    <div class="news-meta">
+                                        <span class="source">央行官网</span>
+                                        <span class="time">30分钟前</span>
+                                        <span class="category">市场动态</span>
+                                        <span class="views">5.8万阅读</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="news-item" data-category="company">
+                                <div class="news-image">
+                                    <div class="placeholder-image">🏢</div>
+                                </div>
+                                <div class="news-content">
+                                    <div class="news-header">
+                                        <h3>比亚迪发布2024年业绩预告 净利润同比增长28%</h3>
+                                        <span class="news-tag">公告</span>
+                                    </div>
+                                    <p class="news-summary">比亚迪股份有限公司发布2024年度业绩预告，预计实现净利润300-350亿元，同比增长25%-35%，主要受益于新能源汽车销量大幅增长...</p>
+                                    <div class="news-meta">
+                                        <span class="source">上交所</span>
+                                        <span class="time">1小时前</span>
+                                        <span class="category">公司资讯</span>
+                                        <span class="views">3.2万阅读</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="news-item" data-category="policy">
+                                <div class="news-image">
+                                    <div class="placeholder-image">📜</div>
+                                </div>
+                                <div class="news-content">
+                                    <div class="news-header">
+                                        <h3>证监会发布新规 进一步规范上市公司并购重组</h3>
+                                        <span class="news-tag">政策</span>
+                                    </div>
+                                    <p class="news-summary">证监会今日发布《上市公司并购重组管理办法》修订版，新规进一步规范并购重组行为，提高信息披露质量，保护中小投资者合法权益...</p>
+                                    <div class="news-meta">
+                                        <span class="source">证监会</span>
+                                        <span class="time">2小时前</span>
+                                        <span class="category">政策解读</span>
+                                        <span class="views">2.1万阅读</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="news-item" data-category="international">
+                                <div class="news-image">
+                                    <div class="placeholder-image">🌍</div>
+                                </div>
+                                <div class="news-content">
+                                    <div class="news-header">
+                                        <h3>美联储暗示可能暂停加息 全球股市反弹</h3>
+                                        <span class="news-tag">国际</span>
+                                    </div>
+                                    <p class="news-summary">美联储主席鲍威尔在最新讲话中暗示，如果通胀数据继续改善，央行可能会考虑暂停加息。消息公布后，全球股市普遍上涨...</p>
+                                    <div class="news-meta">
+                                        <span class="source">路透社</span>
+                                        <span class="time">3小时前</span>
+                                        <span class="category">国际财经</span>
+                                        <span class="views">1.8万阅读</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="news-item" data-category="analysis">
+                                <div class="news-image">
+                                    <div class="placeholder-image">🔍</div>
+                                </div>
+                                <div class="news-content">
+                                    <div class="news-header">
+                                        <h3>机构观点：新能源车板块估值修复空间较大</h3>
+                                        <span class="news-tag">研判</span>
+                                    </div>
+                                    <p class="news-summary">多家机构发布研报认为，经过前期调整，新能源汽车板块估值已回落至合理区间，随着产业政策利好释放，板块有望迎来估值修复...</p>
+                                    <div class="news-meta">
+                                        <span class="source">券商研报</span>
+                                        <span class="time">4小时前</span>
+                                        <span class="category">分析研判</span>
+                                        <span class="views">1.5万阅读</span>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="news-item" data-category="market">
+                                <div class="news-image">
+                                    <div class="placeholder-image">💰</div>
+                                </div>
+                                <div class="news-content">
+                                    <div class="news-header">
+                                        <h3>北向资金今日净流入68.5亿元 连续5日净流入</h3>
+                                        <span class="news-tag">资金</span>
+                                    </div>
+                                    <p class="news-summary">据统计，今日北向资金净流入68.5亿元，这是连续第5个交易日净流入。其中沪股通净流入35.2亿元，深股通净流入33.3亿元...</p>
+                                    <div class="news-meta">
+                                        <span class="source">Wind资讯</span>
+                                        <span class="time">5小时前</span>
+                                        <span class="category">市场动态</span>
+                                        <span class="views">1.2万阅读</span>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+
+                        <!-- 加载更多 -->
+                        <div class="load-more">
+                            <button class="load-more-btn">加载更多资讯</button>
+                        </div>
+                    </div>
+
+                    <!-- 侧边栏 -->
+                    <aside class="news-sidebar">
+                        <!-- 热门资讯 -->
+                        <div class="sidebar-section">
+                            <h3>🔥 热门资讯</h3>
+                            <div class="hot-news-list">
+                                <div class="hot-news-item">
+                                    <span class="rank">1</span>
+                                    <div class="hot-content">
+                                        <h4>A股迎来新一轮上涨行情</h4>
+                                        <span class="views">10.5万阅读</span>
+                                    </div>
+                                </div>
+                                <div class="hot-news-item">
+                                    <span class="rank">2</span>
+                                    <div class="hot-content">
+                                        <h4>科技股集体爆发 AI概念涨停潮</h4>
+                                        <span class="views">8.2万阅读</span>
+                                    </div>
+                                </div>
+                                <div class="hot-news-item">
+                                    <span class="rank">3</span>
+                                    <div class="hot-content">
+                                        <h4>央行降准释放流动性1万亿</h4>
+                                        <span class="views">7.8万阅读</span>
+                                    </div>
+                                </div>
+                                <div class="hot-news-item">
+                                    <span class="rank">4</span>
+                                    <div class="hot-content">
+                                        <h4>新能源车销量数据超预期</h4>
+                                        <span class="views">6.5万阅读</span>
+                                    </div>
+                                </div>
+                                <div class="hot-news-item">
+                                    <span class="rank">5</span>
+                                    <div class="hot-content">
+                                        <h4>茅台股价创历史新高</h4>
+                                        <span class="views">5.9万阅读</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 公告速递 -->
+                        <div class="sidebar-section">
+                            <h3>📢 公告速递</h3>
+                            <div class="announcements-list">
+                                <div class="announcement-item">
+                                    <div class="announcement-header">
+                                        <span class="stock-name">贵州茅台</span>
+                                        <span class="announcement-type">业绩预告</span>
+                                    </div>
+                                    <p>预计2024年净利润增长15-20%</p>
+                                    <span class="time">10分钟前</span>
+                                </div>
+                                <div class="announcement-item">
+                                    <div class="announcement-header">
+                                        <span class="stock-name">宁德时代</span>
+                                        <span class="announcement-type">重大合同</span>
+                                    </div>
+                                    <p>与特斯拉签署长期供货协议</p>
+                                    <span class="time">25分钟前</span>
+                                </div>
+                                <div class="announcement-item">
+                                    <div class="announcement-header">
+                                        <span class="stock-name">平安银行</span>
+                                        <span class="announcement-type">股东大会</span>
+                                    </div>
+                                    <p>将于3月15日召开年度股东大会</p>
+                                    <span class="time">1小时前</span>
+                                </div>
+                                <div class="announcement-item">
+                                    <div class="announcement-header">
+                                        <span class="stock-name">海康威视</span>
+                                        <span class="announcement-type">分红派息</span>
+                                    </div>
+                                    <p>拟每10股派发现金红利8元</p>
+                                    <span class="time">2小时前</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 热门话题 -->
+                        <div class="sidebar-section">
+                            <h3>💬 热门话题</h3>
+                            <div class="topics-list">
+                                <div class="topic-item">
+                                    <span class="topic-tag">#AI概念股#</span>
+                                    <span class="topic-heat">🔥 热度 9.8万</span>
+                                </div>
+                                <div class="topic-item">
+                                    <span class="topic-tag">#新能源汽车#</span>
+                                    <span class="topic-heat">🔥 热度 8.5万</span>
+                                </div>
+                                <div class="topic-item">
+                                    <span class="topic-tag">#央行降准#</span>
+                                    <span class="topic-heat">🔥 热度 7.2万</span>
+                                </div>
+                                <div class="topic-item">
+                                    <span class="topic-tag">#科技股#</span>
+                                    <span class="topic-heat">🔥 热度 6.8万</span>
+                                </div>
+                                <div class="topic-item">
+                                    <span class="topic-tag">#北向资金#</span>
+                                    <span class="topic-heat">🔥 热度 5.5万</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 市场日历 -->
+                        <div class="sidebar-section">
+                            <h3>📅 市场日历</h3>
+                            <div class="calendar-events">
+                                <div class="calendar-item">
+                                    <div class="calendar-date">
+                                        <span class="date">21</span>
+                                        <span class="month">1月</span>
+                                    </div>
+                                    <div class="calendar-content">
+                                        <h4>美联储利率决议</h4>
+                                        <p>预计维持现有利率不变</p>
+                                    </div>
+                                </div>
+                                <div class="calendar-item">
+                                    <div class="calendar-date">
+                                        <span class="date">23</span>
+                                        <span class="month">1月</span>
+                                    </div>
+                                    <div class="calendar-content">
+                                        <h4>GDP数据发布</h4>
+                                        <p>2024年四季度GDP数据</p>
+                                    </div>
+                                </div>
+                                <div class="calendar-item">
+                                    <div class="calendar-date">
+                                        <span class="date">25</span>
+                                        <span class="month">1月</span>
+                                    </div>
+                                    <div class="calendar-content">
+                                        <h4>央行降准生效</h4>
+                                        <p>释放流动性约1万亿元</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="搜索资讯内容" class="search-input">
+                <button class="close-search">×</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/news.js"></script>
+</body>
+</html> 

@@ -1,0 +1,6 @@
+akshare
+pandas
+numpy
+requests
+python-dotenv
+loguru

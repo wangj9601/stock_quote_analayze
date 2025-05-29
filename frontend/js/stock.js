@@ -1,0 +1,785 @@
+// 股票详情页面功能模块
+const StockPage = {
+    stockCode: '000001',
+    stockName: '平安银行',
+    currentPrice: 12.34,
+    priceChange: 0.56,
+    priceChangePercent: 4.76,
+    klineChart: null,
+    minuteChart: null,
+    profitChart: null,
+    flowChart: null,
+    currentTab: 'analysis',
+    currentChartType: 'kline',
+    currentPeriod: '1d',
+
+    // 初始化
+    init() {
+        this.bindEvents();
+        this.initCharts();
+        this.loadStockData();
+        this.startDataUpdate();
+    },
+
+    // 绑定事件
+    bindEvents() {
+        // 自选股切换
+        document.querySelector('.watchlist-toggle').addEventListener('click', () => {
+            this.toggleWatchlist();
+        });
+
+        // 图表类型切换
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.switchChartType(btn.dataset.type);
+                this.updateActiveBtn(btn, '.tab-btn');
+            });
+        });
+
+        // 时间周期切换
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.switchPeriod(btn.dataset.period);
+                this.updateActiveBtn(btn, '.period-btn');
+            });
+        });
+
+        // 内容标签切换
+        document.querySelectorAll('.content-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                this.switchContentTab(tab.dataset.tab);
+                this.updateActiveBtn(tab, '.content-tab');
+            });
+        });
+
+        // 新闻过滤
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.filterNews(btn.dataset.filter);
+                this.updateActiveBtn(btn, '.filter-btn');
+            });
+        });
+
+        // 指标选择
+        document.querySelector('.indicator-select').addEventListener('change', (e) => {
+            this.updateMainIndicator(e.target.value);
+        });
+
+        document.querySelector('.sub-indicator-select').addEventListener('change', (e) => {
+            this.updateSubIndicator(e.target.value);
+        });
+
+        // 搜索功能
+        this.bindSearchEvents();
+    },
+
+    // 绑定搜索事件
+    bindSearchEvents() {
+        const searchBtn = document.querySelector('.search-btn');
+        const searchModal = document.getElementById('searchModal');
+        const closeSearch = document.querySelector('.close-search');
+        const searchInput = document.querySelector('.search-input');
+
+        searchBtn.addEventListener('click', () => {
+            searchModal.style.display = 'flex';
+            searchInput.focus();
+        });
+
+        closeSearch.addEventListener('click', () => {
+            searchModal.style.display = 'none';
+            searchInput.value = '';
+        });
+
+        searchModal.addEventListener('click', (e) => {
+            if (e.target === searchModal) {
+                searchModal.style.display = 'none';
+                searchInput.value = '';
+            }
+        });
+    },
+
+    // 切换自选股状态
+    toggleWatchlist() {
+        const toggleBtn = document.querySelector('.watchlist-toggle');
+        const isActive = toggleBtn.classList.contains('active');
+        
+        if (isActive) {
+            toggleBtn.classList.remove('active');
+            toggleBtn.textContent = '⭐ 自选';
+            CommonUtils.showToast(`已从自选股中移除 ${this.stockName}`, 'info');
+        } else {
+            toggleBtn.classList.add('active');
+            toggleBtn.textContent = '⭐ 已自选';
+            CommonUtils.showToast(`已添加 ${this.stockName} 到自选股`, 'success');
+        }
+    },
+
+    // 切换图表类型
+    switchChartType(type) {
+        this.currentChartType = type;
+        
+        // 隐藏所有图表
+        document.querySelectorAll('.chart').forEach(chart => {
+            chart.style.display = 'none';
+        });
+        
+        // 显示目标图表
+        const targetChart = document.getElementById(`${type}Chart`);
+        if (targetChart) {
+            targetChart.style.display = 'block';
+            this.resizeChart(type);
+        }
+    },
+
+    // 切换时间周期
+    switchPeriod(period) {
+        this.currentPeriod = period;
+        this.loadChartData();
+        CommonUtils.showToast(`切换到${this.getPeriodName(period)}`, 'info');
+    },
+
+    // 获取周期名称
+    getPeriodName(period) {
+        const periodNames = {
+            '1m': '1分钟',
+            '5m': '5分钟',
+            '15m': '15分钟',
+            '30m': '30分钟',
+            '1h': '1小时',
+            '1d': '日线',
+            '1w': '周线',
+            '1M': '月线'
+        };
+        return periodNames[period] || period;
+    },
+
+    // 切换内容标签
+    switchContentTab(tabId) {
+        this.currentTab = tabId;
+        
+        // 隐藏所有面板
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        
+        // 显示目标面板
+        const targetPanel = document.getElementById(tabId);
+        if (targetPanel) {
+            targetPanel.classList.add('active');
+        }
+
+        // 根据标签加载相应数据
+        this.loadTabData(tabId);
+    },
+
+    // 更新活动按钮
+    updateActiveBtn(activeBtn, selector) {
+        document.querySelectorAll(selector).forEach(btn => {
+            btn.classList.remove('active');
+        });
+        activeBtn.classList.add('active');
+    },
+
+    // 初始化图表
+    initCharts() {
+        this.initKlineChart();
+        this.initMinuteChart();
+        this.initProfitChart();
+        this.initFlowChart();
+    },
+
+    // 初始化K线图
+    initKlineChart() {
+        const chartDom = document.getElementById('klineChart');
+        if (!chartDom) return;
+
+        this.klineChart = echarts.init(chartDom);
+        
+        const option = {
+            backgroundColor: 'transparent',
+            grid: [
+                {
+                    left: '10%',
+                    right: '8%',
+                    height: '65%'
+                },
+                {
+                    left: '10%',
+                    right: '8%',
+                    top: '75%',
+                    height: '15%'
+                }
+            ],
+            xAxis: [
+                {
+                    type: 'category',
+                    data: this.generateDateData(),
+                    boundaryGap: false,
+                    axisLine: { onZero: false },
+                    splitLine: { show: false },
+                    min: 'dataMin',
+                    max: 'dataMax'
+                },
+                {
+                    type: 'category',
+                    gridIndex: 1,
+                    data: this.generateDateData(),
+                    boundaryGap: false,
+                    axisLine: { onZero: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                    axisLabel: { show: false },
+                    min: 'dataMin',
+                    max: 'dataMax'
+                }
+            ],
+            yAxis: [
+                {
+                    scale: true,
+                    splitArea: { show: true }
+                },
+                {
+                    scale: true,
+                    gridIndex: 1,
+                    splitNumber: 2,
+                    axisLabel: { show: false },
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false }
+                }
+            ],
+            dataZoom: [{
+                type: 'inside',
+                xAxisIndex: [0, 1],
+                start: 50,
+                end: 100
+            }],
+            series: [
+                {
+                    name: 'K线',
+                    type: 'candlestick',
+                    data: this.generateKlineData(),
+                    itemStyle: {
+                        color: '#dc2626',
+                        color0: '#16a34a',
+                        borderColor: '#dc2626',
+                        borderColor0: '#16a34a'
+                    }
+                },
+                {
+                    name: 'MA5',
+                    type: 'line',
+                    data: this.generateMAData(5),
+                    smooth: true,
+                    lineStyle: { width: 1, color: '#fbbf24' },
+                    showSymbol: false
+                },
+                {
+                    name: 'MA10',
+                    type: 'line',
+                    data: this.generateMAData(10),
+                    smooth: true,
+                    lineStyle: { width: 1, color: '#3b82f6' },
+                    showSymbol: false
+                },
+                {
+                    name: '成交量',
+                    type: 'bar',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: this.generateVolumeData(),
+                    itemStyle: {
+                        color: function(params) {
+                            return params.dataIndex % 2 === 0 ? '#dc2626' : '#16a34a';
+                        }
+                    }
+                }
+            ],
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'cross'
+                },
+                backgroundColor: 'rgba(245, 245, 245, 0.8)',
+                borderWidth: 1,
+                borderColor: '#ccc',
+                textStyle: {
+                    color: '#000'
+                }
+            }
+        };
+
+        this.klineChart.setOption(option);
+    },
+
+    // 初始化分时图
+    initMinuteChart() {
+        const chartDom = document.getElementById('minuteChart');
+        if (!chartDom) return;
+
+        this.minuteChart = echarts.init(chartDom);
+        
+        const option = {
+            backgroundColor: 'transparent',
+            grid: {
+                left: '10%',
+                right: '8%',
+                top: '8%',
+                bottom: '15%'
+            },
+            xAxis: {
+                type: 'category',
+                data: this.generateTimeData(),
+                boundaryGap: false
+            },
+            yAxis: {
+                type: 'value',
+                scale: true,
+                splitArea: { show: true }
+            },
+            series: [{
+                name: '价格',
+                type: 'line',
+                data: this.generateMinuteData(),
+                smooth: true,
+                lineStyle: {
+                    color: '#2563eb',
+                    width: 2
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0,
+                        y: 0,
+                        x2: 0,
+                        y2: 1,
+                        colorStops: [{
+                            offset: 0, color: 'rgba(37, 99, 235, 0.3)'
+                        }, {
+                            offset: 1, color: 'rgba(37, 99, 235, 0.05)'
+                        }]
+                    }
+                },
+                showSymbol: false
+            }],
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: 'rgba(245, 245, 245, 0.8)',
+                borderWidth: 1,
+                borderColor: '#ccc',
+                textStyle: {
+                    color: '#000'
+                }
+            }
+        };
+
+        this.minuteChart.setOption(option);
+    },
+
+    // 初始化盈利能力图表
+    initProfitChart() {
+        const chartDom = document.getElementById('profitChart');
+        if (!chartDom) return;
+
+        this.profitChart = echarts.init(chartDom);
+        
+        const option = {
+            backgroundColor: 'transparent',
+            grid: {
+                left: '10%',
+                right: '8%',
+                top: '8%',
+                bottom: '15%'
+            },
+            xAxis: {
+                type: 'category',
+                data: ['2020', '2021', '2022', '2023', '2024']
+            },
+            yAxis: [{
+                type: 'value',
+                name: '净利润(亿)',
+                position: 'left'
+            }, {
+                type: 'value',
+                name: 'ROE(%)',
+                position: 'right'
+            }],
+            series: [{
+                name: '净利润',
+                type: 'bar',
+                data: [280, 320, 340, 345, 350],
+                itemStyle: {
+                    color: '#2563eb'
+                }
+            }, {
+                name: 'ROE',
+                type: 'line',
+                yAxisIndex: 1,
+                data: [11.2, 12.8, 12.1, 12.3, 12.8],
+                lineStyle: {
+                    color: '#dc2626',
+                    width: 3
+                },
+                symbol: 'circle',
+                symbolSize: 6
+            }],
+            tooltip: {
+                trigger: 'axis'
+            },
+            legend: {
+                data: ['净利润', 'ROE']
+            }
+        };
+
+        this.profitChart.setOption(option);
+    },
+
+    // 初始化资金流向图表
+    initFlowChart() {
+        const chartDom = document.getElementById('flowChart');
+        if (!chartDom) return;
+
+        this.flowChart = echarts.init(chartDom);
+        
+        const option = {
+            backgroundColor: 'transparent',
+            grid: {
+                left: '10%',
+                right: '8%',
+                top: '8%',
+                bottom: '15%'
+            },
+            xAxis: {
+                type: 'category',
+                data: this.generateFlowDates()
+            },
+            yAxis: {
+                type: 'value',
+                name: '资金流入(亿)'
+            },
+            series: [{
+                name: '主力资金',
+                type: 'bar',
+                data: this.generateFlowData('main'),
+                itemStyle: {
+                    color: function(params) {
+                        return params.value > 0 ? '#dc2626' : '#16a34a';
+                    }
+                }
+            }, {
+                name: '散户资金',
+                type: 'bar',
+                data: this.generateFlowData('retail'),
+                itemStyle: {
+                    color: function(params) {
+                        return params.value > 0 ? '#fbbf24' : '#6b7280';
+                    }
+                }
+            }],
+            tooltip: {
+                trigger: 'axis'
+            },
+            legend: {
+                data: ['主力资金', '散户资金']
+            }
+        };
+
+        this.flowChart.setOption(option);
+    },
+
+    // 调整图表大小
+    resizeChart(chartType) {
+        setTimeout(() => {
+            if (chartType === 'kline' && this.klineChart) {
+                this.klineChart.resize();
+            } else if (chartType === 'minute' && this.minuteChart) {
+                this.minuteChart.resize();
+            }
+        }, 100);
+    },
+
+    // 生成模拟数据
+    generateDateData() {
+        const dates = [];
+        const now = new Date();
+        for (let i = 50; i >= 0; i--) {
+            const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+            dates.push(date.toISOString().split('T')[0]);
+        }
+        return dates;
+    },
+
+    generateKlineData() {
+        const data = [];
+        let price = this.currentPrice;
+        for (let i = 0; i < 51; i++) {
+            const open = price + (Math.random() - 0.5) * 2;
+            const close = open + (Math.random() - 0.5) * 2;
+            const high = Math.max(open, close) + Math.random() * 1;
+            const low = Math.min(open, close) - Math.random() * 1;
+            data.push([open.toFixed(2), close.toFixed(2), low.toFixed(2), high.toFixed(2)]);
+            price = close;
+        }
+        return data;
+    },
+
+    generateMAData(period) {
+        const data = [];
+        let sum = 0;
+        const klineData = this.generateKlineData();
+        
+        for (let i = 0; i < klineData.length; i++) {
+            const close = parseFloat(klineData[i][1]);
+            sum += close;
+            
+            if (i >= period - 1) {
+                if (i >= period) {
+                    sum -= parseFloat(klineData[i - period][1]);
+                }
+                data.push((sum / period).toFixed(2));
+            } else {
+                data.push('-');
+            }
+        }
+        return data;
+    },
+
+    generateVolumeData() {
+        const data = [];
+        for (let i = 0; i < 51; i++) {
+            data.push(Math.floor(Math.random() * 200 + 50));
+        }
+        return data;
+    },
+
+    generateTimeData() {
+        const times = [];
+        const start = new Date();
+        start.setHours(9, 30, 0, 0);
+        
+        for (let i = 0; i < 240; i++) {
+            const time = new Date(start.getTime() + i * 60 * 1000);
+            times.push(time.toTimeString().slice(0, 5));
+        }
+        return times;
+    },
+
+    generateMinuteData() {
+        const data = [];
+        let price = this.currentPrice;
+        
+        for (let i = 0; i < 240; i++) {
+            price += (Math.random() - 0.5) * 0.1;
+            data.push(price.toFixed(2));
+        }
+        return data;
+    },
+
+    generateFlowDates() {
+        const dates = [];
+        const now = new Date();
+        for (let i = 9; i >= 0; i--) {
+            const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+            dates.push(date.toISOString().split('T')[0].slice(5));
+        }
+        return dates;
+    },
+
+    generateFlowData(type) {
+        const data = [];
+        for (let i = 0; i < 10; i++) {
+            const value = type === 'main' 
+                ? (Math.random() - 0.3) * 5 
+                : (Math.random() - 0.7) * 3;
+            data.push(value.toFixed(2));
+        }
+        return data;
+    },
+
+    // 加载股票数据
+    loadStockData() {
+        // 模拟加载股票基本信息
+        this.updateStockInfo();
+        this.updateStockDetails();
+        this.loadChartData();
+    },
+
+    // 更新股票信息
+    updateStockInfo() {
+        document.querySelector('.stock-name').textContent = this.stockName;
+        document.querySelector('.stock-code').textContent = this.stockCode;
+        document.querySelector('.current-price').textContent = this.currentPrice.toFixed(2);
+        
+        const changeElement = document.querySelector('.price-change');
+        const changeText = `${this.priceChange > 0 ? '+' : ''}${this.priceChange.toFixed(2)} (${this.priceChange > 0 ? '+' : ''}${this.priceChangePercent.toFixed(2)}%)`;
+        changeElement.textContent = changeText;
+        changeElement.className = `price-change ${this.priceChange > 0 ? 'positive' : 'negative'}`;
+        
+        document.querySelector('.price-time').textContent = new Date().toLocaleTimeString();
+    },
+
+    // 更新股票详情
+    updateStockDetails() {
+        const details = {
+            '今开': (this.currentPrice - 0.45).toFixed(2),
+            '昨收': (this.currentPrice - this.priceChange).toFixed(2),
+            '最高': (this.currentPrice + 0.11).toFixed(2),
+            '最低': (this.currentPrice - 0.49).toFixed(2),
+            '成交量': (Math.random() * 2 + 0.5).toFixed(2) + '亿',
+            '成交额': (Math.random() * 20 + 10).toFixed(1) + '亿',
+            '换手率': (Math.random() * 5 + 1).toFixed(2) + '%',
+            '市盈率': (Math.random() * 20 + 5).toFixed(2)
+        };
+
+        document.querySelectorAll('.detail-item').forEach(item => {
+            const label = item.querySelector('.label').textContent;
+            const valueElement = item.querySelector('.value');
+            if (details[label]) {
+                valueElement.textContent = details[label];
+            }
+        });
+    },
+
+    // 加载图表数据
+    loadChartData() {
+        if (this.currentChartType === 'kline' && this.klineChart) {
+            // 重新生成K线数据
+            const option = this.klineChart.getOption();
+            option.series[0].data = this.generateKlineData();
+            option.series[1].data = this.generateMAData(5);
+            option.series[2].data = this.generateMAData(10);
+            option.series[3].data = this.generateVolumeData();
+            this.klineChart.setOption(option);
+        } else if (this.currentChartType === 'minute' && this.minuteChart) {
+            // 重新生成分时数据
+            const option = this.minuteChart.getOption();
+            option.series[0].data = this.generateMinuteData();
+            this.minuteChart.setOption(option);
+        }
+    },
+
+    // 加载标签数据
+    loadTabData(tabId) {
+        switch (tabId) {
+            case 'analysis':
+                this.loadAnalysisData();
+                break;
+            case 'finance':
+                this.loadFinanceData();
+                break;
+            case 'news':
+                this.loadNewsData();
+                break;
+            case 'research':
+                this.loadResearchData();
+                break;
+            case 'flow':
+                this.loadFlowData();
+                break;
+        }
+    },
+
+    // 加载分析数据
+    loadAnalysisData() {
+        // 更新价格预测
+        const targetPrice = (this.currentPrice * (1 + (Math.random() * 0.2 - 0.1))).toFixed(2);
+        const change = ((targetPrice - this.currentPrice) / this.currentPrice * 100).toFixed(2);
+        
+        document.querySelector('.target-price').textContent = targetPrice;
+        const changeElement = document.querySelector('.prediction-change');
+        changeElement.textContent = `${change > 0 ? '+' : ''}${change}%`;
+        changeElement.className = `prediction-change ${change > 0 ? 'positive' : 'negative'}`;
+    },
+
+    // 加载财务数据
+    loadFinanceData() {
+        if (this.profitChart) {
+            this.profitChart.resize();
+        }
+    },
+
+    // 加载新闻数据
+    loadNewsData() {
+        console.log('新闻数据已加载');
+    },
+
+    // 加载研报数据
+    loadResearchData() {
+        console.log('研报数据已加载');
+    },
+
+    // 加载资金流向数据
+    loadFlowData() {
+        if (this.flowChart) {
+            this.flowChart.resize();
+        }
+    },
+
+    // 过滤新闻
+    filterNews(filter) {
+        const newsCards = document.querySelectorAll('.news-card');
+        
+        newsCards.forEach(card => {
+            const type = card.querySelector('.news-type').textContent.toLowerCase();
+            
+            if (filter === 'all' || 
+                (filter === 'announcement' && type.includes('公告')) ||
+                (filter === 'news' && type.includes('新闻'))) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    },
+
+    // 更新主图指标
+    updateMainIndicator(indicator) {
+        CommonUtils.showToast(`切换到${indicator}指标`, 'info');
+        // 实际项目中这里会更新图表指标
+    },
+
+    // 更新副图指标
+    updateSubIndicator(indicator) {
+        CommonUtils.showToast(`副图切换到${indicator}`, 'info');
+        // 实际项目中这里会更新副图指标
+    },
+
+    // 开始数据更新
+    startDataUpdate() {
+        // 定期更新股价数据
+        setInterval(() => {
+            this.updateRealTimeData();
+        }, 5000); // 每5秒更新一次
+
+        // 监听窗口大小变化
+        window.addEventListener('resize', () => {
+            setTimeout(() => {
+                if (this.klineChart) this.klineChart.resize();
+                if (this.minuteChart) this.minuteChart.resize();
+                if (this.profitChart) this.profitChart.resize();
+                if (this.flowChart) this.flowChart.resize();
+            }, 100);
+        });
+    },
+
+    // 更新实时数据
+    updateRealTimeData() {
+        // 模拟股价变动
+        const change = (Math.random() - 0.5) * 0.1;
+        this.currentPrice += change;
+        this.priceChange += change;
+        this.priceChangePercent = (this.priceChange / (this.currentPrice - this.priceChange)) * 100;
+
+        this.updateStockInfo();
+        
+        // 更新图表（仅在当前显示的图表）
+        if (this.currentChartType === 'minute' && document.getElementById('minuteChart').style.display !== 'none') {
+            // 实际项目中这里会更新分时图的最新数据点
+        }
+    }
+};
+
+// DOM加载完成后初始化
+document.addEventListener('DOMContentLoaded', () => {
+    StockPage.init();
+}); 
