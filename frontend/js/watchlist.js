@@ -1,12 +1,12 @@
 // 自选股页面功能模块
 const WatchlistPage = {
     // 全局API前缀
-    API_BASE_URL: 'http://192.168.31.237:5000',
+    //API_BASE_URL: 'http://192.168.31.237:5000',
     
     // 修改获取用户ID的方法
     async getUserId() {
         try {
-            const res = await authFetch(`${this.API_BASE_URL}/api/auth/status`);
+            const res = await authFetch(`${API_BASE_URL}/api/auth/status`);
             const result = await res.json();
             console.log('获取用户ID结果:', result);
             // 兼容 result.user 和 result.data
@@ -49,7 +49,7 @@ const WatchlistPage = {
                 return;
             }
             console.log('加载自选股数据，用户ID:', user_id);
-            const res = await authFetch(`${this.API_BASE_URL}/api/watchlist?user_id=${user_id}`);
+            const res = await authFetch(`${API_BASE_URL}/api/watchlist?user_id=${user_id}`);
             const result = await res.json();
             console.log('后端返回数据:', result);
             if (result.success && result.data && result.data.length > 0) {
@@ -351,7 +351,7 @@ const WatchlistPage = {
             return;
         }
         try {
-            const res = await authFetch(`${this.API_BASE_URL}/api/stock/list?query=${encodeURIComponent(query)}`);
+            const res = await authFetch(`${API_BASE_URL}/api/stock/list?query=${encodeURIComponent(query)}`);
             const result = await res.json();
             if (result.success) {
                 this.renderSearchResults(result.data);
@@ -418,7 +418,7 @@ const WatchlistPage = {
             return;
         }
         try {
-            const res = await authFetch(`${this.API_BASE_URL}/api/watchlist`, {
+            const res = await authFetch(`${API_BASE_URL}/api/watchlist`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -456,7 +456,7 @@ const WatchlistPage = {
         const user_id = await this.getUserId();
         if (!user_id) return;
         try {
-            const res = await authFetch(`${this.API_BASE_URL}/api/watchlist/delete_by_code`, {
+            const res = await authFetch(`${API_BASE_URL}/api/watchlist/delete_by_code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id, stock_code: code })
@@ -571,7 +571,7 @@ const WatchlistPage = {
     updateStockPrices() {
         const codes = this.stocksData.map(stock => stock.code);
         if (!codes.length) return;
-        authFetch(`${this.API_BASE_URL}/api/stock/quote`, {
+        authFetch(`${API_BASE_URL}/api/stock/quote`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ codes })
@@ -607,7 +607,7 @@ const WatchlistPage = {
     async loadGroups() {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
         if (!userInfo.id) return;
-        const res = await authFetch(`${this.API_BASE_URL}/api/watchlist/groups?user_id=${userInfo.id}`);
+        const res = await authFetch(`${API_BASE_URL}/api/watchlist/groups?user_id=${userInfo.id}`);
         const result = await res.json();
         if (result.success) {
             this.groups = ['default', ...result.data];
@@ -672,7 +672,7 @@ const WatchlistPage = {
     async createGroup(name) {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
         if (!userInfo.id) return;
-        const res = await authFetch(`${this.API_BASE_URL}/api/watchlist/groups`, {
+        const res = await authFetch(`${API_BASE_URL}/api/watchlist/groups`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userInfo.id, group_name: name })
@@ -691,7 +691,7 @@ const WatchlistPage = {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
         if (!userInfo.id) return;
         if (!confirm(`确定删除分组"${name}"及其下所有自选股？`)) return;
-        const res = await authFetch(`${this.API_BASE_URL}/api/watchlist/groups`, {
+        const res = await authFetch(`${API_BASE_URL}/api/watchlist/groups`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userInfo.id, group_name: name })
@@ -711,7 +711,7 @@ const WatchlistPage = {
         if (!newName || newName.trim() === oldName) return;
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
         if (!userInfo.id) return;
-        const res = await authFetch(`${this.API_BASE_URL}/api/watchlist/groups/rename`, {
+        const res = await authFetch(`${API_BASE_URL}/api/watchlist/groups/rename`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userInfo.id, old_name: oldName, new_name: newName.trim() })
