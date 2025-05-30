@@ -1,5 +1,5 @@
 // API配置
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'http://192.168.31.237:5000';
 
 // 全局带token的fetch
 function authFetch(url, options = {}) {
@@ -113,13 +113,14 @@ const CommonUtils = {
             }
             
             // 绑定登出事件
-            document.addEventListener('click', (e) => {
-                if (e.target.classList.contains('logout-btn') || 
-                    e.target.textContent.includes('退出登录')) {
-                    e.preventDefault();
-                    this.logout();
-                }
-            });
+            setTimeout(() => {
+                document.querySelectorAll('.logout-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        CommonUtils.auth.logout();
+                    });
+                });
+            }, 0);
         }
     },
 

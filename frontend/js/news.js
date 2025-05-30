@@ -4,6 +4,7 @@ const NewsPage = {
     newsData: [],
     loadedCount: 6,
     totalCount: 20,
+    API_BASE_URL: 'http://192.168.31.237:5000',
 
     // 初始化
     init() {

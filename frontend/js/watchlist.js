@@ -1,7 +1,7 @@
 // 自选股页面功能模块
 const WatchlistPage = {
     // 全局API前缀
-    API_BASE_URL: 'http://localhost:5000',
+    API_BASE_URL: 'http://192.168.31.237:5000',
     
     // 修改获取用户ID的方法
     async getUserId() {

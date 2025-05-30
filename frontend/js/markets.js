@@ -1,6 +1,8 @@
 // 行情页面功能模块
 const MarketsPage = {
+    
     // 模拟数据
+    /*
     rankingData: {
         rise: [
             { rank: 1, code: '002594', name: '比亚迪', price: 245.67, change: 24.56, percent: 11.11, volume: '8.9亿', turnover: '1245.6亿', rate: '12.5%' },
@@ -17,9 +19,17 @@ const MarketsPage = {
             { rank: 5, code: '600887', name: '伊利股份', price: 32.10, change: -2.40, percent: -6.96, volume: '1.5亿', turnover: '234.8亿', rate: '4.5%' }
         ]
     },
+    */
 
     currentTab: 'rankings',
     currentRankingType: 'rise',
+
+    currentPage: 1,
+    pageSize: 20,
+    total: 0,
+
+    // 全局API前缀
+    API_BASE_URL: 'http://192.168.31.237:5000',
 
     // 初始化
     init() {
@@ -97,7 +107,8 @@ const MarketsPage = {
     // 切换排行榜类型
     switchRankingType(type) {
         this.currentRankingType = type;
-        this.loadRankingData();
+        this.currentPage = 1;
+        this.loadRankingData(1);
     },
 
     // 更新活动排行榜类型
@@ -187,11 +198,49 @@ const MarketsPage = {
         ctx.globalAlpha = 1;
     },
 
-    // 加载排行榜数据
-    loadRankingData() {
-        const data = this.rankingData[this.currentRankingType] || this.rankingData.rise;
-        this.renderRankingTable(data);
-    },
+// 加载排行榜数据
+async loadRankingData(page = 1) {
+    const typeMap = {
+        rise: 'rise',
+        fall: 'fall',
+        volume: 'volume',
+        turnover: 'turnover_rate'
+    };
+    const rankingType = typeMap[this.currentRankingType] || 'rise';
+    let market = document.querySelector('.filter-select').value;
+    if (market === 'cy') market = 'cy';
+    this.currentPage = page;
+    const pageSize = this.pageSize;
+    try {
+        const url = `${API_BASE_URL}/api/stock/quote_board_list?ranking_type=${rankingType}&market=${market}&page=${page}&page_size=${pageSize}`;
+        const resp = await fetch(url);
+        const result = await resp.json();
+        if (result.success) {
+            this.total = result.total || 0;
+            const data = (result.data || []).map((item, idx) => ({
+                rank: (page - 1) * pageSize + idx + 1,
+                code: item.code,
+                name: item.name,
+                price: item.current,
+                change: item.change,
+                percent: item.change_percent,
+                volume: item.volume,
+                turnover: item.turnover,
+                rate: item.turnover_rate
+            }));
+            this.renderRankingTable(data);
+            this.renderPagination();
+        } else {
+            this.renderRankingTable([]);
+            this.renderPagination();
+            CommonUtils.showToast(result.message || '获取数据失败', 'error');
+        }
+    } catch (e) {
+        this.renderRankingTable([]);
+        this.renderPagination();
+        CommonUtils.showToast('网络错误，获取数据失败', 'error');
+    }
+},
 
     // 渲染排行榜表格
     renderRankingTable(data) {
@@ -375,6 +424,8 @@ const MarketsPage = {
         // 根据选择的市场过滤排行榜数据
         console.log('过滤市场:', market);
         CommonUtils.showToast(`已切换到${market === 'all' ? '全部市场' : market}`, 'info');
+        this.currentPage = 1;
+        this.loadRankingData(1);
     },
 
     // 跳转到股票详情
@@ -409,14 +460,15 @@ const MarketsPage = {
         // 定期更新数据
         setInterval(() => {
             if (this.currentTab === 'rankings') {
-                this.updateRankingPrices();
+                //this.updateRankingPrices();
+                this.loadRankingData(this.currentPage);
             } else if (this.currentTab === 'sectors') {
                 this.updateSectorData();
             } else if (this.currentTab === 'hot') {
                 this.updateCapitalFlow();
                 this.updateMarketSentiment();
             }
-        }, 10000); // 每10秒更新一次
+        }, 60000); // 每60秒更新一次
 
         // 更新指数图表
         setInterval(() => {
@@ -424,7 +476,62 @@ const MarketsPage = {
         }, 30000); // 每30秒更新图表
     },
 
+    // 渲染分页
+    renderPagination() {
+        const container = document.querySelector('.rankings-content');
+        let pagination = document.getElementById('rankingsPagination');
+        if (!pagination) {
+            pagination = document.createElement('div');
+            pagination.id = 'rankingsPagination';
+            pagination.className = 'pagination';
+            container.appendChild(pagination);
+        }
+        const totalPages = Math.ceil(this.total / this.pageSize);
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+        let html = '';
+    
+        // 上一页
+        html += `<button class="page-btn prev-btn" ${this.currentPage === 1 ? 'disabled' : ''} data-page="${this.currentPage - 1}">上一页</button>`;
+    
+        // 首页
+        if (this.currentPage > 3) {
+            html += `<button class="page-btn" data-page="1">1</button>`;
+            if (this.currentPage > 4) html += `<span class="page-ellipsis">...</span>`;
+        }
+    
+        // 当前页前后各2页
+        let start = Math.max(1, this.currentPage - 2);
+        let end = Math.min(totalPages, this.currentPage + 2);
+        for (let i = start; i <= end; i++) {
+            if (i === 1 || i === totalPages) continue; // 首页和尾页已处理
+            html += `<button class="page-btn${i === this.currentPage ? ' active' : ''}" data-page="${i}">${i}</button>`;
+        }
+    
+        // 尾页
+        if (this.currentPage < totalPages - 2) {
+            if (this.currentPage < totalPages - 3) html += `<span class="page-ellipsis">...</span>`;
+            html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
+        }
+    
+        // 下一页
+        html += `<button class="page-btn next-btn" ${this.currentPage === totalPages ? 'disabled' : ''} data-page="${this.currentPage + 1}">下一页</button>`;
+    
+        pagination.innerHTML = html;
+        pagination.querySelectorAll('.page-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                const page = parseInt(btn.dataset.page);
+                if (!isNaN(page) && page !== this.currentPage && page >= 1 && page <= totalPages) {
+                    this.loadRankingData(page);
+                }
+            };
+        });
+    },
+
     // 更新排行榜价格
+    /*
     updateRankingPrices() {
         const currentData = this.rankingData[this.currentRankingType];
         if (currentData) {
@@ -438,6 +545,7 @@ const MarketsPage = {
             this.renderRankingTable(currentData);
         }
     }
+    */
 };
 
 // 全局函数
@@ -457,7 +565,10 @@ function addToWatchlist(code, event) {
     CommonUtils.showToast(`${code} 已添加到自选股`, 'success');
 }
 
+
+
 // DOM加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
     MarketsPage.init();
 }); 
+

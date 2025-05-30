@@ -434,3 +434,177 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #a1a1a1;
 } 
+
+
+/* 1.1 让所有页面宽度自适应 */
+body, html {
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  
+  /* 1.2 主要容器自适应 */
+  .container, .main-content, .content-tabs, .market-overview, .tab-panel, .tab-content {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    box-sizing: border-box;
+  }
+  
+  /* 1.3 表格自适应 */
+  .table {
+    width: 100%;
+    min-width: 600px;
+    overflow-x: auto;
+    display: block;
+  }
+  
+  /* 1.4 图片、canvas等自适应 */
+  img, canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+  
+  /* 1.5 按钮、输入框等自适应 */
+  button, input, select, textarea {
+    font-size: 1rem;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* 1.6 响应式字体 */
+  html {
+    font-size: 16px;
+  }
+  @media (max-width: 900px) {
+    html { font-size: 15px; }
+  }
+  @media (max-width: 600px) {
+    html { font-size: 14px; }
+  }
+
+
+  /* 2.1 响应式flex/grid布局 */
+.market-indices, .sectors-grid, .stats-grid, .tab-nav, .hot-content, .news-list, .stock-list, .sector-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  @media (max-width: 900px) {
+    .market-indices, .sectors-grid, .stats-grid, .tab-nav, .hot-content, .news-list, .stock-list, .sector-list {
+      gap: 0.5rem;
+    }
+  }
+  @media (max-width: 600px) {
+    .market-indices, .sectors-grid, .stats-grid, .tab-nav, .hot-content, .news-list, .stock-list, .sector-list {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
+  
+  /* 2.2 卡片、表格、面板等自适应宽度 */
+  .index-card, .sector-card, .stats-card, .stock-card, .news-item, .hot-stock-item, .tab-panel, .profile-card {
+    min-width: 0;
+    flex: 1 1 220px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  @media (max-width: 900px) {
+    .index-card, .sector-card, .stats-card, .stock-card, .news-item, .hot-stock-item, .tab-panel, .profile-card {
+      flex: 1 1 45%;
+    }
+  }
+  @media (max-width: 600px) {
+    .index-card, .sector-card, .stats-card, .stock-card, .news-item, .hot-stock-item, .tab-panel, .profile-card {
+      flex: 1 1 100%;
+    }
+  }
+  
+  /* 2.3 响应式隐藏/显示 */
+  .hide-mobile { display: block; }
+  @media (max-width: 600px) {
+    .hide-mobile { display: none !important; }
+    .show-mobile { display: block !important; }
+  }
+  @media (min-width: 601px) {
+    .show-mobile { display: none !important; }
+  }
+  
+  /* 2.4 响应式分页按钮 */
+  .pagination {
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+  }
+  @media (max-width: 600px) {
+    .pagination .page-btn {
+      min-width: 28px;
+      height: 28px;
+      font-size: 13px;
+      padding: 0 4px;
+    }
+  }
+  
+  /* 2.5 响应式表单 */
+  .form-row, .form-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  @media (max-width: 600px) {
+    .form-row, .form-group {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
+
+  /* 3.1 表格横向滚动 */
+@media (max-width: 900px) {
+    .table {
+      min-width: 500px;
+      font-size: 13px;
+    }
+    .table thead, .table tbody, .table tr, .table th, .table td {
+      white-space: nowrap;
+    }
+    .table {
+      overflow-x: auto;
+      display: block;
+    }
+  }
+  
+  /* 3.2 tab导航自适应 */
+  .tab-nav {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .tab-nav .content-tab {
+    flex: 1 1 120px;
+    min-width: 80px;
+    max-width: 100%;
+    margin-bottom: 0.5rem;
+  }
+  
+  /* 3.3 弹窗自适应 */
+  .search-modal, .modal, .dialog {
+    width: 100vw;
+    max-width: 100vw;
+    min-width: 0;
+    left: 0 !important;
+    padding: 0 !important;
+  }
+  @media (max-width: 600px) {
+    .search-content, .modal-content, .dialog-content {
+      width: 98vw !important;
+      min-width: 0 !important;
+      padding: 1rem !important;
+    }
+  }
+
+
+  

@@ -40,7 +40,7 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
 
 def check_port(port):
     try:
-        with TCPServer(("localhost", port), None) as server:
+        with TCPServer(("0.0.0.0", port), None) as server:
             return True
     except OSError:
         return False
@@ -55,7 +55,7 @@ def find_available_port(start_port=8000):
 
 def start_server(port):
     try:
-        with HTTPServer(("localhost", port), CustomHTTPRequestHandler) as httpd:
+        with HTTPServer(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
             print(f"✓ 前端服务器启动成功")
             print(f"✓ 服务地址: http://localhost:{port}")
             print(f"✓ 登录页面: http://localhost:{port}/login.html")

@@ -872,3 +872,130 @@
         min-width: 80px;
     }
 } 
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    margin: 20px 0 10px 0;
+    flex-wrap: wrap;
+  }
+  .pagination .page-btn {
+    min-width: 32px;
+    height: 32px;
+    margin: 0 2px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #333;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  .pagination .page-btn.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+    font-weight: bold;
+    cursor: default;
+  }
+  .pagination .page-btn:disabled {
+    background: #f3f4f6;
+    color: #bbb;
+    border-color: #e5e7eb;
+    cursor: not-allowed;
+  }
+  .pagination .page-btn:hover:not(:disabled):not(.active) {
+    background: #f1f5fd;
+    color: #2563eb;
+    border-color: #2563eb;
+  }
+  .pagination .page-ellipsis {
+    padding: 0 6px;
+    color: #999;
+    font-size: 16px;
+    user-select: none;
+  }
+
+  /* 让表格区域在小屏下可横向滚动，且宽度自适应 */
+.table {
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+    overflow-x: auto;
+    display: block;
+    box-sizing: border-box;
+  }
+  
+  @media (max-width: 900px) {
+    .table {
+      min-width: 500px;
+      font-size: 13px;
+    }
+  }
+  
+  @media (max-width: 600px) {
+    .table {
+      min-width: 400px;
+      font-size: 12px;
+    }
+    .table thead, .table tbody, .table tr, .table th, .table td {
+      white-space: nowrap;
+    }
+  }
+  
+  /* 让表格外层容器自适应并可滚动 */
+  .rankings-content, .tab-panel, .main-content, .container {
+    width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
+  }
+
+
+
+  /* 让表格区域和分页始终拉伸填满父容器 */
+.rankings-content {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    /* 关键：让内容区自适应拉伸 */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  /* 让表格100%宽度，且可横向滚动 */
+  .rankings-table, .table {
+    width: 100%;
+    min-width: 900px; /* 你可以根据实际列数调整 */
+    box-sizing: border-box;
+    border-collapse: collapse;
+    display: table;
+  }
+  
+  /* 让表格外层在小屏下可横向滚动 */
+  @media (max-width: 900px) {
+    .rankings-content {
+      overflow-x: auto;
+    }
+    .rankings-table, .table {
+      min-width: 600px;
+      font-size: 13px;
+    }
+  }
+  @media (max-width: 600px) {
+    .rankings-table, .table {
+      min-width: 400px;
+      font-size: 12px;
+    }
+  }
+  
+  /* 分页栏自适应居中 */
+  .pagination {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
