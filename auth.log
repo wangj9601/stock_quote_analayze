@@ -11435,3 +11435,73 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-05-30 15:18:31,799 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/market/industry_board - 状态码: 500 - 处理时间: 0.494秒 - IP: 127.0.0.1
 2025-05-30 15:18:31,802 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/watchlist - 状态码: 200 - 处理时间: 0.497秒 - IP: 127.0.0.1
 2025-05-30 15:18:31,804 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/auth/status - 状态码: 200 - 处理时间: 0.493秒 - IP: 127.0.0.1
+2025-05-30 16:03:43,295 - backend_api.main - INFO - [main.py:107] - 正在初始化数据库...
+2025-05-30 16:03:43,323 - backend_api.main - INFO - [main.py:109] - 数据库初始化完成
+2025-05-30 16:03:43,579 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/auth/status - IP: 192.168.31.237
+2025-05-30 16:03:43,579 - backend_api.auth_routes - INFO - [auth_routes.py:276] - 获取认证状态: 用户未登录 - IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:03:43,583 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.31.237
+2025-05-30 16:03:43,589 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/auth/status - IP: 192.168.31.237
+2025-05-30 16:03:43,591 - backend_api.auth_routes - INFO - [auth_routes.py:276] - 获取认证状态: 用户未登录 - IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:03:43,595 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/auth/status - 状态码: 200 - 处理时间: 0.006秒 - IP: 192.168.31.237
+2025-05-30 16:03:44,628 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.31.237:5000/api/auth/login - IP: 192.168.31.237
+2025-05-30 16:03:44,636 - backend_api.auth_routes - INFO - [auth_routes.py:133] - 收到登录请求 - 用户名: wangxw, IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36
+2025-05-30 16:03:44,638 - backend_api.auth_routes - INFO - [auth_routes.py:142] - 开始验证用户: wangxw
+2025-05-30 16:03:44,646 - passlib.handlers.bcrypt - WARNING - [bcrypt.py:622] - (trapped) error reading bcrypt version
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\site-packages\passlib\handlers\bcrypt.py", line 620, in _load_backend_mixin
+    version = _bcrypt.__about__.__version__
+              ^^^^^^^^^^^^^^^^^
+AttributeError: module 'bcrypt' has no attribute '__about__'
+2025-05-30 16:03:45,054 - backend_api.auth_routes - INFO - [auth_routes.py:158] - 用户验证成功: wangxw (ID: 6)
+2025-05-30 16:03:45,057 - backend_api.auth_routes - INFO - [auth_routes.py:161] - 检查用户状态: wangxw - 当前状态: active
+2025-05-30 16:03:45,083 - backend_api.auth_routes - INFO - [auth_routes.py:179] - 更新最后登录时间成功 - 用户: wangxw, 上次登录: 2025-05-30 14:18:44.223364, 本次登录: 2025-05-30 16:03:45.057351
+2025-05-30 16:03:45,083 - backend_api.auth_routes - INFO - [auth_routes.py:191] - 开始创建访问令牌 - 用户: wangxw
+2025-05-30 16:03:45,097 - backend_api.auth_routes - INFO - [auth_routes.py:195] - 访问令牌创建成功 - 用户: wangxw
+2025-05-30 16:03:45,100 - backend_api.auth_routes - INFO - [auth_routes.py:205] - 开始创建登录响应 - 用户: wangxw
+2025-05-30 16:03:45,122 - backend_api.auth_routes - INFO - [auth_routes.py:215] - 登录成功 - 用户: wangxw, ID: 6, IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.486秒
+2025-05-30 16:03:45,124 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.31.237:5000/api/auth/login - 状态码: 200 - 处理时间: 0.496秒 - IP: 192.168.31.237
+2025-05-30 16:03:48,122 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/auth/status - IP: 192.168.31.237
+2025-05-30 16:03:48,129 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:03:48,133 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/auth/status - 状态码: 200 - 处理时间: 0.011秒 - IP: 192.168.31.237
+2025-05-30 16:06:54,968 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/auth/status - IP: 192.168.31.237
+2025-05-30 16:06:54,973 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:06:54,976 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/auth/status - 状态码: 200 - 处理时间: 0.008秒 - IP: 192.168.31.237
+2025-05-30 16:06:54,992 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/market/indices - IP: 192.168.31.237
+2025-05-30 16:06:55,000 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/watchlist - IP: 192.168.31.237
+2025-05-30 16:06:55,008 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/market/industry_board - IP: 192.168.31.237
+2025-05-30 16:06:55,035 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/stock/quote_board?limit=3 - IP: 192.168.31.237
+2025-05-30 16:06:55,049 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/auth/status - IP: 192.168.31.237
+2025-05-30 16:06:55,051 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/news?limit=3 - IP: 192.168.31.237
+2025-05-30 16:06:55,669 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.616秒 - IP: 192.168.31.237
+2025-05-30 16:06:55,674 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:06:55,683 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/market/industry_board - 状态码: 200 - 处理时间: 0.675秒 - IP: 192.168.31.237
+2025-05-30 16:06:55,692 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/watchlist - 状态码: 200 - 处理时间: 0.692秒 - IP: 192.168.31.237
+2025-05-30 16:06:55,736 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/auth/status - 状态码: 200 - 处理时间: 0.686秒 - IP: 192.168.31.237
+2025-05-30 16:06:57,083 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/market/indices - 状态码: 200 - 处理时间: 2.092秒 - IP: 192.168.31.237
+2025-05-30 16:07:00,394 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 5.361秒 - IP: 192.168.31.237
+2025-05-30 16:07:22,299 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/market/indices - IP: 127.0.0.1
+2025-05-30 16:07:22,303 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/stock/quote_board?limit=3 - IP: 127.0.0.1
+2025-05-30 16:07:22,303 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/market/industry_board - IP: 127.0.0.1
+2025-05-30 16:07:22,303 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/watchlist - IP: 127.0.0.1
+2025-05-30 16:07:22,311 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/auth/status - IP: 127.0.0.1
+2025-05-30 16:07:22,311 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/news?limit=3 - IP: 127.0.0.1
+2025-05-30 16:07:22,317 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.006秒 - IP: 127.0.0.1
+2025-05-30 16:07:22,885 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:07:22,889 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 0.586秒 - IP: 127.0.0.1
+2025-05-30 16:07:22,889 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/market/industry_board - 状态码: 200 - 处理时间: 0.586秒 - IP: 127.0.0.1
+2025-05-30 16:07:22,893 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/watchlist - 状态码: 200 - 处理时间: 0.590秒 - IP: 127.0.0.1
+2025-05-30 16:07:22,897 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/auth/status - 状态码: 200 - 处理时间: 0.586秒 - IP: 127.0.0.1
+2025-05-30 16:07:25,183 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/market/indices - 状态码: 200 - 处理时间: 2.884秒 - IP: 127.0.0.1
+2025-05-30 16:08:31,313 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/market/indices - IP: 127.0.0.1
+2025-05-30 16:08:31,313 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/watchlist - IP: 127.0.0.1
+2025-05-30 16:08:31,313 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/market/industry_board - IP: 127.0.0.1
+2025-05-30 16:08:31,313 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/news?limit=3 - IP: 127.0.0.1
+2025-05-30 16:08:31,317 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/auth/status - IP: 127.0.0.1
+2025-05-30 16:08:31,317 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://localhost:5000/api/stock/quote_board?limit=3 - IP: 127.0.0.1
+2025-05-30 16:08:31,942 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.629秒 - IP: 127.0.0.1
+2025-05-30 16:08:31,946 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 127.0.0.1, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-05-30 16:08:31,946 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/market/industry_board - 状态码: 200 - 处理时间: 0.633秒 - IP: 127.0.0.1
+2025-05-30 16:08:31,950 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/watchlist - 状态码: 200 - 处理时间: 0.637秒 - IP: 127.0.0.1
+2025-05-30 16:08:31,954 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/auth/status - 状态码: 200 - 处理时间: 0.637秒 - IP: 127.0.0.1
+2025-05-30 16:08:32,847 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/market/indices - 状态码: 200 - 处理时间: 1.537秒 - IP: 127.0.0.1
+2025-05-30 16:08:37,899 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://localhost:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 6.582秒 - IP: 127.0.0.1
