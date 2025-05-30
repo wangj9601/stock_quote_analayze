@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人中心 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/profile.css">
+</head>
+<body>
+<script src="components/header.js"></script>
+<script>loadHeader('profile');</script>
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <div class="container">
+            <!-- 用户信息卡片 -->
+            <section class="user-profile-card">
+                <div class="profile-header">
+                    <div class="avatar-section">
+                        <div class="user-avatar">
+                            <span>U</span>
+                        </div>
+                        <button class="change-avatar-btn">更换头像</button>
+                    </div>
+                    <div class="user-details">
+                        <h1>投资达人</h1>
+                        <p class="user-title">高级用户 • VIP会员</p>
+                        <div class="user-stats">
+                            <div class="stat-item">
+                                <span class="stat-value">365</span>
+                                <span class="stat-label">使用天数</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value">28</span>
+                                <span class="stat-label">自选股数</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value">156</span>
+                                <span class="stat-label">关注资讯</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="btn btn-primary edit-profile-btn">编辑资料</button>
+                        <button class="btn btn-secondary settings-btn">设置</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 内容标签 -->
+            <section class="profile-tabs">
+                <div class="tab-nav">
+                    <button class="profile-tab active" data-tab="overview">投资概况</button>
+                    <button class="profile-tab" data-tab="portfolio">投资组合</button>
+                    <button class="profile-tab" data-tab="transactions">交易记录</button>
+                    <button class="profile-tab" data-tab="analysis">投资分析</button>
+                    <button class="profile-tab" data-tab="settings">账户设置</button>
+                </div>
+
+                <!-- 投资概况 -->
+                <div class="tab-panel active" id="overview">
+                    <div class="overview-grid">
+                        <div class="overview-card assets-overview">
+                            <h3>📊 资产概况</h3>
+                            <div class="assets-content">
+                                <div class="total-assets">
+                                    <span class="amount">¥1,250,000</span>
+                                    <span class="label">总资产</span>
+                                </div>
+                                <div class="assets-breakdown">
+                                    <div class="breakdown-item">
+                                        <span class="breakdown-label">股票市值</span>
+                                        <span class="breakdown-value">¥980,000</span>
+                                        <span class="breakdown-percent">78.4%</span>
+                                    </div>
+                                    <div class="breakdown-item">
+                                        <span class="breakdown-label">现金余额</span>
+                                        <span class="breakdown-value">¥270,000</span>
+                                        <span class="breakdown-percent">21.6%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="overview-card performance-overview">
+                            <h3>📈 收益概况</h3>
+                            <div class="performance-content">
+                                <div class="performance-item">
+                                    <span class="performance-label">今日收益</span>
+                                    <span class="performance-value positive">+¥15,680</span>
+                                    <span class="performance-percent positive">+1.27%</span>
+                                </div>
+                                <div class="performance-item">
+                                    <span class="performance-label">累计收益</span>
+                                    <span class="performance-value positive">+¥180,000</span>
+                                    <span class="performance-percent positive">+16.82%</span>
+                                </div>
+                                <div class="performance-item">
+                                    <span class="performance-label">年化收益率</span>
+                                    <span class="performance-value positive">+22.5%</span>
+                                    <span class="performance-change">超越85%用户</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="overview-card recent-trades">
+                            <h3>🔄 最近交易</h3>
+                            <div class="trades-list">
+                                <div class="trade-item">
+                                    <div class="trade-stock">
+                                        <span class="stock-name">比亚迪</span>
+                                        <span class="stock-code">002594</span>
+                                    </div>
+                                    <div class="trade-action buy">买入</div>
+                                    <div class="trade-amount">500股</div>
+                                    <div class="trade-time">今天 14:30</div>
+                                </div>
+                                <div class="trade-item">
+                                    <div class="trade-stock">
+                                        <span class="stock-name">宁德时代</span>
+                                        <span class="stock-code">300750</span>
+                                    </div>
+                                    <div class="trade-action sell">卖出</div>
+                                    <div class="trade-amount">200股</div>
+                                    <div class="trade-time">昨天 10:15</div>
+                                </div>
+                                <div class="trade-item">
+                                    <div class="trade-stock">
+                                        <span class="stock-name">贵州茅台</span>
+                                        <span class="stock-code">600519</span>
+                                    </div>
+                                    <div class="trade-action buy">买入</div>
+                                    <div class="trade-amount">100股</div>
+                                    <div class="trade-time">3天前</div>
+                                </div>
+                            </div>
+                            <button class="view-all-btn">查看全部交易</button>
+                        </div>
+
+                        <div class="overview-card portfolio-summary">
+                            <h3>💼 持仓摘要</h3>
+                            <div class="portfolio-content">
+                                <div class="portfolio-chart">
+                                    <canvas id="portfolioChart" width="200" height="200"></canvas>
+                                </div>
+                                <div class="portfolio-legend">
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background: #dc2626;"></span>
+                                        <span class="legend-label">科技股 40%</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background: #16a34a;"></span>
+                                        <span class="legend-label">金融股 25%</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background: #f59e0b;"></span>
+                                        <span class="legend-label">消费股 20%</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="legend-color" style="background: #6b7280;"></span>
+                                        <span class="legend-label">其他 15%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 投资组合 -->
+                <div class="tab-panel" id="portfolio">
+                    <div class="portfolio-section">
+                        <div class="portfolio-header">
+                            <h3>我的投资组合</h3>
+                            <div class="portfolio-controls">
+                                <select class="portfolio-filter">
+                                    <option value="all">全部持仓</option>
+                                    <option value="profit">盈利股票</option>
+                                    <option value="loss">亏损股票</option>
+                                </select>
+                                <button class="btn btn-primary add-position-btn">新增持仓</button>
+                            </div>
+                        </div>
+                        
+                        <div class="portfolio-table">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>股票</th>
+                                        <th>持仓数量</th>
+                                        <th>成本价</th>
+                                        <th>现价</th>
+                                        <th>市值</th>
+                                        <th>盈亏</th>
+                                        <th>盈亏比例</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>
+                                            <div class="stock-info">
+                                                <span class="stock-name">比亚迪</span>
+                                                <span class="stock-code">002594</span>
+                                            </div>
+                                        </td>
+                                        <td>1,500股</td>
+                                        <td>¥215.60</td>
+                                        <td>¥245.67</td>
+                                        <td>¥368,505</td>
+                                        <td class="positive">+¥45,105</td>
+                                        <td class="positive">+13.94%</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-secondary">交易</button>
+                                            <button class="btn btn-sm btn-danger">清仓</button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div class="stock-info">
+                                                <span class="stock-name">宁德时代</span>
+                                                <span class="stock-code">300750</span>
+                                            </div>
+                                        </td>
+                                        <td>800股</td>
+                                        <td>¥198.45</td>
+                                        <td>¥187.50</td>
+                                        <td>¥150,000</td>
+                                        <td class="negative">-¥8,760</td>
+                                        <td class="negative">-5.52%</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-secondary">交易</button>
+                                            <button class="btn btn-sm btn-danger">清仓</button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div class="stock-info">
+                                                <span class="stock-name">招商银行</span>
+                                                <span class="stock-code">600036</span>
+                                            </div>
+                                        </td>
+                                        <td>3,000股</td>
+                                        <td>¥42.80</td>
+                                        <td>¥45.67</td>
+                                        <td>¥137,010</td>
+                                        <td class="positive">+¥8,610</td>
+                                        <td class="positive">+6.71%</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-secondary">交易</button>
+                                            <button class="btn btn-sm btn-danger">清仓</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 交易记录 -->
+                <div class="tab-panel" id="transactions">
+                    <div class="transactions-section">
+                        <div class="transactions-header">
+                            <h3>交易记录</h3>
+                            <div class="transactions-filters">
+                                <select class="filter-select">
+                                    <option value="all">全部交易</option>
+                                    <option value="buy">买入记录</option>
+                                    <option value="sell">卖出记录</option>
+                                </select>
+                                <input type="date" class="date-filter" value="2025-01-20">
+                                <button class="btn btn-secondary export-btn">导出记录</button>
+                            </div>
+                        </div>
+                        
+                        <div class="transactions-list">
+                            <div class="transaction-item">
+                                <div class="transaction-date">2025-01-20 14:30:25</div>
+                                <div class="transaction-stock">
+                                    <span class="stock-name">比亚迪</span>
+                                    <span class="stock-code">002594</span>
+                                </div>
+                                <div class="transaction-type buy">买入</div>
+                                <div class="transaction-details">
+                                    <span class="quantity">500股</span>
+                                    <span class="price">¥245.67</span>
+                                    <span class="amount">¥122,835</span>
+                                </div>
+                                <div class="transaction-status success">已成交</div>
+                            </div>
+                            
+                            <div class="transaction-item">
+                                <div class="transaction-date">2025-01-19 10:15:30</div>
+                                <div class="transaction-stock">
+                                    <span class="stock-name">宁德时代</span>
+                                    <span class="stock-code">300750</span>
+                                </div>
+                                <div class="transaction-type sell">卖出</div>
+                                <div class="transaction-details">
+                                    <span class="quantity">200股</span>
+                                    <span class="price">¥189.50</span>
+                                    <span class="amount">¥37,900</span>
+                                </div>
+                                <div class="transaction-status success">已成交</div>
+                            </div>
+                            
+                            <div class="transaction-item">
+                                <div class="transaction-date">2025-01-17 09:45:12</div>
+                                <div class="transaction-stock">
+                                    <span class="stock-name">贵州茅台</span>
+                                    <span class="stock-code">600519</span>
+                                </div>
+                                <div class="transaction-type buy">买入</div>
+                                <div class="transaction-details">
+                                    <span class="quantity">100股</span>
+                                    <span class="price">¥1,865.00</span>
+                                    <span class="amount">¥186,500</span>
+                                </div>
+                                <div class="transaction-status success">已成交</div>
+                            </div>
+                        </div>
+                        
+                        <div class="pagination">
+                            <button class="pagination-btn">上一页</button>
+                            <span class="pagination-info">第 1 页，共 15 页</span>
+                            <button class="pagination-btn">下一页</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 投资分析 -->
+                <div class="tab-panel" id="analysis">
+                    <div class="analysis-section">
+                        <div class="analysis-grid">
+                            <div class="analysis-card">
+                                <h3>📊 投资偏好分析</h3>
+                                <div class="preference-chart">
+                                    <canvas id="preferenceChart" width="300" height="200"></canvas>
+                                </div>
+                                <div class="preference-summary">
+                                    <p>您更偏好<strong>成长型投资</strong>，风险承受能力<strong>中等偏高</strong></p>
+                                </div>
+                            </div>
+
+                            <div class="analysis-card">
+                                <h3>🎯 投资目标达成</h3>
+                                <div class="goal-progress">
+                                    <div class="goal-item">
+                                        <span class="goal-label">年度收益目标</span>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: 75%;"></div>
+                                        </div>
+                                        <span class="goal-value">75% (15万/20万)</span>
+                                    </div>
+                                    <div class="goal-item">
+                                        <span class="goal-label">风险控制目标</span>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: 88%;"></div>
+                                        </div>
+                                        <span class="goal-value">88% (回撤控制良好)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-card">
+                                <h3>⚡ 交易行为分析</h3>
+                                <div class="behavior-stats">
+                                    <div class="behavior-item">
+                                        <span class="behavior-label">平均持股周期</span>
+                                        <span class="behavior-value">45天</span>
+                                    </div>
+                                    <div class="behavior-item">
+                                        <span class="behavior-label">胜率</span>
+                                        <span class="behavior-value">68.5%</span>
+                                    </div>
+                                    <div class="behavior-item">
+                                        <span class="behavior-label">盈亏比</span>
+                                        <span class="behavior-value">1:2.3</span>
+                                    </div>
+                                    <div class="behavior-item">
+                                        <span class="behavior-label">月均交易次数</span>
+                                        <span class="behavior-value">12次</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-card">
+                                <h3>💡 投资建议</h3>
+                                <div class="suggestions-list">
+                                    <div class="suggestion-item">
+                                        <span class="suggestion-icon">🎯</span>
+                                        <div class="suggestion-content">
+                                            <h4>优化仓位配置</h4>
+                                            <p>建议增加低估值蓝筹股配置，降低单一板块集中度</p>
+                                        </div>
+                                    </div>
+                                    <div class="suggestion-item">
+                                        <span class="suggestion-icon">⏰</span>
+                                        <div class="suggestion-content">
+                                            <h4>延长持股周期</h4>
+                                            <p>适当延长优质股票持有时间，减少频繁交易</p>
+                                        </div>
+                                    </div>
+                                    <div class="suggestion-item">
+                                        <span class="suggestion-icon">🔒</span>
+                                        <div class="suggestion-content">
+                                            <h4>设置止损点</h4>
+                                            <p>为每只股票设置合理止损位，控制单笔损失</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 账户设置 -->
+                <div class="tab-panel" id="settings">
+                    <div class="settings-section">
+                        <div class="settings-grid">
+                            <div class="settings-card">
+                                <h3>👤 个人信息</h3>
+                                <div class="form-group">
+                                    <label>用户名</label>
+                                    <input type="text" value="投资达人" class="form-input">
+                                </div>
+                                <div class="form-group">
+                                    <label>邮箱</label>
+                                    <input type="email" value="investor@example.com" class="form-input">
+                                </div>
+                                <div class="form-group">
+                                    <label>手机号</label>
+                                    <input type="tel" value="138****8888" class="form-input">
+                                </div>
+                                <button class="btn btn-primary">保存修改</button>
+                            </div>
+
+                            <div class="settings-card">
+                                <h3>🔔 通知设置</h3>
+                                <div class="notification-settings">
+                                    <div class="setting-item">
+                                        <label class="setting-label">
+                                            <input type="checkbox" checked>
+                                            <span>价格提醒通知</span>
+                                        </label>
+                                    </div>
+                                    <div class="setting-item">
+                                        <label class="setting-label">
+                                            <input type="checkbox" checked>
+                                            <span>重要资讯推送</span>
+                                        </label>
+                                    </div>
+                                    <div class="setting-item">
+                                        <label class="setting-label">
+                                            <input type="checkbox">
+                                            <span>交易确认通知</span>
+                                        </label>
+                                    </div>
+                                    <div class="setting-item">
+                                        <label class="setting-label">
+                                            <input type="checkbox" checked>
+                                            <span>系统更新通知</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-card">
+                                <h3>🔒 安全设置</h3>
+                                <div class="security-settings">
+                                    <div class="security-item">
+                                        <span class="security-label">登录密码</span>
+                                        <button class="btn btn-secondary">修改密码</button>
+                                    </div>
+                                    <div class="security-item">
+                                        <span class="security-label">交易密码</span>
+                                        <button class="btn btn-secondary">修改密码</button>
+                                    </div>
+                                    <div class="security-item">
+                                        <span class="security-label">双重验证</span>
+                                        <button class="btn btn-primary">开启验证</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-card">
+                                <h3>🎨 界面设置</h3>
+                                <div class="interface-settings">
+                                    <div class="setting-item">
+                                        <label class="setting-label">主题模式</label>
+                                        <select class="form-select">
+                                            <option value="light">浅色模式</option>
+                                            <option value="dark">深色模式</option>
+                                            <option value="auto">跟随系统</option>
+                                        </select>
+                                    </div>
+                                    <div class="setting-item">
+                                        <label class="setting-label">语言设置</label>
+                                        <select class="form-select">
+                                            <option value="zh-CN">简体中文</option>
+                                            <option value="zh-TW">繁体中文</option>
+                                            <option value="en-US">English</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="搜索功能或设置" class="search-input">
+                <button class="close-search">×</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/profile.js"></script>
+</body>
+</html> 

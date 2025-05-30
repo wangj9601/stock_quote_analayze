@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>首页 - 股票分析</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/home.css">
+    <link rel="stylesheet" href="css/home_colors.css">
+</head>
+<body>
+<script src="components/header.js"></script>
+<script>loadHeader('home');</script>
+
+    <!-- 主要内容 -->
+    <main class="main-content">
+        <!-- 市场概览 -->
+        <section class="market-overview">
+            <div class="container">
+                <h2>市场概览</h2>
+                <div class="index-cards">
+                    <div class="index-card" data-index-code="000001">
+                        <div class="index-name">上证指数</div>
+                        <div class="index-value">0.00</div>
+                        <div class="index-change">加载中...</div>
+                        <div class="index-extra-info">
+                            <div class="index-volume">成交量: 加载中...</div>
+                            <div class="index-time">更新时间: 加载中...</div>
+                        </div>
+                    </div>
+                    <div class="index-card" data-index-code="399001">
+                        <div class="index-name">深证成指</div>
+                        <div class="index-value">0.00</div>
+                        <div class="index-change">加载中...</div>
+                        <div class="index-extra-info">
+                            <div class="index-volume">成交量: 加载中...</div>
+                            <div class="index-time">更新时间: 加载中...</div>
+                        </div>
+                    </div>
+                    <div class="index-card" data-index-code="399006">
+                        <div class="index-name">创业板指</div>
+                        <div class="index-value">0.00</div>
+                        <div class="index-change">加载中...</div>
+                        <div class="index-extra-info">
+                            <div class="index-volume">成交量: 加载中...</div>
+                            <div class="index-time">更新时间: 加载中...</div>
+                        </div>
+                    </div>
+                    <div class="index-card" data-index-code="000300">
+                        <div class="index-name">沪深300</div>
+                        <div class="index-value">0.00</div>
+                        <div class="index-change">加载中...</div>
+                        <div class="index-extra-info">
+                            <div class="index-volume">成交量: 加载中...</div>
+                            <div class="index-time">更新时间: 加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 功能区域 -->
+        <section class="function-area">
+            <div class="container">
+                <div class="function-grid">
+                    <!-- 自选股 -->
+                    <div class="function-card">
+                        <div class="function-header">
+                            <h3>📋 我的自选股</h3>
+                            <a href="watchlist.html" class="more-link">更多 &gt;</a>
+                        </div>
+                        <div class="stock-list">
+                            <!-- 动态加载自选股数据 -->
+                        </div>
+                    </div>
+
+                    <!-- 热门板块 -->
+                    <div class="function-card">
+                        <div class="function-header">
+                            <h3>🔥 热门板块</h3>
+                            <a href="markets.html" class="more-link">更多 &gt;</a>
+                        </div>
+                        <div class="sector-list">
+                            <!-- 动态加载板块数据 -->
+                        </div>
+                    </div>
+
+                    <!-- 涨幅榜 -->
+                    <div class="function-card">
+                        <div class="function-header">
+                            <h3>📈 今日涨幅榜</h3>
+                            <a href="markets.html" class="more-link">更多 &gt;</a>
+                        </div>
+                        <div class="gainer-list">
+                            <!-- 动态加载涨幅榜数据 -->
+                        </div>
+                    </div>
+
+                    <!-- 市场资讯 -->
+                    <div class="function-card">
+                        <div class="function-header">
+                            <h3>📰 市场资讯</h3>
+                            <a href="news.html" class="more-link">更多 &gt;</a>
+                        </div>
+                        <div class="news-list">
+                            <!-- 动态加载资讯数据 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 搜索弹窗 -->
+    <div class="search-modal" id="searchModal">
+        <div class="search-content">
+            <div class="search-header">
+                <input type="text" placeholder="输入股票代码或名称" class="search-input">
+                <button class="close-search">✕</button>
+            </div>
+            <div class="search-results"></div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/home.js"></script>
+</body>
+</html> 

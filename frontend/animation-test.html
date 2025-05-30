@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动画效果测试 - 登录动画优化</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            align-items: center;
+            min-height: 80vh;
+        }
+        .demo-box {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            width: 300px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .demo-title {
+            color: #1f2937;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        .logo {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 1rem 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            margin: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* 原来的夸张动画 */
+        .old-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .old-shape {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: oldFloat 4s ease-in-out infinite;
+        }
+        .old-shape-1 {
+            width: 30px;
+            height: 30px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+        .old-shape-2 {
+            width: 40px;
+            height: 40px;
+            top: 60%;
+            right: 10%;
+            animation-delay: 1s;
+        }
+        @keyframes oldFloat {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+                opacity: 0.5;
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+                opacity: 0.8;
+            }
+        }
+        
+        /* 新的柔和动画 */
+        .new-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .new-shape {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            animation: gentleFloat 6s ease-in-out infinite;
+        }
+        .new-shape-1 {
+            width: 25px;
+            height: 25px;
+            top: 15%;
+            left: 15%;
+            animation-delay: 0s;
+        }
+        .new-shape-2 {
+            width: 35px;
+            height: 35px;
+            top: 65%;
+            right: 15%;
+            animation-delay: 2s;
+        }
+        @keyframes gentleFloat {
+            0%, 100% {
+                transform: translateY(0px);
+                opacity: 0.4;
+            }
+            25% {
+                transform: translateY(-4px);
+                opacity: 0.6;
+            }
+            50% {
+                transform: translateY(-8px);
+                opacity: 0.7;
+            }
+            75% {
+                transform: translateY(-4px);
+                opacity: 0.6;
+            }
+        }
+
+        .description {
+            margin-top: 1rem;
+            color: #6b7280;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .comparison-title {
+            text-align: center;
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="comparison-title">🎨 登录动画优化对比</h1>
+    <div class="container">
+        <div class="demo-box">
+            <h3 class="demo-title">优化前（夸张效果）</h3>
+            <div class="logo" onclick="playOldAnimation(this)">📈 股票分析系统</div>
+            <button class="btn" onclick="playOldAnimation(document.querySelector('.demo-box .logo'))">
+                触发登录动画
+            </button>
+            <div class="description">
+                • 旋转幅度大（180度）<br>
+                • 移动距离远（20px）<br>
+                • 透明度变化明显<br>
+                • 动画较快（4秒）
+            </div>
+            <div class="old-shapes">
+                <div class="old-shape old-shape-1"></div>
+                <div class="old-shape old-shape-2"></div>
+            </div>
+        </div>
+
+        <div class="demo-box">
+            <h3 class="demo-title">优化后（柔和效果）</h3>
+            <div class="logo" onclick="playNewAnimation(this)">📈 股票分析系统</div>
+            <button class="btn" onclick="playNewAnimation(document.querySelector('.demo-box:last-child .logo'))">
+                触发登录动画
+            </button>
+            <div class="description">
+                • 纯上下浮动（无转动）<br>
+                • 移动距离短（8px）<br>
+                • 透明度变化柔和<br>
+                • 动画较慢（6秒）<br>
+                • 四段式过渡更平滑
+            </div>
+            <div class="new-shapes">
+                <div class="new-shape new-shape-1"></div>
+                <div class="new-shape new-shape-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function playOldAnimation(logo) {
+            // 重置样式
+            logo.style.transition = 'all 0.5s ease';
+            logo.style.transform = 'scale(1.2) rotate(10deg)';
+            logo.style.filter = 'drop-shadow(0 0 30px rgba(102, 126, 234, 0.8))';
+            
+            setTimeout(() => {
+                logo.style.transform = 'scale(1)';
+                logo.style.filter = 'none';
+            }, 500);
+        }
+
+        function playNewAnimation(logo) {
+            // 柔和动画
+            logo.style.transition = 'all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+            logo.style.transform = 'scale(1.05)';
+            logo.style.filter = 'drop-shadow(0 0 20px rgba(102, 126, 234, 0.3))';
+            
+            setTimeout(() => {
+                logo.style.transform = 'scale(1)';
+                logo.style.filter = 'none';
+            }, 800);
+        }
+    </script>
+</body>
+</html> 

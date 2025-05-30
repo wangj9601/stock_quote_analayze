@@ -1,0 +1,7 @@
+README.md
+setup.py
+backend_core.egg-info/PKG-INFO
+backend_core.egg-info/SOURCES.txt
+backend_core.egg-info/dependency_links.txt
+backend_core.egg-info/requires.txt
+backend_core.egg-info/top_level.txt
