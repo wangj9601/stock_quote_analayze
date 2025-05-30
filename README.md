@@ -1,1 +1,0 @@
-# stock_quote_analayze
