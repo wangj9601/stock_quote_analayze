@@ -1,3 +1,7 @@
+
+const API_BASE_URL = window.API_BASE_URL || 'http://localhost:5000';
+
+
 // 首页数据管理
 document.addEventListener('DOMContentLoaded', function() {
     console.log('首页初始化开始...');
@@ -48,7 +52,8 @@ async function loadRealData() {
 async function loadMarketIndices() {
     try {
         console.log('加载指数数据...');
-        const response = await authFetch('http://localhost:5000/api/market/indices');
+        //const response = await authFetch('http://localhost:5000/api/market/indices');
+        const response = await authFetch(`${API_BASE_URL}/api/market/indices`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -109,7 +114,8 @@ function updateIndexDisplay(indicesData) {
 async function loadWatchlist() {
     try {
         console.log('加载自选股数据...');
-        const response = await authFetch('http://localhost:5000/api/watchlist');
+        //const response = await authFetch('http://localhost:5000/api/watchlist');
+        const response = await authFetch(`${API_BASE_URL}/api/watchlist`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -171,7 +177,8 @@ function updateWatchlistDisplay(stocks) {
 async function loadSectors() {
     try {
         console.log('加载板块数据...');
-        const response = await authFetch('http://localhost:5000/api/market/industry_board');
+        //const response = await authFetch('http://localhost:5000/api/market/industry_board');
+        const response = await authFetch(`${API_BASE_URL}/api/market/industry_board`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -223,7 +230,8 @@ function updateSectorDisplay(sectors) {
 async function loadGainers() {
     try {
         console.log('加载涨幅榜数据...');
-        const response = await authFetch('http://localhost:5000/api/stock/quote_board?limit=3');
+        //const response = await authFetch('http://localhost:5000/api/stock/quote_board?limit=3');
+        const response = await authFetch(`${API_BASE_URL}/api/stock/quote_board?limit=3`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -281,7 +289,8 @@ function updateGainersDisplay(gainers) {
 async function loadNews() {
     try {
         console.log('加载新闻数据...');
-        const response = await authFetch('http://localhost:5000/api/news?limit=3');
+        //const response = await authFetch('http://localhost:5000/api/news?limit=3');
+        const response = await authFetch(`${API_BASE_URL}/api/news?limit=3`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -337,7 +346,8 @@ function updateNewsDisplay(news) {
 // 加载用户信息
 async function loadUserInfo() {
     try {
-        const response = await authFetch('http://localhost:5000/api/auth/status');
+        // const response = await authFetch('http://localhost:5000/api/auth/status');
+        const response = await authFetch(`${API_BASE_URL}/api/auth/status`);
         const result = await response.json();
         
         if (result.success && result.logged_in && result.user) {
