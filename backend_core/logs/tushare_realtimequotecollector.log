@@ -76,3 +76,30 @@ Traceback (most recent call last):
     raise Exception(result['msg'])
 Exception: 抱歉，您每小时最多访问该接口1次，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
 2025-05-31 14:49:09,324 ERROR 记录错误日志失败: cannot access local variable 'cursor' where it is not associated with a value
+2025-05-31 16:46:01,480 ERROR 采集或入库时出错: HTTP Error 431: Request Header Fields Too Large
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\tushare\realtime.py", line 76, in collect_quotes
+    df = ts.get_realtime_quotes(stocks['ts_code'].tolist())
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\tushare\stock\trading.py", line 382, in get_realtime_quotes
+    text = urlopen(request,timeout=10).read()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\urllib\request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 431: Request Header Fields Too Large
+2025-05-31 16:46:01,486 ERROR 记录错误日志失败: cannot access local variable 'cursor' where it is not associated with a value

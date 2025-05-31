@@ -1,2 +1,31 @@
 2025-05-31 12:01:45,841 INFO 采集到 5384 条历史行情数据
 2025-05-31 12:01:46,472 INFO 全部历史行情数据采集并入库完成
+2025-05-31 16:47:33,538 INFO 采集到 0 条历史行情数据
+2025-05-31 16:47:33,560 INFO 全部历史行情数据采集并入库完成
+2025-05-31 16:51:01,276 INFO 采集到 5384 条历史行情数据
+2025-05-31 16:51:01,908 INFO 全部历史行情数据采集并入库完成
+2025-05-31 16:56:43,092 INFO 采集到 5386 条历史行情数据
+2025-05-31 16:56:43,731 INFO 全部历史行情数据采集并入库完成
+2025-05-31 17:04:31,619 INFO 采集到 0 条历史行情数据
+2025-05-31 17:04:31,622 INFO 全部历史行情数据采集并入库完成
+2025-05-31 17:09:09,300 ERROR 采集或入库时出错: pro_bar() got an unexpected keyword argument 'trade_date'
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\tushare\historical.py", line 64, in collect_historical_quotes
+    df = ts.pro_bar(trade_date=date_str)  # 这里需要根据tushare实际API替换
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: pro_bar() got an unexpected keyword argument 'trade_date'
+2025-05-31 17:13:56,009 INFO 采集到 5383 条历史行情数据
+2025-05-31 17:13:56,643 INFO 全部历史行情数据采集并入库完成，成功: 5383，失败: 0
+2025-05-31 17:18:59,379 INFO 采集到 5385 条历史行情数据
+2025-05-31 17:19:05,676 ERROR 采集或入库时出错: database is locked
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\tushare\historical.py", line 119, in collect_historical_quotes
+    conn.commit()
+sqlite3.OperationalError: database is locked
+2025-05-31 17:19:11,310 ERROR 记录错误日志失败: database is locked
+2025-05-31 17:19:40,802 INFO 采集到 5385 条历史行情数据
+2025-05-31 17:19:41,439 INFO 全部历史行情数据采集并入库完成，成功: 5385，失败: 0
+2025-05-31 17:19:55,489 INFO 采集到 5385 条历史行情数据
+2025-05-31 17:19:56,181 INFO 全部历史行情数据采集并入库完成，成功: 5385，失败: 0
+2025-05-31 20:01:57,423 INFO 采集到 5388 条历史行情数据
+2025-05-31 20:02:35,989 INFO 全部历史行情数据采集并入库完成，成功: 5388，失败: 0
