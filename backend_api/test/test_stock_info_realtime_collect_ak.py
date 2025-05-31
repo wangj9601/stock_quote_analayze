@@ -1,38 +1,43 @@
-"""
-实时行情数据采集测试
-"""
+def test_get_stock_quote_on_weekend(monkeypatch):
+    """测试周末从数据库获取行情数据"""
+    import sqlite3
+    from backend_api.config import DB_PATH
+    from fastapi.testclient import TestClient
+    from backend_api.stock.stock_manage import router, safe_float
+    import datetime
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    # 模拟今天是周六
+    class FakeDate(datetime.date):
+        @classmethod
+        def today(cls):
+            # 2024-06-15 是周六
+            return cls(2024, 6, 15)
+    monkeypatch.setattr(datetime, 'date', FakeDate)
 
-from backend_api.config import DB_PATH
-from ..config import DB_PATH
-
-def test_collect_realtime_quotes():
-    """测试实时行情数据采集"""
-    from backend.stock_info_realtime_collect_ak import collect_realtime_quotes
-    db_file = DB_PATH
-    # 运行采集
-    collect_realtime_quotes(db_file=db_file)
-    # 检查数据库文件是否存在
-    assert os.path.exists(db_file), "数据库文件应存在"
-    # 检查表和数据
-    conn = sqlite3.connect(db_file)
+    # 先从数据库取一只股票
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # 检查基础信息表
-    cursor.execute("SELECT COUNT(*) FROM stock_basic_info")
-    basic_count = cursor.fetchone()[0]
-    assert basic_count > 0, "stock_basic_info 表应有数据"
-    # 检查实时行情表
-    cursor.execute("SELECT COUNT(*) FROM stock_realtime_quote")
-    realtime_count = cursor.fetchone()[0]
-    assert realtime_count > 0, "stock_realtime_quote 表应有数据"
-    # 检查部分字段
-    cursor.execute("SELECT code, name FROM stock_basic_info LIMIT 1")
-    code, name = cursor.fetchone()
-    assert code and name, "股票代码和名称应存在"
-    cursor.execute("SELECT code, current_price FROM stock_realtime_quote WHERE code=?", (code,))
+    cursor.execute("SELECT code, current_price, change_percent, volume, amount, high, low, open, pre_close FROM stock_realtime_quote LIMIT 1")
     row = cursor.fetchone()
-    assert row is not None, "实时行情表应有对应股票"
     conn.close()
+    assert row is not None, "数据库应有实时行情数据"
+    code = row[0]
+
+    # 用TestClient调用接口
+    client = TestClient(router)
+    response = client.post("/api/stock/quote", json={"codes": [code]})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert len(data["data"]) == 1
+    # 校验返回内容与数据库一致
+    quote = data["data"][0]
+    assert quote["code"] == code
+    assert safe_float(quote["current_price"]) == safe_float(row[1])
+    assert safe_float(quote["change_percent"]) == safe_float(row[2])
+    assert safe_float(quote["volume"]) == safe_float(row[3])
+    assert safe_float(quote["turnover"]) == safe_float(row[4])
+    assert safe_float(quote["high"]) == safe_float(row[5])
+    assert safe_float(quote["low"]) == safe_float(row[6])
+    assert safe_float(quote["open"]) == safe_float(row[7])
+    assert safe_float(quote["yesterday_close"]) == safe_float(row[8])

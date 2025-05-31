@@ -8,10 +8,13 @@ import traceback
 import numpy as np
 import time
 from threading import Lock
+import sqlite3
+import datetime
+from backend_api.config import DB_PATH
 
-# 简单内存缓存实现
+# 简单内存缓存实现,缓存120秒。
 class DataFrameCache:
-    def __init__(self, expire_seconds=60):
+    def __init__(self, expire_seconds=120):
         self.data = None
         self.timestamp = 0
         self.expire = expire_seconds
@@ -53,27 +56,52 @@ async def get_stock_quote(request: Request):
             print("[stock_quote] 缺少股票代码")
             return JSONResponse({"success": False, "message": "缺少股票代码"}, status_code=400)
         result = []
-        for code in codes:
-            try:
-                df = ak.stock_bid_ask_em(symbol=code)
-                if df.empty:
+        today = datetime.date.today()
+        # 如果是周六或周日，从数据库获取
+        if today.weekday() in (5, 6):
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            for code in codes:
+                cursor.execute(
+                    "SELECT code, current_price, change_percent, volume, amount, high, low, open, pre_close FROM stock_realtime_quote WHERE code=?",
+                    (code,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    result.append({
+                        "code": row[0],
+                        "current_price": safe_float(row[1]),
+                        "change_percent": safe_float(row[2]),
+                        "volume": safe_float(row[3]),
+                        "turnover": safe_float(row[4]),
+                        "high": safe_float(row[5]),
+                        "low": safe_float(row[6]),
+                        "open": safe_float(row[7]),
+                        "yesterday_close": safe_float(row[8]),
+                    })
+            conn.close()
+        else:
+            for code in codes:
+                try:
+                    df = ak.stock_bid_ask_em(symbol=code)
+                    if df.empty:
+                        continue
+                    data_dict = dict(zip(df['item'], df['value']))
+                    result.append({
+                        "code": code,
+                        "current_price": safe_float(data_dict.get("最新")),
+                        "change_amount": safe_float(data_dict.get("涨跌")),
+                        "change_percent": safe_float(data_dict.get("涨幅")),
+                        "open": safe_float(data_dict.get("今开")),
+                        "yesterday_close": safe_float(data_dict.get("昨收")),
+                        "high": safe_float(data_dict.get("最高")),
+                        "low": safe_float(data_dict.get("最低")),
+                        "volume": safe_float(data_dict.get("总手")),
+                        "turnover": safe_float(data_dict.get("金额")),
+                    })
+                except Exception as e:
+                    print(f"[stock_quote] 获取 {code} 行情异常: {e}")
                     continue
-                data_dict = dict(zip(df['item'], df['value']))
-                result.append({
-                    "code": code,
-                    "current_price": safe_float(data_dict.get("最新")),
-                    "change_amount": safe_float(data_dict.get("涨跌")),
-                    "change_percent": safe_float(data_dict.get("涨幅")),
-                    "open": safe_float(data_dict.get("今开")),
-                    "yesterday_close": safe_float(data_dict.get("昨收")),
-                    "high": safe_float(data_dict.get("最高")),
-                    "low": safe_float(data_dict.get("最低")),
-                    "volume": safe_float(data_dict.get("总手")),
-                    "turnover": safe_float(data_dict.get("金额")),
-                })
-            except Exception as e:
-                print(f"[stock_quote] 获取 {code} 行情异常: {e}")
-                continue
         print(f"[stock_quote] 返回数据: {result}")
         return JSONResponse({"success": True, "data": result})
     except Exception as e:
@@ -103,11 +131,43 @@ async def get_stocks_list(request: Request, db: Session = Depends(get_db)):
         print(f"[stock_list] 查询异常: {e}\n{traceback.format_exc()}")
         return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
 
-# 获取A股最新行情
 @router.get("/quote_board")
 def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最高的股票")):
     """获取沪深京A股最新行情，返回涨幅最高的前limit个股票"""
+    import datetime
+    import sqlite3
+    from backend_api.config import DB_PATH
     try:
+        today = datetime.date.today()
+        if today.weekday() in (5, 6):
+            # 周末，从数据库取，联表查出name
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT q.code, b.name, q.current_price, q.change_percent, q.open, q.pre_close, q.high, q.low, q.volume, q.amount "
+                "FROM stock_realtime_quote q LEFT JOIN stock_basic_info b ON q.code = b.code "
+                "ORDER BY q.change_percent DESC LIMIT ?",
+                (limit,)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            data = []
+            for row in rows:
+                data.append({
+                    'code': row[0],
+                    'name': row[1],  # 股票名称
+                    'current': row[2],
+                    'change_percent': row[3],
+                    'open': row[4],
+                    'yesterday_close': row[5],
+                    'high': row[6],
+                    'low': row[7],
+                    'volume': row[8],
+                    'turnover': row[9],
+                })
+            print(f"✅(DB) 成功获取 {len(data)} 条A股涨幅榜数据")
+            return JSONResponse({'success': True, 'data': data})
+        # 工作日，保持原有逻辑
         print(f"📈 获取A股最新行情，limit={limit}")
         df = stock_spot_cache.get()
         if df is None:
@@ -149,7 +209,7 @@ def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最�
         tb = traceback.format_exc()
         print(tb)
         return JSONResponse({'success': False, 'message': '获取A股涨幅榜数据失败', 'error': str(e), 'traceback': tb}, status_code=500)
-
+    
 # 获取A股最新行情排行
 @router.get("/quote_board_list")
 def get_quote_board_list(

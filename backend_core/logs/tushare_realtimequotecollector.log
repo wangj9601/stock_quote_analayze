@@ -1,0 +1,14 @@
+2025-05-31 11:28:01,311 ERROR 采集或入库时出错: api init error.
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\tushare\realtime.py", line 56, in collect_quotes
+    df = ts.pro_bar()  # 这里需要根据tushare实际API替换
+         ^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\tushare\pro\data_pro.py", line 99, in pro_bar
+    api = api if api is not None else pro_api()
+                                      ^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\tushare\pro\data_pro.py", line 212, in pro_api
+    raise Exception('api init error.')
+Exception: api init error.
+2025-05-31 11:28:01,313 ERROR 记录错误日志失败: cannot access local variable 'cursor' where it is not associated with a value
+2025-05-31 11:34:07,601 INFO 采集到 6000 条股票行情数据
+2025-05-31 11:34:08,272 INFO 全部股票行情数据采集并入库完成
