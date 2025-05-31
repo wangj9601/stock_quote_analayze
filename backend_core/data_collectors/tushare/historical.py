@@ -24,6 +24,7 @@ class HistoricalQuoteCollector(TushareCollector):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS historical_quotes (
                 code TEXT,
+                ts_code TEXT,
                 name TEXT,
                 market TEXT,
                 date TEXT,
@@ -34,6 +35,8 @@ class HistoricalQuoteCollector(TushareCollector):
                 volume REAL,
                 amount REAL,
                 change_percent REAL,
+                collected_source TEXT,
+                collected_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (code, date)
             )
         ''')
@@ -52,6 +55,8 @@ class HistoricalQuoteCollector(TushareCollector):
         return conn
     def _safe_value(self, val: Any) -> Optional[float]:
         return None if pd.isna(val) else float(val)
+    def extract_code_from_ts_code(self, ts_code: str) -> str:
+        return ts_code.split(".")[0] if ts_code else ""
     def collect_historical_quotes(self, date_str: str) -> bool:
         conn = None
         cursor = None
@@ -70,14 +75,18 @@ class HistoricalQuoteCollector(TushareCollector):
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 try:
-                    code = row['ts_code']
+                    code = self.extract_code_from_ts_code(row['ts_code'])
+                    ts_code = row['ts_code']
                     name = row.get('name', '')
                     market = row.get('market', '')
                     data = {
                         'code': code,
+                        'ts_code': ts_code,
                         'name': name,
                         'market': market,
                         'date': date_str,
+                        'collected_source': 'tushare',
+                        'collected_date': datetime.datetime.now().isoformat(),
                         'open': self._safe_value(row['open']),
                         'high': self._safe_value(row['high']),
                         'low': self._safe_value(row['low']),
@@ -92,10 +101,11 @@ class HistoricalQuoteCollector(TushareCollector):
                     ''', (data['code'], data['name']))
                     cursor.execute('''
                         INSERT OR REPLACE INTO historical_quotes
-                        (code, name, market, date, open, high, low, close, volume, amount, change_percent)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (code, ts_code, name, market, collected_source, collected_date, date, open, high, low, close, volume, amount, change_percent)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        data['code'], data['name'], data['market'], data['date'],
+                        data['code'], data['ts_code'], data['name'], data['market'],
+                        data['collected_source'], data['collected_date'], data['date'],
                         data['open'], data['high'], data['low'], data['close'],
                         data['volume'], data['amount'], data['change_percent']
                     ))

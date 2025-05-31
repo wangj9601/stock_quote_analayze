@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent
 
 # 数据库目录
-DB_DIR = Path(r"E:\wangxw\股票分析软件\设计\原型\cursor\database")
+DB_DIR = Path(r"E:\wangxw\股票分析软件\编码\stock_quote_analayze\database")
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
 # Tushare配置

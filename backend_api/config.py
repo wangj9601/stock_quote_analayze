@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 数据库目录
-DB_DIR = Path(r"E:\wangxw\股票分析软件\设计\原型\cursor\database")
+DB_DIR = Path(r"E:\wangxw\股票分析软件\编码\stock_quote_analayze\database")
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
 # 数据库文件路径
