@@ -13885,3 +13885,16 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-05-31 14:47:13,862 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 0.041秒 - IP: 192.168.31.237
 2025-05-31 14:47:13,997 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/market/industry_board - 状态码: 200 - 处理时间: 0.882秒 - IP: 192.168.31.237
 2025-05-31 14:47:14,902 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/market/indices - 状态码: 200 - 处理时间: 1.796秒 - IP: 192.168.31.237
+2025-05-31 14:52:13,110 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/market/indices - IP: 192.168.31.237
+2025-05-31 14:52:13,113 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/market/industry_board - IP: 192.168.31.237
+2025-05-31 14:52:13,113 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/watchlist - IP: 192.168.31.237
+2025-05-31 14:52:13,113 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/news?limit=3 - IP: 192.168.31.237
+2025-05-31 14:52:13,120 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/auth/status - IP: 192.168.31.237
+2025-05-31 14:52:13,123 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.31.237:5000/api/stock/quote_board?limit=3 - IP: 192.168.31.237
+2025-05-31 14:52:13,738 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.626秒 - IP: 192.168.31.237
+2025-05-31 14:52:13,743 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.31.237, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.001秒
+2025-05-31 14:52:13,745 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 0.622秒 - IP: 192.168.31.237
+2025-05-31 14:52:13,747 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/market/industry_board - 状态码: 200 - 处理时间: 0.634秒 - IP: 192.168.31.237
+2025-05-31 14:52:13,749 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/watchlist - 状态码: 200 - 处理时间: 0.636秒 - IP: 192.168.31.237
+2025-05-31 14:52:13,752 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/auth/status - 状态码: 200 - 处理时间: 0.632秒 - IP: 192.168.31.237
+2025-05-31 14:52:14,666 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.31.237:5000/api/market/indices - 状态码: 200 - 处理时间: 1.556秒 - IP: 192.168.31.237
