@@ -11,8 +11,24 @@ ROOT_DIR = Path(__file__).parent.parent
 DB_DIR = Path(r"E:\wangxw\股票分析软件\设计\原型\cursor\database")
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
+# Tushare配置
+TUSHARE_CONFIG = {
+    'token': '9701deb356e76d8d9918d797aff060ce90bd1a24339866c02444014f',
+    'max_retries': 3,
+    'timeout': 30
+}
+
 # 数据采集器配置
 DATA_COLLECTORS = {
+    'tushare': {
+        'max_retries': 3,  # 最大重试次数
+        'retry_delay': 5,  # 重试延迟（秒）
+        'timeout': 30,     # 请求超时时间（秒）
+        'log_dir': str(ROOT_DIR / 'logs'),  # 日志目录
+        'db_file': str(DB_DIR / 'stock_analysis.db'),  # 数据库文件路径
+        'max_connection_errors': 10,  # 最大连接错误次数
+        'token': TUSHARE_CONFIG['token']  # Tushare token
+    },
     'akshare': {
         'max_retries': 3,  # 最大重试次数
         'retry_delay': 5,  # 重试延迟（秒）

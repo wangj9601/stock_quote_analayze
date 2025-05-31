@@ -6,11 +6,12 @@ from pathlib import Path
 import logging
 from .base import TushareCollector
 import datetime
+from ...config.config import DATA_COLLECTORS
 
 class RealtimeQuoteCollector(TushareCollector):
     """实时行情数据采集器"""
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        super().__init__(config)
+        super().__init__(config or DATA_COLLECTORS['tushare'])
         self.db_file = Path(self.config.get('db_file', 'database/stock_analysis.db'))
     def _init_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_file)
@@ -18,7 +19,8 @@ class RealtimeQuoteCollector(TushareCollector):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS stock_basic_info (
                 code TEXT PRIMARY KEY,
-                name TEXT
+                name TEXT,
+                create_date DATE DEFAULT CURRENT_DATE
             )
         ''')
         cursor.execute('''
@@ -33,6 +35,7 @@ class RealtimeQuoteCollector(TushareCollector):
                 open REAL,
                 pre_close REAL,
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                create_date DATE DEFAULT CURRENT_DATE,
                 FOREIGN KEY(code) REFERENCES stock_basic_info(code)
             )
         ''')
@@ -54,52 +57,66 @@ class RealtimeQuoteCollector(TushareCollector):
    
     def collect_quotes(self) -> bool:
         try:
+            # 设置 tushare token
+            ts.set_token(self.config['token'])
+            pro = ts.pro_api()
+            print("【采集开始】Tushare 实时行情采集...")
+            
             input_params = {}  # 可根据实际采集参数填写
             collect_date = datetime.date.today().isoformat()
             success_count = 0
             fail_count = 0
             fail_detail = []
 
+            # 获取股票列表
+            stocks = pro.stock_basic(exchange='', list_status='L')
+            print(f"获取到 {len(stocks)} 只股票...")
+            
             # 获取实时行情数据
-            df = ts.pro_bar()  # 这里需要根据tushare实际API替换
-            self.logger.info("采集到 %d 条股票行情数据", len(df))
+            df = ts.get_realtime_quotes(stocks['ts_code'].tolist())
+            print(f"采集到 {len(df)} 条股票行情数据...")
+            
             conn = self._init_db()
             cursor = conn.cursor()
-            for _, row in df.iterrows():
+            
+            for idx, row in df.iterrows():
                 try:
-                    code = row['ts_code']
-                    name = row.get('name', '')
+                    code = row['code']
+                    name = row['name']
                     data = {
                         'code': code,
                         'name': name,
-                        'current_price': self._safe_value(row['close']),
-                        'change_percent': self._safe_value(row['pct_chg']),
-                        'volume': self._safe_value(row['vol']),
+                        'current_price': self._safe_value(row['price']),
+                        'change_percent': self._safe_value(row['changepercent']),
+                        'volume': self._safe_value(row['volume']),
                         'amount': self._safe_value(row['amount']),
                         'high': self._safe_value(row['high']),
                         'low': self._safe_value(row['low']),
                         'open': self._safe_value(row['open']),
-                        'pre_close': self._safe_value(row['pre_close'])
+                        'pre_close': self._safe_value(row['pre_close']),
+                        'create_date': collect_date
                     }
                     cursor.execute('''
-                        INSERT OR REPLACE INTO stock_basic_info (code, name)
-                        VALUES (?, ?)
-                    ''', (data['code'], data['name']))
+                        INSERT OR REPLACE INTO stock_basic_info (code, name, create_date)
+                        VALUES (?, ?, ?)
+                    ''', (data['code'], data['name'], data['create_date']))
                     cursor.execute('''
                         INSERT OR REPLACE INTO stock_realtime_quote
                         (code, current_price, change_percent, volume, amount,
-                        high, low, open, pre_close)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        high, low, open, pre_close, create_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         data['code'], data['current_price'], data['change_percent'],
                         data['volume'], data['amount'], data['high'], data['low'],
-                        data['open'], data['pre_close']
+                        data['open'], data['pre_close'], data['create_date']
                     ))
                     success_count += 1
+                    if success_count % 100 == 0:
+                        print(f"已成功采集 {success_count} 条...")
                 except Exception as row_e:
                     fail_count += 1
                     fail_detail.append(str(row_e))
-                    self.logger.error(f"采集单条数据失败: {row_e}")
+                    print(f"采集单条数据失败: {row_e}")
 
             # 记录采集日志（汇总信息）
             cursor.execute('''
@@ -115,7 +132,7 @@ class RealtimeQuoteCollector(TushareCollector):
             ))
             conn.commit()
             conn.close()
-            self.logger.info(f"采集完成，成功: {success_count}，失败: {fail_count}")
+            print(f"【采集完成】成功: {success_count}，失败: {fail_count}")
             return True
         except Exception as e:
             error_msg = str(e)

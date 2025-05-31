@@ -1,7 +1,7 @@
 import argparse
-from .realtime import RealtimeQuoteCollector
-from .historical import HistoricalQuoteCollector
-from .index import IndexQuoteCollector
+from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
+from backend_core.data_collectors.tushare.historical import HistoricalQuoteCollector
+from backend_core.data_collectors.tushare.index import IndexQuoteCollector
 
 def main():
     parser = argparse.ArgumentParser(description='Tushare数据采集工具')
