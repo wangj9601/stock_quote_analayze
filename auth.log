@@ -18289,3 +18289,986 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-06-01 18:55:52,642 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.099秒 - IP: 192.168.3.60
 2025-06-01 18:56:22,543 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
 2025-06-01 18:56:22,655 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.112秒 - IP: 192.168.3.60
+2025-06-01 18:56:52,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:56:52,649 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 18:57:22,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:57:22,655 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 18:57:52,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:57:52,644 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.102秒 - IP: 192.168.3.60
+2025-06-01 18:58:22,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:58:22,646 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.099秒 - IP: 192.168.3.60
+2025-06-01 18:58:52,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:58:52,642 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.089秒 - IP: 192.168.3.60
+2025-06-01 18:59:22,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:59:22,641 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.095秒 - IP: 192.168.3.60
+2025-06-01 18:59:52,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 18:59:52,644 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.090秒 - IP: 192.168.3.60
+2025-06-01 19:00:22,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:00:22,660 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 19:00:52,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:00:52,748 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.198秒 - IP: 192.168.3.60
+2025-06-01 19:01:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:01:23,742 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 1.188秒 - IP: 192.168.3.60
+2025-06-01 19:01:52,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:01:52,743 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.198秒 - IP: 192.168.3.60
+2025-06-01 19:02:04,512 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 19:02:04,515 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 19:02:22,549 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:02:22,724 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.175秒 - IP: 192.168.3.60
+2025-06-01 19:02:52,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:02:52,775 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.221秒 - IP: 192.168.3.60
+2025-06-01 19:03:22,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:03:22,767 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.213秒 - IP: 192.168.3.60
+2025-06-01 19:03:52,540 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:03:52,777 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.237秒 - IP: 192.168.3.60
+2025-06-01 19:04:22,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:04:22,790 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.236秒 - IP: 192.168.3.60
+2025-06-01 19:04:52,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:04:52,788 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.238秒 - IP: 192.168.3.60
+2025-06-01 19:05:22,552 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:05:22,732 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.180秒 - IP: 192.168.3.60
+2025-06-01 19:05:52,544 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:05:52,720 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.176秒 - IP: 192.168.3.60
+2025-06-01 19:06:22,556 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:06:22,683 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.128秒 - IP: 192.168.3.60
+2025-06-01 19:06:52,541 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:06:52,652 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.111秒 - IP: 192.168.3.60
+2025-06-01 19:07:22,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:07:22,655 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 19:07:52,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:07:52,676 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.128秒 - IP: 192.168.3.60
+2025-06-01 19:08:22,541 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:08:22,672 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.131秒 - IP: 192.168.3.60
+2025-06-01 19:08:52,543 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:08:52,663 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.120秒 - IP: 192.168.3.60
+2025-06-01 19:09:22,556 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:09:22,676 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.120秒 - IP: 192.168.3.60
+2025-06-01 19:09:52,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:09:52,667 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 19:10:22,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:10:22,656 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.110秒 - IP: 192.168.3.60
+2025-06-01 19:10:52,543 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:10:52,660 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.117秒 - IP: 192.168.3.60
+2025-06-01 19:11:22,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:11:22,646 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.092秒 - IP: 192.168.3.60
+2025-06-01 19:11:52,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:11:52,654 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.106秒 - IP: 192.168.3.60
+2025-06-01 19:12:05,502 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 19:12:05,506 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.60
+2025-06-01 19:12:22,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:12:22,654 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.108秒 - IP: 192.168.3.60
+2025-06-01 19:12:52,555 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:12:52,658 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 19:13:22,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:13:22,649 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.099秒 - IP: 192.168.3.60
+2025-06-01 19:13:52,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:13:52,655 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 19:14:22,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:14:22,661 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 19:14:52,543 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:14:52,646 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:15:22,549 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:15:22,656 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 19:15:52,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:15:52,646 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.096秒 - IP: 192.168.3.60
+2025-06-01 19:16:22,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:16:22,658 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:16:52,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:16:52,646 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:17:22,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:17:22,733 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.187秒 - IP: 192.168.3.60
+2025-06-01 19:17:52,541 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:17:52,734 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 19:18:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:18:22,758 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.205秒 - IP: 192.168.3.60
+2025-06-01 19:18:52,541 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:18:53,033 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.492秒 - IP: 192.168.3.60
+2025-06-01 19:19:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:19:22,746 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 19:19:52,556 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:19:52,737 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.181秒 - IP: 192.168.3.60
+2025-06-01 19:20:22,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:20:22,733 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 19:20:52,556 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:20:52,720 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.164秒 - IP: 192.168.3.60
+2025-06-01 19:21:22,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:21:22,735 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.189秒 - IP: 192.168.3.60
+2025-06-01 19:21:52,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:21:52,731 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.187秒 - IP: 192.168.3.60
+2025-06-01 19:22:06,505 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 19:22:06,508 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 19:22:22,549 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:22:22,752 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.203秒 - IP: 192.168.3.60
+2025-06-01 19:22:52,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:22:52,745 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.197秒 - IP: 192.168.3.60
+2025-06-01 19:23:22,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:23:22,669 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.119秒 - IP: 192.168.3.60
+2025-06-01 19:23:52,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:23:52,652 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:24:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:24:22,670 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.118秒 - IP: 192.168.3.60
+2025-06-01 19:24:52,541 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:24:52,645 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:25:22,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:25:22,663 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 19:25:52,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:25:52,658 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.111秒 - IP: 192.168.3.60
+2025-06-01 19:26:22,551 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:26:22,681 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.130秒 - IP: 192.168.3.60
+2025-06-01 19:26:52,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:26:52,661 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.116秒 - IP: 192.168.3.60
+2025-06-01 19:27:22,557 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:27:22,699 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.143秒 - IP: 192.168.3.60
+2025-06-01 19:27:52,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:27:52,675 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.127秒 - IP: 192.168.3.60
+2025-06-01 19:28:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:28:22,756 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.203秒 - IP: 192.168.3.60
+2025-06-01 19:28:52,543 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:28:52,752 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.209秒 - IP: 192.168.3.60
+2025-06-01 19:29:22,551 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:29:22,757 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.206秒 - IP: 192.168.3.60
+2025-06-01 19:29:52,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:29:52,743 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.201秒 - IP: 192.168.3.60
+2025-06-01 19:30:22,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:30:22,744 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.202秒 - IP: 192.168.3.60
+2025-06-01 19:30:52,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:30:53,768 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 1.221秒 - IP: 192.168.3.60
+2025-06-01 19:31:22,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:31:22,746 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.204秒 - IP: 192.168.3.60
+2025-06-01 19:31:52,551 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:31:52,815 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.264秒 - IP: 192.168.3.60
+2025-06-01 19:32:07,500 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 19:32:07,503 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 19:32:22,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:32:22,809 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.263秒 - IP: 192.168.3.60
+2025-06-01 19:32:52,549 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:32:52,741 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.192秒 - IP: 192.168.3.60
+2025-06-01 19:33:22,542 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:33:22,738 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.196秒 - IP: 192.168.3.60
+2025-06-01 19:33:52,549 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:33:52,756 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.207秒 - IP: 192.168.3.60
+2025-06-01 19:34:22,544 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:34:23,068 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.524秒 - IP: 192.168.3.60
+2025-06-01 19:34:52,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:34:52,752 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.207秒 - IP: 192.168.3.60
+2025-06-01 19:35:22,552 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:35:22,760 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.208秒 - IP: 192.168.3.60
+2025-06-01 19:35:52,552 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:35:52,772 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.220秒 - IP: 192.168.3.60
+2025-06-01 19:36:22,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:36:22,754 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.209秒 - IP: 192.168.3.60
+2025-06-01 19:36:52,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:36:52,771 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.223秒 - IP: 192.168.3.60
+2025-06-01 19:37:22,546 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:37:23,038 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.492秒 - IP: 192.168.3.60
+2025-06-01 19:37:52,552 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:37:53,056 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.504秒 - IP: 192.168.3.60
+2025-06-01 19:38:22,551 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:38:23,084 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.534秒 - IP: 192.168.3.60
+2025-06-01 19:38:52,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:38:52,781 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.236秒 - IP: 192.168.3.60
+2025-06-01 19:39:22,549 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:39:22,745 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.196秒 - IP: 192.168.3.60
+2025-06-01 19:39:52,552 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:39:52,769 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.217秒 - IP: 192.168.3.60
+2025-06-01 19:40:22,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:40:22,746 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.201秒 - IP: 192.168.3.60
+2025-06-01 19:40:52,540 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:40:52,724 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.184秒 - IP: 192.168.3.60
+2025-06-01 19:41:22,540 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:41:22,723 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.183秒 - IP: 192.168.3.60
+2025-06-01 19:41:52,544 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:41:52,652 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 19:42:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:42:22,642 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.089秒 - IP: 192.168.3.60
+2025-06-01 19:42:48,503 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 19:42:48,506 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 19:42:52,551 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:42:52,644 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.093秒 - IP: 192.168.3.60
+2025-06-01 19:43:22,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:43:22,654 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:43:52,555 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:43:52,658 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 19:44:22,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:44:22,646 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.101秒 - IP: 192.168.3.60
+2025-06-01 19:44:52,550 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:44:52,649 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.099秒 - IP: 192.168.3.60
+2025-06-01 19:45:22,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:45:22,652 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 19:45:52,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:45:52,652 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.099秒 - IP: 192.168.3.60
+2025-06-01 19:46:22,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:46:22,649 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 19:46:52,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:46:52,653 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.100秒 - IP: 192.168.3.60
+2025-06-01 19:47:22,548 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:47:22,654 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.106秒 - IP: 192.168.3.60
+2025-06-01 19:47:52,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:47:52,654 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.101秒 - IP: 192.168.3.60
+2025-06-01 19:48:22,554 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:48:22,649 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.095秒 - IP: 192.168.3.60
+2025-06-01 19:48:52,559 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:48:52,780 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.221秒 - IP: 192.168.3.60
+2025-06-01 19:49:22,553 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:49:22,729 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.176秒 - IP: 192.168.3.60
+2025-06-01 19:49:53,508 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:49:53,696 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 19:50:23,513 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:50:23,695 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 19:51:48,507 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:51:48,695 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 19:52:48,504 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:52:48,698 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.194秒 - IP: 192.168.3.60
+2025-06-01 19:52:48,700 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 19:52:48,704 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.60
+2025-06-01 19:53:48,515 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:53:48,697 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 19:54:48,506 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:54:48,700 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.194秒 - IP: 192.168.3.60
+2025-06-01 19:55:48,500 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:55:48,713 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.213秒 - IP: 192.168.3.60
+2025-06-01 19:56:48,510 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:56:48,645 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.135秒 - IP: 192.168.3.60
+2025-06-01 19:57:48,505 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:57:48,703 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.198秒 - IP: 192.168.3.60
+2025-06-01 19:58:48,500 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:58:48,632 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.132秒 - IP: 192.168.3.60
+2025-06-01 19:59:48,504 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 19:59:48,623 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.119秒 - IP: 192.168.3.60
+2025-06-01 20:00:48,513 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:00:48,698 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.185秒 - IP: 192.168.3.60
+2025-06-01 20:01:48,503 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:01:48,684 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.181秒 - IP: 192.168.3.60
+2025-06-01 20:02:48,514 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:02:48,641 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.127秒 - IP: 192.168.3.60
+2025-06-01 20:03:48,501 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 20:03:48,506 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.60
+2025-06-01 20:03:48,510 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:03:48,634 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.124秒 - IP: 192.168.3.60
+2025-06-01 20:04:48,502 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:04:48,691 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.189秒 - IP: 192.168.3.60
+2025-06-01 20:05:48,504 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:05:48,687 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.183秒 - IP: 192.168.3.60
+2025-06-01 20:06:48,503 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:06:48,633 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.130秒 - IP: 192.168.3.60
+2025-06-01 20:07:48,515 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:07:48,709 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.194秒 - IP: 192.168.3.60
+2025-06-01 20:08:48,506 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:08:49,045 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.539秒 - IP: 192.168.3.60
+2025-06-01 20:09:48,509 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:09:48,695 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 20:10:48,501 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:10:48,990 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.489秒 - IP: 192.168.3.60
+2025-06-01 20:11:48,516 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:11:48,659 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.143秒 - IP: 192.168.3.60
+2025-06-01 20:12:48,512 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:12:48,632 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.120秒 - IP: 192.168.3.60
+2025-06-01 20:13:48,507 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 20:13:48,512 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.60
+2025-06-01 20:13:48,515 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:13:48,650 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.135秒 - IP: 192.168.3.60
+2025-06-01 20:14:48,514 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:14:48,729 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.215秒 - IP: 192.168.3.60
+2025-06-01 20:15:48,516 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:15:48,704 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 20:16:48,515 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:16:48,730 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.216秒 - IP: 192.168.3.60
+2025-06-01 20:17:48,503 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:17:48,704 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.202秒 - IP: 192.168.3.60
+2025-06-01 20:18:48,503 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:18:48,715 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.212秒 - IP: 192.168.3.60
+2025-06-01 20:19:48,509 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:19:49,344 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.835秒 - IP: 192.168.3.60
+2025-06-01 20:20:48,506 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:20:48,711 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.205秒 - IP: 192.168.3.60
+2025-06-01 20:21:48,518 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:21:48,784 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.266秒 - IP: 192.168.3.60
+2025-06-01 20:22:48,512 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:22:48,718 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.206秒 - IP: 192.168.3.60
+2025-06-01 20:23:48,520 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 20:23:48,525 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.60
+2025-06-01 20:23:48,527 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:23:48,744 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.217秒 - IP: 192.168.3.60
+2025-06-01 20:24:48,516 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:24:48,710 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.194秒 - IP: 192.168.3.60
+2025-06-01 20:25:48,509 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:25:49,760 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 1.251秒 - IP: 192.168.3.60
+2025-06-01 20:26:48,511 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:26:48,711 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.200秒 - IP: 192.168.3.60
+2025-06-01 20:27:48,503 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:27:49,697 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 1.193秒 - IP: 192.168.3.60
+2025-06-01 20:28:48,510 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:28:48,652 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.142秒 - IP: 192.168.3.60
+2025-06-01 20:29:50,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:29:50,214 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.079秒 - IP: 192.168.3.60
+2025-06-01 20:30:50,127 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:30:50,258 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.131秒 - IP: 192.168.3.60
+2025-06-01 20:31:50,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:31:50,253 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.114秒 - IP: 192.168.3.60
+2025-06-01 20:31:55,617 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:31:55,706 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.089秒 - IP: 192.168.3.60
+2025-06-01 20:32:23,853 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:32:23,854 - backend_api.auth_routes - INFO - [auth_routes.py:276] - 获取认证状态: 用户未登录 - IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:32:23,855 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.002秒 - IP: 192.168.3.74
+2025-06-01 20:32:23,862 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:32:23,863 - backend_api.auth_routes - INFO - [auth_routes.py:276] - 获取认证状态: 用户未登录 - IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:32:23,864 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.002秒 - IP: 192.168.3.74
+2025-06-01 20:32:24,172 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:32:24,358 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 20:32:37,715 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/auth/login - IP: 192.168.3.74
+2025-06-01 20:32:37,717 - backend_api.auth_routes - INFO - [auth_routes.py:133] - 收到登录请求 - 用户名: wangxw, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1
+2025-06-01 20:32:37,718 - backend_api.auth_routes - INFO - [auth_routes.py:142] - 开始验证用户: wangxw
+2025-06-01 20:32:37,719 - passlib.handlers.bcrypt - WARNING - [bcrypt.py:622] - (trapped) error reading bcrypt version
+Traceback (most recent call last):
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\passlib\handlers\bcrypt.py", line 620, in _load_backend_mixin
+    version = _bcrypt.__about__.__version__
+              ^^^^^^^^^^^^^^^^^
+AttributeError: module 'bcrypt' has no attribute '__about__'
+2025-06-01 20:32:38,037 - backend_api.auth_routes - INFO - [auth_routes.py:158] - 用户验证成功: wangxw (ID: 6)
+2025-06-01 20:32:38,038 - backend_api.auth_routes - INFO - [auth_routes.py:161] - 检查用户状态: wangxw - 当前状态: active
+2025-06-01 20:32:38,046 - backend_api.auth_routes - INFO - [auth_routes.py:179] - 更新最后登录时间成功 - 用户: wangxw, 上次登录: 2025-06-01 18:16:51.098712, 本次登录: 2025-06-01 20:32:38.038555
+2025-06-01 20:32:38,047 - backend_api.auth_routes - INFO - [auth_routes.py:191] - 开始创建访问令牌 - 用户: wangxw
+2025-06-01 20:32:38,048 - backend_api.auth_routes - INFO - [auth_routes.py:195] - 访问令牌创建成功 - 用户: wangxw
+2025-06-01 20:32:38,048 - backend_api.auth_routes - INFO - [auth_routes.py:205] - 开始创建登录响应 - 用户: wangxw
+2025-06-01 20:32:38,048 - backend_api.auth_routes - INFO - [auth_routes.py:215] - 登录成功 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.331秒
+2025-06-01 20:32:38,049 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/auth/login - 状态码: 200 - 处理时间: 0.335秒 - IP: 192.168.3.74
+2025-06-01 20:32:39,847 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:32:39,849 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/indices - IP: 192.168.3.74
+2025-06-01 20:32:39,851 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:32:39,853 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist - IP: 192.168.3.74
+2025-06-01 20:32:39,855 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/industry_board - IP: 192.168.3.74
+2025-06-01 20:32:39,857 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:32:39,857 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - IP: 192.168.3.74
+2025-06-01 20:32:39,859 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.012秒 - IP: 192.168.3.74
+2025-06-01 20:32:42,047 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:32:42,048 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/news?limit=3 - IP: 192.168.3.74
+2025-06-01 20:32:42,049 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 2.192秒 - IP: 192.168.3.74
+2025-06-01 20:32:42,050 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/industry_board - 状态码: 200 - 处理时间: 2.195秒 - IP: 192.168.3.74
+2025-06-01 20:32:42,051 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/indices - 状态码: 200 - 处理时间: 2.202秒 - IP: 192.168.3.74
+2025-06-01 20:32:42,053 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:32:42,054 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist - 状态码: 200 - 处理时间: 2.201秒 - IP: 192.168.3.74
+2025-06-01 20:32:42,055 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 2.198秒 - IP: 192.168.3.74
+2025-06-01 20:32:49,552 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:32:49,554 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:32:49,555 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.74
+2025-06-01 20:32:49,658 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:32:49,864 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.206秒 - IP: 192.168.3.74
+2025-06-01 20:32:54,174 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:32:54,361 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.187秒 - IP: 192.168.3.60
+2025-06-01 20:33:19,688 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:33:19,754 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.066秒 - IP: 192.168.3.74
+2025-06-01 20:33:24,177 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:33:24,242 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.065秒 - IP: 192.168.3.60
+2025-06-01 20:33:49,678 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:33:49,751 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.073秒 - IP: 192.168.3.74
+2025-06-01 20:33:50,156 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 20:33:50,159 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 20:33:54,169 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:33:54,230 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.061秒 - IP: 192.168.3.60
+2025-06-01 20:34:19,678 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:34:19,899 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.221秒 - IP: 192.168.3.74
+2025-06-01 20:34:24,180 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:34:24,379 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.199秒 - IP: 192.168.3.60
+2025-06-01 20:34:49,676 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:34:49,847 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.171秒 - IP: 192.168.3.74
+2025-06-01 20:34:54,171 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:34:54,278 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 20:35:19,677 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:35:19,776 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.099秒 - IP: 192.168.3.74
+2025-06-01 20:35:24,171 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:35:24,278 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 20:35:27,668 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:35:27,671 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:35:27,672 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:35:27,730 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - IP: 192.168.3.74
+2025-06-01 20:35:27,833 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=301277 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.74
+2025-06-01 20:35:36,207 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:35:36,209 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:35:36,211 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:35:37,223 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:35:37,225 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:35:37,226 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.74
+2025-06-01 20:35:38,408 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:35:38,410 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:35:38,412 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:35:52,952 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:35:52,954 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:35:52,956 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - IP: 192.168.3.74
+2025-06-01 20:35:52,957 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.74
+2025-06-01 20:35:54,181 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:35:54,281 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.100秒 - IP: 192.168.3.60
+2025-06-01 20:36:08,881 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - 状态码: 200 - 处理时间: 15.925秒 - IP: 192.168.3.74
+2025-06-01 20:36:14,342 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:14,343 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/indices - IP: 192.168.3.74
+2025-06-01 20:36:14,347 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:14,349 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist - IP: 192.168.3.74
+2025-06-01 20:36:14,351 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/industry_board - IP: 192.168.3.74
+2025-06-01 20:36:14,352 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - IP: 192.168.3.74
+2025-06-01 20:36:14,352 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/news?limit=3 - IP: 192.168.3.74
+2025-06-01 20:36:14,354 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.002秒 - IP: 192.168.3.74
+2025-06-01 20:36:15,501 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 1.159秒 - IP: 192.168.3.74
+2025-06-01 20:36:15,503 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 1.151秒 - IP: 192.168.3.74
+2025-06-01 20:36:15,505 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/industry_board - 状态码: 200 - 处理时间: 1.154秒 - IP: 192.168.3.74
+2025-06-01 20:36:15,506 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist - 状态码: 200 - 处理时间: 1.157秒 - IP: 192.168.3.74
+2025-06-01 20:36:15,617 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:15,619 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:15,620 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.74
+2025-06-01 20:36:15,854 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/indices - 状态码: 200 - 处理时间: 1.511秒 - IP: 192.168.3.74
+2025-06-01 20:36:24,182 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:36:24,362 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.180秒 - IP: 192.168.3.60
+2025-06-01 20:36:31,770 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:31,772 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:31,773 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:36:31,872 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=000409 - IP: 192.168.3.74
+2025-06-01 20:36:32,081 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=000409 - 状态码: 200 - 处理时间: 0.209秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,863 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:41,864 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:41,865 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:41,868 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:41,870 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:41,873 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:41,874 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.011秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,876 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.012秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,877 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.012秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,898 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:36:41,900 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:36:41,906 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - 状态码: 200 - 处理时间: 0.007秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,907 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - 状态码: 200 - 处理时间: 0.007秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,916 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:41,917 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:36:41,919 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:41,921 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:36:41,922 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.006秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,924 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.007秒 - IP: 192.168.3.74
+2025-06-01 20:36:41,945 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:36:41,946 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:36:44,293 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - 状态码: 200 - 处理时间: 2.349秒 - IP: 192.168.3.74
+2025-06-01 20:36:44,294 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - 状态码: 200 - 处理时间: 2.348秒 - IP: 192.168.3.74
+2025-06-01 20:36:44,447 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.74
+2025-06-01 20:36:44,448 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.74
+2025-06-01 20:36:44,454 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.006秒 - IP: 192.168.3.74
+2025-06-01 20:36:44,455 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.008秒 - IP: 192.168.3.74
+2025-06-01 20:36:54,171 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:36:54,357 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 20:37:10,947 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:10,950 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:10,951 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:37:11,263 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:11,265 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:11,267 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:37:11,269 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - IP: 192.168.3.74
+2025-06-01 20:37:11,883 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:11,885 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:11,886 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.74
+2025-06-01 20:37:12,618 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:12,621 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:12,622 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:37:12,627 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/indices - IP: 192.168.3.74
+2025-06-01 20:37:12,630 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist - IP: 192.168.3.74
+2025-06-01 20:37:12,636 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/industry_board - IP: 192.168.3.74
+2025-06-01 20:37:12,638 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/news?limit=3 - IP: 192.168.3.74
+2025-06-01 20:37:12,639 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - IP: 192.168.3.74
+2025-06-01 20:37:12,641 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:12,642 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:37:13,754 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.001秒
+2025-06-01 20:37:13,755 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 1.116秒 - IP: 192.168.3.74
+2025-06-01 20:37:13,756 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/industry_board - 状态码: 200 - 处理时间: 1.120秒 - IP: 192.168.3.74
+2025-06-01 20:37:13,757 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist - 状态码: 200 - 处理时间: 1.127秒 - IP: 192.168.3.74
+2025-06-01 20:37:13,759 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 1.118秒 - IP: 192.168.3.74
+2025-06-01 20:37:14,239 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/indices - 状态码: 200 - 处理时间: 1.612秒 - IP: 192.168.3.74
+2025-06-01 20:37:15,485 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - 状态码: 200 - 处理时间: 4.216秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,545 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:22,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:22,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:22,550 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:22,552 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:22,554 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:22,556 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.011秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,557 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.010秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,558 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.011秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,569 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:37:22,573 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:37:22,574 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,577 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist/groups?user_id=6 - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,586 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:22,589 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:22,590 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:22,591 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,593 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:22,594 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.74
+2025-06-01 20:37:22,605 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:37:23,683 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - IP: 192.168.3.74
+2025-06-01 20:37:23,684 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:23,685 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - IP: 192.168.3.74
+2025-06-01 20:37:23,686 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - 状态码: 200 - 处理时间: 1.081秒 - IP: 192.168.3.74
+2025-06-01 20:37:24,780 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:24,784 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:24,785 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:37:24,786 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist?user_id=6 - 状态码: 200 - 处理时间: 1.103秒 - IP: 192.168.3.74
+2025-06-01 20:37:24,786 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 1.102秒 - IP: 192.168.3.74
+2025-06-01 20:37:24,973 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 20:37:24,975 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - 状态码: 200 - 处理时间: 1.290秒 - IP: 192.168.3.74
+2025-06-01 20:37:24,978 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:24,980 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:24,982 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.198秒 - IP: 192.168.3.74
+2025-06-01 20:37:24,984 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:24,986 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.006秒 - IP: 192.168.3.74
+2025-06-01 20:37:39,910 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:39,913 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:39,915 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - IP: 192.168.3.74
+2025-06-01 20:37:39,916 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.006秒 - IP: 192.168.3.74
+2025-06-01 20:37:39,938 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board_list?ranking_type=rise&market=all&page=1&page_size=20 - 状态码: 200 - 处理时间: 0.023秒 - IP: 192.168.3.74
+2025-06-01 20:37:41,276 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.74
+2025-06-01 20:37:41,279 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.74, User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1, 处理时间: 0.000秒
+2025-06-01 20:37:41,281 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.74
+2025-06-01 20:37:54,183 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:37:54,376 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 20:38:24,183 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:38:24,375 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 20:38:54,181 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:38:54,305 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.124秒 - IP: 192.168.3.60
+2025-06-01 20:39:24,172 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:39:24,308 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.136秒 - IP: 192.168.3.60
+2025-06-01 20:39:54,178 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:39:54,303 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.125秒 - IP: 192.168.3.60
+2025-06-01 20:40:24,175 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:40:24,311 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.136秒 - IP: 192.168.3.60
+2025-06-01 20:40:54,169 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:40:54,291 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.122秒 - IP: 192.168.3.60
+2025-06-01 20:41:25,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:41:25,319 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.185秒 - IP: 192.168.3.60
+2025-06-01 20:41:55,131 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:41:55,321 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.190秒 - IP: 192.168.3.60
+2025-06-01 20:42:24,183 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:42:24,388 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.205秒 - IP: 192.168.3.60
+2025-06-01 20:42:55,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:42:55,373 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.231秒 - IP: 192.168.3.60
+2025-06-01 20:43:24,412 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:43:24,983 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.571秒 - IP: 192.168.3.60
+2025-06-01 20:43:55,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:43:55,354 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.221秒 - IP: 192.168.3.60
+2025-06-01 20:44:25,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:44:25,365 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.236秒 - IP: 192.168.3.60
+2025-06-01 20:44:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 20:44:50,145 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 20:45:08,302 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:45:08,484 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.183秒 - IP: 192.168.3.60
+2025-06-01 20:45:24,169 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:45:24,360 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.191秒 - IP: 192.168.3.60
+2025-06-01 20:45:55,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:45:55,327 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.189秒 - IP: 192.168.3.60
+2025-06-01 20:46:25,126 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:46:25,302 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.176秒 - IP: 192.168.3.60
+2025-06-01 20:47:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:47:50,251 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 20:48:33,276 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:48:33,513 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.236秒 - IP: 192.168.3.60
+2025-06-01 20:48:54,169 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:48:54,651 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.482秒 - IP: 192.168.3.60
+2025-06-01 20:49:24,174 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:49:24,356 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 20:49:55,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:49:55,335 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.196秒 - IP: 192.168.3.60
+2025-06-01 20:50:25,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:50:25,268 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.126秒 - IP: 192.168.3.60
+2025-06-01 20:50:55,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:50:55,248 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.108秒 - IP: 192.168.3.60
+2025-06-01 20:51:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:51:50,253 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.110秒 - IP: 192.168.3.60
+2025-06-01 20:51:58,112 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:51:58,214 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 20:52:25,126 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:52:25,231 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.105秒 - IP: 192.168.3.60
+2025-06-01 20:52:55,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:52:55,313 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.184秒 - IP: 192.168.3.60
+2025-06-01 20:53:40,522 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:53:40,663 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.141秒 - IP: 192.168.3.60
+2025-06-01 20:53:55,126 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:53:55,253 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.127秒 - IP: 192.168.3.60
+2025-06-01 20:54:25,127 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:54:25,271 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.144秒 - IP: 192.168.3.60
+2025-06-01 20:54:50,157 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 20:54:50,160 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 20:55:50,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:55:50,240 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 20:56:50,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:56:50,321 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.192秒 - IP: 192.168.3.60
+2025-06-01 20:57:50,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:57:50,357 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.219秒 - IP: 192.168.3.60
+2025-06-01 20:58:50,144 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:58:50,350 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.206秒 - IP: 192.168.3.60
+2025-06-01 20:59:50,137 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 20:59:50,319 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 21:00:50,131 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:00:50,308 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.177秒 - IP: 192.168.3.60
+2025-06-01 21:01:50,131 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:01:50,313 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 21:02:50,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:02:50,325 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 21:03:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:03:50,370 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.227秒 - IP: 192.168.3.60
+2025-06-01 21:04:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:04:50,388 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.245秒 - IP: 192.168.3.60
+2025-06-01 21:05:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 21:05:50,148 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.60
+2025-06-01 21:05:50,150 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:05:50,394 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.244秒 - IP: 192.168.3.60
+2025-06-01 21:06:50,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:06:50,339 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.204秒 - IP: 192.168.3.60
+2025-06-01 21:07:50,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:07:50,346 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.207秒 - IP: 192.168.3.60
+2025-06-01 21:08:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:08:50,673 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.531秒 - IP: 192.168.3.60
+2025-06-01 21:09:50,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:09:50,334 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 21:10:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:10:50,353 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.211秒 - IP: 192.168.3.60
+2025-06-01 21:11:50,130 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:11:50,429 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.299秒 - IP: 192.168.3.60
+2025-06-01 21:12:50,130 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:12:50,247 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.117秒 - IP: 192.168.3.60
+2025-06-01 21:13:44,951 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:13:45,159 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.208秒 - IP: 192.168.3.60
+2025-06-01 21:13:54,173 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:13:54,374 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.201秒 - IP: 192.168.3.60
+2025-06-01 21:14:25,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:14:25,395 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.263秒 - IP: 192.168.3.60
+2025-06-01 21:14:55,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:14:55,324 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.184秒 - IP: 192.168.3.60
+2025-06-01 21:15:33,462 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:15:33,666 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.204秒 - IP: 192.168.3.60
+2025-06-01 21:15:54,173 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:15:54,359 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 21:16:24,178 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:16:24,285 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 21:16:50,128 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 21:16:50,131 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 21:16:54,170 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:16:54,309 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.139秒 - IP: 192.168.3.60
+2025-06-01 21:17:24,168 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:17:24,299 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.131秒 - IP: 192.168.3.60
+2025-06-01 21:17:54,174 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:17:54,240 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.066秒 - IP: 192.168.3.60
+2025-06-01 21:18:25,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:18:25,213 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.079秒 - IP: 192.168.3.60
+2025-06-01 21:18:55,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:18:55,266 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.133秒 - IP: 192.168.3.60
+2025-06-01 21:19:50,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:19:50,329 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 21:20:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:20:50,276 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.136秒 - IP: 192.168.3.60
+2025-06-01 21:21:50,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:21:50,259 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.125秒 - IP: 192.168.3.60
+2025-06-01 21:22:50,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:22:50,269 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.130秒 - IP: 192.168.3.60
+2025-06-01 21:23:50,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:23:50,258 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.122秒 - IP: 192.168.3.60
+2025-06-01 21:24:50,128 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:24:50,349 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.221秒 - IP: 192.168.3.60
+2025-06-01 21:25:50,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:25:50,411 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.272秒 - IP: 192.168.3.60
+2025-06-01 21:26:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:26:50,330 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 21:26:50,330 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 21:26:50,335 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.60
+2025-06-01 21:27:50,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:27:50,346 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.212秒 - IP: 192.168.3.60
+2025-06-01 21:28:50,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:28:50,352 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.219秒 - IP: 192.168.3.60
+2025-06-01 21:29:50,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:29:50,376 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.245秒 - IP: 192.168.3.60
+2025-06-01 21:30:50,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:30:50,330 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.189秒 - IP: 192.168.3.60
+2025-06-01 21:31:50,130 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:31:50,775 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.646秒 - IP: 192.168.3.60
+2025-06-01 21:32:50,145 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:32:50,338 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.193秒 - IP: 192.168.3.60
+2025-06-01 21:33:50,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:33:50,343 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.204秒 - IP: 192.168.3.60
+2025-06-01 21:34:50,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:34:50,254 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.119秒 - IP: 192.168.3.60
+2025-06-01 21:35:50,144 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:35:50,246 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.102秒 - IP: 192.168.3.60
+2025-06-01 21:36:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 21:36:50,148 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:36:50,251 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 21:36:50,252 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 21:37:50,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:37:50,320 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 21:38:50,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:38:50,317 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 21:39:50,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:39:50,360 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.227秒 - IP: 192.168.3.60
+2025-06-01 21:40:50,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:40:50,395 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.266秒 - IP: 192.168.3.60
+2025-06-01 21:41:50,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:41:50,341 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.203秒 - IP: 192.168.3.60
+2025-06-01 21:42:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:42:50,360 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.220秒 - IP: 192.168.3.60
+2025-06-01 21:43:50,145 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:43:50,728 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.583秒 - IP: 192.168.3.60
+2025-06-01 21:44:50,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:44:50,334 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.202秒 - IP: 192.168.3.60
+2025-06-01 21:45:50,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:45:51,357 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 1.225秒 - IP: 192.168.3.60
+2025-06-01 21:46:50,130 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:46:50,314 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.184秒 - IP: 192.168.3.60
+2025-06-01 21:47:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 21:47:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:47:50,371 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.230秒 - IP: 192.168.3.60
+2025-06-01 21:47:50,371 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.229秒 - IP: 192.168.3.60
+2025-06-01 21:48:41,813 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:48:41,918 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.105秒 - IP: 192.168.3.60
+2025-06-01 21:48:55,130 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:48:55,233 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 21:49:25,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:49:25,232 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 21:49:55,127 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:49:55,443 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.316秒 - IP: 192.168.3.60
+2025-06-01 21:50:25,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:50:25,807 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.667秒 - IP: 192.168.3.60
+2025-06-01 21:50:55,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:50:55,312 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.179秒 - IP: 192.168.3.60
+2025-06-01 21:51:30,440 - backend_api.main - INFO - [main.py:111] - 正在初始化数据库...
+2025-06-01 21:51:30,456 - backend_api.main - INFO - [main.py:113] - 数据库初始化完成
+2025-06-01 21:51:50,147 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:51:50,362 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.215秒 - IP: 192.168.3.60
+2025-06-01 21:52:50,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:52:50,338 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.203秒 - IP: 192.168.3.60
+2025-06-01 21:53:50,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:53:50,328 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.190秒 - IP: 192.168.3.60
+2025-06-01 21:54:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:54:50,348 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.206秒 - IP: 192.168.3.60
+2025-06-01 21:55:50,145 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:55:50,633 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.488秒 - IP: 192.168.3.60
+2025-06-01 21:56:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:56:50,348 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.206秒 - IP: 192.168.3.60
+2025-06-01 21:57:37,264 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:57:37,796 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.532秒 - IP: 192.168.3.60
+2025-06-01 21:57:50,153 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 21:57:50,157 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.60
+2025-06-01 21:57:55,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:57:55,332 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.196秒 - IP: 192.168.3.60
+2025-06-01 21:58:25,130 - backend_api.main - INFO - [main.py:111] - 正在初始化数据库...
+2025-06-01 21:58:25,148 - backend_api.main - INFO - [main.py:113] - 数据库初始化完成
+2025-06-01 21:58:25,155 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:58:25,357 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.202秒 - IP: 192.168.3.60
+2025-06-01 21:58:29,720 - backend_api.main - INFO - [main.py:111] - 正在初始化数据库...
+2025-06-01 21:58:29,737 - backend_api.main - INFO - [main.py:113] - 数据库初始化完成
+2025-06-01 21:58:37,984 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.60
+2025-06-01 21:58:37,996 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.60, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-06-01 21:58:38,008 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.024秒 - IP: 192.168.3.60
+2025-06-01 21:58:38,107 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:58:38,316 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.209秒 - IP: 192.168.3.60
+2025-06-01 21:59:08,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:59:08,348 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.213秒 - IP: 192.168.3.60
+2025-06-01 21:59:38,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 21:59:38,306 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.174秒 - IP: 192.168.3.60
+2025-06-01 22:00:08,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:00:08,306 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.171秒 - IP: 192.168.3.60
+2025-06-01 22:00:38,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:00:38,311 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.175秒 - IP: 192.168.3.60
+2025-06-01 22:01:08,118 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:01:08,330 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.212秒 - IP: 192.168.3.60
+2025-06-01 22:01:38,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:01:41,343 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 3.204秒 - IP: 192.168.3.60
+2025-06-01 22:02:08,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:02:08,728 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.586秒 - IP: 192.168.3.60
+2025-06-01 22:02:50,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:02:50,324 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 22:03:13,950 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:03:14,158 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.208秒 - IP: 192.168.3.60
+2025-06-01 22:03:16,721 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.60
+2025-06-01 22:03:16,725 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.60, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-06-01 22:03:16,731 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.010秒 - IP: 192.168.3.60
+2025-06-01 22:03:16,852 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:03:17,087 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.235秒 - IP: 192.168.3.60
+2025-06-01 22:03:46,864 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:03:47,089 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.225秒 - IP: 192.168.3.60
+2025-06-01 22:04:17,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:04:17,347 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.205秒 - IP: 192.168.3.60
+2025-06-01 22:04:47,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:04:47,262 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.121秒 - IP: 192.168.3.60
+2025-06-01 22:05:17,127 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:05:17,230 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 22:05:46,863 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:05:47,045 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.182秒 - IP: 192.168.3.60
+2025-06-01 22:05:48,890 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.60
+2025-06-01 22:05:48,893 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.60, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-06-01 22:05:48,898 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.008秒 - IP: 192.168.3.60
+2025-06-01 22:05:49,032 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:05:49,209 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.177秒 - IP: 192.168.3.60
+2025-06-01 22:06:19,033 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:06:19,145 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.112秒 - IP: 192.168.3.60
+2025-06-01 22:06:49,033 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:06:49,123 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.091秒 - IP: 192.168.3.60
+2025-06-01 22:07:19,039 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:07:19,153 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.114秒 - IP: 192.168.3.60
+2025-06-01 22:07:49,042 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:07:49,170 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.128秒 - IP: 192.168.3.60
+2025-06-01 22:08:19,035 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:08:19,150 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.114秒 - IP: 192.168.3.60
+2025-06-01 22:08:49,030 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:08:49,131 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.101秒 - IP: 192.168.3.60
+2025-06-01 22:08:50,127 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 22:08:50,131 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.004秒 - IP: 192.168.3.60
+2025-06-01 22:09:19,034 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:09:19,335 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.301秒 - IP: 192.168.3.60
+2025-06-01 22:09:49,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:09:49,365 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.226秒 - IP: 192.168.3.60
+2025-06-01 22:10:19,043 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:10:19,256 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.213秒 - IP: 192.168.3.60
+2025-06-01 22:10:49,040 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:10:49,247 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.207秒 - IP: 192.168.3.60
+2025-06-01 22:11:19,032 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:11:19,328 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.296秒 - IP: 192.168.3.60
+2025-06-01 22:11:49,037 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:11:49,255 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.218秒 - IP: 192.168.3.60
+2025-06-01 22:12:19,035 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:12:19,231 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.196秒 - IP: 192.168.3.60
+2025-06-01 22:12:49,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:12:49,386 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.251秒 - IP: 192.168.3.60
+2025-06-01 22:13:19,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:13:19,332 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.198秒 - IP: 192.168.3.60
+2025-06-01 22:13:49,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:13:49,242 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 22:14:06,466 - backend_api.main - INFO - [main.py:111] - 正在初始化数据库...
+2025-06-01 22:14:06,484 - backend_api.main - INFO - [main.py:113] - 数据库初始化完成
+2025-06-01 22:14:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:14:50,350 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.210秒 - IP: 192.168.3.60
+2025-06-01 22:14:57,433 - backend_api.main - INFO - [main.py:111] - 正在初始化数据库...
+2025-06-01 22:14:57,448 - backend_api.main - INFO - [main.py:113] - 数据库初始化完成
+2025-06-01 22:15:50,146 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:15:50,260 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.115秒 - IP: 192.168.3.60
+2025-06-01 22:16:19,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:16:19,239 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.103秒 - IP: 192.168.3.60
+2025-06-01 22:16:49,128 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:16:49,199 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.071秒 - IP: 192.168.3.60
+2025-06-01 22:17:19,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:17:19,210 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.069秒 - IP: 192.168.3.60
+2025-06-01 22:17:49,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:17:49,324 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.184秒 - IP: 192.168.3.60
+2025-06-01 22:18:19,132 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:18:19,246 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.114秒 - IP: 192.168.3.60
+2025-06-01 22:18:50,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 22:18:50,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:18:50,251 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.118秒 - IP: 192.168.3.60
+2025-06-01 22:18:50,252 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.114秒 - IP: 192.168.3.60
+2025-06-01 22:19:50,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:19:50,241 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.105秒 - IP: 192.168.3.60
+2025-06-01 22:20:19,039 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:20:19,140 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.101秒 - IP: 192.168.3.60
+2025-06-01 22:20:21,378 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.60
+2025-06-01 22:20:21,392 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.60, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-06-01 22:20:21,404 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.026秒 - IP: 192.168.3.60
+2025-06-01 22:20:21,510 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:20:21,717 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.207秒 - IP: 192.168.3.60
+2025-06-01 22:20:52,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:20:52,349 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.220秒 - IP: 192.168.3.60
+2025-06-01 22:21:22,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:21:22,341 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.200秒 - IP: 192.168.3.60
+2025-06-01 22:21:52,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:21:52,327 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.189秒 - IP: 192.168.3.60
+2025-06-01 22:22:22,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:22:22,336 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.202秒 - IP: 192.168.3.60
+2025-06-01 22:22:52,142 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:22:52,253 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.112秒 - IP: 192.168.3.60
+2025-06-01 22:23:22,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:23:22,235 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.096秒 - IP: 192.168.3.60
+2025-06-01 22:23:32,028 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.60
+2025-06-01 22:23:32,031 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.60, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-06-01 22:23:32,034 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.006秒 - IP: 192.168.3.60
+2025-06-01 22:23:32,162 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:23:32,273 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.111秒 - IP: 192.168.3.60
+2025-06-01 22:24:02,174 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:24:02,280 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.106秒 - IP: 192.168.3.60
+2025-06-01 22:24:32,168 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:24:32,275 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 22:25:02,173 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:25:02,271 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.098秒 - IP: 192.168.3.60
+2025-06-01 22:25:32,166 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:25:32,725 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.559秒 - IP: 192.168.3.60
+2025-06-01 22:26:02,452 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:26:02,640 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 22:26:33,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:26:33,326 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.187秒 - IP: 192.168.3.60
+2025-06-01 22:27:03,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:27:03,320 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.180秒 - IP: 192.168.3.60
+2025-06-01 22:27:50,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:27:50,319 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.185秒 - IP: 192.168.3.60
+2025-06-01 22:28:50,134 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:28:50,322 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.188秒 - IP: 192.168.3.60
+2025-06-01 22:28:50,328 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 22:28:50,333 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.005秒 - IP: 192.168.3.60
+2025-06-01 22:29:02,165 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:29:02,351 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 22:29:32,173 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:29:32,359 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.186秒 - IP: 192.168.3.60
+2025-06-01 22:30:02,174 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:30:02,294 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.120秒 - IP: 192.168.3.60
+2025-06-01 22:30:32,168 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:30:32,275 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.107秒 - IP: 192.168.3.60
+2025-06-01 22:31:02,172 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:31:02,280 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.108秒 - IP: 192.168.3.60
+2025-06-01 22:31:33,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:31:33,331 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.192秒 - IP: 192.168.3.60
+2025-06-01 22:32:03,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:32:03,351 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.217秒 - IP: 192.168.3.60
+2025-06-01 22:32:50,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:32:50,329 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.192秒 - IP: 192.168.3.60
+2025-06-01 22:33:50,143 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:33:50,325 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.183秒 - IP: 192.168.3.60
+2025-06-01 22:34:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:34:50,211 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.071秒 - IP: 192.168.3.60
+2025-06-01 22:35:50,137 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:35:50,246 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 22:36:50,137 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:36:50,243 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.106秒 - IP: 192.168.3.60
+2025-06-01 22:37:50,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:37:50,247 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.111秒 - IP: 192.168.3.60
+2025-06-01 22:38:50,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:38:50,232 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.094秒 - IP: 192.168.3.60
+2025-06-01 22:39:50,136 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 22:39:50,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:39:50,249 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 22:39:50,252 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.111秒 - IP: 192.168.3.60
+2025-06-01 22:40:50,135 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:40:50,352 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.217秒 - IP: 192.168.3.60
+2025-06-01 22:41:50,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:41:50,336 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.207秒 - IP: 192.168.3.60
+2025-06-01 22:42:50,144 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:42:50,359 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.215秒 - IP: 192.168.3.60
+2025-06-01 22:43:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:43:50,249 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.109秒 - IP: 192.168.3.60
+2025-06-01 22:44:03,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:44:03,242 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.104秒 - IP: 192.168.3.60
+2025-06-01 22:44:33,131 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:44:33,314 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.183秒 - IP: 192.168.3.60
+2025-06-01 22:45:50,140 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:45:50,253 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.113秒 - IP: 192.168.3.60
+2025-06-01 22:46:10,695 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:46:10,801 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.106秒 - IP: 192.168.3.60
+2025-06-01 22:46:33,139 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:46:33,378 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.240秒 - IP: 192.168.3.60
+2025-06-01 22:47:03,131 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:47:03,353 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.222秒 - IP: 192.168.3.60
+2025-06-01 22:47:42,728 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:47:42,956 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.228秒 - IP: 192.168.3.60
+2025-06-01 22:48:03,126 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:48:03,384 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.258秒 - IP: 192.168.3.60
+2025-06-01 22:48:33,141 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:48:33,247 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.106秒 - IP: 192.168.3.60
+2025-06-01 22:49:03,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:49:03,239 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.101秒 - IP: 192.168.3.60
+2025-06-01 22:49:33,129 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:49:33,314 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.184秒 - IP: 192.168.3.60
+2025-06-01 22:49:50,138 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - POST http://192.168.3.60:5000/api/stock/quote - IP: 192.168.3.60
+2025-06-01 22:49:50,141 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - POST http://192.168.3.60:5000/api/stock/quote - 状态码: 200 - 处理时间: 0.003秒 - IP: 192.168.3.60
+2025-06-01 22:50:50,133 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:50:50,313 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.180秒 - IP: 192.168.3.60
+2025-06-01 22:51:30,828 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:51:30,940 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.112秒 - IP: 192.168.3.60
+2025-06-01 22:52:02,163 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:52:02,336 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.174秒 - IP: 192.168.3.60
+2025-06-01 22:52:32,171 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - IP: 192.168.3.60
+2025-06-01 22:52:32,428 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/realtime_quote_by_code?code=688114 - 状态码: 200 - 处理时间: 0.257秒 - IP: 192.168.3.60

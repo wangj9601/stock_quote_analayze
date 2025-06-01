@@ -288,6 +288,7 @@ def get_quote_board_list(
         print(tb)
         return JSONResponse({'success': False, 'message': '获取A股排行数据失败', 'error': str(e), 'traceback': tb}, status_code=500)
 
+# 根据股票代码获取实时行情
 @router.get("/realtime_quote_by_code")
 async def get_realtime_quote_by_code(code: str = Query(None, description="股票代码")):
     print(f"[realtime_quote_by_code] 输入参数: code={code}")
@@ -307,6 +308,15 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 return f"{float(val):.2f}"
             except Exception:
                 return None
+        # 增加均价字段
+        avg_price = None
+        try:
+            # 优先用akshare返回的均价字段
+            avg_price = data_dict.get("均价") or data_dict.get("成交均价")
+            if avg_price is None and data_dict.get("金额") and data_dict.get("总手") and float(data_dict.get("总手")) != 0:
+                avg_price = float(data_dict.get("金额")) / float(data_dict.get("总手"))
+        except Exception:
+            avg_price = None
         result = {
             "code": code,
             "current_price": fmt(data_dict.get("最新")),
@@ -318,8 +328,9 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
             "low": fmt(data_dict.get("最低")),
             "volume": fmt(data_dict.get("总手")),
             "turnover": fmt(data_dict.get("金额")),
-            "turnover_rate": fmt(data_dict.get("换手率")),
+            "turnover_rate": fmt(data_dict.get("换手")),
             "pe_dynamic": fmt(data_dict.get("市盈率-动态")),
+            "average_price": fmt(avg_price),
         }
         print(f"[realtime_quote_by_code] 输出数据: {result}")
         return JSONResponse({"success": True, "data": result})

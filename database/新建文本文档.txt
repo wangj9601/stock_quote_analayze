@@ -1,0 +1,10 @@
+[realtime_quote_by_code] 输出数据: {'code': '002539', 'current_price': 8.39, 'change_amount': -0.03, 'change_percent': -0.36, 'open': 8.4, 'yesterday_close': 8.42, 'high': 8.48, 'low': 8.37, 'volume': 65492.0, 'turnover': 55170041.0}
+
+
+[realtime_quote_by_code] 输入参数: code=301277
+[realtime_quote_by_code] 输出数据: {'code': '301277', 'current_price': 15.81, 'change_amount': 0.12, 'change_percent': 0.76, 'open': 15.14, 'yesterday_close': 15.69, 'high': 17.84, 'low': 15.0, 'volume': 520903.0, 'turnover': 851779349.06}
+
+
+[realtime_quote_by_code] 输出数据: {'code': '688114', 'current_price': '70.52', 'change_amount': '-0.97', 'change_percent': '-1.36', 'open': '70.88', 'yesterday_close': '71.49', 'high': '71.50', 'low': '70.21', 'volume': '19863.00', 'turnover': '140435910.00', 'turnover_rate': None, 'pe_dynamic': None}
+
+

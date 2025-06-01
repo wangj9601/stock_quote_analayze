@@ -15,6 +15,7 @@ const StockPage = {
     yesterday_close: null,
     high: null,
     low: null,
+    average_price: null,          
     volume: null,
     turnover: null,
     turnover_rate: null,
@@ -634,6 +635,7 @@ const StockPage = {
                 this.yesterday_close = d.yesterday_close;
                 this.high = d.high;
                 this.low = d.low;
+                this.average_price = d.average_price;
                 this.volume = d.volume;
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
@@ -675,6 +677,7 @@ const StockPage = {
             '昨收': this.yesterday_close,
             '最高': this.high,
             '最低': this.low,
+            '均价': this.average_price,
             '成交量': this.volume,
             '成交额': this.turnover,
             '换手率': this.turnover_rate,
@@ -695,7 +698,7 @@ const StockPage = {
                 } else if (label === '成交额') {
                     valueElement.textContent = (val / 100000000).toFixed(2) + '亿';
                 } else if (label === '换手率') {
-                    valueElement.textContent = val.toFixed(2) + '%';
+                    valueElement.textContent = (Number(val)).toFixed(2) + '%';
                 } else {
                     valueElement.textContent = val;
                 }
@@ -847,6 +850,7 @@ const StockPage = {
                 this.yesterday_close = d.yesterday_close;
                 this.high = d.high;
                 this.low = d.low;
+                this.average_price = d.average_price;
                 this.volume = d.volume;
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
