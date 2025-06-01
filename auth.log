@@ -15773,3 +15773,4 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-06-01 14:51:33,126 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.014秒 - IP: 192.168.3.60
 2025-06-01 14:51:33,128 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 0.016秒 - IP: 192.168.3.60
 2025-06-01 14:51:36,788 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/industry_board - 状态码: 200 - 处理时间: 3.675秒 - IP: 192.168.3.60
+2025-06-01 14:51:57,307 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/indices - 状态码: 200 - 处理时间: 47.799秒 - IP: 192.168.3.60
