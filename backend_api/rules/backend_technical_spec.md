@@ -13,36 +13,37 @@
 
 ## 项目概述
 
-股票分析系统后端是系统的核心服务层，负责提供数据服务、业务逻辑处理和系统管理功能。采用Flask框架构建，提供RESTful API接口，支持前端和管理端的各项功能需求。
+股票分析系统后端是系统的核心服务层，负责提供数据服务、业务逻辑处理和系统管理功能。采用FastAPI框架构建，提供RESTful API接口，支持前端和管理端的各项功能需求。
 
 ## 技术栈
 
 ### 核心框架
-- **Web框架**: Flask 2.x
+- **Web框架**: FastAPI
+- **ORM**: SQLAlchemy
 - **数据库**: SQLite3
 - **API风格**: RESTful
-- **认证方式**: Session + Token
-- **跨域处理**: Flask-CORS
-- **数据采集**: AKShare
+- **认证方式**: JWT Token
+- **跨域处理**: FastAPI CORS Middleware
+- **数据采集**: AKShare、Tushare
 
 ### 开发工具
 - **版本控制**: Git
 - **代码规范**: PEP 8
-- **测试框架**: unittest
+- **测试框架**: pytest
 - **文档工具**: Markdown
 
 ## 项目结构
 
 ```
-backend-api/
-├── app_complete.py      # 主应用入口
-├── database/           # 数据库文件目录
-│   └── stock_analysis.db
-├── test/              # 测试目录
-│   ├── test_app_complete.py
+backend_api/
+├── main.py                # FastAPI主应用入口
+├── stock/                 # 股票相关API（含历史行情）
+├── database/              # 数据库相关
+├── models.py              # ORM模型定义
+├── test/                  # 测试目录
 │   └── test_*.py
-├── requirements.txt    # 依赖管理
-└── README.md          # 项目文档
+├── requirements.txt       # 依赖管理
+└── rules/                 # 规范文档
 ```
 
 ## 开发规范
@@ -55,35 +56,12 @@ backend-api/
 
 ### 2. 命名规范
 - **文件名**: 小写字母，下划线分隔
-  ```python
-  app_complete.py
-  test_app_complete.py
-  ```
 - **函数名**: 小写字母，下划线分隔
-  ```python
-  def get_market_indices():
-  def init_db():
-  ```
 - **类名**: 大驼峰命名
-  ```python
-  class TestStockAnalysisSystem:
-  ```
 - **常量**: 大写字母，下划线分隔
-  ```python
-  MAX_RETRY_COUNT = 3
-  DEFAULT_TIMEOUT = 30
-  ```
 
 ### 3. 注释规范
 - 所有函数必须包含文档字符串
-  ```python
-  def get_market_indices():
-      """获取市场指数数据
-    
-      Returns:
-          dict: 包含指数数据的字典
-      """
-  ```
 - 复杂逻辑必须添加行内注释
 - API接口必须说明参数和返回值
 
@@ -95,38 +73,36 @@ backend-api/
   try:
       # 业务逻辑
   except Exception as e:
-      print(f"❌ 操作失败: {str(e)}")
-      return jsonify({
-          'success': False,
-          'message': '操作失败',
-          'error': str(e)
-      }), 500
+      logger.error(f"操作失败: {str(e)}")
+      raise HTTPException(status_code=500, detail=str(e))
   ```
 
 ## API规范
 
 ### 1. URL规范
 - 使用名词复数形式
-- 版本控制：/api/v1/
+- 版本控制建议：/api/v1/（当前项目为 /api/stock/xxx）
 - 资源层级不超过3层
-  ```
-  /api/users
-  /api/users/{id}
-  /api/users/{id}/status
-  ```
 
 ### 2. 请求方法
 - GET: 获取资源
 - POST: 创建资源
-- PUT: 更新资源
+- PUT/PATCH: 更新资源
 - DELETE: 删除资源
 
 ### 3. 响应格式
 ```json
 {
+    "items": [...],
+    "total": 100
+}
+```
+或
+```json
+{
     "success": true/false,
     "message": "提示信息",
-    "data": {},
+    "data": {...},
     "error": "错误信息"
 }
 ```
@@ -143,20 +119,28 @@ backend-api/
 
 ### 1. 表设计规范
 - 所有表必须包含主键
-- 使用外键保证数据完整性
+- 使用外键保证数据完整性（如有必要）
 - 关键字段必须建立索引
-- 时间字段统一使用TIMESTAMP
+- 时间字段统一使用TEXT(YYYYMMDD)或TIMESTAMP
 
 ### 2. 表结构示例
 ```sql
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    status TEXT DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP
+CREATE TABLE historical_quotes (
+    code TEXT,
+    ts_code TEXT,
+    name TEXT,
+    market TEXT,
+    date TEXT, -- 格式YYYYMMDD
+    open REAL,
+    high REAL,
+    low REAL,
+    close REAL,
+    volume REAL,
+    amount REAL,
+    change_percent REAL,
+    collected_source TEXT,
+    collected_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (code, date)
 );
 ```
 
@@ -165,27 +149,25 @@ CREATE TABLE users (
 - 查询必须指定具体字段
 - 大量数据操作使用事务
 ```python
-cursor.execute('SELECT id, username FROM users WHERE id = ?', (user_id,))
+result = db.execute(text('SELECT code, date FROM historical_quotes WHERE code = :code'), {"code": code})
 ```
 
 ## 安全规范
 
 ### 1. 认证安全
 - 密码必须加密存储
-- Session超时设置
-- Token定期刷新
+- JWT Token有效期设置
 - 敏感操作二次验证
 
 ### 2. 数据安全
-- 敏感数据加密
 - 输入数据验证
 - SQL注入防护
 - XSS防护
 
 ### 3. 接口安全
-- 请求频率限制
+- 请求频率限制（如有必要）
 - 参数验证
-- 跨域控制
+- 跨域控制（CORS）
 - 日志记录
 
 ## 测试规范
@@ -198,24 +180,31 @@ cursor.execute('SELECT id, username FROM users WHERE id = ?', (user_id,))
 
 ### 2. 测试用例示例
 ```python
-def test_user_login(self):
-    """测试用户登录"""
-    response = self.client.post('/api/auth/login',
-        json=self.test_user,
-        content_type='application/json'
-    )
-    self.assertEqual(response.status_code, 200)
-    data = json.loads(response.data)
-    self.assertTrue(data['success'])
+import pytest
+from httpx import AsyncClient
+from backend_api.main import app
+
+@pytest.mark.asyncio
+async def test_get_stock_history():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        resp = await ac.get("/api/stock/history", params={
+            "code": "002539",
+            "page": 1,
+            "size": 10
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
 ```
 
 ### 3. 测试运行
 ```bash
 # 运行所有测试
-python -m unittest discover
+pytest
 
 # 运行特定测试
-python -m unittest test_app_complete.py
+pytest backend_api/test/test_stock_history_api.py
 ```
 
 ## 部署规范
@@ -233,11 +222,11 @@ python -m unittest test_app_complete.py
    ```
 2. 初始化数据库
    ```bash
-   python -c "from app_complete import init_db; init_db()"
+   python run.py  # 首次启动会自动初始化
    ```
 3. 启动服务
    ```bash
-   python app_complete.py
+   python start_system.py
    ```
 
 ### 3. 监控要求
@@ -254,10 +243,11 @@ python -m unittest test_app_complete.py
 
 ## 更新日志
 
-### v1.0.0 (2024-01-20)
-- 初始版本发布
-- 实现基础功能
-- 完成技术规范文档
+### v1.2.0 (2025-06)
+- 切换为FastAPI+SQLAlchemy
+- 新增历史行情API、导出、分页、日期筛选
+- 完善测试用例
+- 文档与规范同步更新
 
 ## 维护说明
 
@@ -265,7 +255,8 @@ python -m unittest test_app_complete.py
 
 ## 参考资源
 
-- [Flask官方文档](https://flask.palletsprojects.com/)
-- [SQLite文档](https://www.sqlite.org/docs.html)
+- [FastAPI官方文档](https://fastapi.tiangolo.com/)
+- [SQLAlchemy文档](https://docs.sqlalchemy.org/)
 - [PEP 8规范](https://www.python.org/dev/peps/pep-0008/)
-- [RESTful API设计指南](https://restfulapi.net/) 
+- [RESTful API设计指南](https://restfulapi.net/)
+- [pytest官方文档](https://docs.pytest.org/) 
