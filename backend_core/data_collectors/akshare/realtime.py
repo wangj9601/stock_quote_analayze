@@ -9,6 +9,7 @@ import sqlite3
 from typing import Optional, Dict, Any
 from pathlib import Path
 import logging
+from datetime import datetime
 
 # 直接导入base模块
 from base import AKShareCollector
@@ -40,7 +41,8 @@ class RealtimeQuoteCollector(AKShareCollector):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS stock_basic_info (
                 code TEXT PRIMARY KEY,
-                name TEXT
+                name TEXT,
+                create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -48,6 +50,7 @@ class RealtimeQuoteCollector(AKShareCollector):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS stock_realtime_quote (
                 code TEXT PRIMARY KEY,
+                name TEXT,
                 current_price REAL,
                 change_percent REAL,
                 volume REAL,
@@ -56,6 +59,11 @@ class RealtimeQuoteCollector(AKShareCollector):
                 low REAL,
                 open REAL,
                 pre_close REAL,
+                turnover_rate REAL,
+                pe_dynamic REAL,
+                total_market_value REAL,
+                pb_ratio REAL,
+                circulating_market_value REAL,
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(code) REFERENCES stock_basic_info(code)
             )
@@ -110,7 +118,8 @@ class RealtimeQuoteCollector(AKShareCollector):
             for _, row in df.iterrows():
                 code = row['代码']
                 name = row['名称']
-                
+                #print(row)
+
                 # 准备数据
                 data = {
                     'code': code,
@@ -122,38 +131,50 @@ class RealtimeQuoteCollector(AKShareCollector):
                     'high': self._safe_value(row['最高']),
                     'low': self._safe_value(row['最低']),
                     'open': self._safe_value(row['今开']),
-                    'pre_close': self._safe_value(row['昨收'])
+                    'pre_close': self._safe_value(row['昨收']),
+                    'turnover_rate': self._safe_value(row['换手率']),
+                    'pe_dynamic': self._safe_value(row['市盈率-动态']),
+                    'total_market_value': self._safe_value(row['总市值']),
+                    'pb_ratio': self._safe_value(row['市净率']),
+                    'circulating_market_value': self._safe_value(row['流通市值']),
+                    'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
                 # 更新基础信息
                 cursor.execute('''
-                    INSERT OR REPLACE INTO stock_basic_info (code, name)
-                    VALUES (?, ?)
-                ''', (data['code'], data['name']))
+                    INSERT OR REPLACE INTO stock_basic_info (code, name, create_date)
+                    VALUES (?, ?, ?)
+                ''', (data['code'], data['name'], data['update_time']))
                 
                 # 更新实时行情
                 cursor.execute('''
                     INSERT OR REPLACE INTO stock_realtime_quote
-                    (code, current_price, change_percent, volume, amount,
-                     high, low, open, pre_close)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (code, name, current_price, change_percent, volume, amount,
+                     high, low, open, pre_close, turnover_rate, pe_dynamic,
+                     total_market_value, pb_ratio, circulating_market_value,
+                     update_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    data['code'], data['current_price'], data['change_percent'],
+                    data['code'], data['name'], data['current_price'], data['change_percent'],
                     data['volume'], data['amount'], data['high'], data['low'],
-                    data['open'], data['pre_close']
+                    data['open'], data['pre_close'], data['turnover_rate'],
+                    data['pe_dynamic'], data['total_market_value'], data['pb_ratio'],
+                    data['circulating_market_value'], data['update_time']
                 ))
                 affected_rows += 1
             
             # 记录操作日志
             cursor.execute('''
-                INSERT INTO operation_logs 
-                (operation_type, operation_desc, affected_rows, status)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO realtime_collect_operation_logs 
+                (operation_type, operation_desc, affected_rows, status, error_message, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
             ''', (
                 'realtime_quote_collect',
                 f'采集并更新{len(df)}条股票实时行情数据',
                 affected_rows,
-                'success'
+                'success',
+                None,
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             ))
             
             conn.commit()
@@ -169,7 +190,7 @@ class RealtimeQuoteCollector(AKShareCollector):
             # 记录错误日志
             try:
                 cursor.execute('''
-                    INSERT INTO operation_logs 
+                    INSERT INTO realtime_collect_operation_logs 
                     (operation_type, operation_desc, affected_rows, status, error_message)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (
