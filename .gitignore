@@ -1,3 +1,7 @@
 # 日志文件
 auth.log
-*.log 
+*.log
+**/__pycache__/
+**/venv/
+**/backend_api/venv/
+
