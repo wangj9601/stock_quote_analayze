@@ -283,7 +283,7 @@ const WatchlistPage = {
                 </div>
                 <div class="stock-actions">
                     <button class="action-btn" onclick="goToStock('${stock.code}')">详情</button>
-                    <button class="action-btn trade-btn">交易</button>
+                    <button class="action-btn trade-btn" onclick="goToStockHistory('${stock.code}')" >历史</button>
                 </div>
             </div>
         `).join('');
@@ -789,6 +789,10 @@ const WatchlistPage = {
 // 全局函数：跳转到股票详情
 function goToStock(code) {
     window.location.href = `stock.html?code=${code}`;
+}
+
+function goToStockHistory(code) {
+    window.location.href = `stock_history.html?code=${code}`;
 }
 
 // DOM加载完成后初始化

@@ -33,6 +33,7 @@ from .user_manage import router as user_manage_router
 from .app_complete import router as system_router
 from .auth_routes import router as auth_router
 from .stock.stock_manage import router as stock_router
+from .stock.history_api import router as history_router
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -50,6 +51,8 @@ origins = [
     "http://127.0.0.1:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8001",
+    "http://192.168.3.60:8000",  # 建议加上你的本地IP端口
+    "http://192.168.3.60:5000",  # 如果有需要
     "*"
 ]
 
@@ -94,6 +97,7 @@ app.include_router(user_manage_router)
 app.include_router(system_router)  # 添加系统路由
 app.include_router(market_router)  # 添加行情路由
 app.include_router(stock_router)
+app.include_router(history_router)
 
 # 根路由重定向到管理后台
 @app.get("/")
