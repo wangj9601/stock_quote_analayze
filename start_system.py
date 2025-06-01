@@ -11,6 +11,7 @@ import time
 import webbrowser
 from threading import Thread
 import logging
+import argparse
 
 def start_backend():
     """启动后端服务"""
@@ -23,7 +24,7 @@ def start_backend():
         print(f"❌ 后端启动失败: {e}")
         return False
 
-def start_frontend():
+def start_frontend(args):
     """启动前端服务"""
     try:
         print("🌐 正在启动前端服务...")
@@ -66,6 +67,11 @@ def main():
         print("请运行: pip install -r requirements.txt")
         return
     
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--frontend_port', type=int, default=8000)
+    parser.add_argument('--debug', action='store_true')
+    args = parser.parse_args()
+
     # 启动后端服务（后台运行）
     backend_thread = Thread(target=start_backend, daemon=True)
     backend_thread.start()

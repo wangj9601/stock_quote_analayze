@@ -15787,3 +15787,15 @@ AttributeError: module 'bcrypt' has no attribute '__about__'
 2025-06-01 14:56:33,413 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/industry_board - 状态码: 200 - 处理时间: 23.897秒 - IP: 192.168.3.60
 2025-06-01 14:56:33,416 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist - 状态码: 200 - 处理时间: 23.901秒 - IP: 192.168.3.60
 2025-06-01 14:56:33,418 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 23.898秒 - IP: 192.168.3.60
+2025-06-01 15:01:48,531 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/indices - IP: 192.168.3.60
+2025-06-01 15:01:48,533 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/watchlist - IP: 192.168.3.60
+2025-06-01 15:01:48,534 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/market/industry_board - IP: 192.168.3.60
+2025-06-01 15:01:48,547 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - IP: 192.168.3.60
+2025-06-01 15:02:08,670 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/news?limit=3 - IP: 192.168.3.60
+2025-06-01 15:02:08,671 - backend_api.auth_routes - INFO - [auth_routes.py:49] - 请求开始 - GET http://192.168.3.60:5000/api/auth/status - IP: 192.168.3.60
+2025-06-01 15:02:08,672 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/market/industry_board - 状态码: 200 - 处理时间: 20.138秒 - IP: 192.168.3.60
+2025-06-01 15:02:08,674 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/news?limit=3 - 状态码: 405 - 处理时间: 0.004秒 - IP: 192.168.3.60
+2025-06-01 15:02:08,676 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/watchlist - 状态码: 200 - 处理时间: 20.143秒 - IP: 192.168.3.60
+2025-06-01 15:02:08,680 - backend_api.auth_routes - INFO - [auth_routes.py:261] - 获取认证状态: 用户已登录 - 用户: wangxw, ID: 6, IP: 192.168.3.60, User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36, 处理时间: 0.000秒
+2025-06-01 15:02:08,682 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/stock/quote_board?limit=3 - 状态码: 200 - 处理时间: 20.135秒 - IP: 192.168.3.60
+2025-06-01 15:02:08,683 - backend_api.auth_routes - INFO - [auth_routes.py:74] - 请求完成 - GET http://192.168.3.60:5000/api/auth/status - 状态码: 200 - 处理时间: 0.012秒 - IP: 192.168.3.60
