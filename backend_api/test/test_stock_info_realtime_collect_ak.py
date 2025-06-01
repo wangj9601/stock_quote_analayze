@@ -41,3 +41,35 @@ def test_get_stock_quote_on_weekend(monkeypatch):
     assert safe_float(quote["low"]) == safe_float(row[6])
     assert safe_float(quote["open"]) == safe_float(row[7])
     assert safe_float(quote["yesterday_close"]) == safe_float(row[8])
+
+import pytest
+from httpx import AsyncClient
+from backend_api.main import app
+
+@pytest.mark.asyncio
+async def test_realtime_quote_by_code_success():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        resp = await ac.get("/api/stock/realtime_quote_by_code", params={"code": "000001"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["data"]["code"] == "000001"
+        assert "current_price" in data["data"]
+
+@pytest.mark.asyncio
+async def test_realtime_quote_by_code_not_found():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        resp = await ac.get("/api/stock/realtime_quote_by_code", params={"code": "notexist"})
+        assert resp.status_code == 404
+        data = resp.json()
+        assert data["success"] is False
+        assert "未找到" in data["message"]
+
+@pytest.mark.asyncio
+async def test_realtime_quote_by_code_missing_param():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        resp = await ac.get("/api/stock/realtime_quote_by_code")
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["success"] is False
+        assert "缺少" in data["message"]

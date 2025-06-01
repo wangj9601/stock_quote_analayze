@@ -287,3 +287,42 @@ def get_quote_board_list(
         tb = traceback.format_exc()
         print(tb)
         return JSONResponse({'success': False, 'message': '获取A股排行数据失败', 'error': str(e), 'traceback': tb}, status_code=500)
+
+@router.get("/realtime_quote_by_code")
+async def get_realtime_quote_by_code(code: str = Query(None, description="股票代码")):
+    print(f"[realtime_quote_by_code] 输入参数: code={code}")
+    if not code:
+        print("[realtime_quote_by_code] 缺少参数")
+        return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
+    try:
+        df = ak.stock_bid_ask_em(symbol=code)
+        if df.empty:
+            print(f"[realtime_quote_by_code] 未找到股票代码: {code}")
+            return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+        data_dict = dict(zip(df['item'], df['value']))
+        def fmt(val):
+            try:
+                if val is None:
+                    return None
+                return f"{float(val):.2f}"
+            except Exception:
+                return None
+        result = {
+            "code": code,
+            "current_price": fmt(data_dict.get("最新")),
+            "change_amount": fmt(data_dict.get("涨跌")),
+            "change_percent": fmt(data_dict.get("涨幅")),
+            "open": fmt(data_dict.get("今开")),
+            "yesterday_close": fmt(data_dict.get("昨收")),
+            "high": fmt(data_dict.get("最高")),
+            "low": fmt(data_dict.get("最低")),
+            "volume": fmt(data_dict.get("总手")),
+            "turnover": fmt(data_dict.get("金额")),
+            "turnover_rate": fmt(data_dict.get("换手率")),
+            "pe_dynamic": fmt(data_dict.get("市盈率-动态")),
+        }
+        print(f"[realtime_quote_by_code] 输出数据: {result}")
+        return JSONResponse({"success": True, "data": result})
+    except Exception as e:
+        print(f"[realtime_quote_by_code] 异常: {e}")
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)

@@ -733,3 +733,50 @@
 .add-stock-modal.active {
     display: flex;
 } 
+
+/* 表格整体样式 */
+.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.table th, .table td {
+    padding: 12px 16px;
+    text-align: center;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 15px;
+}
+.table th {
+    background: #fafbfc;
+    color: #333;
+    font-weight: 600;
+}
+.table tr:last-child td {
+    border-bottom: none;
+}
+.table .positive { color: #e74c3c; }   /* 红色 */
+.table .negative { color: #27ae60; }   /* 绿色 */
+.table .btn {
+    margin: 0 4px;
+    min-width: 48px;
+    border-radius: 4px;
+    font-size: 14px;
+    padding: 4px 12px;
+}
+.table .btn-danger {
+    background: #ff4d4f;
+    color: #fff;
+    border: none;
+}
+.table .btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+    border: none;
+}
+.table .btn:hover {
+    opacity: 0.85;
+}

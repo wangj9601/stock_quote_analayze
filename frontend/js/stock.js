@@ -1,10 +1,24 @@
 // 股票详情页面功能模块
+const getQueryParam = (name) => {
+    const url = window.location.search;
+    const params = new URLSearchParams(url);
+    return params.get(name);
+};
+
 const StockPage = {
-    stockCode: '000001',
-    stockName: '平安银行',
-    currentPrice: 12.34,
-    priceChange: 0.56,
-    priceChangePercent: 4.76,
+    stockCode: getQueryParam('code') || '',
+    stockName: getQueryParam('name') || '',
+    currentPrice: null,
+    priceChange: null,
+    priceChangePercent: null,
+    open: null,
+    yesterday_close: null,
+    high: null,
+    low: null,
+    volume: null,
+    turnover: null,
+    turnover_rate: null,
+    pe_dynamic: null,
     klineChart: null,
     minuteChart: null,
     profitChart: null,
@@ -12,7 +26,7 @@ const StockPage = {
     currentTab: 'analysis',
     currentChartType: 'kline',
     currentPeriod: '1d',
-    API_BASE_URL: 'http://192.168.31.237:5000',
+    //API_BASE_URL: 'http://192.168.31.237:5000',
 
     // 初始化
     init() {
@@ -512,13 +526,18 @@ const StockPage = {
 
     generateKlineData() {
         const data = [];
-        let price = this.currentPrice;
+        let price = Number(this.currentPrice) || 0;
         for (let i = 0; i < 51; i++) {
             const open = price + (Math.random() - 0.5) * 2;
             const close = open + (Math.random() - 0.5) * 2;
             const high = Math.max(open, close) + Math.random() * 1;
             const low = Math.min(open, close) - Math.random() * 1;
-            data.push([open.toFixed(2), close.toFixed(2), low.toFixed(2), high.toFixed(2)]);
+            data.push([
+                Number(open).toFixed(2),
+                Number(close).toFixed(2),
+                Number(low).toFixed(2),
+                Number(high).toFixed(2)
+            ]);
             price = close;
         }
         return data;
@@ -598,45 +617,96 @@ const StockPage = {
     },
 
     // 加载股票数据
-    loadStockData() {
-        // 模拟加载股票基本信息
-        this.updateStockInfo();
-        this.updateStockDetails();
-        this.loadChartData();
+    async loadStockData() {
+        try {
+            const url = `${API_BASE_URL}/api/stock/realtime_quote_by_code?code=${this.stockCode}`;
+            console.log('[loadStockData] 请求URL:', url);
+            const resp = await fetch(url);
+            const data = await resp.json();
+            console.log('[loadStockData] 返回数据:', data);
+            if (data.success) {
+                const d = data.data;
+                this.currentPrice = d.current_price;
+                this.priceChange = d.change_amount;
+                this.priceChangePercent = d.change_percent;
+                this.stockName = d.name || this.stockName;
+                this.open = d.open;
+                this.yesterday_close = d.yesterday_close;
+                this.high = d.high;
+                this.low = d.low;
+                this.volume = d.volume;
+                this.turnover = d.turnover;
+                this.turnover_rate = d.turnover_rate;
+                this.pe_dynamic = d.pe_dynamic;
+                this.updateStockInfo();
+                this.updateStockDetails();
+                this.loadChartData();
+            } else {
+                console.error('[loadStockData] API返回失败:', data.message);
+                CommonUtils.showToast('实时行情获取失败: ' + data.message, 'error');
+            }
+        } catch (e) {
+            console.error('[loadStockData] 请求异常:', e);
+            CommonUtils.showToast('实时行情请求异常', 'error');
+        }
     },
 
     // 更新股票信息
     updateStockInfo() {
-        document.querySelector('.stock-name').textContent = this.stockName;
-        document.querySelector('.stock-code').textContent = this.stockCode;
-        document.querySelector('.current-price').textContent = this.currentPrice.toFixed(2);
+        document.querySelector('.stock-name').textContent = this.stockName || '-';
+        document.querySelector('.stock-code').textContent = this.stockCode || '-';
+        document.querySelector('.current-price').textContent = this.currentPrice ? Number(this.currentPrice).toFixed(2) : '-';
         
         const changeElement = document.querySelector('.price-change');
-        const changeText = `${this.priceChange > 0 ? '+' : ''}${this.priceChange.toFixed(2)} (${this.priceChange > 0 ? '+' : ''}${this.priceChangePercent.toFixed(2)}%)`;
+        const change = this.priceChange ? Number(this.priceChange) : 0;
+        const changePercent = this.priceChangePercent ? Number(this.priceChangePercent) : 0;
+        const changeText = `${change > 0 ? '+' : ''}${change.toFixed(2)} (${change > 0 ? '+' : ''}${changePercent.toFixed(2)}%)`;
         changeElement.textContent = changeText;
-        changeElement.className = `price-change ${this.priceChange > 0 ? 'positive' : 'negative'}`;
+        changeElement.className = `price-change ${change > 0 ? 'positive' : 'negative'}`;
         
         document.querySelector('.price-time').textContent = new Date().toLocaleTimeString();
     },
 
     // 更新股票详情
     updateStockDetails() {
-        const details = {
-            '今开': (this.currentPrice - 0.45).toFixed(2),
-            '昨收': (this.currentPrice - this.priceChange).toFixed(2),
-            '最高': (this.currentPrice + 0.11).toFixed(2),
-            '最低': (this.currentPrice - 0.49).toFixed(2),
-            '成交量': (Math.random() * 2 + 0.5).toFixed(2) + '亿',
-            '成交额': (Math.random() * 20 + 10).toFixed(1) + '亿',
-            '换手率': (Math.random() * 5 + 1).toFixed(2) + '%',
-            '市盈率': (Math.random() * 20 + 5).toFixed(2)
+        // 取API最新数据
+        const d = {
+            '今开': this.open,
+            '昨收': this.yesterday_close,
+            '最高': this.high,
+            '最低': this.low,
+            '成交量': this.volume,
+            '成交额': this.turnover,
+            '换手率': this.turnover_rate,
+            '市盈率': this.pe_dynamic
         };
-
         document.querySelectorAll('.detail-item').forEach(item => {
             const label = item.querySelector('.label').textContent;
             const valueElement = item.querySelector('.value');
-            if (details[label]) {
-                valueElement.textContent = details[label];
+            let val = d[label];
+            if (val === undefined || val === null || val === '') {
+                valueElement.textContent = '-';
+                valueElement.className = 'value';
+            } else {
+                // 格式化
+                if (label === '成交量') {
+                    // 假设后端volume为"手"，显示为"万手"
+                    valueElement.textContent = (Number(val) / 10000).toFixed(2) + '万';
+                } else if (label === '成交额') {
+                    valueElement.textContent = (val / 100000000).toFixed(2) + '亿';
+                } else if (label === '换手率') {
+                    valueElement.textContent = val.toFixed(2) + '%';
+                } else {
+                    valueElement.textContent = val;
+                }
+                // 颜色
+                if (label === '最高') {
+                    valueElement.className = 'value positive';
+                } else if (label === '最低') {
+                    valueElement.className = 'value negative';
+                } else {
+                    valueElement.className = 'value';
+                }
             }
         });
     },
@@ -750,7 +820,7 @@ const StockPage = {
         // 定期更新股价数据
         setInterval(() => {
             this.updateRealTimeData();
-        }, 5000); // 每5秒更新一次
+        }, 30000); // 每30秒更新一次
 
         // 监听窗口大小变化
         window.addEventListener('resize', () => {
@@ -764,18 +834,28 @@ const StockPage = {
     },
 
     // 更新实时数据
-    updateRealTimeData() {
-        // 模拟股价变动
-        const change = (Math.random() - 0.5) * 0.1;
-        this.currentPrice += change;
-        this.priceChange += change;
-        this.priceChangePercent = (this.priceChange / (this.currentPrice - this.priceChange)) * 100;
-
-        this.updateStockInfo();
-        
-        // 更新图表（仅在当前显示的图表）
-        if (this.currentChartType === 'minute' && document.getElementById('minuteChart').style.display !== 'none') {
-            // 实际项目中这里会更新分时图的最新数据点
+    async updateRealTimeData() {
+        try {
+            const resp = await fetch(`${API_BASE_URL}/api/stock/realtime_quote_by_code?code=${this.stockCode}`);
+            const data = await resp.json();
+            if (data.success) {
+                const d = data.data;
+                this.currentPrice = d.current_price;
+                this.priceChange = d.change_amount;
+                this.priceChangePercent = d.change_percent;
+                this.open = d.open;
+                this.yesterday_close = d.yesterday_close;
+                this.high = d.high;
+                this.low = d.low;
+                this.volume = d.volume;
+                this.turnover = d.turnover;
+                this.turnover_rate = d.turnover_rate;
+                this.pe_dynamic = d.pe_dynamic;
+                this.updateStockInfo();
+                this.updateStockDetails();
+            }
+        } catch (e) {
+            // 静默失败
         }
     }
 };

@@ -282,7 +282,7 @@ const WatchlistPage = {
                     </div>
                 </div>
                 <div class="stock-actions">
-                    <button class="action-btn" onclick="goToStock('${stock.code}')">详情</button>
+                    <button class="action-btn" onclick="goToStock('${stock.code}', '${stock.name}')">详情</button>
                     <button class="action-btn trade-btn" onclick="goToStockHistory('${stock.code}')" >历史</button>
                 </div>
             </div>
@@ -314,14 +314,14 @@ const WatchlistPage = {
                 </td>
                 <td>${this.formatPrice(stock.price)}</td>
                 <td class="${this.getChangeClass(stock.change)}">${this.formatChange(stock.change)}</td>
-                <td class="${this.getChangeClass(stock.change)}">${this.formatPercent(stock.percent)}</td>
+                <td class="${this.getChangeClass(stock.percent)}">${this.formatPercent(stock.percent)}</td>
                 <td>${this.formatPrice(stock.open)}</td>
                 <td class="positive">${this.formatPrice(stock.high)}</td>
                 <td class="negative">${this.formatPrice(stock.low)}</td>
                 <td>${this.formatVolume(stock.volume)}</td>
                 <td>
-                    <button class="btn btn-sm btn-secondary" onclick="goToStock('${stock.code}')">详情</button>
-                    <button class="btn btn-sm btn-danger remove-btn">删除</button>
+                    <button class="btn btn-secondary" style="margin-right:8px;" onclick="goToStock('${stock.code}', '${stock.name}')">详情</button>
+                    <button class="btn btn-danger remove-btn">删除</button>
                 </td>
             </tr>
         `).join('');
@@ -787,11 +787,12 @@ const WatchlistPage = {
 };
 
 // 全局函数：跳转到股票详情
-function goToStock(code) {
-    window.location.href = `stock.html?code=${code}`;
+function goToStock(code, name) {
+    //window.location.href = `stock.html?code=${code}`;
+    window.location.href = `stock.html?code=${code}&name=${encodeURIComponent(name)}`;
 }
 
-function goToStockHistory(code) {
+function goToStockHistory(code, name) {
     window.location.href = `stock_history.html?code=${code}`;
 }
 
