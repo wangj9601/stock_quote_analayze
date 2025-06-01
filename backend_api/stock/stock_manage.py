@@ -132,7 +132,7 @@ async def get_stocks_list(request: Request, db: Session = Depends(get_db)):
         return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
 
 @router.get("/quote_board")
-def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最高的股票")):
+async def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最高的股票")):
     """获取沪深京A股最新行情，返回涨幅最高的前limit个股票"""
     import datetime
     import sqlite3
