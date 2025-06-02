@@ -778,6 +778,42 @@ const StockPage = {
                 const startStr = format(start);
                 const endStr = format(end);
                 url = `${API_BASE_URL}/api/stock/kline_min_hist?code=${this.stockCode}&period=60&start_datetime=${startStr}&end_datetime=${endStr}&adjust=qfq`;
+            } else if (this.currentPeriod === '30m') {
+                // 30分钟线，2年区间，精确到秒
+                const end = today;
+                const start = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate(), today.getHours(), today.getMinutes(), today.getSeconds());
+                const pad = n => n.toString().padStart(2, '0');
+                const format = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                const startStr = format(start);
+                const endStr = format(end);
+                url = `${API_BASE_URL}/api/stock/kline_min_hist?code=${this.stockCode}&period=30&start_datetime=${startStr}&end_datetime=${endStr}&adjust=qfq`;
+            } else if (this.currentPeriod === '15m') {
+                // 15分钟线，2年区间，精确到秒
+                const end = today;
+                const start = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate(), today.getHours(), today.getMinutes(), today.getSeconds());
+                const pad = n => n.toString().padStart(2, '0');
+                const format = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                const startStr = format(start);
+                const endStr = format(end);
+                url = `${API_BASE_URL}/api/stock/kline_min_hist?code=${this.stockCode}&period=15&start_datetime=${startStr}&end_datetime=${endStr}&adjust=qfq`;
+            } else if (this.currentPeriod === '5m') {
+                // 5分钟线，2年区间，精确到秒
+                const end = today;
+                const start = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate(), today.getHours(), today.getMinutes(), today.getSeconds());
+                const pad = n => n.toString().padStart(2, '0');
+                const format = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                const startStr = format(start);
+                const endStr = format(end);
+                url = `${API_BASE_URL}/api/stock/kline_min_hist?code=${this.stockCode}&period=5&start_datetime=${startStr}&end_datetime=${endStr}&adjust=qfq`;
+            } else if (this.currentPeriod === '1m') {
+                // 1分钟线，2年区间，精确到秒
+                const end = today;
+                const start = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate(), today.getHours(), today.getMinutes(), today.getSeconds());
+                const pad = n => n.toString().padStart(2, '0');
+                const format = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                const startStr = format(start);
+                const endStr = format(end);
+                url = `${API_BASE_URL}/api/stock/kline_min_hist?code=${this.stockCode}&period=1&start_datetime=${startStr}&end_datetime=${endStr}&adjust=qfq`;
             } else {
                 // 默认日线
                 url = `${API_BASE_URL}/api/stock/kline_hist?code=${this.stockCode}&period=daily&start_date=${startDate}&end_date=${endDate}&adjust=qfq`;
@@ -787,7 +823,7 @@ const StockPage = {
             if (data.success) {
                 const list = data.data;
                 // x轴日期
-                const dates = list.map(item => item.date);
+                const dates = list.map(item => item.date ? item.date : '-');
                 // K线数据 [开,收,低,高]
                 const kline = list.map(item => [item.open, item.close, item.low, item.high]);
                 // MA5/MA10
