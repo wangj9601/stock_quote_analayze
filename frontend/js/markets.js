@@ -248,7 +248,7 @@ async loadRankingData(page = 1) {
         if (!tbody) return;
 
         tbody.innerHTML = data.map(stock => `
-            <tr data-code="${stock.code}" onclick="goToStock('${stock.code}')" style="cursor: pointer;">
+            <tr data-code="${stock.code}" onclick="goToStock('${stock.code}', '${stock.name}')" style="cursor: pointer;">
                 <td>
                     <span class="rank-number ${stock.rank <= 3 ? 'rank-' + stock.rank : ''}">${stock.rank}</span>
                 </td>
@@ -549,8 +549,8 @@ async loadRankingData(page = 1) {
 };
 
 // 全局函数
-function goToStock(code) {
-    window.location.href = `stock.html?code=${code}`;
+function goToStock(code, name) {
+    window.location.href = `stock.html?code=${code}&name=${encodeURIComponent(name)}`;
 }
 
 function goToSectorDetail(sectorName) {
