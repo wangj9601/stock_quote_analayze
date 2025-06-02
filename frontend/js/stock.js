@@ -165,7 +165,7 @@ const StockPage = {
     switchPeriod(period) {
         this.currentPeriod = period;
         this.loadChartData();
-        CommonUtils.showToast(`切换到${this.getPeriodName(period)}`, 'info');
+        //CommonUtils.showToast(`切换到${this.getPeriodName(period)}`, 'info');
     },
 
     // 获取周期名称
