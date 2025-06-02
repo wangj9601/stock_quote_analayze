@@ -73,3 +73,80 @@ async def test_realtime_quote_by_code_missing_param():
         data = resp.json()
         assert data["success"] is False
         assert "缺少" in data["message"]
+
+@pytest.mark.asyncio
+def test_minute_data_by_code_success():
+    """测试分时数据API正常返回"""
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get("/api/stock/minute_data_by_code", params={"code": "000001"})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is True
+            assert isinstance(data["data"], list)
+            assert len(data["data"]) > 0
+            # 检查字段
+            first = data["data"][0]
+            assert "time" in first and "price" in first
+    import asyncio
+    asyncio.run(run())
+
+@pytest.mark.asyncio
+def test_minute_data_by_code_not_found():
+    """测试分时数据API股票代码不存在"""
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get("/api/stock/minute_data_by_code", params={"code": "notexist"})
+            assert resp.status_code == 404
+            data = resp.json()
+            assert data["success"] is False
+            assert "未找到" in data["message"]
+    import asyncio
+    asyncio.run(run())
+
+@pytest.mark.asyncio
+def test_minute_data_by_code_missing_param():
+    """测试分时数据API缺少参数"""
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get("/api/stock/minute_data_by_code")
+            assert resp.status_code == 400
+            data = resp.json()
+            assert data["success"] is False
+            assert "缺少" in data["message"]
+    import asyncio
+    asyncio.run(run())
+
+@pytest.mark.asyncio
+def test_minute_data_by_code_on_non_trading_day(monkeypatch):
+    """测试分时数据API在非交易日返回最近一个交易日的分钟数据"""
+    import datetime
+    # 假设2024-06-15是非交易日
+    class FakeDate(datetime.date):
+        @classmethod
+        def today(cls):
+            return cls(2024, 6, 15)
+    monkeypatch.setattr(datetime, 'date', FakeDate)
+
+    # monkeypatch ak.tool_trade_date_hist_sina 返回不包含今天
+    import akshare as ak
+    real_func = ak.tool_trade_date_hist_sina
+    def fake_trade_date_hist_sina():
+        import pandas as pd
+        # 2024-06-14为最近一个交易日
+        return pd.DataFrame({'trade_date': ['2024-06-14']})
+    monkeypatch.setattr(ak, 'tool_trade_date_hist_sina', fake_trade_date_hist_sina)
+
+    import asyncio
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get("/api/stock/minute_data_by_code", params={"code": "000001"})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is True
+            assert isinstance(data["data"], list)
+            assert len(data["data"]) > 0
+            # 检查字段
+            first = data["data"][0]
+            assert "time" in first and "price" in first
+    asyncio.run(run())

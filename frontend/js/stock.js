@@ -133,7 +133,18 @@ const StockPage = {
     // 切换图表类型
     switchChartType(type) {
         this.currentChartType = type;
-        
+
+        // 控制K线相关标签栏和指标下拉框的显示/隐藏
+        const periodTabs = document.querySelector('.chart-period-tabs');
+        const indicators = document.querySelector('.chart-indicators');
+        if (type === 'minute') {
+            if (periodTabs) periodTabs.style.display = 'none';
+            if (indicators) indicators.style.display = 'none';
+        } else if (type === 'kline') {
+            if (periodTabs) periodTabs.style.display = '';
+            if (indicators) indicators.style.display = '';
+        }
+
         // 隐藏所有图表
         document.querySelectorAll('.chart').forEach(chart => {
             chart.style.display = 'none';
@@ -145,6 +156,9 @@ const StockPage = {
             targetChart.style.display = 'block';
             this.resizeChart(type);
         }
+
+        // 切换类型后加载对应图表数据
+        this.loadChartData();
     },
 
     // 切换时间周期
@@ -345,7 +359,7 @@ const StockPage = {
             },
             xAxis: {
                 type: 'category',
-                data: this.generateTimeData(),
+                data: [], // 初始为空
                 boundaryGap: false
             },
             yAxis: {
@@ -356,7 +370,7 @@ const StockPage = {
             series: [{
                 name: '价格',
                 type: 'line',
-                data: this.generateMinuteData(),
+                data: [], // 初始为空
                 smooth: true,
                 lineStyle: {
                     color: '#2563eb',
@@ -380,6 +394,16 @@ const StockPage = {
             }],
             tooltip: {
                 trigger: 'axis',
+                formatter: function(params) {
+                    const d = params[0];
+                    const data = d.data;
+                    return `
+                        时间：${d.axisValue}<br/>
+                        价格：<b>${data.value[1]}</b><br/>
+                        成交量：${data.volume || '-'}<br/>
+                        成交额：${data.amount || '-'}
+                    `;
+                },
                 backgroundColor: 'rgba(245, 245, 245, 0.8)',
                 borderWidth: 1,
                 borderColor: '#ccc',
@@ -585,17 +609,6 @@ const StockPage = {
         return times;
     },
 
-    generateMinuteData() {
-        const data = [];
-        let price = this.currentPrice;
-        
-        for (let i = 0; i < 240; i++) {
-            price += (Math.random() - 0.5) * 0.1;
-            data.push(price.toFixed(2));
-        }
-        return data;
-    },
-
     generateFlowDates() {
         const dates = [];
         const now = new Date();
@@ -725,10 +738,8 @@ const StockPage = {
             option.series[3].data = this.generateVolumeData();
             this.klineChart.setOption(option);
         } else if (this.currentChartType === 'minute' && this.minuteChart) {
-            // 重新生成分时数据
-            const option = this.minuteChart.getOption();
-            option.series[0].data = this.generateMinuteData();
-            this.minuteChart.setOption(option);
+            // 通过API获取分时数据
+            this.loadMinuteData();
         }
     },
 
@@ -823,7 +834,7 @@ const StockPage = {
         // 定期更新股价数据
         setInterval(() => {
             this.updateRealTimeData();
-        }, 30000); // 每30秒更新一次
+        }, 300000); // 每5分钟更新一次
 
         // 监听窗口大小变化
         window.addEventListener('resize', () => {
@@ -860,6 +871,34 @@ const StockPage = {
             }
         } catch (e) {
             // 静默失败
+        }
+    },
+
+    async loadMinuteData() {
+        if (!this.minuteChart) return;
+        try {
+            const url = `${API_BASE_URL}/api/stock/minute_data_by_code?code=${this.stockCode}`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            console.log('[loadMinuteData] 返回数据:', data);
+            if (data.success) {
+                const list = data.data;
+                const times = list.map(item => item.time);
+                // 组装对象数据，便于tooltip显示更多信息
+                const seriesData = list.map(item => ({
+                    value: [item.time, Number(item.price)],
+                    volume: item.volume,
+                    amount: item.amount
+                }));
+                const option = this.minuteChart.getOption();
+                option.xAxis[0].data = times;
+                option.series[0].data = seriesData;
+                this.minuteChart.setOption(option);
+            } else {
+                CommonUtils.showToast('分时数据获取失败: ' + data.message, 'error');
+            }
+        } catch (e) {
+            CommonUtils.showToast('分时数据请求异常', 'error');
         }
     }
 };

@@ -337,3 +337,68 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
     except Exception as e:
         print(f"[realtime_quote_by_code] 异常: {e}")
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+@router.get("/minute_data_by_code")
+async def get_minute_data_by_code(code: str = Query(None, description="股票代码")):
+    """
+    获取指定股票代码的当日分时数据（分时线），非交易日返回最近一个交易日的分钟数据
+    """
+    print(f"[minute_data_by_code] 输入参数: code={code}")
+    if not code:
+        print(f"[minute_data_by_code] 缺少参数code")
+        return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
+    try:
+        today = datetime.date.today()
+        trade_dates = ak.tool_trade_date_hist_sina()['trade_date'].tolist()
+        is_trading_day = today.strftime('%Y-%m-%d') in trade_dates
+        print(f"[minute_data_by_code] 今日是否交易日: {is_trading_day}")
+        result = []
+        if is_trading_day:
+            df = ak.stock_intraday_em(symbol=code)
+            if df is None or df.empty:
+                print(f"[minute_data_by_code] 未找到股票代码: {code}")
+                return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+            for _, row in df.iterrows():
+                result.append({
+                    "time": row.get("时间"),
+                    "price": row.get("最新价"),
+                    "volume": row.get("成交量"),
+                    "avg_price": row.get("均价"),
+                    "amount": row.get("成交额"),
+                    "change_percent": row.get("涨跌幅"),
+                    "change": row.get("涨跌额"),
+                })
+            print(f"[minute_data_by_code] 交易日，返回{len(result)}条分时数据")
+        else:
+            # 非交易日，取最近一个交易日的分钟数据
+            df = ak.stock_zh_a_hist_pre_min_em(symbol=code, start_time="09:00:00", end_time="15:40:00")
+            if df is None or df.empty:
+                print(f"[minute_data_by_code] 非交易日未找到股票代码: {code}")
+                return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+            # 取最近一个交易日
+            #df['日期'] = df['时间'].str[:10]
+            last_date = df['时间'].max()
+            #df_last = df[df['日期'] == last_date]
+            for _, row in df.iterrows():
+                result.append({
+                    "time": row.get("时间"),
+                    "price": row.get("最新价"),
+                    "open": row.get("开盘"),
+                    "close": row.get("收盘"),
+                    "high": row.get("最高"),
+                    "low": row.get("最低"),
+                    #"avg_price": row.get("均价"),
+                    "volume": row.get("成交量"),
+                    "amount": row.get("成交额"),
+                    #"change_percent": row.get("涨跌幅"),
+                    #"change": row.get("涨跌额"),
+                })
+            print(f"[minute_data_by_code] 非交易日，返回{len(result)}条分时数据，日期: {last_date}")
+        if result:
+            print(f"[minute_data_by_code] 前3条数据: {result[:3]}")
+        return JSONResponse({"success": True, "data": result})
+    except Exception as e:
+        print(f"[minute_data_by_code] 异常: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
