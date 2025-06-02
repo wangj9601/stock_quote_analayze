@@ -491,7 +491,10 @@ async def get_kline_min_hist(
         # 日期格式化
         start_dt_fmt = start_datetime.replace('-', '').replace(':', '').replace(' ', '') if start_datetime else None
         end_dt_fmt = end_datetime.replace('-', '').replace(':', '').replace(' ', '') if end_datetime else None
-        df = ak.stock_zh_a_hist_min_em(symbol=code, period=period, start_date=start_dt_fmt, end_date=end_dt_fmt, adjust=adjust)
+        # 1分钟线不支持复权，adjust传空
+        ak_adjust = '' if period == '1' else adjust
+        print(f"[kline_min_hist] 调用ak，symbol={code}, period={period}, start={start_dt_fmt}, end={end_dt_fmt}, adjust={ak_adjust}")
+        df = ak.stock_zh_a_hist_min_em(symbol=code, period=period, start_date=start_dt_fmt, end_date=end_dt_fmt, adjust=ak_adjust)
         if df is None or df.empty:
             print(f"[kline_min_hist] 未找到股票代码: {code}")
             return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
