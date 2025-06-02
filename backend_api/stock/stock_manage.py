@@ -359,14 +359,23 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
                 print(f"[minute_data_by_code] 未找到股票代码: {code}")
                 return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
             for _, row in df.iterrows():
+                def fmt(val):
+                    try:
+                        if val is None:
+                            return None
+                        return round(float(val), 2)
+                    except Exception:
+                        return None
                 result.append({
                     "time": row.get("时间"),
-                    "price": row.get("最新价"),
+                    "price": fmt(row.get("最新价")),
+                    "open": fmt(row.get("开盘")),
+                    "close": fmt(row.get("收盘")),
+                    "high": fmt(row.get("最高")),
+                    "low": fmt(row.get("最低")),
+                    "avg_price": fmt((row.get("成交额") / (row.get("成交量") * 100)) if row.get("成交量") else None),
                     "volume": row.get("成交量"),
-                    "avg_price": row.get("均价"),
-                    "amount": row.get("成交额"),
-                    "change_percent": row.get("涨跌幅"),
-                    "change": row.get("涨跌额"),
+                    "amount": fmt(row.get("成交额")),
                 })
             print(f"[minute_data_by_code] 交易日，返回{len(result)}条分时数据")
         else:
@@ -376,29 +385,146 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
                 print(f"[minute_data_by_code] 非交易日未找到股票代码: {code}")
                 return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
             # 取最近一个交易日
-            #df['日期'] = df['时间'].str[:10]
-            last_date = df['时间'].max()
-            #df_last = df[df['日期'] == last_date]
             for _, row in df.iterrows():
+                def fmt(val):
+                    try:
+                        if val is None:
+                            return None
+                        return round(float(val), 2)
+                    except Exception:
+                        return None
                 result.append({
                     "time": row.get("时间"),
-                    "price": row.get("最新价"),
-                    "open": row.get("开盘"),
-                    "close": row.get("收盘"),
-                    "high": row.get("最高"),
-                    "low": row.get("最低"),
-                    #"avg_price": row.get("均价"),
+                    "price": fmt(row.get("最新价")),
+                    "open": fmt(row.get("开盘")),
+                    "close": fmt(row.get("收盘")),
+                    "high": fmt(row.get("最高")),
+                    "low": fmt(row.get("最低")),
+                    "avg_price": fmt((row.get("成交额") / (row.get("成交量") * 100)) if row.get("成交量") else None),
                     "volume": row.get("成交量"),
-                    "amount": row.get("成交额"),
-                    #"change_percent": row.get("涨跌幅"),
-                    #"change": row.get("涨跌额"),
+                    "amount": fmt(row.get("成交额")),
                 })
-            print(f"[minute_data_by_code] 非交易日，返回{len(result)}条分时数据，日期: {last_date}")
+            print(f"[minute_data_by_code] 非交易日，返回{len(result)}条分时数据")
         if result:
             print(f"[minute_data_by_code] 前3条数据: {result[:3]}")
         return JSONResponse({"success": True, "data": result})
     except Exception as e:
         print(f"[minute_data_by_code] 异常: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+@router.get("/kline_hist")
+async def get_kline_hist(
+    code: str = Query(None, description="股票代码"),
+    period: str = Query("daily", description="周期，如daily"),
+    start_date: str = Query(None, description="开始日期，YYYY-MM-DD"),
+    end_date: str = Query(None, description="结束日期，YYYY-MM-DD"),
+    adjust: str = Query("qfq", description="复权类型，如qfq")
+):
+    """
+    获取A股K线历史（日线）数据
+    """
+    print(f"[kline_hist] 输入参数: code={code}, period={period}, start_date={start_date}, end_date={end_date}, adjust={adjust}")
+    if not code or not start_date or not end_date:
+        print(f"[kline_hist] 缺少参数")
+        return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
+    try:
+        # 日期格式化为YYYYMMDD
+        start_date_fmt = start_date.replace('-', '') if start_date else None
+        end_date_fmt = end_date.replace('-', '') if end_date else None
+        df = ak.stock_zh_a_hist(symbol=code, period=period, start_date=start_date_fmt, end_date=end_date_fmt, adjust=adjust)
+        if df is None or df.empty:
+            print(f"[kline_hist] 未找到股票代码: {code}")
+            return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+        result = []
+        def fmt(val):
+            try:
+                if val is None:
+                    return None
+                return round(float(val), 2)
+            except Exception:
+                return None
+        for _, row in df.iterrows():
+            date_val = row.get("日期")
+            if hasattr(date_val, 'strftime'):
+                date_val = date_val.strftime('%Y-%m-%d')
+            result.append({
+                "date": date_val,
+                "code": code,
+                "open": fmt(row.get("开盘")),
+                "close": fmt(row.get("收盘")),
+                "high": fmt(row.get("最高")),
+                "low": fmt(row.get("最低")),
+                "volume": int(row.get("成交量")) if row.get("成交量") is not None else None,
+                "amount": fmt(row.get("成交额")),
+                "amplitude": fmt(row.get("振幅")),
+                "pct_chg": fmt(row.get("涨跌幅")),
+                "change": fmt(row.get("涨跌额")),
+                "turnover": fmt(row.get("换手率")),
+            })
+        print(f"[kline_hist] 返回{len(result)}条K线数据，前3条: {result[:3]}")
+        return JSONResponse({"success": True, "data": result})
+    except Exception as e:
+        print(f"[kline_hist] 异常: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+# 获取A股分钟K线历史数据
+@router.get("/kline_min_hist")
+async def get_kline_min_hist(
+    code: str = Query(None, description="股票代码"),
+    period: str = Query("60", description="周期，分钟K，如1、5、15、30、60"),
+    start_datetime: str = Query(None, description="开始时间，YYYY-MM-DD HH:MM:SS"),
+    end_datetime: str = Query(None, description="结束时间，YYYY-MM-DD HH:MM:SS"),
+    adjust: str = Query("qfq", description="复权类型，如qfq")
+):
+    """
+    获取A股分钟K线（如1小时线）历史数据
+    """
+    print(f"[kline_min_hist] 输入参数: code={code}, period={period}, start_datetime={start_datetime}, end_datetime={end_datetime}, adjust={adjust}")
+    if not code or not start_datetime or not end_datetime:
+        print(f"[kline_min_hist] 缺少参数")
+        return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
+    try:
+        # 日期格式化
+        start_dt_fmt = start_datetime.replace('-', '').replace(':', '').replace(' ', '') if start_datetime else None
+        end_dt_fmt = end_datetime.replace('-', '').replace(':', '').replace(' ', '') if end_datetime else None
+        df = ak.stock_zh_a_hist_min_em(symbol=code, period=period, start_date=start_dt_fmt, end_date=end_dt_fmt, adjust=adjust)
+        if df is None or df.empty:
+            print(f"[kline_min_hist] 未找到股票代码: {code}")
+            return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+        result = []
+        def fmt(val):
+            try:
+                if val is None:
+                    return None
+                return round(float(val), 2)
+            except Exception:
+                return None
+        for _, row in df.iterrows():
+            date_val = row.get("时间")
+            if hasattr(date_val, 'strftime'):
+                date_val = date_val.strftime('%Y-%m-%d %H:%M:%S')
+            result.append({
+                "date": date_val,
+                "code": code,
+                "open": fmt(row.get("开盘")),
+                "close": fmt(row.get("收盘")),
+                "high": fmt(row.get("最高")),
+                "low": fmt(row.get("最低")),
+                "volume": int(row.get("成交量")) if row.get("成交量") is not None else None,
+                "amount": fmt(row.get("成交额")),
+                "amplitude": fmt(row.get("振幅")),
+                "pct_chg": fmt(row.get("涨跌幅")),
+                "change": fmt(row.get("涨跌额")),
+                "turnover": fmt(row.get("换手率")),
+            })
+        print(f"[kline_min_hist] 返回{len(result)}条分钟K线数据，前3条: {result[:3]}")
+        return JSONResponse({"success": True, "data": result})
+    except Exception as e:
+        print(f"[kline_min_hist] 异常: {e}")
         import traceback
         print(traceback.format_exc())
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)

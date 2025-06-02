@@ -222,123 +222,30 @@ const StockPage = {
     initKlineChart() {
         const chartDom = document.getElementById('klineChart');
         if (!chartDom) return;
-
         this.klineChart = echarts.init(chartDom);
-        
         const option = {
             backgroundColor: 'transparent',
             grid: [
-                {
-                    left: '10%',
-                    right: '8%',
-                    height: '65%'
-                },
-                {
-                    left: '10%',
-                    right: '8%',
-                    top: '75%',
-                    height: '15%'
-                }
+                { left: '10%', right: '8%', height: '65%' },
+                { left: '10%', right: '8%', top: '75%', height: '15%' }
             ],
             xAxis: [
-                {
-                    type: 'category',
-                    data: this.generateDateData(),
-                    boundaryGap: false,
-                    axisLine: { onZero: false },
-                    splitLine: { show: false },
-                    min: 'dataMin',
-                    max: 'dataMax'
-                },
-                {
-                    type: 'category',
-                    gridIndex: 1,
-                    data: this.generateDateData(),
-                    boundaryGap: false,
-                    axisLine: { onZero: false },
-                    axisTick: { show: false },
-                    splitLine: { show: false },
-                    axisLabel: { show: false },
-                    min: 'dataMin',
-                    max: 'dataMax'
-                }
+                { type: 'category', data: [], boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' },
+                { type: 'category', gridIndex: 1, data: [], boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' }
             ],
             yAxis: [
-                {
-                    scale: true,
-                    splitArea: { show: true }
-                },
-                {
-                    scale: true,
-                    gridIndex: 1,
-                    splitNumber: 2,
-                    axisLabel: { show: false },
-                    axisLine: { show: false },
-                    axisTick: { show: false },
-                    splitLine: { show: false }
-                }
+                { scale: true, splitArea: { show: true } },
+                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
             ],
-            dataZoom: [{
-                type: 'inside',
-                xAxisIndex: [0, 1],
-                start: 50,
-                end: 100
-            }],
+            dataZoom: [{ type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 }],
             series: [
-                {
-                    name: 'K线',
-                    type: 'candlestick',
-                    data: this.generateKlineData(),
-                    itemStyle: {
-                        color: '#dc2626',
-                        color0: '#16a34a',
-                        borderColor: '#dc2626',
-                        borderColor0: '#16a34a'
-                    }
-                },
-                {
-                    name: 'MA5',
-                    type: 'line',
-                    data: this.generateMAData(5),
-                    smooth: true,
-                    lineStyle: { width: 1, color: '#fbbf24' },
-                    showSymbol: false
-                },
-                {
-                    name: 'MA10',
-                    type: 'line',
-                    data: this.generateMAData(10),
-                    smooth: true,
-                    lineStyle: { width: 1, color: '#3b82f6' },
-                    showSymbol: false
-                },
-                {
-                    name: '成交量',
-                    type: 'bar',
-                    xAxisIndex: 1,
-                    yAxisIndex: 1,
-                    data: this.generateVolumeData(),
-                    itemStyle: {
-                        color: function(params) {
-                            return params.dataIndex % 2 === 0 ? '#dc2626' : '#16a34a';
-                        }
-                    }
-                }
+                { name: 'K线', type: 'candlestick', data: [], itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' } },
+                { name: 'MA5', type: 'line', data: [], smooth: true, lineStyle: { width: 1, color: '#fbbf24' }, showSymbol: false },
+                { name: 'MA10', type: 'line', data: [], smooth: true, lineStyle: { width: 1, color: '#3b82f6' }, showSymbol: false },
+                { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: [], itemStyle: { color: function(params) { return params.dataIndex % 2 === 0 ? '#dc2626' : '#16a34a'; } } }
             ],
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'cross'
-                },
-                backgroundColor: 'rgba(245, 245, 245, 0.8)',
-                borderWidth: 1,
-                borderColor: '#ccc',
-                textStyle: {
-                    color: '#000'
-                }
-            }
+            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, backgroundColor: 'rgba(245, 245, 245, 0.8)', borderWidth: 1, borderColor: '#ccc', textStyle: { color: '#000' } }
         };
-
         this.klineChart.setOption(option);
     },
 
@@ -549,54 +456,6 @@ const StockPage = {
         return dates;
     },
 
-    generateKlineData() {
-        const data = [];
-        let price = Number(this.currentPrice) || 0;
-        for (let i = 0; i < 51; i++) {
-            const open = price + (Math.random() - 0.5) * 2;
-            const close = open + (Math.random() - 0.5) * 2;
-            const high = Math.max(open, close) + Math.random() * 1;
-            const low = Math.min(open, close) - Math.random() * 1;
-            data.push([
-                Number(open).toFixed(2),
-                Number(close).toFixed(2),
-                Number(low).toFixed(2),
-                Number(high).toFixed(2)
-            ]);
-            price = close;
-        }
-        return data;
-    },
-
-    generateMAData(period) {
-        const data = [];
-        let sum = 0;
-        const klineData = this.generateKlineData();
-        
-        for (let i = 0; i < klineData.length; i++) {
-            const close = parseFloat(klineData[i][1]);
-            sum += close;
-            
-            if (i >= period - 1) {
-                if (i >= period) {
-                    sum -= parseFloat(klineData[i - period][1]);
-                }
-                data.push((sum / period).toFixed(2));
-            } else {
-                data.push('-');
-            }
-        }
-        return data;
-    },
-
-    generateVolumeData() {
-        const data = [];
-        for (let i = 0; i < 51; i++) {
-            data.push(Math.floor(Math.random() * 200 + 50));
-        }
-        return data;
-    },
-
     generateTimeData() {
         const times = [];
         const start = new Date();
@@ -730,15 +589,8 @@ const StockPage = {
     // 加载图表数据
     loadChartData() {
         if (this.currentChartType === 'kline' && this.klineChart) {
-            // 重新生成K线数据
-            const option = this.klineChart.getOption();
-            option.series[0].data = this.generateKlineData();
-            option.series[1].data = this.generateMAData(5);
-            option.series[2].data = this.generateMAData(10);
-            option.series[3].data = this.generateVolumeData();
-            this.klineChart.setOption(option);
+            this.loadKlineData();
         } else if (this.currentChartType === 'minute' && this.minuteChart) {
-            // 通过API获取分时数据
             this.loadMinuteData();
         }
     },
@@ -899,6 +751,74 @@ const StockPage = {
             }
         } catch (e) {
             CommonUtils.showToast('分时数据请求异常', 'error');
+        }
+    },
+
+    // 修改loadKlineData，支持period参数
+    async loadKlineData() {
+        if (!this.klineChart) return;
+        try {
+            const today = new Date();
+            let endDate = today.toISOString().split('T')[0];
+            let startDate = (new Date(today.getFullYear() - 5, today.getMonth(), today.getDate())).toISOString().split('T')[0];
+            let period = 'daily';
+            let url = '';
+            if (this.currentPeriod === '1w') {
+                period = 'weekly';
+                url = `${API_BASE_URL}/api/stock/kline_hist?code=${this.stockCode}&period=${period}&start_date=${startDate}&end_date=${endDate}&adjust=qfq`;
+            } else if (this.currentPeriod === '1M') {
+                period = 'monthly';
+                url = `${API_BASE_URL}/api/stock/kline_hist?code=${this.stockCode}&period=${period}&start_date=${startDate}&end_date=${endDate}&adjust=qfq`;
+            } else if (this.currentPeriod === '1h') {
+                // 小时线，2年区间，精确到秒
+                const end = today;
+                const start = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate(), today.getHours(), today.getMinutes(), today.getSeconds());
+                const pad = n => n.toString().padStart(2, '0');
+                const format = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                const startStr = format(start);
+                const endStr = format(end);
+                url = `${API_BASE_URL}/api/stock/kline_min_hist?code=${this.stockCode}&period=60&start_datetime=${startStr}&end_datetime=${endStr}&adjust=qfq`;
+            } else {
+                // 默认日线
+                url = `${API_BASE_URL}/api/stock/kline_hist?code=${this.stockCode}&period=daily&start_date=${startDate}&end_date=${endDate}&adjust=qfq`;
+            }
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data.success) {
+                const list = data.data;
+                // x轴日期
+                const dates = list.map(item => item.date);
+                // K线数据 [开,收,低,高]
+                const kline = list.map(item => [item.open, item.close, item.low, item.high]);
+                // MA5/MA10
+                function calcMA(arr, n) {
+                    const result = [];
+                    for (let i = 0; i < arr.length; i++) {
+                        if (i < n - 1) { result.push('-'); continue; }
+                        let sum = 0;
+                        for (let j = 0; j < n; j++) sum += Number(arr[i - j][1]);
+                        result.push((sum / n).toFixed(2));
+                    }
+                    return result;
+                }
+                const ma5 = calcMA(kline, 5);
+                const ma10 = calcMA(kline, 10);
+                // 成交量
+                const volume = list.map(item => item.volume);
+                // 更新option
+                const option = this.klineChart.getOption();
+                option.xAxis[0].data = dates;
+                option.xAxis[1].data = dates;
+                option.series[0].data = kline;
+                option.series[1].data = ma5;
+                option.series[2].data = ma10;
+                option.series[3].data = volume;
+                this.klineChart.setOption(option);
+            } else {
+                CommonUtils.showToast('K线数据获取失败: ' + data.message, 'error');
+            }
+        } catch (e) {
+            CommonUtils.showToast('K线数据请求异常', 'error');
         }
     }
 };

@@ -150,3 +150,72 @@ def test_minute_data_by_code_on_non_trading_day(monkeypatch):
             first = data["data"][0]
             assert "time" in first and "price" in first
     asyncio.run(run())
+
+@pytest.mark.asyncio
+def test_kline_hist_success():
+    """测试K线历史API正常返回"""
+    import datetime
+    today = datetime.date.today()
+    end_date = today.strftime('%Y-%m-%d')
+    start_date = (today.replace(year=today.year-5)).strftime('%Y-%m-%d')
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get(
+                "/api/stock/kline_hist",
+                params={
+                    "code": "000001",
+                    "period": "daily",
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "adjust": "qfq"
+                }
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is True
+            assert isinstance(data["data"], list)
+            assert len(data["data"]) > 0
+            first = data["data"][0]
+            for field in ["date", "code", "open", "close", "high", "low", "volume", "amount", "amplitude", "pct_chg", "change", "turnover"]:
+                assert field in first
+    import asyncio
+    asyncio.run(run())
+
+@pytest.mark.asyncio
+def test_kline_hist_not_found():
+    """测试K线历史API股票代码不存在"""
+    import datetime
+    today = datetime.date.today()
+    end_date = today.strftime('%Y-%m-%d')
+    start_date = (today.replace(year=today.year-5)).strftime('%Y-%m-%d')
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get(
+                "/api/stock/kline_hist",
+                params={
+                    "code": "notexist",
+                    "period": "daily",
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "adjust": "qfq"
+                }
+            )
+            assert resp.status_code == 404
+            data = resp.json()
+            assert data["success"] is False
+            assert "未找到" in data["message"]
+    import asyncio
+    asyncio.run(run())
+
+@pytest.mark.asyncio
+def test_kline_hist_missing_param():
+    """测试K线历史API缺少参数"""
+    async def run():
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            resp = await ac.get("/api/stock/kline_hist")
+            assert resp.status_code == 400
+            data = resp.json()
+            assert data["success"] is False
+            assert "缺少" in data["message"]
+    import asyncio
+    asyncio.run(run())
