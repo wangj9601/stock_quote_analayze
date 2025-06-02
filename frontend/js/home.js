@@ -439,9 +439,11 @@ function bindEvents() {
         const stockItem = e.target.closest('.stock-item');
         if (stockItem) {
             const codeEl = stockItem.querySelector('.stock-code');
+            const nameEl = stockItem.querySelector('.stock-name');
             if (codeEl) {
                 const code = codeEl.textContent;
-                window.location.href = 'stock.html?code=' + code;
+                const name = nameEl.textContent;
+                window.location.href = 'stock.html?code=' + code + '&name=' + encodeURIComponent(name);
             }
         }
     });
