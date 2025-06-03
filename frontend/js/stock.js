@@ -308,7 +308,8 @@ const StockPage = {
                         时间：${d.axisValue}<br/>
                         价格：<b>${data.value[1]}</b><br/>
                         成交量：${data.volume || '-'}<br/>
-                        成交额：${data.amount || '-'}
+                        成交额：${data.amount || '-'}<br/>
+                        买卖盘性质：${data.trade_type || '-'}
                     `;
                 },
                 backgroundColor: 'rgba(245, 245, 245, 0.8)',
@@ -726,6 +727,7 @@ const StockPage = {
         }
     },
 
+    // 加载分时数据
     async loadMinuteData() {
         if (!this.minuteChart) return;
         try {
@@ -740,7 +742,8 @@ const StockPage = {
                 const seriesData = list.map(item => ({
                     value: [item.time, Number(item.price)],
                     volume: item.volume,
-                    amount: item.amount
+                    amount: item.amount,
+                    trade_type: item.trade_type
                 }));
                 const option = this.minuteChart.getOption();
                 option.xAxis[0].data = times;

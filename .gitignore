@@ -1,7 +1,52 @@
-# 日志文件
-auth.log
-*.log
-**/__pycache__/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
 **/venv/
 **/backend_api/venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 日志文件
+*.log
+auth.log
+sync.log
+quotes.log
+app.log
+
+# 数据库文件
+#
+
+# 其他
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
 
