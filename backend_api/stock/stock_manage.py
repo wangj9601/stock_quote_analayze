@@ -338,6 +338,7 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
         print(f"[realtime_quote_by_code] 异常: {e}")
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
+# 获取指定股票代码的当日分时数据（分时线），非交易日返回最近一个交易日的分钟数据
 @router.get("/minute_data_by_code")
 async def get_minute_data_by_code(code: str = Query(None, description="股票代码")):
     """
@@ -348,9 +349,16 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
         print(f"[minute_data_by_code] 缺少参数code")
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
     try:
-        today = datetime.date.today()
         trade_dates = ak.tool_trade_date_hist_sina()['trade_date'].tolist()
-        is_trading_day = today.strftime('%Y-%m-%d') in trade_dates
+        trade_dates_str = [d.strftime('%Y-%m-%d') for d in trade_dates]
+        print(f"[minute_data_by_code] 交易日历: {trade_dates_str[:10]} ... 共{len(trade_dates_str)}天")
+        today = datetime.date.today()
+        today_str = today.strftime('%Y-%m-%d')
+        # 如果今天不是交易日，则取最近一个交易日的分钟数据
+        if today_str not in trade_dates_str:
+            today = today - datetime.timedelta(days=1)
+            today_str = today.strftime('%Y-%m-%d')
+        is_trading_day = today_str in trade_dates_str
         print(f"[minute_data_by_code] 今日是否交易日: {is_trading_day}")
         result = []
         if is_trading_day:
@@ -368,14 +376,10 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
                         return None
                 result.append({
                     "time": row.get("时间"),
-                    "price": fmt(row.get("最新价")),
-                    "open": fmt(row.get("开盘")),
-                    "close": fmt(row.get("收盘")),
-                    "high": fmt(row.get("最高")),
-                    "low": fmt(row.get("最低")),
-                    "avg_price": fmt((row.get("成交额") / (row.get("成交量") * 100)) if row.get("成交量") else None),
-                    "volume": row.get("成交量"),
-                    "amount": fmt(row.get("成交额")),
+                    "price": fmt(row.get("成交价")),
+                    "volume": row.get("手数"),
+                    "amount": fmt(fmt(row.get("手数")) * fmt(row.get("成交价")) if fmt(row.get("手数")) is not None and fmt(row.get("成交价")) is not None else None),
+                    "trade_type": row.get("买卖盘性质") if "买卖盘性质" in row else None,
                 })
             print(f"[minute_data_by_code] 交易日，返回{len(result)}条分时数据")
         else:
