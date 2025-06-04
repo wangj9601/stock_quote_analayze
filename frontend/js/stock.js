@@ -652,17 +652,17 @@ const StockPage = {
         if (!this.flowChart) return;
         try {
             // 1. 先获取当日资金流向数据
-            const todayUrl = `${API_BASE_URL}/api/stock_fund_flow/fund_flow/?code=${this.stockCode}`;
+            const todayUrl = `${API_BASE_URL}/api/stock_fund_flow/history/?code=${this.stockCode}`;
             const todayResp = await fetch(todayUrl);
             const todayData = await todayResp.json();
             if (todayData.success && todayData.data) {
                 // 依次赋值到页面
                 const values = [
-                    todayData.data.今日主力净流入,
-                    todayData.data.今日超大单净流入,
-                    todayData.data.今日大单净流入,
-                    todayData.data.今日中单净流入,
-                    todayData.data.今日小单净流入
+                    todayData.data["今日主力净流入-净额"],
+                    todayData.data["今日超大单净流入-净额"],
+                    todayData.data["今日大单净流入-净额"],
+                    todayData.data["今日中单净流入-净额"],
+                    todayData.data["今日小单净流入-净额"]
                 ];
                 document.querySelectorAll('.flow-summary .flow-value').forEach((el, idx) => {
                     const val = values[idx];

@@ -110,27 +110,29 @@ async def get_stock_fund_flow_today(code: str = Query(None, description="股票�
         print(traceback.format_exc())
         return JSONResponse({"success": False, "message": f"查询个股资金流向历史数据异常: {e}"}, status_code=500)
 
-@router.get("/fund_flow")
-async def get_stock_fund_flow(code: str = Query(None, description="股票代码")):
-    print(f"[get_stock_fund_flow] 输入参数: code={code}")
+# 查询个股资金流向
+@router.get("/history")
+async def get_stock_fund_flow_history(code: str = Query(None, description="股票代码")):
+
+    print(f"[get_stock_fund_flow_history] 输入参数: code={code}")
     if not code:
-        print("[get_stock_fund_flow] 缺少参数code")
+        print("[get_stock_fund_flow_history] 缺少参数code")
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
     try:
-        print(f"[get_stock_fund_flow] 调用ak.stock_individual_fund_flow_rank")
+        print(f"[get_stock_fund_flow_history] 调用ak.stock_individual_fund_flow_rank")
         df = ak.stock_individual_fund_flow_rank(indicator='今日')
         if df is None or df.empty:
-            print(f"[get_stock_fund_flow] 未找到股票代码: {code} 的资金流向数据")
+            print(f"[get_stock_fund_flow_history] 未找到股票代码: {code} 的资金流向数据")
             return JSONResponse({"success": False, "message": f"未找到股票代码: {code} 的资金流向数据"}, status_code=404)
         df_filtered = df[df['代码'] == code]
         if df_filtered.empty:
-            print(f"[get_stock_fund_flow] 未找到股票代码: {code} 的资金流向数据")
+            print(f"[get_stock_fund_flow_history] 未找到股票代码: {code} 的资金流向数据")
             return JSONResponse({"success": False, "message": f"未找到股票代码: {code} 的资金流向数据"}, status_code=404)
         fund_flow = df_filtered.to_dict(orient='records')[0]
-        print(f"[get_stock_fund_flow] 输出数据: {fund_flow}")
+        print(f"[get_stock_fund_flow_history] 输出数据: {fund_flow}")
         return JSONResponse({"success": True, "data": fund_flow})
     except Exception as e:
-        print(f"[get_stock_fund_flow] 查询个股资金流向异常: {e}")
+        print(f"[get_stock_fund_flow_history] 查询个股资金流向异常: {e}")
         import traceback
         print(traceback.format_exc())
         return JSONResponse({"success": False, "message": f"查询个股资金流向异常: {e}"}, status_code=500)
