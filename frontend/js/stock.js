@@ -652,7 +652,7 @@ const StockPage = {
         if (!this.flowChart) return;
         try {
             // 1. 先获取当日资金流向数据
-            const todayUrl = `${API_BASE_URL}/api/stock_fund_flow/history/?code=${this.stockCode}`;
+            const todayUrl = `${API_BASE_URL}/api/stock_fund_flow/history?code=${this.stockCode}`;
             const todayResp = await fetch(todayUrl);
             const todayData = await todayResp.json();
             if (todayData.success && todayData.data) {
