@@ -71,7 +71,7 @@ class RealtimeQuoteCollector(TushareCollector):
             # 获取股票列表
             stocks = pro.stock_basic(exchange='', list_status='L')
             print(f"获取到 {len(stocks)} 只股票...")
-            
+
             # 获取实时行情数据
             df = ts.get_realtime_quotes(stocks['ts_code'].tolist())
             print(f"采集到 {len(df)} 条股票行情数据...")

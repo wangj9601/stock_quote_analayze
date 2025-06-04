@@ -144,7 +144,7 @@ const StockPage = {
             if (periodTabs) periodTabs.style.display = '';
             if (indicators) indicators.style.display = '';
         }
-
+        
         // 隐藏所有图表
         document.querySelectorAll('.chart').forEach(chart => {
             chart.style.display = 'none';
@@ -399,7 +399,7 @@ const StockPage = {
             },
             xAxis: {
                 type: 'category',
-                data: this.generateFlowDates()
+                data: []
             },
             yAxis: {
                 type: 'value',
@@ -408,7 +408,7 @@ const StockPage = {
             series: [{
                 name: '主力资金',
                 type: 'bar',
-                data: this.generateFlowData('main'),
+                data: [],
                 itemStyle: {
                     color: function(params) {
                         return params.value > 0 ? '#dc2626' : '#16a34a';
@@ -417,7 +417,7 @@ const StockPage = {
             }, {
                 name: '散户资金',
                 type: 'bar',
-                data: this.generateFlowData('retail'),
+                data: [],
                 itemStyle: {
                     color: function(params) {
                         return params.value > 0 ? '#fbbf24' : '#6b7280';
@@ -469,26 +469,26 @@ const StockPage = {
         return times;
     },
 
-    generateFlowDates() {
-        const dates = [];
-        const now = new Date();
-        for (let i = 9; i >= 0; i--) {
-            const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-            dates.push(date.toISOString().split('T')[0].slice(5));
-        }
-        return dates;
-    },
+    // generateFlowDates() {
+    //     const dates = [];
+    //     const now = new Date();
+    //     for (let i = 9; i >= 0; i--) {
+    //         const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    //         dates.push(date.toISOString().split('T')[0].slice(5));
+    //     }
+    //     return dates;
+    // },
 
-    generateFlowData(type) {
-        const data = [];
-        for (let i = 0; i < 10; i++) {
-            const value = type === 'main' 
-                ? (Math.random() - 0.3) * 5 
-                : (Math.random() - 0.7) * 3;
-            data.push(value.toFixed(2));
-        }
-        return data;
-    },
+    // generateFlowData(type) {
+    //     const data = [];
+    //     for (let i = 0; i < 10; i++) {
+    //         const value = type === 'main' 
+    //             ? (Math.random() - 0.3) * 5 
+    //             : (Math.random() - 0.7) * 3;
+    //         data.push(value.toFixed(2));
+    //     }
+    //     return data;
+    // },
 
     // 加载股票数据
     async loadStockData() {
@@ -513,9 +513,9 @@ const StockPage = {
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
                 this.pe_dynamic = d.pe_dynamic;
-                this.updateStockInfo();
-                this.updateStockDetails();
-                this.loadChartData();
+        this.updateStockInfo();
+        this.updateStockDetails();
+        this.loadChartData();
             } else {
                 console.error('[loadStockData] API返回失败:', data.message);
                 CommonUtils.showToast('实时行情获取失败: ' + data.message, 'error');
@@ -646,10 +646,50 @@ const StockPage = {
         console.log('研报数据已加载');
     },
 
-    // 加载资金流向数据
-    loadFlowData() {
-        if (this.flowChart) {
-            this.flowChart.resize();
+    // 加载资金流向数据，调用后端API
+    async loadFlowData() {
+        if (!this.flowChart) return;
+        try {
+            const url = `${API_BASE_URL}/api/stock/fund_flow_today?code=${this.stockCode}`;
+            const resp = await fetch(url);
+            console.log('资金流向resp:', resp);
+            const data = await resp.json();
+            console.log('资金流向返回内容:', data);
+            if (data.success) {
+                const d = data.data;
+                const dates = [d['date'] || d['日期'] || '今日'];
+                const mainFlow = [Number(d['main_net_inflow'] || 0)];
+                const superLargeFlow = [Number(d['super_large_net_inflow'] || 0)];
+                const largeFlow = [Number(d['large_net_inflow'] || 0)];
+                const mediumFlow = [Number(d['medium_net_inflow'] || 0)];
+                const smallFlow = [Number(d['small_net_inflow'] || 0)];
+                const retailFlow = [Number(d['retail_net_inflow'] || 0)];
+                console.log('处理逻辑1');
+
+                const option = this.flowChart.getOption();
+                console.log('处理逻辑2');
+
+                option.xAxis[0].data = dates;
+                console.log('处理逻辑3');
+
+                option.series[0].data = mainFlow;
+                option.series[1].data = superLargeFlow;
+                console.log('处理逻辑3.1');
+                option.series[2].data = largeFlow;
+                console.log('处理逻辑3.2');
+                option.series[3].data = mediumFlow;
+                console.log('处理逻辑4');
+
+                option.series[4].data = smallFlow;
+                option.series[5].data = retailFlow;
+                console.log('处理逻辑5');
+
+                this.flowChart.setOption(option);
+            } else {
+                CommonUtils.showToast('资金流向获取失败: ' + data.message, 'error');
+            }
+        } catch (e) {
+            CommonUtils.showToast('资金流向请求异常', 'error');
         }
     },
 
@@ -719,7 +759,7 @@ const StockPage = {
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
                 this.pe_dynamic = d.pe_dynamic;
-                this.updateStockInfo();
+        this.updateStockInfo();
                 this.updateStockDetails();
             }
         } catch (e) {
