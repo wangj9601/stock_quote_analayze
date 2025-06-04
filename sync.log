@@ -1,0 +1,1 @@
+PS E:\wangxw\股票分析软件\编码\stock_quote_analayze> python -m backend_core.data_collectors.tushare.main --type realtime

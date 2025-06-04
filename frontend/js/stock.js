@@ -186,18 +186,19 @@ const StockPage = {
     // 切换内容标签
     switchContentTab(tabId) {
         this.currentTab = tabId;
-        
         // 隐藏所有面板
         document.querySelectorAll('.tab-panel').forEach(panel => {
             panel.classList.remove('active');
         });
-        
         // 显示目标面板
         const targetPanel = document.getElementById(tabId);
         if (targetPanel) {
             targetPanel.classList.add('active');
         }
-
+        // 切换到资金流向tab时，resize图表
+        if (tabId === 'flow' && this.flowChart) {
+            this.flowChart.resize();
+        }
         // 根据标签加载相应数据
         this.loadTabData(tabId);
     },
@@ -397,16 +398,16 @@ const StockPage = {
                 top: '8%',
                 bottom: '15%'
             },
-            xAxis: {
+            xAxis: [{
                 type: 'category',
                 data: []
-            },
-            yAxis: {
+            }],
+            yAxis: [{
                 type: 'value',
                 name: '资金流入(亿)'
-            },
+            }],
             series: [{
-                name: '主力资金',
+                name: '主力净流入',
                 type: 'bar',
                 data: [],
                 itemStyle: {
@@ -415,7 +416,7 @@ const StockPage = {
                     }
                 }
             }, {
-                name: '散户资金',
+                name: '大单净流入',
                 type: 'bar',
                 data: [],
                 itemStyle: {
@@ -428,7 +429,7 @@ const StockPage = {
                 trigger: 'axis'
             },
             legend: {
-                data: ['主力资金', '散户资金']
+                data: ['主力净流入', '大单净流入']
             }
         };
 
@@ -650,47 +651,67 @@ const StockPage = {
     async loadFlowData() {
         if (!this.flowChart) return;
         try {
+            // 1. 先获取当日资金流向数据
+            const todayUrl = `${API_BASE_URL}/api/stock_fund_flow/fund_flow/?code=${this.stockCode}`;
+            const todayResp = await fetch(todayUrl);
+            const todayData = await todayResp.json();
+            if (todayData.success && todayData.data) {
+                // 依次赋值到页面
+                const values = [
+                    todayData.data.今日主力净流入,
+                    todayData.data.今日超大单净流入,
+                    todayData.data.今日大单净流入,
+                    todayData.data.今日中单净流入,
+                    todayData.data.今日小单净流入
+                ];
+                document.querySelectorAll('.flow-summary .flow-value').forEach((el, idx) => {
+                    const val = values[idx];
+                    if (val == null) {
+                        el.textContent = '-';
+                        el.className = 'flow-value';
+                    } else {
+                        const num = Number(val) / 1e8;
+                        el.textContent = (num > 0 ? '+' : '') + num.toFixed(2) + '亿';
+                        el.className = 'flow-value ' + (num >= 0 ? 'positive' : 'negative');
+                    }
+                });
+            } else {
+                // 可选：清空或提示
+            }
+
+            // 2. 再获取多天资金流向数据，渲染图表            
             const url = `${API_BASE_URL}/api/stock_fund_flow/today?code=${this.stockCode}`;
             const resp = await fetch(url);
-            console.log('资金流向resp:', resp);
             const data = await resp.json();
-            console.log('资金流向返回内容:', data);
-            if (data.success) {
-                const d = data.data;
-                const dates = [d['date'] || d['日期'] || '今日'];
-                const mainFlow = [Number(d['main_net_inflow'] || 0)];
-                const superLargeFlow = [Number(d['super_large_net_inflow'] || 0)];
-                const largeFlow = [Number(d['large_net_inflow'] || 0)];
-                const mediumFlow = [Number(d['medium_net_inflow'] || 0)];
-                const smallFlow = [Number(d['small_net_inflow'] || 0)];
-                const retailFlow = [Number(d['retail_net_inflow'] || 0)];
-                console.log('处理逻辑1');
-
+            if (data.success && Array.isArray(data.data)) {
+                // 回退：直接取原始数值（不除以1e8，不toFixed）
+                const mainFlow = [];
+                const largeFlow = [];
+                data.data.forEach(item => {
+                    mainFlow.push(Number(item.main_net_inflow || 0));
+                    largeFlow.push(Number(item.large_net_inflow || 0));
+                });
+                // 更新ECharts配置
                 const option = this.flowChart.getOption();
-                console.log('处理逻辑2');
-
-                option.xAxis[0].data = dates;
-                console.log('处理逻辑3');
-
+                option.xAxis[0].data = this.generateDateData();
                 option.series[0].data = mainFlow;
-                option.series[1].data = superLargeFlow;
-                console.log('处理逻辑3.1');
-                option.series[2].data = largeFlow;
-                console.log('处理逻辑3.2');
-                option.series[3].data = mediumFlow;
-                console.log('处理逻辑4');
-
-                option.series[4].data = smallFlow;
-                option.series[5].data = retailFlow;
-                console.log('处理逻辑5');
-
+                option.series[1].data = largeFlow;
                 this.flowChart.setOption(option);
             } else {
-                CommonUtils.showToast('资金流向获取失败: ' + data.message, 'error');
+                CommonUtils.showToast('资金流向获取失败: ' + (data.message || '无数据'), 'error');
             }
+
         } catch (e) {
             CommonUtils.showToast('资金流向请求异常', 'error');
         }
+    },
+
+    // 可选：格式化为“+2.34亿”或“-1.11亿”
+    formatInflow(val) {
+        if (val == null) return '-';
+        const num = Number(val) / 1e8;
+        const str = (num > 0 ? '+' : '') + num.toFixed(2) + '亿';
+        return str;
     },
 
     // 过滤新闻
