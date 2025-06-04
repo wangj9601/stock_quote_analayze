@@ -650,7 +650,7 @@ const StockPage = {
     async loadFlowData() {
         if (!this.flowChart) return;
         try {
-            const url = `${API_BASE_URL}/api/stock/fund_flow_today?code=${this.stockCode}`;
+            const url = `${API_BASE_URL}/api/stock_fund_flow/today?code=${this.stockCode}`;
             const resp = await fetch(url);
             console.log('资金流向resp:', resp);
             const data = await resp.json();
