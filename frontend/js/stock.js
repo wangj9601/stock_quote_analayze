@@ -1,3 +1,29 @@
+// 可选：格式化为“+2.34亿”或“-1.11亿”
+const formatInflow = (val) => {
+    if (val === null || val === undefined || val === '' || isNaN(val)) return '--';
+    let num = Number(val);
+    return (num / 1e8).toFixed(2);
+};
+
+function parseProfitToYi(val) {
+    if (typeof val !== 'string') return 0;
+    if (val.endsWith('亿')) {
+        return parseFloat(val.replace('亿', ''));
+    } else if (val.endsWith('万')) {
+        return parseFloat(val.replace('万', '')) / 10000;
+    } else {
+        return parseFloat(val) || 0;
+    }
+};
+
+function parsePercent(val) {
+    if (typeof val !== 'string') return 0;
+    if (val.endsWith('%')) {
+        return parseFloat(val.replace('%', ''));
+    }
+    return parseFloat(val) || 0;
+}
+
 // 股票详情页面功能模块
 const getQueryParam = (name) => {
     const url = window.location.search;
@@ -337,12 +363,12 @@ const StockPage = {
             grid: {
                 left: '10%',
                 right: '8%',
-                top: '8%',
-                bottom: '15%'
+                top: '15%',
+                bottom: '18%'
             },
             xAxis: {
                 type: 'category',
-                data: ['2020', '2021', '2022', '2023', '2024']
+                data: []
             },
             yAxis: [{
                 type: 'value',
@@ -356,7 +382,7 @@ const StockPage = {
             series: [{
                 name: '净利润',
                 type: 'bar',
-                data: [280, 320, 340, 345, 350],
+                data: [],
                 itemStyle: {
                     color: '#2563eb'
                 }
@@ -364,7 +390,7 @@ const StockPage = {
                 name: 'ROE',
                 type: 'line',
                 yAxisIndex: 1,
-                data: [11.2, 12.8, 12.1, 12.3, 12.8],
+                data: [],
                 lineStyle: {
                     color: '#dc2626',
                     width: 3
@@ -630,13 +656,6 @@ const StockPage = {
         changeElement.className = `prediction-change ${change > 0 ? 'positive' : 'negative'}`;
     },
 
-    // 加载财务数据
-    loadFinanceData() {
-        if (this.profitChart) {
-            this.profitChart.resize();
-        }
-    },
-
     // 加载新闻数据
     loadNewsData() {
         console.log('新闻数据已加载');
@@ -704,14 +723,6 @@ const StockPage = {
         } catch (e) {
             CommonUtils.showToast('资金流向请求异常', 'error');
         }
-    },
-
-    // 可选：格式化为“+2.34亿”或“-1.11亿”
-    formatInflow(val) {
-        if (val == null) return '-';
-        const num = Number(val) / 1e8;
-        const str = (num > 0 ? '+' : '') + num.toFixed(2) + '亿';
-        return str;
     },
 
     // 过滤新闻
@@ -920,7 +931,67 @@ const StockPage = {
         } catch (e) {
             CommonUtils.showToast('K线数据请求异常', 'error');
         }
+    },
+
+    // 加载财务数据,更新财务指标列表,更新财务指标图表
+    async loadFinanceData() {
+        console.log('[loadFinanceData] 加载财务数据');  
+        try{
+            const resp = await fetch(`${API_BASE_URL}/api/stock/latest_financial?code=${this.stockCode}`);
+            const data = await resp.json();
+            if (data.success && data.data) {
+                const d = data.data;
+                document.getElementById('pe').innerText = d.pe ?? '--';
+                document.getElementById('pb').innerText = d.pb ?? '--';
+                document.getElementById('roe').innerText = d.roe ? d.roe.toFixed(2) : '--';
+                document.getElementById('roa').innerText = d.roa ? d.roa.toFixed(2) : '--';
+                document.getElementById('revenue').innerText = d.revenue ? formatInflow(d.revenue) + '亿' : '--';
+                document.getElementById('profit').innerText = d.profit ? formatInflow(d.profit) + '亿' : '--';
+                document.getElementById('eps').innerText = d.eps ? d.eps.toFixed(2) : '--';
+                document.getElementById('bps').innerText = d.bps ? d.bps.toFixed(2) : '--';
+            } else {
+                CommonUtils.showToast('财务数据获取失败: ' + data.message, 'error');    
+            }
+        } catch (e) {
+            CommonUtils.showToast('财务数据请求异常', 'error');
+        }
+        //加载财务指标盈利能力图表数据列表
+        this.loadFinancialIndicatorList();
+
+    },
+
+    // 加载财务指标盈利能力图表数据列表
+    async loadFinancialIndicatorList() {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/stock/financial_indicator_list?symbol=${this.stockCode}&indicator=2`);
+            const json = await res.json();
+            if (json.success && json.data) {
+                const data = json.data;
+                const names = data.map(item => item['报告期']);
+                const profitValues = data.map(item => parseProfitToYi(item['净利润']));
+                const roeValues = data.map(item => parsePercent(item['净资产收益率']));
+                this.updateProfitBarChart(names, profitValues, roeValues);
+            }
+        } catch (e) {
+            console.error(e);
+            CommonUtils.showToast('财务指标盈利能力图表数据列表请求异常', 'error');
+        }
+    },
+    
+    // 示例：更新ECharts
+    updateProfitBarChart(names, profitValues, roeValues) {
+        if (!this.profitChart) return;
+        const option = {
+            xAxis: { data: names },
+            series: [
+                { name: '净利润', type: 'bar', data: profitValues },
+                { name: 'ROE', type: 'line', yAxisIndex: 1, data: roeValues }
+            ]
+        };
+        this.profitChart.setOption(option);
+        this.profitChart.resize();
     }
+
 };
 
 // DOM加载完成后初始化
