@@ -461,20 +461,139 @@
 #### 2.5.1. 用户认证相关 API 
 注册、登录、退出、账户验证/激活。
 
+- **用户注册/登录/登出/状态**
+  - 路径：`POST /api/users/register`，`POST /api/users/login`，`POST /api/auth/login`，`POST /api/auth/logout`，`GET /api/auth/status`
+  - 输入参数：用户名、密码、邮箱等
+  - 输出：用户信息、Token、登录状态
+  - 逻辑规则：注册/登录校验唯一性与密码，Token基于JWT，登出仅前端清理。
+
+
 #### 2.5.2. 用户信息管理 API 
 获取、更新用户信息。
+
+- **获取/更新用户信息**
+  - 路径：`GET /api/users/me`，`PUT /api/users/me`，`PUT /api/users/me/password`，`GET /api/users/status`
+  - 输入参数：用户信息、密码
+  - 输出：用户信息、状态
+  - 逻辑规则：需登录，更新时校验唯一性。
+
+- **用户搜索（管理端）**
+  - 路径：`GET /api/users/search?keyword=xxx`
+  - 输入参数：keyword
+  - 输出：用户列表
+  - 逻辑规则：仅管理端可用。
 
 #### 2.5.3. 自选股管理 API 
 获取、添加、删除自选股。
 
+- **获取自选股列表（含实时行情）**
+  - 路径：`GET /api/watchlist`
+  - 输入参数：需登录
+  - 输出：`{ success: bool, data: [ { code, name, current_price, ... } ] }`
+  - 逻辑规则：返回当前用户全部自选股及实时行情。
+
+- **添加/删除自选股**
+  - 路径：`POST /api/watchlist`，`DELETE /api/watchlist/{watchlist_id}`，`POST /api/watchlist/delete_by_code`
+  - 输入参数：股票代码、分组等
+  - 输出：操作结果
+  - 逻辑规则：同一股票不可重复添加，删除需校验归属。
+
+- **自选股分组管理**
+  - 路径：`GET /api/watchlist/groups`，`POST /api/watchlist/groups`，`DELETE /api/watchlist/groups/{group_id}`，`PUT /api/watchlist/{watchlist_id}/group`
+  - 输入参数：分组名、ID等
+  - 输出：操作结果
+  - 逻辑规则：分组不可重名，删除分组时自选股归入默认分组。
+
 #### 2.5.4. 股票搜索 API 
 根据关键词搜索股票。
 
-#### 2.5.5. 行情数据 API 
+#### 2.5.5. 行情与股票相关 API 
 获取主要指数、股票实时/延时行情、量价数据。
 
-#### 2.5.6. 历史数据 API 
-获取股票分时、K线历史数据（支持不同周期、时间范围）。
+- **获取市场主要指数**
+  - 路径：`GET /api/market/indices`
+  - 输入参数：无
+  - 输出：`{ success: bool, data: [ { code, name, current, change, change_percent, high, low, open, yesterday_close, volume, turnover, timestamp } ] }`
+  - 逻辑规则：优先从akshare获取沪深主流指数数据，失败时返回模拟数据。字段含义与主流行情平台一致。
+
+- **获取行业板块行情**
+  - 路径：`GET /api/market/industry_board`
+  - 输入参数：无
+  - 输出：`{ success: bool, data: [ { name, price, change_amount, change_percent, market_cap, turnover_rate, turnover, leading_stock, leading_stock_change } ] }`
+  - 逻辑规则：按涨幅降序，字段含义与主流平台一致。
+
+- **批量获取股票实时行情**
+  - 路径：`POST /api/stock/quote`
+  - 输入参数：`{ codes: [股票代码列表] }`
+  - 输出：`{ success: bool, data: [ { code, current_price, change_amount, change_percent, open, yesterday_close, high, low, volume, turnover } ] }`
+  - 逻辑规则：工作日实时拉取，周末从本地库取，异常返回详细错误。
+
+- **获取股票列表（模糊搜索）**
+  - 路径：`GET /api/stock/list?query=关键词&limit=15`
+  - 输入参数：query（代码/名称模糊），limit（返回条数）
+  - 输出：`{ success: bool, data: [ { code, name } ], total }`
+  - 逻辑规则：支持代码或名称模糊搜索，默认最多15条。
+
+- **获取A股涨跌幅/成交量/换手率排行榜**
+  - 路径：`GET /api/stock/quote_board_list?ranking_type=rise|fall|volume|turnover_rate&market=all|sh|sz|cy|bj&page=1&page_size=20`
+  - 输入参数：排行类型、市场、分页
+  - 输出：`{ success: bool, data: [ { code, name, current, change, change_percent, ... } ], total, page, page_size }`
+  - 逻辑规则：支持多种排行、市场过滤、分页，数据缓存1分钟。
+
+- **获取单只股票实时行情**
+  - 路径：`GET /api/stock/realtime_quote_by_code?code=xxxxxx`
+  - 输入参数：code
+  - 输出：`{ success: bool, data: { code, current_price, ... } }`
+  - 逻辑规则：实时拉取，返回主流行情字段。
+
+- **获取单只股票分时数据**
+  - 路径：`GET /api/stock/minute_data_by_code?code=xxxxxx`
+  - 输入参数：code
+  - 输出：`{ success: bool, data: [ { time, price, volume, amount, ... } ] }`
+  - 逻辑规则：交易日拉取当日，非交易日取最近交易日。
+
+- **获取K线（日/分钟）历史数据**
+  - 路径：`GET /api/stock/kline_hist?code=xxxxxx&period=daily&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&adjust=qfq`
+  - 路径：`GET /api/stock/kline_min_hist?code=xxxxxx&period=60&start_datetime=YYYY-MM-DD HH:MM:SS&end_datetime=YYYY-MM-DD HH:MM:SS&adjust=qfq`
+  - 输入参数：股票代码、周期、时间范围、复权
+  - 输出：`{ success: bool, data: [ { date, code, open, close, high, low, volume, amount, ... } ] }`
+  - 逻辑规则：参数校验严格，数据完整。
+
+- **获取股票基本面最新财务摘要**
+  - 路径：`GET /api/stock/latest_financial?code=xxxxxx`
+  - 输入参数：code
+  - 输出：`{ success: bool, data: { pe, pb, roe, roa, revenue, profit, eps, bps, report_date } }`
+  - 逻辑规则：按主流财务字段映射，异常返回详细错误。
+
+- **获取股票财务指标列表**
+  - 路径：`GET /api/stock/financial_indicator_list?symbol=xxxxxx&indicator=1|2|3`
+  - 输入参数：symbol（股票代码），indicator（报告期类型）
+  - 输出：`{ success: bool, data: [ { 报告期, 净资产收益率, 资产收益率, 营业总收入, 净利润, 基本每股收益, 每股净资产 } ] }`
+  - 逻辑规则：支持多报告期，字段映射清晰。
+
+
+#### 2.5.6. 资金流向相关 API 
+
+- **获取个股资金流向（今日/历史）**
+  - 路径：`GET /api/stock_fund_flow/today?code=xxxxxx`
+  - 路径：`GET /api/stock_fund_flow/history?code=xxxxxx`
+  - 输入参数：code
+  - 输出：`{ success: bool, data: [ { date, code, main_net_inflow, large_net_inflow, ... } ] }`
+  - 逻辑规则：优先用akshare，支持主力/大单等多维度，异常详细。
+
+#### 2.5.6. 历史行情API
+
+- **获取历史行情（分页）**
+  - 路径：`GET /api/stock/history?code=xxxxxx&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&page=1&size=20`
+  - 输入参数：股票代码、起止日期、分页
+  - 输出：`{ items: [ { date, open, close, high, low, volume } ], total }`
+  - 逻辑规则：分页查询，字段与数据库一致。
+
+- **导出历史行情CSV**
+  - 路径：`GET /api/stock/history/export?code=xxxxxx&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
+  - 输入参数：同上
+  - 输出：CSV文件流
+  - 逻辑规则：字段顺序与数据库一致，支持大批量导出。
 
 #### 2.5.7. 基本面信息 API 
 获取公司财务、基本面数据、股本结构等。
@@ -548,9 +667,56 @@
 实现基于预测结果、技术指标信号、基本面数据组合的交易建议生成逻辑。
 输出: 交易建议操作（买入/卖出/持有/观望）、置信度、风险等级。
 
-## 3. 接口设计说明 
-### 3.1. 接口接口说明 
-### 3.2. 接口清单 
+## 3. 接口设计说明
+
+### 3.1. 主要API接口详细说明
+
+#### 3.1.1. 行情与股票相关API
+
+
+#### 3.1.2. 资金流向相关API
+
+
+
+#### 3.1.4. 自选股管理API
+
+- **获取自选股列表（含实时行情）**
+  - 路径：`GET /api/watchlist`
+  - 输入参数：需登录
+  - 输出：`{ success: bool, data: [ { code, name, current_price, ... } ] }`
+  - 逻辑规则：返回当前用户全部自选股及实时行情。
+
+- **添加/删除自选股**
+  - 路径：`POST /api/watchlist`，`DELETE /api/watchlist/{watchlist_id}`，`POST /api/watchlist/delete_by_code`
+  - 输入参数：股票代码、分组等
+  - 输出：操作结果
+  - 逻辑规则：同一股票不可重复添加，删除需校验归属。
+
+- **自选股分组管理**
+  - 路径：`GET /api/watchlist/groups`，`POST /api/watchlist/groups`，`DELETE /api/watchlist/groups/{group_id}`，`PUT /api/watchlist/{watchlist_id}/group`
+  - 输入参数：分组名、ID等
+  - 输出：操作结果
+  - 逻辑规则：分组不可重名，删除分组时自选股归入默认分组。
+
+#### 3.1.5. 用户与认证API
+
+- **用户注册/登录/登出/状态**
+  - 路径：`POST /api/users/register`，`POST /api/users/login`，`POST /api/auth/login`，`POST /api/auth/logout`，`GET /api/auth/status`
+  - 输入参数：用户名、密码、邮箱等
+  - 输出：用户信息、Token、登录状态
+  - 逻辑规则：注册/登录校验唯一性与密码，Token基于JWT，登出仅前端清理。
+
+- **获取/更新用户信息**
+  - 路径：`GET /api/users/me`，`PUT /api/users/me`，`PUT /api/users/me/password`，`GET /api/users/status`
+  - 输入参数：用户信息、密码
+  - 输出：用户信息、状态
+  - 逻辑规则：需登录，更新时校验唯一性。
+
+- **用户搜索（管理端）**
+  - 路径：`GET /api/users/search?keyword=xxx`
+  - 输入参数：keyword
+  - 输出：用户列表
+  - 逻辑规则：仅管理端可用。
 
 ## 4. 非功能性需求分析 
 ### 4.1. 性能要求 
