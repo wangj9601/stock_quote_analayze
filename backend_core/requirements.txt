@@ -4,7 +4,7 @@ numpy>=1.21.0
 scipy>=1.7.0
 
 # 数据采集
-akshare>=1.8.0
+akshare>=1.16.95
 tushare>=1.2.0
 requests>=2.28.0
 beautifulsoup4>=4.11.0
@@ -53,4 +53,7 @@ sphinx-rtd-theme>=1.0.0
 black>=22.0.0
 flake8>=4.0.0
 mypy>=0.950
-isort>=5.10.0 
+isort>=5.10.0
+
+# 定时任务
+apscheduler>=3.10.0 

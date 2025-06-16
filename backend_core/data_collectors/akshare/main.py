@@ -11,13 +11,13 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 # 直接导入当前目录下的模块
-from realtime import RealtimeQuoteCollector
+from realtime import AkshareRealtimeQuoteCollector
 from historical import HistoricalQuoteCollector
 from index import IndexQuoteCollector
 
 def run_realtime_collector():
     """运行实时行情采集器"""
-    collector = RealtimeQuoteCollector()
+    collector = AkshareRealtimeQuoteCollector()
     success = collector.collect_quotes()
     if success:
         print("实时行情数据采集成功")

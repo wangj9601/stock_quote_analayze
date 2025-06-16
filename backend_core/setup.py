@@ -15,6 +15,7 @@ setup(
         "requests",
         "python-dotenv",
         "loguru",
+        "apscheduler>=3.10.0",
     ],
     python_requires=">=3.8",
     author="Your Name",

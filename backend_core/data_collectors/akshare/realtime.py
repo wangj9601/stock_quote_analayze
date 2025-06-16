@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 
 # 直接导入base模块
-from base import AKShareCollector
+from .base import AKShareCollector
 
 class RealtimeQuoteCollector(AKShareCollector):
     """实时行情数据采集器"""

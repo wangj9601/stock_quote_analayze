@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List
 import logging
 
 # 直接导入base模块
-from base import AKShareCollector
+from .base import AKShareCollector
 
 class IndexQuoteCollector(AKShareCollector):
     """指数行情数据采集器"""

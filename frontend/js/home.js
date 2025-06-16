@@ -447,4 +447,4 @@ function bindEvents() {
 setInterval(function() {
     console.log('定时刷新数据...');
     loadRealData();
-}, 300000); // 每300 秒刷新一次
+}, 600000); // 每600 秒刷新一次

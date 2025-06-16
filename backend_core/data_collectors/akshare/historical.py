@@ -15,7 +15,7 @@ import signal
 from requests.exceptions import RequestException
 
 # 直接导入base模块
-from base import AKShareCollector
+from .base import AKShareCollector
 
 class HistoricalQuoteCollector(AKShareCollector):
     """历史行情数据采集器"""
