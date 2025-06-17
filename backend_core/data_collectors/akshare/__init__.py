@@ -4,13 +4,15 @@ AKShare数据采集模块
 """
 
 from .base import AKShareCollector
-from .realtime import RealtimeQuoteCollector
+from .realtime import AkshareRealtimeQuoteCollector
 from .historical import HistoricalQuoteCollector
 from .index import IndexQuoteCollector
+from .realtime_index_spot_ak import RealtimeIndexSpotAkCollector
 
 __all__ = [
     'AKShareCollector',
-    'RealtimeQuoteCollector',
+    'AkshareRealtimeQuoteCollector',
     'HistoricalQuoteCollector',
-    'IndexQuoteCollector'
+    'IndexQuoteCollector',
+    'RealtimeIndexSpotAkCollector'
 ] 

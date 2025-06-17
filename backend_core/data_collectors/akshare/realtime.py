@@ -14,8 +14,8 @@ from datetime import datetime
 # 直接导入base模块
 from .base import AKShareCollector
 
-class RealtimeQuoteCollector(AKShareCollector):
-    """实时行情数据采集器"""
+class AkshareRealtimeQuoteCollector(AKShareCollector):
+    """沪深京A股实时行情数据采集器"""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -105,14 +105,15 @@ class RealtimeQuoteCollector(AKShareCollector):
             bool: 是否成功
         """
         try:
-            # 获取实时行情数据
-            df = self._retry_on_failure(ak.stock_zh_a_spot_em)
-            self.logger.info("采集到 %d 条股票行情数据", len(df))
-            
+ 
             # 连接数据库
             conn = self._init_db()
             cursor = conn.cursor()
             
+            # 获取实时行情数据
+            df = self._retry_on_failure(ak.stock_zh_a_spot_em)
+            self.logger.info("采集到 %d 条股票行情数据", len(df))
+ 
             # 批量处理数据
             affected_rows = 0
             for _, row in df.iterrows():
@@ -189,18 +190,20 @@ class RealtimeQuoteCollector(AKShareCollector):
             
             # 记录错误日志
             try:
-                cursor.execute('''
-                    INSERT INTO realtime_collect_operation_logs 
-                    (operation_type, operation_desc, affected_rows, status, error_message)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    'realtime_quote_collect',
-                    '采集股票实时行情数据失败',
-                    0,
-                    'error',
-                    error_msg
-                ))
-                conn.commit()
+                if 'cursor' in locals() and cursor is not None:
+                    cursor.execute('''
+                        INSERT INTO realtime_collect_operation_logs 
+                        (operation_type, operation_desc, affected_rows, status, error_message, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        'realtime_quote_collect',
+                        '采集股票实时行情数据失败',
+                        0,
+                        'error',
+                        error_msg,
+                        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    ))
+                    conn.commit()
             except Exception as log_error:
                 self.logger.error("记录错误日志失败: %s", str(log_error))
             finally:

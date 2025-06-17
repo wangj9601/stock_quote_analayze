@@ -6,6 +6,7 @@ from backend_core.data_collectors.akshare.realtime import AkshareRealtimeQuoteCo
 from backend_core.data_collectors.tushare.historical import HistoricalQuoteCollector
 from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
 from backend_core.config.config import DATA_COLLECTORS
+from backend_core.data_collectors.akshare.realtime_index_spot_ak import RealtimeIndexSpotAkCollector
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -13,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 ak_collector = AkshareRealtimeQuoteCollector(DATA_COLLECTORS.get('akshare', {}))
 tushare_hist_collector = HistoricalQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 tushare_realtime_collector = RealtimeQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
+index_collector = RealtimeIndexSpotAkCollector()
 
 scheduler = BlockingScheduler()
 
@@ -21,7 +23,16 @@ def collect_akshare_realtime():
         logging.info("[定时任务] AKShare 实时行情采集开始...")
         df = ak_collector.collect_quotes()
         # 可在此处保存数据到数据库或文件
-        logging.info(f"[定时任务] AKShare 实时行情采集完成，采集到 {len(df)} 条数据")
+        #logging.info(f"[定时任务] AKShare 实时行情采集完成，采集到 {len(df)} 条数据")
+    except Exception as e:
+        logging.error(f"[定时任务] AKShare 实时行情采集异常: {e}")
+
+def collect_akshare_index_realtime(): 
+    try:
+        logging.info("[定时任务] AKShare 指数实时行情采集开始...")
+        df = index_collector.collect_quotes()
+        # 可在此处保存数据到数据库或文件
+        #logging.info(f"[定时任务] AKShare 实时行情采集完成，采集到 {len(df)} 条数据")
     except Exception as e:
         logging.error(f"[定时任务] AKShare 实时行情采集异常: {e}")
 
@@ -49,7 +60,7 @@ scheduler.add_job(
     'cron',
     day_of_week='mon-fri',
     hour='9-11,13-15',
-    minute='*/5',
+    minute='*/10',
     id='akshare_realtime',
     # 11:35-12:00、15:35-23:59不会触发
 )
@@ -57,6 +68,16 @@ scheduler.add_job(
 scheduler.add_job(collect_tushare_historical, 'cron', hour=15, minute=45, id='tushare_historical')
 # 每隔5分钟采集一次Tushare实时行情----由于tushare对普通会员，一小时只能调用1次，所以暂时不启用
 #scheduler.add_job(collect_tushare_realtime, 'interval', minutes=5, id='tushare_realtime')
+
+# 指数实时行情采集任务，每5分钟
+scheduler.add_job(
+    collect_akshare_index_realtime,
+    'cron',
+    day_of_week='mon-fri',
+    hour='9-10,11,13-15',
+    minute='0,5,10,15,20,25,30,35,40,45,50,55',
+    id='akshare_index_realtime',
+)
 
 if __name__ == "__main__":
     logging.info("启动定时采集任务...")
