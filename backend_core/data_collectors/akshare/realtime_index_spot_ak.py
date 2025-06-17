@@ -72,17 +72,22 @@ class RealtimeIndexSpotAkCollector:
             df3 = ak.stock_zh_index_spot_em(symbol="深证系列指数")
             df3['index_spot_type'] = 3
             df = pd.concat([df1, df2, df3], ignore_index=True)
+            # 去重
+            df = df.drop_duplicates(subset=['代码'], keep='first')
             df['collect_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            df['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             affected_rows = 0
+            # 清空表
+            cursor.execute('DELETE FROM index_realtime_quotes')
             for _, row in df.iterrows():
                 cursor.execute('''
                     INSERT OR REPLACE INTO index_realtime_quotes (
-                        code, name, price, change, pct_chg, open, pre_close, high, low, volume, amount, amplitude, turnover, pe, volume_ratio, update_time, collect_time, index_spot_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        code, name, price, change, pct_chg, open, pre_close, high, low, volume, amount, amplitude, volume_ratio, update_time, collect_time, index_spot_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     row['代码'], row['名称'], row['最新价'], row['涨跌额'], row['涨跌幅'], row['今开'], row['昨收'],
-                    row['最高'], row['最低'], row['成交量'], row['成交额'], row['振幅'], row['换手率'],
-                    row['市盈率'], row['量比'], row['更新时间'], row['collect_time'], row['index_spot_type']
+                    row['最高'], row['最低'], row['成交量'], row['成交额'], row['振幅'], 
+                    row['量比'], row['update_time'], row['collect_time'], row['index_spot_type']
                 ))
                 affected_rows += 1
             # 记录操作日志

@@ -59,7 +59,7 @@ scheduler.add_job(
     collect_akshare_realtime,
     'cron',
     day_of_week='mon-fri',
-    hour='9-11,13-15',
+    hour='9-11,13-21',
     minute='*/10',
     id='akshare_realtime',
     # 11:35-12:00、15:35-23:59不会触发
@@ -74,7 +74,7 @@ scheduler.add_job(
     collect_akshare_index_realtime,
     'cron',
     day_of_week='mon-fri',
-    hour='9-10,11,13-15',
+    hour='9-10,11,13-21',
     minute='0,5,10,15,20,25,30,35,40,45,50,55',
     id='akshare_index_realtime',
 )

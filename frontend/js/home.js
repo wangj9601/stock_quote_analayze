@@ -84,18 +84,20 @@ function updateIndexDisplay(indicesData) {
             const timeEl = card.querySelector('.index-time');
             
             if (valueEl) {
-                valueEl.textContent = index.current.toFixed(2);
+                valueEl.textContent = (typeof index.current === 'number' && !isNaN(index.current)) ? index.current.toFixed(2) : '--';
             }
             
             if (changeEl) {
-                const changeStr = index.change >= 0 ? '+' + index.change.toFixed(2) : index.change.toFixed(2);
-                const percentStr = index.change_percent >= 0 ? '+' + index.change_percent.toFixed(2) + '%' : index.change_percent.toFixed(2) + '%';
+                const change = (typeof index.change === 'number' && !isNaN(index.change)) ? index.change : 0;
+                const change_percent = (typeof index.change_percent === 'number' && !isNaN(index.change_percent)) ? index.change_percent : 0;
+                const changeStr = change >= 0 ? '+' + change.toFixed(2) : change.toFixed(2);
+                const percentStr = change_percent >= 0 ? '+' + change_percent.toFixed(2) + '%' : change_percent.toFixed(2) + '%';
                 changeEl.innerHTML = changeStr + ' (' + percentStr + ')';
-                changeEl.className = 'index-change ' + (index.change > 0 ? 'positive' : index.change < 0 ? 'negative' : '');
+                changeEl.className = 'index-change ' + (change > 0 ? 'positive' : change < 0 ? 'negative' : '');
             }
             
             if (volumeEl) {
-                const volume = index.volume || 0;
+                const volume = (typeof index.volume === 'number' && !isNaN(index.volume)) ? index.volume : 0;
                 volumeEl.textContent = '成交量: ' + (volume / 1e8).toFixed(2) + '亿';
             }
             
@@ -106,6 +108,7 @@ function updateIndexDisplay(indicesData) {
         }
     });
 }
+
 
 // 加载自选股数据
 async function loadWatchlist() {

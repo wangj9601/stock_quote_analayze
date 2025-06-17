@@ -1,3 +1,5 @@
+https://www.tradingview.com/symbols/SSE-601919/
+
 # 收集akshare和tushare接口列表
 _Exported on 2025/6/13 at GMT+8 15:35:37 from Cursor (1.1.2)_
 

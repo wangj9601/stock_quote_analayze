@@ -45,7 +45,7 @@ def get_market_indices():
         for name, code in index_codes.items():
             cursor.execute(
                 """
-                SELECT * FROM akshare_index_realtime
+                SELECT * FROM index_realtime_quotes
                 WHERE code = ?
                 ORDER BY update_time DESC
                 LIMIT 1
