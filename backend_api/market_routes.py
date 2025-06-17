@@ -8,6 +8,9 @@ import random
 import traceback
 import pandas as pd
 import numpy as np
+import sqlite3
+from backend_core.config.config import DATA_COLLECTORS
+from backend_api.config import DB_PATH
 
 
 
@@ -24,123 +27,50 @@ def safe_float(value):
 
 @router.get("/indices")
 def get_market_indices():
-    """获取市场指数数据(akshare)"""
+    """获取市场指数数据(修改为从数据库akshare_index_realtime表中获取)"""
+    db_file = DB_PATH
     try:
-        print("📊 开始获取市场指数数据...")
-        
-        # 尝试从akshare获取数据
-        try:
-            print("正在从akshare获取沪深重要指数...")
-            df1 = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
-            print("正在从akshare获取上证系列指数...")
-            df2 = ak.stock_zh_index_spot_em(symbol="上证系列指数")
-            print("正在从akshare获取深证系列指数...")
-            df3 = ak.stock_zh_index_spot_em(symbol="深证系列指数")
-            
-            # 合并所有数据框
-            df = pd.concat([df1, df2, df3], ignore_index=True)
-            # 删除重复的行
-            df = df.drop_duplicates(subset=['代码'], keep='first')
-            # 将所有 NaN 值替换为 None
-            df = df.replace({np.nan: None})
-            print(f"成功获取 {len(df)} 条指数数据")
-            
-        except Exception as e:
-            print(f"❌ 从akshare获取数据失败: {str(e)}")
-            print("将使用模拟数据...")
-            df = pd.DataFrame()  # 创建空DataFrame
-        
-        target_indices = {
-            '000001': '上证指数',
-            '399001': '深证成指',
-            '399006': '创业板指',
-            '000300': '沪深300'
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # 指数代码映射
+        index_codes = {
+            '上证指数': '000001',
+            '深圳成指': '399001',
+            '创业板指': '399006',
+            '沪深300': '000300',
         }
-        
         indices_data = []
-        for code, name in target_indices.items():
-            try:
-                if not df.empty:
-                    index_row = df[df['代码'] == code]
-                    if not index_row.empty:
-                        row = index_row.iloc[0]
-                        indices_data.append({
-                            'code': code,
-                            'name': name,
-                            'current': safe_float(row['最新价']),
-                            'change': safe_float(row['涨跌额']),
-                            'change_percent': safe_float(row['涨跌幅']),
-                            'high': safe_float(row['最高']),
-                            'low': safe_float(row['最低']),
-                            'open': safe_float(row['今开']),
-                            'yesterday_close': safe_float(row['昨收']),
-                            'volume': safe_float(row['成交量']),
-                            'turnover': safe_float(row['成交额']),
-                            'timestamp': datetime.now().isoformat()
-                        })
-                        continue
-                
-                # 如果获取失败或数据不存在，使用模拟数据
-                print(f"为 {name}({code}) 生成模拟数据...")
-                base_price = random.uniform(3300, 3400) if code == '000001' else \
-                             random.uniform(10800, 11200) if code == '399001' else \
-                             random.uniform(2300, 2600) if code == '399006' else \
-                             random.uniform(3800, 4000)
-                change_amount = random.uniform(-50, 50)
-                change_percent = (change_amount / base_price) * 100
-                
-                indices_data.append({
-                    'code': code,
-                    'name': name,
-                    'current': round(base_price, 2),
-                    'change': round(change_amount, 2),
-                    'change_percent': round(change_percent, 2),
-                    'high': round(base_price * 1.02, 2),
-                    'low': round(base_price * 0.98, 2),
-                    'open': round(base_price - change_amount, 2),
-                    'yesterday_close': round(base_price - change_amount, 2),
-                    'volume': random.randint(100000000, 500000000),
-                    'turnover': random.randint(100000000000, 800000000000),
-                    'timestamp': datetime.now().isoformat(),
-                    'is_mock': True
-                })
-                
-            except Exception as e:
-                print(f"❌ 处理指数 {name}({code}) 时出错: {str(e)}")
-                # 使用最基本的模拟数据
-                indices_data.append({
-                    'code': code,
-                    'name': name,
-                    'current': 0,
-                    'change': 0,
-                    'change_percent': 0,
-                    'high': 0,
-                    'low': 0,
-                    'open': 0,
-                    'yesterday_close': 0,
-                    'volume': 0,
-                    'turnover': 0,
-                    'timestamp': datetime.now().isoformat(),
-                    'is_mock': True,
-                    'error': str(e)
-                })
+        for name, code in index_codes.items():
+            cursor.execute(
+                """
+                SELECT * FROM akshare_index_realtime
+                WHERE code = ?
+                ORDER BY update_time DESC
+                LIMIT 1
+                """, (code,)
+            )
+            row = cursor.fetchone()
+            # 格式化数据，确保数值类型正确
+            formatted_row = {}
+            for key in row.keys():
+                value = row[key]
+                if key in ['current', 'change', 'change_percent', 'high', 'low', 'open', 'yesterday_close', 'volume', 'turnover']:
+                    # 数值字段进行安全转换
+                    formatted_row[key] = safe_float(value)
+                elif key == 'update_time':
+                    # 时间字段保持原样
+                    formatted_row[key] = value
+                else:
+                    # 其他字段保持原样
+                    formatted_row[key] = value
+            indices_data.append(formatted_row)
         
-        print(f"✅ 成功生成 {len(indices_data)} 条指数数据")
-        return JSONResponse({'success': True, 'data': indices_data})
-        
+        conn.close()
+        return JSONResponse({'success': True, 'data': indices_data})    
     except Exception as e:
-        print(f"❌ 获取市场指数数据失败: {str(e)}")
-        print("详细错误信息:")
-        traceback.print_exc()
-        # 返回最基本的错误响应
-        return JSONResponse(
-            content={
-                'success': False,
-                'message': '获取市场指数数据失败',
-                'error': str(e)
-            },
-            status_code=500
-        )   
+        return JSONResponse({'success': False, 'message': str(e)})
 
 @router.get("/industry_board")
 def get_industry_board():
