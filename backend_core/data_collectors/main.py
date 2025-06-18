@@ -7,6 +7,8 @@ from backend_core.data_collectors.tushare.historical import HistoricalQuoteColle
 from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.data_collectors.akshare.realtime_index_spot_ak import RealtimeIndexSpotAkCollector
+from backend_core.data_collectors.akshare.realtime_stock_industry_board_ak import RealtimeStockIndustryBoardCollector
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -15,6 +17,7 @@ ak_collector = AkshareRealtimeQuoteCollector(DATA_COLLECTORS.get('akshare', {}))
 tushare_hist_collector = HistoricalQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 tushare_realtime_collector = RealtimeQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 index_collector = RealtimeIndexSpotAkCollector()
+industry_board_collector = RealtimeStockIndustryBoardCollector()
 
 scheduler = BlockingScheduler()
 
@@ -53,30 +56,48 @@ def collect_tushare_realtime():
     except Exception as e:
         logging.error(f"[定时任务] Tushare 实时行情采集异常: {e}")
 
+def collect_akshare_industry_board_realtime():
+    try:
+        logging.info("[定时任务] 行业板块实时行情采集开始...")
+        industry_board_collector.run()
+        logging.info("[定时任务] 行业板块实时行情采集完成")
+    except Exception as e:
+        logging.error(f"[定时任务] 行业板块实时行情采集异常: {e}")
+
 # 定时任务配置
-# 每个交易日上午9:00-11:30、下午13:30-15:30每5分钟采集一次A股实时行情
+# 每个交易日上午9:00-11:30、下午13:30-15:30每15分钟采集一次A股实时行情
 scheduler.add_job(
     collect_akshare_realtime,
     'cron',
     day_of_week='mon-fri',
     hour='9-11,13-21',
-    minute='*/10',
+    minute='0,15,30,45',
     id='akshare_realtime',
-    # 11:35-12:00、15:35-23:59不会触发
 )
 # 每天15:45采集当天历史行情（收盘后）
 scheduler.add_job(collect_tushare_historical, 'cron', hour=15, minute=45, id='tushare_historical')
+
 # 每隔5分钟采集一次Tushare实时行情----由于tushare对普通会员，一小时只能调用1次，所以暂时不启用
 #scheduler.add_job(collect_tushare_realtime, 'interval', minutes=5, id='tushare_realtime')
 
-# 指数实时行情采集任务，每5分钟
+# 指数实时行情采集任务，每20分钟采集一次
 scheduler.add_job(
     collect_akshare_index_realtime,
     'cron',
     day_of_week='mon-fri',
     hour='9-10,11,13-21',
-    minute='0,5,10,15,20,25,30,35,40,45,50,55',
+    minute='0,20,40',
     id='akshare_index_realtime',
+)
+
+# 行业板块实时行情采集任务，每30分钟采集一次
+scheduler.add_job(
+    collect_akshare_industry_board_realtime,
+    'cron',
+    day_of_week='mon-fri',
+    hour='9-10,11,13-21',
+    minute='0,18,50',
+    id='akshare_industry_board_realtime',
 )
 
 if __name__ == "__main__":

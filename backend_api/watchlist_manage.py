@@ -11,11 +11,12 @@ from datetime import datetime
 from fastapi.responses import JSONResponse
 import akshare as ak
 from pydantic import BaseModel
+import sqlite3
 
 from .models import (
     Watchlist, WatchlistGroup,
     WatchlistCreate, WatchlistInDB, WatchlistGroupCreate,
-    WatchlistGroupInDB, User
+    WatchlistGroupInDB, User, StockRealtimeQuote
 )
 from .database import get_db
 from .auth import get_current_user
@@ -27,11 +28,10 @@ async def get_watchlist(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """获取自选股列表（数据库+akshare盘口实时行情）"""
+    """获取自选股列表（SQLAlchemy查询实时行情）"""
     try:
         user_id = current_user.id
         print(f"[watchlist] 请求用户ID: {user_id}")
-        # 查询该用户所有自选股
         rows = db.query(Watchlist.stock_code, Watchlist.stock_name).filter(
             Watchlist.user_id == user_id
         ).order_by(desc(Watchlist.created_at)).all()
@@ -44,47 +44,45 @@ async def get_watchlist(
         names = {row[0]: row[1] for row in rows}
         watchlist = []
 
-        for code in codes:
+        # 批量查行情
+        quotes = db.query(StockRealtimeQuote).filter(StockRealtimeQuote.code.in_(codes)).all()
+        print(f"[watchlist] 批量查到行情数量: {len(quotes)}")
+        quote_map = {q.code: q for q in quotes}
+
+        def safe_float(value):
             try:
-                df = ak.stock_bid_ask_em(symbol=code)
-                if df.empty:
-                    print(f"[watchlist] {code} 无盘口数据")
-                    continue
-                data_dict = dict(zip(df['item'], df['value']))
-                print(f"[watchlist] {code} 数据字典: {data_dict}")
-                def safe_float(value):
-                    try:
-                        if value in [None, '', '-']:
-                            return None
-                        return float(value)
-                    except (ValueError, TypeError):
-                        return None
-                watchlist.append({
-                    'code': code,
-                    'name': names.get(code, ''),
-                    'current_price': safe_float(data_dict.get('最新')),
-                    'change_amount': safe_float(data_dict.get('涨跌')),
-                    'change_percent': safe_float(data_dict.get('涨幅')),
-                    'open': safe_float(data_dict.get('今开')),
-                    'yesterday_close': safe_float(data_dict.get('昨收')),
-                    'high': safe_float(data_dict.get('最高')),
-                    'low': safe_float(data_dict.get('最低')),
-                    'volume': safe_float(data_dict.get('总手')),
-                    'turnover': safe_float(data_dict.get('金额')),
-                    'bid1': safe_float(data_dict.get('buy_1')),
-                    'bid1_volume': safe_float(data_dict.get('buy_1_vol')),
-                    'ask1': safe_float(data_dict.get('sell_1')),
-                    'ask1_volume': safe_float(data_dict.get('sell_1_vol')),
-                    'limit_up': safe_float(data_dict.get('涨停')),
-                    'limit_down': safe_float(data_dict.get('跌停')),
-                    'turnover_rate': safe_float(data_dict.get('换手')),
-                    'volume_ratio': safe_float(data_dict.get('量比')),
-                    'timestamp': datetime.now().isoformat()
-                })
-            except Exception as e:
-                print(f"[watchlist] {code} 获取盘口数据异常: {str(e)}")
+                if value in [None, '', '-']:
+                    return None
+                return float(value)
+            except (ValueError, TypeError):
+                return None
+
+        for code in codes:
+            q = quote_map.get(code)
+            if not q:
+                print(f"[watchlist] {code} 无行情数据，跳过")
                 continue
-        print(f"[watchlist] 返回自选股行情数据: {watchlist}")
+            watchlist.append({
+                'code': code,
+                'name': names.get(code, ''),
+                'current_price': safe_float(getattr(q, 'current_price', None)),
+                'change_percent': safe_float(getattr(q, 'change_percent', None)),
+                'volume': safe_float(getattr(q, 'volume', None)),
+                'amount': safe_float(getattr(q, 'amount', None)),
+                'high': safe_float(getattr(q, 'high', None)),
+                'low': safe_float(getattr(q, 'low', None)),
+                'open': safe_float(getattr(q, 'open', None)),
+                'pre_close': safe_float(getattr(q, 'pre_close', None)),
+                'turnover_rate': safe_float(getattr(q, 'turnover_rate', None)),
+                'pe_dynamic': safe_float(getattr(q, 'pe_dynamic', None)),
+                'total_market_value': safe_float(getattr(q, 'total_market_value', None)),
+                'pb_ratio': safe_float(getattr(q, 'pb_ratio', None)),
+                'circulating_market_value': safe_float(getattr(q, 'circulating_market_value', None)),
+                'update_time': getattr(q, 'update_time', None).isoformat() if getattr(q, 'update_time', None) else None
+            })
+        print(f"[watchlist] 最终返回watchlist条数: {len(watchlist)}")
+        if watchlist:
+            print(f"[watchlist] 返回示例: {watchlist[0]}")
         return JSONResponse({'success': True, 'data': watchlist})
     except Exception as e:
         print(f"[watchlist] 异常: {str(e)}")

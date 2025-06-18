@@ -25,10 +25,23 @@ def safe_float(value):
     except (ValueError, TypeError):
         return None
 
+# 获取市场指数数据(修改为从数据库 index_realtime_quotes 表中获取)
 @router.get("/indices")
 def get_market_indices():
-    """获取市场指数数据(修改为从数据库akshare_index_realtime表中获取)"""
+    """获取市场指数数据(修改为从数据库 index_realtime_quotes 表中获取)"""
     db_file = DB_PATH
+    
+    def map_index_fields(row):
+        return {
+            "code": row.get("code"),
+            "name": row.get("name"),
+            "current": row.get("price"),
+            "change": row.get("change"),
+            "change_percent": row.get("pct_chg"),
+            "volume": row.get("volume"),
+            "timestamp": row.get("update_time"),
+            # 其他字段可按需补充
+        }
     try:
         conn = sqlite3.connect(db_file)
         conn.row_factory = sqlite3.Row
@@ -52,26 +65,25 @@ def get_market_indices():
                 """, (code,)
             )
             row = cursor.fetchone()
+            if row is None:
+                continue
             # 格式化数据，确保数值类型正确
             formatted_row = {}
             for key in row.keys():
                 value = row[key]
-                if key in ['current', 'change', 'change_percent', 'high', 'low', 'open', 'yesterday_close', 'volume', 'turnover']:
-                    # 数值字段进行安全转换
+                if key in ['price', 'change', 'pct_chg', 'high', 'low', 'open', 'pre_close', 'volume', 'amount', 'amplitude', 'turnover', 'pe', 'volume_ratio']:
                     formatted_row[key] = safe_float(value)
                 elif key == 'update_time':
-                    # 时间字段保持原样
                     formatted_row[key] = value
                 else:
-                    # 其他字段保持原样
                     formatted_row[key] = value
-            indices_data.append(formatted_row)
-        
+            indices_data.append(map_index_fields(formatted_row))
         conn.close()
         return JSONResponse({'success': True, 'data': indices_data})    
     except Exception as e:
         return JSONResponse({'success': False, 'message': str(e)})
 
+# 获取当日最新板块行情，按涨幅降序排序
 @router.get("/industry_board")
 def get_industry_board():
     """获取当日最新板块行情，按涨幅降序排序"""

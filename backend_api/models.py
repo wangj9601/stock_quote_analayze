@@ -241,4 +241,23 @@ class QuoteSyncTaskInDB(QuoteSyncTaskCreate):
     updated_at: datetime
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+class StockRealtimeQuote(Base):
+    __tablename__ = "stock_realtime_quote"
+    code = Column(String, primary_key=True)
+    name = Column(String)
+    current_price = Column(Float)
+    change_percent = Column(Float)
+    volume = Column(Float)
+    amount = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    open = Column(Float)
+    pre_close = Column(Float)
+    turnover_rate = Column(Float)
+    pe_dynamic = Column(Float)
+    total_market_value = Column(Float)
+    pb_ratio = Column(Float)
+    circulating_market_value = Column(Float)
+    update_time = Column(DateTime) 
