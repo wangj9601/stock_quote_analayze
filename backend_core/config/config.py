@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 
 # 项目根目录
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent
 
-# 数据库目录
-DB_DIR = Path(r"E:\wangxw\股票分析软件\编码\stock_quote_analayze\database")
+# 数据库目录 - 使用相对路径
+DB_DIR = ROOT_DIR / 'database'
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
 # Tushare配置
@@ -24,7 +24,7 @@ DATA_COLLECTORS = {
         'max_retries': 3,  # 最大重试次数
         'retry_delay': 5,  # 重试延迟（秒）
         'timeout': 30,     # 请求超时时间（秒）
-        'log_dir': str(ROOT_DIR / 'logs'),  # 日志目录
+        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),  # 日志目录
         'db_file': str(DB_DIR / 'stock_analysis.db'),  # 数据库文件路径
         'max_connection_errors': 10,  # 最大连接错误次数
         'token': TUSHARE_CONFIG['token']  # Tushare token
@@ -33,7 +33,7 @@ DATA_COLLECTORS = {
         'max_retries': 3,  # 最大重试次数
         'retry_delay': 5,  # 重试延迟（秒）
         'timeout': 30,     # 请求超时时间（秒）
-        'log_dir': str(ROOT_DIR / 'logs'),  # 日志目录
+        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),  # 日志目录
         'db_file': str(DB_DIR / 'stock_analysis.db'),  # 数据库文件路径
         'max_connection_errors': 10,  # 最大连接错误次数
     }
@@ -41,8 +41,8 @@ DATA_COLLECTORS = {
 
 # 创建必要的目录
 for dir_path in [
-    ROOT_DIR / 'logs',
-    ROOT_DIR / 'data',
-    ROOT_DIR / 'models'
+    ROOT_DIR / 'backend_core' / 'logs',
+    ROOT_DIR / 'backend_core' / 'data',
+    ROOT_DIR / 'backend_core' / 'models'
 ]:
     dir_path.mkdir(parents=True, exist_ok=True)

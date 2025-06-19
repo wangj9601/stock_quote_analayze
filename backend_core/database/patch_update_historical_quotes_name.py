@@ -1,6 +1,8 @@
 import sqlite3
+from pathlib import Path
 
-DB_PATH = 'E:\wangxw\股票分析软件\编码\stock_quote_analayze\database\stock_analysis.db'
+# 使用相对路径
+DB_PATH = Path(__file__).parent.parent.parent / 'database' / 'stock_analysis.db'
 
 UPDATE_SQL = '''
 UPDATE historical_quotes
