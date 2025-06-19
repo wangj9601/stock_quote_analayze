@@ -86,41 +86,52 @@ def get_market_indices():
 # 获取当日最新板块行情，按涨幅降序排序
 @router.get("/industry_board")
 def get_industry_board():
-    """获取当日最新板块行情，按涨幅降序排序"""
-    try:
-        print("📈 开始获取板块行情数据...")
-        df = ak.stock_board_industry_name_em()
-        df = df.sort_values(by='涨跌幅', ascending=False)
-        print("实际字段：", df.columns.tolist())
-        expected_fields = ['板块名称', '最新价', '涨跌额', '涨跌幅', '总市值', '换手率', '成交额', '领涨股', '领涨股涨跌幅']
-        actual_fields = [f for f in expected_fields if f in df.columns]
-        # 统一将 NaN 转为 None
-        df = df.replace({np.nan: None})
-        # 字段名映射为英文
-        field_map = {
-            '板块名称': 'name',
-            '最新价': 'price',
-            '涨跌额': 'change_amount',
-            '涨跌幅': 'change_percent',
-            '总市值': 'market_cap',
-            '换手率': 'turnover_rate',
-            '成交额': 'turnover',
-            '领涨股': 'leading_stock',
-            '领涨股涨跌幅': 'leading_stock_change'
+    """获取当日最新板块行情，按涨幅降序排序（从industry_board_realtime_quotes表读取）"""
+    db_file = DB_PATH
+    def map_board_fields(row):
+        return {
+            "board_code": row.get("board_code"),
+            "board_name": row.get("board_name"),
+            "latest_price": row.get("latest_price"),
+            "change_amount": row.get("change_amount"),
+            "change_percent": row.get("change_percent"),
+            "total_market_value": row.get("total_market_value"),
+            "volume": row.get("volume"),
+            "amount": row.get("amount"),
+            "turnover_rate": row.get("turnover_rate"),
+            "leading_stock_name": row.get("leading_stock_name"),
+            "leading_stock_code": row.get("leading_stock_code"),
+            "leading_stock_change_percent": row.get("leading_stock_change_percent"),
+            "update_time": row.get("update_time"),
         }
+    try:
+        conn = sqlite3.connect(db_file)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM industry_board_realtime_quotes
+            ORDER BY change_percent DESC, update_time DESC
+            """
+        )
+        rows = cursor.fetchall()
         data = []
-        for _, row in df[actual_fields].iterrows():
-            item = {}
-            for k in actual_fields:
-                item[field_map.get(k, k)] = row[k]
-            data.append(item)
-        print(f"✅ 成功获取 {len(data)} 条板块数据")
+        for row in rows:
+            formatted_row = {}
+            for key in row.keys():
+                value = row[key]
+                # 需要转为float的字段
+                if key in [
+                    'latest_price', 'change_amount', 'change_percent', 'total_market_value',
+                    'volume', 'amount', 'turnover_rate', 'leading_stock_change_percent']:
+                    formatted_row[key] = safe_float(value)
+                else:
+                    formatted_row[key] = value
+            data.append(map_board_fields(formatted_row))
+        conn.close()
         return JSONResponse({'success': True, 'data': data})
     except Exception as e:
-        print(f"❌ 获取板块行情数据失败: {str(e)}")
-        print("详细错误信息:")
         tb = traceback.format_exc()
-        print(tb)
         return JSONResponse({
             'success': False,
             'message': '获取板块行情数据失败',

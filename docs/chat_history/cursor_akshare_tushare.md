@@ -87,3 +87,5 @@ _Exported on 2025/6/13 at GMT+8 15:35:37 from Cursor (1.1.2)_
 
 如需继续，请输入你的补充指令，或输入 `TASK_COMPLETE` 结束本次交互。
 
+https://mp.weixin.qq.com/s/uAouYZUlLar4MyHomFff0w
+

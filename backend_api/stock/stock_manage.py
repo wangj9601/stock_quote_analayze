@@ -135,76 +135,35 @@ async def get_stocks_list(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/quote_board")
 async def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最高的股票")):
-    """获取沪深京A股最新行情，返回涨幅最高的前limit个股票"""
-    import datetime
+    """获取沪深京A股最新行情，返回涨幅最高的前limit个股票（始终从stock_realtime_quote表读取，不联表）"""
     import sqlite3
     from backend_api.config import DB_PATH
     try:
-        today = datetime.date.today()
-        if today.weekday() in (5, 6):
-            # 周末，从数据库取，联表查出name
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT q.code, b.name, q.current_price, q.change_percent, q.open, q.pre_close, q.high, q.low, q.volume, q.amount "
-                "FROM stock_realtime_quote q LEFT JOIN stock_basic_info b ON q.code = b.code "
-                "ORDER BY q.change_percent DESC LIMIT ?",
-                (limit,)
-            )
-            rows = cursor.fetchall()
-            conn.close()
-            data = []
-            for row in rows:
-                data.append({
-                    'code': row[0],
-                    'name': row[1],  # 股票名称
-                    'current': row[2],
-                    'change_percent': row[3],
-                    'open': row[4],
-                    'yesterday_close': row[5],
-                    'high': row[6],
-                    'low': row[7],
-                    'volume': row[8],
-                    'turnover': row[9],
-                })
-            print(f"✅(DB) 成功获取 {len(data)} 条A股涨幅榜数据")
-            return JSONResponse({'success': True, 'data': data})
-        # 工作日，保持原有逻辑
-        print(f"📈 获取A股最新行情，limit={limit}")
-        df = stock_spot_cache.get()
-        if df is None:
-            df = ak.stock_zh_a_spot_em()
-            stock_spot_cache.set(df)
-        # 只保留主要字段并按涨跌幅降序排序
-        df = df.sort_values(by='涨跌幅', ascending=False)
-        df = df.replace({np.nan: None})
-        field_map = {
-            '代码': 'code',
-            '名称': 'name',
-            '最新价': 'current',
-            '涨跌额': 'change',
-            '涨跌幅': 'change_percent',
-            '今开': 'open',
-            '昨收': 'yesterday_close',
-            '最高': 'high',
-            '最低': 'low',
-            '成交量': 'volume',
-            '成交额': 'turnover',
-            '换手率': 'turnover_rate',
-            '市盈率-动态': 'pe_dynamic',
-            '市净率': 'pb',
-            '总市值': 'market_cap',
-            '流通市值': 'circulating_market_cap',
-        }
-        expected_fields = list(field_map.keys())
-        actual_fields = [f for f in expected_fields if f in df.columns]
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT code, name, current_price, change_percent, open, pre_close, high, low, volume, amount "
+            "FROM stock_realtime_quote "
+            "ORDER BY change_percent DESC LIMIT ?",
+            (limit,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
         data = []
-        for _, row in df[actual_fields].head(limit).iterrows():
-            item = {}
-            for k in actual_fields:
-                item[field_map.get(k, k)] = row[k]
-            data.append(item)
-        print(f"✅ 成功获取 {len(data)} 条A股涨幅榜数据")
+        for row in rows:
+            data.append({
+                'code': row[0],
+                'name': row[1],
+                'current': row[2],
+                'change_percent': row[3],
+                'open': row[4],
+                'yesterday_close': row[5],
+                'high': row[6],
+                'low': row[7],
+                'volume': row[8],
+                'turnover': row[9],
+            })
+        print(f"✅(DB) 成功获取 {len(data)} 条A股涨幅榜数据")
         return JSONResponse({'success': True, 'data': data})
     except Exception as e:
         print(f"❌ 获取A股涨幅榜数据失败: {str(e)}")

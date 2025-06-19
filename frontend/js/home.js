@@ -214,7 +214,7 @@ function updateSectorDisplay(sectors) {
             const changeClass = sector.change_percent > 0 ? 'positive' : sector.change_percent < 0 ? 'negative' : '';
             const changeSign = sector.change_percent > 0 ? '+' : '';
             sectorHTML += '<div class="sector-item">' +
-                '<div class="sector-name">' + (sector.name || '--') + '</div>' +
+                '<div class="sector-name">' + (sector.board_name || '--') + '</div>' +
                 '<div class="sector-change ' + changeClass + '">' +
                     changeSign + formatNumber(sector.change_percent, 2, '%') +
                 '</div>' +
