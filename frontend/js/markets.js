@@ -226,7 +226,7 @@ async loadRankingData(page = 1) {
                 percent: item.change_percent,
                 volume: item.volume,
                 turnover: item.turnover,
-                rate: item.turnover_rate
+                rate: item.rate
             }));
             this.renderRankingTable(data);
             this.renderPagination();
@@ -435,23 +435,28 @@ async loadRankingData(page = 1) {
 
     // 格式化价格
     formatPrice(price) {
-        return parseFloat(price).toFixed(2);
+        if (price === null || typeof price === 'undefined' || isNaN(price)) return '--';
+        return price.toFixed(2);
     },
 
     // 格式化涨跌额
     formatChange(change) {
-        return change >= 0 ? `+${change.toFixed(2)}` : change.toFixed(2);
+        if (change === null || typeof change === 'undefined' || isNaN(change)) return '--';
+        const sign = change > 0 ? '+' : '';
+        return `${sign}${change.toFixed(2)}`;
     },
 
-    // 格式化涨跌幅
+    // 格式化百分比
     formatPercent(percent) {
-        return percent >= 0 ? `+${percent.toFixed(2)}%` : `${percent.toFixed(2)}%`;
+        if (percent === null || typeof percent === 'undefined' || isNaN(percent)) return '--';
+        return `${percent.toFixed(2)}%`;
     },
 
-    // 获取涨跌样式类
+    // 获取涨跌颜色
     getChangeClass(value) {
-        if (value > 0) return 'positive';
-        if (value < 0) return 'negative';
+        if (value === null || typeof value === 'undefined' || isNaN(value)) return 'text-gray-500';
+        if (value > 0) return 'text-red-500';
+        if (value < 0) return 'text-green-500';
         return '';
     },
 

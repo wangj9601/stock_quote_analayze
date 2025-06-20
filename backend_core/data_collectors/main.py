@@ -86,7 +86,7 @@ scheduler.add_job(
     'cron',
     day_of_week='mon-fri',
     hour='9-10,11,13-21',
-    minute='0,20,40',
+    minute='1,21,41',
     id='akshare_index_realtime',
 )
 
@@ -96,7 +96,7 @@ scheduler.add_job(
     'cron',
     day_of_week='mon-fri',
     hour='9-10,11,13-21',
-    minute='0,30',
+    minute='2,32',
     id='akshare_industry_board_realtime',
 )
 

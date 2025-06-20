@@ -553,7 +553,7 @@ const WatchlistPage = {
             // 午盘 13:30-15:30
             const inAfternoon = (hour === 13 && minute >= 30) || (hour === 14) || (hour === 15 && minute <= 30);
             if (inMorning || inAfternoon) {
-                return 30000; // 30秒
+                return 300000; // 30秒
             } else {
                 return 600000; // 600秒
             }

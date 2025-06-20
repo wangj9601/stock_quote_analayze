@@ -14,9 +14,9 @@ from backend_api.config import DB_PATH
 import pandas as pd
 import math
 
-# 简单内存缓存实现,缓存120秒。
+# 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
-    def __init__(self, expire_seconds=120):
+    def __init__(self, expire_seconds=600):
         self.data = None
         self.timestamp = 0
         self.expire = expire_seconds
@@ -32,7 +32,7 @@ class DataFrameCache:
             self.timestamp = time.time()
 
 # 创建一个全局缓存实例
-stock_spot_cache = DataFrameCache(expire_seconds=60)
+stock_spot_cache = DataFrameCache(expire_seconds=600)
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
 
@@ -180,69 +180,84 @@ def get_quote_board_list(
     page_size: int = Query(20, description="每页条数，默认20")
 ):
     """
-    获取A股最新行情，支持多种排行类型、市场过滤和分页
+    获取A股最新行情，支持多种排行类型、市场过滤和分页 (数据源: stock_realtime_quote)
     """
     try:
-        print(f"📊 获取A股行情排行: type={ranking_type}, market={market}, page={page}, page_size={page_size}")
-        df = stock_spot_cache.get()
-        if df is None:
-            df = ak.stock_zh_a_spot_em()
-            stock_spot_cache.set(df)
-        # 市场类型过滤
+        print(f"📊 获取A股行情排行 (from DB): type={ranking_type}, market={market}, page={page}, page_size={page_size}")
+        
+        # 1. 从数据库读取数据到 pandas DataFrame
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("SELECT * FROM stock_realtime_quote", conn)
+        conn.close()
+
+        # 2. 市场类型过滤
         if market != 'all':
             if market == 'sh':
-                df = df[df['代码'].str.startswith('6')]
+                df = df[df['code'].str.startswith('6')]
             elif market == 'sz':
-                df = df[df['代码'].str.startswith('0')]
+                df = df[df['code'].str.startswith('0') | df['code'].str.startswith('3')] # 深市包含主板和创业板
             elif market == 'cy':
-                df = df[df['代码'].str.startswith('3')]
+                df = df[df['code'].str.startswith('3')]
             elif market == 'bj':
-                df = df[df['代码'].str.startswith('8')]
-        # 排行类型排序
-        if ranking_type == 'rise':
-            df = df.sort_values(by='涨跌幅', ascending=False)
-        elif ranking_type == 'fall':
-            df = df.sort_values(by='涨跌幅', ascending=True)
-        elif ranking_type == 'volume':
-            df = df.sort_values(by='成交量', ascending=False)
-        elif ranking_type == 'turnover_rate':
-            df = df.sort_values(by='换手率', ascending=False)
+                df = df[df['code'].str.startswith('8') | df['code'].str.startswith('4')] # 北交所
+        
+        # 3. 排行类型排序
+        sort_column_map = {
+            'rise': ('change_percent', False),
+            'fall': ('change_percent', True),
+            'volume': ('volume', False),
+            'turnover_rate': ('turnover_rate', False)
+        }
+        
+        if ranking_type in sort_column_map:
+            col, ascending = sort_column_map[ranking_type]
+            df = df.sort_values(by=col, ascending=ascending)
         else:
             return JSONResponse({'success': False, 'message': '无效的排行类型'}, status_code=400)
-        import numpy as np
+
+        # 4. 字段重命名和格式化
         df = df.replace({np.nan: None})
-        field_map = {
-            '代码': 'code',
-            '名称': 'name',
-            '最新价': 'current',
-            '涨跌额': 'change',
-            '涨跌幅': 'change_percent',
-            '今开': 'open',
-            '昨收': 'yesterday_close',
-            '最高': 'high',
-            '最低': 'low',
-            '成交量': 'volume',
-            '成交额': 'turnover',
-            '换手率': 'turnover_rate',
-            '市盈率-动态': 'pe_dynamic',
-            '市净率': 'pb',
-            '总市值': 'market_cap',
-            '流通市值': 'circulating_market_cap',
+        
+        field_rename_map = {
+            'code': 'code',
+            'name': 'name',
+            'current_price': 'current',
+            # 'change' is not in db, can be calculated if needed
+            'change_percent': 'change_percent',
+            'open': 'open',
+            'pre_close': 'yesterday_close',
+            'high': 'high',
+            'low': 'low',
+            'volume': 'volume',
+            'amount': 'turnover',
+            'turnover_rate': 'rate',
+            'pe_dynamic': 'pe_dynamic',
+            'pb_ratio': 'pb',
+            'total_market_value': 'market_cap',
+            'circulating_market_value': 'circulating_market_cap'
         }
-        expected_fields = list(field_map.keys())
-        actual_fields = [f for f in expected_fields if f in df.columns]
-        total = len(df)
+        
+        # Select and rename columns
+        df_selected = df[list(field_rename_map.keys())].rename(columns=field_rename_map)
+
+        # Calculate 'change' if possible
+        if 'current' in df_selected.columns and 'yesterday_close' in df_selected.columns:
+            df_selected['change'] = (df_selected['current'] - df_selected['yesterday_close']).round(2)
+        else:
+            df_selected['change'] = None
+
+        # 5. 分页
+        total = len(df_selected)
         start = (page - 1) * page_size
         end = start + page_size
-        df_page = df.iloc[start:end]
-        data = []
-        for _, row in df_page[actual_fields].iterrows():
-            item = {}
-            for k in actual_fields:
-                item[field_map.get(k, k)] = row[k]
-            data.append(item)
+        df_page = df_selected.iloc[start:end]
+        
+        data = df_page.to_dict(orient='records')
+        data = clean_nan(data)
+        
         print(f"✅ 成功获取 {len(data)} 条A股排行数据 (总数: {total})")
         return JSONResponse({'success': True, 'data': data, 'total': total, 'page': page, 'page_size': page_size})
+        
     except Exception as e:
         print(f"❌ 获取A股排行数据失败: {str(e)}")
         tb = traceback.format_exc()
