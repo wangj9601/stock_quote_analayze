@@ -1,7 +1,7 @@
 import sys
 import logging
 from apscheduler.schedulers.blocking import BlockingScheduler
-from datetime import datetime
+from datetime import datetime, timedelta
 from backend_core.data_collectors.akshare.realtime import AkshareRealtimeQuoteCollector
 from backend_core.data_collectors.tushare.historical import HistoricalQuoteCollector
 from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
@@ -41,7 +41,11 @@ def collect_akshare_index_realtime():
 
 def collect_tushare_historical():
     try:
-        today = datetime.now().strftime('%Y%m%d')
+        today = datetime.now()
+        while today.weekday() >= 5:  # 5是周六,6是周日
+            today = today - timedelta(days=1)
+        today = today - timedelta(days=1)  # 取前一天
+        today = today.strftime('%Y%m%d')
         logging.info(f"[定时任务] Tushare 历史行情采集开始，日期: {today}")
         tushare_hist_collector.collect_historical_quotes(today)
         logging.info("[定时任务] Tushare 历史行情采集完成")
@@ -70,12 +74,12 @@ scheduler.add_job(
     collect_akshare_realtime,
     'cron',
     day_of_week='mon-fri',
-    hour='9-11,13-21',
+    hour='9-11,13-23',
     minute='0,15,30,45',
     id='akshare_realtime',
 )
 # 每天15:45采集当天历史行情（收盘后）
-scheduler.add_job(collect_tushare_historical, 'cron', hour=15, minute=45, id='tushare_historical')
+scheduler.add_job(collect_tushare_historical, 'cron', hour=22, minute=53, id='tushare_historical')
 
 # 每隔5分钟采集一次Tushare实时行情----由于tushare对普通会员，一小时只能调用1次，所以暂时不启用
 #scheduler.add_job(collect_tushare_realtime, 'interval', minutes=5, id='tushare_realtime')

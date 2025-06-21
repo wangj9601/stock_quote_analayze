@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-股票分析系统 - 交互式审查脚本
-用于在 AI 完成主要任务后，允许用户进行交互式审查和提供子提示。
-"""
-
+# final_review_gate.py
 import sys
 import os
 
@@ -24,7 +18,7 @@ if __name__ == "__main__":
 
     print("--- FINAL REVIEW GATE ACTIVE ---", flush=True)
     print("AI has completed its primary actions. Awaiting your review or further sub-prompts.", flush=True)
-    print("Type your sub-prompt, or one of: 'TASK_COMPLETE', 'Done', 'Quit', 'q' to signal completion.", flush=True)
+    print("Type your sub-prompt, or one of: 'TASK_COMPLETE', 'Done', 'Quit', 'q' to signal completion.", flush=True) # MODIFIED
     
     active_session = True
     while active_session:
@@ -43,7 +37,7 @@ if __name__ == "__main__":
             user_input = line.strip()
 
             # Check for exit conditions
-            if user_input.upper() in ['TASK_COMPLETE', 'DONE', 'QUIT', 'Q']:
+            if user_input.upper() in ['TASK_COMPLETE', 'DONE', 'QUIT', 'Q']: # MODIFIED: Empty string no longer exits
                 print(f"--- REVIEW GATE: USER SIGNALED COMPLETION WITH '{user_input.upper()}' ---", flush=True)
                 active_session = False
                 break
