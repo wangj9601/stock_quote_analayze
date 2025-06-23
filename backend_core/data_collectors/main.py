@@ -74,7 +74,7 @@ scheduler.add_job(
     collect_akshare_realtime,
     'cron',
     day_of_week='mon-fri',
-    hour='9-11,13-23',
+    hour='9-11,13-16',
     minute='0,15,30,45',
     id='akshare_realtime',
 )
@@ -89,7 +89,7 @@ scheduler.add_job(
     collect_akshare_index_realtime,
     'cron',
     day_of_week='mon-fri',
-    hour='9-10,11,13-21',
+    hour='9-10,11,13-16',
     minute='1,21,41',
     id='akshare_index_realtime',
 )
@@ -99,7 +99,7 @@ scheduler.add_job(
     collect_akshare_industry_board_realtime,
     'cron',
     day_of_week='mon-fri',
-    hour='9-10,11,13-21',
+    hour='9-10,11,13-16',
     minute='2,32',
     id='akshare_industry_board_realtime',
 )
