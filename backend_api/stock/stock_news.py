@@ -8,6 +8,7 @@ import datetime
 import sqlite3
 from backend_api.config import DB_PATH
 import pandas as pd
+import difflib
 
 router = APIRouter(prefix="/api/stock", tags=["stock_news"])
 
@@ -22,205 +23,56 @@ def clean_nan(obj):
         return [clean_nan(v) for v in obj]
     return obj
 
-@router.get("/news")
-async def get_stock_news(
-    symbol: str = Query(..., description="股票代码"),
-    limit: int = Query(100, description="获取新闻数量，默认100条")
-):
-    """
-    获取指定股票代码的新闻资讯数据
-    """
-    try:
-        print(f"[stock_news] 获取股票新闻: symbol={symbol}, limit={limit}")
-        
-        # 调用AkShare获取新闻数据
-        df = ak.stock_news_em(symbol=symbol)
-        
-        if df is None or df.empty:
-            print(f"[stock_news] 未获取到新闻数据: {symbol}")
-            return JSONResponse({"success": False, "message": f"未获取到股票 {symbol} 的新闻数据"}, status_code=404)
-        
-        print(f"[stock_news] 获取到 {len(df)} 条原始新闻数据")
-        print(f"[stock_news] DataFrame columns: {df.columns.tolist()}")
-        
-        # 限制数量
-        if len(df) > limit:
-            df = df.head(limit)
-        
-        # 数据清理和格式化
-        result = []
-        for _, row in df.iterrows():
-            # 处理发布时间
-            publish_time = row.get('发布时间', '') or row.get('时间', '') or row.get('更新时间', '')
-            if pd.isna(publish_time):
-                publish_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            else:
-                # 如果是datetime对象，转换为字符串
-                if hasattr(publish_time, 'strftime'):
-                    publish_time = publish_time.strftime('%Y-%m-%d %H:%M:%S')
-                else:
-                    publish_time = str(publish_time)
-            
-            news_item = {
-                "id": row.get('序号', '') or '',
-                "title": row.get('新闻标题', '') or row.get('标题', '') or '',
-                "content": row.get('新闻内容', '') or row.get('内容', '') or '',
-                "keywords": row.get('关键词', '') or '',
-                "publish_time": publish_time,
-                "source": row.get('文章来源', '') or row.get('来源', '') or '东方财富',
-                "url": row.get('新闻链接', '') or row.get('链接', '') or '',
-                "summary": row.get('摘要', '') or '',
-                "type": "news"
-            }
-            result.append(news_item)
-        
-        # 清理数据
-        result = clean_nan(result)
-        
-        # 保存到数据库
-        await save_news_to_db(symbol, result)
-        
-        print(f"[stock_news] 成功返回 {len(result)} 条新闻数据")
-        return JSONResponse({"success": True, "data": result, "total": len(result)})
-        
-    except Exception as e:
-        print(f"[stock_news] 获取新闻数据异常: {e}")
-        print(traceback.format_exc())
-        return JSONResponse({"success": False, "message": f"获取新闻数据失败: {str(e)}"}, status_code=500)
+def calculate_similarity(title1, title2):
+    """计算两个标题的相似度"""
+    if not title1 or not title2:
+        return 0.0
+    return difflib.SequenceMatcher(None, title1, title2).ratio()
 
-@router.get("/announcements")
-async def get_stock_announcements(
-    symbol: str = Query(..., description="股票代码"),
-    limit: int = Query(50, description="获取公告数量，默认50条")
-):
+def deduplicate_news(news_list, similarity_threshold=0.8):
     """
-    获取指定股票代码的公告数据
+    新闻去重函数
+    优先保留东方财富网的新闻，相似度超过阈值的新闻只保留一条
     """
-    try:
-        print(f"[stock_announcements] 获取股票公告: symbol={symbol}, limit={limit}")
-        
-        # 调用AkShare获取公告数据
-        df = ak.stock_notice_report(symbol=symbol)
-        
-        if df is None or df.empty:
-            print(f"[stock_announcements] 未获取到公告数据: {symbol}")
-            return JSONResponse({"success": False, "message": f"未获取到股票 {symbol} 的公告数据"}, status_code=404)
-        
-        print(f"[stock_announcements] 获取到 {len(df)} 条原始公告数据")
-        print(f"[stock_announcements] DataFrame columns: {df.columns.tolist()}")
-        
-        # 限制数量
-        if len(df) > limit:
-            df = df.head(limit)
-        
-        # 数据清理和格式化
-        result = []
-        for _, row in df.iterrows():
-            # 处理发布时间
-            publish_time = row.get('公告日期', '') or row.get('时间', '') or row.get('更新时间', '')
-            if pd.isna(publish_time):
-                publish_time = datetime.datetime.now().strftime('%Y-%m-%d')
-            else:
-                # 如果是datetime对象，转换为字符串
-                if hasattr(publish_time, 'strftime'):
-                    publish_time = publish_time.strftime('%Y-%m-%d')
-                else:
-                    publish_time = str(publish_time)
+    if not news_list:
+        return news_list
+    
+    # 按来源优先级排序：东方财富 > 其他来源
+    def get_source_priority(item):
+        source = item.get('source', '').lower()
+        if '东方财富' in source:
+            return 1  # 最高优先级
+        elif '财经' in source or '证券' in source:
+            return 2  # 财经类媒体次优先
+        else:
+            return 3  # 其他来源最低优先级
+    
+    # 先按时间倒序，再按来源优先级排序
+    sorted_news = sorted(news_list, key=lambda x: (x.get('publish_time', ''), get_source_priority(x)), reverse=True)
+    
+    unique_news = []
+    processed_titles = []
+    
+    for news_item in sorted_news:
+        title = news_item.get('title', '')
+        if not title:
+            continue
             
-            announcement_item = {
-                "id": row.get('序号', '') or '',
-                "title": row.get('公告标题', '') or row.get('标题', '') or '',
-                "content": row.get('公告摘要', '') or row.get('摘要', '') or '',
-                "keywords": "",
-                "publish_time": publish_time,
-                "source": "上市公司公告",
-                "url": row.get('公告链接', '') or row.get('相关链接', '') or '',
-                "summary": row.get('公告摘要', '') or row.get('摘要', '') or '',
-                "type": "announcement"
-            }
-            result.append(announcement_item)
+        # 检查是否与已处理的标题相似
+        is_duplicate = False
+        for processed_title in processed_titles:
+            similarity = calculate_similarity(title, processed_title)
+            if similarity >= similarity_threshold:
+                is_duplicate = True
+                print(f"[deduplicate_news] 发现重复新闻: '{title}' 与 '{processed_title}' 相似度: {similarity:.2f}")
+                break
         
-        # 清理数据
-        result = clean_nan(result)
-        
-        # 保存到数据库
-        await save_news_to_db(symbol, result)
-        
-        print(f"[stock_announcements] 成功返回 {len(result)} 条公告数据")
-        return JSONResponse({"success": True, "data": result, "total": len(result)})
-        
-    except Exception as e:
-        print(f"[stock_announcements] 获取公告数据异常: {e}")
-        print(traceback.format_exc())
-        return JSONResponse({"success": False, "message": f"获取公告数据失败: {str(e)}"}, status_code=500)
-
-@router.get("/research_reports")
-async def get_stock_research_reports(
-    symbol: str = Query(..., description="股票代码"),
-    limit: int = Query(20, description="获取研报数量，默认20条")
-):
-    """
-    获取指定股票代码的研报数据
-    """
-    try:
-        print(f"[stock_research] 获取股票研报: symbol={symbol}, limit={limit}")
-        
-        # 调用AkShare获取研报数据
-        df = ak.stock_research_report_em(symbol=symbol)
-        
-        if df is None or df.empty:
-            print(f"[stock_research] 未获取到研报数据: {symbol}")
-            return JSONResponse({"success": False, "message": f"未获取到股票 {symbol} 的研报数据"}, status_code=404)
-        
-        print(f"[stock_research] 获取到 {len(df)} 条原始研报数据")
-        print(f"[stock_research] DataFrame columns: {df.columns.tolist()}")
-        
-        # 限制数量
-        if len(df) > limit:
-            df = df.head(limit)
-        
-        # 数据清理和格式化
-        result = []
-        for _, row in df.iterrows():
-            # 处理发布时间
-            publish_time = row.get('发布日期', '') or row.get('时间', '') or row.get('更新时间', '')
-            if pd.isna(publish_time):
-                publish_time = datetime.datetime.now().strftime('%Y-%m-%d')
-            else:
-                # 如果是datetime对象，转换为字符串
-                if hasattr(publish_time, 'strftime'):
-                    publish_time = publish_time.strftime('%Y-%m-%d')
-                else:
-                    publish_time = str(publish_time)
-            
-            research_item = {
-                "id": row.get('序号', '') or '',
-                "title": row.get('研报标题', '') or row.get('标题', '') or '',
-                "content": row.get('研报摘要', '') or row.get('摘要', '') or '',
-                "keywords": row.get('评级', '') or '',
-                "publish_time": publish_time,
-                "source": row.get('机构名称', '') or row.get('券商名称', '') or '研究机构',
-                "url": row.get('研报链接', '') or row.get('链接', '') or '',
-                "summary": row.get('研报摘要', '') or row.get('投资要点', '') or '',
-                "type": "research",
-                "rating": row.get('评级', '') or row.get('投资评级', '') or '',
-                "target_price": row.get('目标价', '') or row.get('目标价格', '') or ''
-            }
-            result.append(research_item)
-        
-        # 清理数据
-        result = clean_nan(result)
-        
-        # 保存到数据库
-        await save_news_to_db(symbol, result)
-        
-        print(f"[stock_research] 成功返回 {len(result)} 条研报数据")
-        return JSONResponse({"success": True, "data": result, "total": len(result)})
-        
-    except Exception as e:
-        print(f"[stock_research] 获取研报数据异常: {e}")
-        print(traceback.format_exc())
-        return JSONResponse({"success": False, "message": f"获取研报数据失败: {str(e)}"}, status_code=500)
+        if not is_duplicate:
+            unique_news.append(news_item)
+            processed_titles.append(title)
+    
+    print(f"[deduplicate_news] 去重前: {len(news_list)} 条，去重后: {len(unique_news)} 条")
+    return unique_news
 
 @router.get("/news_combined")
 async def get_stock_news_combined(
@@ -241,7 +93,6 @@ async def get_stock_news_combined(
         try:
             news_df = ak.stock_news_em(symbol=symbol)
             if news_df is not None and not news_df.empty:
-                news_df = news_df.head(news_limit)
                 for _, row in news_df.iterrows():
                     publish_time = row.get('发布时间', '') or row.get('时间', '')
                     if pd.isna(publish_time):
@@ -329,17 +180,38 @@ async def get_stock_news_combined(
         except Exception as e:
             print(f"[stock_news_combined] 获取研报数据失败: {e}")
         
+        # 去重处理 - 在合并后统一去重，这样可以跨类型去重
+        all_data = deduplicate_news(all_data)
+        
         # 按发布时间排序
         all_data.sort(key=lambda x: x.get('publish_time', ''), reverse=True)
         
+        # 根据类型限制数量
+        news_count = 0
+        announcement_count = 0
+        research_count = 0
+        filtered_data = []
+        
+        for item in all_data:
+            item_type = item.get('type', '')
+            if item_type == 'news' and news_count < news_limit:
+                filtered_data.append(item)
+                news_count += 1
+            elif item_type == 'announcement' and announcement_count < announcement_limit:
+                filtered_data.append(item)
+                announcement_count += 1
+            elif item_type == 'research' and research_count < research_limit:
+                filtered_data.append(item)
+                research_count += 1
+        
         # 清理数据
-        all_data = clean_nan(all_data)
+        filtered_data = clean_nan(filtered_data)
         
         # 保存到数据库
-        await save_news_to_db(symbol, all_data)
+        await save_news_to_db(symbol, filtered_data)
         
-        print(f"[stock_news_combined] 成功返回 {len(all_data)} 条综合资讯数据")
-        return JSONResponse({"success": True, "data": all_data, "total": len(all_data)})
+        print(f"[stock_news_combined] 成功返回 {len(filtered_data)} 条综合资讯数据 (新闻:{news_count}, 公告:{announcement_count}, 研报:{research_count})")
+        return JSONResponse({"success": True, "data": filtered_data, "total": len(filtered_data)})
         
     except Exception as e:
         print(f"[stock_news_combined] 获取综合资讯异常: {e}")
@@ -387,64 +259,3 @@ async def save_news_to_db(symbol: str, news_data: list):
     except Exception as e:
         print(f"[save_news_to_db] 保存数据到数据库失败: {e}")
         print(traceback.format_exc())
-
-@router.get("/news_from_db")
-async def get_stock_news_from_db(
-    symbol: str = Query(..., description="股票代码"),
-    type_filter: str = Query("all", description="类型过滤: all, news, announcement, research"),
-    limit: int = Query(100, description="返回数量限制")
-):
-    """
-    从数据库获取股票新闻数据
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # 构建查询SQL
-        if type_filter == "all":
-            sql = """
-                SELECT title, content, keywords, publish_time, source, url, summary, type, rating, target_price, created_at
-                FROM stock_news 
-                WHERE stock_code = ? 
-                ORDER BY publish_time DESC, created_at DESC
-                LIMIT ?
-            """
-            cursor.execute(sql, (symbol, limit))
-        else:
-            sql = """
-                SELECT title, content, keywords, publish_time, source, url, summary, type, rating, target_price, created_at
-                FROM stock_news 
-                WHERE stock_code = ? AND type = ?
-                ORDER BY publish_time DESC, created_at DESC
-                LIMIT ?
-            """
-            cursor.execute(sql, (symbol, type_filter, limit))
-        
-        rows = cursor.fetchall()
-        conn.close()
-        
-        # 格式化数据
-        data = []
-        for i, row in enumerate(rows):
-            data.append({
-                "id": f"{type_filter}_{i}",
-                "title": row[0],
-                "content": row[1],
-                "keywords": row[2],
-                "publish_time": row[3],
-                "source": row[4],
-                "url": row[5],
-                "summary": row[6],
-                "type": row[7],
-                "rating": row[8] or '',
-                "target_price": row[9] or ''
-            })
-        
-        print(f"[stock_news_from_db] 从数据库返回 {len(data)} 条新闻数据")
-        return JSONResponse({"success": True, "data": data, "total": len(data)})
-        
-    except Exception as e:
-        print(f"[stock_news_from_db] 从数据库获取新闻数据异常: {e}")
-        print(traceback.format_exc())
-        return JSONResponse({"success": False, "message": f"从数据库获取新闻数据失败: {str(e)}"}, status_code=500)
