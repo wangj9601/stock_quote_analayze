@@ -653,6 +653,20 @@
     color: #0369a1;
 }
 
+.news-type.research {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.news-source {
+    font-size: 0.75rem;
+    color: #6b7280;
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    margin-left: 0.5rem;
+}
+
 .news-title {
     font-size: 1.1rem;
     font-weight: 600;
@@ -665,6 +679,36 @@
     color: #6b7280;
     line-height: 1.6;
     font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.target-price {
+    font-size: 0.8rem;
+    color: #059669;
+    font-weight: 600;
+    margin: 0.5rem 0;
+}
+
+.news-link, .research-link {
+    color: #3b82f6;
+    text-decoration: none;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    display: inline-block;
+}
+
+.news-link:hover, .research-link:hover {
+    text-decoration: underline;
+}
+
+.no-data {
+    text-align: center;
+    color: #6b7280;
+    font-style: italic;
+    padding: 2rem;
+    background: #f9fafb;
+    border-radius: 8px;
+    margin: 1rem 0;
 }
 
 /* 研报样式 */

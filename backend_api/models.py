@@ -260,4 +260,23 @@ class StockRealtimeQuote(Base):
     total_market_value = Column(Float)
     pb_ratio = Column(Float)
     circulating_market_value = Column(Float)
-    update_time = Column(DateTime) 
+    update_time = Column(DateTime)
+
+class StockNews(Base):
+    """股票新闻公告表"""
+    __tablename__ = "stock_news"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    stock_code = Column(String(10), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    content = Column(String, nullable=True)  # 新闻内容，长文本
+    keywords = Column(String(200), nullable=True)  # 关键词
+    publish_time = Column(String(50), nullable=True)  # 发布时间
+    source = Column(String(100), nullable=True)  # 文章来源
+    url = Column(String(500), nullable=True)  # 新闻链接
+    summary = Column(String, nullable=True)  # 摘要
+    type = Column(String(20), default="news", nullable=False)  # 类型: news, announcement, research
+    rating = Column(String(50), nullable=True)  # 研报评级
+    target_price = Column(String(20), nullable=True)  # 研报目标价
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now) 

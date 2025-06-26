@@ -27,6 +27,11 @@ https://github.com/yutiansut/QUANTAXIS
 
 https://github.com/Sumanth077/awesome-ai-apps-and-agents.git
 
+https://github.com/google-gemini/gemini-cli
+
+一键打包 Python，跨平台运行
+https://github.com/TanixLu/pyfuze
+
 
 
 # git常规操作指令

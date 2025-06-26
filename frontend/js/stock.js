@@ -657,13 +657,168 @@ const StockPage = {
     },
 
     // 加载新闻数据
-    loadNewsData() {
-        console.log('新闻数据已加载');
+    async loadNewsData() {
+        try {
+            console.log('[loadNewsData] 开始加载新闻数据:', this.stockCode);
+            const url = `${API_BASE_URL}/api/stock/news_combined?symbol=${this.stockCode}&news_limit=50&announcement_limit=20&research_limit=10`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            
+            if (data.success && data.data) {
+                console.log('[loadNewsData] 获取到新闻数据:', data.data.length, '条');
+                this.renderNewsData(data.data);
+            } else {
+                console.error('[loadNewsData] 获取新闻数据失败:', data.message);
+                CommonUtils.showToast('获取新闻数据失败: ' + (data.message || '未知错误'), 'error');
+            }
+        } catch (error) {
+            console.error('[loadNewsData] 请求异常:', error);
+            CommonUtils.showToast('新闻数据请求异常', 'error');
+        }
+    },
+
+    // 渲染新闻数据
+    renderNewsData(newsData) {
+        const newsContainer = document.querySelector('.news-items');
+        if (!newsContainer) return;
+        
+        // 清空现有内容
+        newsContainer.innerHTML = '';
+        
+        // 如果没有数据，显示空状态
+        if (!newsData || newsData.length === 0) {
+            newsContainer.innerHTML = '<div class="no-data">暂无新闻数据</div>';
+            return;
+        }
+        
+        // 渲染新闻项目
+        newsData.forEach(item => {
+            const newsCard = document.createElement('div');
+            newsCard.className = 'news-card';
+            
+            // 确定新闻类型显示文本和样式
+            let typeText = '新闻';
+            let typeClass = 'news';
+            if (item.type === 'announcement') {
+                typeText = '公告';
+                typeClass = 'announcement';
+            } else if (item.type === 'research') {
+                typeText = '研报';
+                typeClass = 'research';
+            }
+            
+            // 格式化发布时间
+            const publishTime = item.publish_time ? item.publish_time.split(' ')[0] : '未知时间';
+            
+            // 构建新闻卡片HTML
+            newsCard.innerHTML = `
+                <div class="news-meta">
+                    <span class="news-date">${publishTime}</span>
+                    <span class="news-type ${typeClass}">${typeText}</span>
+                    ${item.source ? `<span class="news-source">${item.source}</span>` : ''}
+                    ${item.rating ? `<span class="research-rating">${item.rating}</span>` : ''}
+                </div>
+                <h4 class="news-title">${item.title || '无标题'}</h4>
+                <p class="news-summary">${item.summary || item.content || '无摘要'}</p>
+                ${item.target_price ? `<div class="target-price">目标价: ${item.target_price}</div>` : ''}
+                ${item.url ? `<a href="${item.url}" target="_blank" class="news-link">查看详情</a>` : ''}
+            `;
+            
+            newsContainer.appendChild(newsCard);
+        });
+        
+        console.log('[loadNewsData] 新闻数据渲染完成，共', newsData.length, '条');
     },
 
     // 加载研报数据
-    loadResearchData() {
-        console.log('研报数据已加载');
+    async loadResearchData() {
+        try {
+            console.log('[loadResearchData] 开始加载研报数据:', this.stockCode);
+            const url = `${API_BASE_URL}/api/stock/research_reports?symbol=${this.stockCode}&limit=20`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            
+            if (data.success && data.data) {
+                console.log('[loadResearchData] 获取到研报数据:', data.data.length, '条');
+                this.renderResearchData(data.data);
+            } else {
+                console.error('[loadResearchData] 获取研报数据失败:', data.message);
+                CommonUtils.showToast('获取研报数据失败: ' + (data.message || '未知错误'), 'error');
+            }
+        } catch (error) {
+            console.error('[loadResearchData] 请求异常:', error);
+            CommonUtils.showToast('研报数据请求异常', 'error');
+        }
+    },
+
+    // 渲染研报数据
+    renderResearchData(researchData) {
+        const researchContainer = document.querySelector('.research-list');
+        if (!researchContainer) return;
+        
+        // 清空现有内容
+        researchContainer.innerHTML = '';
+        
+        // 如果没有数据，显示空状态
+        if (!researchData || researchData.length === 0) {
+            researchContainer.innerHTML = '<div class="no-data">暂无研报数据</div>';
+            return;
+        }
+        
+        // 渲染研报项目
+        researchData.forEach(item => {
+            const researchItem = document.createElement('div');
+            researchItem.className = 'research-item';
+            
+            // 确定评级样式
+            let ratingClass = 'hold';
+            const rating = item.rating || item.keywords || '';
+            if (rating.includes('买入') || rating.includes('推荐')) {
+                ratingClass = 'buy';
+            } else if (rating.includes('卖出') || rating.includes('减持')) {
+                ratingClass = 'sell';
+            }
+            
+            // 格式化发布时间
+            const publishTime = item.publish_time ? item.publish_time.split(' ')[0] : '未知时间';
+            
+            // 计算目标价涨幅（如果有当前价格）
+            let targetUpside = '';
+            if (item.target_price && this.currentPrice) {
+                try {
+                    const target = parseFloat(item.target_price);
+                    const current = parseFloat(this.currentPrice);
+                    const upside = ((target - current) / current * 100).toFixed(1);
+                    targetUpside = `<span class="target-upside ${upside > 0 ? 'positive' : 'negative'}">${upside}%</span>`;
+                } catch (e) {
+                    // 忽略计算错误
+                }
+            }
+            
+            // 构建研报项目HTML
+            researchItem.innerHTML = `
+                <div class="research-header">
+                    <h4>${item.title || '无标题'}</h4>
+                    <div class="research-meta">
+                        <span class="research-firm">${item.source || '研究机构'}</span>
+                        <span class="research-date">${publishTime}</span>
+                        <span class="research-rating ${ratingClass}">${rating || '未评级'}</span>
+                    </div>
+                </div>
+                ${item.target_price ? `
+                    <div class="research-target">
+                        <span>目标价：${item.target_price}元</span>
+                        ${targetUpside}
+                    </div>
+                ` : ''}
+                <p class="research-summary">${item.summary || item.content || '无摘要'}</p>
+                ${item.url ? `<a href="${item.url}" target="_blank" class="research-link">查看详情</a>` : ''}
+            `;
+            
+            researchContainer.appendChild(researchItem);
+        });
+        
+        console.log('[loadResearchData] 研报数据渲染完成，共', researchData.length, '条');
     },
 
     // 加载资金流向数据，调用后端API
@@ -730,11 +885,16 @@ const StockPage = {
         const newsCards = document.querySelectorAll('.news-card');
         
         newsCards.forEach(card => {
-            const type = card.querySelector('.news-type').textContent.toLowerCase();
+            const typeElement = card.querySelector('.news-type');
+            if (!typeElement) return;
+            
+            const type = typeElement.textContent.toLowerCase();
+            const typeClass = typeElement.className;
             
             if (filter === 'all' || 
-                (filter === 'announcement' && type.includes('公告')) ||
-                (filter === 'news' && type.includes('新闻'))) {
+                (filter === 'announcement' && (type.includes('公告') || typeClass.includes('announcement'))) ||
+                (filter === 'news' && (type.includes('新闻') || typeClass.includes('news'))) ||
+                (filter === 'research' && (type.includes('研报') || typeClass.includes('research')))) {
                 card.style.display = 'block';
             } else {
                 card.style.display = 'none';
