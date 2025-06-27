@@ -812,13 +812,106 @@ const StockPage = {
                     </div>
                 ` : ''}
                 <p class="research-summary">${item.summary && item.summary !== '研报摘要暂无' ? item.summary : (item.content || '暂无研报摘要')}</p>
-                ${item.url && item.url !== '' ? `<a href="${item.url}" target="_blank" class="research-link">查看详情</a>` : ''}
+                ${item.url && item.url !== '' ? `<a href="#" class="research-link" onclick="StockPage.downloadPDF('${item.url}', '${item.title}')">下载报告</a>` : ''}
             `;
             
             researchContainer.appendChild(researchItem);
         });
         
         console.log('[loadResearchData] 研报数据渲染完成，共', researchData.length, '条');
+    },
+
+    // 下载PDF报告
+    downloadPDF(url, title) {
+        try {
+            console.log('[downloadPDF] 开始下载PDF:', url, title);
+            
+            // 创建一个隐藏的链接元素
+            const link = document.createElement('a');
+            link.style.display = 'none';
+            
+            // 设置下载属性
+            link.href = url;
+            link.download = `${title || '研报'}.pdf`;
+            
+            // 如果是跨域链接，需要通过代理下载
+            if (this.isCrossOriginURL(url)) {
+                this.downloadPDFWithProxy(url, title);
+                return;
+            }
+            
+            // 添加到DOM并点击下载
+            document.body.appendChild(link);
+            link.click();
+            
+            // 清理
+            document.body.removeChild(link);
+            
+            CommonUtils.showToast(`开始下载: ${title}`, 'success');
+            
+        } catch (error) {
+            console.error('[downloadPDF] 下载失败:', error);
+            CommonUtils.showToast('下载失败，请重试', 'error');
+        }
+    },
+
+    // 检查是否是跨域URL
+    isCrossOriginURL(url) {
+        try {
+            const urlObj = new URL(url);
+            return urlObj.origin !== window.location.origin;
+        } catch (error) {
+            return true; // 如果URL解析失败，当作跨域处理
+        }
+    },
+
+    // 通过代理下载PDF
+    async downloadPDFWithProxy(url, title) {
+        try {
+            console.log('[downloadPDFWithProxy] 通过代理下载PDF:', url);
+            
+            // 显示下载提示
+            CommonUtils.showToast('正在准备下载...', 'info');
+            
+            // 通过fetch获取文件
+            const response = await fetch(url, {
+                mode: 'cors',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'application/pdf,*/*'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // 获取文件内容
+            const blob = await response.blob();
+            
+            // 创建下载链接
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.style.display = 'none';
+            link.href = downloadUrl;
+            link.download = `${title || '研报'}.pdf`;
+            
+            // 执行下载
+            document.body.appendChild(link);
+            link.click();
+            
+            // 清理
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            CommonUtils.showToast(`下载完成: ${title}`, 'success');
+            
+        } catch (error) {
+            console.error('[downloadPDFWithProxy] 代理下载失败:', error);
+            // 如果代理下载失败，回退到直接打开链接
+            window.open(url, '_blank');
+            CommonUtils.showToast('无法直接下载，已在新窗口打开', 'warning');
+        }
     },
 
     // 加载资金流向数据，调用后端API

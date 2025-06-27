@@ -695,10 +695,22 @@
     font-size: 0.8rem;
     margin-top: 0.5rem;
     display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #3b82f6;
+    border-radius: 4px;
+    background: #f8fafc;
+    transition: all 0.3s ease;
 }
 
 .news-link:hover, .research-link:hover {
-    text-decoration: underline;
+    background: #3b82f6;
+    color: white;
+    text-decoration: none;
+}
+
+.research-link:before {
+    content: "📥 ";
+    margin-right: 0.25rem;
 }
 
 .no-data {
