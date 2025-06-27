@@ -751,7 +751,7 @@ const StockPage = {
         }
     },
 
-    // 渲染研报数据
+    // 渲染研报数据gu'pgup
     renderResearchData(researchData) {
         const researchContainer = document.querySelector('.research-list');
         if (!researchContainer) return;
@@ -798,21 +798,21 @@ const StockPage = {
             // 构建研报项目HTML
             researchItem.innerHTML = `
                 <div class="research-header">
-                    <h4>${item.title || '无标题'}</h4>
+                    <h4>${item.title && item.title !== '研报标题' ? item.title : '暂无研报标题'}</h4>
                     <div class="research-meta">
-                        <span class="research-firm">${item.source || '研究机构'}</span>
+                        <span class="research-firm">${item.source && item.source !== '研究机构' ? item.source : '暂无机构信息'}</span>
                         <span class="research-date">${publishTime}</span>
-                        <span class="research-rating ${ratingClass}">${rating || '未评级'}</span>
+                        <span class="research-rating ${ratingClass}">${rating && rating !== '未评级' ? rating : '暂无评级'}</span>
                     </div>
                 </div>
-                ${item.target_price ? `
+                ${item.target_price && item.target_price !== '' ? `
                     <div class="research-target">
                         <span>目标价：${item.target_price}元</span>
                         ${targetUpside}
                     </div>
                 ` : ''}
-                <p class="research-summary">${item.summary || item.content || '无摘要'}</p>
-                ${item.url ? `<a href="${item.url}" target="_blank" class="research-link">查看详情</a>` : ''}
+                <p class="research-summary">${item.summary && item.summary !== '研报摘要暂无' ? item.summary : (item.content || '暂无研报摘要')}</p>
+                ${item.url && item.url !== '' ? `<a href="${item.url}" target="_blank" class="research-link">查看详情</a>` : ''}
             `;
             
             researchContainer.appendChild(researchItem);

@@ -33,7 +33,6 @@ https://github.com/google-gemini/gemini-cli
 https://github.com/TanixLu/pyfuze
 
 
+https://github.com/LowinLi/fushare
 
-# git常规操作指令
-## git 强制以远程的文件为准。
-git reset --hard origin/main
+

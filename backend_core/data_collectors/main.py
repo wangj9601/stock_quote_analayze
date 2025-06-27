@@ -8,6 +8,7 @@ from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.data_collectors.akshare.realtime_index_spot_ak import RealtimeIndexSpotAkCollector
 from backend_core.data_collectors.akshare.realtime_stock_industry_board_ak import RealtimeStockIndustryBoardCollector
+from backend_core.data_collectors.akshare.realtime_stock_notice_report_ak import AkshareStockNoticeReportCollector
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -18,6 +19,7 @@ tushare_hist_collector = HistoricalQuoteCollector(DATA_COLLECTORS.get('tushare',
 tushare_realtime_collector = RealtimeQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 index_collector = RealtimeIndexSpotAkCollector()
 industry_board_collector = RealtimeStockIndustryBoardCollector()
+notice_collector = AkshareStockNoticeReportCollector(DATA_COLLECTORS.get('akshare', {}))
 
 scheduler = BlockingScheduler()
 
@@ -68,6 +70,18 @@ def collect_akshare_industry_board_realtime():
     except Exception as e:
         logging.error(f"[定时任务] 行业板块实时行情采集异常: {e}")
 
+def collect_akshare_stock_notices():
+    try:
+        logging.info("[定时任务] A股公告数据采集开始...")
+        # 采集当日公告数据
+        result = notice_collector.collect_stock_notices(symbol="全部")
+        if result:
+            logging.info("[定时任务] A股公告数据采集完成")
+        else:
+            logging.warning("[定时任务] A股公告数据采集失败")
+    except Exception as e:
+        logging.error(f"[定时任务] A股公告数据采集异常: {e}")
+
 # 定时任务配置
 # 每个交易日上午9:00-11:30、下午13:30-15:30每15分钟采集一次A股实时行情
 scheduler.add_job(
@@ -102,6 +116,14 @@ scheduler.add_job(
     hour='9-10,11,13-16',
     minute='2,32',
     id='akshare_industry_board_realtime',
+)
+
+# A股公告数据采集任务，每60分钟采集一次
+scheduler.add_job(
+    collect_akshare_stock_notices,
+    'interval',
+    minutes=60,
+    id='akshare_stock_notices',
 )
 
 if __name__ == "__main__":
