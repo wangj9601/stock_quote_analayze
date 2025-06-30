@@ -1,4 +1,4 @@
-// 可选：格式化为“+2.34亿”或“-1.11亿”
+// 可选：格式化为"+2.34亿"或"-1.11亿"
 const formatInflow = (val) => {
     if (val === null || val === undefined || val === '' || isNaN(val)) return '--';
     let num = Number(val);
@@ -826,33 +826,257 @@ const StockPage = {
         try {
             console.log('[downloadPDF] 开始下载PDF:', url, title);
             
-            // 创建一个隐藏的链接元素
-            const link = document.createElement('a');
-            link.style.display = 'none';
-            
-            // 设置下载属性
-            link.href = url;
-            link.download = `${title || '研报'}.pdf`;
-            
-            // 如果是跨域链接，需要通过代理下载
-            if (this.isCrossOriginURL(url)) {
-                this.downloadPDFWithProxy(url, title);
+            // 方案1：尝试直接在新窗口打开（最可靠的方式）
+            if (this.shouldUseDirectOpen(url)) {
+                this.openPDFInNewWindow(url, title);
                 return;
             }
             
-            // 添加到DOM并点击下载
-            document.body.appendChild(link);
-            link.click();
+            // 方案2：如果是同域，尝试直接下载
+            if (!this.isCrossOriginURL(url)) {
+                this.directDownload(url, title);
+                return;
+            }
             
-            // 清理
-            document.body.removeChild(link);
-            
-            CommonUtils.showToast(`开始下载: ${title}`, 'success');
+            // 方案3：跨域情况，尝试多种下载策略
+            this.downloadPDFWithProxy(url, title);
             
         } catch (error) {
             console.error('[downloadPDF] 下载失败:', error);
-            CommonUtils.showToast('下载失败，请重试', 'error');
+            // 最终回退：直接打开链接
+            this.openPDFInNewWindow(url, title);
         }
+    },
+
+    // 判断是否应该使用后端重定向页面
+    shouldUseDirectOpen(url) {
+        // 对于所有PDF链接，都优先使用后端重定向页面来绕过防盗链
+        return true;
+    },
+
+    // 在新窗口打开PDF
+    openPDFInNewWindow(url, title) {
+        console.log('[openPDFInNewWindow] 在新窗口打开PDF:', url);
+        
+        // 方案1：使用后端重定向页面（最强力的去referrer方法）
+        try {
+            const redirectUrl = `${API_BASE_URL}/api/stock/pdf_redirect?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title || 'PDF文档')}`;
+            const newWindow = window.open(redirectUrl, '_blank', 'width=1000,height=800,scrollbars=yes,resizable=yes');
+            
+            if (newWindow) {
+                CommonUtils.showToast(`正在新窗口打开: ${title}`, 'success');
+                return;
+            }
+        } catch (error) {
+            console.warn('[openPDFInNewWindow] 后端重定向失败，尝试方案2:', error);
+        }
+        
+        // 方案2：使用about:blank中间页面去除referrer
+        try {
+            const newWindow = window.open('about:blank', '_blank', 'width=1000,height=800,scrollbars=yes,resizable=yes');
+            if (newWindow) {
+                // 在新窗口中写入重定向代码，去除referrer
+                newWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>正在加载PDF...</title>
+                        <meta charset="UTF-8">
+                        <style>
+                            body { 
+                                font-family: Arial, sans-serif; 
+                                text-align: center; 
+                                padding: 50px;
+                                background: #f5f5f5;
+                            }
+                            .loading {
+                                font-size: 18px;
+                                color: #666;
+                                margin-bottom: 20px;
+                            }
+                            .spinner {
+                                border: 4px solid #f3f3f3;
+                                border-top: 4px solid #3498db;
+                                border-radius: 50%;
+                                width: 40px;
+                                height: 40px;
+                                animation: spin 1s linear infinite;
+                                margin: 20px auto;
+                            }
+                            @keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="loading">正在加载PDF文件...</div>
+                        <div class="spinner"></div>
+                        <p>如果页面没有自动跳转，请点击下面的链接：</p>
+                        <a href="${url}" target="_blank" rel="noreferrer noopener">点击这里打开PDF</a>
+                        <script>
+                            // 延迟跳转，去除referrer
+                            setTimeout(function() {
+                                window.location.replace('${url}');
+                            }, 1000);
+                        </script>
+                    </body>
+                    </html>
+                `);
+                newWindow.document.close();
+                
+                CommonUtils.showToast(`正在新窗口打开: ${title}`, 'success');
+                return;
+            }
+                    } catch (error) {
+            console.warn('[openPDFInNewWindow] 方案2失败，尝试方案3:', error);
+        }
+        
+        // 方案3：使用data URI去除referrer
+        try {
+            const redirectHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>PDF跳转页面</title>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; 
+                            text-align: center; 
+                            padding: 50px;
+                            background: #f5f5f5;
+                        }
+                        .info {
+                            font-size: 16px;
+                            color: #333;
+                            margin-bottom: 20px;
+                        }
+                        .link {
+                            display: inline-block;
+                            padding: 10px 20px;
+                            background: #007cba;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            margin: 10px;
+                        }
+                        .link:hover {
+                            background: #005a8b;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="info">
+                        <h3>PDF文件访问</h3>
+                        <p>请点击下面的链接访问PDF文件：</p>
+                        <p><strong>${title}</strong></p>
+                    </div>
+                    <a href="${url}" class="link" target="_blank" rel="noreferrer noopener">打开PDF文件</a>
+                    <br><br>
+                    <div style="font-size: 12px; color: #666;">
+                        <p>如果遇到访问限制，请复制以下链接到新的浏览器窗口：</p>
+                        <input type="text" value="${url}" style="width: 80%; padding: 5px; border: 1px solid #ccc;" readonly onclick="this.select();">
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            const dataUri = 'data:text/html;charset=utf-8,' + encodeURIComponent(redirectHtml);
+            const newWindow = window.open(dataUri, '_blank', 'width=1000,height=800,scrollbars=yes,resizable=yes');
+            
+            if (newWindow) {
+                CommonUtils.showToast(`正在新窗口打开: ${title}`, 'success');
+                return;
+            }
+        } catch (error) {
+            console.warn('[openPDFInNewWindow] 方案3失败，尝试方案4:', error);
+        }
+        
+        // 方案4：创建临时链接元素（传统方式）
+        try {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noreferrer noopener';  // 关键：去除referrer
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            CommonUtils.showToast(`正在新窗口打开: ${title}`, 'success');
+            return;
+        } catch (error) {
+            console.warn('[openPDFInNewWindow] 方案4失败，使用最后备选方案:', error);
+        }
+        
+        // 方案5：最后备选 - 复制链接到剪贴板
+        CommonUtils.showToast('无法直接打开PDF，正在复制链接到剪贴板', 'warning');
+        this.copyToClipboard(url, title);
+        
+        // 显示操作提示
+        setTimeout(() => {
+            CommonUtils.showToast('请在新的浏览器窗口中粘贴链接访问PDF', 'info');
+        }, 1000);
+    },
+
+    // 直接下载（同域情况）
+    directDownload(url, title) {
+        console.log('[directDownload] 直接下载PDF:', url);
+        
+        const link = document.createElement('a');
+        link.style.display = 'none';
+        link.href = url;
+        link.download = `${title || '研报'}.pdf`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        CommonUtils.showToast(`开始下载: ${title}`, 'success');
+    },
+
+    // 复制链接到剪贴板
+    copyToClipboard(url, title) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(url).then(() => {
+                CommonUtils.showToast(`链接已复制到剪贴板，请手动打开: ${title}`, 'info');
+            }).catch(() => {
+                this.fallbackCopyToClipboard(url, title);
+            });
+        } else {
+            this.fallbackCopyToClipboard(url, title);
+        }
+    },
+
+    // 回退的复制方法
+    fallbackCopyToClipboard(url, title) {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';
+        textArea.style.top = '0';
+        textArea.style.left = '0';
+        textArea.style.width = '2em';
+        textArea.style.height = '2em';
+        textArea.style.padding = '0';
+        textArea.style.border = 'none';
+        textArea.style.outline = 'none';
+        textArea.style.boxShadow = 'none';
+        textArea.style.background = 'transparent';
+        
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            CommonUtils.showToast(`链接已复制: ${title}`, 'info');
+        } catch (err) {
+            CommonUtils.showToast(`无法复制链接，请手动访问: ${url}`, 'warning');
+        }
+        
+        document.body.removeChild(textArea);
     },
 
     // 检查是否是跨域URL
@@ -865,20 +1089,49 @@ const StockPage = {
         }
     },
 
-    // 通过代理下载PDF
+    // 通过代理下载PDF（改进版）
     async downloadPDFWithProxy(url, title) {
         try {
-            console.log('[downloadPDFWithProxy] 通过代理下载PDF:', url);
+            console.log('[downloadPDFWithProxy] 尝试通过后端代理下载PDF:', url);
             
             // 显示下载提示
-            CommonUtils.showToast('正在准备下载...', 'info');
+            CommonUtils.showToast('正在尝试下载...', 'info');
             
-            // 通过fetch获取文件
+            // 方案1：使用后端代理下载
+            try {
+                const proxyUrl = `${API_BASE_URL}/api/stock/download_pdf?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(title || '研报')}.pdf`;
+                console.log('[downloadPDFWithProxy] 尝试后端代理下载:', proxyUrl);
+                
+                const link = document.createElement('a');
+                link.style.display = 'none';
+                link.href = proxyUrl;
+                link.download = `${title || '研报'}.pdf`;
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                CommonUtils.showToast(`正在通过服务器下载: ${title}`, 'success');
+                return; // 成功后直接返回
+                
+            } catch (proxyError) {
+                console.warn('[downloadPDFWithProxy] 后端代理下载失败，尝试直接下载:', proxyError);
+                // 继续执行下面的直接下载逻辑
+            }
+            
+            // 方案2：直接fetch下载（作为后备方案）
+            console.log('[downloadPDFWithProxy] 尝试直接fetch下载PDF:', url);
+            
+            // 设置更宽松的请求头
             const response = await fetch(url, {
+                method: 'GET',
                 mode: 'cors',
                 cache: 'no-cache',
+                redirect: 'follow',
+                referrerPolicy: 'no-referrer', // 不发送referrer
                 headers: {
-                    'Accept': 'application/pdf,*/*'
+                    'Accept': 'application/pdf,application/octet-stream,*/*',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
             });
             
@@ -886,8 +1139,22 @@ const StockPage = {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
+            // 检查响应类型
+            const contentType = response.headers.get('content-type');
+            if (contentType && !contentType.includes('pdf') && !contentType.includes('octet-stream')) {
+                console.warn('[downloadPDFWithProxy] 响应不是PDF类型:', contentType);
+                // 如果不是PDF，可能是HTML错误页面，直接打开
+                throw new Error('响应不是PDF文件');
+            }
+            
             // 获取文件内容
             const blob = await response.blob();
+            
+            // 检查blob大小
+            if (blob.size < 1024) {
+                console.warn('[downloadPDFWithProxy] 文件太小，可能不是有效PDF:', blob.size);
+                throw new Error('文件大小异常');
+            }
             
             // 创建下载链接
             const downloadUrl = window.URL.createObjectURL(blob);
@@ -902,15 +1169,20 @@ const StockPage = {
             
             // 清理
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(downloadUrl);
+            
+            // 延迟清理blob URL
+            setTimeout(() => {
+                window.URL.revokeObjectURL(downloadUrl);
+            }, 1000);
             
             CommonUtils.showToast(`下载完成: ${title}`, 'success');
             
         } catch (error) {
-            console.error('[downloadPDFWithProxy] 代理下载失败:', error);
-            // 如果代理下载失败，回退到直接打开链接
-            window.open(url, '_blank');
-            CommonUtils.showToast('无法直接下载，已在新窗口打开', 'warning');
+            console.error('[downloadPDFWithProxy] 所有下载方案都失败:', error);
+            
+            // 最终回退策略：直接在新窗口打开
+            CommonUtils.showToast('下载失败，已在新窗口打开PDF', 'warning');
+            this.openPDFInNewWindow(url, title);
         }
     },
 

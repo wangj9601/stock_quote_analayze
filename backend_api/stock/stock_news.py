@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Query, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Query, Request, Depends, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 import akshare as ak
 from ..database import get_db
 from sqlalchemy.orm import Session
@@ -10,6 +10,10 @@ from backend_api.config import DB_PATH
 import pandas as pd
 import difflib
 import time
+import aiohttp
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stock", tags=["stock_news"])
 
@@ -23,6 +27,85 @@ def clean_nan(obj):
     if isinstance(obj, list):
         return [clean_nan(v) for v in obj]
     return obj
+
+def is_news_related_to_stock(title: str, content: str, stock_info: dict) -> bool:
+    """
+    检查新闻是否与指定股票相关
+    
+    Args:
+        title: 新闻标题
+        content: 新闻内容  
+        stock_info: 股票信息字典，包含name和code
+    
+    Returns:
+        bool: 是否相关
+    """
+    try:
+        stock_name = stock_info.get('name', '').strip()
+        stock_code = stock_info.get('code', '').strip()
+        
+        # 如果股票名称或代码为空,返回True(避免过度过滤)
+        if not stock_name and not stock_code:
+            return True
+            
+        # 合并标题和内容进行检查
+        text_to_check = f"{title} {content}".lower()
+        
+        # 检查股票代码(去掉前缀，如SZ、SH等)
+        if stock_code:
+            clean_code = stock_code
+            if '.' in clean_code:
+                clean_code = clean_code.split('.')[0]
+            
+            # 检查完整代码和清理后的代码
+            if stock_code.lower() in text_to_check or clean_code in text_to_check:
+                return True
+        
+        # 检查股票名称
+        if stock_name and len(stock_name) >= 2:
+            # 完整股票名称匹配
+            if stock_name in text_to_check:
+                return True
+                
+            # 移除常见后缀后匹配（如"股份"、"有限公司"、"集团"等）
+            import re
+            clean_name = re.sub(r'(股份|有限公司|集团|公司|控股|投资|科技|实业)$', '', stock_name)
+            if len(clean_name) >= 2 and clean_name in text_to_check:
+                return True
+                
+            # 检查股票简称（通常是前2-4个字符）
+            if len(stock_name) >= 3:
+                short_name = stock_name[:3]
+                if short_name in text_to_check:
+                    return True
+        
+        # 过滤明显无关的通用新闻关键词
+        irrelevant_keywords = [
+            '华为', '苹果', '特斯拉', '比亚迪', '小米', '腾讯', '阿里', '百度',
+            '美联储', '央行', '拜登', '特朗普', '欧盟', '日本', '韩国',
+            '比特币', '数字货币', '房地产', '楼市', '油价', '黄金',
+            '奥运', '世界杯', '疫情', '新冠', 'AI', '人工智能',
+            '芯片', '半导体', '新能源', '电动车', '锂电池'
+        ]
+        
+        # 如果包含无关关键词但不包含股票相关信息，则认为不相关
+        has_irrelevant = any(keyword in text_to_check for keyword in irrelevant_keywords)
+        if has_irrelevant:
+            # 二次确认：即使有无关关键词，如果明确提到该股票，仍然认为相关
+            if stock_name and stock_name in text_to_check:
+                return True
+            if stock_code and stock_code.lower() in text_to_check:
+                return True
+            # 包含无关关键词且不提及该股票，认为不相关
+            return False
+        
+        # 默认认为相关（保守策略，避免过度过滤）
+        return True
+        
+    except Exception as e:
+        print(f"[is_news_related_to_stock] 检查新闻相关性异常: {e}")
+        # 出现异常时保守处理，认为相关
+        return True
 
 def calculate_similarity(title1, title2):
     """计算两个标题的相似度"""
@@ -170,7 +253,7 @@ async def _get_research_data(symbol: str, limit: int = 20) -> list:
                     print(f"[_get_research_data] 等待{wait_time}秒后重试...")
                     time.sleep(wait_time)
                 else:
-                    print(f"[_get_research_data] 达到最大重试次数，将使用模拟数据")
+                    print(f"[_get_research_data] 达到最大重试次数，返回空数据")
                     research_df = None
                     break
         
@@ -244,55 +327,10 @@ async def _get_research_data(symbol: str, limit: int = 20) -> list:
         else:
             print(f"[_get_research_data] AkShare未返回{symbol}的研报数据（可能该股票没有研报）")
             
-            # 如果AkShare获取失败，提供模拟数据以确保功能正常
-            print(f"[_get_research_data] AkShare获取失败，为{symbol}提供模拟研报数据")
-            research_data = [
-                {
-                    "id": f"res_mock_1",
-                    "title": f"{symbol}投资价值分析报告",
-                    "content": "基于公司基本面分析，认为该股具有较好的投资价值。",
-                    "keywords": "买入",
-                    "publish_time": "2025-01-20",
-                    "source": "模拟证券研究所",
-                    "url": "http://example.com/report1.pdf",
-                    "summary": "基于公司基本面分析，认为该股具有较好的投资价值，建议买入。",
-                    "type": "research",
-                    "rating": "买入",
-                    "target_price": "15.50",
-                    # 完整的数据库字段
-                    "profit_2024": 1.25,
-                    "pe_2024": 18.5,
-                    "profit_2025": 1.45,
-                    "pe_2025": 16.2,
-                    "profit_2026": 1.68,
-                    "pe_2026": 14.8,
-                    "industry": "制造业",
-                    "monthly_count": 5
-                },
-                {
-                    "id": f"res_mock_2", 
-                    "title": f"{symbol}季度业绩点评",
-                    "content": "公司季度业绩符合预期，维持持有评级。",
-                    "keywords": "持有",
-                    "publish_time": "2025-01-18",
-                    "source": "模拟投资咨询",
-                    "url": "http://example.com/report2.pdf",
-                    "summary": "公司季度业绩符合预期，维持持有评级。关注后续发展。",
-                    "type": "research", 
-                    "rating": "持有",
-                    "target_price": "13.80",
-                    # 完整的数据库字段
-                    "profit_2024": 1.20,
-                    "pe_2024": 19.2,
-                    "profit_2025": 1.38,
-                    "pe_2025": 17.1,
-                    "profit_2026": 1.55,
-                    "pe_2026": 15.6,
-                    "industry": "制造业",
-                    "monthly_count": 5
-                }
-            ]
-        
+            # 如果AkShare获取失败，不提供模拟数据，直接返回空列表
+            print(f"[_get_research_data] AkShare获取失败，{symbol}暂无研报数据")
+            research_data = []
+                    
         print(f"[_get_research_data] 最终获取到 {len(research_data)} 条研报数据")
         
     except Exception as e:
@@ -317,11 +355,27 @@ async def get_stock_news_combined(
         
         all_data = []
         
+        # 获取股票基本信息用于新闻过滤
+        stock_name = await get_stock_name(symbol)
+        stock_info = {"name": stock_name, "code": symbol}
+        
         # 获取新闻数据
         try:
             news_df = ak.stock_news_em(symbol=symbol)
             if news_df is not None and not news_df.empty:
+                print(f"[stock_news_combined] AkShare返回{len(news_df)}条原始新闻数据")
+                
+                # 过滤新闻 - 只保留与该股票相关的新闻
+                filtered_news_count = 0
                 for _, row in news_df.iterrows():
+                    title = row.get('新闻标题', '') or row.get('标题', '') or ''
+                    content = row.get('新闻内容', '') or row.get('内容', '') or ''
+                    
+                    # 检查新闻是否与该股票相关
+                    if not is_news_related_to_stock(title, content, stock_info):
+                        continue
+                        
+                    filtered_news_count += 1
                     publish_time = row.get('发布时间', '') or row.get('时间', '')
                     if pd.isna(publish_time):
                         publish_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -333,8 +387,8 @@ async def get_stock_news_combined(
                     
                     news_item = {
                         "id": f"news_{row.get('序号', '')}" or f"news_{len(all_data)}",
-                        "title": row.get('新闻标题', '') or row.get('标题', '') or '',
-                        "content": row.get('新闻内容', '') or row.get('内容', '') or '',
+                        "title": title,
+                        "content": content,
                         "keywords": row.get('关键词', '') or '',
                         "publish_time": publish_time,
                         "source": row.get('文章来源', '') or '东方财富',
@@ -343,6 +397,8 @@ async def get_stock_news_combined(
                         "type": "news"
                     }
                     all_data.append(news_item)
+                
+                print(f"[stock_news_combined] 过滤后保留{filtered_news_count}条相关新闻")
         except Exception as e:
             print(f"[stock_news_combined] 获取新闻数据失败: {e}")
         
@@ -671,3 +727,275 @@ async def get_research_reports(
         print(f"[research_reports] 获取研报数据异常: {e}")
         print(traceback.format_exc())
         return JSONResponse({"success": False, "message": f"获取研报数据失败: {str(e)}"}, status_code=500)
+
+@router.get("/download_pdf")
+async def download_pdf_proxy(
+    url: str = Query(..., description="PDF文件URL"),
+    filename: str = Query(None, description="下载文件名")
+):
+    """
+    代理下载PDF文件，解决前端跨域问题
+    """
+    try:
+        # 设置请求头，模拟浏览器访问
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/pdf,application/octet-stream,*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        # 使用aiohttp获取PDF文件
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=30) as response:
+                if response.status != 200:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"无法获取PDF文件，状态码: {response.status}"
+                    )
+                
+                # 检查内容类型
+                content_type = response.headers.get('content-type', '')
+                if 'pdf' not in content_type.lower() and 'octet-stream' not in content_type.lower():
+                    # 如果不是PDF，可能是错误页面，检查内容
+                    content_preview = await response.text()
+                    if len(content_preview) < 10000 and ('error' in content_preview.lower() or 'access denied' in content_preview.lower()):
+                        raise HTTPException(status_code=400, detail="访问被拒绝或文件不存在")
+                
+                # 设置下载文件名
+                if not filename:
+                    # 从URL或响应头中提取文件名
+                    content_disposition = response.headers.get('content-disposition', '')
+                    if 'filename=' in content_disposition:
+                        filename = content_disposition.split('filename=')[1].strip('"\'')
+                    else:
+                        filename = url.split('/')[-1]
+                        if not filename.endswith('.pdf'):
+                            filename = "研报.pdf"
+                
+                # 流式返回PDF内容
+                async def generate():
+                    while True:
+                        chunk = await response.content.read(8192)
+                        if not chunk:
+                            break
+                        yield chunk
+                
+                return StreamingResponse(
+                    generate(),
+                    media_type='application/pdf',
+                    headers={
+                        'Content-Disposition': f'attachment; filename="{filename}"',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Expose-Headers': 'Content-Disposition'
+                    }
+                )
+                
+    except aiohttp.ClientError as e:
+        logger.error(f"下载PDF失败: {e}")
+        raise HTTPException(status_code=400, detail=f"网络请求失败: {str(e)}")
+    except Exception as e:
+        logger.error(f"代理下载PDF异常: {e}")
+        raise HTTPException(status_code=500, detail=f"下载失败: {str(e)}")
+
+@router.get("/pdf_redirect")
+async def pdf_redirect_page(
+    url: str = Query(..., description="PDF文件URL"),
+    title: str = Query("PDF文档", description="文档标题")
+):
+    """
+    生成PDF重定向页面，彻底去除referrer绕过防盗链
+    """
+    try:
+        # 创建HTML重定向页面
+        html_content = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>正在访问: {title}</title>
+    <meta name="referrer" content="no-referrer">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-align: center;
+        }}
+        .container {{
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 90%;
+        }}
+        .title {{
+            font-size: 24px;
+            margin-bottom: 20px;
+            font-weight: 300;
+        }}
+        .subtitle {{
+            font-size: 16px;
+            margin-bottom: 30px;
+            opacity: 0.8;
+        }}
+        .spinner {{
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }}
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+        .manual-link {{
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }}
+        .manual-link:hover {{
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }}
+        .countdown {{
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 20px;
+        }}
+        .url-display {{
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-size: 12px;
+            font-family: monospace;
+            cursor: pointer;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">正在访问PDF文档</div>
+        <div class="subtitle">{title}</div>
+        <div class="spinner"></div>
+        <div class="countdown">
+            <span id="countdown">3</span> 秒后自动跳转...
+        </div>
+        <a href="javascript:void(0)" onclick="openPDF()" class="manual-link">
+            立即访问
+        </a>
+        <div class="url-display" onclick="copyUrl()" title="点击复制链接">
+            {url}
+        </div>
+        <div style="font-size: 12px; opacity: 0.6; margin-top: 10px;">
+            如遇访问限制，请将上方链接复制到新浏览器窗口
+        </div>
+    </div>
+
+    <script>
+        let countdown = 3;
+        const countdownElement = document.getElementById('countdown');
+        const pdfUrl = `{url}`;
+        
+        // 倒计时
+        const timer = setInterval(() => {{
+            countdown--;
+            countdownElement.textContent = countdown;
+            if (countdown <= 0) {{
+                clearInterval(timer);
+                openPDF();
+            }}
+        }}, 1000);
+        
+        // 打开PDF的函数
+        function openPDF() {{
+            // 方法1：直接替换当前页面位置（最强力的去referrer方法）
+            try {{
+                window.location.replace(pdfUrl);
+            }} catch(e) {{
+                // 方法2：使用window.open
+                try {{
+                    const newWindow = window.open('about:blank', '_self');
+                    newWindow.location.href = pdfUrl;
+                }} catch(e2) {{
+                    // 方法3：创建表单提交（POST方式不会发送referrer）
+                    const form = document.createElement('form');
+                    form.method = 'GET';
+                    form.action = pdfUrl;
+                    form.target = '_blank';
+                    form.style.display = 'none';
+                    document.body.appendChild(form);
+                    form.submit();
+                    document.body.removeChild(form);
+                }}
+            }}
+        }}
+        
+        // 复制URL
+        function copyUrl() {{
+            if (navigator.clipboard) {{
+                navigator.clipboard.writeText(pdfUrl).then(() => {{
+                    alert('链接已复制到剪贴板');
+                }});
+            }} else {{
+                // 降级方案
+                const textArea = document.createElement('textarea');
+                textArea.value = pdfUrl;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('链接已复制到剪贴板');
+            }}
+        }}
+        
+        // 阻止页面被缓存
+        window.addEventListener('beforeunload', function() {{
+            // 清理定时器
+            clearInterval(timer);
+        }});
+        
+        // 防止浏览器记住referrer
+        if (document.referrer) {{
+            history.replaceState(null, '', location.href);
+        }}
+    </script>
+</body>
+</html>
+        """
+        
+        return HTMLResponse(
+            content=html_content,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache", 
+                "Expires": "0",
+                "Referrer-Policy": "no-referrer"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"生成PDF重定向页面失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成重定向页面失败: {str(e)}")
