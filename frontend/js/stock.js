@@ -257,8 +257,8 @@ const StockPage = {
                 { left: '10%', right: '8%', top: '75%', height: '15%' }
             ],
             xAxis: [
-                { type: 'category', data: [], boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' },
-                { type: 'category', gridIndex: 1, data: [], boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' }
+                { type: 'category', data: [], boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false } },
+                { type: 'category', gridIndex: 1, data: [], boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false } }
             ],
             yAxis: [
                 { scale: true, splitArea: { show: true } },
@@ -266,10 +266,37 @@ const StockPage = {
             ],
             dataZoom: [{ type: 'inside', xAxisIndex: [0, 1], start: 50, end: 100 }],
             series: [
-                { name: 'K线', type: 'candlestick', data: [], itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' } },
+                { 
+                    name: 'K线', 
+                    type: 'candlestick', 
+                    data: [], 
+                    itemStyle: { 
+                        color: '#dc2626', 
+                        color0: '#16a34a', 
+                        borderColor: '#dc2626', 
+                        borderColor0: '#16a34a',
+                        borderWidth: 1
+                    },
+                    emphasis: {
+                        itemStyle: {
+                            borderWidth: 2
+                        }
+                    }
+                },
                 { name: 'MA5', type: 'line', data: [], smooth: true, lineStyle: { width: 1, color: '#fbbf24' }, showSymbol: false },
                 { name: 'MA10', type: 'line', data: [], smooth: true, lineStyle: { width: 1, color: '#3b82f6' }, showSymbol: false },
-                { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: [], itemStyle: { color: function(params) { return params.dataIndex % 2 === 0 ? '#dc2626' : '#16a34a'; } } }
+                { 
+                    name: '成交量', 
+                    type: 'bar', 
+                    xAxisIndex: 1, 
+                    yAxisIndex: 1, 
+                    data: [], 
+                    itemStyle: { 
+                        color: function(params) { 
+                            return params.dataIndex % 2 === 0 ? '#dc2626' : '#16a34a'; 
+                        } 
+                    } 
+                }
             ],
             tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, backgroundColor: 'rgba(245, 245, 245, 0.8)', borderWidth: 1, borderColor: '#ccc', textStyle: { color: '#000' } }
         };
@@ -1422,6 +1449,13 @@ const StockPage = {
             const data = await resp.json();
             if (data.success) {
                 const list = data.data;
+                
+                // 检查数据是否为空
+                if (!list || list.length === 0) {
+                    CommonUtils.showToast('暂无K线数据', 'info');
+                    return;
+                }
+                
                 // x轴日期
                 const dates = list.map(item => item.date ? item.date : '-');
                 // K线数据 [开,收,低,高]
@@ -1441,7 +1475,7 @@ const StockPage = {
                 const ma10 = calcMA(kline, 10);
                 // 成交量
                 const volume = list.map(item => item.volume);
-                // 更新option
+                // 更新option - 根据数据量调整显示效果
                 const option = this.klineChart.getOption();
                 option.xAxis[0].data = dates;
                 option.xAxis[1].data = dates;
@@ -1449,6 +1483,45 @@ const StockPage = {
                 option.series[1].data = ma5;
                 option.series[2].data = ma10;
                 option.series[3].data = volume;
+                
+                // 当数据量较少时，优化显示效果
+                const dataCount = kline.length;
+                if (dataCount <= 50) {
+                    // 数据少时，显示全部数据，不进行缩放
+                    option.dataZoom[0].start = 0;
+                    option.dataZoom[0].end = 100;
+                    
+                    // 调整K线柱子宽度，让它们更显眼
+                    option.series[0].barWidth = Math.max(3, Math.min(15, 300 / dataCount));
+                    // 同时调整成交量柱子宽度
+                    option.series[3].barWidth = Math.max(3, Math.min(15, 300 / dataCount));
+                    
+                    // 优化X轴显示
+                    option.xAxis[0].boundaryGap = true; // 让K线不贴边显示
+                    option.xAxis[1].boundaryGap = true;
+                } else if (dataCount <= 200) {
+                    // 中等数据量时，调整显示范围
+                    option.dataZoom[0].start = Math.max(0, 100 - (100 * 100 / dataCount));
+                    option.dataZoom[0].end = 100;
+                    
+                    // 适中的柱子宽度
+                    option.series[0].barWidth = Math.max(2, Math.min(8, 200 / dataCount));
+                    option.series[3].barWidth = Math.max(2, Math.min(8, 200 / dataCount));
+                    
+                    option.xAxis[0].boundaryGap = true;
+                    option.xAxis[1].boundaryGap = true;
+                } else {
+                    // 数据量充足时，保持原有的显示方式
+                    option.dataZoom[0].start = 50;
+                    option.dataZoom[0].end = 100;
+                    
+                    // 恢复默认设置
+                    delete option.series[0].barWidth;
+                    delete option.series[3].barWidth;
+                    option.xAxis[0].boundaryGap = false;
+                    option.xAxis[1].boundaryGap = false;
+                }
+                
                 this.klineChart.setOption(option);
             } else {
                 CommonUtils.showToast('K线数据获取失败: ' + data.message, 'error');

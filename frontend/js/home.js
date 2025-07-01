@@ -151,7 +151,8 @@ function updateWatchlistDisplay(stocks) {
             const changePercent = stock.change_percent || 0;
             const currentPrice = stock.current_price || stock.current || 0;
             
-            const changeClass = changeAmount > 0 ? 'positive' : changeAmount < 0 ? 'negative' : '';
+            // 根据涨跌幅度确定颜色类：正值红色，负值绿色
+            const changeClass = changePercent > 0 ? 'positive' : changePercent < 0 ? 'negative' : '';
             const changeSign = changeAmount >= 0 ? '+' : '';
             const percentSign = changePercent >= 0 ? '+' : '';
             

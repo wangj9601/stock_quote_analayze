@@ -44,12 +44,15 @@ def is_news_related_to_stock(title: str, content: str, stock_info: dict) -> bool
         stock_name = stock_info.get('name', '').strip()
         stock_code = stock_info.get('code', '').strip()
         
-        # 如果股票名称或代码为空,返回True(避免过度过滤)
+        # 如果股票名称和代码都为空,返回False
         if not stock_name and not stock_code:
-            return True
+            return False
             
         # 合并标题和内容进行检查
         text_to_check = f"{title} {content}".lower()
+        
+        # 首先检查是否明确提到了该股票
+        is_related = False
         
         # 检查股票代码(去掉前缀，如SZ、SH等)
         if stock_code:
@@ -59,53 +62,67 @@ def is_news_related_to_stock(title: str, content: str, stock_info: dict) -> bool
             
             # 检查完整代码和清理后的代码
             if stock_code.lower() in text_to_check or clean_code in text_to_check:
-                return True
+                is_related = True
         
         # 检查股票名称
         if stock_name and len(stock_name) >= 2:
             # 完整股票名称匹配
             if stock_name in text_to_check:
-                return True
-                
-            # 移除常见后缀后匹配（如"股份"、"有限公司"、"集团"等）
-            import re
-            clean_name = re.sub(r'(股份|有限公司|集团|公司|控股|投资|科技|实业)$', '', stock_name)
-            if len(clean_name) >= 2 and clean_name in text_to_check:
-                return True
-                
-            # 检查股票简称（通常是前2-4个字符）
-            if len(stock_name) >= 3:
-                short_name = stock_name[:3]
-                if short_name in text_to_check:
-                    return True
+                is_related = True
+            else:
+                # 移除常见后缀后匹配（如"股份"、"有限公司"、"集团"等）
+                import re
+                clean_name = re.sub(r'(股份|有限公司|集团|公司|控股|投资|科技|实业)$', '', stock_name)
+                if len(clean_name) >= 2 and clean_name in text_to_check:
+                    is_related = True
+                else:
+                    # 检查股票简称（通常是前2-4个字符）
+                    if len(stock_name) >= 3:
+                        short_name = stock_name[:3]
+                        if short_name in text_to_check:
+                            is_related = True
         
-        # 过滤明显无关的通用新闻关键词
-        irrelevant_keywords = [
-            '华为', '苹果', '特斯拉', '比亚迪', '小米', '腾讯', '阿里', '百度',
-            '美联储', '央行', '拜登', '特朗普', '欧盟', '日本', '韩国',
-            '比特币', '数字货币', '房地产', '楼市', '油价', '黄金',
-            '奥运', '世界杯', '疫情', '新冠', 'AI', '人工智能',
-            '芯片', '半导体', '新能源', '电动车', '锂电池'
-        ]
-        
-        # 如果包含无关关键词但不包含股票相关信息，则认为不相关
-        has_irrelevant = any(keyword in text_to_check for keyword in irrelevant_keywords)
-        if has_irrelevant:
-            # 二次确认：即使有无关关键词，如果明确提到该股票，仍然认为相关
-            if stock_name and stock_name in text_to_check:
-                return True
-            if stock_code and stock_code.lower() in text_to_check:
-                return True
-            # 包含无关关键词且不提及该股票，认为不相关
+        # 如果没有找到相关性，直接返回False
+        if not is_related:
             return False
         
-        # 默认认为相关（保守策略，避免过度过滤）
+        # 过滤明显提到其他公司的新闻
+        # 如果新闻标题中明确包含其他公司名称，且该公司不是目标股票，则认为不相关
+        other_company_patterns = [
+            r'([A-Z]+[a-z]*[A-Z]*[a-z]*)\s*[:：]\s*',  # 匹配 "公司名:"
+            r'([^，。]+?)[:：]\s*',  # 匹配中文公司名后跟冒号
+            r'([^，。\s]+?)\s*发布',  # 匹配 "XXX发布"
+            r'([^，。\s]+?)\s*公告',  # 匹配 "XXX公告"
+            r'([^，。\s]+?)\s*股东大会',  # 匹配 "XXX股东大会"
+            r'([^，。\s]+?)\s*年度',  # 匹配 "XXX年度"
+        ]
+        
+        import re
+        for pattern in other_company_patterns:
+            matches = re.findall(pattern, title)
+            for match in matches:
+                # 清理匹配的公司名
+                company_in_title = match.strip()
+                if len(company_in_title) >= 2:
+                    # 如果标题中的公司名与目标股票名不匹配，则认为不相关
+                    if stock_name and company_in_title != stock_name:
+                        # 进一步检查：是否是目标公司的简称或别名
+                        clean_target_name = re.sub(r'(股份|有限公司|集团|公司|控股|投资|科技|实业)$', '', stock_name)
+                        clean_title_name = re.sub(r'(股份|有限公司|集团|公司|控股|投资|科技|实业)$', '', company_in_title)
+                        
+                        # 如果清理后的名称也不匹配，且不是简称关系，则认为不相关
+                        if (clean_title_name != clean_target_name and 
+                            clean_target_name not in clean_title_name and 
+                            clean_title_name not in clean_target_name):
+                            print(f"[is_news_related_to_stock] 过滤掉其他公司新闻: '{title}' (提到了'{company_in_title}'，但目标是'{stock_name}')")
+                            return False
+        
         return True
         
     except Exception as e:
         print(f"[is_news_related_to_stock] 检查新闻相关性异常: {e}")
-        # 出现异常时保守处理，认为相关
-        return True
+        # 出现异常时返回False，避免显示无关新闻
+        return False
 
 def calculate_similarity(title1, title2):
     """计算两个标题的相似度"""

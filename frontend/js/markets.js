@@ -454,9 +454,9 @@ async loadRankingData(page = 1) {
 
     // 获取涨跌颜色
     getChangeClass(value) {
-        if (value === null || typeof value === 'undefined' || isNaN(value)) return 'text-gray-500';
-        if (value > 0) return 'text-red-500';
-        if (value < 0) return 'text-green-500';
+        if (value === null || typeof value === 'undefined' || isNaN(value)) return '';
+        if (value > 0) return 'positive';
+        if (value < 0) return 'negative';
         return '';
     },
 
