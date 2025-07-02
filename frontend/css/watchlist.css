@@ -780,3 +780,36 @@
 .table .btn:hover {
     opacity: 0.85;
 }
+
+.stocks-list {
+    background: #fff;
+    border-radius: 0 !important;
+    border: none !important;
+    overflow: visible;
+    width: 100% !important;
+    box-shadow: none !important;
+    margin: 0;
+    padding: 0;
+}
+
+.table {
+    width: 100% !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin: 0;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+.table th, .table td {
+    text-align: left !important;
+    padding: 12px 8px;
+}
+
+.table th {
+    background: #fafbfc;
+    color: #333;
+    font-weight: 600;
+    text-align: left !important;
+}
+

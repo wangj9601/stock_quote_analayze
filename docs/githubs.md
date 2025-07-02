@@ -35,4 +35,6 @@ https://github.com/TanixLu/pyfuze
 
 https://github.com/LowinLi/fushare
 
+# 开源健身教练平台
 
+https://github.com/Snouzy/workout-cool

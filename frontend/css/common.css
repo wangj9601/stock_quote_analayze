@@ -37,7 +37,7 @@ body {
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
     padding: 0 20px;
 }
@@ -362,6 +362,7 @@ body {
 /* 响应式设计 */
 @media (max-width: 768px) {
     .container {
+        max-width: 100%;
         padding: 0 15px;
     }
     
@@ -448,7 +449,7 @@ body, html {
   /* 1.2 主要容器自适应 */
   .container, .main-content, .content-tabs, .market-overview, .tab-panel, .tab-content {
     width: 100%;
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
     padding-left: 1rem;
     padding-right: 1rem;
