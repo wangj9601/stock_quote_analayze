@@ -73,6 +73,11 @@ async def get_watchlist(
                 'low': safe_float(getattr(q, 'low', None)),
                 'open': safe_float(getattr(q, 'open', None)),
                 'pre_close': safe_float(getattr(q, 'pre_close', None)),
+                'change_amount': (
+                    safe_float(getattr(q, 'current_price', None)) - safe_float(getattr(q, 'pre_close', None))
+                    if safe_float(getattr(q, 'current_price', None)) is not None and safe_float(getattr(q, 'pre_close', None)) is not None
+                    else None
+                ),                
                 'turnover_rate': safe_float(getattr(q, 'turnover_rate', None)),
                 'pe_dynamic': safe_float(getattr(q, 'pe_dynamic', None)),
                 'total_market_value': safe_float(getattr(q, 'total_market_value', None)),
