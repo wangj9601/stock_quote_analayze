@@ -813,3 +813,31 @@
     text-align: left !important;
 }
 
+
+
+
+/* 让自选股表格区域拉伸到白色内容区宽度 */
+.stocks-list {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 表格宽度100%，列均分 */
+.stocks-list .table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.stocks-list .table th,
+.stocks-list .table td {
+    text-align: center;
+    word-break: break-all;
+    /* 均分列宽，9列时每列约11.11% */
+    width: 9%;
+}
+
+
