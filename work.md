@@ -7,6 +7,21 @@ AIzaSyD1PSWLXbmZM2mfXPXjQ5iPMv0hiaNUdg8
 ## git 强制以远程的文件为准。
 git reset --hard origin/main
 
+# 安装 Git LFS：
+
+git lfs install
+
+git lfs track "*.psd"
+
+git add .
+
+git commit -m "Add large files"
+
+git push origin main
+
+
+
+
 # 数据采集主程序
  python -m backend_core.data_collectors.main
 
