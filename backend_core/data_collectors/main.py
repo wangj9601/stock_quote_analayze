@@ -109,7 +109,7 @@ scheduler.add_job(
     'cron',
     day_of_week='mon-fri',
     hour='9-10,11,13-16',
-    minute='1,21,41',
+    minute='11,31,51',
     id='akshare_index_realtime',
 )
 
