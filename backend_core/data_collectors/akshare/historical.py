@@ -5,7 +5,6 @@
 
 import akshare as ak
 import pandas as pd
-import sqlite3
 from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
 import logging
@@ -16,6 +15,8 @@ from requests.exceptions import RequestException
 
 # 直接导入base模块
 from .base import AKShareCollector
+from backend_core.database.db import SessionLocal
+from sqlalchemy import text
 
 class HistoricalQuoteCollector(AKShareCollector):
     """历史行情数据采集器"""
@@ -42,17 +43,15 @@ class HistoricalQuoteCollector(AKShareCollector):
         self.logger.info("接收到中断信号，正在安全退出...")
         self.should_stop = True
         
-    def _init_db(self) -> sqlite3.Connection:
+    def _init_db(self) -> bool:
         """
         初始化数据库表结构
         
         Returns:
-            sqlite3.Connection: 数据库连接
+            bool: 是否成功
         """
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
+        session = SessionLocal()
+        session.execute(text('''
             CREATE TABLE IF NOT EXISTS historical_quotes (
                 code TEXT,
                 name TEXT,
@@ -68,10 +67,10 @@ class HistoricalQuoteCollector(AKShareCollector):
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (code, date)
             )
-        ''')
-        
-        conn.commit()
-        return conn
+        '''))
+        session.commit()
+        session.close()
+        return True
     
     def _safe_value(self, val: Any) -> Optional[float]:
         """
@@ -146,8 +145,7 @@ class HistoricalQuoteCollector(AKShareCollector):
             self.logger.info(f"开始采集 {date_str} 的历史行情数据，共 {total_stocks} 只股票")
             
             # 连接数据库
-            conn = self._init_db()
-            cursor = conn.cursor()
+            session = self._init_db()
             
             # 遍历股票列表
             for _, row in stock_list.iterrows():
@@ -168,7 +166,7 @@ class HistoricalQuoteCollector(AKShareCollector):
                         self.logger.error(f"网络连接错误 ({connection_error_count}/{max_connection_errors}): {str(e)}")
                         if connection_error_count >= max_connection_errors:
                             self.logger.error("连接错误次数过多，程序退出")
-                            conn.close()
+                            session.close()
                             return success_count, error_count
                         time.sleep(5)
                         continue
@@ -184,12 +182,12 @@ class HistoricalQuoteCollector(AKShareCollector):
                     # 处理数据
                     daily_data = df.iloc[0]
                     try:
-                        cursor.execute('''
+                        session.execute(text('''
                             INSERT OR REPLACE INTO historical_quotes
                             (code, name, market, date, open, high, low, close,
                              volume, amount, change_percent)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (
+                        '''), (
                             code, name, market, date_str,
                             self._safe_value(daily_data['开盘']),
                             self._safe_value(daily_data['最高']),
@@ -199,7 +197,7 @@ class HistoricalQuoteCollector(AKShareCollector):
                             self._safe_value(daily_data['成交额']),
                             self._safe_value(daily_data['涨跌幅'])
                         ))
-                        conn.commit()
+                        session.commit()
                         success_count += 1
                         connection_error_count = 0
                         
@@ -216,7 +214,7 @@ class HistoricalQuoteCollector(AKShareCollector):
                     self.logger.error(f"处理股票 {code} 时出错: {str(e)}")
                     continue
                     
-            conn.close()
+            session.close()
             self.logger.info(f"历史行情数据采集完成。成功: {success_count}, 失败: {error_count}")
             
             if self.should_stop:

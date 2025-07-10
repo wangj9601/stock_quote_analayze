@@ -1,10 +1,11 @@
 import akshare as ak
-import sqlite3
 import traceback
 from datetime import datetime
 import sys
 import os
 from backend_core.config.config import DATA_COLLECTORS
+from backend_core.database.db import SessionLocal
+from sqlalchemy import text
 
 class RealtimeStockIndustryBoardCollector:
     def __init__(self):
@@ -18,8 +19,7 @@ class RealtimeStockIndustryBoardCollector:
         return df
 
     def save_to_db(self, df):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
+        session = SessionLocal()
         try:
             # 字段映射：中文->英文
             col_map = {
@@ -43,47 +43,41 @@ class RealtimeStockIndustryBoardCollector:
             df['update_time'] = now
             columns = list(df.columns)
             # 清空旧数据（可选，或用upsert）
-            cursor.execute(f"DELETE FROM {self.table_name}")
+            session.execute(text(f"DELETE FROM {self.table_name}"))
             # 插入新数据
             for _, row in df.iterrows():
-                values = []
+                value_dict = {}
                 for col in columns:
                     v = row[col]
-                    # 处理 pandas/numpy 类型
                     if hasattr(v, 'item'):
                         v = v.item()
-                    # 处理 pandas.Timestamp
                     if str(type(v)).endswith("Timestamp'>"):
                         v = v.to_pydatetime().isoformat()
-                    # 处理 update_time
                     if col == 'update_time' and not isinstance(v, str):
                         v = v.isoformat()
-                    values.append(v)
-                placeholders = ','.join(['?'] * len(columns))
+                    value_dict[col] = v
+                placeholders = ','.join([f':{col}' for col in columns])
                 sql = f'INSERT INTO {self.table_name} ({','.join([f'"{col}"' for col in columns])}) VALUES ({placeholders})'
-                cursor.execute(sql, values)
-            conn.commit()
+                session.execute(text(sql), value_dict)
+            session.commit()
             return True, None
         except Exception as e:
-            conn.rollback()
+            session.rollback()
             return False, str(e)
         finally:
-            cursor.close()
-            conn.close()
+            session.close()
 
     def write_log(self, operation_type, operation_desc, affected_rows, status, error_message=None):
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
+        session = SessionLocal()
         try:
             now = datetime.now().replace(microsecond=0)
-            cursor.execute(f"INSERT INTO {self.log_table} (operation_type, operation_desc, affected_rows, status, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                           (operation_type, operation_desc, affected_rows, status, error_message or '', now))
-            conn.commit()
+            session.execute(text(f"INSERT INTO {self.log_table} (operation_type, operation_desc, affected_rows, status, error_message, created_at) VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at)"),
+                           {'operation_type': operation_type, 'operation_desc': operation_desc, 'affected_rows': affected_rows, 'status': status, 'error_message': error_message or '', 'created_at': now})
+            session.commit()
         except Exception as e:
             print(f"[LOG ERROR] {e}")
         finally:
-            cursor.close()
-            conn.close()
+            session.close()
 
     def run(self):
         try:

@@ -36,3 +36,9 @@ git push origin main
 # 长期工作安排
 ## 1. 交易策略管理。
 ## 2. 策略回测。
+
+# postgresql 
+
+admin passwd :  qidianspacetime
+
+docker run --rm -it -v E:\wangxw\股票分析软件\编码\stock_quote_analayze\database:/database ghcr.io/dimitri/pgloader:latest pgloader /database/stock_analysis.db postgresql://postgres:qidianspacetime@host.docker.internal:5446/stock_analysis

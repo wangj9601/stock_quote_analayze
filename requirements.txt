@@ -10,6 +10,7 @@ email-validator==2.1.0.post1
 sqlalchemy==2.0.27
 alembic==1.13.1
 aiosqlite==0.20.0
+psycopg2-binary==2.9.10
 
 # 数据处理
 pandas==2.2.0

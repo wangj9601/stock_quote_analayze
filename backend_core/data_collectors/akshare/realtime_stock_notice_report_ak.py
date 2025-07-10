@@ -5,7 +5,6 @@ A股公告数据采集器
 
 import akshare as ak
 import pandas as pd
-import sqlite3
 from typing import Optional, Dict, Any
 from pathlib import Path
 import logging
@@ -14,6 +13,8 @@ import time
 
 # 直接导入base模块
 from .base import AKShareCollector
+from backend_core.database.db import SessionLocal
+from sqlalchemy import text
 
 class AkshareStockNoticeReportCollector(AKShareCollector):
     """A股公告数据采集器"""
@@ -28,18 +29,17 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
         super().__init__(config)
         self.db_file = Path(self.config.get('db_file', 'database/stock_analysis.db'))
         
-    def _init_db(self) -> sqlite3.Connection:
+    def _init_db(self) -> bool:
         """
         初始化数据库表结构
         
         Returns:
-            sqlite3.Connection: 数据库连接
+            bool: 是否成功
         """
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
+        session = SessionLocal()
         
         # 创建A股公告数据表
-        cursor.execute('''
+        session.execute('''
             CREATE TABLE IF NOT EXISTS stock_notice_report (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code TEXT NOT NULL,
@@ -55,23 +55,23 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
         ''')
         
         # 创建索引
-        cursor.execute('''
+        session.execute('''
             CREATE INDEX IF NOT EXISTS idx_stock_notice_code 
             ON stock_notice_report(code)
         ''')
         
-        cursor.execute('''
+        session.execute('''
             CREATE INDEX IF NOT EXISTS idx_stock_notice_date 
             ON stock_notice_report(publish_date)
         ''')
         
-        cursor.execute('''
+        session.execute('''
             CREATE INDEX IF NOT EXISTS idx_stock_notice_type 
             ON stock_notice_report(notice_type)
         ''')
         
         # 创建操作日志表（如果不存在）
-        cursor.execute('''
+        session.execute('''
             CREATE TABLE IF NOT EXISTS realtime_collect_operation_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 operation_type TEXT NOT NULL,
@@ -83,8 +83,9 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             )
         ''')
         
-        conn.commit()
-        return conn
+        session.commit()
+        session.close()
+        return True
     
     def collect_stock_notices(self, symbol: str = "全部", date_str: Optional[str] = None) -> bool:
         """
@@ -103,8 +104,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                 date_str = datetime.now().strftime('%Y-%m-%d')
             
             # 连接数据库
-            conn = self._init_db()
-            cursor = conn.cursor()
+            session = SessionLocal()
             
             # 获取公告数据
             self.logger.info(f"开始采集A股公告数据，类型：{symbol}，日期：{date_str}")
@@ -113,7 +113,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             if df.empty:
                 self.logger.warning(f"未获取到公告数据，类型：{symbol}，日期：{date_str}")
                 # 记录操作日志
-                cursor.execute('''
+                session.execute('''
                     INSERT INTO realtime_collect_operation_logs 
                     (operation_type, operation_desc, affected_rows, status, error_message, created_at)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -125,8 +125,8 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                     '未获取到数据',
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 ))
-                conn.commit()
-                conn.close()
+                session.commit()
+                session.close()
                 return True
             
             self.logger.info(f"采集到 {len(df)} 条A股公告数据")
@@ -147,7 +147,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                     }
                     
                     # 插入或更新数据
-                    cursor.execute('''
+                    session.execute('''
                         INSERT OR REPLACE INTO stock_notice_report
                         (code, name, notice_title, notice_type, publish_date, url, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -163,7 +163,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                     continue
             
             # 记录操作日志
-            cursor.execute('''
+            session.execute('''
                 INSERT INTO realtime_collect_operation_logs 
                 (operation_type, operation_desc, affected_rows, status, error_message, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -176,8 +176,8 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             ))
             
-            conn.commit()
-            conn.close()
+            session.commit()
+            session.close()
             
             self.logger.info(f"A股公告数据采集并入库完成，成功处理 {affected_rows} 条数据")
             return True
@@ -188,9 +188,8 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             
             # 记录错误日志
             try:
-                conn = sqlite3.connect(self.db_file)
-                cursor = conn.cursor()
-                cursor.execute('''
+                session = SessionLocal()
+                session.execute('''
                     INSERT INTO realtime_collect_operation_logs 
                     (operation_type, operation_desc, affected_rows, status, error_message, created_at)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -202,8 +201,8 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                     error_msg,
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 ))
-                conn.commit()
-                conn.close()
+                session.commit()
+                session.close()
             except Exception as log_error:
                 self.logger.error(f"记录错误日志失败: {str(log_error)}")
             
@@ -264,7 +263,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             pandas.DataFrame: 公告数据
         """
         try:
-            conn = sqlite3.connect(self.db_file)
+            session = SessionLocal()
             
             query = '''
                 SELECT code, name, notice_title, notice_type, publish_date, url, created_at
@@ -274,8 +273,8 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                 LIMIT ?
             '''
             
-            df = pd.read_sql_query(query, conn, params=(stock_code, limit))
-            conn.close()
+            df = pd.read_sql_query(query, session.connection(), params=(stock_code, limit))
+            session.close()
             
             self.logger.info(f"查询到股票 {stock_code} 的 {len(df)} 条公告数据")
             return df
@@ -296,7 +295,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             pandas.DataFrame: 公告数据
         """
         try:
-            conn = sqlite3.connect(self.db_file)
+            session = SessionLocal()
             
             query = '''
                 SELECT code, name, notice_title, notice_type, publish_date, url, created_at
@@ -306,8 +305,8 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                 LIMIT ?
             '''
             
-            df = pd.read_sql_query(query, conn, params=(date_str, limit))
-            conn.close()
+            df = pd.read_sql_query(query, session.connection(), params=(date_str, limit))
+            session.close()
             
             self.logger.info(f"查询到日期 {date_str} 的 {len(df)} 条公告数据")
             return df

@@ -5,7 +5,6 @@
 
 import akshare as ak
 import pandas as pd
-import sqlite3
 from typing import Optional, Dict, Any
 from pathlib import Path
 import logging
@@ -13,6 +12,8 @@ from datetime import datetime
 
 # 直接导入base模块
 from .base import AKShareCollector
+from backend_core.database.db import SessionLocal
+from sqlalchemy import text
 
 class AkshareRealtimeQuoteCollector(AKShareCollector):
     """沪深京A股实时行情数据采集器"""
@@ -27,27 +28,24 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
         super().__init__(config)
         self.db_file = Path(self.config.get('db_file', 'database/stock_analysis.db'))
         
-    def _init_db(self) -> sqlite3.Connection:
+    def _init_db(self) -> bool:
         """
         初始化数据库表结构
         
         Returns:
-            sqlite3.Connection: 数据库连接
+            bool: 是否成功
         """
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        
-        # 创建股票基本信息表
-        cursor.execute('''
+        session = SessionLocal()
+        cursor = session.execute(text('''
             CREATE TABLE IF NOT EXISTS stock_basic_info (
                 code TEXT PRIMARY KEY,
                 name TEXT,
                 create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        ''')
-        
-        # 创建实时行情表
-        cursor.execute('''
+        '''))
+        session.commit()
+
+        cursor = session.execute(text('''
             CREATE TABLE IF NOT EXISTS stock_realtime_quote (
                 code TEXT PRIMARY KEY,
                 name TEXT,
@@ -67,10 +65,10 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(code) REFERENCES stock_basic_info(code)
             )
-        ''')
-        
-        # 创建操作日志表
-        cursor.execute('''
+        '''))
+        session.commit()
+
+        cursor = session.execute(text('''
             CREATE TABLE IF NOT EXISTS realtime_collect_operation_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 operation_type TEXT NOT NULL,
@@ -80,10 +78,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        ''')
-        
-        conn.commit()
-        return conn
+        '''))
+        session.commit()
+
+        session.close()
+        return True
     
     def _safe_value(self, val: Any) -> Optional[float]:
         """
@@ -105,17 +104,16 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
             bool: 是否成功
         """
         try:
- 
-            # 连接数据库
-            conn = self._init_db()
-            cursor = conn.cursor()
             
+            affected_rows = 0 
+            
+            # 连接数据库
+            session = SessionLocal()
+
             # 获取实时行情数据
             df = self._retry_on_failure(ak.stock_zh_a_spot_em)
             self.logger.info("采集到 %d 条股票行情数据", len(df))
- 
-            # 批量处理数据
-            affected_rows = 0
+
             for _, row in df.iterrows():
                 code = row['代码']
                 name = row['名称']
@@ -140,46 +138,67 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                     'circulating_market_value': self._safe_value(row['流通市值']),
                     'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
+
+                cursor = session.execute(text('''
+                    INSERT INTO stock_basic_info (code, name, create_date)
+                    VALUES (:code, :name, :create_date)
+                    ON CONFLICT (code) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        create_date = EXCLUDED.create_date
+                    '''), {'code': code, 'name': name, 'create_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
                 
-                # 更新基础信息
-                cursor.execute('''
-                    INSERT OR REPLACE INTO stock_basic_info (code, name, create_date)
-                    VALUES (?, ?, ?)
-                ''', (data['code'], data['name'], data['update_time']))
                 
-                # 更新实时行情
-                cursor.execute('''
-                    INSERT OR REPLACE INTO stock_realtime_quote
-                    (code, name, current_price, change_percent, volume, amount,
-                     high, low, open, pre_close, turnover_rate, pe_dynamic,
-                     total_market_value, pb_ratio, circulating_market_value,
-                     update_time)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    data['code'], data['name'], data['current_price'], data['change_percent'],
-                    data['volume'], data['amount'], data['high'], data['low'],
-                    data['open'], data['pre_close'], data['turnover_rate'],
-                    data['pe_dynamic'], data['total_market_value'], data['pb_ratio'],
-                    data['circulating_market_value'], data['update_time']
-                ))
+                cursor = session.execute(    
+                    text('''
+                        INSERT INTO stock_realtime_quote
+                        (code, name, current_price, change_percent, volume, amount,
+                        high, low, open, pre_close, turnover_rate, pe_dynamic,
+                        total_market_value, pb_ratio, circulating_market_value,
+                        update_time)
+                        VALUES (
+                            :code, :name, :current_price, :change_percent, :volume, :amount,
+                            :high, :low, :open, :pre_close, :turnover_rate, :pe_dynamic,
+                            :total_market_value, :pb_ratio, :circulating_market_value,
+                            :update_time
+                        )
+                        ON CONFLICT (code) DO UPDATE SET
+                            name = EXCLUDED.name,
+                            current_price = EXCLUDED.current_price,
+                            change_percent = EXCLUDED.change_percent,
+                            volume = EXCLUDED.volume,
+                            amount = EXCLUDED.amount,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            open = EXCLUDED.open,
+                            pre_close = EXCLUDED.pre_close,
+                            turnover_rate = EXCLUDED.turnover_rate,
+                            pe_dynamic = EXCLUDED.pe_dynamic,
+                            total_market_value = EXCLUDED.total_market_value,
+                            pb_ratio = EXCLUDED.pb_ratio,
+                            circulating_market_value = EXCLUDED.circulating_market_value,
+                            update_time = EXCLUDED.update_time
+                    '''), 
+                    {'code': code, 'name': name, 'current_price': data['current_price'], 'change_percent': data['change_percent'], 'volume': data['volume'], 'amount': data['amount'], 'high': data['high'], 'low': data['low'], 'open': data['open'], 'pre_close': data['pre_close'], 'turnover_rate': data['turnover_rate'], 'pe_dynamic': data['pe_dynamic'], 'total_market_value': data['total_market_value'], 'pb_ratio': data['pb_ratio'], 'circulating_market_value': data['circulating_market_value'], 'update_time': data['update_time']})
+                
                 affected_rows += 1
             
             # 记录操作日志
-            cursor.execute('''
+            session.execute(text('''
                 INSERT INTO realtime_collect_operation_logs 
                 (operation_type, operation_desc, affected_rows, status, error_message, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                'realtime_quote_collect',
-                f'采集并更新{len(df)}条股票实时行情数据',
-                affected_rows,
-                'success',
-                None,
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            ))
+                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at)
+            '''), {
+                'operation_type': 'realtime_quote_collect',
+                'operation_desc': f'采集并更新{len(df)}条股票实时行情数据',
+                'affected_rows': affected_rows,
+                'status': 'success',
+                'error_message': None,
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
             
-            conn.commit()
-            conn.close()
+            session.commit()
+            
+            session.close()
             
             self.logger.info("全部股票行情数据采集并入库完成")
             return True
@@ -203,11 +222,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                         error_msg,
                         datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     ))
-                    conn.commit()
+                    session.commit()
             except Exception as log_error:
                 self.logger.error("记录错误日志失败: %s", str(log_error))
             finally:
-                if 'conn' in locals():
-                    conn.close()
+                if 'session' in locals():
+                    session.close()
             
             return False 
