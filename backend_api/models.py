@@ -5,7 +5,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -262,21 +262,84 @@ class StockRealtimeQuote(Base):
     circulating_market_value = Column(Float)
     update_time = Column(DateTime)
 
+class StockNoticeReport(Base):
+    __tablename__ = "stock_notice_report"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), index=True)
+    name = Column(String(50))
+    notice_title = Column(String(200))
+    notice_type = Column(String(50))
+    publish_date = Column(DateTime)
+    url = Column(String(300))
+    created_at = Column(DateTime)
+
 class StockNews(Base):
-    """股票新闻公告表"""
     __tablename__ = "stock_news"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    stock_code = Column(String(10), nullable=False, index=True)
-    title = Column(String(500), nullable=False)
-    content = Column(String, nullable=True)  # 新闻内容，长文本
-    keywords = Column(String(200), nullable=True)  # 关键词
-    publish_time = Column(String(50), nullable=True)  # 发布时间
-    source = Column(String(100), nullable=True)  # 文章来源
-    url = Column(String(500), nullable=True)  # 新闻链接
-    summary = Column(String, nullable=True)  # 摘要
-    type = Column(String(20), default="news", nullable=False)  # 类型: news, announcement, research
-    rating = Column(String(50), nullable=True)  # 研报评级
-    target_price = Column(String(20), nullable=True)  # 研报目标价
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now) 
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stock_code = Column(String(20), index=True)
+    title = Column(String(200))
+    content = Column(Text)
+    keywords = Column(String(100))
+    publish_time = Column(DateTime)
+    source = Column(String(100))
+    url = Column(String(300))
+    summary = Column(Text)
+    type = Column(String(20))
+    rating = Column(String(50))
+    target_price = Column(String(50))
+    created_at = Column(DateTime)
+
+class StockResearchReport(Base):
+    __tablename__ = "stock_research_reports"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stock_code = Column(String(20), index=True)
+    stock_name = Column(String(50))
+    report_name = Column(String(200))
+    dongcai_rating = Column(String(50))
+    institution = Column(String(100))
+    monthly_report_count = Column(Integer)
+    profit_2024 = Column(Float)
+    pe_2024 = Column(Float)
+    profit_2025 = Column(Float)
+    pe_2025 = Column(Float)
+    profit_2026 = Column(Float)
+    pe_2026 = Column(Float)
+    industry = Column(String(100))
+    report_date = Column(DateTime)
+    pdf_url = Column(String(300))
+    updated_at = Column(DateTime)
+
+class IndexRealtimeQuotes(Base):
+    __tablename__ = "index_realtime_quotes"
+    code = Column(String(10), primary_key=True)
+    name = Column(String(50), nullable=False)
+    price = Column(Float)
+    change = Column(Float)
+    pct_chg = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    open = Column(Float)
+    pre_close = Column(Float)
+    volume = Column(Float)
+    amount = Column(Float)
+    amplitude = Column(Float)
+    turnover = Column(Float)
+    pe = Column(Float)
+    volume_ratio = Column(Float)
+    update_time = Column(DateTime, index=True)
+
+class IndustryBoardRealtimeQuotes(Base):
+    __tablename__ = "industry_board_realtime_quotes"
+    board_code = Column(String(20), primary_key=True)
+    board_name = Column(String(100))
+    latest_price = Column(Float)
+    change_amount = Column(Float)
+    change_percent = Column(Float)
+    total_market_value = Column(Float)
+    volume = Column(Float)
+    amount = Column(Float)
+    turnover_rate = Column(Float)
+    leading_stock_name = Column(String(100))
+    leading_stock_code = Column(String(20))
+    leading_stock_change_percent = Column(Float)
+    update_time = Column(DateTime) 

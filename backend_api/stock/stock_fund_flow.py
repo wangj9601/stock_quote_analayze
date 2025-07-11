@@ -10,7 +10,6 @@ import time
 from threading import Lock
 import sqlite3
 from datetime import datetime  # 直接导入 datetime 类
-from backend_api.config import DB_PATH
 
 
 

@@ -9,16 +9,16 @@ from dotenv import load_dotenv
 # 加载环境变量
 load_dotenv()
 
-# 数据库目录 - 使用相对路径
-DB_DIR = Path(__file__).parent.parent / 'database'
-DB_DIR.mkdir(parents=True, exist_ok=True)
+# # 数据库目录 - 使用相对路径
+# DB_DIR = Path(__file__).parent.parent / 'database'
+# DB_DIR.mkdir(parents=True, exist_ok=True)
 
-# 数据库文件路径
-DB_PATH = str(DB_DIR / 'stock_analysis.db')
+# # 数据库文件路径
+# DB_PATH = str(DB_DIR / 'stock_analysis.db')
 
 # 数据库配置
 DATABASE_CONFIG = {
-    "url": os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}"),
+    "url": os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis"),
     "pool_size": int(os.getenv("DATABASE_POOL_SIZE", "5")),
     "max_overflow": int(os.getenv("DATABASE_MAX_OVERFLOW", "10")),
     "echo": os.getenv("DATABASE_ECHO", "False").lower() == "true"

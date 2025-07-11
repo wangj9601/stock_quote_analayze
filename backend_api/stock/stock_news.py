@@ -5,13 +5,12 @@ from ..database import get_db
 from sqlalchemy.orm import Session
 import traceback
 import datetime
-import sqlite3
-from backend_api.config import DB_PATH
 import pandas as pd
 import difflib
 import time
 import aiohttp
 import logging
+from ..models import StockNoticeReport, StockNews, StockResearchReport
 
 logger = logging.getLogger(__name__)
 
@@ -178,42 +177,7 @@ def deduplicate_news(news_list, similarity_threshold=0.8):
 def init_stock_research_table():
     """初始化个股研报信息表"""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # 创建个股研报信息表
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS stock_research_reports (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                stock_code TEXT NOT NULL,                    -- 股票代码
-                stock_name TEXT,                             -- 股票简称
-                report_name TEXT NOT NULL,                   -- 报告名称
-                dongcai_rating TEXT,                         -- 东财评级
-                institution TEXT,                            -- 机构
-                monthly_report_count INTEGER DEFAULT 0,      -- 近一个月研报数
-                profit_2024 REAL,                           -- 2024-盈利预测-收益
-                pe_2024 REAL,                               -- 2024-盈利预测-市盈率
-                profit_2025 REAL,                           -- 2025-盈利预测-收益
-                pe_2025 REAL,                               -- 2025-盈利预测-市盈率
-                profit_2026 REAL,                           -- 2026-盈利预测-收益
-                pe_2026 REAL,                               -- 2026-盈利预测-市盈率
-                industry TEXT,                              -- 行业
-                report_date TEXT,                           -- 日期
-                pdf_url TEXT,                               -- 报告PDF链接
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(stock_code, report_name, report_date)
-            )
-        """)
-        
-        # 创建索引
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_research_code ON stock_research_reports(stock_code)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_research_date ON stock_research_reports(report_date)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_research_institution ON stock_research_reports(institution)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_research_rating ON stock_research_reports(dongcai_rating)")
-        
-        conn.commit()
-        conn.close()
+        # 确保表已创建
         print("[init_stock_research_table] 个股研报信息表初始化成功")
         
     except Exception as e:
@@ -422,32 +386,11 @@ async def get_stock_news_combined(
         # 获取公告数据
         try:
             # 直接连接SQLite数据库获取公告数据
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
+            db = next(get_db())
             
-            query = """
-                SELECT 
-                    id,
-                    code,
-                    name,
-                    notice_title,
-                    notice_type,
-                    publish_date,
-                    url,
-                    created_at
-                FROM stock_notice_report 
-                WHERE code = ? 
-                ORDER BY publish_date DESC 
-                LIMIT ?
-            """
-            cursor.execute(query, (symbol, announcement_limit))
-            announcement_data = cursor.fetchall()
-            
-            # 将结果转换为字典列表
-            columns = ['id', 'code', 'name', 'notice_title', 'notice_type', 'publish_date', 'url', 'created_at']
-            announcement_data = [dict(zip(columns, row)) for row in announcement_data]
-            
-            conn.close()
+            # 公告数据查询示例（替换原sqlite3公告查询）
+            announcements = db.query(StockNoticeReport).filter(StockNoticeReport.code == symbol).order_by(StockNoticeReport.publish_date.desc()).limit(announcement_limit).all()
+            announcement_data = [row.to_dict() for row in announcements]
             
             if announcement_data:
                 print(f"[stock_news_combined] 从数据库获取到公告数据: {len(announcement_data)} 条")
@@ -532,39 +475,30 @@ async def get_stock_news_combined(
 async def save_news_to_db(symbol: str, news_data: list):
     """保存新闻数据到数据库"""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        db = next(get_db())
         
         # 先删除该股票的旧数据（保持当日最新）
         today = datetime.date.today().strftime('%Y-%m-%d')
-        cursor.execute(
-            "DELETE FROM stock_news WHERE stock_code = ? AND DATE(created_at) = ?",
-            (symbol, today)
-        )
+        db.query(StockNews).filter(StockNews.stock_code == symbol, StockNews.created_at >= today).delete()
         
         # 插入新数据
         for item in news_data:
-            cursor.execute("""
-                INSERT OR REPLACE INTO stock_news 
-                (stock_code, title, content, keywords, publish_time, source, url, summary, type, rating, target_price, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                symbol,
-                item.get('title', ''),
-                item.get('content', ''),
-                item.get('keywords', ''),
-                item.get('publish_time', ''),
-                item.get('source', ''),
-                item.get('url', ''),
-                item.get('summary', ''),
-                item.get('type', 'news'),
-                item.get('rating', ''),
-                item.get('target_price', ''),
-                datetime.datetime.now()
+            db.add(StockNews(
+                stock_code=symbol,
+                title=item.get('title', ''),
+                content=item.get('content', ''),
+                keywords=item.get('keywords', ''),
+                publish_time=item.get('publish_time', ''),
+                source=item.get('source', ''),
+                url=item.get('url', ''),
+                summary=item.get('summary', ''),
+                type=item.get('type', 'news'),
+                rating=item.get('rating', ''),
+                target_price=item.get('target_price', ''),
+                created_at=datetime.datetime.now()
             ))
         
-        conn.commit()
-        conn.close()
+        db.commit()
         print(f"[save_news_to_db] 成功保存 {len(news_data)} 条数据到数据库")
         
     except Exception as e:
@@ -577,8 +511,7 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
         # 确保表已创建
         init_stock_research_table()
         
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        db = next(get_db())
         
         # 获取股票名称（从其他表或API获取）
         stock_name = await get_stock_name(symbol)
@@ -623,29 +556,23 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
                 monthly_count = item.get('monthly_count', len(research_data))
                 
                 # 插入或更新数据
-                cursor.execute("""
-                    INSERT OR REPLACE INTO stock_research_reports 
-                    (stock_code, stock_name, report_name, dongcai_rating, institution, 
-                     monthly_report_count, profit_2024, pe_2024, profit_2025, pe_2025, 
-                     profit_2026, pe_2026, industry, report_date, pdf_url, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    symbol,
-                    stock_name,
-                    report_name,
-                    dongcai_rating if dongcai_rating and dongcai_rating != '未评级' else None,
-                    institution if institution and institution != '研究机构' else None,
-                    monthly_count,
-                    profit_2024,
-                    pe_2024,
-                    profit_2025,
-                    pe_2025,
-                    profit_2026,
-                    pe_2026,
-                    industry,
-                    report_date if report_date else None,
-                    pdf_url if pdf_url else None,
-                    datetime.datetime.now()
+                db.add(StockResearchReport(
+                    stock_code=symbol,
+                    stock_name=stock_name,
+                    report_name=report_name,
+                    dongcai_rating=dongcai_rating if dongcai_rating and dongcai_rating != '未评级' else None,
+                    institution=institution if institution and institution != '研究机构' else None,
+                    monthly_report_count=monthly_count,
+                    profit_2024=profit_2024,
+                    pe_2024=pe_2024,
+                    profit_2025=profit_2025,
+                    pe_2025=pe_2025,
+                    profit_2026=profit_2026,
+                    pe_2026=pe_2026,
+                    industry=industry,
+                    report_date=report_date if report_date else None,
+                    pdf_url=pdf_url if pdf_url else None,
+                    updated_at=datetime.datetime.now()
                 ))
                 
                 saved_count += 1
@@ -656,9 +583,7 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
                 print(f"[DEBUG] 失败的研报数据: {item}")
                 continue
         
-        conn.commit()
-        conn.close()
-        
+        db.commit()
         print(f"[save_research_reports_to_db] 成功保存 {saved_count}/{len(research_data)} 条研报数据到数据库")
         
     except Exception as e:

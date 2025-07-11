@@ -1,66 +1,58 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-import sqlite3
-import os
+"""
+数据库迁移脚本（SQLAlchemy+PostgreSQL 版）
+"""
+from backend_api.database import SessionLocal, init_db
+from backend_api.models import User, Admin
+from sqlalchemy import inspect
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy import text
 
 def migrate_database():
-    """迁移数据库，添加缺失的列"""
-    db_path = 'backend_api/database/stock_analysis.db'
-    
-    if not os.path.exists(db_path):
-        print("数据库文件不存在，无需迁移")
-        return
-    
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
+    """
+迁移数据库，添加缺失的列和表（适配PostgreSQL，推荐直接用Alembic管理迁移）
+"""
+    db = SessionLocal()
     try:
+        inspector = inspect(db.bind)
         # 检查users表是否有status列
-        cursor.execute("PRAGMA table_info(users)")
-        columns = [column[1] for column in cursor.fetchall()]
-        
+        columns = [col['name'] for col in inspector.get_columns('users')]
         if 'status' not in columns:
             print("添加status列到users表...")
-            cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
+            db.execute(text("ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT 'active'"))
             print("✅ 成功添加status列")
         else:
-            print("✅ users表已有status列")
-        
-        # 检查是否存在admins表
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='admins'")
-        if not cursor.fetchone():
+            print("✅ users表已存在status列")
+        # 检查admins表是否存在
+        if not inspector.has_table('admins'):
             print("创建admins表...")
-            cursor.execute('''
-                CREATE TABLE admins (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    role TEXT DEFAULT 'admin',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_login TIMESTAMP
-                )
-            ''')
-            
-            # 创建默认管理员账号
-            import hashlib
-            default_admin_password = hashlib.sha256('123456'.encode()).hexdigest()
-            cursor.execute('''
-                INSERT INTO admins (username, password_hash, role)
-                VALUES (?, ?, ?)
-            ''', ('admin', default_admin_password, 'super_admin'))
-            print("✅ 成功创建admins表和默认管理员账号")
+            init_db()  # 直接用SQLAlchemy自动建表
+            print("✅ 成功创建admins表")
         else:
             print("✅ admins表已存在")
-        
-        conn.commit()
+        # 检查是否有默认管理员
+        admin = db.query(Admin).first()
+        if not admin:
+            from backend_api.auth import get_password_hash
+            admin = Admin(
+                username="admin",
+                password_hash=get_password_hash("123456"),
+                role="super_admin"
+            )
+            db.add(admin)
+            db.commit()
+            print("✅ 成功创建默认管理员账号")
+        db.commit()
         print("🎉 数据库迁移完成")
-        
+    except ProgrammingError as e:
+        print(f"❌ 迁移失败: {e}")
+        db.rollback()
     except Exception as e:
         print(f"❌ 迁移失败: {e}")
-        conn.rollback()
+        db.rollback()
     finally:
-        conn.close()
+        db.close()
 
 if __name__ == '__main__':
     migrate_database() 

@@ -6,7 +6,7 @@
 import os
 import sys
 import subprocess
-import sqlite3
+# import sqlite3  # 移除sqlite3
 
 def check_python_version():
     """检查Python版本"""
@@ -28,21 +28,11 @@ def install_dependencies():
 def setup_database():
     """设置数据库"""
     print("正在初始化数据库...")
-    
-    # 创建数据库目录
+    # 只创建数据库目录（如有必要），不再用sqlite3创建文件
     if not os.path.exists('database'):
         os.makedirs('database')
         print("✓ 创建数据库目录")
-    
-    # 检查数据库文件
-    db_path = 'database/stock_analysis.db'
-    if not os.path.exists(db_path):
-        # 创建空数据库文件
-        conn = sqlite3.connect(db_path)
-        conn.close()
-        print("✓ 创建数据库文件")
-    
-    print("✓ 数据库初始化完成")
+    print("✓ 数据库目录检查完成")
 
 def start_server():
     """启动服务器"""
@@ -53,8 +43,7 @@ def start_server():
     
     try:
         # 导入并运行应用
-        from app import app, init_db
-        
+        from backend_api.app_complete import app, init_db        
         # 初始化数据库
         init_db()
         

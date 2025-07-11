@@ -8,11 +8,10 @@ import traceback
 import numpy as np
 import time
 from threading import Lock
-import sqlite3
 import datetime
-from backend_api.config import DB_PATH
 import pandas as pd
 import math
+from ..models import StockRealtimeQuote
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
@@ -61,27 +60,22 @@ async def get_stock_quote(request: Request):
         today = datetime.date.today()
         # 如果是周六或周日，从数据库获取
         if today.weekday() in (5, 6):
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
+            db = next(get_db())
             for code in codes:
-                cursor.execute(
-                    "SELECT code, current_price, change_percent, volume, amount, high, low, open, pre_close FROM stock_realtime_quote WHERE code=?",
-                    (code,)
-                )
-                row = cursor.fetchone()
-                if row:
+                stock_quote = db.query(StockRealtimeQuote).filter(StockRealtimeQuote.code == code).first()
+                if stock_quote:
                     result.append({
-                        "code": row[0],
-                        "current_price": safe_float(row[1]),
-                        "change_percent": safe_float(row[2]),
-                        "volume": safe_float(row[3]),
-                        "turnover": safe_float(row[4]),
-                        "high": safe_float(row[5]),
-                        "low": safe_float(row[6]),
-                        "open": safe_float(row[7]),
-                        "yesterday_close": safe_float(row[8]),
+                        "code": stock_quote.code,
+                        "current_price": safe_float(stock_quote.current_price),
+                        "change_percent": safe_float(stock_quote.change_percent),
+                        "volume": safe_float(stock_quote.volume),
+                        "turnover": safe_float(stock_quote.amount),
+                        "high": safe_float(stock_quote.high),
+                        "low": safe_float(stock_quote.low),
+                        "open": safe_float(stock_quote.open),
+                        "yesterday_close": safe_float(stock_quote.pre_close),
                     })
-            conn.close()
+            db.close()
         else:
             for code in codes:
                 try:
@@ -133,35 +127,30 @@ async def get_stocks_list(request: Request, db: Session = Depends(get_db)):
         print(f"[stock_list] 查询异常: {e}\n{traceback.format_exc()}")
         return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
 
+
 @router.get("/quote_board")
 async def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最高的股票")):
     """获取沪深京A股最新行情，返回涨幅最高的前limit个股票（始终从stock_realtime_quote表读取，不联表）"""
-    import sqlite3
-    from backend_api.config import DB_PATH
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT code, name, current_price, change_percent, open, pre_close, high, low, volume, amount "
-            "FROM stock_realtime_quote "
-            "ORDER BY change_percent DESC LIMIT ?",
-            (limit,)
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        db = next(get_db())
+        cursor = db.query(StockRealtimeQuote)\
+            .filter(StockRealtimeQuote.change_percent != None)\
+            .filter(StockRealtimeQuote.change_percent != '')\
+            .order_by(StockRealtimeQuote.change_percent.desc())\
+            .limit(limit).all()
         data = []
-        for row in rows:
+        for row in cursor:
             data.append({
-                'code': row[0],
-                'name': row[1],
-                'current': row[2],
-                'change_percent': row[3],
-                'open': row[4],
-                'yesterday_close': row[5],
-                'high': row[6],
-                'low': row[7],
-                'volume': row[8],
-                'turnover': row[9],
+                'code': row.code,
+                'name': row.name,
+                'current': row.current_price,
+                'change_percent': row.change_percent,
+                'open': row.open,
+                'yesterday_close': row.pre_close,
+                'high': row.high,
+                'low': row.low,
+                'volume': row.volume,
+                'turnover': row.amount,
             })
         print(f"✅(DB) 成功获取 {len(data)} 条A股涨幅榜数据")
         return JSONResponse({'success': True, 'data': data})
@@ -186,9 +175,9 @@ def get_quote_board_list(
         print(f"📊 获取A股行情排行 (from DB): type={ranking_type}, market={market}, page={page}, page_size={page_size}")
         
         # 1. 从数据库读取数据到 pandas DataFrame
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query("SELECT * FROM stock_realtime_quote", conn)
-        conn.close()
+        db = next(get_db())
+        df = pd.read_sql_query("SELECT * FROM stock_realtime_quote WHERE change_percent IS NOT NULL", db.bind)
+        db.close()
 
         # 2. 市场类型过滤
         if market != 'all':

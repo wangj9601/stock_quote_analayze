@@ -16,6 +16,18 @@ from .base import AKShareCollector
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
+def convert_dates(obj):
+    if isinstance(obj, dict):
+        return {k: convert_dates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_dates(v) for v in obj]
+    elif isinstance(obj, datetime):
+        return obj.strftime('%Y-%m-%d %H:%M:%S')
+    elif isinstance(obj, date):
+        return obj.strftime('%Y-%m-%d')
+    else:
+        return obj
+
 class AkshareStockNoticeReportCollector(AKShareCollector):
     """A股公告数据采集器"""
     
@@ -39,7 +51,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
         session = SessionLocal()
         
         # 创建A股公告数据表
-        session.execute('''
+        session.execute(text('''
             CREATE TABLE IF NOT EXISTS stock_notice_report (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code TEXT NOT NULL,
@@ -52,26 +64,26 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(code, notice_title, publish_date)
             )
-        ''')
+        '''))
         
         # 创建索引
-        session.execute('''
+        session.execute(text('''
             CREATE INDEX IF NOT EXISTS idx_stock_notice_code 
             ON stock_notice_report(code)
-        ''')
+        '''))
         
-        session.execute('''
+        session.execute(text('''
             CREATE INDEX IF NOT EXISTS idx_stock_notice_date 
             ON stock_notice_report(publish_date)
-        ''')
+        '''))
         
-        session.execute('''
+        session.execute(text('''
             CREATE INDEX IF NOT EXISTS idx_stock_notice_type 
             ON stock_notice_report(notice_type)
-        ''')
+        '''))
         
         # 创建操作日志表（如果不存在）
-        session.execute('''
+        session.execute(text('''
             CREATE TABLE IF NOT EXISTS realtime_collect_operation_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 operation_type TEXT NOT NULL,
@@ -81,7 +93,7 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        ''')
+        '''))
         
         session.commit()
         session.close()
@@ -113,18 +125,20 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             if df.empty:
                 self.logger.warning(f"未获取到公告数据，类型：{symbol}，日期：{date_str}")
                 # 记录操作日志
-                session.execute('''
+                log_data = {
+                    'operation_type': 'stock_notice_collect',
+                    'operation_desc': f'采集A股公告数据，类型：{symbol}，日期：{date_str}',
+                    'affected_rows': 0,
+                    'status': 'success',
+                    'error_message': '未获取到数据',
+                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                log_data = convert_dates(log_data)
+                session.execute(text('''
                     INSERT INTO realtime_collect_operation_logs 
                     (operation_type, operation_desc, affected_rows, status, error_message, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    'stock_notice_collect',
-                    f'采集A股公告数据，类型：{symbol}，日期：{date_str}',
-                    0,
-                    'success',
-                    '未获取到数据',
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                ))
+                    VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at)
+                '''), log_data)
                 session.commit()
                 session.close()
                 return True
@@ -146,35 +160,43 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
                         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }
                     
-                    # 插入或更新数据
-                    session.execute('''
-                        INSERT OR REPLACE INTO stock_notice_report
-                        (code, name, notice_title, notice_type, publish_date, url, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        data['code'], data['name'], data['notice_title'], 
-                        data['notice_type'], data['publish_date'], data['url'], 
-                        data['updated_at']
-                    ))
+                    # 插入或更新数据（PostgreSQL UPSERT）
+                    data = convert_dates(data)
+                    session.execute(
+                        text('''
+                            INSERT INTO stock_notice_report
+                            (code, name, notice_title, notice_type, publish_date, url, updated_at)
+                            VALUES (:code, :name, :notice_title, :notice_type, :publish_date, :url, :updated_at)
+                            ON CONFLICT (code, notice_title, publish_date)
+                            DO UPDATE SET
+                                name = EXCLUDED.name,
+                                notice_type = EXCLUDED.notice_type,
+                                url = EXCLUDED.url,
+                                updated_at = EXCLUDED.updated_at
+                        '''),
+                        data
+                    )
                     affected_rows += 1
                     
                 except Exception as e:
                     self.logger.warning(f"处理单条公告数据时出错: {str(e)}, 数据: {row.to_dict()}")
-                    continue
+                    raise
             
             # 记录操作日志
-            session.execute('''
+            log_data = {
+                'operation_type': 'stock_notice_collect',
+                'operation_desc': f'采集并更新A股公告数据，类型：{symbol}，日期：{date_str}，共{len(df)}条数据',
+                'affected_rows': affected_rows,
+                'status': 'success',
+                'error_message': None,
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            log_data = convert_dates(log_data)
+            session.execute(text('''
                 INSERT INTO realtime_collect_operation_logs 
                 (operation_type, operation_desc, affected_rows, status, error_message, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                'stock_notice_collect',
-                f'采集并更新A股公告数据，类型：{symbol}，日期：{date_str}，共{len(df)}条数据',
-                affected_rows,
-                'success',
-                None,
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            ))
+                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at)
+            '''), log_data)
             
             session.commit()
             session.close()
@@ -189,18 +211,20 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
             # 记录错误日志
             try:
                 session = SessionLocal()
-                session.execute('''
+                log_data = {
+                    'operation_type': 'stock_notice_collect',
+                    'operation_desc': f'采集A股公告数据失败，类型：{symbol}，日期：{date_str}',
+                    'affected_rows': 0,
+                    'status': 'error',
+                    'error_message': error_msg,
+                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                log_data = convert_dates(log_data)
+                session.execute(text('''
                     INSERT INTO realtime_collect_operation_logs 
                     (operation_type, operation_desc, affected_rows, status, error_message, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    'stock_notice_collect',
-                    f'采集A股公告数据失败，类型：{symbol}，日期：{date_str}',
-                    0,
-                    'error',
-                    error_msg,
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                ))
+                    VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at)
+                '''), log_data)
                 session.commit()
                 session.close()
             except Exception as log_error:
@@ -265,13 +289,13 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
         try:
             session = SessionLocal()
             
-            query = '''
+            query = text('''
                 SELECT code, name, notice_title, notice_type, publish_date, url, created_at
                 FROM stock_notice_report 
                 WHERE code = ? 
                 ORDER BY publish_date DESC, created_at DESC
                 LIMIT ?
-            '''
+            ''')
             
             df = pd.read_sql_query(query, session.connection(), params=(stock_code, limit))
             session.close()
@@ -297,13 +321,13 @@ class AkshareStockNoticeReportCollector(AKShareCollector):
         try:
             session = SessionLocal()
             
-            query = '''
+            query = text('''
                 SELECT code, name, notice_title, notice_type, publish_date, url, created_at
                 FROM stock_notice_report 
                 WHERE publish_date = ? 
                 ORDER BY created_at DESC
                 LIMIT ?
-            '''
+            ''')
             
             df = pd.read_sql_query(query, session.connection(), params=(date_str, limit))
             session.close()

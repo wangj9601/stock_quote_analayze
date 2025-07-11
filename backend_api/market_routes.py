@@ -1,6 +1,6 @@
 # backend_api/market_routes.py
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 import akshare as ak
 from datetime import datetime
 from fastapi.responses import JSONResponse
@@ -9,8 +9,9 @@ import traceback
 import pandas as pd
 import numpy as np
 import sqlite3
-from backend_core.config.config import DATA_COLLECTORS
-from backend_api.config import DB_PATH
+from sqlalchemy.orm import Session
+from backend_api.database import get_db
+from backend_api.models import IndexRealtimeQuotes, IndustryBoardRealtimeQuotes
 
 
 
@@ -25,29 +26,31 @@ def safe_float(value):
     except (ValueError, TypeError):
         return None
 
+def row_to_dict(row):
+    d = {}
+    for c in row.__table__.columns:
+        v = getattr(row, c.name)
+        if isinstance(v, datetime):
+            d[c.name] = v.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            d[c.name] = v
+    return d
+
 # 获取市场指数数据(修改为从数据库 index_realtime_quotes 表中获取)
 @router.get("/indices")
-def get_market_indices():
-    """获取市场指数数据(修改为从数据库 index_realtime_quotes 表中获取)"""
-    db_file = DB_PATH
-    
+def get_market_indices(db: Session = Depends(get_db)):
+    """获取市场指数数据(从数据库 index_realtime_quotes 表中获取)"""
     def map_index_fields(row):
         return {
-            "code": row.get("code"),
-            "name": row.get("name"),
-            "current": row.get("price"),
-            "change": row.get("change"),
-            "change_percent": row.get("pct_chg"),
-            "volume": row.get("volume"),
-            "timestamp": row.get("update_time"),
-            # 其他字段可按需补充
+            "code": row.code,
+            "name": row.name,
+            "current": row.price,
+            "change": row.change,
+            "change_percent": row.pct_chg,
+            "volume": row.volume,
+            "timestamp": row.update_time,
         }
     try:
-        conn = sqlite3.connect(db_file)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # 指数代码映射
         index_codes = {
             '上证指数': '000001',
             '深圳成指': '399001',
@@ -56,81 +59,40 @@ def get_market_indices():
         }
         indices_data = []
         for name, code in index_codes.items():
-            cursor.execute(
-                """
-                SELECT * FROM index_realtime_quotes
-                WHERE code = ?
-                ORDER BY update_time DESC
-                LIMIT 1
-                """, (code,)
-            )
-            row = cursor.fetchone()
+            row = db.query(IndexRealtimeQuotes).filter(IndexRealtimeQuotes.code == code).order_by(IndexRealtimeQuotes.update_time.desc()).first()
             if row is None:
                 continue
-            # 格式化数据，确保数值类型正确
-            formatted_row = {}
-            for key in row.keys():
-                value = row[key]
-                if key in ['price', 'change', 'pct_chg', 'high', 'low', 'open', 'pre_close', 'volume', 'amount', 'amplitude', 'turnover', 'pe', 'volume_ratio']:
-                    formatted_row[key] = safe_float(value)
-                elif key == 'update_time':
-                    formatted_row[key] = value
-                else:
-                    formatted_row[key] = value
-            indices_data.append(map_index_fields(formatted_row))
-        conn.close()
-        return JSONResponse({'success': True, 'data': indices_data})    
+            indices_data.append(map_index_fields(row))
+        return JSONResponse({'success': True, 'data': indices_data})
     except Exception as e:
         return JSONResponse({'success': False, 'message': str(e)})
 
 # 获取当日最新板块行情，按涨幅降序排序
 @router.get("/industry_board")
-def get_industry_board():
+def get_industry_board(db: Session = Depends(get_db)):
     """获取当日最新板块行情，按涨幅降序排序（从industry_board_realtime_quotes表读取）"""
-    db_file = DB_PATH
     def map_board_fields(row):
         return {
-            "board_code": row.get("board_code"),
-            "board_name": row.get("board_name"),
-            "latest_price": row.get("latest_price"),
-            "change_amount": row.get("change_amount"),
-            "change_percent": row.get("change_percent"),
-            "total_market_value": row.get("total_market_value"),
-            "volume": row.get("volume"),
-            "amount": row.get("amount"),
-            "turnover_rate": row.get("turnover_rate"),
-            "leading_stock_name": row.get("leading_stock_name"),
-            "leading_stock_code": row.get("leading_stock_code"),
-            "leading_stock_change_percent": row.get("leading_stock_change_percent"),
-            "update_time": row.get("update_time"),
+            "board_code": row.board_code,
+            "board_name": row.board_name,
+            "latest_price": row.latest_price,
+            "change_amount": row.change_amount,
+            "change_percent": row.change_percent,
+            "total_market_value": row.total_market_value,
+            "volume": row.volume,
+            "amount": row.amount,
+            "turnover_rate": row.turnover_rate,
+            "leading_stock_name": row.leading_stock_name,
+            "leading_stock_code": row.leading_stock_code,
+            "leading_stock_change_percent": row.leading_stock_change_percent,
+            "update_time": row.update_time,
         }
     try:
-        conn = sqlite3.connect(db_file)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM industry_board_realtime_quotes
-            ORDER BY change_percent DESC, update_time DESC
-            """
-        )
-        rows = cursor.fetchall()
-        data = []
-        for row in rows:
-            formatted_row = {}
-            for key in row.keys():
-                value = row[key]
-                # 需要转为float的字段
-                if key in [
-                    'latest_price', 'change_amount', 'change_percent', 'total_market_value',
-                    'volume', 'amount', 'turnover_rate', 'leading_stock_change_percent']:
-                    formatted_row[key] = safe_float(value)
-                else:
-                    formatted_row[key] = value
-            data.append(map_board_fields(formatted_row))
-        conn.close()
+        rows = db.query(IndustryBoardRealtimeQuotes).order_by(IndustryBoardRealtimeQuotes.change_percent.desc(), IndustryBoardRealtimeQuotes.update_time.desc()).all()
+        data = [row_to_dict(row) for row in rows]
         return JSONResponse({'success': True, 'data': data})
     except Exception as e:
+        import traceback
         tb = traceback.format_exc()
         return JSONResponse({
             'success': False,
