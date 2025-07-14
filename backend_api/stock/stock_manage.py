@@ -135,7 +135,7 @@ async def get_quote_board(limit: int = Query(10, description="返回前N个涨�
         db = next(get_db())
         cursor = db.query(StockRealtimeQuote)\
             .filter(StockRealtimeQuote.change_percent != None)\
-            .filter(StockRealtimeQuote.change_percent != '')\
+            .filter(StockRealtimeQuote.change_percent != 0)\
             .order_by(StockRealtimeQuote.change_percent.desc())\
             .limit(limit).all()
         data = []

@@ -9,10 +9,12 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
 class HistoricalQuoteCollector(TushareCollector):
+    
     """历史行情数据采集器"""
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
-        super().__init__(config)
-        self.db_file = Path(self.config.get('db_file', 'database/stock_analysis.db'))
+    # def __init__(self, config: Optional[Dict[str, Any]] = None):
+    #     super().__init__(config)
+    #     #self.db_file = Path(self.config.get('db_file', 'database/stock_analysis.db'))
+    
     def _init_db(self):
         session = SessionLocal()
         session.execute(text('''

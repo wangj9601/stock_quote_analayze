@@ -10,5 +10,8 @@
 # 2025/07/11
 ## 股票数据分析软件相关工作
     - 继续调试数据采集相关改造代码；
-    - 参考backend_core 目录，backend_api 目录相关程序代码数据库访问切换到postgreSQL， 数据库访问架构都改为 sqlalchemy；
-    - 。
+    - 参考backend_core 目录，backend_api 目录相关程序代码数据库访问切换到postgreSQL， 数据库访问架构都改为 sqlalchemy。
+
+# 2025/07/14
+## 股票数据分析软件相关工作
+    - 新增自选股历史行情采集任务相关处理，每天凌晨2点执行一次， 数据库访问架构都改为 sqlalchemy。

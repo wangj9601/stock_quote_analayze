@@ -9,6 +9,9 @@ from backend_core.config.config import DATA_COLLECTORS
 from backend_core.data_collectors.akshare.realtime_index_spot_ak import RealtimeIndexSpotAkCollector
 from backend_core.data_collectors.akshare.realtime_stock_industry_board_ak import RealtimeStockIndustryBoardCollector
 from backend_core.data_collectors.akshare.realtime_stock_notice_report_ak import AkshareStockNoticeReportCollector
+from apscheduler.schedulers.background import BackgroundScheduler
+from backend_core.data_collectors.akshare.watchlist_history_collector import collect_watchlist_history
+import time
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -36,10 +39,9 @@ def collect_akshare_index_realtime():
     try:
         logging.info("[定时任务] AKShare 指数实时行情采集开始...")
         df = index_collector.collect_quotes()
-        # 可在此处保存数据到数据库或文件
-        #logging.info(f"[定时任务] AKShare 实时行情采集完成，采集到 {len(df)} 条数据")
+        logging.info(f"[定时任务] AKShare 指数实时行情采集完成，采集到 {len(df)} 条数据")
     except Exception as e:
-        logging.error(f"[定时任务] AKShare 实时行情采集异常: {e}")
+        logging.error(f"[定时任务] 实时行情采集异常: {e}")
 
 def collect_tushare_historical():
     try:
@@ -87,6 +89,17 @@ def collect_akshare_stock_notices():
     except Exception as e:
         logging.error(f"[定时任务] A股公告数据采集异常: {e}")
 
+def run_watchlist_history_collection():
+    try:
+        logging.info("[定时任务] 自选股历史行情采集开始...")
+        result = collect_watchlist_history()
+        if result:
+            logging.info("[定时任务] 自选股历史行情采集完成")
+        else:
+            logging.warning("[定时任务] 自选股历史行情采集失败")
+    except Exception as e:
+        logging.error(f"[定时任务] 自选股历史行情采集异常: {e}")
+
 # 定时任务配置
 # 每个交易日上午9:00-11:30、下午13:30-15:30每15分钟采集一次A股实时行情
 scheduler.add_job(
@@ -119,7 +132,7 @@ scheduler.add_job(
     'cron',
     day_of_week='mon-fri',
     hour='9-10,11,13-17',
-    minute='10,32',
+    minute='10,40',
     id='akshare_industry_board_realtime',
 )
 
@@ -129,6 +142,15 @@ scheduler.add_job(
     'interval',
     minutes=60,
     id='akshare_stock_notices',
+)
+
+# 自选股历史行情采集任务，每天凌晨2点执行一次
+scheduler.add_job(
+    run_watchlist_history_collection,
+    'cron',
+    hour=16,
+    minute=33,
+    id='watchlist_history_daily',
 )
 
 if __name__ == "__main__":
