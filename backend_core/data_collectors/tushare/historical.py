@@ -86,7 +86,7 @@ class HistoricalQuoteCollector(TushareCollector):
                         'ts_code': ts_code,
                         'name': name,
                         'market': market,
-                        'date': date_str,
+                        'date': datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
                         'collected_source': 'tushare',
                         'collected_date': datetime.datetime.now().isoformat(),
                         'open': self._safe_value(row['open']),

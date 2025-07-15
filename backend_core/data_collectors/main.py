@@ -95,8 +95,7 @@ def run_watchlist_history_collection():
         result = collect_watchlist_history()
         if result:
             logging.info("[定时任务] 自选股历史行情采集完成")
-        else:
-            logging.warning("[定时任务] 自选股历史行情采集失败")
+            print(f"自选股历史行情采集成功个股数量: {result.get('success', 0)}，失败个股数量: {result.get('fail', 0)}")
     except Exception as e:
         logging.error(f"[定时任务] 自选股历史行情采集异常: {e}")
 
@@ -148,8 +147,8 @@ scheduler.add_job(
 scheduler.add_job(
     run_watchlist_history_collection,
     'cron',
-    hour=16,
-    minute=33,
+    hour=14,
+    minute=38,
     id='watchlist_history_daily',
 )
 

@@ -63,7 +63,7 @@ const WatchlistPage = {
                     open: item.open,
                     high: item.high,
                     low: item.low,
-                    yesterday_close: item.yesterday_close,
+                    pre_close: item.pre_close,
                     volume: item.volume
                 }));
                 console.log('stocksData:', this.stocksData);
@@ -270,7 +270,7 @@ const WatchlistPage = {
                     </div>
                     <div class="detail-row">
                         <span>昨收</span>
-                        <span>${this.formatPrice(stock.yesterday_close)}</span>
+                        <span>${this.formatPrice(stock.pre_close)}</span>
                     </div>
                     <div class="detail-row">
                         <span>最高</span>
@@ -591,7 +591,7 @@ const WatchlistPage = {
                         change: newStock.change_amount,
                         percent: newStock.change_percent,
                         open: newStock.open,
-                        yesterday_close: newStock.yesterday_close,
+                        pre_close: newStock.pre_close,
                         high: newStock.high,
                         low: newStock.low,
                         volume: newStock.volume,

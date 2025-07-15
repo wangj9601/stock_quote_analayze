@@ -73,7 +73,7 @@ async def get_stock_quote(request: Request):
                         "high": safe_float(stock_quote.high),
                         "low": safe_float(stock_quote.low),
                         "open": safe_float(stock_quote.open),
-                        "yesterday_close": safe_float(stock_quote.pre_close),
+                        "pre_close": safe_float(stock_quote.pre_close),
                     })
             db.close()
         else:
@@ -89,7 +89,7 @@ async def get_stock_quote(request: Request):
                         "change_amount": safe_float(data_dict.get("涨跌")),
                         "change_percent": safe_float(data_dict.get("涨幅")),
                         "open": safe_float(data_dict.get("今开")),
-                        "yesterday_close": safe_float(data_dict.get("昨收")),
+                        "pre_close": safe_float(data_dict.get("昨收")),
                         "high": safe_float(data_dict.get("最高")),
                         "low": safe_float(data_dict.get("最低")),
                         "volume": safe_float(data_dict.get("总手")),
@@ -146,7 +146,7 @@ async def get_quote_board(limit: int = Query(10, description="返回前N个涨�
                 'current': row.current_price,
                 'change_percent': row.change_percent,
                 'open': row.open,
-                'yesterday_close': row.pre_close,
+                'pre_close': row.pre_close,
                 'high': row.high,
                 'low': row.low,
                 'volume': row.volume,
@@ -214,7 +214,7 @@ def get_quote_board_list(
             # 'change' is not in db, can be calculated if needed
             'change_percent': 'change_percent',
             'open': 'open',
-            'pre_close': 'yesterday_close',
+            'pre_close': 'pre_close',
             'high': 'high',
             'low': 'low',
             'volume': 'volume',
@@ -230,8 +230,8 @@ def get_quote_board_list(
         df_selected = df[list(field_rename_map.keys())].rename(columns=field_rename_map)
 
         # Calculate 'change' if possible
-        if 'current' in df_selected.columns and 'yesterday_close' in df_selected.columns:
-            df_selected['change'] = (df_selected['current'] - df_selected['yesterday_close']).round(2)
+        if 'current' in df_selected.columns and 'pre_close' in df_selected.columns:
+            df_selected['change'] = (df_selected['current'] - df_selected['pre_close']).round(2)
         else:
             df_selected['change'] = None
 
@@ -288,7 +288,7 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
             "change_amount": fmt(data_dict.get("涨跌")),
             "change_percent": fmt(data_dict.get("涨幅")),
             "open": fmt(data_dict.get("今开")),
-            "yesterday_close": fmt(data_dict.get("昨收")),
+            "pre_close": fmt(data_dict.get("昨收")),
             "high": fmt(data_dict.get("最高")),
             "low": fmt(data_dict.get("最低")),
             "volume": fmt(data_dict.get("总手")),

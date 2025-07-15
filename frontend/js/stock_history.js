@@ -4,7 +4,7 @@
 (function() {
     let code = getQueryParam('code') || '';
     let page = 1;
-    let size = 10;
+    let size = 50;
     let total = 0;
     let startDate = '';
     let endDate = '';
@@ -46,12 +46,14 @@
         const tbody = document.querySelector('#historyTable tbody');
         tbody.innerHTML = '';
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="6">无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8">无数据</td></tr>';
             return;
         }
         items.forEach(row => {
+            const stockCode = row.stock_code || row.code || code;
+            const stockName = row.stock_name || row.name || '';
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${row.date}</td><td>${row.open}</td><td>${row.close}</td><td>${row.high}</td><td>${row.low}</td><td>${row.volume}</td>`;
+            tr.innerHTML = `<td>${stockCode}</td><td>${stockName}</td><td>${row.date}</td><td>${row.open}</td><td>${row.close}</td><td>${row.high}</td><td>${row.low}</td><td>${row.volume}</td>`;
             tbody.appendChild(tr);
         });
     }
@@ -60,6 +62,11 @@
         const pageInfo = document.getElementById('pageInfo');
         const pageCount = Math.ceil(total / size);
         pageInfo.textContent = `第 ${page} / ${pageCount || 1} 页`;
+        // 同步禁用分页按钮
+        document.getElementById('firstPage').disabled = (page === 1);
+        document.getElementById('prevPage').disabled = (page === 1);
+        document.getElementById('nextPage').disabled = (page === pageCount || pageCount === 0);
+        document.getElementById('lastPage').disabled = (page === pageCount || pageCount === 0);
     }
 
     document.getElementById('searchBtn').onclick = function() {
@@ -98,6 +105,19 @@
         if (startDate) url += `&start_date=${startDate}`;
         if (endDate) url += `&end_date=${endDate}`;
         window.open(url, '_blank');
+    };
+    document.getElementById('firstPage').onclick = function() {
+        if (page !== 1) {
+            page = 1;
+            fetchHistory();
+        }
+    };
+    document.getElementById('lastPage').onclick = function() {
+        const pageCount = Math.ceil(total / size);
+        if (page !== pageCount && pageCount > 0) {
+            page = pageCount;
+            fetchHistory();
+        }
     };
 
     // 页面加载时自动拉取数据

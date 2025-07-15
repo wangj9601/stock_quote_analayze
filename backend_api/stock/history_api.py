@@ -1,3 +1,4 @@
+import codecs
 from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -7,6 +8,11 @@ import io
 import csv
 from sqlalchemy import text
 from datetime import datetime
+
+# 新增依赖
+import pandas as pd
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font
 
 router = APIRouter(prefix="/api/stock/history", tags=["StockHistory"])
 
@@ -36,7 +42,7 @@ def get_stock_history(
     start_date_fmt = format_date_yyyymmdd(start_date)
     end_date_fmt = format_date_yyyymmdd(end_date)
     print(f"[get_stock_history] 输入参数: code={code}, start_date={start_date_fmt}, end_date={end_date_fmt}, page={page}, size={size}")
-    query = "SELECT date, open, close, high, low, volume FROM historical_quotes WHERE code = :code"
+    query = "SELECT code,name,date, open, close, high, low, volume FROM historical_quotes WHERE code = :code"
     params = {"code": code}
     if start_date_fmt:
         query += " AND date >= :start_date"
@@ -54,12 +60,14 @@ def get_stock_history(
     result = db.execute(text(query), params)   
     items = [
         {
-            "date": row[0],
-            "open": row[1],
-            "close": row[2],
-            "high": row[3],
-            "low": row[4],
-            "volume": row[5]
+            "code": row[0],
+            "name": row[1],
+            "date": row[2],
+            "open": row[3],
+            "close": row[4],
+            "high": row[5],
+            "low": row[6],
+            "volume": row[7]
         }
         for row in result.fetchall()
     ]
@@ -76,7 +84,8 @@ def export_stock_history(
     start_date_fmt = format_date_yyyymmdd(start_date)
     end_date_fmt = format_date_yyyymmdd(end_date)
     print(f"[export_stock_history] 输入参数: code={code}, start_date={start_date_fmt}, end_date={end_date_fmt}")
-    query = "SELECT date, open, close, high, low, volume FROM historical_quotes WHERE code = :code"
+    # 字段顺序与表头一致
+    query = "SELECT code, name, date, open, close, high, low, volume FROM historical_quotes WHERE code = :code"
     params = {"code": code}
     if start_date_fmt:
         query += " AND date >= :start_date"
@@ -86,19 +95,35 @@ def export_stock_history(
         params["end_date"] = end_date_fmt
     query += " ORDER BY date DESC"
     result = db.execute(text(query), params)
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["date", "open", "close", "high", "low", "volume"])
-    row_count = 0
-    for row in result.fetchall():
-        writer.writerow(row)
-        row_count += 1
+    rows = result.fetchall()
+    columns = ["股票代码", "股票名称", "日期", "开盘价", "收盘价", "最高价", "最低价", "成交量"]
+    df = pd.DataFrame(rows, columns=columns)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="历史行情")
+        worksheet = writer.sheets["历史行情"]
+        # 标题加粗
+        for cell in worksheet[1]:
+            cell.font = Font(bold=True)
+        # 列宽自适应
+        for col in worksheet.columns:
+            max_length = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                try:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+                except:
+                    pass
+            worksheet.column_dimensions[col_letter].width = max_length + 2
     output.seek(0)
-    filename = f"{code}_history.csv"
-    print(f"[export_stock_history] 导出行数: {row_count}")
+    filename = f"{code}_history.xlsx"
+    print(f"[export_stock_history] 导出行数: {len(df)}")
     return StreamingResponse(
         output,
-        media_type="text/csv; charset=utf-8",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f"attachment; filename={filename}"
         }

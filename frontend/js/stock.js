@@ -38,7 +38,7 @@ const StockPage = {
     priceChange: null,
     priceChangePercent: null,
     open: null,
-    yesterday_close: null,
+    pre_close: null,
     high: null,
     low: null,
     average_price: null,          
@@ -559,7 +559,7 @@ const StockPage = {
                 this.priceChangePercent = d.change_percent;
                 this.stockName = d.name || this.stockName;
                 this.open = d.open;
-                this.yesterday_close = d.yesterday_close;
+                this.pre_close = d.pre_close;
                 this.high = d.high;
                 this.low = d.low;
                 this.average_price = d.average_price;
@@ -601,7 +601,7 @@ const StockPage = {
         // 取API最新数据
         const d = {
             '今开': this.open,
-            '昨收': this.yesterday_close,
+            '昨收': this.pre_close,
             '最高': this.high,
             '最低': this.low,
             '均价': this.average_price,
@@ -1335,7 +1335,7 @@ const StockPage = {
                 this.priceChange = d.change_amount;
                 this.priceChangePercent = d.change_percent;
                 this.open = d.open;
-                this.yesterday_close = d.yesterday_close;
+                this.pre_close = d.pre_close; 
                 this.high = d.high;
                 this.low = d.low;
                 this.average_price = d.average_price;
