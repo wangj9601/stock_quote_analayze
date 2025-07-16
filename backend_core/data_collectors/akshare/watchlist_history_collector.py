@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import akshare as ak
 from sqlalchemy.orm import Session
 from sqlalchemy import exists
@@ -120,7 +120,8 @@ def collect_watchlist_history():
         if has_collected(db, stock_code):
             continue
         try:
-            df = ak.stock_zh_a_hist(symbol=stock_code, period='daily', start_date='19940101', end_date=datetime.now().strftime('%Y%m%d'), adjust='qfq')
+            end_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+            df = ak.stock_zh_a_hist(symbol=stock_code, period='daily', start_date='19940101', end_date=end_date, adjust='qfq')
             # 批量插入前，先删除该stock_code的历史数据
             db.query(HistoricalQuotes).filter(HistoricalQuotes.code == stock_code).delete()
             affected_rows = insert_historical_quotes(db, stock_code, df)

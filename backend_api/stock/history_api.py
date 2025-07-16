@@ -22,12 +22,15 @@ def format_date_yyyymmdd(date_str: Optional[str]) -> Optional[str]:
     # 支持 "YYYY-MM-DD"、"YYYY/MM/DD"、"YYYY.MM.DD" 等
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
         try:
-            return datetime.strptime(date_str, fmt).strftime("%Y%m%d")
+            return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
         except Exception:
             continue
-    # 如果本身就是8位数字直接返回
+    # 如果本身就是8位数字，尝试转为YYYY-MM-DD格式
     if len(date_str) == 8 and date_str.isdigit():
-        return date_str
+        try:
+            return datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+        except Exception:
+            pass
     return date_str  # fallback
 
 @router.get("")
