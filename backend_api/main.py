@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import logging
 from .auth_routes import RequestLoggingMiddleware
-from .database import init_db
+#from .database import init_db
 from .market_routes import router as market_router
 
 # 配置日志
@@ -113,7 +113,7 @@ async def startup_event():
     """应用启动时执行"""
     try:
         logger.info("正在初始化数据库...")
-        init_db()
+        #init_db()
         logger.info("数据库初始化完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")

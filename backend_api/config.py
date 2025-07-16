@@ -4,10 +4,10 @@ backend_api配置文件
 
 from pathlib import Path
 import os
-from dotenv import load_dotenv
+
 
 # 加载环境变量
-load_dotenv()
+#load_dotenv()
 
 # # 数据库目录 - 使用相对路径
 # DB_DIR = Path(__file__).parent.parent / 'database'
@@ -18,17 +18,19 @@ load_dotenv()
 
 # 数据库配置
 DATABASE_CONFIG = {
-    "url": os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis"),
-    "pool_size": int(os.getenv("DATABASE_POOL_SIZE", "5")),
-    "max_overflow": int(os.getenv("DATABASE_MAX_OVERFLOW", "10")),
-    "echo": os.getenv("DATABASE_ECHO", "False").lower() == "true"
+    "url": "postgresql+psycopg2://postgres:qidianspacetime@192.168.31.237:5446/stock_analysis",
+    "pool_size": 5,
+    "max_overflow": 10,
+    "echo": False
 }
+
+print("数据库连接URL字节:", DATABASE_CONFIG["url"].encode("utf-8"))
 
 # JWT配置
 JWT_CONFIG = {
-    "secret_key": os.getenv("JWT_SECRET_KEY", "your-secret-key-here"),
+    "secret_key": "your-secret-key-here",
     "algorithm": "HS256",
-    "access_token_expire_minutes": int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24小时
+    "access_token_expire_minutes": 1440  # 24小时
 }
 
 # API配置
@@ -40,7 +42,7 @@ API_CONFIG = {
 
 # CORS配置
 CORS_CONFIG = {
-    "allow_origins": os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    "allow_origins": ["*"],
     "allow_credentials": True,
     "allow_methods": ["*"],
     "allow_headers": ["*"]

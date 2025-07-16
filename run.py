@@ -7,12 +7,12 @@ import uvicorn
 import os
 import sys
 from pathlib import Path
-
+import traceback
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # 导入数据库初始化函数
-from backend_api.database import init_db
+#from backend_api.database import init_db
 
 def main():
     """主函数"""
@@ -33,13 +33,8 @@ def main():
         print("请运行: pip install -r requirements.txt")
         return
     
-    # 初始化数据库
-    print("\n💾 初始化数据库...")
-    try:
-        init_db()
-    except Exception as e:
-        print(f"❌ 数据库初始化失败: {e}")
-        return
+    # 已取消数据库初始化操作
+    
     
     print("\n🚀 启动服务器...")
     print("📱 API地址: http://localhost:5000")
