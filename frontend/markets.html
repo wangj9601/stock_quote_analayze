@@ -15,7 +15,9 @@
         <!-- 市场总览 -->
         <section class="market-overview">
             <div class="container">
-                <h1>行情中心</h1>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <h1>行情中心</h1>
+                </div>
                 <div class="market-indices">
                     <div class="index-card">
                         <div class="index-header">
@@ -108,13 +110,17 @@
                                 <button class="ranking-type-btn" data-type="volume">成交量榜</button>
                                 <button class="ranking-type-btn" data-type="turnover">换手率榜</button>
                             </div>
-                            <div class="market-filter">
+                            <div class="market-filter" style="display:flex;align-items:center;gap:12px;">
                                 <select class="filter-select">
                                     <option value="all">全部市场</option>
                                     <option value="sh">沪市A股</option>
                                     <option value="sz">深市A股</option>
                                     <option value="cy">创业板</option>
                                 </select>
+                                <div class="market-search-bar">
+                                    <input type="text" id="marketSearchInput" placeholder="输入股票代码或名称" style="padding:6px 12px; font-size:1em; border:1px solid #ccc; border-radius:4px;">
+                                    <button id="marketSearchBtn" style="padding:6px 16px; margin-left:8px; font-size:1em; border:none; background:#1976d2; color:#fff; border-radius:4px; cursor:pointer;">查询</button>
+                                </div>
                             </div>
                         </div>
 

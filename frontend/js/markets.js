@@ -573,7 +573,49 @@ function addToWatchlist(code, event) {
 
 
 // DOM加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
+// 查询到股票代码后直接跳转到股票详情页
+document.addEventListener('DOMContentLoaded', function() {
     MarketsPage.init();
-}); 
+    // 查询输入框和按钮只绑定一次
+    setTimeout(function() {
+        const searchInput = document.getElementById('marketSearchInput');
+        const searchBtn = document.getElementById('marketSearchBtn');
+        if (searchInput && searchBtn) {
+            function doSearch() {
+                const query = searchInput.value.trim();
+                if (!query) {
+                    alert('请输入股票代码或名称');
+                    return;
+                }
+                // 只在涨跌排行tab激活时生效
+                const rankingsTab = document.getElementById('rankings');
+                if (!rankingsTab.classList.contains('active')) {
+                    alert('请先切换到“涨跌排行”标签页');
+                    return;
+                }
+                fetch(`${API_BASE_URL}/api/stock/list?query=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success && data.data && data.data.length > 0) {
+                            const code = data.data[0].code;
+                            const name = data.data[0].name;
+                            // 直接跳转到股票详情页
+                            goToStock(code, name);
+                        } else {
+                            alert('未找到相关股票');
+                        }
+                    })
+                    .catch(() => alert('查询失败，请稍后重试'));
+            }
+            searchBtn.onclick = doSearch;
+            searchInput.onkeydown = function(e) {
+                if (e.key === 'Enter') doSearch();
+            };
+        }
+    }, 300); // 延迟绑定，确保DOM渲染完成
+});
+// 高亮样式
+const style = document.createElement('style');
+style.innerHTML = `#rankingsTableBody tr.highlight { box-shadow: 0 0 0 3px #ff9800 !important; border-color: #ff9800 !important; }`;
+document.head.appendChild(style); 
 
