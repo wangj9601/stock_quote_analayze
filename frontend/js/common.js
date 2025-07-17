@@ -1,6 +1,6 @@
 // API配置
-//const API_BASE_URL = 'http://192.168.31.237:5000';
-const API_BASE_URL = 'http://192.168.31.117:5000';
+const API_BASE_URL = 'http://192.168.31.237:5000';
+//const API_BASE_URL = 'http://192.168.31.117:5000';
 //const API_BASE_URL = 'http://192.168.3.78:5000';
 
 // 全局带token的fetch

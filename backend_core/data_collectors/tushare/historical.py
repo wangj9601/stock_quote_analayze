@@ -79,7 +79,12 @@ class HistoricalQuoteCollector(TushareCollector):
                 try:
                     code = self.extract_code_from_ts_code(row['ts_code'])
                     ts_code = row['ts_code']
-                    name = row.get('name', '')
+                    # 从 stock_basic_info 表读取 name
+                    result = session.execute(
+                        text('SELECT name FROM stock_basic_info WHERE code = :code'),
+                        {'code': code}
+                    ).fetchone()
+                    name = result[0] if result and result[0] else ''
                     market = row.get('market', '')
                     data = {
                         'code': code,
