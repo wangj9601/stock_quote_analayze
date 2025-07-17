@@ -41,3 +41,6 @@ https://github.com/Snouzy/workout-cool
 # 现代 Vue 3 中后台面板
 https://github.com/vbenjs/vue-vben-admin
 
+
+
+https://github.com/hsliuping/TradingAgents-CN
