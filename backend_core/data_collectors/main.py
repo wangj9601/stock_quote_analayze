@@ -110,7 +110,7 @@ scheduler.add_job(
     id='akshare_realtime',
 )
 # 每天16:35采集当天历史行情（收盘后）
-scheduler.add_job(collect_tushare_historical, 'cron', hour=9, minute=23, id='tushare_historical')
+scheduler.add_job(collect_tushare_historical, 'cron', hour=10, minute=3, id='tushare_historical')
 
 # 每隔5分钟采集一次Tushare实时行情----由于tushare对普通会员，一小时只能调用1次，所以暂时不启用
 #scheduler.add_job(collect_tushare_realtime, 'interval', minutes=5, id='tushare_realtime')
@@ -143,7 +143,7 @@ scheduler.add_job(
     id='akshare_stock_notices',
 )
 
-# 自选股历史行情采集任务，每天凌晨2点执行一次
+# 自选股历史行情采集任务，每天下午3点8分执行一次
 scheduler.add_job(
     run_watchlist_history_collection,
     'cron',
