@@ -45,7 +45,7 @@ def get_stock_history(
     start_date_fmt = format_date_yyyymmdd(start_date)
     end_date_fmt = format_date_yyyymmdd(end_date)
     print(f"[get_stock_history] 输入参数: code={code}, start_date={start_date_fmt}, end_date={end_date_fmt}, page={page}, size={size}")
-    query = "SELECT code,name,date, open, close, high, low, volume FROM historical_quotes WHERE code = :code"
+    query = "SELECT code,name,date, open, close, high, low, volume,amount,change_percent FROM historical_quotes WHERE code = :code"
     params = {"code": code}
     if start_date_fmt:
         query += " AND date >= :start_date"
@@ -70,7 +70,9 @@ def get_stock_history(
             "close": row[4],
             "high": row[5],
             "low": row[6],
-            "volume": row[7]
+            "volume": row[7],
+            "amount": row[8],
+            "change_percent": row[9]
         }
         for row in result.fetchall()
     ]

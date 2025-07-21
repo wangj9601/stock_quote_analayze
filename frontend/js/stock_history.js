@@ -52,8 +52,10 @@
         items.forEach(row => {
             const stockCode = row.stock_code || row.code || code;
             const stockName = row.stock_name || row.name || '';
+            const amount = row.amount !== undefined ? row.amount : '';
+            const changePercent = row.change_percent !== undefined ? row.change_percent : '';
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${stockCode}</td><td>${stockName}</td><td>${row.date}</td><td>${row.open}</td><td>${row.close}</td><td>${row.high}</td><td>${row.low}</td><td>${row.volume}</td>`;
+            tr.innerHTML = `<td>${stockCode}</td><td>${stockName}</td><td>${row.date}</td><td>${row.open}</td><td>${row.close}</td><td>${row.high}</td><td>${row.low}</td><td>${row.volume}</td><td>${amount}</td><td>${changePercent}</td>`;
             tbody.appendChild(tr);
         });
     }

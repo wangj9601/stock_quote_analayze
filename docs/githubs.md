@@ -48,3 +48,4 @@ https://github.com/hsliuping/TradingAgents-CN
 源码：https://github.com/freeCodeCamp/freeCodeCamp
 文档：https://www.freecodecamp.org/chinese/learn/
 
+https://github.com/OpenBB-finance/OpenBB
