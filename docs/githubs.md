@@ -49,3 +49,5 @@ https://github.com/hsliuping/TradingAgents-CN
 文档：https://www.freecodecamp.org/chinese/learn/
 
 https://github.com/OpenBB-finance/OpenBB
+
+https://github.com/Anduin2017/HowToCook#

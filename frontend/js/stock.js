@@ -239,16 +239,23 @@ const StockPage = {
 
     // 初始化图表
     initCharts() {
+        console.log('[initCharts] 开始初始化图表');
         this.initKlineChart();
         this.initMinuteChart();
         this.initProfitChart();
         this.initFlowChart();
+        console.log('[initCharts] 图表初始化完成');
     },
 
     // 初始化K线图
     initKlineChart() {
+        console.log('[initKlineChart] 开始初始化K线图表');
         const chartDom = document.getElementById('klineChart');
-        if (!chartDom) return;
+        if (!chartDom) {
+            console.error('[initKlineChart] 未找到klineChart元素');
+            return;
+        }
+        console.log('[initKlineChart] 找到klineChart元素，开始初始化ECharts');
         this.klineChart = echarts.init(chartDom);
         const option = {
             backgroundColor: 'transparent',
@@ -643,10 +650,19 @@ const StockPage = {
 
     // 加载图表数据
     loadChartData() {
+        console.log('[loadChartData] 开始加载图表数据');
+        console.log('[loadChartData] 当前图表类型:', this.currentChartType);
+        console.log('[loadChartData] K线图表状态:', !!this.klineChart);
+        console.log('[loadChartData] 分时图表状态:', !!this.minuteChart);
+        
         if (this.currentChartType === 'kline' && this.klineChart) {
+            console.log('[loadChartData] 加载K线数据');
             this.loadKlineData();
         } else if (this.currentChartType === 'minute' && this.minuteChart) {
+            console.log('[loadChartData] 加载分时数据');
             this.loadMinuteData();
+        } else {
+            console.error('[loadChartData] 图表未初始化或类型不匹配');
         }
     },
 
@@ -1383,7 +1399,15 @@ const StockPage = {
 
     // 修改loadKlineData，支持period参数
     async loadKlineData() {
-        if (!this.klineChart) return;
+        console.log('[loadKlineData] 开始加载K线数据');
+        console.log('[loadKlineData] 股票代码:', this.stockCode);
+        console.log('[loadKlineData] 当前周期:', this.currentPeriod);
+        
+        if (!this.klineChart) {
+            console.error('[loadKlineData] K线图表未初始化');
+            return;
+        }
+        
         try {
             const today = new Date();
             let endDate = today.toISOString().split('T')[0];
@@ -1445,8 +1469,11 @@ const StockPage = {
                 // 默认日线
                 url = `${API_BASE_URL}/api/stock/kline_hist?code=${this.stockCode}&period=daily&start_date=${startDate}&end_date=${endDate}&adjust=qfq`;
             }
+            
+            console.log('[loadKlineData] 请求URL:', url);
             const resp = await fetch(url);
             const data = await resp.json();
+            console.log('[loadKlineData] API响应:', data);
             if (data.success) {
                 const list = data.data;
                 
