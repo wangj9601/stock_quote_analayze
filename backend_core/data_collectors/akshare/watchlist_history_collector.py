@@ -80,10 +80,10 @@ def insert_historical_quotes(db: Session, stock_code: str, df):
                 low=hq.low,
                 volume=hq.volume,
                 amount=hq.amount,
-                #amplitude=hq.amplitude,
+                amplitude=hq.amplitude,
                 change_percent=hq.change_percent,
-                #change=hq.change,
-                #turnover_rate=hq.turnover_rate,
+                change=hq.change,
+                turnover_rate=hq.turnover_rate
                 #adjust=hq.adjust
             ).on_conflict_do_update(
                 index_elements=['code', 'date'],
@@ -95,10 +95,10 @@ def insert_historical_quotes(db: Session, stock_code: str, df):
                     'low': hq.low,
                     'volume': hq.volume,
                     'amount': hq.amount,
-                    #'amplitude': hq.amplitude,
-                    'change_percent': hq.change_percent
-                    #   'change': hq.change,
-                    #'turnover_rate': hq.turnover_rate,
+                    'amplitude': hq.amplitude,
+                    'change_percent': hq.change_percent,
+                    'change': hq.change,
+                    'turnover_rate': hq.turnover_rate
                     #'adjust': hq.adjust
                 }
             )

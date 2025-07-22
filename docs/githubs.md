@@ -51,3 +51,7 @@ https://github.com/hsliuping/TradingAgents-CN
 https://github.com/OpenBB-finance/OpenBB
 
 https://github.com/Anduin2017/HowToCook#
+
+https://github.com/DR-lin-eng/stock-scanner
+https://github.com/lanzhihong6/stock-scanner/tree/main/frontend
+
