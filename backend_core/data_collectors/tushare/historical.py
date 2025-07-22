@@ -86,6 +86,35 @@ class HistoricalQuoteCollector(TushareCollector):
                     ).fetchone()
                     name = result[0] if result and result[0] else ''
                     market = row.get('market', '')
+                    # 计算换手率和振幅
+                    # 换手率 = 成交量 / 总股本 * 100
+                    # 振幅 = (最高价 - 最低价) / 昨收盘价 * 100
+                    # 注意：需要从 stock_basic_info 表获取总股本（total_share），如果没有则为 None
+                    total_share = None
+                    try:
+                        result_share = session.execute(
+                            text('SELECT total_share FROM stock_basic_info WHERE code = :code'),
+                            {'code': code}
+                        ).fetchone()
+                        if result_share and result_share[0]:
+                            total_share = float(result_share[0])
+                    except Exception as e:
+                        self.logger.warning(f"获取总股本失败: {e}")
+                        total_share = None
+
+                    volume = self._safe_value(row['vol'])
+                    pre_close = self._safe_value(row['pre_close'])
+                    high = self._safe_value(row['high'])
+                    low = self._safe_value(row['low'])
+
+                    turnover_rate = None
+                    if total_share and volume is not None and total_share > 0:
+                        turnover_rate = volume / total_share * 100
+
+                    amplitude = None
+                    if pre_close and pre_close > 0 and high is not None and low is not None:
+                        amplitude = (high - low) / pre_close * 100
+
                     data = {
                         'code': code,
                         'ts_code': ts_code,
@@ -95,13 +124,18 @@ class HistoricalQuoteCollector(TushareCollector):
                         'collected_source': 'tushare',
                         'collected_date': datetime.datetime.now().isoformat(),
                         'open': self._safe_value(row['open']),
-                        'high': self._safe_value(row['high']),
-                        'low': self._safe_value(row['low']),
+                        'high': high,
+                        'low': low,
                         'close': self._safe_value(row['close']),
-                        'volume': self._safe_value(row['vol']),
+                        'volume': volume,
                         'amount': self._safe_value(row['amount']),
-                        'change_percent': self._safe_value(row['pct_chg'])
+                        'change_percent': self._safe_value(row['pct_chg']),
+                        'pre_close': pre_close,
+                        'change': self._safe_value(row['change']),
+                        'turnover_rate': turnover_rate,
+                        'amplitude': amplitude
                     }
+                    
                     session.execute(text('''
                         INSERT INTO stock_basic_info (code, name)
                         VALUES (:code, :name)
@@ -110,8 +144,8 @@ class HistoricalQuoteCollector(TushareCollector):
                     '''), {'code': data['code'], 'name': data['name']})
                     session.execute(text('''
                         INSERT INTO historical_quotes
-                        (code, ts_code, name, market, collected_source, collected_date, date, open, high, low, close, volume, amount, change_percent)
-                        VALUES (:code, :ts_code, :name, :market, :collected_source, :collected_date, :date, :open, :high, :low, :close, :volume, :amount, :change_percent)
+                        (code, ts_code, name, market, collected_source, collected_date, date, open, high, low, close, volume, amount, change_percent, pre_close, change)
+                        VALUES (:code, :ts_code, :name, :market, :collected_source, :collected_date, :date, :open, :high, :low, :close, :volume, :amount, :change_percent, :pre_close, :change)
                         ON CONFLICT (code, date) DO UPDATE SET
                             ts_code = EXCLUDED.ts_code,
                             name = EXCLUDED.name,
@@ -124,7 +158,9 @@ class HistoricalQuoteCollector(TushareCollector):
                             close = EXCLUDED.close,
                             volume = EXCLUDED.volume,
                             amount = EXCLUDED.amount,
-                            change_percent = EXCLUDED.change_percent
+                            change_percent = EXCLUDED.change_percent,
+                            pre_close = EXCLUDED.pre_close,
+                            change = EXCLUDED.change
                     '''), data)
                     success_count += 1
                 except Exception as row_e:

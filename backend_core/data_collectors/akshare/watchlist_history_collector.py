@@ -57,11 +57,10 @@ def insert_historical_quotes(db: Session, stock_code: str, df):
             low=row.get('最低'),
             volume=row.get('成交量'),
             amount=row.get('成交额'),
-            #amplitude=row.get('振幅'),
-            change_percent=row.get('涨跌幅')
-  
-            #change=row.get('涨跌额'),
-            #turnover_rate=row.get('换手率'),
+            amplitude=row.get('振幅'),
+            change_percent=row.get('涨跌幅'),
+            change=row.get('涨跌额'),
+            turnover_rate=row.get('换手率')
             #adjust='qfq'
         )
         rows.append(hq)
