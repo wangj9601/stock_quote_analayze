@@ -63,3 +63,8 @@
 ## 股票数据分析软件相关工作
     - 实现智能分析功能，单独开发新的python。@stock.html @stock.js @/backend_api。
     - 前端页面@stock.html,@stock.js, 价格预测、交易建议、技术指标、关键价位，调用后台@backend_api  /analysis/stock/{stock_code}接口， 参考 @智能分析功能说明.md 
+
+# 2025/07/25
+
+## 股票数据分析软件相关工作
+    - 编写设计文档，@design.md 
