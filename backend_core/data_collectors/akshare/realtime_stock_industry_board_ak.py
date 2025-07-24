@@ -44,7 +44,7 @@ class RealtimeStockIndustryBoardCollector:
             columns = list(df.columns)
             # 清空旧数据（可选，或用upsert）
             session.execute(text(f"DELETE FROM {self.table_name}"))
-            # 插入新数据
+            # 插入新数据（upsert）
             for _, row in df.iterrows():
                 value_dict = {}
                 for col in columns:
@@ -57,7 +57,10 @@ class RealtimeStockIndustryBoardCollector:
                         v = v.isoformat()
                     value_dict[col] = v
                 placeholders = ','.join([f':{col}' for col in columns])
-                sql = f'INSERT INTO {self.table_name} ({','.join([f'"{col}"' for col in columns])}) VALUES ({placeholders})'
+                col_names = ','.join([f'"{col}"' for col in columns])
+                # 构造upsert SQL
+                update_set = ','.join([f'"{col}"=EXCLUDED."{col}"' for col in columns if col not in ('board_code','update_time')])
+                sql = f'INSERT INTO {self.table_name} ({col_names}) VALUES ({placeholders}) ON CONFLICT (board_code, update_time) DO UPDATE SET {update_set}'
                 session.execute(text(sql), value_dict)
             session.commit()
             return True, None

@@ -20,7 +20,8 @@ class HistoricalQuoteCollector(TushareCollector):
         session.execute(text('''
             CREATE TABLE IF NOT EXISTS stock_basic_info (
                 code TEXT PRIMARY KEY,
-                name TEXT
+                name TEXT,
+                total_share REAL
             )
         '''))
         session.execute(text('''
@@ -34,9 +35,13 @@ class HistoricalQuoteCollector(TushareCollector):
                 high REAL,
                 low REAL,
                 close REAL,
+                pre_close REAL,
                 volume REAL,
-                amount REAL,
+                amount REAL,    
+                amplitude REAL,
+                turnover_rate REAL,
                 change_percent REAL,
+                change REAL,
                 collected_source TEXT,
                 collected_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (code, date)
@@ -75,6 +80,13 @@ class HistoricalQuoteCollector(TushareCollector):
             pro = ts.pro_api()
             df = pro.daily(trade_date=date_str)  # 这里需要根据tushare实际API替换
             self.logger.info("采集到 %d 条历史行情数据", len(df))
+            try:
+                for _, row in df.iterrows():
+                    pass  # 这里的 pass 只是占位，实际循环体在后面
+            except Exception as e:
+                self.logger.error(f"遍历历史行情数据时发生异常: {e}")
+                import sys
+                sys.exit(1)
             for _, row in df.iterrows():
                 try:
                     code = self.extract_code_from_ts_code(row['ts_code'])
@@ -114,6 +126,8 @@ class HistoricalQuoteCollector(TushareCollector):
                     amplitude = None
                     if pre_close and pre_close > 0 and high is not None and low is not None:
                         amplitude = (high - low) / pre_close * 100
+                    # 打印前面取得的参数
+                    self.logger.info(f"参数: code={code}, ts_code={ts_code}, name={name}, market={market}, total_share={total_share}, volume={volume}, pre_close={pre_close}, high={high}, low={low}, turnover_rate={turnover_rate}, amplitude={amplitude}")
 
                     data = {
                         'code': code,
@@ -136,37 +150,78 @@ class HistoricalQuoteCollector(TushareCollector):
                         'amplitude': amplitude
                     }
                     
-                    session.execute(text('''
-                        INSERT INTO stock_basic_info (code, name)
-                        VALUES (:code, :name)
-                        ON CONFLICT (code) DO UPDATE SET
-                            name = EXCLUDED.name
-                    '''), {'code': data['code'], 'name': data['name']})
-                    session.execute(text('''
-                        INSERT INTO historical_quotes
-                        (code, ts_code, name, market, collected_source, collected_date, date, open, high, low, close, volume, amount, change_percent, pre_close, change)
-                        VALUES (:code, :ts_code, :name, :market, :collected_source, :collected_date, :date, :open, :high, :low, :close, :volume, :amount, :change_percent, :pre_close, :change)
-                        ON CONFLICT (code, date) DO UPDATE SET
-                            ts_code = EXCLUDED.ts_code,
-                            name = EXCLUDED.name,
-                            market = EXCLUDED.market,
-                            collected_source = EXCLUDED.collected_source,
-                            collected_date = EXCLUDED.collected_date,
-                            open = EXCLUDED.open,
-                            high = EXCLUDED.high,
-                            low = EXCLUDED.low,
-                            close = EXCLUDED.close,
-                            volume = EXCLUDED.volume,
-                            amount = EXCLUDED.amount,
-                            change_percent = EXCLUDED.change_percent,
-                            pre_close = EXCLUDED.pre_close,
-                            change = EXCLUDED.change
-                    '''), data)
-                    success_count += 1
+                    # 使用重试机制处理死锁
+                    max_retries = 3
+                    retry_count = 0
+                    
+                    while retry_count < max_retries:
+                        try:
+                            # 先尝试插入 stock_basic_info（如果不存在）
+                            session.execute(text('''
+                                INSERT INTO stock_basic_info (code, name)
+                                VALUES (:code, :name)
+                                ON CONFLICT (code) DO NOTHING
+                            '''), {'code': data['code'], 'name': data['name']})
+                            
+                            # 然后插入 historical_quotes
+                            session.execute(text('''
+                                INSERT INTO historical_quotes
+                                (code, ts_code, name, market, collected_source, collected_date, date, open, high, low, close, volume, amount, change_percent, pre_close, change, amplitude, turnover_rate)
+                                VALUES (:code, :ts_code, :name, :market, :collected_source, :collected_date, :date, :open, :high, :low, :close, :volume, :amount, :change_percent, :pre_close, :change, :amplitude, :turnover_rate)
+                                ON CONFLICT (code, date) DO UPDATE SET
+                                    ts_code = EXCLUDED.ts_code,
+                                    name = EXCLUDED.name,
+                                    market = EXCLUDED.market,
+                                    collected_source = EXCLUDED.collected_source,
+                                    collected_date = EXCLUDED.collected_date,
+                                    open = EXCLUDED.open,
+                                    high = EXCLUDED.high,
+                                    low = EXCLUDED.low,
+                                    close = EXCLUDED.close,
+                                    volume = EXCLUDED.volume,
+                                    amount = EXCLUDED.amount,
+                                    change_percent = EXCLUDED.change_percent,
+                                    pre_close = EXCLUDED.pre_close,
+                                    amplitude = EXCLUDED.amplitude,
+                                    turnover_rate = EXCLUDED.turnover_rate,
+                                    change = EXCLUDED.change
+                            '''), data)
+                            
+                            # 每100条记录提交一次，减少事务数量
+                            if success_count % 100 == 0:
+                                session.commit()
+                                self.logger.info(f"已处理 {success_count} 条记录，提交事务")
+                            
+                            success_count += 1
+                            break  # 成功插入，跳出重试循环
+                            
+                        except Exception as insert_error:
+                            # 如果是死锁错误，回滚并重试
+                            if "DeadlockDetected" in str(insert_error):
+                                retry_count += 1
+                                self.logger.warning(f"检测到死锁，第 {retry_count} 次重试: {insert_error}")
+                                session.rollback()
+                                # 短暂等待后重试
+                                import time
+                                time.sleep(0.1 * retry_count)  # 递增等待时间
+                                continue
+                            else:
+                                # 其他错误，直接抛出
+                                raise insert_error
+                    
+                    # 如果重试次数用完仍然失败
+                    if retry_count >= max_retries:
+                        fail_count += 1
+                        fail_detail.append(f"股票 {code} 插入失败，重试 {max_retries} 次后仍然死锁")
+                        self.logger.error(f"股票 {code} 插入失败，重试 {max_retries} 次后仍然死锁")
+                        continue
+                        
                 except Exception as row_e:
                     fail_count += 1
                     fail_detail.append(str(row_e))
                     self.logger.error(f"采集单条数据失败: {row_e}")
+                    # 移除 sys.exit(1)，避免程序退出
+                    continue
             # 记录采集日志（汇总信息）
             session.execute(text('''
                 INSERT INTO historical_collect_operation_logs 

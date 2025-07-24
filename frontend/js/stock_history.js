@@ -23,6 +23,16 @@
         return params.get(name);
     }
 
+    function formatAmount(val) {
+        if (val === undefined || val === null || isNaN(val)) return '';
+        return (parseFloat(val) / 1e8).toFixed(2) + '亿';
+    }
+
+    function formatVolume(val) {
+        if (val === undefined || val === null || isNaN(val)) return '';
+        return (parseFloat(val) / 1e4).toFixed(2) + '万';
+    }
+
     function fetchHistory() {
         if (!code) {
             alert('未指定股票代码');
@@ -46,16 +56,31 @@
         const tbody = document.querySelector('#historyTable tbody');
         tbody.innerHTML = '';
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="8">无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12">无数据</td></tr>';
             return;
         }
         items.forEach(row => {
             const stockCode = row.stock_code || row.code || code;
             const stockName = row.stock_name || row.name || '';
-            const amount = row.amount !== undefined ? row.amount : '';
-            const changePercent = row.change_percent !== undefined ? row.change_percent : '';
+            const amount = formatAmount(row.amount);
+            const volume = formatVolume(row.volume);
+            const changePercentVal = row.change_percent !== undefined && row.change_percent !== null ? parseFloat(row.change_percent) : '';
+            const changePercent = changePercentVal !== '' ? changePercentVal.toFixed(2) + '%' : '';
+            const changeVal = row.change !== undefined && row.change !== null ? parseFloat(row.change) : '';
+            const change = changeVal !== '' ? changeVal : '';
+            const turnoverRate = row.turnover_rate !== undefined ? row.turnover_rate : '';
+            // 涨跌额、涨跌幅单元格加色
+            let changePercentClass = '', changeClass = '';
+            if (changeVal !== '') {
+                if (changeVal > 0) changeClass = 'cell-up';
+                else if (changeVal < 0) changeClass = 'cell-down';
+            }
+            if (changePercentVal !== '') {
+                if (changePercentVal > 0) changePercentClass = 'cell-up';
+                else if (changePercentVal < 0) changePercentClass = 'cell-down';
+            }
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${stockCode}</td><td>${stockName}</td><td>${row.date}</td><td>${row.open}</td><td>${row.close}</td><td>${row.high}</td><td>${row.low}</td><td>${row.volume}</td><td>${amount}</td><td>${changePercent}</td>`;
+            tr.innerHTML = `<td>${stockCode}</td><td>${stockName}</td><td>${row.date}</td><td>${row.open}</td><td>${row.close}</td><td>${row.high}</td><td>${row.low}</td><td>${volume}</td><td>${amount}</td><td class='${changePercentClass}'>${changePercent}</td><td class='${changeClass}'>${change}</td><td>${turnoverRate}</td>`;
             tbody.appendChild(tr);
         });
     }

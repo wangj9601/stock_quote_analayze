@@ -99,27 +99,21 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
     def collect_quotes(self) -> bool:
         """
         采集实时行情数据
-        
         Returns:
             bool: 是否成功
         """
         try:
-            
             affected_rows = 0 
-            
-            # 连接数据库
             session = SessionLocal()
-
-            # 获取实时行情数据
             df = self._retry_on_failure(ak.stock_zh_a_spot_em)
+            if df is None or (hasattr(df, 'empty') and df.empty):
+                self.logger.error("采集到的实时行情数据为空")
+                return False
             self.logger.info("采集到 %d 条股票行情数据", len(df))
 
             for _, row in df.iterrows():
                 code = row['代码']
                 name = row['名称']
-                #print(row)
-
-                # 准备数据
                 data = {
                     'code': code,
                     'name': name,
@@ -139,49 +133,87 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                     'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
 
-                cursor = session.execute(text('''
-                    INSERT INTO stock_basic_info (code, name, create_date)
-                    VALUES (:code, :name, :create_date)
-                    ON CONFLICT (code) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        create_date = EXCLUDED.create_date
-                    '''), {'code': code, 'name': name, 'create_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-                
-                
-                cursor = session.execute(    
-                    text('''
-                        INSERT INTO stock_realtime_quote
-                        (code, name, current_price, change_percent, volume, amount,
-                        high, low, open, pre_close, turnover_rate, pe_dynamic,
-                        total_market_value, pb_ratio, circulating_market_value,
-                        update_time)
-                        VALUES (
-                            :code, :name, :current_price, :change_percent, :volume, :amount,
-                            :high, :low, :open, :pre_close, :turnover_rate, :pe_dynamic,
-                            :total_market_value, :pb_ratio, :circulating_market_value,
-                            :update_time
-                        )
-                        ON CONFLICT (code) DO UPDATE SET
-                            name = EXCLUDED.name,
-                            current_price = EXCLUDED.current_price,
-                            change_percent = EXCLUDED.change_percent,
-                            volume = EXCLUDED.volume,
-                            amount = EXCLUDED.amount,
-                            high = EXCLUDED.high,
-                            low = EXCLUDED.low,
-                            open = EXCLUDED.open,
-                            pre_close = EXCLUDED.pre_close,
-                            turnover_rate = EXCLUDED.turnover_rate,
-                            pe_dynamic = EXCLUDED.pe_dynamic,
-                            total_market_value = EXCLUDED.total_market_value,
-                            pb_ratio = EXCLUDED.pb_ratio,
-                            circulating_market_value = EXCLUDED.circulating_market_value,
-                            update_time = EXCLUDED.update_time
-                    '''), 
-                    {'code': code, 'name': name, 'current_price': data['current_price'], 'change_percent': data['change_percent'], 'volume': data['volume'], 'amount': data['amount'], 'high': data['high'], 'low': data['low'], 'open': data['open'], 'pre_close': data['pre_close'], 'turnover_rate': data['turnover_rate'], 'pe_dynamic': data['pe_dynamic'], 'total_market_value': data['total_market_value'], 'pb_ratio': data['pb_ratio'], 'circulating_market_value': data['circulating_market_value'], 'update_time': data['update_time']})
-                
+                # --- 重试机制插入 stock_basic_info ---
+                max_retries = 3
+                retry_count = 0
+                while retry_count < max_retries:
+                    try:
+                        session.execute(text('''
+                            INSERT INTO stock_basic_info (code, name, create_date)
+                            VALUES (:code, :name, :create_date)
+                            ON CONFLICT (code) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                create_date = EXCLUDED.create_date
+                        '''), {'code': code, 'name': name, 'create_date': data['update_time']})
+                        break
+                    except Exception as e:
+                        if ("LockNotAvailable" in str(e)) or ("DeadlockDetected" in str(e)):
+                            retry_count += 1
+                            session.rollback()
+                            self.logger.warning(f"stock_basic_info插入锁冲突，第{retry_count}次重试: {e}")
+                            import time
+                            time.sleep(0.2 * retry_count)
+                            continue
+                        else:
+                            session.rollback()
+                            raise
+                if retry_count >= max_retries:
+                    self.logger.error(f"stock_basic_info插入锁冲突重试{max_retries}次仍失败: code={code}, name={name}")
+                    continue
+
+                # --- 重试机制插入 stock_realtime_quote ---
+                retry_count = 0
+                while retry_count < max_retries:
+                    try:
+                        session.execute(    
+                            text('''
+                                INSERT INTO stock_realtime_quote
+                                (code, name, current_price, change_percent, volume, amount,
+                                high, low, open, pre_close, turnover_rate, pe_dynamic,
+                                total_market_value, pb_ratio, circulating_market_value,
+                                update_time)
+                                VALUES (
+                                    :code, :name, :current_price, :change_percent, :volume, :amount,
+                                    :high, :low, :open, :pre_close, :turnover_rate, :pe_dynamic,
+                                    :total_market_value, :pb_ratio, :circulating_market_value,
+                                    :update_time
+                                )
+                                ON CONFLICT (code) DO UPDATE SET
+                                    name = EXCLUDED.name,
+                                    current_price = EXCLUDED.current_price,
+                                    change_percent = EXCLUDED.change_percent,
+                                    volume = EXCLUDED.volume,
+                                    amount = EXCLUDED.amount,
+                                    high = EXCLUDED.high,
+                                    low = EXCLUDED.low,
+                                    open = EXCLUDED.open,
+                                    pre_close = EXCLUDED.pre_close,
+                                    turnover_rate = EXCLUDED.turnover_rate,
+                                    pe_dynamic = EXCLUDED.pe_dynamic,
+                                    total_market_value = EXCLUDED.total_market_value,
+                                    pb_ratio = EXCLUDED.pb_ratio,
+                                    circulating_market_value = EXCLUDED.circulating_market_value,
+                                    update_time = EXCLUDED.update_time
+                            '''), 
+                            {'code': code, 'name': name, 'current_price': data['current_price'], 'change_percent': data['change_percent'], 'volume': data['volume'], 'amount': data['amount'], 'high': data['high'], 'low': data['low'], 'open': data['open'], 'pre_close': data['pre_close'], 'turnover_rate': data['turnover_rate'], 'pe_dynamic': data['pe_dynamic'], 'total_market_value': data['total_market_value'], 'pb_ratio': data['pb_ratio'], 'circulating_market_value': data['circulating_market_value'], 'update_time': data['update_time']})
+                        break
+                    except Exception as e:
+                        if ("LockNotAvailable" in str(e)) or ("DeadlockDetected" in str(e)):
+                            retry_count += 1
+                            session.rollback()
+                            self.logger.warning(f"stock_realtime_quote插入锁冲突，第{retry_count}次重试: {e}")
+                            import time
+                            time.sleep(0.2 * retry_count)
+                            continue
+                        else:
+                            session.rollback()
+                            raise
+                if retry_count >= max_retries:
+                    self.logger.error(f"stock_realtime_quote插入锁冲突重试{max_retries}次仍失败: code={code}, name={name}")
+                    continue
+
                 affected_rows += 1
-            
+
             # 记录操作日志
             session.execute(text('''
                 INSERT INTO realtime_collect_operation_logs 
@@ -195,38 +227,32 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 'error_message': None,
                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
-            
             session.commit()
-            
             session.close()
-            
             self.logger.info("全部股票行情数据采集并入库完成")
             return True
-            
         except Exception as e:
             error_msg = str(e)
             self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)
-            
             # 记录错误日志
             try:
-                if 'cursor' in locals() and cursor is not None:
-                    cursor.execute('''
+                if 'session' in locals():
+                    session.execute(text('''
                         INSERT INTO realtime_collect_operation_logs 
                         (operation_type, operation_desc, affected_rows, status, error_message, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (
-                        'realtime_quote_collect',
-                        '采集股票实时行情数据失败',
-                        0,
-                        'error',
-                        error_msg,
-                        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    ))
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at)
+                    '''), {
+                        'operation_type': 'realtime_quote_collect',
+                        'operation_desc': '采集股票实时行情数据失败',
+                        'affected_rows': 0,
+                        'status': 'error',
+                        'error_message': error_msg,
+                        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
                     session.commit()
             except Exception as log_error:
                 self.logger.error("记录错误日志失败: %s", str(log_error))
             finally:
                 if 'session' in locals():
                     session.close()
-            
             return False 

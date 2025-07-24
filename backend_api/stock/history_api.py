@@ -45,7 +45,7 @@ def get_stock_history(
     start_date_fmt = format_date_yyyymmdd(start_date)
     end_date_fmt = format_date_yyyymmdd(end_date)
     print(f"[get_stock_history] 输入参数: code={code}, start_date={start_date_fmt}, end_date={end_date_fmt}, page={page}, size={size}")
-    query = "SELECT code,name,date, open, close, high, low, volume,amount,change_percent FROM historical_quotes WHERE code = :code"
+    query = "SELECT code,name,date, open, close, high, low, volume,amount,change_percent,change FROM historical_quotes WHERE code = :code"
     params = {"code": code}
     if start_date_fmt:
         query += " AND date >= :start_date"
@@ -72,7 +72,8 @@ def get_stock_history(
             "low": row[6],
             "volume": row[7],
             "amount": row[8],
-            "change_percent": row[9]
+            "change_percent": row[9],
+            "change": row[10]
         }
         for row in result.fetchall()
     ]
@@ -90,7 +91,7 @@ def export_stock_history(
     end_date_fmt = format_date_yyyymmdd(end_date)
     print(f"[export_stock_history] 输入参数: code={code}, start_date={start_date_fmt}, end_date={end_date_fmt}")
     # 字段顺序与表头一致
-    query = "SELECT code, name, date, open, close, high, low, volume FROM historical_quotes WHERE code = :code"
+    query = "SELECT code, name, date, open, close, high, low, volume, amount, change_percent, change FROM historical_quotes WHERE code = :code"
     params = {"code": code}
     if start_date_fmt:
         query += " AND date >= :start_date"
@@ -101,8 +102,11 @@ def export_stock_history(
     query += " ORDER BY date DESC"
     result = db.execute(text(query), params)
     rows = result.fetchall()
-    columns = ["股票代码", "股票名称", "日期", "开盘价", "收盘价", "最高价", "最低价", "成交量"]
+    columns = ["股票代码", "股票名称", "日期", "开盘价", "收盘价", "最高价", "最低价", "成交量", "成交额", "涨跌幅", "涨跌额"]
     df = pd.DataFrame(rows, columns=columns)
+
+    df["成交量"] = df["成交量"].apply(lambda x: f"{round(float(x)/1e4, 2)}万" if x is not None and x != '' else '')
+    df["成交额"] = df["成交额"].apply(lambda x: f"{round(float(x)/1e8, 2)}亿" if x is not None and x != '' else '')
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -123,9 +127,36 @@ def export_stock_history(
                 except:
                     pass
             worksheet.column_dimensions[col_letter].width = max_length + 2
+        # 设置涨跌幅、涨跌额颜色
+        from openpyxl.styles import Font as XLFont
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+            # "涨跌幅"在第10列（J），"涨跌额"在第11列（K），列索引从0开始
+            change_percent_cell = row[9]
+            change_cell = row[10]
+            # 涨跌幅
+            try:
+                val = change_percent_cell.value
+                if val is not None and val != '':
+                    num = float(str(val).replace('%',''))
+                    if num > 0:
+                        change_percent_cell.font = XLFont(color='FF0000', bold=True)
+                    elif num < 0:
+                        change_percent_cell.font = XLFont(color='009933', bold=True)
+            except:
+                pass
+            # 涨跌额
+            try:
+                val = change_cell.value
+                if val is not None and val != '':
+                    num = float(val)
+                    if num > 0:
+                        change_cell.font = XLFont(color='FF0000', bold=True)
+                    elif num < 0:
+                        change_cell.font = XLFont(color='009933', bold=True)
+            except:
+                pass
     output.seek(0)
     filename = f"{code}_history.xlsx"
-    print(f"[export_stock_history] 导出行数: {len(df)}")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
