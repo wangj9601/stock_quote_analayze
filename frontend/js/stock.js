@@ -53,6 +53,7 @@ const StockPage = {
     currentTab: 'analysis',
     currentChartType: 'kline',
     currentPeriod: '1d',
+    analysisDataLoaded: false, // 添加标志跟踪智能分析数据是否已加载
     //API_BASE_URL: 'http://192.168.31.237:5000',
 
     // 初始化
@@ -574,9 +575,12 @@ const StockPage = {
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
                 this.pe_dynamic = d.pe_dynamic;
-        this.updateStockInfo();
-        this.updateStockDetails();
-        this.loadChartData();
+                
+                this.updateStockInfo();
+                this.updateStockDetails();
+                
+                // 加载图表数据，完成后自动加载智能分析数据
+                await this.loadChartDataWithCallback();
             } else {
                 console.error('[loadStockData] API返回失败:', data.message);
                 CommonUtils.showToast('实时行情获取失败: ' + data.message, 'error');
@@ -670,7 +674,12 @@ const StockPage = {
     loadTabData(tabId) {
         switch (tabId) {
             case 'analysis':
-                this.loadAnalysisData();
+                // 如果智能分析数据已经加载过，不再重复加载
+                if (!this.analysisDataLoaded) {
+                    this.loadAnalysisData();
+                } else {
+                    console.log('[loadTabData] 智能分析数据已加载，跳过重复加载');
+                }
                 break;
             case 'finance':
                 this.loadFinanceData();
@@ -688,7 +697,294 @@ const StockPage = {
     },
 
     // 加载分析数据
-    loadAnalysisData() {
+    async loadAnalysisData() {
+        try {
+            console.log('[智能分析] 开始加载分析数据...');
+            
+            // 显示加载状态
+            this.showAnalysisLoading();
+            
+            // 调用智能分析API
+            const response = await fetch(`${API_BASE_URL}/api/analysis/stock/${this.stockCode}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || '获取分析数据失败');
+            }
+            
+            console.log('[智能分析] 数据获取成功:', result.data);
+            
+            const data = result.data;
+            
+            // 更新价格预测
+            this.updatePricePrediction(data.price_prediction);
+            
+            // 更新交易建议
+            this.updateTradingRecommendation(data.trading_recommendation);
+            
+            // 更新技术指标
+            this.updateTechnicalIndicators(data.technical_indicators);
+            
+            // 更新关键价位
+            this.updateKeyLevels(data.key_levels);
+            
+            // 隐藏加载状态
+            this.hideAnalysisLoading();
+            
+            // 设置数据已加载标志
+            this.analysisDataLoaded = true;
+            
+        } catch (error) {
+            console.error('[智能分析] 加载分析数据失败:', error);
+            // 如果API调用失败，使用模拟数据
+            this.loadMockAnalysisData();
+            this.hideAnalysisLoading();
+            
+            // 显示错误提示
+            this.showAnalysisError(error.message);
+            
+            // 即使失败也设置标志，避免重复尝试
+            this.analysisDataLoaded = true;
+        }
+    },
+
+    // 显示分析加载状态
+    showAnalysisLoading() {
+        const analysisPanel = document.getElementById('analysis');
+        if (analysisPanel) {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'analysis-loading';
+            loadingDiv.className = 'analysis-loading';
+            loadingDiv.innerHTML = `
+                <div class="loading-spinner"></div>
+                <div class="loading-text">正在分析数据...</div>
+            `;
+            analysisPanel.appendChild(loadingDiv);
+        }
+    },
+
+    // 隐藏分析加载状态
+    hideAnalysisLoading() {
+        const loadingDiv = document.getElementById('analysis-loading');
+        if (loadingDiv) {
+            loadingDiv.remove();
+        }
+    },
+
+    // 显示分析错误
+    showAnalysisError(message) {
+        const analysisPanel = document.getElementById('analysis');
+        if (analysisPanel) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'analysis-error';
+            errorDiv.innerHTML = `
+                <div class="error-icon">⚠️</div>
+                <div class="error-text">分析数据加载失败: ${message}</div>
+                <button onclick="this.parentElement.remove()" class="error-close">×</button>
+            `;
+            analysisPanel.appendChild(errorDiv);
+        }
+    },
+
+    // 更新价格预测
+    updatePricePrediction(prediction) {
+        console.log('[价格预测] 更新数据:', prediction);
+        
+        const targetPriceElement = document.querySelector('.target-price');
+        const changeElement = document.querySelector('.prediction-change');
+        const rangeElement = document.querySelector('.prediction-range span');
+        const confidenceElement = document.querySelector('.confidence span:first-child');
+        const periodElement = document.querySelector('.confidence span:last-child');
+        
+        if (targetPriceElement && prediction.target_price !== undefined) {
+            targetPriceElement.textContent = prediction.target_price.toFixed(2);
+        }
+        
+        if (changeElement && prediction.change_percent !== undefined) {
+            const change = prediction.change_percent;
+            changeElement.textContent = `${change > 0 ? '+' : ''}${change.toFixed(2)}%`;
+            changeElement.className = `prediction-change ${change > 0 ? 'positive' : 'negative'}`;
+        }
+        
+        if (rangeElement && prediction.prediction_range) {
+            const range = prediction.prediction_range;
+            rangeElement.textContent = `预测区间：${range.min} - ${range.max}`;
+        }
+        
+        if (confidenceElement && prediction.confidence !== undefined) {
+            confidenceElement.textContent = `置信度：${prediction.confidence}%`;
+        }
+        
+        if (periodElement) {
+            periodElement.textContent = `预测周期：30天`;
+        }
+    },
+
+    // 更新交易建议
+    updateTradingRecommendation(recommendation) {
+        console.log('[交易建议] 更新数据:', recommendation);
+        
+        const actionBadge = document.querySelector('.action-badge');
+        const reasonsContainer = document.querySelector('.recommendation-reasons');
+        const riskBadge = document.querySelector('.risk-badge');
+        
+        if (actionBadge && recommendation.action) {
+            actionBadge.textContent = this.getActionText(recommendation.action);
+            actionBadge.className = `action-badge ${recommendation.action}`;
+        }
+        
+        if (reasonsContainer && recommendation.reasons) {
+            reasonsContainer.innerHTML = '';
+            recommendation.reasons.forEach(reason => {
+                const reasonItem = document.createElement('div');
+                reasonItem.className = 'reason-item positive';
+                reasonItem.innerHTML = `<span class="checkmark">✓</span> ${reason}`;
+                reasonsContainer.appendChild(reasonItem);
+            });
+            
+            // 添加风险提示
+            if (recommendation.risk_level === 'high') {
+                const warningItem = document.createElement('div');
+                warningItem.className = 'reason-item warning';
+                warningItem.innerHTML = `<span class="warning-icon">⚠</span> 注意大盘风险`;
+                reasonsContainer.appendChild(warningItem);
+            }
+        }
+        
+        if (riskBadge && recommendation.risk_level) {
+            riskBadge.textContent = this.getRiskText(recommendation.risk_level);
+            riskBadge.className = `risk-badge ${recommendation.risk_level}`;
+        }
+    },
+
+    // 更新技术指标
+    updateTechnicalIndicators(indicators) {
+        console.log('[技术指标] 更新数据:', indicators);
+        
+        if (!indicators) {
+            console.warn('[技术指标] 指标数据为空');
+            return;
+        }
+        
+        // 更新RSI
+        if (indicators.rsi) {
+            this.updateIndicator('RSI(14)', indicators.rsi.value, indicators.rsi.signal);
+        }
+        
+        // 更新MACD
+        if (indicators.macd) {
+            this.updateIndicator('MACD', indicators.macd.value, indicators.macd.signal);
+        }
+        
+        // 更新KDJ
+        if (indicators.kdj) {
+            this.updateIndicator('KDJ', indicators.kdj.value, indicators.kdj.signal);
+        }
+        
+        // 更新布林带
+        if (indicators.bollinger_bands) {
+            const bbSignal = indicators.bollinger_bands.signal;
+            this.updateIndicator('布林带', '上轨', bbSignal);
+        }
+    },
+
+    // 更新单个指标
+    updateIndicator(name, value, signal) {
+        const indicatorRows = document.querySelectorAll('.indicator-row');
+        indicatorRows.forEach(row => {
+            const nameElement = row.querySelector('.indicator-name');
+            if (nameElement && nameElement.textContent.includes(name)) {
+                const valueElement = row.querySelector('.indicator-value');
+                const signalElement = row.querySelector('.indicator-signal');
+                
+                if (valueElement) {
+                    valueElement.textContent = value;
+                }
+                
+                if (signalElement) {
+                    signalElement.textContent = signal;
+                    signalElement.className = `indicator-signal ${this.getSignalClass(signal)}`;
+                }
+            }
+        });
+    },
+
+    // 更新关键价位
+    updateKeyLevels(levels) {
+        console.log('[关键价位] 更新数据:', levels);
+        
+        if (!levels) {
+            console.warn('[关键价位] 价位数据为空');
+            return;
+        }
+        
+        // 更新阻力位
+        if (levels.resistance_levels && levels.resistance_levels.length > 0) {
+            const resistanceElements = document.querySelectorAll('.level-item:not(.current) .level-value.resistance');
+            levels.resistance_levels.forEach((level, index) => {
+                if (resistanceElements[index]) {
+                    resistanceElements[index].textContent = level.toFixed(2);
+                }
+            });
+        }
+        
+        // 更新支撑位
+        if (levels.support_levels && levels.support_levels.length > 0) {
+            const supportElements = document.querySelectorAll('.level-item:not(.current) .level-value.support');
+            levels.support_levels.forEach((level, index) => {
+                if (supportElements[index]) {
+                    supportElements[index].textContent = level.toFixed(2);
+                }
+            });
+        }
+        
+        // 更新当前价格
+        if (levels.current_price !== undefined) {
+            const currentPriceElement = document.querySelector('.level-item.current .level-value');
+            if (currentPriceElement) {
+                currentPriceElement.textContent = levels.current_price.toFixed(2);
+            }
+        }
+    },
+
+    // 获取操作文本
+    getActionText(action) {
+        const actionMap = {
+            'buy': '建议买入',
+            'sell': '建议卖出',
+            'hold': '建议持有'
+        };
+        return actionMap[action] || '建议持有';
+    },
+
+    // 获取风险等级文本
+    getRiskText(riskLevel) {
+        const riskMap = {
+            'low': '低',
+            'medium': '中等',
+            'high': '高'
+        };
+        return riskMap[riskLevel] || '中等';
+    },
+
+    // 获取信号样式类
+    getSignalClass(signal) {
+        if (signal.includes('看多') || signal.includes('超卖')) {
+            return 'bullish';
+        } else if (signal.includes('看空') || signal.includes('超买')) {
+            return 'bearish';
+        } else {
+            return 'neutral';
+        }
+    },
+
+    // 加载模拟分析数据（备用）
+    loadMockAnalysisData() {
+        console.log('[loadMockAnalysisData] 加载模拟分析数据');
+        
         // 更新价格预测
         const targetPrice = (this.currentPrice * (1 + (Math.random() * 0.2 - 0.1))).toFixed(2);
         const change = ((targetPrice - this.currentPrice) / this.currentPrice * 100).toFixed(2);
@@ -697,6 +993,9 @@ const StockPage = {
         const changeElement = document.querySelector('.prediction-change');
         changeElement.textContent = `${change > 0 ? '+' : ''}${change}%`;
         changeElement.className = `prediction-change ${change > 0 ? 'positive' : 'negative'}`;
+        
+        // 设置数据已加载标志
+        this.analysisDataLoaded = true;
     },
 
     // 加载新闻数据
@@ -1615,6 +1914,33 @@ const StockPage = {
         };
         this.profitChart.setOption(option);
         this.profitChart.resize();
+    },
+
+    // 加载图表数据并等待完成后触发智能分析
+    async loadChartDataWithCallback() {
+        console.log('[loadChartDataWithCallback] 开始加载图表数据并等待完成');
+        
+        try {
+            // 根据当前图表类型加载数据
+            if (this.currentChartType === 'kline' && this.klineChart) {
+                console.log('[loadChartDataWithCallback] 等待K线数据加载完成');
+                await this.loadKlineData();
+            } else if (this.currentChartType === 'minute' && this.minuteChart) {
+                console.log('[loadChartDataWithCallback] 等待分时数据加载完成');
+                await this.loadMinuteData();
+            } else {
+                console.warn('[loadChartDataWithCallback] 图表未初始化，直接加载智能分析');
+            }
+            
+            // 图表数据加载完成后，自动加载智能分析数据
+            console.log('[loadChartDataWithCallback] 图表数据加载完成，开始加载智能分析数据');
+            await this.loadAnalysisData();
+            
+        } catch (error) {
+            console.error('[loadChartDataWithCallback] 图表数据加载失败:', error);
+            // 即使图表加载失败，也尝试加载智能分析数据
+            await this.loadAnalysisData();
+        }
     }
 
 };
