@@ -25,7 +25,17 @@
 
     function formatAmount(val) {
         if (val === undefined || val === null || isNaN(val)) return '';
-        return (parseFloat(val) / 1e8).toFixed(2) + '亿';
+        const amount = parseFloat(val);
+        if (amount >= 1e8) {
+            // 大于等于1亿，显示为亿
+            return (amount / 1e8).toFixed(2) + '亿';
+        } else if (amount >= 1e4) {
+            // 大于等于1万，显示为万
+            return (amount / 1e4).toFixed(2) + '万';
+        } else {
+            // 小于1万，显示原始数值
+            return amount.toFixed(2);
+        }
     }
 
     function formatVolume(val) {

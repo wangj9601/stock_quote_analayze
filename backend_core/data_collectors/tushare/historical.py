@@ -142,7 +142,8 @@ class HistoricalQuoteCollector(TushareCollector):
                         'low': low,
                         'close': self._safe_value(row['close']),
                         'volume': volume,
-                        'amount': self._safe_value(row['amount']),
+                        # tushare返回的amount单位是千元，需折算为元
+                        'amount': self._safe_value(row['amount']) * 1000 if self._safe_value(row['amount']) is not None else None,
                         'change_percent': self._safe_value(row['pct_chg']),
                         'pre_close': pre_close,
                         'change': self._safe_value(row['change']),
