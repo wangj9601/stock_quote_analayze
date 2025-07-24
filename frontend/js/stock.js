@@ -705,7 +705,7 @@ const StockPage = {
             this.showAnalysisLoading();
             
             // 调用智能分析API
-            const response = await fetch(`${API_BASE_URL}/analysis/stock/${this.stockCode}`);
+            const response = await fetch(`${API_BASE_URL}/api/analysis/stock/${this.stockCode}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }

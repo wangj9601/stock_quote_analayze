@@ -329,15 +329,17 @@ class KeyLevels:
                 "current_price": current_price
             }
         
-        # 提取高低点
+        # 提取数据
         highs = [float(data['high']) for data in historical_data]
         lows = [float(data['low']) for data in historical_data]
+        closes = [float(data['close']) for data in historical_data]
+        volumes = [float(data.get('volume', 0)) for data in historical_data]
         
-        # 计算支撑位（基于近期低点）
-        support_levels = KeyLevels._find_support_levels(lows, current_price)
+        # 计算支撑位（基于近期低点和重要价位）
+        support_levels = KeyLevels._find_support_levels(lows, closes, volumes, current_price)
         
-        # 计算阻力位（基于近期高点）
-        resistance_levels = KeyLevels._find_resistance_levels(highs, current_price)
+        # 计算阻力位（基于近期高点和重要价位）
+        resistance_levels = KeyLevels._find_resistance_levels(highs, closes, volumes, current_price)
         
         return {
             "resistance_levels": resistance_levels,
@@ -346,32 +348,84 @@ class KeyLevels:
         }
     
     @staticmethod
-    def _find_support_levels(lows: List[float], current_price: float) -> List[float]:
+    def _find_support_levels(lows: List[float], closes: List[float], volumes: List[float], current_price: float) -> List[float]:
         """寻找支撑位"""
-        # 使用近期低点作为支撑位
-        recent_lows = sorted(lows[-20:])
         support_levels = []
         
-        for low in recent_lows:
-            if low < current_price and low not in support_levels:
-                support_levels.append(round(low, 2))
+        # 1. 寻找近期重要低点（最近30天）
+        recent_lows = lows[-30:] if len(lows) >= 30 else lows
+        recent_closes = closes[-30:] if len(closes) >= 30 else closes
+        recent_volumes = volumes[-30:] if len(volumes) >= 30 else volumes
         
-        # 返回最近的3个支撑位
-        return sorted(support_levels, reverse=True)[:3]
+        # 找出局部最低点
+        for i in range(1, len(recent_lows) - 1):
+            if (recent_lows[i] < recent_lows[i-1] and 
+                recent_lows[i] < recent_lows[i+1] and
+                recent_lows[i] < current_price):
+                support_levels.append(recent_lows[i])
+        
+        # 2. 添加心理支撑位（整数价位）
+        for i in range(int(current_price), int(current_price) - 5, -1):
+            if i > 0 and i < current_price:
+                support_levels.append(float(i))
+        
+        # 3. 添加技术支撑位（移动平均线附近）
+        if len(closes) >= 20:
+            ma20 = sum(closes[-20:]) / 20
+            if ma20 < current_price:
+                support_levels.append(round(ma20, 2))
+        
+        # 去重并排序
+        support_levels = list(set(support_levels))
+        support_levels = [round(level, 2) for level in support_levels if level < current_price]
+        support_levels.sort(reverse=True)
+        
+        return support_levels[:3]
     
     @staticmethod
-    def _find_resistance_levels(highs: List[float], current_price: float) -> List[float]:
+    def _find_resistance_levels(highs: List[float], closes: List[float], volumes: List[float], current_price: float) -> List[float]:
         """寻找阻力位"""
-        # 使用近期高点作为阻力位
-        recent_highs = sorted(highs[-20:])
         resistance_levels = []
         
-        for high in recent_highs:
-            if high > current_price and high not in resistance_levels:
-                resistance_levels.append(round(high, 2))
+        # 1. 寻找近期重要高点（最近30天）
+        recent_highs = highs[-30:] if len(highs) >= 30 else highs
+        recent_closes = closes[-30:] if len(closes) >= 30 else closes
+        recent_volumes = volumes[-30:] if len(volumes) >= 30 else volumes
         
-        # 返回最近的3个阻力位
-        return sorted(resistance_levels)[:3]
+        # 找出局部最高点
+        for i in range(1, len(recent_highs) - 1):
+            if (recent_highs[i] > recent_highs[i-1] and 
+                recent_highs[i] > recent_highs[i+1] and
+                recent_highs[i] > current_price):
+                resistance_levels.append(recent_highs[i])
+        
+        # 2. 添加心理阻力位（整数价位）
+        for i in range(int(current_price) + 1, int(current_price) + 6):
+            if i > current_price:
+                resistance_levels.append(float(i))
+        
+        # 3. 添加技术阻力位（移动平均线附近）
+        if len(closes) >= 20:
+            ma20 = sum(closes[-20:]) / 20
+            if ma20 > current_price:
+                resistance_levels.append(round(ma20, 2))
+        
+        # 4. 添加布林带上轨作为阻力位
+        if len(closes) >= 20:
+            prices = closes[-20:]
+            middle = sum(prices) / 20
+            variance = sum((p - middle) ** 2 for p in prices) / 20
+            std = variance ** 0.5
+            upper_band = middle + (2 * std)
+            if upper_band > current_price:
+                resistance_levels.append(round(upper_band, 2))
+        
+        # 去重并排序
+        resistance_levels = list(set(resistance_levels))
+        resistance_levels = [round(level, 2) for level in resistance_levels if level > current_price]
+        resistance_levels.sort()
+        
+        return resistance_levels[:3]
 
 class StockAnalysisService:
     """股票分析服务类"""
