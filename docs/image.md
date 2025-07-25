@@ -196,5 +196,56 @@ flowchart TB
 日志和配置文件为系统运维和监控提供支持，所有关键操作均有日志记录。
 
 
+# AKShare采集器 类层次结构图
 
+```mermaid
+
+---
+config:
+  look: neo
+  layout: elk
+---
+classDiagram
+    class AKShareCollector
+    AKShareCollector <|-- AkshareRealtimeQuoteCollector
+    AKShareCollector <|-- HistoricalQuoteCollector
+    AKShareCollector <|-- IndexQuoteCollector
+    AKShareCollector <|-- AkshareStockNoticeReportCollector
+
+    class RealtimeStockIndustryBoardCollector
+    class RealtimeIndexSpotAkCollector
+
+```
+
+说明
+
+1. 基类
+AKShareCollector
+文件：backend_core/data_collectors/akshare/base.py
+说明：所有 Akshare 采集器的通用基类，封装了日志、配置等基础功能。
+2. 主要子类（直接继承自 AKShareCollector）
+AkshareRealtimeQuoteCollector
+文件：realtime.py
+说明：用于采集沪深京A股实时行情数据。
+HistoricalQuoteCollector
+文件：historical.py
+说明：用于采集股票历史行情数据。
+IndexQuoteCollector
+文件：index.py
+说明：用于采集指数行情数据。
+AkshareStockNoticeReportCollector
+文件：realtime_stock_notice_report_ak.py
+说明：用于采集股票公告数据。
+3. 其它采集器（未继承 AKShareCollector，但属于 Akshare 采集器体系）
+RealtimeStockIndustryBoardCollector
+文件：realtime_stock_industry_board_ak.py
+说明：采集行业板块实时行情数据。注意：未继承 AKShareCollector，而是独立实现。
+RealtimeIndexSpotAkCollector
+文件：realtime_index_spot_ak.py
+说明：采集指数实时行情数据。注意：未继承 AKShareCollector，而是独立实现。
+
+5. 总结说明
+核心基类：AKShareCollector，其子类负责不同类型的数据采集。
+部分采集器（如行业板块、指数实时采集器）未继承基类，但实现方式类似，属于同一采集体系。
+采集器之间通过配置、数据库操作等实现复用和扩展。
 
