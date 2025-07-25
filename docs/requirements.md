@@ -16,6 +16,8 @@
 ### 1.2. 范围 
 本系统定位于面向个人投资者的股票分析和辅助决策平台，主要通过Web提供服务（可考虑移动端APP作为扩展）。系统核心功能包括A股市场数据展示、自选股管理、基础分析、智能模型的股票价格预测以及交易辅助分析。系统不涉及实际的股票交易功能，仅提供分析和建议。
 
+> 注：核心数据采集编排流程见2.6.x。
+
 ## 2. 功能需求分析
 
 系统主要分为以下几个部分：前端、后台管理、后端 API、数据采集和存储、后端系统。
@@ -634,17 +636,69 @@
 #### 2.6.3. 增量采集策略 
 采集增量数据采集，只获取新增数据，避免重复下载提高效率。
 
-#### 2.6.4. 数据上传清洗和校验 
+### 2.6.x 核心采集编排流程（可视化）
+
+系统核心采集调度、清洗、入库流程如下：
+
+```mermaid
+graph TB
+    A[main.py 入口点] --> B[BlockingScheduler]
+    B --> C1[collect_akshare_realtime]
+    B --> C2[collect_tushare_historical]
+    B --> C3[collect_akshare_index_realtime]
+    B --> C4[collect_akshare_industry_board_realtime]
+    B --> C5[collect_akshare_stock_notices]
+    B --> C6[run_watchlist_history_collection]
+    C1 --> D1[ak_collector\nAkshareRealtimeQuoteCollector]
+    C2 --> D2[tushare_hist_collector\nHistoricalQuoteCollector]
+    C3 --> D3[index_collector\nRealtimeIndexSpotAkCollector]
+    C4 --> D4[industry_board_collector\nRealtimeStockIndustryBoardCollector]
+    C5 --> D5[notice_collector\nAkshareStockNoticeReportCollector]
+    C6 --> D6[watchlist_collector\nWatchlistHistoryCollector]
+    E[DATA_COLLECTORS\nfrom config.py] --> D1
+    E --> D2
+    E --> D3
+    E --> D4
+    E --> D5
+    E --> D6
+    D1 --> F1[AKShare API]
+    D2 --> F2[Tushare API]
+    D3 --> F1
+    D4 --> F1
+    D5 --> F1
+    D6 --> F3[多数据源]
+    D1 --> G[PostgreSQL Database]
+    D2 --> G
+    D3 --> G
+    D4 --> G
+    D5 --> G
+    D6 --> G
+    classDef entry fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+    classDef scheduler fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef wrapper fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef collector fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef config fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef api fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef storage fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    class A entry
+    class B scheduler
+    class C1,C2,C3,C4,C5,C6 wrapper
+    class D1,D2,D3,D4,D5,D6 collector
+    class E config
+    class F1,F2,F3 api
+    class G storage
+```
+
+### 2.6.4. 数据上传清洗和校验 
 对采集到的原始数据进行清洗上传、去重、格式转换和一致性校验。
+- 支持直接写入PostgreSQL数据库（推荐生产环境），也可写入SQLite（开发/测试环境）。
+- 采集结果以DataFrame为主，入库前转换为dict或SQL批量写入，推荐SQLAlchemy统一接口。
+- 数据表结构与API字段一致，主键唯一，重要字段加索引。
 
-#### 2.6.5. 异常处理告警 
-在采集失败时自动重试，记录错误、发送告警。
-
-#### 2.6.6. 历史数据归档管理 
-对长期频繁查询的历史数据进行归档压缩降维管理。
-
-#### 2.6.7. 数据备份恢复 
+### 2.6.7. 数据备份恢复 
 制定并执行数据备份和恢复策略。
+- PostgreSQL生产环境需定期全量/增量备份，支持自动恢复。
+- 支持多环境（PostgreSQL/SQLite）数据迁移与恢复。
 
 ### 2.7. 后端分析预测 
 后端分析预测模块负责进行技术计算、预测模型运行和交易建议生成。
@@ -725,6 +779,7 @@
 - 图表交互响应：K线图缩放、平移、切换周期、添加指标等操作响应延迟，延迟不超过 [500] 毫秒。
 - API响应时间：各类API调用响应在 [5] 秒内响应。
 - 数据采集效率：能够在规定时间内完成全部、高效的数据采集任务。
+- PostgreSQL数据库应支持高并发读写，表结构优化，索引合理，满足大数据量场景。
 
 ### 4.2. 安全性要求 
 - 用户认证和授权：确保用户账号安全，API调用权限控制。
@@ -738,6 +793,7 @@
 - 数据一致性：确保存储和展示的数据准确一致。
 - 容错性：系统应能处理部分服务异常，不影响整体系统功能。
 - 数据备份恢复：建立备份机制，具备快速恢复能力。
+- PostgreSQL生产环境需具备主从、备份、监控、自动恢复等高可用能力。
 
 ### 4.4. 扩展性要求 
 系统能够应支持未来用户数量和数据量增长，可以通过增加服务器资源进行水平扩展。
