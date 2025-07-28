@@ -579,6 +579,9 @@ const StockPage = {
                 this.updateStockInfo();
                 this.updateStockDetails();
                 
+                // 同步更新关键价位的当前价格
+                this.updateKeyLevelsCurrentPrice();
+                
                 // 加载图表数据，完成后自动加载智能分析数据
                 await this.loadChartDataWithCallback();
             } else {
@@ -941,12 +944,15 @@ const StockPage = {
             });
         }
         
-        // 更新当前价格
-        if (levels.current_price !== undefined) {
-            const currentPriceElement = document.querySelector('.level-item.current .level-value');
-            if (currentPriceElement) {
-                currentPriceElement.textContent = levels.current_price.toFixed(2);
-            }
+        // 更新当前价格 - 使用最新的实时价格而不是智能分析API返回的价格
+        this.updateKeyLevelsCurrentPrice();
+    },
+
+    // 更新关键价位的当前价格
+    updateKeyLevelsCurrentPrice() {
+        const currentPriceElement = document.querySelector('.level-item.current .level-value');
+        if (currentPriceElement && this.currentPrice !== null) {
+            currentPriceElement.textContent = Number(this.currentPrice).toFixed(2);
         }
     },
 
@@ -1658,8 +1664,12 @@ const StockPage = {
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
                 this.pe_dynamic = d.pe_dynamic;
-        this.updateStockInfo();
+                
+                this.updateStockInfo();
                 this.updateStockDetails();
+                
+                // 同步更新关键价位的当前价格
+                this.updateKeyLevelsCurrentPrice();
             }
         } catch (e) {
             // 静默失败
