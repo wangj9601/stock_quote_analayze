@@ -20,7 +20,7 @@
 ### 核心框架
 - **Web框架**: FastAPI
 - **ORM**: SQLAlchemy
-- **数据库**: SQLite3
+- **数据库**: PostgreSQL
 - **API风格**: RESTful
 - **认证方式**: JWT Token
 - **跨域处理**: FastAPI CORS Middleware
