@@ -417,60 +417,74 @@ class KeyLevels:
     
     @staticmethod
     def _find_significant_lows(lows: List[float], volumes: List[float], current_price: float) -> List[float]:
-        """寻找重要低点（考虑成交量权重）"""
+        """寻找重要低点（参考东方财富网、同花顺等主流网站）"""
         significant_lows = []
-        window_size = 5  # 滑动窗口大小
+        window_size = 3  # 滑动窗口大小，参考主流网站
         
         for i in range(window_size, len(lows) - window_size):
             # 检查是否为局部最低点
             is_local_min = all(lows[i] <= lows[j] for j in range(i - window_size, i + window_size + 1))
             
-            if is_local_min and lows[i] < current_price:
+            # 支撑位必须严格小于当前价格
+            if is_local_min and lows[i] < current_price and lows[i] > 0:
                 # 计算成交量权重
-                volume_weight = volumes[i] / max(volumes) if max(volumes) > 0 else 1
+                avg_volume = sum(volumes) / len(volumes) if volumes else 0
+                volume_weight = volumes[i] / avg_volume if avg_volume > 0 else 1
                 
-                # 只有成交量较大的低点才被认为是重要的
-                if volume_weight > 0.5:  # 成交量超过平均值的50%
-                    significant_lows.append(lows[i])
+                # 只有成交量较大的低点才被认为是重要的（参考主流网站标准）
+                if volume_weight > 0.8:  # 成交量超过平均值的80%
+                    # 避免过于接近的低点
+                    if not any(abs(lows[i] - existing) < current_price * 0.02 for existing in significant_lows):
+                        significant_lows.append(round(lows[i], 2))
         
         return significant_lows
     
     @staticmethod
     def _find_significant_highs(highs: List[float], volumes: List[float], current_price: float) -> List[float]:
-        """寻找重要高点（考虑成交量权重）"""
+        """寻找重要高点（参考东方财富网、同花顺等主流网站）"""
         significant_highs = []
-        window_size = 5  # 滑动窗口大小
+        window_size = 3  # 滑动窗口大小，参考主流网站
         
         for i in range(window_size, len(highs) - window_size):
             # 检查是否为局部最高点
             is_local_max = all(highs[i] >= highs[j] for j in range(i - window_size, i + window_size + 1))
             
+            # 阻力位必须严格大于当前价格
             if is_local_max and highs[i] > current_price:
                 # 计算成交量权重
-                volume_weight = volumes[i] / max(volumes) if max(volumes) > 0 else 1
+                avg_volume = sum(volumes) / len(volumes) if volumes else 0
+                volume_weight = volumes[i] / avg_volume if avg_volume > 0 else 1
                 
-                # 只有成交量较大的高点才被认为是重要的
-                if volume_weight > 0.5:  # 成交量超过平均值的50%
-                    significant_highs.append(highs[i])
+                # 只有成交量较大的高点才被认为是重要的（参考主流网站标准）
+                if volume_weight > 0.8:  # 成交量超过平均值的80%
+                    # 避免过于接近的高点
+                    if not any(abs(highs[i] - existing) < current_price * 0.02 for existing in significant_highs):
+                        significant_highs.append(round(highs[i], 2))
         
         return significant_highs
     
     @staticmethod
     def _calculate_fibonacci_levels(high: float, low: float, current_price: float, is_support: bool) -> List[float]:
-        """计算斐波那契回调位"""
+        """计算斐波那契回调位（参考东方财富网、同花顺等主流网站）"""
         fib_levels = []
         diff = high - low
         
-        # 斐波那契回调比例
+        # 如果高低点差距太小，不计算斐波那契位
+        if diff < current_price * 0.05:  # 差距小于5%不计算
+            return fib_levels
+        
+        # 斐波那契回调比例（参考主流网站常用比例）
         fib_ratios = [0.236, 0.382, 0.5, 0.618, 0.786]
         
         for ratio in fib_ratios:
             if is_support:
                 level = high - (diff * ratio)
+                # 支撑位必须严格小于当前价格，且大于最低点
                 if low < level < current_price:
                     fib_levels.append(round(level, 2))
             else:
                 level = low + (diff * ratio)
+                # 阻力位必须严格大于当前价格，且小于最高点
                 if current_price < level < high:
                     fib_levels.append(round(level, 2))
         
@@ -478,64 +492,73 @@ class KeyLevels:
     
     @staticmethod
     def _calculate_ma_support_levels(closes: List[float], current_price: float) -> List[float]:
-        """计算移动平均线支撑位"""
+        """计算移动平均线支撑位（参考东方财富网、同花顺等主流网站）"""
         ma_levels = []
         
-        # 计算多个周期的移动平均线
-        ma_periods = [5, 10, 20, 50]
+        # 计算多个周期的移动平均线，参考主流网站常用周期
+        ma_periods = [5, 10, 20, 30, 60]
         
         for period in ma_periods:
             if len(closes) >= period:
                 ma = sum(closes[-period:]) / period
+                # 支撑位必须严格小于当前价格，且为正数
                 if ma < current_price and ma > 0:
-                    ma_levels.append(round(ma, 2))
+                    # 只添加距离当前价格不太远的移动平均线（避免过远的支撑位）
+                    if current_price - ma <= current_price * 0.15:  # 距离不超过15%
+                        ma_levels.append(round(ma, 2))
         
         return ma_levels
     
     @staticmethod
     def _calculate_ma_resistance_levels(closes: List[float], current_price: float) -> List[float]:
-        """计算移动平均线阻力位"""
+        """计算移动平均线阻力位（参考东方财富网、同花顺等主流网站）"""
         ma_levels = []
         
-        # 计算多个周期的移动平均线
-        ma_periods = [5, 10, 20, 50]
+        # 计算多个周期的移动平均线，参考主流网站常用周期
+        ma_periods = [5, 10, 20, 30, 60]
         
         for period in ma_periods:
             if len(closes) >= period:
                 ma = sum(closes[-period:]) / period
+                # 阻力位必须严格大于当前价格
                 if ma > current_price:
-                    ma_levels.append(round(ma, 2))
+                    # 只添加距离当前价格不太远的移动平均线（避免过远的阻力位）
+                    if ma - current_price <= current_price * 0.15:  # 距离不超过15%
+                        ma_levels.append(round(ma, 2))
         
         return ma_levels
     
     @staticmethod
     def _calculate_psychological_levels(current_price: float, is_support: bool) -> List[float]:
-        """计算心理价位（改进版）"""
+        """计算心理价位（参考东方财富网、同花顺等主流网站的计算方法）"""
         psychological_levels = []
         
-        # 获取价格的整数部分和小数部分
+        # 获取价格的整数部分
         integer_part = int(current_price)
-        decimal_part = current_price - integer_part
         
         if is_support:
-            # 支撑位：向下寻找心理价位
-            for i in range(integer_part, max(0, integer_part - 10), -1):
+            # 支撑位：严格小于当前价格的心理价位
+            # 从当前价格整数部分减1开始，向下寻找
+            for i in range(integer_part - 1, max(0, integer_part - 15), -1):
                 # 添加整数价位
-                psychological_levels.append(float(i))
+                if i > 0:
+                    psychological_levels.append(float(i))
                 
                 # 添加半整数价位（如 10.5, 9.5）
-                half_level = i - 0.5
-                if half_level > 0:
+                half_level = i + 0.5
+                if half_level > 0 and half_level < current_price:
                     psychological_levels.append(half_level)
         else:
-            # 阻力位：向上寻找心理价位
-            for i in range(integer_part + 1, integer_part + 11):
+            # 阻力位：严格大于当前价格的心理价位
+            # 从当前价格整数部分加1开始，向上寻找
+            for i in range(integer_part + 1, integer_part + 15):
                 # 添加整数价位
                 psychological_levels.append(float(i))
                 
                 # 添加半整数价位（如 11.5, 12.5）
-                half_level = i + 0.5
-                psychological_levels.append(half_level)
+                half_level = i - 0.5
+                if half_level > current_price:
+                    psychological_levels.append(half_level)
         
         return psychological_levels
     
@@ -583,32 +606,34 @@ class KeyLevels:
     
     @staticmethod
     def _filter_and_sort_levels(levels: List[float], current_price: float, is_support: bool) -> List[float]:
-        """过滤和排序价位"""
+        """过滤和排序价位（参考东方财富网、同花顺等主流网站）"""
         if not levels:
             return []
         
         # 去重
         unique_levels = list(set(levels))
         
-        # 过滤：支撑位必须小于当前价格，阻力位必须大于当前价格
+        # 过滤：支撑位必须严格小于当前价格，阻力位必须严格大于当前价格
         if is_support:
             filtered_levels = [level for level in unique_levels if level < current_price and level > 0]
-            # 支撑位按降序排列（从高到低）
+            # 支撑位按降序排列（从高到低，最接近当前价格的在前）
             filtered_levels.sort(reverse=True)
         else:
             filtered_levels = [level for level in unique_levels if level > current_price]
-            # 阻力位按升序排列（从低到高）
+            # 阻力位按升序排列（从低到高，最接近当前价格的在前）
             filtered_levels.sort()
         
-        # 去除过于接近的价位（避免重复）
+        # 去除过于接近的价位（避免重复，参考主流网站标准）
         final_levels = []
-        min_distance = current_price * 0.01  # 最小距离为当前价格的1%
+        min_distance = current_price * 0.015  # 最小距离为当前价格的1.5%
         
         for level in filtered_levels:
             if not any(abs(level - existing) < min_distance for existing in final_levels):
                 final_levels.append(round(level, 2))
         
-        return final_levels
+        # 限制返回的价位数量，参考主流网站通常显示3-5个价位
+        max_levels = 5
+        return final_levels[:max_levels]
 
 class StockAnalysisService:
     """股票分析服务类"""
