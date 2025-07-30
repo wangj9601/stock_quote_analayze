@@ -1,0 +1,69 @@
+=== 依赖检查报告 ===
+
+项目根目录: D:\work\奇点时空科技有限公司\潜在项目\股票分析软件\编码\stock_quote_analayze
+检查时间: 2025-07-30 15:55:36
+
+=== 依赖统计 ===
+requirements.txt中的依赖: 63
+已安装的包: 7
+项目导入的包: 71
+
+=== 问题详情 ===
+缺失的依赖:
+  - 
+  - app_complete
+  - backend_api
+  - backend_core
+  - config
+  - decimal
+  - flask
+  - flask_cors
+  - historical
+  - importlib
+  - index
+  - io
+  - jose
+  - jwt
+  - main
+  - passlib
+  - platform
+  - psycopg2
+  - realtime
+  - setuptools
+  - sqlite3
+  - starlette
+  - stock
+  - sys,
+  - unittest
+
+未安装的依赖:
+  - 
+  - app_complete
+  - backend_api
+  - backend_core
+  - config
+  - decimal
+  - flask
+  - flask_cors
+  - historical
+  - httpx
+  - importlib
+  - index
+  - io
+  - jwt
+  - main
+  - platform
+  - psycopg2
+  - pytest
+  - realtime
+  - setuptools
+  - sqlite3
+  - stock
+  - sys,
+  - unittest
+
+版本不匹配:
+  - pydantic: 需要 ==2.6.1, 已安装 2.11.7
+  - pydantic-settings: 需要 ==2.1.0, 已安装 2.10.1
+  - aiohttp: 需要 ==3.11.13, 已安装 3.11.18
+

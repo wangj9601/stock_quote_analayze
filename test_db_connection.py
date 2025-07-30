@@ -19,7 +19,7 @@ def test_psycopg2_connection():
             password="qidianspacetime",
             client_encoding='utf8'
         )
-        print("✅ psycopg2 连接成功")
+        print("[OK] psycopg2 连接成功")
         
         # 测试查询
         cursor = conn.cursor()
@@ -31,7 +31,7 @@ def test_psycopg2_connection():
         conn.close()
         return True
     except Exception as e:
-        print(f"❌ psycopg2 连接失败: {e}")
+        print(f"[ERROR] psycopg2 连接失败: {e}")
         return False
 
 def test_sqlalchemy_connection():
@@ -44,12 +44,12 @@ def test_sqlalchemy_connection():
         with engine.connect() as connection:
             result = connection.execute(text("SELECT version();"))
             version = result.fetchone()
-            print(f"✅ SQLAlchemy 连接成功")
+            print(f"[OK] SQLAlchemy 连接成功")
             print(f"PostgreSQL 版本: {version[0]}")
         
         return True
     except Exception as e:
-        print(f"❌ SQLAlchemy 连接失败: {e}")
+        print(f"[ERROR] SQLAlchemy 连接失败: {e}")
         return False
 
 def test_database_exists():
@@ -71,21 +71,21 @@ def test_database_exists():
         result = cursor.fetchone()
         
         if result:
-            print("✅ stock_analysis 数据库存在")
+            print("[OK] stock_analysis 数据库存在")
         else:
-            print("❌ stock_analysis 数据库不存在")
+            print("[ERROR] stock_analysis 数据库不存在")
             print("需要创建数据库...")
             
             # 创建数据库
             cursor.execute("CREATE DATABASE stock_analysis;")
             conn.commit()
-            print("✅ stock_analysis 数据库已创建")
+            print("[OK] stock_analysis 数据库已创建")
         
         cursor.close()
         conn.close()
         return True
     except Exception as e:
-        print(f"❌ 检查数据库失败: {e}")
+        print(f"[ERROR] 检查数据库失败: {e}")
         return False
 
 if __name__ == "__main__":
@@ -103,4 +103,4 @@ if __name__ == "__main__":
     if not test_sqlalchemy_connection():
         sys.exit(1)
     
-    print("\n🎉 所有数据库连接测试通过！") 
+    print("\n[SUCCESS] 所有数据库连接测试通过！") 

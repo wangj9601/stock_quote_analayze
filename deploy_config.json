@@ -1,0 +1,56 @@
+{
+  "python_version": "3.8",
+  "ports": {
+    "backend": 5000,
+    "frontend": 8000,
+    "admin": 8001
+  },
+  "database": {
+    "type": "postgresql",
+    "host": "192.168.31.237",
+    "port": 5446,
+    "name": "stock_analysis",
+    "user": "postgres",
+    "password": "qidianspacetime",
+    "pool_size": 5,
+    "max_overflow": 10,
+    "backup_enabled": true,
+    "backup_interval": "daily"
+  },
+  "services": {
+    "backend": true,
+    "frontend": true,
+    "admin": true,
+    "data_collector": true
+  },
+  "environment": "production",
+  "install_submodules": true,
+  "debug": false,
+  "log_level": "INFO",
+  "data_sources": {
+    "akshare": {
+      "enabled": true,
+      "timeout": 30,
+      "retry_count": 3
+    },
+    "tushare": {
+      "enabled": false,
+      "token": "",
+      "timeout": 30
+    }
+  },
+  "security": {
+    "cors_origins": ["http://localhost:8000", "http://localhost:8001"],
+    "jwt_secret": "your-secret-key-change-in-production",
+    "jwt_expire_hours": 24
+  },
+  "monitoring": {
+    "health_check_enabled": true,
+    "health_check_interval": 60,
+    "log_rotation": {
+      "enabled": true,
+      "max_size": "100MB",
+      "backup_count": 5
+    }
+  }
+} 
