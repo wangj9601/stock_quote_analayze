@@ -127,7 +127,7 @@ class HistoricalQuoteCollector(TushareCollector):
                     if pre_close and pre_close > 0 and high is not None and low is not None:
                         amplitude = (high - low) / pre_close * 100
                     # 打印前面取得的参数
-                    self.logger.info(f"参数: code={code}, ts_code={ts_code}, name={name}, market={market}, total_share={total_share}, volume={volume}, pre_close={pre_close}, high={high}, low={low}, turnover_rate={turnover_rate}, amplitude={amplitude}")
+                    #self.logger.info(f"参数: code={code}, ts_code={ts_code}, name={name}, market={market}, total_share={total_share}, volume={volume}, pre_close={pre_close}, high={high}, low={low}, turnover_rate={turnover_rate}, amplitude={amplitude}")
 
                     data = {
                         'code': code,

@@ -728,7 +728,7 @@ class StockAnalysisService:
         try:
             stock = self.db.query(StockRealtimeQuote).filter(StockRealtimeQuote.code == stock_code).first()
             if stock:
-                return float(stock.latest_price) if stock.latest_price else None
+                return float(stock.current_price) if stock.current_price else None
             return None
         except Exception as e:
             logger.error(f"获取当前价格失败: {str(e)}")

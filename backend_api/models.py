@@ -288,6 +288,10 @@ class StockNews(Base):
     rating = Column(String(50))
     target_price = Column(String(50))
     created_at = Column(DateTime)
+    
+    __table_args__ = (
+        {'sqlite_autoincrement': True},
+    )
 
 class StockResearchReport(Base):
     __tablename__ = "stock_research_reports"
@@ -308,6 +312,10 @@ class StockResearchReport(Base):
     report_date = Column(DateTime)
     pdf_url = Column(String(300))
     updated_at = Column(DateTime)
+    
+    __table_args__ = (
+        {'sqlite_autoincrement': True},
+    )
 
 class IndexRealtimeQuotes(Base):
     __tablename__ = "index_realtime_quotes"

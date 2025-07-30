@@ -482,28 +482,53 @@ async def save_news_to_db(symbol: str, news_data: list):
         db.query(StockNews).filter(StockNews.stock_code == symbol, StockNews.created_at >= today).delete()
         
         # 插入新数据
+        saved_count = 0
+        skipped_count = 0
+        
         for item in news_data:
-            db.add(StockNews(
-                stock_code=symbol,
-                title=item.get('title', ''),
-                content=item.get('content', ''),
-                keywords=item.get('keywords', ''),
-                publish_time=item.get('publish_time', ''),
-                source=item.get('source', ''),
-                url=item.get('url', ''),
-                summary=item.get('summary', ''),
-                type=item.get('type', 'news'),
-                rating=item.get('rating', ''),
-                target_price=item.get('target_price', ''),
-                created_at=datetime.datetime.now()
-            ))
+            try:
+                # 检查是否已存在相同的新闻
+                existing_news = db.query(StockNews).filter(
+                    StockNews.stock_code == symbol,
+                    StockNews.title == item.get('title', ''),
+                    StockNews.publish_time == item.get('publish_time', '')
+                ).first()
+                
+                if existing_news:
+                    print(f"[DEBUG] 跳过重复新闻: {item.get('title', '')} (已存在)")
+                    skipped_count += 1
+                    continue
+                
+                news_obj = StockNews(
+                    stock_code=symbol,
+                    title=item.get('title', ''),
+                    content=item.get('content', ''),
+                    keywords=item.get('keywords', ''),
+                    publish_time=item.get('publish_time', ''),
+                    source=item.get('source', ''),
+                    url=item.get('url', ''),
+                    summary=item.get('summary', ''),
+                    type=item.get('type', 'news'),
+                    rating=item.get('rating', ''),
+                    target_price=item.get('target_price', ''),
+                    created_at=datetime.datetime.now()
+                )
+                # 不设置id字段，让数据库自动生成
+                db.add(news_obj)
+                saved_count += 1
+                
+            except Exception as e:
+                print(f"[save_news_to_db] 保存单条新闻数据失败: {e}")
+                continue
         
         db.commit()
-        print(f"[save_news_to_db] 成功保存 {len(news_data)} 条数据到数据库")
+        print(f"[save_news_to_db] 成功保存 {saved_count}/{len(news_data)} 条数据到数据库，跳过 {skipped_count} 条重复数据")
         
     except Exception as e:
         print(f"[save_news_to_db] 保存数据到数据库失败: {e}")
         print(traceback.format_exc())
+        db.rollback()
+        raise
 
 async def save_research_reports_to_db(symbol: str, research_data: list):
     """保存研报信息到个股研报信息表"""
@@ -520,6 +545,8 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
         monthly_count = len(research_data)
         
         saved_count = 0
+        skipped_count = 0
+        
         for i, item in enumerate(research_data):
             try:
                 # 提取和处理各字段
@@ -536,8 +563,20 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
                 
                 dongcai_rating = item.get('rating', '').strip()
                 institution = item.get('source', '').strip()
-                report_date = item.get('publish_time', '').split(' ')[0] if item.get('publish_time') else ''
+                report_date_str = item.get('publish_time', '').split(' ')[0] if item.get('publish_time') else ''
                 pdf_url = item.get('url', '').strip()
+                
+                # 检查是否已存在相同的研报
+                existing_report = db.query(StockResearchReport).filter(
+                    StockResearchReport.stock_code == symbol,
+                    StockResearchReport.report_name == report_name,
+                    StockResearchReport.report_date == report_date_str
+                ).first()
+                
+                if existing_report:
+                    print(f"[DEBUG] 跳过重复研报: {report_name} (已存在)")
+                    skipped_count += 1
+                    continue
                 
                 print(f"[DEBUG] 准备保存研报: {report_name}")
                 
@@ -555,8 +594,8 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
                 # 获取近一月研报数
                 monthly_count = item.get('monthly_count', len(research_data))
                 
-                # 插入或更新数据
-                db.add(StockResearchReport(
+                # 插入新数据
+                research_obj = StockResearchReport(
                     stock_code=symbol,
                     stock_name=stock_name,
                     report_name=report_name,
@@ -570,10 +609,12 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
                     profit_2026=profit_2026,
                     pe_2026=pe_2026,
                     industry=industry,
-                    report_date=report_date if report_date else None,
+                    report_date=report_date_str if report_date_str else None,
                     pdf_url=pdf_url if pdf_url else None,
                     updated_at=datetime.datetime.now()
-                ))
+                )
+                # 不设置id字段，让数据库自动生成
+                db.add(research_obj)
                 
                 saved_count += 1
                 print(f"[DEBUG] 成功保存第{i+1}条研报: {report_name}")
@@ -584,12 +625,14 @@ async def save_research_reports_to_db(symbol: str, research_data: list):
                 continue
         
         db.commit()
-        print(f"[save_research_reports_to_db] 成功保存 {saved_count}/{len(research_data)} 条研报数据到数据库")
+        print(f"[save_research_reports_to_db] 成功保存 {saved_count}/{len(research_data)} 条研报数据到数据库，跳过 {skipped_count} 条重复数据")
         
     except Exception as e:
         print(f"[save_research_reports_to_db] 保存研报数据到数据库失败: {e}")
         import traceback
         traceback.print_exc()
+        db.rollback()
+        raise
 
 def extract_profit_forecast(summary: str, year: str):
     """从研报摘要中提取盈利预测信息"""

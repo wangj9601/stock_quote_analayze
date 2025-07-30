@@ -1000,6 +1000,42 @@ const StockPage = {
         changeElement.textContent = `${change > 0 ? '+' : ''}${change}%`;
         changeElement.className = `prediction-change ${change > 0 ? 'positive' : 'negative'}`;
         
+        // 更新关键价位 - 确保支撑位严格小于当前价格，阻力位严格大于当前价格
+        const currentPrice = this.currentPrice || 6.80;
+        
+        // 生成合理的支撑位（严格小于当前价格）
+        const supportLevels = [
+            (currentPrice * 0.95).toFixed(2),  // 支撑位1：当前价格的95%
+            (currentPrice * 0.90).toFixed(2),  // 支撑位2：当前价格的90%
+            (currentPrice * 0.85).toFixed(2)   // 支撑位3：当前价格的85%
+        ];
+        
+        // 生成合理的阻力位（严格大于当前价格）
+        const resistanceLevels = [
+            (currentPrice * 1.05).toFixed(2),  // 阻力位1：当前价格的105%
+            (currentPrice * 1.10).toFixed(2),  // 阻力位2：当前价格的110%
+            (currentPrice * 1.15).toFixed(2)   // 阻力位3：当前价格的115%
+        ];
+        
+        // 更新阻力位显示
+        const resistanceElements = document.querySelectorAll('.level-item:not(.current) .level-value.resistance');
+        resistanceLevels.forEach((level, index) => {
+            if (resistanceElements[index]) {
+                resistanceElements[index].textContent = level;
+            }
+        });
+        
+        // 更新支撑位显示
+        const supportElements = document.querySelectorAll('.level-item:not(.current) .level-value.support');
+        supportLevels.forEach((level, index) => {
+            if (supportElements[index]) {
+                supportElements[index].textContent = level;
+            }
+        });
+        
+        // 更新当前价格
+        this.updateKeyLevelsCurrentPrice();
+        
         // 设置数据已加载标志
         this.analysisDataLoaded = true;
     },
