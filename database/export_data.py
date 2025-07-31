@@ -42,20 +42,66 @@ def export_schema():
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = EXPORT_DIR / f"schema_backup_{timestamp}.sql"
     
-    command = f'pg_dump -h {DB_CONFIG["host"]} -p {DB_CONFIG["port"]} -U {DB_CONFIG["user"]} -d {DB_CONFIG["database"]} --schema-only > "{output_file}"'
-    
-    # 设置环境变量
-    env = os.environ.copy()
-    env['PGPASSWORD'] = DB_CONFIG['password']
-    
     print(f"正在导出数据库结构到: {output_file}")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_CONFIG["host"],
+            port=DB_CONFIG["port"],
+            database=DB_CONFIG["database"],
+            user=DB_CONFIG["user"],
+            password=DB_CONFIG["password"],
+            client_encoding='utf8'
+        )
+        
+        cursor = conn.cursor()
+        
+        # 获取表结构
+        cursor.execute("""
+            SELECT 
+                table_name,
+                column_name,
+                data_type,
+                is_nullable,
+                column_default
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name, ordinal_position;
+        """)
+        
+        columns = cursor.fetchall()
+        
+        # 写入SQL文件
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write("-- PostgreSQL 数据库结构导出\n")
+            f.write(f"-- 导出时间: {datetime.datetime.now()}\n")
+            f.write("-- 数据库: stock_analysis\n\n")
+            
+            current_table = None
+            for column in columns:
+                table_name, column_name, data_type, is_nullable, column_default = column
+                
+                if table_name != current_table:
+                    if current_table:
+                        f.write(");\n\n")
+                    f.write(f"CREATE TABLE {table_name} (\n")
+                    current_table = table_name
+                
+                nullable = "" if is_nullable == "YES" else " NOT NULL"
+                default = f" DEFAULT {column_default}" if column_default else ""
+                f.write(f"    {column_name} {data_type}{nullable}{default},\n")
+            
+            if current_table:
+                f.write(");\n")
+        
+        cursor.close()
+        conn.close()
+        
         print(f"✅ 数据库结构导出成功: {output_file}")
         return output_file
-    except subprocess.CalledProcessError as e:
-        print(f"❌ 数据库结构导出失败: {e.stderr}")
+    except Exception as e:
+        print(f"❌ 数据库结构导出失败: {e}")
         return None
 
 def export_data():
@@ -63,19 +109,77 @@ def export_data():
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = EXPORT_DIR / f"data_backup_{timestamp}.sql"
     
-    command = f'pg_dump -h {DB_CONFIG["host"]} -p {DB_CONFIG["port"]} -U {DB_CONFIG["user"]} -d {DB_CONFIG["database"]} --data-only > "{output_file}"'
-    
-    env = os.environ.copy()
-    env['PGPASSWORD'] = DB_CONFIG['password']
-    
     print(f"正在导出数据库数据到: {output_file}")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_CONFIG["host"],
+            port=DB_CONFIG["port"],
+            database=DB_CONFIG["database"],
+            user=DB_CONFIG["user"],
+            password=DB_CONFIG["password"],
+            client_encoding='utf8'
+        )
+        
+        cursor = conn.cursor()
+        
+        # 获取所有表
+        cursor.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name;
+        """)
+        
+        tables = cursor.fetchall()
+        
+        # 写入SQL文件
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write("-- PostgreSQL 数据库数据导出\n")
+            f.write(f"-- 导出时间: {datetime.datetime.now()}\n")
+            f.write("-- 数据库: stock_analysis\n\n")
+            
+            for table in tables:
+                table_name = table[0]
+                print(f"  正在导出表: {table_name}")
+                
+                # 获取表数据
+                cursor.execute(f"SELECT * FROM {table_name}")
+                rows = cursor.fetchall()
+                
+                if rows:
+                    # 获取列名
+                    cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}' AND table_schema = 'public' ORDER BY ordinal_position")
+                    columns = [col[0] for col in cursor.fetchall()]
+                    
+                    f.write(f"\n-- 表 {table_name} 的数据\n")
+                    f.write(f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES\n")
+                    
+                    for i, row in enumerate(rows):
+                        values = []
+                        for value in row:
+                            if value is None:
+                                values.append("NULL")
+                            elif isinstance(value, str):
+                                values.append(f"'{value.replace(\"'\", \"''\")}'")
+                            else:
+                                values.append(str(value))
+                        
+                        f.write(f"({', '.join(values)})")
+                        if i < len(rows) - 1:
+                            f.write(",")
+                        f.write("\n")
+                    
+                    f.write(";\n")
+        
+        cursor.close()
+        conn.close()
+        
         print(f"✅ 数据库数据导出成功: {output_file}")
         return output_file
-    except subprocess.CalledProcessError as e:
-        print(f"❌ 数据库数据导出失败: {e.stderr}")
+    except Exception as e:
+        print(f"❌ 数据库数据导出失败: {e}")
         return None
 
 def export_full_backup():
@@ -145,20 +249,31 @@ def export_all_tables():
 
 def test_connection():
     """测试数据库连接"""
-    command = f'psql -h {DB_CONFIG["host"]} -p {DB_CONFIG["port"]} -U {DB_CONFIG["user"]} -d {DB_CONFIG["database"]} -c "SELECT version();"'
-    
-    env = os.environ.copy()
-    env['PGPASSWORD'] = DB_CONFIG['password']
-    
     print("正在测试数据库连接...")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_CONFIG["host"],
+            port=DB_CONFIG["port"],
+            database=DB_CONFIG["database"],
+            user=DB_CONFIG["user"],
+            password=DB_CONFIG["password"],
+            client_encoding='utf8'
+        )
         print("✅ 数据库连接成功")
-        print(f"PostgreSQL版本: {result.stdout.strip()}")
+        
+        # 测试查询
+        cursor = conn.cursor()
+        cursor.execute("SELECT version();")
+        version = cursor.fetchone()
+        print(f"PostgreSQL版本: {version[0]}")
+        
+        cursor.close()
+        conn.close()
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ 数据库连接失败: {e.stderr}")
+    except Exception as e:
+        print(f"❌ 数据库连接失败: {e}")
         return False
 
 def main():
