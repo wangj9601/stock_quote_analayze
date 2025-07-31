@@ -155,6 +155,13 @@ def export_table_data(table_name):
                             # 转义单引号
                             escaped_value = value.replace("'", "''")
                             values.append(f"'{escaped_value}'")
+                        elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
+                            # 日期和日期时间类型，格式化为字符串并加单引号
+                            if isinstance(value, datetime.datetime):
+                                formatted_date = value.strftime("%Y-%m-%d %H:%M:%S")
+                            else:
+                                formatted_date = value.strftime("%Y-%m-%d")
+                            values.append(f"'{formatted_date}'")
                         else:
                             values.append(str(value))
                     
