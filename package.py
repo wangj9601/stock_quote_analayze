@@ -50,36 +50,72 @@ class ProjectPackager:
     def get_include_patterns(self) -> List[str]:
         """获取需要包含的文件模式"""
         return [
-            # 核心代码
+            # 核心代码目录 - 确保包含所有子目录和文件
             "backend_api/**/*",
+            "backend_api/*.py",
+            "backend_api/*.txt",
             "backend_core/**/*",
+            "backend_core/*.py",
+            "backend_core/*.txt",
             "frontend/**/*",
+            "frontend/*.html",
+            "frontend/*.txt",
             "admin/**/*",
+            "admin/*.html",
+            "admin/*.txt",
+            "admin/*.css",
+            "admin/*.js",
+            "admin/*.json",
+            "admin/*.txt",
             
-            # 配置文件
+            # 根目录重要文件
             "requirements.txt",
+            "requirements-dev.txt",
+            "requirements-prod.txt",
             "setup.py",
             "README.md",
+            "START_GUIDE.md",
+            "QUICK_DEPLOY.md",
+            "DEPLOYMENT_SUMMARY.md",
+            "DEPENDENCY_MANAGEMENT_GUIDE.md",
+            "POSTGRESQL_MIGRATION_GUIDE.md",
+            
+            # 启动脚本
             "start_system.py",
-            "run.py",
             "start_frontend.py",
+            "start_backend_core.py",
+            "start_admin.py",
+            "start_analysis_service.py",
+            "run.py",
+            
+            # 数据库相关
             "migrate_db.py",
+            "init_postgresql_db.py",
+            "create_stock_news_table.py",
+            "update_historical_quotes_name.py",
+            "database/**/*",
             
             # 部署相关
             "deploy.py",
             "package.py",
             "deploy_config.json",
-            "DEPLOYMENT_GUIDE.md",
+            "wait-for-it.sh",
+            "collect_realtime.bat",
             
-            # 数据库
-            "database/**/*",
+            # 检查和测试脚本
+            "check_dependencies.py",
+            "check_postgresql_env.py",
+            "quick_dependency_check.py",
+            "test_*.py",
             
             # 文档
             "docs/**/*",
             "*.md",
             
+            # 配置文件
+            ".gitattributes",
+            
             # 测试文件
-            "test_*.py",
             "backend_api/test/**/*",
             "backend_core/test/**/*",
         ]
@@ -121,10 +157,6 @@ class ProjectPackager:
             "**/.git/**",
             "**/.gitignore",
             
-            # 数据库文件（可选，根据需要调整）
-            # "**/*.db",
-            # "**/*.sqlite",
-            
             # 备份文件
             "**/backup/**",
             "**/*.bak",
@@ -139,6 +171,14 @@ class ProjectPackager:
             "**/node_modules/**",
             "**/package-lock.json",
             "**/yarn.lock",
+            
+            # 压缩文件
+            "**/*.rar",
+            "**/*.zip",
+            "**/*.tar.gz",
+            
+            # 临时文档
+            "**/~$*.docx",
         ]
     
     def should_include_file(self, file_path: Path, include_patterns: List[str], exclude_patterns: List[str]) -> bool:
@@ -199,8 +239,15 @@ class ProjectPackager:
             "services": {
                 "backend": "FastAPI + SQLAlchemy",
                 "frontend": "HTML5 + CSS3 + JavaScript",
-                "database": "SQLite",
+                "admin": "HTML5 + CSS3 + JavaScript",
+                "database": "SQLite/PostgreSQL",
                 "data_source": "akshare + tushare"
+            },
+            "components": {
+                "backend_api": "FastAPI后端API服务",
+                "backend_core": "核心数据采集和处理模块",
+                "frontend": "用户前端界面",
+                "admin": "管理员后台界面"
             }
         }
     
@@ -439,11 +486,18 @@ class ProjectPackager:
             "frontend/**/*",
             "admin/**/*",
             "requirements.txt",
+            "requirements-prod.txt",
             "start_system.py",
+            "start_frontend.py",
+            "start_backend_core.py",
+            "start_admin.py",
             "run.py",
             "migrate_db.py",
             "database/**/*",
             "README.md",
+            "START_GUIDE.md",
+            "deploy.py",
+            "deploy_config.json",
         ]
         
         # 最小化排除的文件模式
@@ -464,8 +518,10 @@ class ProjectPackager:
             "**/*.log",
             "**/logs/**",
             "**/docs/**",
-            "**/deploy.py",
             "**/package.py",
+            "**/*.egg-info/**",
+            "**/build/**",
+            "**/dist/**",
         ]
         
         files = []
