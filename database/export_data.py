@@ -162,7 +162,16 @@ def export_data():
                             if value is None:
                                 values.append("NULL")
                             elif isinstance(value, str):
-                                values.append(f"'{value.replace(\"'\", \"''\")}'")
+                                # 转义单引号
+                                escaped_value = value.replace("'", "''")
+                                values.append(f"'{escaped_value}'")
+                            elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
+                                # 日期和日期时间类型，格式化为字符串并加单引号
+                                if isinstance(value, datetime.datetime):
+                                    formatted_date = value.strftime("%Y-%m-%d %H:%M:%S")
+                                else:
+                                    formatted_date = value.strftime("%Y-%m-%d")
+                                values.append(f"'{formatted_date}'")
                             else:
                                 values.append(str(value))
                         
@@ -207,19 +216,69 @@ def export_table_data(table_name):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = EXPORT_DIR / f"{table_name}_data_{timestamp}.sql"
     
-    command = f'pg_dump -h {DB_CONFIG["host"]} -p {DB_CONFIG["port"]} -U {DB_CONFIG["user"]} -d {DB_CONFIG["database"]} -t {table_name} --data-only > "{output_file}"'
-    
-    env = os.environ.copy()
-    env['PGPASSWORD'] = DB_CONFIG['password']
-    
     print(f"正在导出表 {table_name} 的数据到: {output_file}")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DB_CONFIG["host"],
+            port=DB_CONFIG["port"],
+            database=DB_CONFIG["database"],
+            user=DB_CONFIG["user"],
+            password=DB_CONFIG["password"],
+            client_encoding='utf8'
+        )
+        
+        cursor = conn.cursor()
+        
+        # 获取表数据
+        cursor.execute(f"SELECT * FROM {table_name}")
+        rows = cursor.fetchall()
+        
+        if rows:
+            # 获取列名
+            cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}' AND table_schema = 'public' ORDER BY ordinal_position")
+            columns = [col[0] for col in cursor.fetchall()]
+            
+            # 写入SQL文件
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(f"-- 表 {table_name} 的数据导出\n")
+                f.write(f"-- 导出时间: {datetime.datetime.now()}\n\n")
+                f.write(f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES\n")
+                
+                for i, row in enumerate(rows):
+                    values = []
+                    for value in row:
+                        if value is None:
+                            values.append("NULL")
+                        elif isinstance(value, str):
+                            # 转义单引号
+                            escaped_value = value.replace("'", "''")
+                            values.append(f"'{escaped_value}'")
+                        elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
+                            # 日期和日期时间类型，格式化为字符串并加单引号
+                            if isinstance(value, datetime.datetime):
+                                formatted_date = value.strftime("%Y-%m-%d %H:%M:%S")
+                            else:
+                                formatted_date = value.strftime("%Y-%m-%d")
+                            values.append(f"'{formatted_date}'")
+                        else:
+                            values.append(str(value))
+                    
+                    f.write(f"({', '.join(values)})")
+                    if i < len(rows) - 1:
+                        f.write(",")
+                    f.write("\n")
+                
+                f.write(";\n")
+        
+        cursor.close()
+        conn.close()
+        
         print(f"✅ 表 {table_name} 数据导出成功: {output_file}")
         return output_file
-    except subprocess.CalledProcessError as e:
-        print(f"❌ 表 {table_name} 数据导出失败: {e.stderr}")
+    except Exception as e:
+        print(f"❌ 表 {table_name} 数据导出失败: {e}")
         return None
 
 def export_all_tables():
