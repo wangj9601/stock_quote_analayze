@@ -79,21 +79,29 @@ def export_schema():
             f.write("-- 数据库: stock_analysis\n\n")
             
             current_table = None
+            table_columns = {}
+            
+            # 按表分组列信息
             for column in columns:
                 table_name, column_name, data_type, is_nullable, column_default = column
-                
-                if table_name != current_table:
-                    if current_table:
-                        f.write(");\n\n")
-                    f.write(f"CREATE TABLE {table_name} (\n")
-                    current_table = table_name
-                
-                nullable = "" if is_nullable == "YES" else " NOT NULL"
-                default = f" DEFAULT {column_default}" if column_default else ""
-                f.write(f"    {column_name} {data_type}{nullable}{default},\n")
+                if table_name not in table_columns:
+                    table_columns[table_name] = []
+                table_columns[table_name].append((column_name, data_type, is_nullable, column_default))
             
-            if current_table:
-                f.write(");\n")
+            # 写入每个表的CREATE语句
+            for table_name, table_cols in table_columns.items():
+                f.write(f"CREATE TABLE {table_name} (\n")
+                
+                for i, (column_name, data_type, is_nullable, column_default) in enumerate(table_cols):
+                    nullable = "" if is_nullable == "YES" else " NOT NULL"
+                    default = f" DEFAULT {column_default}" if column_default else ""
+                    f.write(f"    {column_name} {data_type}{nullable}{default}")
+                    
+                    if i < len(table_cols) - 1:
+                        f.write(",")
+                    f.write("\n")
+                
+                f.write(");\n\n")
         
         cursor.close()
         conn.close()

@@ -16,7 +16,7 @@ DB_CONFIG = {
     "port": "5446",
     "user": "postgres",
     "password": "qidianspacetime",
-    "database": "stock_analysis"
+    "database": "stock_analysis_bak"
 }
 
 # 导入目录
@@ -28,16 +28,23 @@ def test_connection():
     
     env = os.environ.copy()
     env['PGPASSWORD'] = DB_CONFIG['password']
+    env['PGCLIENTENCODING'] = 'UTF8'
     
     print("正在测试数据库连接...")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         print("✅ 数据库连接成功")
-        print(f"PostgreSQL版本: {result.stdout.strip()}")
+        if result.stdout:
+            print(f"PostgreSQL版本: {result.stdout.strip()}")
+        else:
+            print("PostgreSQL版本: 未知")
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ 数据库连接失败: {e.stderr}")
+        return False
+    except UnicodeDecodeError as e:
+        print(f"❌ 编码错误: {e}")
         return False
 
 def list_backup_files():
@@ -62,17 +69,23 @@ def import_sql_file(file_path):
     
     env = os.environ.copy()
     env['PGPASSWORD'] = DB_CONFIG['password']
+    # 设置UTF-8编码
+    env['PGCLIENTENCODING'] = 'UTF8'
     
     print(f"正在导入文件: {file_path}")
     print(f"文件大小: {file_path.stat().st_size / 1024 / 1024:.2f} MB")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         print(f"✅ 文件导入成功: {file_path}")
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ 文件导入失败: {file_path}")
         print(f"错误输出: {e.stderr}")
+        return False
+    except UnicodeDecodeError as e:
+        print(f"❌ 文件编码错误: {file_path}")
+        print(f"编码错误: {e}")
         return False
 
 def import_schema_only(file_path):
@@ -87,9 +100,10 @@ def import_schema_only(file_path):
     
     env = os.environ.copy()
     env['PGPASSWORD'] = DB_CONFIG['password']
+    env['PGCLIENTENCODING'] = 'UTF8'
     
     try:
-        subprocess.run(cleanup_command, shell=True, check=True, env=env, capture_output=True, text=True)
+        subprocess.run(cleanup_command, shell=True, check=True, env=env, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         print("✅ 现有表结构清理完成")
     except subprocess.CalledProcessError as e:
         print(f"⚠️ 清理现有表结构时出现警告: {e.stderr}")
@@ -110,11 +124,12 @@ def backup_current_database():
     
     env = os.environ.copy()
     env['PGPASSWORD'] = DB_CONFIG['password']
+    env['PGCLIENTENCODING'] = 'UTF8'
     
     print(f"正在备份当前数据库到: {backup_file}")
     
     try:
-        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True)
+        result = subprocess.run(command, shell=True, check=True, env=env, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         print(f"✅ 当前数据库备份成功: {backup_file}")
         return backup_file
     except subprocess.CalledProcessError as e:

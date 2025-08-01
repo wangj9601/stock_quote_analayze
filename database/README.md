@@ -27,7 +27,14 @@ Python数据导入脚本，提供交互式菜单：
 - 仅导入数据
 - 备份当前数据库
 
-### 4. quick_export.bat
+### 4. python_import.py
+Python直接导入脚本（推荐，避免编码问题）：
+- 使用Python直接执行SQL文件
+- 避免Windows编码问题
+- 支持大文件导入
+- 提供详细的执行进度
+
+### 5. quick_export.bat
 Windows批处理脚本，快速导出数据库：
 - 完整数据库备份
 - 表结构
@@ -48,6 +55,12 @@ python export_data.py
 ```bash
 cd database
 python import_data.py
+```
+
+#### 导入数据（推荐，避免编码问题）
+```bash
+cd database
+python python_import.py
 ```
 
 ### 方法2: 使用批处理脚本（Windows）
@@ -127,6 +140,11 @@ psql -h 192.168.31.237 -p 5446 -U postgres -d stock_analysis < data_backup.sql
 - 如果导入失败，检查SQL文件格式和数据库版本兼容性
 - 查看错误日志获取详细信息
 
+### 5. 编码问题解决
+- 如果遇到编码错误，使用 `python_import.py` 替代 `import_data.py`
+- Windows系统默认使用GBK编码，可能导致UTF-8文件导入失败
+- `python_import.py` 使用Python直接执行SQL，避免编码问题
+
 ## 常见问题
 
 ### Q: 导出时提示权限错误
@@ -140,6 +158,9 @@ A: 考虑分批导出或使用并行导出
 
 ### Q: 导入后数据不完整
 A: 检查SQL文件是否完整，确认没有截断
+
+### Q: 导入时出现编码错误
+A: 使用 `python python_import.py` 替代 `python import_data.py`
 
 ## 联系支持
 
