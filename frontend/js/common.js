@@ -83,18 +83,15 @@ const CommonUtils = {
             if (!user) return;
 
             // 更新导航栏用户信息
-            const userMenu = document.querySelector('.user-menu');
+            const userStatus = document.getElementById('userStatus');
+            const userMenu = document.getElementById('userMenu');
+            
+            if (userStatus) {
+                userStatus.textContent = user.username || '已登录';
+            }
+            
             if (userMenu) {
-                userMenu.innerHTML = `
-                    <div class="user-info">
-                        <span class="user-avatar">👤</span>
-                        <span class="user-name">${user.username}</span>
-                        <div class="user-dropdown">
-                            <a href="profile.html">个人中心</a>
-                            <a href="#" onclick="CommonUtils.auth.logout()">退出登录</a>
-                        </div>
-                    </div>
-                `;
+                userMenu.style.cursor = 'pointer';
             }
 
             // 如果页面有用户名显示区域，更新它
@@ -102,10 +99,24 @@ const CommonUtils = {
             userNameElements.forEach(el => {
                 el.textContent = user.username;
             });
+            
+            console.log('用户显示更新完成:', user.username);
         },
 
         // 初始化认证
         async init() {
+            // 等待header组件加载完成
+            await new Promise(resolve => {
+                const checkHeader = () => {
+                    if (document.getElementById('userMenu')) {
+                        resolve();
+                    } else {
+                        setTimeout(checkHeader, 50);
+                    }
+                };
+                checkHeader();
+            });
+            
             // 检查登录状态
             const user = await this.checkLogin();
             

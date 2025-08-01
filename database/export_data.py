@@ -38,7 +38,7 @@ def run_command(command, description):
         return False
 
 def export_schema():
-    """导出数据库结构"""
+    """导出数据库结构（包含索引、约束等）"""
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = EXPORT_DIR / f"schema_backup_{timestamp}.sql"
     
@@ -72,11 +72,114 @@ def export_schema():
         
         columns = cursor.fetchall()
         
+        # 获取主键约束
+        cursor.execute("""
+            SELECT 
+                tc.table_name,
+                tc.constraint_name,
+                kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu 
+                ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.constraint_type = 'PRIMARY KEY' 
+                AND tc.table_schema = 'public'
+            ORDER BY tc.table_name, kcu.ordinal_position;
+        """)
+        
+        primary_keys = cursor.fetchall()
+        
+        # 获取外键约束
+        cursor.execute("""
+            SELECT 
+                tc.table_name,
+                tc.constraint_name,
+                kcu.column_name,
+                ccu.table_name AS foreign_table_name,
+                ccu.column_name AS foreign_column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu 
+                ON tc.constraint_name = kcu.constraint_name
+            JOIN information_schema.constraint_column_usage ccu 
+                ON ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY' 
+                AND tc.table_schema = 'public'
+            ORDER BY tc.table_name, kcu.ordinal_position;
+        """)
+        
+        foreign_keys = cursor.fetchall()
+        
+        # 获取唯一约束
+        cursor.execute("""
+            SELECT 
+                tc.table_name,
+                tc.constraint_name,
+                kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu 
+                ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.constraint_type = 'UNIQUE' 
+                AND tc.table_schema = 'public'
+            ORDER BY tc.table_name, kcu.ordinal_position;
+        """)
+        
+        unique_constraints = cursor.fetchall()
+        
+        # 获取索引
+        cursor.execute("""
+            SELECT 
+                schemaname,
+                tablename,
+                indexname,
+                indexdef
+            FROM pg_indexes 
+            WHERE schemaname = 'public'
+            ORDER BY tablename, indexname;
+        """)
+        
+        indexes = cursor.fetchall()
+        
+        # 获取序列
+        cursor.execute("""
+            SELECT 
+                sequence_name,
+                data_type,
+                start_value,
+                minimum_value,
+                maximum_value,
+                increment
+            FROM information_schema.sequences 
+            WHERE sequence_schema = 'public'
+            ORDER BY sequence_name;
+        """)
+        
+        sequences = cursor.fetchall()
+        
         # 写入SQL文件
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write("-- PostgreSQL 数据库结构导出\n")
+            f.write("-- PostgreSQL 数据库结构导出（包含索引、约束等）\n")
             f.write(f"-- 导出时间: {datetime.datetime.now()}\n")
             f.write("-- 数据库: stock_analysis\n\n")
+            
+            # 1. 创建序列
+            if sequences:
+                f.write("-- ==========================================\n")
+                f.write("-- 序列 (Sequences)\n")
+                f.write("-- ==========================================\n\n")
+                
+                for sequence in sequences:
+                    sequence_name, data_type, start_value, min_value, max_value, increment = sequence
+                    f.write(f"CREATE SEQUENCE {sequence_name}\n")
+                    f.write(f"    AS {data_type}\n")
+                    f.write(f"    START WITH {start_value}\n")
+                    f.write(f"    INCREMENT BY {increment}\n")
+                    f.write(f"    MINVALUE {min_value}\n")
+                    f.write(f"    MAXVALUE {max_value}\n")
+                    f.write("    CACHE 1;\n\n")
+            
+            # 2. 创建表结构
+            f.write("-- ==========================================\n")
+            f.write("-- 表结构 (Tables)\n")
+            f.write("-- ==========================================\n\n")
             
             current_table = None
             table_columns = {}
@@ -102,6 +205,84 @@ def export_schema():
                     f.write("\n")
                 
                 f.write(");\n\n")
+            
+            # 3. 创建主键约束
+            if primary_keys:
+                f.write("-- ==========================================\n")
+                f.write("-- 主键约束 (Primary Keys)\n")
+                f.write("-- ==========================================\n\n")
+                
+                current_table = None
+                current_columns = []
+                
+                for pk in primary_keys:
+                    table_name, constraint_name, column_name = pk
+                    
+                    if table_name != current_table:
+                        if current_table and current_columns:
+                            f.write(f"ALTER TABLE {current_table} ADD CONSTRAINT {constraint_name} PRIMARY KEY ({', '.join(current_columns)});\n")
+                        current_table = table_name
+                        current_columns = [column_name]
+                    else:
+                        current_columns.append(column_name)
+                
+                if current_table and current_columns:
+                    f.write(f"ALTER TABLE {current_table} ADD CONSTRAINT {constraint_name} PRIMARY KEY ({', '.join(current_columns)});\n")
+                
+                f.write("\n")
+            
+            # 4. 创建外键约束
+            if foreign_keys:
+                f.write("-- ==========================================\n")
+                f.write("-- 外键约束 (Foreign Keys)\n")
+                f.write("-- ==========================================\n\n")
+                
+                for fk in foreign_keys:
+                    table_name, constraint_name, column_name, foreign_table, foreign_column = fk
+                    f.write(f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} ")
+                    f.write(f"FOREIGN KEY ({column_name}) REFERENCES {foreign_table}({foreign_column});\n")
+                
+                f.write("\n")
+            
+            # 5. 创建唯一约束
+            if unique_constraints:
+                f.write("-- ==========================================\n")
+                f.write("-- 唯一约束 (Unique Constraints)\n")
+                f.write("-- ==========================================\n\n")
+                
+                current_table = None
+                current_constraint = None
+                current_columns = []
+                
+                for uc in unique_constraints:
+                    table_name, constraint_name, column_name = uc
+                    
+                    if table_name != current_table or constraint_name != current_constraint:
+                        if current_table and current_constraint and current_columns:
+                            f.write(f"ALTER TABLE {current_table} ADD CONSTRAINT {current_constraint} UNIQUE ({', '.join(current_columns)});\n")
+                        current_table = table_name
+                        current_constraint = constraint_name
+                        current_columns = [column_name]
+                    else:
+                        current_columns.append(column_name)
+                
+                if current_table and current_constraint and current_columns:
+                    f.write(f"ALTER TABLE {current_table} ADD CONSTRAINT {current_constraint} UNIQUE ({', '.join(current_columns)});\n")
+                
+                f.write("\n")
+            
+            # 6. 创建索引
+            if indexes:
+                f.write("-- ==========================================\n")
+                f.write("-- 索引 (Indexes)\n")
+                f.write("-- ==========================================\n\n")
+                
+                for index in indexes:
+                    schema_name, table_name, index_name, index_def = index
+                    # 跳过主键和唯一约束的索引（已经通过约束创建）
+                    if not any(pk[1] == index_name for pk in primary_keys) and \
+                       not any(uc[1] == index_name for uc in unique_constraints):
+                        f.write(f"{index_def};\n\n")
         
         cursor.close()
         conn.close()

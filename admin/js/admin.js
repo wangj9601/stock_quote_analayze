@@ -84,21 +84,23 @@ const AdminPanel = {
         const password = document.getElementById('password').value;
 
         try {
+            // 创建表单数据，符合OAuth2PasswordRequestForm的要求
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+
             const response = await fetch(`${this.apiBaseUrl}/admin/login`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ username, password })
+                body: formData
             });
 
             const result = await response.json();
 
-            if (result.success) {
+            if (response.ok) {
                 this.currentUser = result.admin;
                 localStorage.setItem('adminLoggedIn', 'true');
                 localStorage.setItem('adminData', JSON.stringify(result.admin));
-                localStorage.setItem('adminToken', result.token);
+                localStorage.setItem('admin_token', result.access_token);
                 
                 this.showAdminPanel();
                 this.showToast('登录成功！', 'success');
@@ -106,7 +108,7 @@ const AdminPanel = {
                 // 加载仪表板数据
                 this.loadDashboardData();
             } else {
-                this.showToast(result.message || '登录失败', 'error');
+                this.showToast(result.detail || '登录失败', 'error');
             }
         } catch (error) {
             console.error('登录错误:', error);
@@ -118,7 +120,7 @@ const AdminPanel = {
     logout() {
         localStorage.removeItem('adminLoggedIn');
         localStorage.removeItem('adminData');
-        localStorage.removeItem('adminToken');
+        localStorage.removeItem('admin_token');
         this.currentUser = null;
         this.showLoginPage();
         this.showToast('已安全退出', 'info');

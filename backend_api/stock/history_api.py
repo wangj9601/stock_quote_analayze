@@ -105,8 +105,37 @@ def export_stock_history(
     columns = ["股票代码", "股票名称", "日期", "开盘价", "收盘价", "最高价", "最低价", "成交量", "成交额", "涨跌幅", "涨跌额"]
     df = pd.DataFrame(rows, columns=columns)
 
+    # 格式化成交量
     df["成交量"] = df["成交量"].apply(lambda x: f"{round(float(x)/1e4, 2)}万" if x is not None and x != '' else '')
+    
+    # 格式化成交额
     df["成交额"] = df["成交额"].apply(lambda x: f"{round(float(x)/1e8, 2)}亿" if x is not None and x != '' else '')
+    
+    # 格式化涨跌幅：保留两位小数，四舍五入，添加%符号
+    def format_change_percent(val):
+        if val is None or val == '':
+            return ''
+        try:
+            # 四舍五入到两位小数
+            rounded_val = round(float(val) * 100) / 100
+            return f"{rounded_val:.2f}%"
+        except:
+            return str(val) if val != '' else ''
+    
+    # 格式化涨跌额：保留两位小数，四舍五入
+    def format_change_amount(val):
+        if val is None or val == '':
+            return ''
+        try:
+            # 四舍五入到两位小数
+            rounded_val = round(float(val) * 100) / 100
+            return f"{rounded_val:.2f}"
+        except:
+            return str(val) if val != '' else ''
+    
+    # 应用格式化
+    df["涨跌幅"] = df["涨跌幅"].apply(format_change_percent)
+    df["涨跌额"] = df["涨跌额"].apply(format_change_amount)
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -137,6 +166,7 @@ def export_stock_history(
             try:
                 val = change_percent_cell.value
                 if val is not None and val != '':
+                    # 移除%符号并转换为数字
                     num = float(str(val).replace('%',''))
                     if num > 0:
                         change_percent_cell.font = XLFont(color='FF0000', bold=True)

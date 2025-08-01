@@ -10,38 +10,7 @@
     <script src="js/echarts.min.js"></script>
 </head>
 <body>
-    <!-- 头部导航 -->
-    <header class="header">
-        <div class="container">
-            <div class="nav-brand">
-                <a href="index.html" style="text-decoration: none; color: inherit;">
-                    <h1>📈 股票分析</h1>
-                </a>
-            </div>
-            <nav class="nav-menu">
-                <a href="index.html" class="nav-item">首页</a>
-                <a href="watchlist.html" class="nav-item">自选股</a>
-                <a href="markets.html" class="nav-item">行情</a>
-                <a href="analysis.html" class="nav-item">分析</a>
-                <a href="news.html" class="nav-item">资讯</a>
-                <a href="profile.html" class="nav-item">我的</a>
-            </nav>
-            <div class="user-actions">
-                <button class="search-btn">🔍</button>
-                <div class="user-menu">
-                    <!-- 这里将由JavaScript动态填充用户信息 -->
-                    <div class="user-info">
-                        <span class="user-avatar">👤</span>
-                        <span class="user-name">加载中...</span>
-                        <div class="user-dropdown">
-                            <a href="profile.html">个人中心</a>
-                            <a href="#" onclick="CommonUtils.auth.logout()">退出登录</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </header>
+    <!-- 头部导航将由JavaScript动态加载 -->
 
     <!-- 主要内容 -->
     <main class="main-content">
@@ -418,6 +387,7 @@
     </div>
 
     <script src="js/common.js"></script>
+    <script src="components/header.js"></script>
     <script src="js/stock.js"></script>
 </body>
 </html> 

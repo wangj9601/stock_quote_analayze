@@ -11,12 +11,161 @@
         <a href="news.html" class="nav-link" id="nav-news">资讯</a>
         <a href="profile.html" class="nav-link" id="nav-profile">我的</a>
     </nav>
-    <div class="user-menu" id="userMenu">
-        <span id="userStatus" class="user-status">未登录</span>
-        <div class="user-dropdown" id="userDropdown" style="display:none;">
-            <a href="profile.html" id="menuProfile">个人中心</a>
-            <a href="#" id="menuLogout">退出登录</a>
+    <div class="header-actions">
+        <button class="search-btn">🔍</button>
+        <div class="user-menu" id="userMenu">
+            <span id="userStatus" class="user-status">未登录</span>
+            <div class="user-dropdown" id="userDropdown" style="display:none;">
+                <a href="profile.html" id="menuProfile">个人中心</a>
+                <a href="#" id="menuLogout">退出登录</a>
+            </div>
         </div>
     </div>
 </div>
-<link rel="stylesheet" href="components/header.css"> 
+
+<style>
+/* 内联样式确保用户菜单正常工作 */
+.main-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #03213a !important;
+    color: #fff !important;
+    padding: 0 32px !important;
+    height: 56px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+}
+
+.logo-area {
+    display: flex !important;
+    align-items: center !important;
+}
+
+.logo-title {
+    font-size: 20px !important;
+    font-weight: bold !important;
+    letter-spacing: 2px !important;
+}
+
+.nav-bar {
+    display: flex !important;
+    align-items: center !important;
+    gap: 24px !important;
+}
+
+.nav-link {
+    color: #fff !important;
+    text-decoration: none !important;
+    font-size: 16px !important;
+    padding: 8px 12px !important;
+    border-radius: 4px !important;
+    transition: background 0.2s !important;
+}
+
+.nav-link.active, .nav-link:hover {
+    background: #174b7a !important;
+}
+
+.header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+}
+
+.search-btn {
+    background: none !important;
+    border: 1px solid #174b7a !important;
+    color: #fff !important;
+    border-radius: 4px !important;
+    padding: 4px 8px !important;
+    cursor: pointer !important;
+    font-size: 16px !important;
+    transition: background 0.2s, border 0.2s !important;
+}
+
+.search-btn:hover {
+    background: #174b7a !important;
+}
+
+.user-menu {
+    display: flex !important;
+    align-items: center !important;
+    position: relative !important;
+    background: #22384a !important;
+    border-radius: 20px !important;
+    padding: 2px 14px 2px 6px !important;
+    margin-left: 16px !important;
+    cursor: pointer !important;
+    min-width: 80px !important;
+    transition: background 0.2s !important;
+}
+
+.user-menu:hover {
+    background: #2a4258 !important;
+}
+
+.user-menu::before {
+    content: "" !important;
+    display: inline-block !important;
+    width: 28px !important;
+    height: 28px !important;
+    background: #4a5a6a !important;
+    border-radius: 50% !important;
+    margin-right: 6px !important;
+    background-image: url('data:image/svg+xml;utf8,<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="7" r="4" fill="%23fff"/><ellipse cx="10" cy="15" rx="6" ry="3" fill="%23fff"/></svg>') !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+}
+
+.user-status {
+    font-size: 15px !important;
+    color: #fff !important;
+    margin-left: 0 !important;
+    margin-right: 2px !important;
+    z-index: 1 !important;
+    user-select: none !important;
+}
+
+.user-dropdown {
+    display: none !important;
+    position: absolute !important;
+    right: 0 !important;
+    top: 120% !important;
+    background: #fff !important;
+    color: #222 !important;
+    min-width: 120px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    border-radius: 6px !important;
+    z-index: 9999 !important;
+    flex-direction: column !important;
+    padding: 6px 0 !important;
+    border: 1px solid #e0e0e0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    width: auto !important;
+    overflow: visible !important;
+}
+
+.user-dropdown a {
+    display: block !important;
+    padding: 10px 18px !important;
+    color: #222 !important;
+    text-decoration: none !important;
+    font-size: 15px !important;
+    transition: background 0.2s !important;
+    white-space: nowrap !important;
+    background: transparent !important;
+}
+
+.user-dropdown a:hover {
+    background: #f2f6fa !important;
+    color: #1890ff !important;
+}
+
+.user-menu.open .user-dropdown {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+</style> 

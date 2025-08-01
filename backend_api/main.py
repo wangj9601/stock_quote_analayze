@@ -56,7 +56,7 @@ origins = [
     "http://127.0.0.1:8001",
     "http://192.168.3.60:8000",  # 建议加上你的本地IP端口
     "http://192.168.3.60:5000",  # 如果有需要
-    "*"
+    "*",  # 允许所有来源
 ]
 
 app.add_middleware(
@@ -68,23 +68,6 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,
 )
-
-# 添加OPTIONS请求处理，动态设置Allow-Origin
-@app.options("/{full_path:path}")
-async def options_handler(request: Request, full_path: str):
-    origin = request.headers.get("origin", "*")
-    allow_origin = origin if origin in origins or "*" in origins else "*"
-    return Response(
-        content="",
-        headers={
-            "Access-Control-Allow-Origin": allow_origin,
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "3600",
-        },
-        status_code=204
-    )
 
 # 挂载静态文件目录
 app.mount("/admin", StaticFiles(directory="admin", html=True), name="admin")

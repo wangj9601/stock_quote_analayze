@@ -57,11 +57,42 @@ const StockPage = {
     //API_BASE_URL: 'http://192.168.31.237:5000',
 
     // 初始化
-    init() {
+    async init() {
+        // 先加载header组件
+        await this.loadHeader();
+        
         this.bindEvents();
         this.initCharts();
         this.loadStockData();
         this.startDataUpdate();
+    },
+
+    // 加载header组件
+    async loadHeader() {
+        try {
+            console.log('[loadHeader] 开始加载header组件');
+            
+            // 检查是否已经加载了header.js
+            if (typeof loadHeader === 'function') {
+                await loadHeader('stock');
+                console.log('[loadHeader] header组件加载完成');
+            } else {
+                console.warn('[loadHeader] loadHeader函数未找到，尝试动态加载');
+                
+                // 动态加载header.js
+                const script = document.createElement('script');
+                script.src = 'components/header.js';
+                script.onload = async () => {
+                    if (typeof loadHeader === 'function') {
+                        await loadHeader('stock');
+                        console.log('[loadHeader] header组件动态加载完成');
+                    }
+                };
+                document.head.appendChild(script);
+            }
+        } catch (error) {
+            console.error('[loadHeader] header组件加载失败:', error);
+        }
     },
 
     // 绑定事件
@@ -118,27 +149,36 @@ const StockPage = {
 
     // 绑定搜索事件
     bindSearchEvents() {
-        const searchBtn = document.querySelector('.search-btn');
-        const searchModal = document.getElementById('searchModal');
-        const closeSearch = document.querySelector('.close-search');
-        const searchInput = document.querySelector('.search-input');
+        // 延迟绑定，确保header组件已加载
+        setTimeout(() => {
+            const searchBtn = document.querySelector('.search-btn');
+            const searchModal = document.getElementById('searchModal');
+            const closeSearch = document.querySelector('.close-search');
+            const searchInput = document.querySelector('.search-input');
 
-        searchBtn.addEventListener('click', () => {
-            searchModal.style.display = 'flex';
-            searchInput.focus();
-        });
-
-        closeSearch.addEventListener('click', () => {
-            searchModal.style.display = 'none';
-            searchInput.value = '';
-        });
-
-        searchModal.addEventListener('click', (e) => {
-            if (e.target === searchModal) {
-                searchModal.style.display = 'none';
-                searchInput.value = '';
+            if (searchBtn) {
+                searchBtn.addEventListener('click', () => {
+                    searchModal.style.display = 'flex';
+                    searchInput.focus();
+                });
             }
-        });
+
+            if (closeSearch) {
+                closeSearch.addEventListener('click', () => {
+                    searchModal.style.display = 'none';
+                    searchInput.value = '';
+                });
+            }
+
+            if (searchModal) {
+                searchModal.addEventListener('click', (e) => {
+                    if (e.target === searchModal) {
+                        searchModal.style.display = 'none';
+                        searchInput.value = '';
+                    }
+                });
+            }
+        }, 500); // 延迟500ms确保header组件加载完成
     },
 
     // 切换自选股状态

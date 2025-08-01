@@ -106,6 +106,8 @@
         document.getElementById('lastPage').disabled = (page === pageCount || pageCount === 0);
     }
 
+
+
     document.getElementById('searchBtn').onclick = function() {
         const start = document.getElementById('startDate').value;
         const end = document.getElementById('endDate').value;
