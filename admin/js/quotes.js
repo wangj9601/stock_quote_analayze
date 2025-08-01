@@ -36,7 +36,8 @@ async function apiRequest(url, options = {}) {
         // 处理401未授权错误
         if (response.status === 401) {
             localStorage.removeItem(CONFIG.TOKEN_KEY);
-            window.location.href = '/login.html';
+            // 管理端应该重定向到管理端首页，而不是前端登录页
+            window.location.href = '/admin/';
             throw new Error('登录已过期，请重新登录');
         }
         

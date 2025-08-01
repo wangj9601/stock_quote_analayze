@@ -13,7 +13,7 @@ const ADMIN_CONFIG = {
     AUTH: {
         TOKEN_KEY: 'admin_token',
         REFRESH_TOKEN_KEY: 'admin_refresh_token',
-        LOGIN_URL: '/login.html',
+        LOGIN_URL: '/admin/',
         LOGOUT_URL: '/api/admin/auth/logout'
     },
     

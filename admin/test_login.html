@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录状态测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>管理端登录状态测试</h1>
+        
+        <div id="testResults"></div>
+        
+        <div style="margin: 20px 0;">
+            <button onclick="testLoginStatus()">测试登录状态检查</button>
+            <button onclick="clearLocalStorage()">清除localStorage</button>
+            <button onclick="setMockLoginData()">设置模拟登录数据</button>
+            <button onclick="goToAdmin()">前往管理端</button>
+        </div>
+        
+        <div class="test-result info">
+            <strong>说明：</strong>
+            <ul>
+                <li>点击"测试登录状态检查"来验证当前的检查逻辑</li>
+                <li>点击"清除localStorage"来清除所有存储的登录信息</li>
+                <li>点击"设置模拟登录数据"来模拟已登录状态</li>
+                <li>点击"前往管理端"来访问实际的管理端页面</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+        }
+
+        function testLoginStatus() {
+            const isLoggedIn = localStorage.getItem('adminLoggedIn');
+            const adminData = localStorage.getItem('adminData');
+            
+            addResult(`localStorage检查结果:`, 'info');
+            addResult(`adminLoggedIn: ${isLoggedIn}`, 'info');
+            addResult(`adminData: ${adminData ? '存在' : '不存在'}`, 'info');
+            
+            if (isLoggedIn === 'true' && adminData) {
+                addResult('检测到登录数据，但应该显示登录页面', 'error');
+            } else {
+                addResult('未检测到登录数据，应该显示登录页面', 'success');
+            }
+        }
+
+        function clearLocalStorage() {
+            localStorage.clear();
+            addResult('localStorage已清除', 'success');
+        }
+
+        function setMockLoginData() {
+            localStorage.setItem('adminLoggedIn', 'true');
+            localStorage.setItem('adminData', JSON.stringify({username: 'admin'}));
+            addResult('已设置模拟登录数据', 'info');
+        }
+
+        function goToAdmin() {
+            window.location.href = 'index.html';
+        }
+
+        // 页面加载时自动测试
+        window.onload = function() {
+            addResult('页面加载完成，开始测试...', 'info');
+            testLoginStatus();
+        };
+    </script>
+</body>
+</html> 

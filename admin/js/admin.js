@@ -67,15 +67,8 @@ const AdminPanel = {
 
     // 检查登录状态
     checkLoginStatus() {
-        const isLoggedIn = localStorage.getItem('adminLoggedIn');
-        const adminData = localStorage.getItem('adminData');
-        
-        if (isLoggedIn === 'true' && adminData) {
-            this.currentUser = JSON.parse(adminData);
-            this.showAdminPanel();
-        } else {
-            this.showLoginPage();
-        }
+        // 首页始终显示登录页面，不自动登录
+        this.showLoginPage();
     },
 
     // 处理登录
@@ -91,7 +84,10 @@ const AdminPanel = {
 
             const response = await fetch(`${this.apiBaseUrl}/admin/login`, {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(formData)
             });
 
             const result = await response.json();
