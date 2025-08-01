@@ -127,14 +127,8 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
     return admin
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
-
-    print(f"数据库user.username: {repr(username)}")
-    print(f"数据库user.status: {password}")
-    print(f"数据库user.password_hash: {password}")
- 
     """验证用户"""
     query = db.query(User).filter(User.username == username)
-    print(str(query.statement))  # 打印SQL语句
     user = query.first()
     if not user:
         logger.warning(f"用户不存在: {username}")

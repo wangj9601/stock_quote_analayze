@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS admins (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    email VARCHAR(100),
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) DEFAULT 'admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -261,6 +261,7 @@ CREATE INDEX IF NOT EXISTS idx_quote_sync_tasks_created_at ON quote_sync_tasks(c
 -- 6. 创建视图
 -- =====================================================
 
+/*
 -- 股票综合信息视图
 CREATE OR REPLACE VIEW stock_summary AS
 SELECT 
@@ -281,7 +282,8 @@ SELECT
     srq.circulating_market_value,
     srq.update_time
 FROM stock_basic_info sbi
-LEFT JOIN stock_realtime_quote srq ON sbi.code = srq.code;
+LEFT JOIN stock_realtime_quote srq ON sbi.code = srq.code; */
+
 
 -- =====================================================
 -- 7. 创建函数
