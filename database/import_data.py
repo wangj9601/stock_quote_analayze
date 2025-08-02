@@ -12,11 +12,11 @@ from pathlib import Path
 
 # 数据库配置
 DB_CONFIG = {
-    "host": "192.168.31.237",
-    "port": "5446",
+    "host": "localhost",
+    "port": "5432",
     "user": "postgres",
     "password": "qidianspacetime",
-    "database": "stock_analysis_bak"
+    "database": "stock_analysis"
 }
 
 # 导入目录
