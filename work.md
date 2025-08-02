@@ -7,19 +7,18 @@ AIzaSyD1PSWLXbmZM2mfXPXjQ5iPMv0hiaNUdg8
 ## git 强制以远程的文件为准。
 git reset --hard origin/main
 
-# 安装 Git LFS：
+## 安装 Git LFS：
 
-git lfs install
-
-git lfs track "*.psd"
-
-git add .
-
-git commit -m "Add large files"
+    - git lfs install
+    - git lfs track "*.psd"
+    - git add .
+    - git commit -m "Add large files"
 
 git push origin main
 
-
+##不能访问git22,443端口
+    - ssh -T git@ssh.github.com -p 22
+    - ssh -T git@ssh.github.com -p 443
 
 
 # 数据采集主程序
