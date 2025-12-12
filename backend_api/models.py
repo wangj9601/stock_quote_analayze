@@ -564,6 +564,7 @@ class DataCollectionRequest(BaseModel):
     test_mode: bool = False
     full_collection_mode: bool = False  # 新增：全量采集模式
     market: str = 'CN'  # CN: A股, HK: 港股
+    force_update: bool = False  # 强制更新：如果为True，即使数据已存在也会重新采集并更新
 
 class DataCollectionResponse(BaseModel):
     """数据采集响应模型"""

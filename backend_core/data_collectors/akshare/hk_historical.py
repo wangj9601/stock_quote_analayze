@@ -131,88 +131,221 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             # 获取字段名列表
             col_names = [col for col in result.keys()]
             
-            affected = 0
+            # 按股票代码分组处理，以便计算涨跌幅
+            stocks_data = {}
             for row in realtime_rows:
                 record = dict(zip(col_names, row))
-                # 构造要插入/更新的字段
-                insert_dict = {
-                    # 字段映射：如有不同需调整
-                    'code': record.get('code'),
-                    'name': record.get('name'),
-                    'date': record.get('trade_date'),  # 记得历史行情表日期字段为date
-                    'english_name': record.get('english_name'),
-                    'close': record.get('current_price'), # 实时行情表中，最后的当前价格，就相当于收盘价
-                    'open': record.get('open'),
-                    'high': record.get('high'),
-                    'low': record.get('low'),
-                    'pre_close': record.get('pre_close'),
-                    'volume': record.get('volume'),
-                    'amount': record.get('amount'),
-                    #'amplitude': record.get('amplitude'),
-                    #'turnover_rate': record.get('turnover_rate'),
-                    'change_percent': record.get('change_percent'),
-                    'change_amount': record.get('change_amount'),  # 可能字段名有差异
-                    'collected_source': "akshare",
-                    'collected_date': collect_date,
-                    # 用当前时间替换有语法错误的行，赋值方式如下：
-                    'create_date': datetime.now()
-                }
-                # 处理可选的多天涨跌幅字段（没有则给None）
-                for day_field in [
-                    'five_day_change_percent',
-                    'ten_day_change_percent',
-                    'sixty_day_change_percent',
-                    'thirty_day_change_percent'
-                ]:
-                    insert_dict[day_field] = record.get(day_field)
-
-                # upsert逻辑：如果已有则更新，否则插入
+                stock_code = record.get('code')
+                if stock_code not in stocks_data:
+                    stocks_data[stock_code] = []
+                stocks_data[stock_code].append(record)
+            
+            affected = 0
+            # 对每只股票进行处理
+            for stock_code, records in stocks_data.items():
                 try:
-                    # 先尝试更新
-                    update_stmt = text("""
-                        UPDATE historical_quotes_hk SET
-                            name = :name,
-                            english_name = :english_name,
-                            close = :close,
-                            open = :open,
-                            high = :high,
-                            low = :low,
-                            pre_close = :pre_close,
-                            volume = :volume,
-                            amount = :amount,
-                            change_percent = :change_percent,
-                            change_amount = :change_amount,
-                            five_day_change_percent = :five_day_change_percent,
-                            ten_day_change_percent = :ten_day_change_percent,
-                            sixty_day_change_percent = :sixty_day_change_percent,
-                            thirty_day_change_percent = :thirty_day_change_percent,
-                            collected_source = :collected_source,
-                            collected_date = :collected_date,
-                            create_date = :create_date
-                        WHERE code = :code AND date = :date 
-                    """)
-                    result_update = session.execute(update_stmt, insert_dict)
-                    if result_update.rowcount == 0:
-                        # 没有更新任何行，执行插入
-                        insert_stmt = text("""
-                            INSERT INTO historical_quotes_hk (
-                                code, name, date, english_name, close, open, high, low, pre_close, volume, amount,
-                                change_percent, change_amount,
-                                five_day_change_percent, ten_day_change_percent, sixty_day_change_percent, thirty_day_change_percent,
-                                collected_source, collected_date, create_date
-                            ) VALUES (
-                                :code, :name, :date, :english_name, :close, :open, :high, :low, :pre_close, :volume, :amount,
-                                :change_percent, :change_amount,
-                                :five_day_change_percent, :ten_day_change_percent, :sixty_day_change_percent, :thirty_day_change_percent,
-                                :collected_source, :collected_date, :create_date
-                            )
-                        """)
-                        session.execute(insert_stmt, insert_dict)
-                    affected += 1
-                except Exception as e:
-                    self.logger.error(f"港股历史({insert_dict['code']}-{target_date})同步失败: {e}")
-                    session.rollback()
-                    continue
+                    # 获取该股票在历史行情表中的已有数据（用于计算涨跌幅）
+                    historical_result = session.execute(text("""
+                        SELECT date, close 
+                        FROM historical_quotes_hk 
+                        WHERE code = :code 
+                        ORDER BY date ASC
+                    """), {"code": stock_code})
+                    historical_data = historical_result.fetchall()
+                    
+                    # 构建DataFrame用于计算涨跌幅
+                    historical_df_data = []
+                    for hist_row in historical_data:
+                        historical_df_data.append({
+                            'date': hist_row[0],
+                            'close': hist_row[1]
+                        })
+                    
+                    # 添加当前要插入的数据
+                    for record in records:
+                        close_price = record.get('current_price')
+                        if close_price:
+                            historical_df_data.append({
+                                'date': record.get('trade_date'),
+                                'close': float(close_price) if close_price else None
+                            })
+                    
+                    # 如果有数据，计算涨跌幅
+                    change_percents = {}
+                    if historical_df_data:
+                        df = pd.DataFrame(historical_df_data)
+                        df = df.sort_values('date')
+                        df = df.drop_duplicates(subset=['date'], keep='last')  # 去重，保留最新的
+                        
+                        if 'close' in df.columns and len(df) > 0:
+                            # 计算涨跌幅（与A股逻辑相同）
+                            df['five_day_change_percent'] = df['close'].pct_change(periods=5) * 100
+                            df['ten_day_change_percent'] = df['close'].pct_change(periods=10) * 100
+                            df['thirty_day_change_percent'] = df['close'].pct_change(periods=30) * 100
+                            df['sixty_day_change_percent'] = df['close'].pct_change(periods=60) * 100
+                            
+                            # 将计算结果存储到字典中
+                            for _, row in df.iterrows():
+                                change_percents[row['date']] = {
+                                    'five_day_change_percent': self._safe_value(row.get('five_day_change_percent')),
+                                    'ten_day_change_percent': self._safe_value(row.get('ten_day_change_percent')),
+                                    'thirty_day_change_percent': self._safe_value(row.get('thirty_day_change_percent')),
+                                    'sixty_day_change_percent': self._safe_value(row.get('sixty_day_change_percent'))
+                                }
+                    
+                    # 处理每条记录
+                    for record in records:
+                        trade_date = record.get('trade_date')
+                        change_data = change_percents.get(trade_date, {})
+                        
+                        # 构造要插入/更新的字段
+                        insert_dict = {
+                            # 字段映射：如有不同需调整
+                            'code': record.get('code'),
+                            'name': record.get('name'),
+                            'date': trade_date,  # 记得历史行情表日期字段为date
+                            'english_name': record.get('english_name'),
+                            'close': record.get('current_price'), # 实时行情表中，最后的当前价格，就相当于收盘价
+                            'open': record.get('open'),
+                            'high': record.get('high'),
+                            'low': record.get('low'),
+                            'pre_close': record.get('pre_close'),
+                            'volume': record.get('volume'),
+                            'amount': record.get('amount'),
+                            #'amplitude': record.get('amplitude'),
+                            #'turnover_rate': record.get('turnover_rate'),
+                            'change_percent': record.get('change_percent'),
+                            'change_amount': record.get('change_amount'),  # 可能字段名有差异
+                            'collected_source': "akshare",
+                            'collected_date': collect_date,
+                            # 用当前时间替换有语法错误的行，赋值方式如下：
+                            'create_date': datetime.now(),
+                            # 使用计算出的涨跌幅
+                            'five_day_change_percent': change_data.get('five_day_change_percent'),
+                            'ten_day_change_percent': change_data.get('ten_day_change_percent'),
+                            'thirty_day_change_percent': change_data.get('thirty_day_change_percent'),
+                            'sixty_day_change_percent': change_data.get('sixty_day_change_percent')
+                        }
+                        
+                        # upsert逻辑：如果已有则更新，否则插入
+                        try:
+                            # 先尝试更新
+                            update_stmt = text("""
+                                UPDATE historical_quotes_hk SET
+                                    name = :name,
+                                    english_name = :english_name,
+                                    close = :close,
+                                    open = :open,
+                                    high = :high,
+                                    low = :low,
+                                    pre_close = :pre_close,
+                                    volume = :volume,
+                                    amount = :amount,
+                                    change_percent = :change_percent,
+                                    change_amount = :change_amount,
+                                    five_day_change_percent = :five_day_change_percent,
+                                    ten_day_change_percent = :ten_day_change_percent,
+                                    sixty_day_change_percent = :sixty_day_change_percent,
+                                    thirty_day_change_percent = :thirty_day_change_percent,
+                                    collected_source = :collected_source,
+                                    collected_date = :collected_date,
+                                    create_date = :create_date
+                                WHERE code = :code AND date = :date 
+                            """)
+                            result_update = session.execute(update_stmt, insert_dict)
+                            if result_update.rowcount == 0:
+                                # 没有更新任何行，执行插入
+                                insert_stmt = text("""
+                                    INSERT INTO historical_quotes_hk (
+                                        code, name, date, english_name, close, open, high, low, pre_close, volume, amount,
+                                        change_percent, change_amount,
+                                        five_day_change_percent, ten_day_change_percent, sixty_day_change_percent, thirty_day_change_percent,
+                                        collected_source, collected_date, create_date
+                                    ) VALUES (
+                                        :code, :name, :date, :english_name, :close, :open, :high, :low, :pre_close, :volume, :amount,
+                                        :change_percent, :change_amount,
+                                        :five_day_change_percent, :ten_day_change_percent, :sixty_day_change_percent, :thirty_day_change_percent,
+                                        :collected_source, :collected_date, :create_date
+                                    )
+                                """)
+                                session.execute(insert_stmt, insert_dict)
+                            affected += 1
+                        except Exception as e:
+                            self.logger.error(f"港股历史({insert_dict['code']}-{insert_dict['date']})同步失败: {e}")
+                            session.rollback()
+                            continue
+                        
+                except Exception as stock_error:
+                    self.logger.error(f"处理股票 {stock_code} 的涨跌幅计算失败: {stock_error}")
+                    # 即使计算失败，也尝试插入数据（不包含涨跌幅）
+                    for record in records:
+                        try:
+                            insert_dict = {
+                                'code': record.get('code'),
+                                'name': record.get('name'),
+                                'date': record.get('trade_date'),
+                                'english_name': record.get('english_name'),
+                                'close': record.get('current_price'),
+                                'open': record.get('open'),
+                                'high': record.get('high'),
+                                'low': record.get('low'),
+                                'pre_close': record.get('pre_close'),
+                                'volume': record.get('volume'),
+                                'amount': record.get('amount'),
+                                'change_percent': record.get('change_percent'),
+                                'change_amount': record.get('change_amount'),
+                                'collected_source': "akshare",
+                                'collected_date': collect_date,
+                                'create_date': datetime.now(),
+                                'five_day_change_percent': None,
+                                'ten_day_change_percent': None,
+                                'thirty_day_change_percent': None,
+                                'sixty_day_change_percent': None
+                            }
+                            
+                            update_stmt = text("""
+                                UPDATE historical_quotes_hk SET
+                                    name = :name,
+                                    english_name = :english_name,
+                                    close = :close,
+                                    open = :open,
+                                    high = :high,
+                                    low = :low,
+                                    pre_close = :pre_close,
+                                    volume = :volume,
+                                    amount = :amount,
+                                    change_percent = :change_percent,
+                                    change_amount = :change_amount,
+                                    five_day_change_percent = :five_day_change_percent,
+                                    ten_day_change_percent = :ten_day_change_percent,
+                                    sixty_day_change_percent = :sixty_day_change_percent,
+                                    thirty_day_change_percent = :thirty_day_change_percent,
+                                    collected_source = :collected_source,
+                                    collected_date = :collected_date,
+                                    create_date = :create_date
+                                WHERE code = :code AND date = :date 
+                            """)
+                            result_update = session.execute(update_stmt, insert_dict)
+                            if result_update.rowcount == 0:
+                                insert_stmt = text("""
+                                    INSERT INTO historical_quotes_hk (
+                                        code, name, date, english_name, close, open, high, low, pre_close, volume, amount,
+                                        change_percent, change_amount,
+                                        five_day_change_percent, ten_day_change_percent, sixty_day_change_percent, thirty_day_change_percent,
+                                        collected_source, collected_date, create_date
+                                    ) VALUES (
+                                        :code, :name, :date, :english_name, :close, :open, :high, :low, :pre_close, :volume, :amount,
+                                        :change_percent, :change_amount,
+                                        :five_day_change_percent, :ten_day_change_percent, :sixty_day_change_percent, :thirty_day_change_percent,
+                                        :collected_source, :collected_date, :create_date
+                                    )
+                                """)
+                                session.execute(insert_stmt, insert_dict)
+                            affected += 1
+                        except Exception as e:
+                            self.logger.error(f"港股历史({insert_dict['code']}-{insert_dict['date']})同步失败: {e}")
+                            session.rollback()
+                            continue
 
             session.commit()
             self.logger.info(f"{target_date} 共有 {affected} 条港股实时数据同步到了历史行情表")

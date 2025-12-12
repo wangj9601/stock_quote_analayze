@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import logging
 from pathlib import Path
+import time
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
@@ -89,6 +90,19 @@ class HKIndexRealtimeCollector:
         session.commit()
         return session
 
+    def _retry_on_failure(self, func, max_retries=3, retry_delay=5, *args, **kwargs):
+        """失败重试装饰器"""
+        for i in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if i == max_retries - 1:
+                    self.logger.error(f"函数 {func.__name__ if hasattr(func, '__name__') else 'unknown'} 执行失败: {str(e)}")
+                    raise
+                self.logger.warning(f"第 {i+1} 次重试失败: {str(e)}，{retry_delay}秒后重试")
+                time.sleep(retry_delay)
+        raise Exception("重试次数用尽")
+
     def collect_realtime_quotes(self):
         """采集港股指数实时行情数据（全量）"""
         session = None
@@ -98,10 +112,10 @@ class HKIndexRealtimeCollector:
             collected_data = []
             basic_info_data = []
             
-            # 优先尝试使用 stock_hk_index_spot_em 获取全量数据
+            # 优先尝试使用 stock_hk_index_spot_em 获取全量数据（带重试）
             try:
                 self.logger.info('尝试使用 stock_hk_index_spot_em 接口获取全量港股指数数据')
-                df = ak.stock_hk_index_spot_em()
+                df = self._retry_on_failure(ak.stock_hk_index_spot_em, max_retries=3, retry_delay=5)
                 
                 if df is not None and not df.empty:
                     self.logger.info(f'stock_hk_index_spot_em 返回数据形状: {df.shape}')
@@ -150,25 +164,25 @@ class HKIndexRealtimeCollector:
                     self.logger.info(f'成功从 stock_hk_index_spot_em 获取 {len(collected_data)} 条港股指数数据')
                         
             except Exception as e1:
-                self.logger.warning(f'stock_hk_index_spot_em 接口调用失败: {str(e1)}，尝试使用 stock_hk_index_daily_sina')
+                self.logger.warning(f'stock_hk_index_spot_em 接口调用失败: {str(e1)}，尝试使用 stock_hk_index_spot_sina')
                 
-                # 失败则尝试使用 stock_hk_index_daily_sina 获取主要指数
+                # 失败则尝试使用 stock_hk_index_spot_sina 获取全量数据（不需要参数）
                 try:
-                    # 主要港股指数代码映射
-                    main_indices = {
-                        'HSI': '恒生指数',
-                        'HSTECH': '恒生科技指数',
-                        'HSCI': '恒生综合指数',
-                        'HSCEI': '恒生中国企业指数'
-                    }
+                    self.logger.info('尝试使用 stock_hk_index_spot_sina 接口获取全量港股指数数据')
+                    df = self._retry_on_failure(ak.stock_hk_index_spot_sina, max_retries=3, retry_delay=5)
                     
-                    for code, name in main_indices.items():
-                        try:
-                            df_sina = ak.stock_hk_index_daily_sina(symbol=code)
-                            
-                            if df_sina is not None and not df_sina.empty:
-                                # 获取最新一条数据
-                                latest_row = df_sina.iloc[-1]
+                    if df is not None and not df.empty:
+                        self.logger.info(f'stock_hk_index_spot_sina 返回数据形状: {df.shape}')
+                        
+                        # 处理全量数据
+                        for _, row in df.iterrows():
+                            try:
+                                # 提取指数代码和名称
+                                code = str(row.get('代码', row.get('code', '')))
+                                name = str(row.get('名称', row.get('name', '')))
+                                
+                                if not code or not name:
+                                    continue
                                 
                                 # 基础信息
                                 basic_info = {
@@ -178,49 +192,36 @@ class HKIndexRealtimeCollector:
                                 }
                                 basic_info_data.append(basic_info)
                                 
-                                # 提取数据
-                                current = self._safe_float(latest_row.get('close', latest_row.get('收盘', None)))
-                                
-                                # 计算涨跌额和涨跌幅
-                                if len(df_sina) >= 2:
-                                    prev_row = df_sina.iloc[-2]
-                                    prev_close = self._safe_float(prev_row.get('close', prev_row.get('收盘', None)))
-                                    if current is not None and prev_close is not None and prev_close > 0:
-                                        change = current - prev_close
-                                        pct_chg = (change / prev_close) * 100
-                                    else:
-                                        change = None
-                                        pct_chg = None
-                                else:
-                                    change = None
-                                    pct_chg = None
-                                    prev_close = None
-                                
+                                # 实时行情数据
                                 data = {
                                     'code': code,
                                     'name': name,
-                                    'price': current,
-                                    'change': change,
-                                    'pct_chg': pct_chg,
-                                    'open': self._safe_float(latest_row.get('open', latest_row.get('开盘', None))),
-                                    'pre_close': prev_close,
-                                    'high': self._safe_float(latest_row.get('high', latest_row.get('最高', None))),
-                                    'low': self._safe_float(latest_row.get('low', latest_row.get('最低', None))),
-                                    'volume': self._safe_float(latest_row.get('volume', latest_row.get('成交量', 0))),
-                                    'amount': 0,  # sina接口可能没有成交额
+                                    'price': self._safe_float(row.get('最新价', row.get('current', row.get('price', None)))),
+                                    'change': self._safe_float(row.get('涨跌额', row.get('change', row.get('change_amount', None)))),
+                                    'pct_chg': self._safe_float(row.get('涨跌幅', row.get('change_percent', row.get('pct_chg', None)))),
+                                    'open': self._safe_float(row.get('今开', row.get('open', None))),
+                                    'pre_close': self._safe_float(row.get('昨收', row.get('pre_close', None))),
+                                    'high': self._safe_float(row.get('最高', row.get('high', None))),
+                                    'low': self._safe_float(row.get('最低', row.get('low', None))),
+                                    'volume': self._safe_float(row.get('成交量', row.get('volume', row.get('vol', 0)))),
+                                    'amount': self._safe_float(row.get('成交额', row.get('amount', 0))),
                                 }
                                 collected_data.append(data)
-                                self.logger.info(f'通过sina接口成功获取 {name} 数据')
-                        except Exception as e2:
-                            self.logger.warning(f'通过sina接口获取 {name} 失败: {str(e2)}')
-                            continue
-                    
-                    if not collected_data:
-                        raise Exception('所有接口都未能获取到数据')
+                                
+                            except Exception as e:
+                                self.logger.warning(f'处理指数时出错: {str(e)}')
+                                continue
+                        
+                        if not collected_data:
+                            raise Exception('未能从 stock_hk_index_spot_sina 获取任何指数数据')
+                        
+                        self.logger.info(f'成功从 stock_hk_index_spot_sina 获取 {len(collected_data)} 条港股指数数据')
+                    else:
+                        raise Exception('stock_hk_index_spot_sina 返回空数据')
                         
                 except Exception as e2:
-                    self.logger.error(f'stock_hk_index_daily_sina 接口调用失败: {str(e2)}')
-                    raise Exception(f'港股指数数据获取失败: {str(e2)}')
+                    self.logger.error(f'stock_hk_index_spot_sina 接口调用失败: {str(e2)}')
+                    raise Exception(f'港股指数数据获取失败: stock_hk_index_spot_em错误={str(e1)}, stock_hk_index_spot_sina错误={str(e2)}')
             
             # 如果成功获取数据，写入数据库
             if collected_data and basic_info_data:

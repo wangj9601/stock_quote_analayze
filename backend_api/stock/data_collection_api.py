@@ -397,27 +397,40 @@ class AkshareDataCollector:
             logger.error(f"更新股票 {stock_code} 全量采集标志失败: {e}")
             # 不抛出异常，避免影响主流程
     
-    def collect_single_hk_stock_data(self, stock_code: str, stock_name: str, start_date: str, end_date: str, is_full_collection: bool = False) -> bool:
-        """采集单只港股的历史数据"""
+    def collect_single_hk_stock_data(self, stock_code: str, stock_name: str, start_date: str, end_date: str, is_full_collection: bool = False, force_update: bool = False) -> bool:
+        """
+        采集单只港股的历史数据
+        
+        Args:
+            stock_code: 股票代码
+            stock_name: 股票名称
+            start_date: 开始日期
+            end_date: 结束日期
+            is_full_collection: 是否全量采集模式
+            force_update: 是否强制更新（如果为True，即使数据已存在也会重新采集并更新）
+        """
         try:
-            # 检查已存在的数据
-            # 港股表是 historical_quotes_hk
-            result = self.session.execute(text("""
-                SELECT date 
-                FROM historical_quotes_hk 
-                WHERE code = :stock_code 
-                AND date >= :start_date 
-                AND date <= :end_date
-                ORDER BY date
-            """), {
-                'stock_code': stock_code,
-                'start_date': start_date,
-                'end_date': end_date
-            })
-            
-            existing_dates = [row[0] for row in result.fetchall()]
-            if existing_dates:
-                logger.debug(f"港股 {stock_code} 在 {start_date} 到 {end_date} 期间已有 {len(existing_dates)} 天数据")
+            # 检查已存在的数据（仅在非强制更新模式下）
+            existing_dates = []
+            if not force_update:
+                result = self.session.execute(text("""
+                    SELECT date 
+                    FROM historical_quotes_hk 
+                    WHERE code = :stock_code 
+                    AND date >= :start_date 
+                    AND date <= :end_date
+                    ORDER BY date
+                """), {
+                    'stock_code': stock_code,
+                    'start_date': start_date,
+                    'end_date': end_date
+                })
+                
+                existing_dates = [row[0] for row in result.fetchall()]
+                if existing_dates:
+                    logger.debug(f"港股 {stock_code} 在 {start_date} 到 {end_date} 期间已有 {len(existing_dates)} 天数据")
+            else:
+                logger.info(f"港股 {stock_code} 强制更新模式：将重新采集并更新所有数据")
             
             # 使用akshare获取历史数据
             logger.info(f"开始采集港股 {stock_code} 的历史数据...")
@@ -521,8 +534,8 @@ class AkshareDataCollector:
                         if len(trade_date) == 8:
                             trade_date = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:8]}"
                     
-                    # 检查是否已存在
-                    if trade_date in existing_dates:
+                    # 检查是否已存在（仅在非强制更新模式下）
+                    if not force_update and trade_date in existing_dates:
                         skip_count += 1
                         continue
                     
@@ -557,7 +570,7 @@ class AkshareDataCollector:
                         'collected_date': datetime.now().isoformat()
                     }
                     
-                    # 插入数据
+                    # 插入或更新数据（使用ON CONFLICT DO UPDATE实现强制更新）
                     self.session.execute(text("""
                         INSERT INTO historical_quotes_hk
                         (code, ts_code, name, english_name, date, open, high, low, close, pre_close, 
@@ -568,6 +581,27 @@ class AkshareDataCollector:
                                 :volume, :amount, :change_amount, :change_percent, :turnover_rate, :amplitude,
                                 :five_day_change_percent, :ten_day_change_percent, :thirty_day_change_percent, :sixty_day_change_percent,
                                 :collected_source, :collected_date)
+                        ON CONFLICT (code, date) DO UPDATE SET
+                            ts_code = EXCLUDED.ts_code,
+                            name = EXCLUDED.name,
+                            english_name = EXCLUDED.english_name,
+                            open = EXCLUDED.open,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            close = EXCLUDED.close,
+                            pre_close = EXCLUDED.pre_close,
+                            volume = EXCLUDED.volume,
+                            amount = EXCLUDED.amount,
+                            change_amount = EXCLUDED.change_amount,
+                            change_percent = EXCLUDED.change_percent,
+                            turnover_rate = EXCLUDED.turnover_rate,
+                            amplitude = EXCLUDED.amplitude,
+                            five_day_change_percent = EXCLUDED.five_day_change_percent,
+                            ten_day_change_percent = EXCLUDED.ten_day_change_percent,
+                            thirty_day_change_percent = EXCLUDED.thirty_day_change_percent,
+                            sixty_day_change_percent = EXCLUDED.sixty_day_change_percent,
+                            collected_source = EXCLUDED.collected_source,
+                            collected_date = EXCLUDED.collected_date
                     """), data)
                     
                     success_count += 1
@@ -599,7 +633,7 @@ class AkshareDataCollector:
             self.failed_stocks.append(f"{stock_code}: {str(e)}")
             return False
     
-    def collect_historical_data(self, start_date: str, end_date: str, stock_codes: Optional[List[str]] = None, full_collection_mode: bool = False, market: str = 'CN') -> Dict[str, any]:
+    def collect_historical_data(self, start_date: str, end_date: str, stock_codes: Optional[List[str]] = None, full_collection_mode: bool = False, market: str = 'CN', force_update: bool = False) -> Dict[str, any]:
         """批量采集历史行情数据"""
         try:
             logger.info(f"开始批量采集历史行情数据: {start_date} 到 {end_date}, 市场: {market}")
@@ -687,7 +721,7 @@ class AkshareDataCollector:
                             self.skipped_count += 1
                             continue
                     
-                    if self.collect_single_hk_stock_data(stock['code'], stock['name'], start_date, end_date, full_collection_mode and market == 'HK'):
+                    if self.collect_single_hk_stock_data(stock['code'], stock['name'], start_date, end_date, full_collection_mode and market == 'HK', force_update):
                         success_count += 1
                 else:
                     # A股
@@ -834,7 +868,8 @@ async def start_historical_collection(
             request.stock_codes,
             request.test_mode,
             request.full_collection_mode,
-            request.market
+            request.market,
+            request.force_update
         )
         
         logger.info(f"启动历史数据采集任务: {task_id}")
@@ -862,7 +897,8 @@ def run_historical_collection_task(
     stock_codes: Optional[List[str]] = None,
     test_mode: bool = False,
     full_collection_mode: bool = False,
-    market: str = 'CN'
+    market: str = 'CN',
+    force_update: bool = False
 ):
     """运行历史数据采集任务（后台任务）"""
     global current_task_id
@@ -905,7 +941,7 @@ def run_historical_collection_task(
                     collection_tasks[task_id]["total_stocks"] = total
             
             # 执行采集
-            result = collector.collect_historical_data(start_date, end_date, stock_codes, full_collection_mode, market)
+            result = collector.collect_historical_data(start_date, end_date, stock_codes, full_collection_mode, market, force_update)
             
             # 更新任务状态
             with task_lock:

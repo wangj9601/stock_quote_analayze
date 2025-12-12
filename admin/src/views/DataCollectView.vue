@@ -266,6 +266,16 @@
                     <p>将采集数据库中所有港股的历史数据。由于akshare限流要求，系统采用单任务执行模式，每次采集间隔5秒。</p>
                   </el-alert>
 
+                  <!-- 强制更新选项 -->
+                  <el-form-item>
+                    <el-checkbox v-model="hkForm.force_update">
+                      强制更新（如果已存在此日期的历史数据，将重新采集并更新）
+                    </el-checkbox>
+                    <div class="text-sm text-gray-500 mt-1">
+                      未选择强制更新时，如果已存在数据则跳过插入
+                    </div>
+                  </el-form-item>
+
                   <!-- 操作按钮 -->
                   <el-form-item>
                     <el-button
@@ -435,6 +445,7 @@ interface HKFormData {
   end_date: string
   stock_codes_text: string
   collection_type: 'specified' | 'all'
+  force_update: boolean
 }
 
 interface RequestData {
@@ -444,6 +455,7 @@ interface RequestData {
   stock_codes?: string[]
   full_collection_mode?: boolean
   market?: string
+  force_update?: boolean
 }
 
 // 标签页状态
@@ -466,7 +478,8 @@ const hkForm = ref<HKFormData>({
   start_date: '',
   end_date: '',
   stock_codes_text: '',
-  collection_type: 'specified'
+  collection_type: 'specified',
+  force_update: false
 })
 
 // TuShare表单数据
@@ -594,7 +607,8 @@ const startHKCollection = async () => {
       start_date: hkForm.value.start_date,
       end_date: hkForm.value.end_date,
       test_mode: false,
-      market: 'HK'
+      market: 'HK',
+      force_update: hkForm.value.force_update
     }
 
     if (hkForm.value.collection_type === 'specified') {
@@ -689,7 +703,8 @@ const resetHKForm = () => {
     start_date: '',
     end_date: '',
     stock_codes_text: '',
-    collection_type: 'specified'
+    collection_type: 'specified',
+    force_update: false
   }
 }
 
