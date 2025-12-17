@@ -557,105 +557,29 @@ async def get_hk_minute_data_by_code(code: str = Query(None, description="股票
         traceback.print_exc()
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
-# 港股K线历史数据接口（日线/周线/月线）
+# 港股K线历史数据接口（日线/周线/月线/季线/半年线/年线）
 @router.get("/kline_hist")
 async def get_hk_kline_hist(
     code: str = Query(None, description="股票代码"),
-    period: str = Query("daily", description="周期，如daily/weekly/monthly"),
+    period: str = Query("daily", description="周期，如daily/weekly/monthly/quarterly/semiannual/annual"),
     start_date: str = Query(None, description="开始日期，YYYY-MM-DD"),
     end_date: str = Query(None, description="结束日期，YYYY-MM-DD"),
     adjust: str = Query("", description="复权类型，港股暂不支持复权"),
     db: Session = Depends(get_db)
 ):
     """
-    获取港股K线历史数据（日线/周线/月线）
-    从historical_quotes_hk表查询
+    获取港股K线历史数据
+    修改后：从数据库历史行情表获取除当天外的数据，当天数据从实时行情表获取
     """
     print(f"[hk_kline_hist] 输入参数: code={code}, period={period}, start_date={start_date}, end_date={end_date}")
     if not code or not start_date or not end_date:
         return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
     
     try:
-        # 从数据库查询历史数据
-        query = db.query(HistoricalQuotesHK).filter(
-            HistoricalQuotesHK.code == code
-        )
+        from datetime import datetime
+        import pandas as pd
+        today = datetime.now().strftime('%Y-%m-%d')
         
-        # 日期过滤
-        if start_date:
-            query = query.filter(HistoricalQuotesHK.date >= start_date)
-        if end_date:
-            query = query.filter(HistoricalQuotesHK.date <= end_date)
-        
-        # 按日期降序
-        query = query.order_by(HistoricalQuotesHK.date.desc())
-        
-        quotes = query.all()
-        
-        # 如果数据库没有数据，尝试从akshare获取
-        if not quotes:
-            print(f"[hk_kline_hist] 数据库没有数据，尝试从akshare获取")
-            try:
-                import akshare as ak
-                from datetime import datetime
-                
-                # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-                start_date_str = start_date.replace("-", "")
-                end_date_str = end_date.replace("-", "")
-                
-                # 根据周期选择接口
-                if period == "daily":
-                    df = ak.stock_hk_hist(symbol=code, period='daily', start_date=start_date_str, end_date=end_date_str, adjust='')
-                elif period == "weekly":
-                    df = ak.stock_hk_hist(symbol=code, period='weekly', start_date=start_date_str, end_date=end_date_str, adjust='')
-                elif period == "monthly":
-                    df = ak.stock_hk_hist(symbol=code, period='monthly', start_date=start_date_str, end_date=end_date_str, adjust='')
-                else:
-                    df = ak.stock_hk_hist(symbol=code, period='daily', start_date=start_date_str, end_date=end_date_str, adjust='')
-                
-                if df is None or df.empty:
-                    return JSONResponse({"success": False, "message": f"未找到股票代码: {code} 的历史数据"}, status_code=404)
-                
-                # 转换DataFrame为返回格式
-                result = []
-                for _, row in df.iterrows():
-                    try:
-                        date_val = row.get('日期', '')
-                        date_str = str(date_val) if date_val is not None else ''
-                        # 处理日期格式：YYYYMMDD -> YYYY-MM-DD
-                        if len(date_str) == 8 and date_str.isdigit():
-                            date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-                        elif len(date_str) == 10 and '-' in date_str:
-                            # 已经是 YYYY-MM-DD 格式
-                            pass
-                        elif isinstance(date_val, pd.Timestamp):
-                            date_str = date_val.strftime("%Y-%m-%d")
-                        
-                        result.append({
-                            "date": date_str,
-                            "open": float(row.get('开盘', 0)) if pd.notna(row.get('开盘')) else 0,
-                            "close": float(row.get('收盘', 0)) if pd.notna(row.get('收盘')) else 0,
-                            "high": float(row.get('最高', 0)) if pd.notna(row.get('最高')) else 0,
-                            "low": float(row.get('最低', 0)) if pd.notna(row.get('最低')) else 0,
-                            "volume": float(row.get('成交量', 0)) if pd.notna(row.get('成交量')) else 0,
-                            "amount": float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else 0,
-                        })
-                    except Exception as e:
-                        print(f"[hk_kline_hist] 处理行数据时出错: {e}, row: {row}")
-                        continue
-                
-                # 按日期降序排列
-                result.sort(key=lambda x: x['date'], reverse=True)
-                
-                print(f"[hk_kline_hist] 从akshare获取到{len(result)}条K线数据")
-                return JSONResponse({"success": True, "data": result})
-            except Exception as e:
-                print(f"[hk_kline_hist] 从akshare获取数据失败: {e}")
-                import traceback
-                traceback.print_exc()
-                return JSONResponse({"success": False, "message": f"未找到股票代码: {code} 的历史数据"}, status_code=404)
-        
-        result = []
         def fmt(val):
             try:
                 if val is None:
@@ -664,31 +588,237 @@ async def get_hk_kline_hist(
             except Exception:
                 return None
         
-        for quote in quotes:
-            result.append({
-                "date": quote.date,
-                "code": quote.code,
-                "open": fmt(quote.open),
-                "close": fmt(quote.close),
-                "high": fmt(quote.high),
-                "low": fmt(quote.low),
-                "volume": int(quote.volume) if quote.volume is not None else None,
-                "amount": fmt(quote.amount),
-                "amplitude": fmt(quote.amplitude),
-                "pct_chg": fmt(quote.change_percent),
-                "change": fmt(quote.change_amount),
-                "turnover": fmt(quote.turnover_rate),
-            })
+        # 如果是日线，直接从数据库查询并合并
+        if period == "daily":
+            result = []
+            
+            # 1. 查询历史数据（除当天外，港股date是String类型）
+            historical_query = db.query(HistoricalQuotesHK).filter(
+                HistoricalQuotesHK.code == code,
+                HistoricalQuotesHK.date >= start_date,
+                HistoricalQuotesHK.date < today
+            ).order_by(HistoricalQuotesHK.date.asc())
+            
+            historical_quotes = historical_query.all()
+            
+            # 转换历史数据
+            for quote in historical_quotes:
+                result.append({
+                    "date": quote.date,
+                    "code": code,
+                    "open": fmt(quote.open),
+                    "close": fmt(quote.close),
+                    "high": fmt(quote.high),
+                    "low": fmt(quote.low),
+                    "volume": int(quote.volume) if quote.volume is not None else None,
+                    "amount": fmt(quote.amount),
+                    "amplitude": fmt(quote.amplitude),
+                    "pct_chg": fmt(quote.change_percent),
+                    "change": fmt(quote.change_amount),
+                    "turnover": fmt(quote.turnover_rate),
+                })
+            
+            # 2. 查询当天实时数据
+            today_realtime = db.query(StockRealtimeQuoteHK).filter(
+                StockRealtimeQuoteHK.code == code,
+                StockRealtimeQuoteHK.trade_date == today
+            ).first()
+            
+            if today_realtime:
+                result.append({
+                    "date": today,
+                    "code": code,
+                    "open": fmt(today_realtime.open),
+                    "close": fmt(today_realtime.current_price),  # 实时行情中current_price相当于收盘价
+                    "high": fmt(today_realtime.high),
+                    "low": fmt(today_realtime.low),
+                    "volume": int(today_realtime.volume) if today_realtime.volume is not None else None,
+                    "amount": fmt(today_realtime.amount),
+                    "amplitude": None,  # 实时数据可能没有振幅
+                    "pct_chg": fmt(today_realtime.change_percent),
+                    "change": fmt(today_realtime.change_amount),
+                    "turnover": None,  # 实时数据可能没有换手率
+                })
+            
+            # 按日期排序
+            result.sort(key=lambda x: x['date'])
+            
+            print(f"[hk_kline_hist] 返回{len(result)}条日线数据（历史{len(historical_quotes)}条，当天{1 if today_realtime else 0}条）")
+            return JSONResponse({"success": True, "data": result})
         
-        # 如果是周线或月线，需要聚合数据
-        if period == "weekly" or period == "monthly":
-            # 简单的聚合逻辑：按周/月分组，取第一天的开盘、最后一天的收盘、最高价、最低价、成交量总和
-            # 这里简化处理，直接返回日线数据，前端可以自行聚合
-            pass
-        
-        print(f"[hk_kline_hist] 返回{len(result)}条K线数据")
-        return JSONResponse({"success": True, "data": result})
-        
+        # 其他周期：优先从周期表查询，如果没有则从日线数据实时聚合
+        else:
+            # 周期表映射
+            period_table_map = {
+                'weekly': 'hk_weekly_quotes',
+                'monthly': 'hk_monthly_quotes',
+                'quarterly': 'hk_quarterly_quotes',
+                'semiannual': 'hk_semiannual_quotes',
+                'annual': 'hk_annual_quotes'
+            }
+            
+            table_name = period_table_map.get(period)
+            result = []
+            
+            # 尝试从周期表查询
+            if table_name:
+                try:
+                    period_query = db.execute(text(f"""
+                        SELECT code, date, open, close, high, low, volume, amount, 
+                               change_percent, change_amount, amplitude, turnover_rate
+                        FROM {table_name}
+                        WHERE code = :code AND date >= :start_date AND date <= :end_date
+                        ORDER BY date ASC
+                    """), {
+                        "code": code,
+                        "start_date": start_date,
+                        "end_date": end_date
+                    })
+                    period_rows = period_query.fetchall()
+                    
+                    if period_rows:
+                        for row in period_rows:
+                            result.append({
+                                "date": str(row[1]),
+                                "code": row[0],
+                                "open": fmt(row[2]),
+                                "close": fmt(row[3]),
+                                "high": fmt(row[4]),
+                                "low": fmt(row[5]),
+                                "volume": int(row[6]) if row[6] is not None else None,
+                                "amount": fmt(row[7]),
+                                "amplitude": fmt(row[10]),
+                                "pct_chg": fmt(row[8]),
+                                "change": fmt(row[9]),
+                                "turnover": fmt(row[11]),
+                            })
+                        print(f"[hk_kline_hist] 从周期表{table_name}返回{len(result)}条数据")
+                        return JSONResponse({"success": True, "data": result})
+                except Exception as e:
+                    print(f"[hk_kline_hist] 从周期表{table_name}查询失败，将使用实时聚合: {e}")
+            
+            # Fallback: 从日线数据实时聚合
+            print(f"[hk_kline_hist] 从日线数据实时聚合{period}周期数据")
+            
+            # 获取日线数据（包括当天）
+            daily_query = db.query(HistoricalQuotesHK).filter(
+                HistoricalQuotesHK.code == code,
+                HistoricalQuotesHK.date >= start_date,
+                HistoricalQuotesHK.date < today
+            ).order_by(HistoricalQuotesHK.date.asc())
+            
+            daily_quotes = daily_query.all()
+            
+            # 获取当天实时数据
+            today_realtime = db.query(StockRealtimeQuoteHK).filter(
+                StockRealtimeQuoteHK.code == code,
+                StockRealtimeQuoteHK.trade_date == today
+            ).first()
+            
+            # 构建DataFrame
+            daily_data = []
+            for quote in daily_quotes:
+                daily_data.append({
+                    'date': quote.date,
+                    'open': quote.open or 0,
+                    'close': quote.close or 0,
+                    'high': quote.high or 0,
+                    'low': quote.low or 0,
+                    'volume': quote.volume or 0,
+                    'amount': quote.amount or 0,
+                })
+            
+            if today_realtime:
+                daily_data.append({
+                    'date': today,
+                    'open': today_realtime.open or 0,
+                    'close': today_realtime.current_price or 0,
+                    'high': today_realtime.high or 0,
+                    'low': today_realtime.low or 0,
+                    'volume': today_realtime.volume or 0,
+                    'amount': today_realtime.amount or 0,
+                })
+            
+            if not daily_data:
+                print(f"[hk_kline_hist] 没有日线数据可供聚合")
+                return JSONResponse({"success": True, "data": []})
+            
+            # 使用pandas进行聚合
+            df = pd.DataFrame(daily_data)
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+            
+            # 根据周期进行聚合
+            if period == 'weekly':
+                resampled = df.resample('W-FRI').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'amount': 'sum'
+                })
+            elif period == 'monthly':
+                resampled = df.resample('M').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'amount': 'sum'
+                })
+            elif period == 'quarterly':
+                resampled = df.resample('Q').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'amount': 'sum'
+                })
+            elif period == 'semiannual':
+                # 半年线：每年6月30日和12月31日
+                resampled = df.resample('6M', label='right', closed='right').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'amount': 'sum'
+                })
+            elif period == 'annual':
+                resampled = df.resample('A').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum',
+                    'amount': 'sum'
+                })
+            else:
+                return JSONResponse({"success": False, "message": f"不支持的周期类型: {period}"}, status_code=400)
+            
+            # 转换结果
+            for idx, row in resampled.iterrows():
+                date_str = idx.strftime('%Y-%m-%d')
+                result.append({
+                    "date": date_str,
+                    "code": code,
+                    "open": fmt(row['open']),
+                    "close": fmt(row['close']),
+                    "high": fmt(row['high']),
+                    "low": fmt(row['low']),
+                    "volume": int(row['volume']) if pd.notna(row['volume']) else None,
+                    "amount": fmt(row['amount']),
+                    "amplitude": None,
+                    "pct_chg": None,
+                    "change": None,
+                    "turnover": None,
+                })
+            
+            print(f"[hk_kline_hist] 实时聚合返回{len(result)}条{period}周期数据")
+            return JSONResponse({"success": True, "data": result})
+            
     except Exception as e:
         print(f"[hk_kline_hist] 异常: {e}")
         traceback.print_exc()
