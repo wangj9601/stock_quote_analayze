@@ -158,7 +158,7 @@ class WeeklyDataGenerator:
             # 注意：pct_change 是基于前一行计算的。如果我们只查询了一周的数据，那么第一行就是 NaN
             # 所以如果需要准确的涨跌幅，调用者应该提供更长的时间范围，或者我们在查询时多查一点
             # 这里我们尝试计算，如果无法计算（NaN），则设为None或者0
-            weekly_df['change_percent'] = weekly_df['close'].pct_change() * 100
+            weekly_df['change_percent'] = weekly_df['close'].pct_change(fill_method=None) * 100
             
             # 计算涨跌额
             weekly_df['change'] = weekly_df['close'].diff()

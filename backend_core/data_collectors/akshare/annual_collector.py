@@ -86,7 +86,7 @@ class AnnualDataGenerator:
             if annual_df.empty:
                 return True
 
-            annual_df['change_percent'] = annual_df['close'].pct_change() * 100
+            annual_df['change_percent'] = annual_df['close'].pct_change(fill_method=None) * 100
             annual_df['change'] = annual_df['close'].diff()
             annual_df['pre_close'] = annual_df['close'].shift(1)
             annual_df['amplitude'] = (annual_df['high'] - annual_df['low']) / annual_df['pre_close'] * 100

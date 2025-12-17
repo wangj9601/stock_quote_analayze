@@ -114,7 +114,7 @@ class HKQuarterlyDataGenerator:
             if quarterly_df.empty:
                 return True
 
-            quarterly_df['change_percent'] = quarterly_df['close'].pct_change() * 100
+            quarterly_df['change_percent'] = quarterly_df['close'].pct_change(fill_method=None) * 100
             quarterly_df['change'] = quarterly_df['close'].diff()
             quarterly_df['pre_close'] = quarterly_df['close'].shift(1)
             quarterly_df['amplitude'] = (quarterly_df['high'] - quarterly_df['low']) / quarterly_df['pre_close'] * 100

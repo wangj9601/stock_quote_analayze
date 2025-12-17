@@ -145,7 +145,7 @@ class HKMonthlyDataGenerator:
                 return True
 
             # 3. 计算技术指标
-            monthly_df['change_percent'] = monthly_df['close'].pct_change() * 100
+            monthly_df['change_percent'] = monthly_df['close'].pct_change(fill_method=None) * 100
             monthly_df['change'] = monthly_df['close'].diff()
             monthly_df['pre_close'] = monthly_df['close'].shift(1)
             monthly_df['amplitude'] = (monthly_df['high'] - monthly_df['low']) / monthly_df['pre_close'] * 100

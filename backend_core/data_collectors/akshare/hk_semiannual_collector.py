@@ -90,7 +90,7 @@ class HKSemiAnnualDataGenerator:
             if semiannual_df.empty:
                 return True
 
-            semiannual_df['change_percent'] = semiannual_df['close'].pct_change() * 100
+            semiannual_df['change_percent'] = semiannual_df['close'].pct_change(fill_method=None) * 100
             semiannual_df['change'] = semiannual_df['close'].diff()
             semiannual_df['pre_close'] = semiannual_df['close'].shift(1)
             semiannual_df['amplitude'] = (semiannual_df['high'] - semiannual_df['low']) / semiannual_df['pre_close'] * 100

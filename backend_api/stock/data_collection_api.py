@@ -514,10 +514,10 @@ class AkshareDataCollector:
             if 'date' in df.columns:
                 df = df.sort_values('date')
                 if 'close' in df.columns:
-                    df['five_day_change_percent'] = df['close'].pct_change(periods=5) * 100
-                    df['ten_day_change_percent'] = df['close'].pct_change(periods=10) * 100
-                    df['thirty_day_change_percent'] = df['close'].pct_change(periods=30) * 100
-                    df['sixty_day_change_percent'] = df['close'].pct_change(periods=60) * 100
+                    df['five_day_change_percent'] = df['close'].pct_change(periods=5, fill_method=None) * 100
+                    df['ten_day_change_percent'] = df['close'].pct_change(periods=10, fill_method=None) * 100
+                    df['thirty_day_change_percent'] = df['close'].pct_change(periods=30, fill_method=None) * 100
+                    df['sixty_day_change_percent'] = df['close'].pct_change(periods=60, fill_method=None) * 100
             
             # 处理数据并插入数据库
             success_count = 0

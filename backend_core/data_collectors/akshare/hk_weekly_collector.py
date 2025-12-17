@@ -148,7 +148,7 @@ class HKWeeklyDataGenerator:
                 return True
 
             # 3. 计算技术指标
-            weekly_df['change_percent'] = weekly_df['close'].pct_change() * 100
+            weekly_df['change_percent'] = weekly_df['close'].pct_change(fill_method=None) * 100
             weekly_df['change'] = weekly_df['close'].diff()
             weekly_df['pre_close'] = weekly_df['close'].shift(1)
             weekly_df['amplitude'] = (weekly_df['high'] - weekly_df['low']) / weekly_df['pre_close'] * 100

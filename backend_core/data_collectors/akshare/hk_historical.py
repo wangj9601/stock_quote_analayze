@@ -179,10 +179,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                         
                         if 'close' in df.columns and len(df) > 0:
                             # 计算涨跌幅（与A股逻辑相同）
-                            df['five_day_change_percent'] = df['close'].pct_change(periods=5) * 100
-                            df['ten_day_change_percent'] = df['close'].pct_change(periods=10) * 100
-                            df['thirty_day_change_percent'] = df['close'].pct_change(periods=30) * 100
-                            df['sixty_day_change_percent'] = df['close'].pct_change(periods=60) * 100
+                            # 使用 fill_method=None 避免 FutureWarning
+                            df['five_day_change_percent'] = df['close'].pct_change(periods=5, fill_method=None) * 100
+                            df['ten_day_change_percent'] = df['close'].pct_change(periods=10, fill_method=None) * 100
+                            df['thirty_day_change_percent'] = df['close'].pct_change(periods=30, fill_method=None) * 100
+                            df['sixty_day_change_percent'] = df['close'].pct_change(periods=60, fill_method=None) * 100
                             
                             # 将计算结果存储到字典中
                             for _, row in df.iterrows():
