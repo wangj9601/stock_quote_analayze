@@ -22,6 +22,8 @@ import akshare as ak
 import pandas as pd
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
+from backend_core.utils.macd_calculator import MACDCalculator
+from datetime import datetime, timedelta
 
 # 配置日志
 logging.basicConfig(
@@ -43,11 +45,35 @@ class AkshareHistoricalCollector:
         self.skipped_count = 0
         self.failed_count = 0
         self.failed_stocks = []
+        self._init_macd_table()
         
     def __del__(self):
         """析构函数，确保session被关闭"""
         if hasattr(self, 'session'):
             self.session.close()
+    
+    def _init_macd_table(self):
+        """初始化MACD指标表结构"""
+        try:
+            self.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS macd_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    dif REAL,
+                    dea REAL,
+                    macd REAL,
+                    ema12 REAL,
+                    ema26 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            self.session.commit()
+            logger.debug("MACD指标表初始化完成")
+        except Exception as e:
+            logger.warning(f"MACD指标表初始化失败（可能已存在）: {e}")
+            self.session.rollback()
     
     def get_stock_list(self) -> List[Dict[str, str]]:
         """
@@ -221,6 +247,13 @@ class AkshareHistoricalCollector:
             
             logger.info(f"股票 {stock_code} 处理完成: 新增 {success_count} 条，跳过 {skip_count} 条")
             
+            # 计算并保存MACD指标（仅对新增的数据）
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_macd(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} MACD指标计算失败: {e}")
+            
             # 添加随机延迟，避免请求过于频繁
             time.sleep(random.uniform(0.5, 1.5))
             
@@ -324,6 +357,103 @@ class AkshareHistoricalCollector:
                 'skipped': 0,
                 'failed_details': [str(e)]
             }
+    
+    def _calculate_and_save_macd(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存MACD指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票最近至少26天的收盘价数据（用于计算MACD）
+            # 需要查询更多天数以确保有足够的数据
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            result = self.session.execute(text("""
+                SELECT date, close 
+                FROM historical_quotes 
+                WHERE code = :stock_code 
+                AND date >= :query_start_date 
+                AND date <= :end_date
+                AND close IS NOT NULL
+                ORDER BY date ASC
+            """), {
+                'stock_code': stock_code,
+                'query_start_date': query_start_date,
+                'end_date': end_date
+            })
+            
+            rows = result.fetchall()
+            if len(rows) < 26:
+                logger.debug(f"股票 {stock_code} 历史数据不足26天，跳过MACD计算")
+                return
+            
+            # 提取收盘价列表
+            closes = [float(row[1]) for row in rows]
+            dates = [row[0] for row in rows]
+            
+            # 使用MACD计算器批量计算
+            calculator = MACDCalculator()
+            macd_results = calculator.calculate_macd_batch(closes)
+            
+            if not macd_results:
+                return
+            
+            # 保存MACD数据（只保存日期范围内的数据）
+            macd_saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for i, macd_data in enumerate(macd_results):
+                if macd_data['dif'] is None:
+                    continue
+                
+                date_obj = dates[i] if isinstance(dates[i], datetime) else datetime.strptime(str(dates[i]), '%Y-%m-%d').date()
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d') if isinstance(date_obj, datetime) else str(date_obj)
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO macd_indicators
+                        (code, date, market_type, dif, dea, macd, ema12, ema26, created_at)
+                        VALUES (:code, :date, :market_type, :dif, :dea, :macd, :ema12, :ema26, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            dif = EXCLUDED.dif,
+                            dea = EXCLUDED.dea,
+                            macd = EXCLUDED.macd,
+                            ema12 = EXCLUDED.ema12,
+                            ema26 = EXCLUDED.ema26,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'CN',
+                        'dif': macd_data['dif'],
+                        'dea': macd_data['dea'],
+                        'macd': macd_data['macd'],
+                        'ema12': macd_data['ema12'],
+                        'ema26': macd_data['ema26'],
+                        'created_at': datetime.now()
+                    })
+                    macd_saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} MACD数据失败: {e}")
+                    continue
+            
+            if macd_saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} MACD指标计算完成，保存 {macd_saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} MACD指标失败: {e}")
+            self.session.rollback()
     
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
         """记录采集结果到日志表"""

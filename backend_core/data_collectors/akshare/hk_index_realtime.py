@@ -170,7 +170,7 @@ class HKIndexRealtimeCollector:
                 try:
                     self.logger.info('尝试使用 stock_hk_index_spot_sina 接口获取全量港股指数数据')
                     df = self._retry_on_failure(ak.stock_hk_index_spot_sina, max_retries=3, retry_delay=5)
-                    
+                            
                     if df is not None and not df.empty:
                         self.logger.info(f'stock_hk_index_spot_sina 返回数据形状: {df.shape}')
                         
@@ -211,7 +211,7 @@ class HKIndexRealtimeCollector:
                             except Exception as e:
                                 self.logger.warning(f'处理指数时出错: {str(e)}')
                                 continue
-                        
+                    
                         if not collected_data:
                             raise Exception('未能从 stock_hk_index_spot_sina 获取任何指数数据')
                         

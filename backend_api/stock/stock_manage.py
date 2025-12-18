@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes
+from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, MACDIndicators
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
@@ -792,6 +792,32 @@ async def get_kline_hist(
             # 按日期排序
             result.sort(key=lambda x: x['date'])
             
+            # 查询MACD数据并合并到结果中
+            try:
+                macd_query = db.query(MACDIndicators).filter(
+                    MACDIndicators.code == code,
+                    MACDIndicators.market_type == 'CN',
+                    MACDIndicators.date >= start_date,
+                    MACDIndicators.date <= end_date
+                ).order_by(MACDIndicators.date.asc())
+                
+                macd_records = macd_query.all()
+                macd_dict = {}
+                for record in macd_records:
+                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                    macd_dict[date_str] = {
+                        "dif": round(float(record.dif), 4) if record.dif is not None else None,
+                        "dea": round(float(record.dea), 4) if record.dea is not None else None,
+                        "macd": round(float(record.macd), 4) if record.macd is not None else None
+                    }
+                
+                # 将MACD数据合并到K线数据中
+                for item in result:
+                    if item['date'] in macd_dict:
+                        item.update(macd_dict[item['date']])
+            except Exception as e:
+                print(f"[kline_hist] MACD数据查询失败: {e}")
+            
             print(f"[kline_hist] 返回{len(result)}条日线数据（历史{len(historical_quotes)}条，当天{1 if today_realtime else 0}条）")
             return JSONResponse({"success": True, "data": result})
         
@@ -1037,6 +1063,56 @@ async def get_kline_min_hist(
         print(f"[kline_min_hist] 异常: {e}")
         import traceback
         print(traceback.format_exc())
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+@router.get("/macd")
+async def get_macd(
+    code: str = Query(None, description="股票代码"),
+    start_date: str = Query(None, description="开始日期，YYYY-MM-DD"),
+    end_date: str = Query(None, description="结束日期，YYYY-MM-DD"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取A股MACD指标数据
+    """
+    print(f"[macd] 输入参数: code={code}, start_date={start_date}, end_date={end_date}")
+    if not code or not start_date or not end_date:
+        return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
+    
+    try:
+        # 查询MACD数据
+        macd_query = db.query(MACDIndicators).filter(
+            MACDIndicators.code == code,
+            MACDIndicators.market_type == 'CN',
+            MACDIndicators.date >= start_date,
+            MACDIndicators.date <= end_date
+        ).order_by(MACDIndicators.date.asc())
+        
+        macd_records = macd_query.all()
+        
+        result = []
+        for record in macd_records:
+            date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+            result.append({
+                "date": date_str,
+                "code": record.code,
+                "dif": round(float(record.dif), 4) if record.dif is not None else None,
+                "dea": round(float(record.dea), 4) if record.dea is not None else None,
+                "macd": round(float(record.macd), 4) if record.macd is not None else None,
+                "ema12": round(float(record.ema12), 4) if record.ema12 is not None else None,
+                "ema26": round(float(record.ema26), 4) if record.ema26 is not None else None
+            })
+        
+        print(f"[macd] 返回 {len(result)} 条MACD数据")
+        return JSONResponse({
+            "success": True,
+            "data": result
+        })
+        
+    except Exception as e:
+        print(f"[macd] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
     
 @router.get("/latest_financial")

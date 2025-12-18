@@ -411,8 +411,9 @@ const StockPage = {
         const option = {
             backgroundColor: 'transparent',
             grid: [
-                { left: '8%', right: '6%', top: '5%', height: '70%' },
-                { left: '8%', right: '6%', top: '78%', height: '18%' }
+                { left: '8%', right: '6%', top: '5%', height: '55%' },  // K线图区域
+                { left: '8%', right: '6%', top: '63%', height: '12%' },  // 成交量区域
+                { left: '8%', right: '6%', top: '78%', height: '18%' }  // MACD区域
             ],
             xAxis: [
                 { 
@@ -435,16 +436,51 @@ const StockPage = {
                     axisTick: { show: false }, 
                     splitLine: { show: false }, 
                     axisLabel: { show: false } 
+                },
+                { 
+                    type: 'category', 
+                    gridIndex: 2, 
+                    data: [], 
+                    boundaryGap: [0.1, 0.1], 
+                    axisLine: { onZero: false }, 
+                    axisTick: { show: false }, 
+                    splitLine: { show: false }, 
+                    axisLabel: { show: false } 
                 }
             ],
             yAxis: [
                 { scale: true, splitArea: { show: true } },
-                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                { 
+                    scale: true, 
+                    gridIndex: 2, 
+                    splitNumber: 2, 
+                    axisLabel: { 
+                        show: true, 
+                        color: '#999',
+                        formatter: function(value) {
+                            if (Math.abs(value) < 0.01) {
+                                return '0';
+                            }
+                            return value.toFixed(2);
+                        }
+                    }, 
+                    axisLine: { show: false }, 
+                    axisTick: { show: false }, 
+                    splitLine: { 
+                        show: true, 
+                        lineStyle: { 
+                            type: 'dashed', 
+                            color: '#666',
+                            width: 1
+                        }
+                    }
+                }
             ],
             dataZoom: [
                 { 
                     type: 'inside', 
-                    xAxisIndex: [0, 1], 
+                    xAxisIndex: [0, 1, 2], 
                     start: 30, 
                     end: 100,
                     zoomOnMouseWheel: true,
@@ -453,7 +489,7 @@ const StockPage = {
                 },
                 {
                     type: 'slider',
-                    xAxisIndex: [0, 1],
+                    xAxisIndex: [0, 1, 2],
                     bottom: '2%',
                     height: '15px',
                     start: 30,
@@ -515,6 +551,43 @@ const StockPage = {
                             borderWidth: 1
                         } 
                     } 
+                },
+                { 
+                    name: 'DIF', 
+                    type: 'line', 
+                    xAxisIndex: 2, 
+                    yAxisIndex: 2, 
+                    data: [], 
+                    smooth: true, 
+                    lineStyle: { width: 2, color: '#ffffff' }, 
+                    showSymbol: false,
+                    z: 2
+                },
+                { 
+                    name: 'DEA', 
+                    type: 'line', 
+                    xAxisIndex: 2, 
+                    yAxisIndex: 2, 
+                    data: [], 
+                    smooth: true, 
+                    lineStyle: { width: 2, color: '#fbbf24' }, 
+                    showSymbol: false,
+                    z: 2
+                },
+                { 
+                    name: 'MACD', 
+                    type: 'bar', 
+                    xAxisIndex: 2, 
+                    yAxisIndex: 2, 
+                    data: [], 
+                    barWidth: '60%',
+                    z: 1,
+                    itemStyle: {
+                        color: function(params) {
+                            // 正值显示红色，负值显示青色/浅蓝色
+                            return params.value >= 0 ? '#dc2626' : '#06b6d4';
+                        }
+                    }
                 }
             ],
             tooltip: { 
@@ -526,23 +599,43 @@ const StockPage = {
                 textStyle: { color: '#000' },
                 formatter: function(params) {
                     let result = params[0].name + '<br/>';
+                    let macdInfo = '';
                     params.forEach(function(item) {
                         if (item.seriesName === 'K线') {
-                            // 简单调试
-                            console.log('[Tooltip] K线数据:', item.data);
-                            
                             result += item.marker + ' ' + item.seriesName + ': ';
                             result += '开盘:' + item.data[1] + ' 收盘:' + item.data[2] + '<br/>';
                             result += '最低:' + item.data[3] + ' 最高:' + item.data[4] + '<br/>';
+                        } else if (item.seriesName === 'DIF') {
+                            macdInfo += item.marker + ' DIF: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                        } else if (item.seriesName === 'DEA') {
+                            macdInfo += item.marker + ' DEA: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                        } else if (item.seriesName === 'MACD') {
+                            macdInfo += item.marker + ' MACD: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
                         } else {
-                            result += item.marker + ' ' + item.seriesName + ': ' + item.data + '<br/>';
+                            result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
                         }
                     });
+                    if (macdInfo) {
+                        result += '<br/>MACD(12,26,9)<br/>' + macdInfo;
+                    }
                     return result;
+                }
+            },
+            legend: {
+                data: ['K线', 'MA5', 'MA10', '成交量', 'DIF', 'DEA', 'MACD'],
+                top: '1%',
+                textStyle: {
+                    color: '#999'
                 }
             }
         };
         this.klineChart.setOption(option);
+        
+        // 初始化时默认显示成交量，隐藏MACD
+        const initOption = this.klineChart.getOption();
+        this.showVolumeChart(initOption);
+        this.hideMACDChart(initOption);
+        this.klineChart.setOption(initOption);
     },
 
     // 初始化分时图
@@ -1931,8 +2024,165 @@ const StockPage = {
 
     // 更新副图指标
     updateSubIndicator(indicator) {
-        CommonUtils.showToast(`副图切换到${indicator}`, 'info');
-        // 实际项目中这里会更新副图指标
+        console.log(`[副图指标] 切换到${indicator}指标`);
+        
+        if (!this.klineChart) {
+            console.error('[副图指标] K线图表未初始化');
+            return;
+        }
+        
+        const option = this.klineChart.getOption();
+        
+        // 根据选择的指标显示/隐藏对应的图表区域和系列
+        switch(indicator) {
+            case 'vol':
+                // 显示成交量，隐藏MACD
+                this.showVolumeChart(option);
+                this.hideMACDChart(option);
+                break;
+            case 'macd':
+                // 显示MACD，隐藏成交量
+                this.hideVolumeChart(option);
+                this.showMACDChart(option);
+                break;
+            case 'kdj':
+            case 'rsi':
+                // 暂时显示成交量（KDJ和RSI还未实现）
+                this.showVolumeChart(option);
+                this.hideMACDChart(option);
+                CommonUtils.showToast(`${indicator.toUpperCase()}指标功能开发中`, 'info');
+                return;
+            default:
+                console.warn(`[副图指标] 未知指标类型: ${indicator}`);
+                return;
+        }
+        
+        this.klineChart.setOption(option);
+        CommonUtils.showToast(`已切换到${this.getSubIndicatorName(indicator)}`, 'success');
+    },
+    
+    showVolumeChart(option) {
+        // 显示成交量区域（grid[1]），隐藏MACD区域（grid[2]）
+        if (option.grid && option.grid[1]) {
+            option.grid[1].height = '12%';
+            option.grid[1].top = '63%';
+        }
+        if (option.grid && option.grid[2]) {
+            option.grid[2].height = '0%';
+            option.grid[2].top = '100%';
+        }
+        
+        // 调整K线图区域高度
+        if (option.grid && option.grid[0]) {
+            option.grid[0].height = '55%';
+        }
+        
+        // 显示成交量系列，隐藏MACD系列
+        if (option.series) {
+            if (option.series[3]) {
+                option.series[3].show = true;
+                option.series[3].xAxisIndex = 1;
+                option.series[3].yAxisIndex = 1;
+            }
+            if (option.series[4]) option.series[4].show = false; // DIF
+            if (option.series[5]) option.series[5].show = false; // DEA
+            if (option.series[6]) option.series[6].show = false; // MACD
+        }
+        
+        // 更新dataZoom的xAxisIndex
+        if (option.dataZoom) {
+            option.dataZoom.forEach(zoom => {
+                if (zoom.xAxisIndex) {
+                    zoom.xAxisIndex = [0, 1];
+                }
+            });
+        }
+    },
+    
+    hideVolumeChart(option) {
+        // 隐藏成交量区域（grid[1]）
+        if (option.grid && option.grid[1]) {
+            option.grid[1].height = '0%';
+            option.grid[1].top = '100%';
+        }
+        
+        // 隐藏成交量系列
+        if (option.series && option.series[3]) {
+            option.series[3].show = false;
+        }
+    },
+    
+    showMACDChart(option) {
+        // 显示MACD区域（grid[2]），隐藏成交量区域（grid[1]）
+        if (option.grid && option.grid[1]) {
+            option.grid[1].height = '0%';
+            option.grid[1].top = '100%';
+        }
+        if (option.grid && option.grid[2]) {
+            option.grid[2].height = '18%';
+            option.grid[2].top = '78%';
+        }
+        
+        // 调整K线图区域高度
+        if (option.grid && option.grid[0]) {
+            option.grid[0].height = '60%';
+        }
+        
+        // 显示MACD系列，隐藏成交量系列
+        if (option.series) {
+            if (option.series[3]) {
+                option.series[3].show = false; // 隐藏成交量
+            }
+            if (option.series[4]) {
+                option.series[4].show = true; // DIF
+                option.series[4].xAxisIndex = 2;
+                option.series[4].yAxisIndex = 2;
+            }
+            if (option.series[5]) {
+                option.series[5].show = true; // DEA
+                option.series[5].xAxisIndex = 2;
+                option.series[5].yAxisIndex = 2;
+            }
+            if (option.series[6]) {
+                option.series[6].show = true; // MACD
+                option.series[6].xAxisIndex = 2;
+                option.series[6].yAxisIndex = 2;
+            }
+        }
+        
+        // 更新dataZoom的xAxisIndex
+        if (option.dataZoom) {
+            option.dataZoom.forEach(zoom => {
+                if (zoom.xAxisIndex) {
+                    zoom.xAxisIndex = [0, 2];
+                }
+            });
+        }
+    },
+    
+    hideMACDChart(option) {
+        // 隐藏MACD区域（grid[2]）
+        if (option.grid && option.grid[2]) {
+            option.grid[2].height = '0%';
+            option.grid[2].top = '100%';
+        }
+        
+        // 隐藏MACD系列
+        if (option.series) {
+            if (option.series[4]) option.series[4].show = false; // DIF
+            if (option.series[5]) option.series[5].show = false; // DEA
+            if (option.series[6]) option.series[6].show = false; // MACD
+        }
+    },
+    
+    getSubIndicatorName(indicator) {
+        const names = {
+            'vol': '成交量',
+            'macd': 'MACD',
+            'kdj': 'KDJ',
+            'rsi': 'RSI'
+        };
+        return names[indicator] || indicator;
     },
 
     // 开始数据更新
@@ -2105,12 +2355,32 @@ const StockPage = {
                 const volume = list.map(item => item.volume);
                 // 更新option - 根据数据量调整显示效果
                 const option = this.klineChart.getOption();
+                // MACD数据
+                const dif = list.map(item => item.dif !== null && item.dif !== undefined ? parseFloat(item.dif) : null);
+                const dea = list.map(item => item.dea !== null && item.dea !== undefined ? parseFloat(item.dea) : null);
+                const macd = list.map(item => item.macd !== null && item.macd !== undefined ? parseFloat(item.macd) : null);
+                
                 option.xAxis[0].data = dates;
                 option.xAxis[1].data = dates;
+                option.xAxis[2].data = dates;
                 option.series[0].data = kline;
                 option.series[1].data = ma5;
                 option.series[2].data = ma10;
                 option.series[3].data = volume;
+                option.series[4].data = dif;
+                option.series[5].data = dea;
+                option.series[6].data = macd;
+                
+                // 根据当前选择的副图指标设置显示状态
+                const subIndicatorSelect = document.querySelector('.sub-indicator-select');
+                const currentSubIndicator = subIndicatorSelect ? subIndicatorSelect.value : 'vol';
+                if (currentSubIndicator === 'macd') {
+                    this.showMACDChart(option);
+                    this.hideVolumeChart(option);
+                } else {
+                    this.showVolumeChart(option);
+                    this.hideMACDChart(option);
+                }
                 
                 // 当数据量较少时，优化显示效果
                 const dataCount = kline.length;

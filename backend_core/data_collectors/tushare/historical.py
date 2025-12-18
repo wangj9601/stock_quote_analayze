@@ -10,6 +10,8 @@ from sqlalchemy import text
 from .five_day_change_calculator import FiveDayChangeCalculator
 from .extended_change_calculator import ExtendedChangeCalculator
 from .thirty_day_change_calculator import ThirtyDayChangeCalculator
+from backend_core.utils.macd_calculator import MACDCalculator
+from datetime import timedelta
 
 class HistoricalQuoteCollector(TushareCollector):
     
@@ -83,8 +85,167 @@ class HistoricalQuoteCollector(TushareCollector):
 
     def _safe_value(self, val: Any) -> Optional[float]:
         return None if pd.isna(val) else float(val)
+    
     def extract_code_from_ts_code(self, ts_code: str) -> str:
         return ts_code.split(".")[0] if ts_code else ""
+    
+    def _calculate_and_save_macd_for_date(self, session, target_date: str) -> dict:
+        """
+        计算并保存指定日期的MACD指标
+        
+        Args:
+            session: 数据库会话
+            target_date: 目标日期 (YYYY-MM-DD)
+            
+        Returns:
+            dict: 计算结果统计
+        """
+        try:
+            calculator = MACDCalculator()
+            
+            # 获取该日期所有有数据的股票代码
+            result = session.execute(text("""
+                SELECT DISTINCT code 
+                FROM historical_quotes 
+                WHERE date = :target_date
+            """), {'target_date': target_date})
+            
+            stock_codes = [row[0] for row in result.fetchall()]
+            
+            if not stock_codes:
+                self.logger.warning(f"日期 {target_date} 没有股票数据")
+                return {
+                    'total': 0,
+                    'success': 0,
+                    'skipped': 0,
+                    'failed': 0,
+                    'details': []
+                }
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            
+            # 查询开始日期（需要至少26天历史数据）
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少26天的收盘价数据
+                    result = session.execute(text("""
+                        SELECT date, close 
+                        FROM historical_quotes 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 26:
+                        skipped_count += 1
+                        continue
+                    
+                    # 提取收盘价和日期
+                    dates = []
+                    closes = []
+                    for row in rows:
+                        date_val = row[0]
+                        if isinstance(date_val, datetime.datetime):
+                            date_str = date_val.strftime('%Y-%m-%d')
+                        elif isinstance(date_val, str):
+                            date_str = date_val
+                        else:
+                            date_str = str(date_val)
+                        dates.append(date_str)
+                        closes.append(float(row[1]))
+                    
+                    # 批量计算MACD
+                    macd_results = calculator.calculate_macd_batch(closes)
+                    
+                    if not macd_results:
+                        failed_count += 1
+                        failed_details.append(f"{stock_code}: MACD计算失败")
+                        continue
+                    
+                    # 保存MACD数据（只保存目标日期的数据）
+                    saved = False
+                    for i, macd_data in enumerate(macd_results):
+                        if macd_data['dif'] is None:
+                            continue
+                        
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO macd_indicators
+                                (code, date, market_type, dif, dea, macd, ema12, ema26, created_at)
+                                VALUES (:code, :date, :market_type, :dif, :dea, :macd, :ema12, :ema26, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    dif = EXCLUDED.dif,
+                                    dea = EXCLUDED.dea,
+                                    macd = EXCLUDED.macd,
+                                    ema12 = EXCLUDED.ema12,
+                                    ema26 = EXCLUDED.ema26,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'CN',
+                                'dif': macd_data['dif'],
+                                'dea': macd_data['dea'],
+                                'macd': macd_data['macd'],
+                                'ema12': macd_data['ema12'],
+                                'ema26': macd_data['ema26'],
+                                'created_at': datetime.datetime.now()
+                            })
+                            saved = True
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} MACD数据失败: {e}")
+                            continue
+                    
+                    if saved:
+                        success_count += 1
+                    else:
+                        skipped_count += 1
+                    
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+                    self.logger.error(f"计算股票 {stock_code} MACD指标失败: {e}")
+                    continue
+            
+            # 提交事务
+            session.commit()
+            
+            return {
+                'total': len(stock_codes),
+                'success': success_count,
+                'skipped': skipped_count,
+                'failed': failed_count,
+                'details': failed_details
+            }
+            
+        except Exception as e:
+            self.logger.error(f"批量计算MACD指标失败: {e}")
+            session.rollback()
+            return {
+                'total': 0,
+                'success': 0,
+                'skipped': 0,
+                'failed': 0,
+                'details': [str(e)]
+            }
     
     def collect_historical_quotes(self, date_str: str) -> bool:
         self._init_db()  # 初始化表结构
@@ -355,6 +516,54 @@ class HistoricalQuoteCollector(TushareCollector):
                         session.commit()
                     except Exception as log_error:
                         self.logger.error(f"记录30日涨跌幅计算失败日志时出错: {log_error}")
+                
+                # 30日涨跌幅计算完成后，再计算MACD指标
+                try:
+                    self.logger.info("开始自动计算MACD指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    macd_result = self._calculate_and_save_macd_for_date(session, target_date)
+                    
+                    self.logger.info(
+                        "MACD指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
+                        macd_result['total'],
+                        macd_result['success'],
+                        macd_result['skipped'],
+                        macd_result['failed']
+                    )
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'macd_calculation',
+                        'operation_desc': f'计算日期: {target_date}\n总计股票: {macd_result["total"]}\n成功计算: {macd_result["success"]}\n跳过: {macd_result["skipped"]}\n失败计算: {macd_result["failed"]}',
+                        'affected_rows': macd_result['success'],
+                        'status': 'success' if macd_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(macd_result['details']) if macd_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                    
+                except Exception as macd_error:
+                    self.logger.error(f"自动计算MACD指标失败: {macd_error}")
+                    try:
+                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                        session.execute(text('''
+                            INSERT INTO historical_collect_operation_logs 
+                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                        '''), {
+                            'operation_type': 'macd_calculation',
+                            'operation_desc': f'计算日期: {target_date}',
+                            'affected_rows': 0,
+                            'status': 'error',
+                            'error_message': str(macd_error),
+                            'collect_source': 'tushare'
+                        })
+                        session.commit()
+                    except Exception as log_error:
+                        self.logger.error(f"记录MACD计算失败日志时出错: {log_error}")
             
             return True
         except Exception as e:
