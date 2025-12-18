@@ -410,7 +410,7 @@ const StockPage = {
         console.log('[initKlineChart] 找到klineChart元素，开始初始化ECharts');
         this.klineChart = echarts.init(chartDom);
         const option = {
-            backgroundColor: 'transparent',
+            backgroundColor: '#0f172a',
             grid: [
                 { left: '8%', right: '6%', top: '5%', height: '55%' },  // K线图区域
                 { left: '8%', right: '6%', top: '63%', height: '12%' },  // 成交量区域
@@ -647,7 +647,7 @@ const StockPage = {
         this.minuteChart = echarts.init(chartDom);
         
         const option = {
-            backgroundColor: 'transparent',
+            backgroundColor: '#0f172a',
             grid: {
                 left: '8%',
                 right: '6%',
@@ -726,7 +726,7 @@ const StockPage = {
         this.profitChart = echarts.init(chartDom);
         
         const option = {
-            backgroundColor: 'transparent',
+            backgroundColor: '#0f172a',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -784,7 +784,7 @@ const StockPage = {
         this.flowChart = echarts.init(chartDom);
         
         const option = {
-            backgroundColor: 'transparent',
+            backgroundColor: '#0f172a',
             grid: {
                 left: '10%',
                 right: '8%',

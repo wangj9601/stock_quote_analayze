@@ -1,9 +1,19 @@
-/* 股票详情页面样式 */
+/* 股票详情页面样式 - 深色主题 */
+
+/* 页面主背景 */
+body {
+    background: #0a0e1a;
+    color: #e5e7eb;
+}
+
+.main-content {
+    background: #0a0e1a;
+}
 
 /* 股票头部信息 */
 .stock-header {
-    background: white;
-    border-bottom: 1px solid #e2e8f0;
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
     padding: 2rem 0;
 }
 
@@ -25,13 +35,13 @@
 .stock-name {
     font-size: 2rem;
     font-weight: 700;
-    color: #1f2937;
+    color: #ffffff;
     margin: 0;
 }
 
 .stock-code {
-    background: #f3f4f6;
-    color: #6b7280;
+    background: #1e293b;
+    color: #94a3b8;
     padding: 0.25rem 0.75rem;
     border-radius: 12px;
     font-size: 0.9rem;
@@ -40,10 +50,10 @@
 
 .watchlist-toggle {
     padding: 0.5rem 1rem;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: #1e293b;
+    border: 1px solid #334155;
     border-radius: 6px;
-    color: #374151;
+    color: #cbd5e1;
     cursor: pointer;
     transition: all 0.3s ease;
     font-weight: 500;
@@ -71,7 +81,7 @@
 .current-price {
     font-size: 3rem;
     font-weight: 700;
-    color: #1f2937;
+    color: #ffffff;
     line-height: 1;
 }
 
@@ -89,7 +99,7 @@
 }
 
 .price-time {
-    color: #6b7280;
+    color: #94a3b8;
     font-size: 0.9rem;
 }
 
@@ -98,8 +108,9 @@
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 2rem;
     padding: 1.5rem;
-    background: #f8fafc;
+    background: #1e293b;
     border-radius: 8px;
+    border: 1px solid #334155;
 }
 
 .detail-item {
@@ -110,13 +121,13 @@
 }
 
 .detail-item .label {
-    color: #6b7280;
+    color: #94a3b8;
     font-size: 0.9rem;
 }
 
 .detail-item .value {
     font-weight: 600;
-    color: #1f2937;
+    color: #e5e7eb;
     font-size: 1.1rem;
 }
 
@@ -130,16 +141,17 @@
 
 /* 图表区域样式 */
 .chart-section {
-    background: white;
+    background: #0f172a;
     padding: 2rem 0;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #1e293b;
 }
 
 .chart-container {
-    background: white;
+    background: #0f172a;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     overflow: hidden;
+    border: 1px solid #1e293b;
 }
 
 .chart-controls {
@@ -147,9 +159,10 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #1e293b;
     flex-wrap: wrap;
     gap: 1rem;
+    background: #0f172a;
 }
 
 .chart-type-tabs {
@@ -159,9 +172,9 @@
 
 .tab-btn {
     padding: 0.5rem 1rem;
-    border: 1px solid #e2e8f0;
-    background: white;
-    color: #6b7280;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #94a3b8;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -188,7 +201,7 @@
     padding: 0.25rem 0.75rem;
     border: none;
     background: transparent;
-    color: #6b7280;
+    color: #94a3b8;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -201,8 +214,8 @@
 }
 
 .period-btn:hover:not(.active) {
-    background: #f3f4f6;
-    color: #374151;
+    background: #1e293b;
+    color: #cbd5e1;
 }
 
 .chart-indicators {
@@ -213,10 +226,10 @@
 .indicator-select,
 .sub-indicator-select {
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #334155;
     border-radius: 6px;
-    background: white;
-    color: #374151;
+    background: #1e293b;
+    color: #cbd5e1;
     font-size: 0.9rem;
 }
 
@@ -233,13 +246,14 @@
 /* 内容标签区域 */
 .content-tabs {
     padding: 2rem 0;
+    background: #0f172a;
 }
 
 .tab-nav {
     display: flex;
     gap: 1rem;
     margin-bottom: 2rem;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #1e293b;
     flex-wrap: wrap;
 }
 
@@ -247,7 +261,7 @@
     padding: 0.75rem 1.5rem;
     border: none;
     background: transparent;
-    color: #6b7280;
+    color: #94a3b8;
     border-bottom: 2px solid transparent;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -255,12 +269,12 @@
 }
 
 .content-tab.active {
-    color: #2563eb;
-    border-bottom-color: #2563eb;
+    color: #60a5fa;
+    border-bottom-color: #60a5fa;
 }
 
 .content-tab:hover:not(.active) {
-    color: #374151;
+    color: #cbd5e1;
 }
 
 .tab-panel {
@@ -279,24 +293,26 @@
 }
 
 .analysis-card {
-    background: white;
+    background: #1e293b;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     padding: 1.5rem;
     transition: all 0.3s ease;
+    border: 1px solid #334155;
 }
 
 .analysis-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    border-color: #475569;
 }
 
 .analysis-card h3 {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: #ffffff;
     margin-bottom: 1rem;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid #334155;
     padding-bottom: 0.5rem;
 }
 
@@ -316,7 +332,7 @@
 .target-price {
     font-size: 2rem;
     font-weight: 700;
-    color: #1f2937;
+    color: #ffffff;
 }
 
 .prediction-change {
@@ -336,7 +352,7 @@
 .confidence {
     display: flex;
     gap: 2rem;
-    color: #6b7280;
+    color: #94a3b8;
     font-size: 0.9rem;
 }
 
@@ -526,18 +542,19 @@
 }
 
 .finance-section {
-    background: white;
+    background: #1e293b;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     padding: 1.5rem;
+    border: 1px solid #334155;
 }
 
 .finance-section h3 {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: #ffffff;
     margin-bottom: 1rem;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid #334155;
     padding-bottom: 0.5rem;
 }
 
@@ -553,26 +570,31 @@
 }
 
 .finance-table td:nth-child(odd) {
-    color: #6b7280;
+    color: #94a3b8;
 }
 
 .finance-table td:nth-child(even) {
     font-weight: 600;
-    color: #1f2937;
+    color: #e5e7eb;
+}
+
+.finance-table td {
+    border-bottom: 1px solid #334155;
 }
 
 .chart-placeholder {
-    background: #f8fafc;
+    background: #0f172a;
     border-radius: 6px;
     padding: 1rem;
 }
 
 /* 新闻公告样式 */
 .news-list-container {
-    background: white;
+    background: #1e293b;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     padding: 1.5rem;
+    border: 1px solid #334155;
 }
 
 .news-filter {
@@ -580,14 +602,14 @@
     gap: 0.5rem;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #334155;
 }
 
 .filter-btn {
     padding: 0.5rem 1rem;
-    border: 1px solid #e2e8f0;
-    background: white;
-    color: #6b7280;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #94a3b8;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -613,15 +635,16 @@
 
 .news-card {
     padding: 1.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #334155;
     border-radius: 8px;
     transition: all 0.3s ease;
     cursor: pointer;
+    background: #0f172a;
 }
 
 .news-card:hover {
-    border-color: #2563eb;
-    background: #f8fafc;
+    border-color: #60a5fa;
+    background: #1e293b;
 }
 
 .news-meta {
@@ -670,13 +693,13 @@
 .news-title {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: #ffffff;
     margin-bottom: 0.75rem;
     line-height: 1.4;
 }
 
 .news-summary {
-    color: #6b7280;
+    color: #94a3b8;
     line-height: 1.6;
     font-size: 0.9rem;
     margin-bottom: 0.5rem;
