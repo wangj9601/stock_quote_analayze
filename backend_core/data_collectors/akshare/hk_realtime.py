@@ -239,6 +239,11 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                         'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }
 
+                    # 如果现价、开盘、最高、最低中有为空的，跳过不采集
+                    if not data['current_price'] or not data['open'] or \
+                       not data['high'] or not data['low']:
+                        continue
+
                     # --- 重试机制插入 stock_basic_info_hk ---
                     max_retries = 3
                     retry_count = 0

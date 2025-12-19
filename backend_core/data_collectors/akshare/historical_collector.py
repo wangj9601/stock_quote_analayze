@@ -23,6 +23,9 @@ import pandas as pd
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 from backend_core.utils.macd_calculator import MACDCalculator
+from backend_core.utils.macd_calculator import MACDCalculator
+from backend_core.utils.kdj_calculator import KDJCalculator
+from backend_core.utils.rsi_calculator import RSICalculator
 from datetime import datetime, timedelta
 
 # 配置日志
@@ -46,13 +49,58 @@ class AkshareHistoricalCollector:
         self.failed_count = 0
         self.failed_stocks = []
         self._init_macd_table()
+        self._init_macd_table()
+        self._init_kdj_table()
+        self._init_rsi_table()
         
     def __del__(self):
         """析构函数，确保session被关闭"""
         if hasattr(self, 'session'):
             self.session.close()
-    
-    def _init_macd_table(self):
+
+    def _init_kdj_table(self):
+        """初始化KDJ指标表结构"""
+        try:
+            self.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS kdj_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    k REAL,
+                    d REAL,
+                    j REAL,
+                    rsv REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            self.session.commit()
+            logger.debug("KDJ指标表初始化完成")
+        except Exception as e:
+            logger.warning(f"KDJ指标表初始化失败（可能已存在）: {e}")
+            self.session.rollback()
+            self.session.rollback()
+
+    def _init_rsi_table(self):
+        """初始化RSI指标表结构"""
+        try:
+            self.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS rsi_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    rsi6 REAL,
+                    rsi12 REAL,
+                    rsi24 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            self.session.commit()
+            logger.debug("RSI指标表初始化完成")
+        except Exception as e:
+            logger.warning(f"RSI指标表初始化失败（可能已存在）: {e}")
+            self.session.rollback()
         """初始化MACD指标表结构"""
         try:
             self.session.execute(text('''
@@ -158,7 +206,8 @@ class AkshareHistoricalCollector:
             logger.info(f"开始采集股票 {stock_code} 的历史数据...")
             
             # 添加重试机制
-            max_retries = 3
+            max_retries = 5
+            df = None
             for attempt in range(max_retries):
                 try:
                     # 使用akshare获取历史数据
@@ -169,20 +218,30 @@ class AkshareHistoricalCollector:
                         adjust="qfq"  # 前复权
                     )
                     break
-                except Exception as e:
+                except (AttributeError, ValueError, IndexError) as e:
+                    # 捕获常见的解析错误，如 AttributeError: 'NoneType' object has no attribute 'text'
+                    # 这通常意味着akshare无法从网页解析数据，可能是反爬虫限制或数据为空
                     if attempt < max_retries - 1:
                         wait_time = (attempt + 1) * 2 + random.uniform(0, 1)
+                        logger.warning(f"股票 {stock_code} 第 {attempt + 1} 次采集遭受解析错误，{wait_time:.1f}秒后重试: {e}")
+                        time.sleep(wait_time)
+                except Exception as e:
+                    # 捕获网络错误，如SSLError
+                    error_str = str(e)
+                    is_ssl_error = "SSLError" in error_str or "Connection" in error_str or "UNEXPECTED_EOF_WHILE_READING" in error_str
+                    
+                    if attempt < max_retries - 1:
+                        # 对于SSL或连接错误，等待时间加长
+                        wait_time = (attempt + 1) * 5 + random.uniform(1, 3) if is_ssl_error else (attempt + 1) * 2 + random.uniform(0, 1)
                         logger.warning(f"股票 {stock_code} 第 {attempt + 1} 次采集失败，{wait_time:.1f}秒后重试: {e}")
                         time.sleep(wait_time)
                     else:
-                        logger.error(f"股票 {stock_code} 采集失败，已重试 {max_retries} 次: {e}")
-                        self.failed_count += 1
-                        self.failed_stocks.append(f"{stock_code}: {str(e)}")
-                        return False
+                        logger.error(f"股票 {stock_code} 采集最终失败: {e}")
             
-            if df.empty:
-                logger.warning(f"股票 {stock_code} 在指定日期范围内没有数据")
-                return True
+            if df is None or df.empty:
+                logger.warning(f"股票 {stock_code} 未获取到有效数据")
+                return False
+
             
             logger.info(f"股票 {stock_code} 采集到 {len(df)} 条数据")
             
@@ -253,8 +312,22 @@ class AkshareHistoricalCollector:
                     self._calculate_and_save_macd(stock_code, start_date, end_date)
                 except Exception as e:
                     logger.warning(f"股票 {stock_code} MACD指标计算失败: {e}")
-            
-            # 添加随机延迟，避免请求过于频繁
+
+            # 计算并保存KDJ指标
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_kdj(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} KDJ指标计算失败: {e}")
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} KDJ指标计算失败: {e}")
+
+            # 计算并保存RSI指标
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_rsi(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} RSI指标计算失败: {e}")
             time.sleep(random.uniform(0.5, 1.5))
             
             return True
@@ -453,6 +526,190 @@ class AkshareHistoricalCollector:
             
         except Exception as e:
             logger.error(f"计算股票 {stock_code} MACD指标失败: {e}")
+            self.session.rollback()
+
+    def _calculate_and_save_kdj(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存KDJ指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票最近至少20天的收盘价数据（用于计算KDJ）
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            result = self.session.execute(text("""
+                SELECT date, close, high, low 
+                FROM historical_quotes 
+                WHERE code = :stock_code 
+                AND date >= :query_start_date 
+                AND date <= :end_date
+                AND close IS NOT NULL 
+                AND high IS NOT NULL 
+                AND low IS NOT NULL
+                ORDER BY date ASC
+            """), {
+                'stock_code': stock_code,
+                'query_start_date': query_start_date,
+                'end_date': end_date
+            })
+            
+            rows = result.fetchall()
+            if len(rows) < 9:
+                logger.debug(f"股票 {stock_code} 历史数据不足9天，跳过KDJ计算")
+                return
+            
+            # 提取数据列表
+            dates = [row[0] for row in rows]
+            closes = [float(row[1]) for row in rows]
+            highs = [float(row[2]) for row in rows]
+            lows = [float(row[3]) for row in rows]
+            
+            # 使用KDJ计算器批量计算
+            calculator = KDJCalculator()
+            kdj_results = calculator.calculate_kdj_batch(closes, highs, lows)
+            
+            if not kdj_results:
+                return
+            
+            # 保存KDJ数据（只保存日期范围内的数据）
+            kdj_saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for i, kdj_data in enumerate(kdj_results):
+                date_obj = dates[i] if isinstance(dates[i], datetime) else datetime.strptime(str(dates[i]), '%Y-%m-%d').date()
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d') if isinstance(date_obj, datetime) else str(date_obj)
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO kdj_indicators
+                        (code, date, market_type, k, d, j, rsv, created_at)
+                        VALUES (:code, :date, :market_type, :k, :d, :j, :rsv, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            k = EXCLUDED.k,
+                            d = EXCLUDED.d,
+                            j = EXCLUDED.j,
+                            rsv = EXCLUDED.rsv,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'CN',
+                        'k': kdj_data['k'],
+                        'd': kdj_data['d'],
+                        'j': kdj_data['j'],
+                        'rsv': kdj_data['rsv'],
+                        'created_at': datetime.now()
+                    })
+                    kdj_saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} KDJ数据失败: {e}")
+                    continue
+            
+            if kdj_saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} KDJ指标计算完成，保存 {kdj_saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} KDJ指标失败: {e}")
+            self.session.rollback()
+
+    def _calculate_and_save_rsi(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存RSI指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票最近至少30天的收盘价数据（用于计算RSI，RSI24需要24+周期）
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
+            
+            result = self.session.execute(text("""
+                SELECT date, close
+                FROM historical_quotes 
+                WHERE code = :stock_code 
+                AND date >= :query_start_date 
+                AND date <= :end_date
+                AND close IS NOT NULL 
+                ORDER BY date ASC
+            """), {
+                'stock_code': stock_code,
+                'query_start_date': query_start_date,
+                'end_date': end_date
+            })
+            
+            rows = result.fetchall()
+            if len(rows) < 7: # rsi6至少需要7天数据 (1 for diff, 6 for avg)
+                logger.debug(f"股票 {stock_code} 历史数据不足7天，跳过RSI计算")
+                return
+            
+            # 提取数据列表
+            dates = [row[0] for row in rows]
+            closes = [float(row[1]) for row in rows]
+            
+            # 使用RSI计算器批量计算
+            calculator = RSICalculator()
+            rsi_results = calculator.calculate_rsi_batch(closes)
+            
+            if not rsi_results:
+                return
+            
+            # 保存RSI数据（只保存日期范围内的数据）
+            rsi_saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for i, rsi_data in enumerate(rsi_results):
+                date_obj = dates[i] if isinstance(dates[i], datetime) else datetime.strptime(str(dates[i]), '%Y-%m-%d').date()
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d') if isinstance(date_obj, datetime) else str(date_obj)
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO rsi_indicators
+                        (code, date, market_type, rsi6, rsi12, rsi24, created_at)
+                        VALUES (:code, :date, :market_type, :rsi6, :rsi12, :rsi24, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            rsi6 = EXCLUDED.rsi6,
+                            rsi12 = EXCLUDED.rsi12,
+                            rsi24 = EXCLUDED.rsi24,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'CN',
+                        'rsi6': rsi_data.get('rsi6'),
+                        'rsi12': rsi_data.get('rsi12'),
+                        'rsi24': rsi_data.get('rsi24'),
+                        'created_at': datetime.now()
+                    })
+                    rsi_saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} RSI数据失败: {e}")
+                    continue
+            
+            if rsi_saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} RSI指标计算完成，保存 {rsi_saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} RSI指标失败: {e}")
             self.session.rollback()
     
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):

@@ -501,6 +501,31 @@ class MACDIndicators(Base):
     ema26 = Column(Float)  # 26日指数移动平均
     created_at = Column(DateTime, default=datetime.now)
 
+
+class KDJIndicators(Base):
+    """KDJ指标数据表（A股和港股共用）"""
+    __tablename__ = 'kdj_indicators'
+    code = Column(String, primary_key=True)
+    date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
+    market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
+    k = Column(Float)
+    d = Column(Float)
+    j = Column(Float)
+    rsv = Column(Float)
+    created_at = Column(DateTime, default=datetime.now)
+
+class RSIIndicators(Base):
+    """RSI指标数据表（A股和港股共用）"""
+    __tablename__ = 'rsi_indicators'
+    code = Column(String, primary_key=True)
+    date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
+    market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
+    rsi6 = Column(Float)
+    rsi12 = Column(Float)
+    rsi24 = Column(Float)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class TradingNotes(Base):
     __tablename__ = 'trading_notes'
     id = Column(Integer, primary_key=True, autoincrement=True)

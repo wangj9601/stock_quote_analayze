@@ -74,20 +74,28 @@ def get_stock_history(
                 COALESCE(tn.risk_level, '') as risk_level,
                 COALESCE(tn.created_by, '') as notes_creator,
                 tn.created_at as notes_created_at,
-                tn.updated_at as notes_updated_at
+                tn.updated_at as notes_updated_at,
+                kdj.k, kdj.d, kdj.j,
+                rsi.rsi6, rsi.rsi12, rsi.rsi24
             FROM historical_quotes h
             LEFT JOIN trading_notes tn ON h.code = tn.stock_code AND h.date::date = tn.trade_date
+            LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'CN'
+            LEFT JOIN rsi_indicators rsi ON h.code = rsi.code AND h.date = rsi.date AND rsi.market_type = 'CN'
             WHERE h.code = :code
         """
     else:
         # 只查询基础历史行情数据
         query_a = """
             SELECT 
-                code, name, date, open, close, high, low, 
-                volume, amount, change_percent, change, turnover_rate,
-                cumulative_change_percent, five_day_change_percent, ten_day_change_percent, thirty_day_change_percent, sixty_day_change_percent, remarks
-            FROM historical_quotes 
-            WHERE code = :code
+                h.code, h.name, h.date, h.open, h.close, h.high, h.low, 
+                h.volume, h.amount, h.change_percent, h.change, h.turnover_rate,
+                h.cumulative_change_percent, h.five_day_change_percent, h.ten_day_change_percent, h.thirty_day_change_percent, h.sixty_day_change_percent, h.remarks,
+                kdj.k, kdj.d, kdj.j,
+                rsi.rsi6, rsi.rsi12, rsi.rsi24
+            FROM historical_quotes h
+            LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'CN'
+            LEFT JOIN rsi_indicators rsi ON h.code = rsi.code AND h.date = rsi.date AND rsi.market_type = 'CN'
+            WHERE h.code = :code
         """
     
     params_a = {"code": code}
@@ -144,6 +152,23 @@ def get_stock_history(
                         "notes_created_at": row[22],
                         "notes_updated_at": row[23]
                     })
+                    item.update({
+                        "k": row[24],
+                        "d": row[25],
+                        "j": row[26],
+                        "rsi6": row[27],
+                        "rsi12": row[28],
+                        "rsi24": row[29]
+                    })
+                else:
+                    item.update({
+                        "k": row[18],
+                        "d": row[19],
+                        "j": row[20],
+                        "rsi6": row[21],
+                        "rsi12": row[22],
+                        "rsi24": row[23]
+                    })
                 
                 items.append(item)
         else:
@@ -162,19 +187,27 @@ def get_stock_history(
                         COALESCE(tn.risk_level, '') as risk_level,
                         COALESCE(tn.created_by, '') as notes_creator,
                         tn.created_at as notes_created_at,
-                        tn.updated_at as notes_updated_at
+                        tn.updated_at as notes_updated_at,
+                        kdj.k, kdj.d, kdj.j,
+                        rsi.rsi6, rsi.rsi12, rsi.rsi24
                     FROM historical_quotes_hk h
                     LEFT JOIN trading_notes tn ON h.code = tn.stock_code AND CAST(h.date AS DATE) = CAST(tn.trade_date AS DATE)
+                    LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'HK'
+                    LEFT JOIN rsi_indicators rsi ON h.code = rsi.code AND h.date = rsi.date AND rsi.market_type = 'HK'
                     WHERE h.code = :code
                 """
             else:
                 query_hk = """
                     SELECT 
-                        code, name, date, open, close, high, low, 
-                        volume, amount, change_percent, change_amount, turnover_rate,
-                        NULL as cumulative_change_percent, five_day_change_percent, ten_day_change_percent, thirty_day_change_percent, sixty_day_change_percent, NULL as remarks
-                    FROM historical_quotes_hk 
-                    WHERE code = :code
+                        h.code, h.name, h.date, h.open, h.close, h.high, h.low, 
+                        h.volume, h.amount, h.change_percent, h.change_amount, h.turnover_rate,
+                        NULL as cumulative_change_percent, h.five_day_change_percent, h.ten_day_change_percent, h.thirty_day_change_percent, h.sixty_day_change_percent, NULL as remarks,
+                        kdj.k, kdj.d, kdj.j,
+                        rsi.rsi6, rsi.rsi12, rsi.rsi24
+                    FROM historical_quotes_hk h
+                    LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'HK'
+                    LEFT JOIN rsi_indicators rsi ON h.code = rsi.code AND h.date = rsi.date AND rsi.market_type = 'HK'
+                    WHERE h.code = :code
                 """
             
             params_hk = {"code": code}
@@ -225,7 +258,25 @@ def get_stock_history(
                             "risk_level": row[20],
                             "notes_creator": row[21],
                             "notes_created_at": row[22],
+                            "notes_created_at": row[22],
                             "notes_updated_at": row[23]
+                        })
+                        item.update({
+                            "k": row[24],
+                            "d": row[25],
+                            "j": row[26],
+                            "rsi6": row[27],
+                            "rsi12": row[28],
+                            "rsi24": row[29]
+                        })
+                    else:
+                        item.update({
+                            "k": row[18],
+                            "d": row[19],
+                            "j": row[20],
+                            "rsi6": row[21],
+                            "rsi12": row[22],
+                            "rsi24": row[23]
                         })
                     
                     items.append(item)

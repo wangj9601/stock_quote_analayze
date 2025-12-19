@@ -15,6 +15,9 @@ from .base import AKShareCollector
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 from backend_core.utils.macd_calculator import MACDCalculator
+from backend_core.utils.macd_calculator import MACDCalculator
+from backend_core.utils.kdj_calculator import KDJCalculator
+from backend_core.utils.rsi_calculator import RSICalculator
 
 class HKHistoricalQuoteCollector(AKShareCollector):
     """港股历史行情数据采集器"""
@@ -73,6 +76,35 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     collected_source TEXT,
                     collected_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date)
+                )
+            '''))
+            session.commit()
+            
+            session.execute(text('''
+                CREATE TABLE IF NOT EXISTS kdj_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    k REAL,
+                    d REAL,
+                    j REAL,
+                    rsv REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            session.commit()
+
+            session.execute(text('''
+                CREATE TABLE IF NOT EXISTS rsi_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    rsi6 REAL,
+                    rsi12 REAL,
+                    rsi24 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
                 )
             '''))
             session.commit()
@@ -198,6 +230,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     
                     # 处理每条记录
                     for record in records:
+                        # 如果现价、开盘、最高、最低中有为空的，跳过不采集
+                        if not record.get('current_price') or not record.get('open') or \
+                           not record.get('high') or not record.get('low'):
+                            continue
+
                         trade_date = record.get('trade_date')
                         change_data = change_percents.get(trade_date, {})
                         
@@ -282,6 +319,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     self.logger.error(f"处理股票 {stock_code} 的涨跌幅计算失败: {stock_error}")
                     # 即使计算失败，也尝试插入数据（不包含涨跌幅）
                     for record in records:
+                        # 如果现价、开盘、最高、最低中有为空的，跳过不采集
+                        if not record.get('current_price') or not record.get('open') or \
+                           not record.get('high') or not record.get('low'):
+                            continue
+
                         try:
                             insert_dict = {
                                 'code': record.get('code'),
@@ -360,6 +402,16 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     self._calculate_and_save_macd_hk(list(affected_stocks), target_date, session)
                 except Exception as e:
                     self.logger.warning(f"港股MACD指标计算失败: {e}")
+            
+                try:
+                    self._calculate_and_save_kdj_hk(list(affected_stocks), target_date, session)
+                except Exception as e:
+                    self.logger.warning(f"港股KDJ指标计算失败: {e}")
+
+                try:
+                    self._calculate_and_save_rsi_hk(list(affected_stocks), target_date, session)
+                except Exception as e:
+                    self.logger.warning(f"港股RSI指标计算失败: {e}")
             
             # 操作日志记录
             try:
@@ -482,5 +534,187 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     
         except Exception as e:
             self.logger.error(f"批量计算港股MACD指标失败: {e}")
+            session.rollback()
+
+    def _calculate_and_save_kdj_hk(self, stock_codes: list, target_date: str, session):
+        """
+        计算并保存港股KDJ指标
+        
+        Args:
+            stock_codes: 股票代码列表
+            target_date: 目标日期 (YYYY-MM-DD)
+            session: 数据库会话
+        """
+        try:
+            calculator = KDJCalculator()
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少20天的收盘价数据
+                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+                    
+                    result = session.execute(text("""
+                        SELECT date, close, high, low
+                        FROM historical_quotes_hk 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        AND high IS NOT NULL
+                        AND low IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 9:
+                        continue
+                    
+                    # 提取数据列表
+                    dates = [str(row[0]) for row in rows]
+                    closes = [float(row[1]) for row in rows]
+                    highs = [float(row[2]) for row in rows]
+                    lows = [float(row[3]) for row in rows]
+                    
+                    # 使用KDJ计算器批量计算
+                    kdj_results = calculator.calculate_kdj_batch(closes, highs, lows)
+                    
+                    if not kdj_results:
+                        continue
+                    
+                    # 保存KDJ数据（只保存目标日期的数据）
+                    for i, kdj_data in enumerate(kdj_results):
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO kdj_indicators
+                                (code, date, market_type, k, d, j, rsv, created_at)
+                                VALUES (:code, :date, :market_type, :k, :d, :j, :rsv, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    k = EXCLUDED.k,
+                                    d = EXCLUDED.d,
+                                    j = EXCLUDED.j,
+                                    rsv = EXCLUDED.rsv,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'HK',
+                                'k': kdj_data['k'],
+                                'd': kdj_data['d'],
+                                'j': kdj_data['j'],
+                                'rsv': kdj_data['rsv'],
+                                'created_at': datetime.now()
+                            })
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} KDJ数据失败: {e}")
+                            continue
+                    
+                    session.commit()
+                    self.logger.debug(f"股票 {stock_code} KDJ指标计算完成")
+                    
+                except Exception as e:
+                    self.logger.error(f"计算股票 {stock_code} KDJ指标失败: {e}")
+                    session.rollback()
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"批量计算港股KDJ指标失败: {e}")
+            session.rollback()
+
+    def _calculate_and_save_rsi_hk(self, stock_codes: list, target_date: str, session):
+        """
+        计算并保存港股RSI指标
+        
+        Args:
+            stock_codes: 股票代码列表
+            target_date: 目标日期 (YYYY-MM-DD)
+            session: 数据库会话
+        """
+        try:
+            calculator = RSICalculator()
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少30天的收盘价数据（用于计算RSI）
+                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
+                    
+                    result = session.execute(text("""
+                        SELECT date, close
+                        FROM historical_quotes_hk 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 7: # rsi6至少需要7天数据
+                        continue
+                    
+                    # 提取数据列表
+                    dates = [str(row[0]) for row in rows]
+                    closes = [float(row[1]) for row in rows]
+                    
+                    # 使用RSI计算器批量计算
+                    rsi_results = calculator.calculate_rsi_batch(closes)
+                    
+                    if not rsi_results:
+                        continue
+                    
+                    # 保存RSI数据（只保存目标日期的数据）
+                    for i, rsi_data in enumerate(rsi_results):
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO rsi_indicators
+                                (code, date, market_type, rsi6, rsi12, rsi24, created_at)
+                                VALUES (:code, :date, :market_type, :rsi6, :rsi12, :rsi24, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    rsi6 = EXCLUDED.rsi6,
+                                    rsi12 = EXCLUDED.rsi12,
+                                    rsi24 = EXCLUDED.rsi24,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'HK',
+                                'rsi6': rsi_data.get('rsi6'),
+                                'rsi12': rsi_data.get('rsi12'),
+                                'rsi24': rsi_data.get('rsi24'),
+                                'created_at': datetime.now()
+                            })
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} RSI数据失败: {e}")
+                            continue
+                    
+                    session.commit()
+                    self.logger.debug(f"股票 {stock_code} RSI指标计算完成")
+                    
+                except Exception as e:
+                    self.logger.error(f"计算股票 {stock_code} RSI指标失败: {e}")
+                    session.rollback()
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"批量计算港股RSI指标失败: {e}")
             session.rollback()
 

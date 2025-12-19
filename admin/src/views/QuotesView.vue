@@ -325,6 +325,36 @@
                       </span>
                     </template>
                   </el-table-column>
+                  <el-table-column prop="k" label="K" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.k !== null && scope.row.k !== undefined ? Number(scope.row.k).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="d" label="D" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.d !== null && scope.row.d !== undefined ? Number(scope.row.d).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="j" label="J" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.j !== null && scope.row.j !== undefined ? Number(scope.row.j).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="rsi6" label="RSI6" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.rsi6 !== null && scope.row.rsi6 !== undefined ? Number(scope.row.rsi6).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="rsi12" label="RSI12" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.rsi12 !== null && scope.row.rsi12 !== undefined ? Number(scope.row.rsi12).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="rsi24" label="RSI24" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.rsi24 !== null && scope.row.rsi24 !== undefined ? Number(scope.row.rsi24).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -594,6 +624,36 @@
                       <span :class="getChangeClass(scope.row.change_percent)">
                         {{ formatPercent(scope.row.change_percent) }}
                       </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="k" label="K" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.k !== null && scope.row.k !== undefined ? Number(scope.row.k).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="d" label="D" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.d !== null && scope.row.d !== undefined ? Number(scope.row.d).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="j" label="J" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.j !== null && scope.row.j !== undefined ? Number(scope.row.j).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="rsi6" label="RSI6" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.rsi6 !== null && scope.row.rsi6 !== undefined ? Number(scope.row.rsi6).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="rsi12" label="RSI12" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.rsi12 !== null && scope.row.rsi12 !== undefined ? Number(scope.row.rsi12).toFixed(2) : '-' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="rsi24" label="RSI24" min-width="60" show-overflow-tooltip>
+                    <template #default="scope">
+                        {{ scope.row.rsi24 !== null && scope.row.rsi24 !== undefined ? Number(scope.row.rsi24).toFixed(2) : '-' }}
                     </template>
                   </el-table-column>
                 </el-table>

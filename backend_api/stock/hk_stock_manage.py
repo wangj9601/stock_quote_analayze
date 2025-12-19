@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import akshare as ak
 from sqlalchemy import text, create_engine, func
-from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators
+from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口
@@ -668,6 +668,58 @@ async def get_hk_kline_hist(
                         item.update(macd_dict[item['date']])
             except Exception as e:
                 print(f"[hk_kline_hist] MACD数据查询失败: {e}")
+            
+            # 查询KDJ数据并合并到结果中
+            try:
+                kdj_query = db.query(KDJIndicators).filter(
+                    KDJIndicators.code == code,
+                    KDJIndicators.market_type == 'HK',
+                    KDJIndicators.date >= start_date,
+                    KDJIndicators.date <= end_date
+                ).order_by(KDJIndicators.date.asc())
+                
+                kdj_records = kdj_query.all()
+                kdj_dict = {}
+                for record in kdj_records:
+                    date_str = str(record.date)  # 港股date是String类型
+                    kdj_dict[date_str] = {
+                        "k": round(float(record.k), 4) if record.k is not None else None,
+                        "d": round(float(record.d), 4) if record.d is not None else None,
+                        "j": round(float(record.j), 4) if record.j is not None else None
+                    }
+                
+                # 将KDJ数据合并到K线数据中
+                for item in result:
+                    if item['date'] in kdj_dict:
+                        item.update(kdj_dict[item['date']])
+            except Exception as e:
+                print(f"[hk_kline_hist] KDJ数据查询失败: {e}")
+
+            # 查询RSI数据并合并到结果中
+            try:
+                rsi_query = db.query(RSIIndicators).filter(
+                    RSIIndicators.code == code,
+                    RSIIndicators.market_type == 'HK',
+                    RSIIndicators.date >= start_date,
+                    RSIIndicators.date <= end_date
+                ).order_by(RSIIndicators.date.asc())
+                
+                rsi_records = rsi_query.all()
+                rsi_dict = {}
+                for record in rsi_records:
+                    date_str = str(record.date)  # 港股date是String类型
+                    rsi_dict[date_str] = {
+                        "rsi6": round(float(record.rsi6), 4) if record.rsi6 is not None else None,
+                        "rsi12": round(float(record.rsi12), 4) if record.rsi12 is not None else None,
+                        "rsi24": round(float(record.rsi24), 4) if record.rsi24 is not None else None
+                    }
+                
+                # 将RSI数据合并到K线数据中
+                for item in result:
+                    if item['date'] in rsi_dict:
+                        item.update(rsi_dict[item['date']])
+            except Exception as e:
+                print(f"[hk_kline_hist] RSI数据查询失败: {e}")
             
             print(f"[hk_kline_hist] 返回{len(result)}条日线数据（历史{len(historical_quotes)}条，当天{1 if today_realtime else 0}条）")
             return JSONResponse({"success": True, "data": result})
