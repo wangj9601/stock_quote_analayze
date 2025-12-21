@@ -100,12 +100,12 @@ def get_stock_history(
     
     params_a = {"code": code}
     if start_date_fmt:
-        query_a += " AND date >= :start_date"
+        query_a += " AND h.date >= :start_date"
         params_a["start_date"] = start_date_fmt
     if end_date_fmt:
-        query_a += " AND date <= :end_date"
+        query_a += " AND h.date <= :end_date"
         params_a["end_date"] = end_date_fmt
-    query_a += " ORDER BY date DESC"
+    query_a += " ORDER BY h.date DESC"
     
     try:
         # 先检查A股表是否有数据
@@ -212,12 +212,12 @@ def get_stock_history(
             
             params_hk = {"code": code}
             if start_date_fmt:
-                query_hk += " AND date >= :start_date"
+                query_hk += " AND h.date >= :start_date"
                 params_hk["start_date"] = start_date_fmt
             if end_date_fmt:
-                query_hk += " AND date <= :end_date"
+                query_hk += " AND h.date <= :end_date"
                 params_hk["end_date"] = end_date_fmt
-            query_hk += " ORDER BY date DESC"
+            query_hk += " ORDER BY h.date DESC"
             
             count_query_hk = f"SELECT COUNT(*) FROM ({query_hk})"
             total = db.execute(text(count_query_hk), params_hk).scalar()

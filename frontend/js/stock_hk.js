@@ -482,7 +482,7 @@ const StockPage = {
                         show: true,
                         lineStyle: {
                             type: 'dashed',
-                            color: '#666',
+                            color: '#dc2626',
                             width: 1
                         }
                     }
@@ -595,8 +595,8 @@ const StockPage = {
                     z: 1,
                     itemStyle: {
                         color: function (params) {
-                            // 正值显示红色，负值显示青色/浅蓝色
-                            return params.value >= 0 ? '#dc2626' : '#06b6d4';
+                            // 正值显示红色，负值显示绿色
+                            return params.value >= 0 ? '#dc2626' : '#16a34a';
                         }
                     }
                 },
@@ -2173,7 +2173,9 @@ const StockPage = {
                 return;
         }
 
-        this.klineChart.setOption(option);
+        // 应用配置到图表，使用notMerge确保所有配置生效
+        this.klineChart.setOption(option, { notMerge: false });
+        console.log(`[updateSubIndicator] 已切换到${indicator}指标，配置已应用`);
         CommonUtils.showToast(`已切换到${this.getSubIndicatorName(indicator)}`, 'success');
     },
 
@@ -2235,19 +2237,75 @@ const StockPage = {
     },
 
     showMACDChart(option) {
+        console.log('[showMACDChart] 开始显示MACD图表');
+        
         // 显示MACD区域（grid[2]），隐藏成交量区域（grid[1]）
         if (option.grid && option.grid[1]) {
             option.grid[1].height = '0%';
             option.grid[1].top = '100%';
+            option.grid[1].show = false; // 明确隐藏成交量区域
         }
         if (option.grid && option.grid[2]) {
             option.grid[2].height = '18%';
             option.grid[2].top = '78%';
+            option.grid[2].show = true; // 明确显示MACD区域
+            option.grid[2].left = option.grid[0] ? option.grid[0].left : '8%';
+            option.grid[2].right = option.grid[0] ? option.grid[0].right : '6%';
         }
 
         // 调整K线图区域高度
         if (option.grid && option.grid[0]) {
             option.grid[0].height = '60%';
+        }
+
+        // 确保xAxis[2]的data与xAxis[0]同步
+        if (option.xAxis && option.xAxis[0] && option.xAxis[2]) {
+            option.xAxis[2].data = option.xAxis[0].data;
+            option.xAxis[2].show = true; // 明确显示xAxis
+            option.xAxis[2].type = 'category';
+            option.xAxis[2].boundaryGap = option.xAxis[0].boundaryGap !== undefined ? option.xAxis[0].boundaryGap : false;
+            
+            // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
+            if (!option.xAxis[2].axisLabel) {
+                option.xAxis[2].axisLabel = {};
+            }
+            option.xAxis[2].axisLabel.show = true;
+            option.xAxis[2].axisLabel.color = '#dc2626';
+            option.xAxis[2].axisLabel.formatter = function(value, index) {
+                // 格式化日期显示月份，例如：2023-08-10 -> 08
+                if (value && typeof value === 'string' && value.length >= 7) {
+                    const month = value.substring(5, 7);
+                    return month;
+                }
+                return value;
+            };
+            
+            // 设置xAxis[2]的axisLine和axisTick
+            option.xAxis[2].axisLine = { show: false };
+            option.xAxis[2].axisTick = { show: false };
+            option.xAxis[2].splitLine = { show: false };
+        }
+        
+        // 确保yAxis[2]的零线显示（红色虚线）
+        if (option.yAxis && option.yAxis[2]) {
+            option.yAxis[2].show = true; // 明确显示yAxis
+            option.yAxis[2].type = 'value';
+            option.yAxis[2].scale = true; // 确保包含零值
+            
+            // 确保splitLine显示零线
+            if (!option.yAxis[2].splitLine) {
+                option.yAxis[2].splitLine = {};
+            }
+            option.yAxis[2].splitLine.show = true;
+            option.yAxis[2].splitLine.lineStyle = {
+                type: 'dashed',
+                color: '#dc2626',
+                width: 1
+            };
+            
+            // 设置yAxis[2]的其他属性
+            option.yAxis[2].axisLine = { show: false };
+            option.yAxis[2].axisTick = { show: false };
         }
 
         // 显示MACD系列，隐藏成交量系列
@@ -2259,16 +2317,30 @@ const StockPage = {
                 option.series[4].show = true; // DIF
                 option.series[4].xAxisIndex = 2;
                 option.series[4].yAxisIndex = 2;
+                console.log('[showMACDChart] DIF系列已显示，数据长度:', option.series[4].data ? option.series[4].data.length : 0);
             }
             if (option.series[5]) {
                 option.series[5].show = true; // DEA
                 option.series[5].xAxisIndex = 2;
                 option.series[5].yAxisIndex = 2;
+                console.log('[showMACDChart] DEA系列已显示，数据长度:', option.series[5].data ? option.series[5].data.length : 0);
             }
             if (option.series[6]) {
                 option.series[6].show = true; // MACD
                 option.series[6].xAxisIndex = 2;
                 option.series[6].yAxisIndex = 2;
+                // 确保MACD柱状图的itemStyle正确
+                if (!option.series[6].itemStyle) {
+                    option.series[6].itemStyle = {};
+                }
+                if (typeof option.series[6].itemStyle.color === 'function') {
+                    // 保持原有的颜色函数
+                } else {
+                    option.series[6].itemStyle.color = function (params) {
+                        return params.value >= 0 ? '#dc2626' : '#16a34a';
+                    };
+                }
+                console.log('[showMACDChart] MACD系列已显示，数据长度:', option.series[6].data ? option.series[6].data.length : 0);
             }
             if (option.series[7]) option.series[7].show = false; // K
             if (option.series[8]) option.series[8].show = false; // D
@@ -2286,21 +2358,47 @@ const StockPage = {
                 }
             });
         }
+        
+        console.log('[showMACDChart] MACD图表配置完成，grid[2].show:', option.grid && option.grid[2] ? option.grid[2].show : 'N/A');
     },
 
     hideMACDChart(option) {
+        console.log('[hideMACDChart] 开始隐藏MACD图表');
+        
         // 隐藏MACD区域（grid[2]）
         if (option.grid && option.grid[2]) {
             option.grid[2].height = '0%';
             option.grid[2].top = '100%';
+            option.grid[2].show = false; // 明确设置show为false
+        }
+
+        // 隐藏xAxis[2]
+        if (option.xAxis && option.xAxis[2]) {
+            if (option.xAxis[2].axisLabel) {
+                option.xAxis[2].axisLabel.show = false;
+            }
+            option.xAxis[2].show = false; // 明确设置show为false
+        }
+
+        // 隐藏yAxis[2]
+        if (option.yAxis && option.yAxis[2]) {
+            option.yAxis[2].show = false; // 明确设置show为false
         }
 
         // 隐藏MACD系列
         if (option.series) {
-            if (option.series[4]) option.series[4].show = false; // DIF
-            if (option.series[5]) option.series[5].show = false; // DEA
-            if (option.series[6]) option.series[6].show = false; // MACD
+            if (option.series[4]) {
+                option.series[4].show = false; // DIF
+            }
+            if (option.series[5]) {
+                option.series[5].show = false; // DEA
+            }
+            if (option.series[6]) {
+                option.series[6].show = false; // MACD
+            }
         }
+        
+        console.log('[hideMACDChart] MACD图表已隐藏');
     },
 
     showKDJChart(option) {
@@ -2317,6 +2415,46 @@ const StockPage = {
         // 调整K线图区域高度
         if (option.grid && option.grid[0]) {
             option.grid[0].height = '60%';
+        }
+
+        // 确保xAxis[2]的data与xAxis[0]同步
+        if (option.xAxis && option.xAxis[0] && option.xAxis[2]) {
+            option.xAxis[2].data = option.xAxis[0].data;
+            // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
+            if (option.xAxis[2].axisLabel) {
+                option.xAxis[2].axisLabel.show = true;
+                option.xAxis[2].axisLabel.color = '#dc2626';
+                option.xAxis[2].axisLabel.formatter = function(value, index) {
+                    // 格式化日期显示月份，例如：2023-08-10 -> 08
+                    if (value && typeof value === 'string' && value.length >= 7) {
+                        const month = value.substring(5, 7);
+                        return month;
+                    }
+                    return value;
+                };
+            }
+            // 显示xAxis[2]的axisLine和axisTick
+            if (option.xAxis[2]) {
+                option.xAxis[2].axisLine = { show: false };
+                option.xAxis[2].axisTick = { show: false };
+                option.xAxis[2].splitLine = { show: false };
+            }
+        }
+        
+        // 确保yAxis[2]的零线显示（红色虚线）
+        if (option.yAxis && option.yAxis[2]) {
+            // 确保splitLine显示零线
+            if (!option.yAxis[2].splitLine) {
+                option.yAxis[2].splitLine = {};
+            }
+            option.yAxis[2].splitLine.show = true;
+            option.yAxis[2].splitLine.lineStyle = {
+                type: 'dashed',
+                color: '#dc2626',
+                width: 1
+            };
+            // 确保包含零值
+            option.yAxis[2].scale = true;
         }
 
         // 显示KDJ系列，隐藏成交量和MACD系列
@@ -2358,6 +2496,17 @@ const StockPage = {
     },
 
     hideKDJChart(option) {
+        // 隐藏KDJ区域（grid[2]）
+        if (option.grid && option.grid[2]) {
+            option.grid[2].height = '0%';
+            option.grid[2].top = '100%';
+        }
+
+        // 隐藏xAxis[2]的axisLabel
+        if (option.xAxis && option.xAxis[2] && option.xAxis[2].axisLabel) {
+            option.xAxis[2].axisLabel.show = false;
+        }
+
         // 隐藏KDJ系列
         if (option.series) {
             if (option.series[7]) option.series[7].show = false; // K
@@ -2380,6 +2529,46 @@ const StockPage = {
         // 调整K线图区域高度
         if (option.grid && option.grid[0]) {
             option.grid[0].height = '60%';
+        }
+
+        // 确保xAxis[2]的data与xAxis[0]同步
+        if (option.xAxis && option.xAxis[0] && option.xAxis[2]) {
+            option.xAxis[2].data = option.xAxis[0].data;
+            // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
+            if (option.xAxis[2].axisLabel) {
+                option.xAxis[2].axisLabel.show = true;
+                option.xAxis[2].axisLabel.color = '#dc2626';
+                option.xAxis[2].axisLabel.formatter = function(value, index) {
+                    // 格式化日期显示月份，例如：2023-08-10 -> 08
+                    if (value && typeof value === 'string' && value.length >= 7) {
+                        const month = value.substring(5, 7);
+                        return month;
+                    }
+                    return value;
+                };
+            }
+            // 显示xAxis[2]的axisLine和axisTick
+            if (option.xAxis[2]) {
+                option.xAxis[2].axisLine = { show: false };
+                option.xAxis[2].axisTick = { show: false };
+                option.xAxis[2].splitLine = { show: false };
+            }
+        }
+        
+        // 确保yAxis[2]的零线显示（红色虚线）
+        if (option.yAxis && option.yAxis[2]) {
+            // 确保splitLine显示零线
+            if (!option.yAxis[2].splitLine) {
+                option.yAxis[2].splitLine = {};
+            }
+            option.yAxis[2].splitLine.show = true;
+            option.yAxis[2].splitLine.lineStyle = {
+                type: 'dashed',
+                color: '#dc2626',
+                width: 1
+            };
+            // 确保包含零值
+            option.yAxis[2].scale = true;
         }
 
         // 显示RSI系列，隐藏成交量、MACD、KDJ系列
@@ -2420,6 +2609,17 @@ const StockPage = {
     },
 
     hideRSIChart(option) {
+        // 隐藏RSI区域（grid[2]）
+        if (option.grid && option.grid[2]) {
+            option.grid[2].height = '0%';
+            option.grid[2].top = '100%';
+        }
+
+        // 隐藏xAxis[2]的axisLabel
+        if (option.xAxis && option.xAxis[2] && option.xAxis[2].axisLabel) {
+            option.xAxis[2].axisLabel.show = false;
+        }
+
         // 隐藏RSI系列
         if (option.series) {
             if (option.series[10]) option.series[10].show = false; // RSI6
@@ -2559,12 +2759,25 @@ const StockPage = {
             const data = await resp.json();
             console.log('[loadKlineData] API响应:', data);
             if (data.success) {
-                const list = data.data;
+                let list = data.data;
 
                 // 检查数据是否为空
                 if (!list || list.length === 0) {
                     CommonUtils.showToast('暂无K线数据', 'info');
                     return;
+                }
+
+                // 确保数据按日期排序（从早到晚）
+                list.sort((a, b) => {
+                    const dateA = a.date ? new Date(a.date) : new Date(0);
+                    const dateB = b.date ? new Date(b.date) : new Date(0);
+                    return dateA - dateB;
+                });
+
+                // 调试：显示前5条和最后5条数据的日期
+                if (list.length > 0) {
+                    console.log('[loadKlineData] 数据排序后 - 前5条日期:', list.slice(0, 5).map(item => item.date));
+                    console.log('[loadKlineData] 数据排序后 - 后5条日期:', list.slice(-5).map(item => item.date));
                 }
 
                 // x轴日期
@@ -2718,7 +2931,8 @@ const StockPage = {
                     option.xAxis[1].boundaryGap = false;
                 }
 
-                this.klineChart.setOption(option);
+                // 应用配置到图表
+                this.klineChart.setOption(option, { notMerge: false });
             } else {
                 CommonUtils.showToast('K线数据获取失败: ' + data.message, 'error');
             }

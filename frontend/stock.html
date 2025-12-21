@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,8 +9,10 @@
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/stock.css">
     <!-- ECharts库 - 优先使用本地文件，失败时使用CDN -->
-    <script src="js/echarts.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
+    <script src="js/echarts.min.js"
+        onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
 </head>
+
 <body>
     <!-- 头部导航将由JavaScript动态加载 -->
 
@@ -30,7 +33,7 @@
                         <div class="price-time">--</div>
                     </div>
                 </div>
-                
+
                 <div class="stock-details">
                     <div class="detail-item">
                         <span class="label">今开</span>
@@ -121,7 +124,7 @@
                     <button class="content-tab" data-tab="research">研报</button>
                     <button class="content-tab" data-tab="flow">资金流向</button>
                 </div>
-                
+
                 <div class="tab-content">
                     <!-- 智能分析 -->
                     <div class="tab-panel active" id="analysis">
@@ -142,7 +145,7 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="analysis-card">
                                 <h3>📊 交易建议</h3>
                                 <div class="recommendation-result">
@@ -159,7 +162,7 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="analysis-card">
                                 <h3>📈 技术指标</h3>
                                 <div class="technical-indicators">
@@ -185,7 +188,7 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="analysis-card">
                                 <h3>🎯 关键价位</h3>
                                 <div class="key-levels">
@@ -221,7 +224,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 财务数据 -->
                     <div class="tab-panel" id="finance">
                         <div class="finance-grid">
@@ -254,7 +257,7 @@
                                     </tr>
                                 </table>
                             </div>
-                            
+
                             <div class="finance-section">
                                 <h3>盈利能力</h3>
                                 <div class="chart-placeholder">
@@ -263,7 +266,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 新闻公告 -->
                     <div class="tab-panel" id="news">
                         <div class="news-list-container">
@@ -282,7 +285,7 @@
                                     <h4 class="news-title">平安银行2024年年度业绩预告</h4>
                                     <p class="news-summary">公司预计2024年归属于上市公司股东的净利润为350-360亿元，同比增长5%-8%...</p>
                                 </div>
-                                
+
                                 <div class="news-card">
                                     <div class="news-meta">
                                         <span class="news-date">2025-01-19</span>
@@ -291,7 +294,7 @@
                                     <h4 class="news-title">银行股集体走强，平安银行涨超5%</h4>
                                     <p class="news-summary">受利好政策影响，银行板块今日表现强劲，平安银行领涨...</p>
                                 </div>
-                                
+
                                 <div class="news-card">
                                     <div class="news-meta">
                                         <span class="news-date">2025-01-18</span>
@@ -303,7 +306,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 研报 -->
                     <div class="tab-panel" id="research">
                         <div class="research-list">
@@ -322,7 +325,7 @@
                                 </div>
                                 <p class="research-summary">公司2024年业绩表现稳健，资产质量持续改善，建议买入...</p>
                             </div>
-                            
+
                             <div class="research-item">
                                 <div class="research-header">
                                     <h4>平安银行：零售转型成效显著</h4>
@@ -340,7 +343,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 资金流向 -->
                     <div class="tab-panel" id="flow">
                         <div class="flow-summary">
@@ -388,65 +391,65 @@
     <script src="components/header.js"></script>
     <script>
         // 确保API_BASE_URL已定义（备用方案）
-        (function() {
+        (function () {
             if (typeof API_BASE_URL === 'undefined') {
-                const apiUrl = (typeof Config !== 'undefined' && Config && Config.getApiBaseUrl) 
-                    ? Config.getApiBaseUrl() 
+                const apiUrl = (typeof Config !== 'undefined' && Config && Config.getApiBaseUrl)
+                    ? Config.getApiBaseUrl()
                     : 'http://192.168.31.237:5000';
                 window.API_BASE_URL = apiUrl;
             }
         })();
-        
+
         // 确保echarts已加载（备用方案）
         if (typeof echarts === 'undefined') {
             console.warn('echarts未加载，尝试从CDN加载');
             const echartsScript = document.createElement('script');
             echartsScript.src = 'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';
-            echartsScript.onerror = function() {
+            echartsScript.onerror = function () {
                 console.error('echarts CDN加载也失败');
             };
             document.head.appendChild(echartsScript);
         }
-        
+
         // 根据股票类型动态加载对应的JS文件
-        (async function() {
+        (async function () {
             // 从URL获取股票代码
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');
-            
+
             if (!code) {
                 console.error('缺少股票代码参数');
                 return;
             }
-            
+
             // 确保API_BASE_URL可用（使用全局变量）
-            const apiBaseUrl = (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) 
-                ? API_BASE_URL 
-                : ((typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL) 
-                    ? window.API_BASE_URL 
+            const apiBaseUrl = (typeof API_BASE_URL !== 'undefined' && API_BASE_URL)
+                ? API_BASE_URL
+                : ((typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL)
+                    ? window.API_BASE_URL
                     : 'http://192.168.31.237:5000');
-            
+
             try {
                 // 调用判断接口
                 const response = await fetch(`${apiBaseUrl}/api/stock/check_type?code=${code}`);
                 const result = await response.json();
-                
+
                 if (result.success) {
                     // 根据is_hk字段加载对应的JS文件
                     const jsFile = result.is_hk ? 'js/stock_hk.js' : 'js/stock.js';
                     console.log(`股票类型: ${result.is_hk ? '港股' : 'A股'}，加载文件: ${jsFile}`);
-                    
+
                     // 动态加载JS文件
                     const script = document.createElement('script');
                     script.src = jsFile;
-                    script.onload = function() {
+                    script.onload = function () {
                         console.log(`${jsFile} 加载完成`);
                         // JS文件加载完成后，初始化StockPage
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
                         }
                     };
-                    script.onerror = function() {
+                    script.onerror = function () {
                         console.error(`加载 ${jsFile} 失败`);
                         CommonUtils.showToast('加载股票页面脚本失败', 'error');
                     };
@@ -455,8 +458,8 @@
                     console.error('判断股票类型失败:', result.message);
                     // 默认加载A股JS
                     const script = document.createElement('script');
-                    script.src = 'js/stock.js';
-                    script.onload = function() {
+                    script.src = 'js/stock.js?v=' + new Date().getTime();
+                    script.onload = function () {
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
                         }
@@ -468,7 +471,7 @@
                 // 异常时默认加载A股JS
                 const script = document.createElement('script');
                 script.src = 'js/stock.js';
-                script.onload = function() {
+                script.onload = function () {
                     if (typeof StockPage !== 'undefined' && StockPage.init) {
                         StockPage.init();
                     }
@@ -478,4 +481,5 @@
         })();
     </script>
 </body>
-</html> 
+
+</html>

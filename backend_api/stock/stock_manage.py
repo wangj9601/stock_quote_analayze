@@ -702,13 +702,14 @@ async def get_kline_hist(
     start_date: str = Query(None, description="开始日期，YYYY-MM-DD"),
     end_date: str = Query(None, description="结束日期，YYYY-MM-DD"),
     adjust: str = Query("qfq", description="复权类型，如qfq"),
+    indicator: str = Query(None, description="指标类型，如vol/macd/kdj/rsi，默认返回vol"),
     db: Session = Depends(get_db)
 ):
     """
     获取A股K线历史数据
     修改后：从数据库历史行情表获取除当天外的数据，当天数据从实时行情表获取
     """
-    print(f"[kline_hist] 输入参数: code={code}, period={period}, start_date={start_date}, end_date={end_date}, adjust={adjust}")
+    print(f"[kline_hist] 输入参数: code={code}, period={period}, start_date={start_date}, end_date={end_date}, adjust={adjust}, indicator={indicator}")
     if not code or not start_date or not end_date:
         print(f"[kline_hist] 缺少参数")
         return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
@@ -789,86 +790,107 @@ async def get_kline_hist(
                     "turnover": fmt(today_realtime.turnover_rate),
                 })
             
-            # 按日期排序
-            result.sort(key=lambda x: x['date'])
+            # 按日期排序（确保日期格式统一后排序）
+            result.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d') if isinstance(x['date'], str) and len(x['date']) == 10 else datetime.min)
             
-            # 查询MACD数据并合并到结果中
-            try:
-                macd_query = db.query(MACDIndicators).filter(
-                    MACDIndicators.code == code,
-                    MACDIndicators.market_type == 'CN',
-                    MACDIndicators.date >= start_date,
-                    MACDIndicators.date <= end_date
-                ).order_by(MACDIndicators.date.asc())
-                
-                macd_records = macd_query.all()
-                macd_dict = {}
-                for record in macd_records:
-                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
-                    macd_dict[date_str] = {
-                        "dif": round(float(record.dif), 4) if record.dif is not None else None,
-                        "dea": round(float(record.dea), 4) if record.dea is not None else None,
-                        "macd": round(float(record.macd), 4) if record.macd is not None else None
-                    }
-                
-                # 将MACD数据合并到K线数据中
-                for item in result:
-                    if item['date'] in macd_dict:
-                        item.update(macd_dict[item['date']])
-            except Exception as e:
-                print(f"[kline_hist] MACD数据查询失败: {e}")
+            # 根据indicator参数决定查询哪些指标数据
+            # 默认返回vol（成交量），vol总是返回
+            # 如果指定了indicator（macd/kdj/rsi），则只返回对应的指标数据
             
-            # 查询KDJ数据并合并到结果中
-            try:
-                kdj_query = db.query(KDJIndicators).filter(
-                    KDJIndicators.code == code,
-                    KDJIndicators.market_type == 'CN',
-                    KDJIndicators.date >= start_date,
-                    KDJIndicators.date <= end_date
-                ).order_by(KDJIndicators.date.asc())
-                
-                kdj_records = kdj_query.all()
-                kdj_dict = {}
-                for record in kdj_records:
-                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
-                    kdj_dict[date_str] = {
-                        "k": round(float(record.k), 4) if record.k is not None else None,
-                        "d": round(float(record.d), 4) if record.d is not None else None,
-                        "j": round(float(record.j), 4) if record.j is not None else None
-                    }
-                
-                # 将KDJ数据合并到K线数据中
-                for item in result:
-                    if item['date'] in kdj_dict:
-                        item.update(kdj_dict[item['date']])
-            except Exception as e:
-                print(f"[kline_hist] KDJ数据查询失败: {e}")
+            # 查询MACD数据（仅在indicator为macd时）
+            if indicator == 'macd':
+                try:
+                    macd_query = db.query(MACDIndicators).filter(
+                        MACDIndicators.code == code,
+                        MACDIndicators.market_type == 'CN',
+                        MACDIndicators.date >= start_date,
+                        MACDIndicators.date <= end_date
+                    ).order_by(MACDIndicators.date.asc())
+                    
+                    macd_records = macd_query.all()
+                    macd_dict = {}
+                    for record in macd_records:
+                        date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                        macd_dict[date_str] = {
+                            "dif": round(float(record.dif), 4) if record.dif is not None else None,
+                            "dea": round(float(record.dea), 4) if record.dea is not None else None,
+                            "macd": round(float(record.macd), 4) if record.macd is not None else None
+                        }
+                    
+                    # 将MACD数据合并到K线数据中
+                    for item in result:
+                        if item['date'] in macd_dict:
+                            item.update(macd_dict[item['date']])
+                except Exception as e:
+                    print(f"[kline_hist] MACD数据查询失败: {e}")
+            
+            # 查询KDJ数据（仅在indicator为kdj时）
+            elif indicator == 'kdj':
+                try:
+                    print(f"[kline_hist] 开始查询KDJ数据: code={code}, start_date={start_date}, end_date={end_date}")
+                    kdj_query = db.query(KDJIndicators).filter(
+                        KDJIndicators.code == code,
+                        KDJIndicators.market_type == 'CN',
+                        KDJIndicators.date >= start_date,
+                        KDJIndicators.date <= end_date
+                    ).order_by(KDJIndicators.date.asc())
+                    
+                    kdj_records = kdj_query.all()
+                    print(f"[kline_hist] KDJ数据查询结果: 找到{len(kdj_records)}条记录")
+                    kdj_dict = {}
+                    for record in kdj_records:
+                        date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                        kdj_dict[date_str] = {
+                            "k": round(float(record.k), 4) if record.k is not None else None,
+                            "d": round(float(record.d), 4) if record.d is not None else None,
+                            "j": round(float(record.j), 4) if record.j is not None else None
+                        }
+                    
+                    print(f"[kline_hist] KDJ数据字典大小: {len(kdj_dict)}")
+                    if len(kdj_dict) > 0:
+                        sample_dates = list(kdj_dict.keys())[:5]
+                        print(f"[kline_hist] KDJ数据示例日期: {sample_dates}")
+                    
+                    # 将KDJ数据合并到K线数据中
+                    merged_count = 0
+                    for item in result:
+                        if item['date'] in kdj_dict:
+                            item.update(kdj_dict[item['date']])
+                            merged_count += 1
+                    print(f"[kline_hist] KDJ数据合并完成: 合并了{merged_count}条数据到{len(result)}条K线数据中")
+                except Exception as e:
+                    print(f"[kline_hist] KDJ数据查询失败: {e}")
+                    import traceback
+                    traceback.print_exc()
 
-            # 查询RSI数据并合并到结果中
-            try:
-                rsi_query = db.query(RSIIndicators).filter(
-                    RSIIndicators.code == code,
-                    RSIIndicators.market_type == 'CN',
-                    RSIIndicators.date >= start_date,
-                    RSIIndicators.date <= end_date
-                ).order_by(RSIIndicators.date.asc())
-                
-                rsi_records = rsi_query.all()
-                rsi_dict = {}
-                for record in rsi_records:
-                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
-                    rsi_dict[date_str] = {
-                        "rsi6": round(float(record.rsi6), 4) if record.rsi6 is not None else None,
-                        "rsi12": round(float(record.rsi12), 4) if record.rsi12 is not None else None,
-                        "rsi24": round(float(record.rsi24), 4) if record.rsi24 is not None else None
-                    }
-                
-                # 将RSI数据合并到K线数据中
-                for item in result:
-                    if item['date'] in rsi_dict:
-                        item.update(rsi_dict[item['date']])
-            except Exception as e:
-                print(f"[kline_hist] RSI数据查询失败: {e}")
+            # 查询RSI数据（仅在indicator为rsi时）
+            elif indicator == 'rsi':
+                try:
+                    rsi_query = db.query(RSIIndicators).filter(
+                        RSIIndicators.code == code,
+                        RSIIndicators.market_type == 'CN',
+                        RSIIndicators.date >= start_date,
+                        RSIIndicators.date <= end_date
+                    ).order_by(RSIIndicators.date.asc())
+                    
+                    rsi_records = rsi_query.all()
+                    rsi_dict = {}
+                    for record in rsi_records:
+                        date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                        rsi_dict[date_str] = {
+                            "rsi6": round(float(record.rsi6), 4) if record.rsi6 is not None else None,
+                            "rsi12": round(float(record.rsi12), 4) if record.rsi12 is not None else None,
+                            "rsi24": round(float(record.rsi24), 4) if record.rsi24 is not None else None
+                        }
+                    
+                    # 将RSI数据合并到K线数据中
+                    for item in result:
+                        if item['date'] in rsi_dict:
+                            item.update(rsi_dict[item['date']])
+                except Exception as e:
+                    print(f"[kline_hist] RSI数据查询失败: {e}")
+            
+            # 如果没有指定indicator或indicator为vol，只返回基础K线数据和成交量（已经在result中）
             
             print(f"[kline_hist] 返回{len(result)}条日线数据（历史{len(historical_quotes)}条，当天{1 if today_realtime else 0}条）")
             return JSONResponse({"success": True, "data": result})
