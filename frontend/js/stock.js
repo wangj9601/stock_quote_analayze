@@ -414,7 +414,7 @@ const StockPage = {
             backgroundColor: '#0f172a',
             grid: [
                 { left: '8%', right: '6%', top: '5%', height: '55%' },  // K线图区域
-                { left: '8%', right: '6%', top: '63%', height: '12%' },  // 成交量区域
+                { left: '8%', right: '6%', top: '63%', height: '18%' },  // 成交量区域
                 { left: '8%', right: '6%', top: '74%', height: '22%' }  // MACD区域（增加高度）
             ],
             xAxis: [
@@ -3214,9 +3214,22 @@ const StockPage = {
             if (option.series[4]) option.series[4].show = false; // DIF
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
+            
+            // 清除KDJ数据，避免显示残留数据
+            if (option.series[7]) {
+                option.series[7].show = false; // K
+                option.series[7].data = [];
+            }
+            if (option.series[8]) {
+                option.series[8].show = false; // D
+                option.series[8].data = [];
+            }
+            if (option.series[9]) {
+                option.series[9].show = false; // J
+                option.series[9].data = [];
+            }
+            
+            // RSI系列先设为false，稍后会设置为true
             if (option.series[10]) option.series[10].show = false; // RSI6 (先设为false)
             if (option.series[11]) option.series[11].show = false; // RSI12 (先设为false)
             if (option.series[12]) option.series[12].show = false; // RSI24 (先设为false)
@@ -3672,21 +3685,43 @@ const StockPage = {
                     const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
 
                     // 设置KDJ系列数据
-                if (option.series[7]) option.series[7].data = k;
-                if (option.series[8]) option.series[8].data = d;
-                if (option.series[9]) option.series[9].data = j;
+                    if (option.series[7]) option.series[7].data = k;
+                    if (option.series[8]) option.series[8].data = d;
+                    if (option.series[9]) option.series[9].data = j;
+                    
+                    // 清除RSI数据，避免切换时显示残留数据
+                    if (option.series[10]) option.series[10].data = [];
+                    if (option.series[11]) option.series[11].data = [];
+                    if (option.series[12]) option.series[12].data = [];
                 }
 
                 // RSI数据（仅在indicator为rsi时）
                 if (targetIndicator === 'rsi') {
-                const rsi6 = list.map(item => item.rsi6 !== null && item.rsi6 !== undefined ? parseFloat(item.rsi6) : null);
-                const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
-                const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
+                    const rsi6 = list.map(item => item.rsi6 !== null && item.rsi6 !== undefined ? parseFloat(item.rsi6) : null);
+                    const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
+                    const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
 
                     // 设置RSI系列数据
-                if (option.series[10]) option.series[10].data = rsi6;
-                if (option.series[11]) option.series[11].data = rsi12;
-                if (option.series[12]) option.series[12].data = rsi24;
+                    if (option.series[10]) option.series[10].data = rsi6;
+                    if (option.series[11]) option.series[11].data = rsi12;
+                    if (option.series[12]) option.series[12].data = rsi24;
+                    
+                    // 清除KDJ数据，避免切换时显示残留数据
+                    if (option.series[7]) option.series[7].data = [];
+                    if (option.series[8]) option.series[8].data = [];
+                    if (option.series[9]) option.series[9].data = [];
+                }
+                
+                // 如果当前指标不是KDJ也不是RSI，清除这两个指标的数据
+                if (targetIndicator !== 'kdj' && targetIndicator !== 'rsi') {
+                    // 清除KDJ数据
+                    if (option.series[7]) option.series[7].data = [];
+                    if (option.series[8]) option.series[8].data = [];
+                    if (option.series[9]) option.series[9].data = [];
+                    // 清除RSI数据
+                    if (option.series[10]) option.series[10].data = [];
+                    if (option.series[11]) option.series[11].data = [];
+                    if (option.series[12]) option.series[12].data = [];
                 }
 
                 // 根据当前选择的副图指标设置显示状态

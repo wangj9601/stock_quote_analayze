@@ -2464,6 +2464,20 @@ const StockPage = {
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
 
+            // 清除RSI数据，避免显示残留数据
+            if (option.series[10]) {
+                option.series[10].show = false; // RSI6
+                option.series[10].data = [];
+            }
+            if (option.series[11]) {
+                option.series[11].show = false; // RSI12
+                option.series[11].data = [];
+            }
+            if (option.series[12]) {
+                option.series[12].show = false; // RSI24
+                option.series[12].data = [];
+            }
+
             if (option.series[7]) {
                 option.series[7].show = true; // K
                 option.series[7].xAxisIndex = 2;
@@ -2479,10 +2493,6 @@ const StockPage = {
                 option.series[9].xAxisIndex = 2;
                 option.series[9].yAxisIndex = 2;
             }
-
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
         }
 
         // 更新dataZoom的xAxisIndex
@@ -2577,9 +2587,20 @@ const StockPage = {
             if (option.series[4]) option.series[4].show = false; // DIF
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
+            
+            // 清除KDJ数据，避免显示残留数据
+            if (option.series[7]) {
+                option.series[7].show = false; // K
+                option.series[7].data = [];
+            }
+            if (option.series[8]) {
+                option.series[8].show = false; // D
+                option.series[8].data = [];
+            }
+            if (option.series[9]) {
+                option.series[9].show = false; // J
+                option.series[9].data = [];
+            }
 
             if (option.series[10]) {
                 option.series[10].show = true; // RSI6
@@ -2837,27 +2858,49 @@ const StockPage = {
                 option.series[5].data = dea;
                 option.series[6].data = macd;
 
-                // KDJ数据
-                const k = list.map(item => item.k !== null && item.k !== undefined ? parseFloat(item.k) : null);
-                const d = list.map(item => item.d !== null && item.d !== undefined ? parseFloat(item.d) : null);
-                const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
-
-                if (option.series[7]) option.series[7].data = k;
-                if (option.series[8]) option.series[8].data = d;
-                if (option.series[9]) option.series[9].data = j;
-
-                // RSI数据
-                const rsi6 = list.map(item => item.rsi6 !== null && item.rsi6 !== undefined ? parseFloat(item.rsi6) : null);
-                const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
-                const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
-
-                if (option.series[10]) option.series[10].data = rsi6;
-                if (option.series[11]) option.series[11].data = rsi12;
-                if (option.series[12]) option.series[12].data = rsi24;
-
                 // 根据当前选择的副图指标设置显示状态
                 const subIndicatorSelect = document.querySelector('.sub-indicator-select');
                 const currentSubIndicator = subIndicatorSelect ? subIndicatorSelect.value : 'vol';
+                
+                // KDJ数据（仅在indicator为kdj时）
+                if (currentSubIndicator === 'kdj') {
+                    const k = list.map(item => item.k !== null && item.k !== undefined ? parseFloat(item.k) : null);
+                    const d = list.map(item => item.d !== null && item.d !== undefined ? parseFloat(item.d) : null);
+                    const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
+
+                    // 设置KDJ系列数据
+                    if (option.series[7]) option.series[7].data = k;
+                    if (option.series[8]) option.series[8].data = d;
+                    if (option.series[9]) option.series[9].data = j;
+                    
+                    // 清除RSI数据，避免切换时显示残留数据
+                    if (option.series[10]) option.series[10].data = [];
+                    if (option.series[11]) option.series[11].data = [];
+                    if (option.series[12]) option.series[12].data = [];
+                } else if (currentSubIndicator === 'rsi') {
+                    // RSI数据（仅在indicator为rsi时）
+                    const rsi6 = list.map(item => item.rsi6 !== null && item.rsi6 !== undefined ? parseFloat(item.rsi6) : null);
+                    const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
+                    const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
+
+                    // 设置RSI系列数据
+                    if (option.series[10]) option.series[10].data = rsi6;
+                    if (option.series[11]) option.series[11].data = rsi12;
+                    if (option.series[12]) option.series[12].data = rsi24;
+                    
+                    // 清除KDJ数据，避免切换时显示残留数据
+                    if (option.series[7]) option.series[7].data = [];
+                    if (option.series[8]) option.series[8].data = [];
+                    if (option.series[9]) option.series[9].data = [];
+                } else {
+                    // 如果当前指标不是KDJ也不是RSI，清除这两个指标的数据
+                    if (option.series[7]) option.series[7].data = [];
+                    if (option.series[8]) option.series[8].data = [];
+                    if (option.series[9]) option.series[9].data = [];
+                    if (option.series[10]) option.series[10].data = [];
+                    if (option.series[11]) option.series[11].data = [];
+                    if (option.series[12]) option.series[12].data = [];
+                }
                 if (currentSubIndicator === 'macd') {
                     this.showMACDChart(option);
                     this.hideVolumeChart(option);
