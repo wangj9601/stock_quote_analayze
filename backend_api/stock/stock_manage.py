@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators
+from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
@@ -546,28 +546,7 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
         except Exception:
             avg_price = None
         
-        # 优先从数据库获取市盈率数据，如果数据库没有则从akshare获取
-        pe_dynamic = None
-        if db_stock_data and db_stock_data.pe_dynamic is not None:
-            # 从数据库获取市盈率
-            pe_dynamic = fmt(db_stock_data.pe_dynamic)
-            print(f"[realtime_quote_by_code] 从数据库获取市盈率: {pe_dynamic}")
-        else:
-            # 数据库没有市盈率数据，从akshare获取作为备选
-            try:
-                df_spot = ak.stock_zh_a_spot_em()
-                stock_spot_data = df_spot[df_spot['代码'] == code]
-                if not stock_spot_data.empty:
-                    pe_dynamic = stock_spot_data.iloc[0]['市盈率-动态']
-                    if pd.isna(pe_dynamic):
-                        pe_dynamic = None
-                    else:
-                        pe_dynamic = fmt(pe_dynamic)
-                    print(f"[realtime_quote_by_code] 从akshare获取市盈率: {pe_dynamic}")
-            except Exception as e:
-                print(f"[realtime_quote_by_code] 从akshare获取市盈率失败: {e}")
-                pe_dynamic = None
-        
+              
         result = {
             "code": code,
             "current_price": fmt(bid_ask_dict.get("最新")),
@@ -580,7 +559,7 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
             "volume": fmt(bid_ask_dict.get("总手")),
             "turnover": fmt(bid_ask_dict.get("金额")),
             "turnover_rate": fmt(bid_ask_dict.get("换手")),
-            "pe_dynamic": pe_dynamic,
+            "pe_dynamic": None,
             "average_price": fmt(avg_price),
         }
         print(f"[realtime_quote_by_code] 输出数据: {result}")
@@ -890,6 +869,36 @@ async def get_kline_hist(
                 except Exception as e:
                     print(f"[kline_hist] RSI数据查询失败: {e}")
             
+            # 查询MA数据（MA总是返回，因为它是K线图的基础指标）
+            try:
+                ma_query = db.query(MAIndicators).filter(
+                    MAIndicators.code == code,
+                    MAIndicators.market_type == 'A股',
+                    MAIndicators.date >= start_date,
+                    MAIndicators.date <= end_date
+                ).order_by(MAIndicators.date.asc())
+                
+                ma_records = ma_query.all()
+                ma_dict = {}
+                for record in ma_records:
+                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                    ma_dict[date_str] = {
+                        "ma5": round(float(record.ma5), 4) if record.ma5 is not None else None,
+                        "ma10": round(float(record.ma10), 4) if record.ma10 is not None else None,
+                        "ma20": round(float(record.ma20), 4) if record.ma20 is not None else None,
+                        "ma30": round(float(record.ma30), 4) if record.ma30 is not None else None,
+                        "ma60": round(float(record.ma60), 4) if record.ma60 is not None else None,
+                        "ma120": round(float(record.ma120), 4) if record.ma120 is not None else None,
+                        "ma200": round(float(record.ma200), 4) if record.ma200 is not None else None
+                    }
+                
+                # 将MA数据合并到K线数据中
+                for item in result:
+                    if item['date'] in ma_dict:
+                        item.update(ma_dict[item['date']])
+            except Exception as e:
+                print(f"[kline_hist] MA数据查询失败: {e}")
+            
             # 如果没有指定indicator或indicator为vol，只返回基础K线数据和成交量（已经在result中）
             
             print(f"[kline_hist] 返回{len(result)}条日线数据（历史{len(historical_quotes)}条，当天{1 if today_realtime else 0}条）")
@@ -1185,6 +1194,58 @@ async def get_macd(
         
     except Exception as e:
         print(f"[macd] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+@router.get("/ma")
+async def get_ma(
+    code: str = Query(None, description="股票代码"),
+    start_date: str = Query(None, description="开始日期，YYYY-MM-DD"),
+    end_date: str = Query(None, description="结束日期，YYYY-MM-DD"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取A股MA指标数据
+    """
+    print(f"[ma] 输入参数: code={code}, start_date={start_date}, end_date={end_date}")
+    if not code or not start_date or not end_date:
+        return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
+    
+    try:
+        # 查询MA数据
+        ma_query = db.query(MAIndicators).filter(
+            MAIndicators.code == code,
+            MAIndicators.market_type == 'A股',
+            MAIndicators.date >= start_date,
+            MAIndicators.date <= end_date
+        ).order_by(MAIndicators.date.asc())
+        
+        ma_records = ma_query.all()
+        
+        result = []
+        for record in ma_records:
+            date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+            result.append({
+                "date": date_str,
+                "code": record.code,
+                "ma5": round(float(record.ma5), 4) if record.ma5 is not None else None,
+                "ma10": round(float(record.ma10), 4) if record.ma10 is not None else None,
+                "ma20": round(float(record.ma20), 4) if record.ma20 is not None else None,
+                "ma30": round(float(record.ma30), 4) if record.ma30 is not None else None,
+                "ma60": round(float(record.ma60), 4) if record.ma60 is not None else None,
+                "ma120": round(float(record.ma120), 4) if record.ma120 is not None else None,
+                "ma200": round(float(record.ma200), 4) if record.ma200 is not None else None
+            })
+        
+        print(f"[ma] 返回 {len(result)} 条MA数据")
+        return JSONResponse({
+            "success": True,
+            "data": result
+        })
+        
+    except Exception as e:
+        print(f"[ma] 错误: {str(e)}")
         import traceback
         traceback.print_exc()
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)

@@ -727,7 +727,7 @@ const StockPage = {
                 }
             },
             legend: {
-                data: ['K线', 'MA5', 'MA10', '成交量', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24'],
+                data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', '成交量', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24'],
                 top: '1%',
                 textStyle: {
                     color: '#999'
@@ -2825,19 +2825,36 @@ const StockPage = {
                     // 返回正确的ECharts candlestick格式
                     return [open, close, low, high];
                 });
-                // MA5/MA10
-                function calcMA(arr, n) {
-                    const result = [];
-                    for (let i = 0; i < arr.length; i++) {
-                        if (i < n - 1) { result.push('-'); continue; }
-                        let sum = 0;
-                        for (let j = 0; j < n; j++) sum += Number(arr[i - j][1]);
-                        result.push((sum / n).toFixed(2));
+                // MA数据：优先使用API返回的MA数据，如果没有则实时计算MA5和MA10
+                const ma5 = list.map(item => item.ma5 !== null && item.ma5 !== undefined ? parseFloat(item.ma5) : null);
+                const ma10 = list.map(item => item.ma10 !== null && item.ma10 !== undefined ? parseFloat(item.ma10) : null);
+                const ma20 = list.map(item => item.ma20 !== null && item.ma20 !== undefined ? parseFloat(item.ma20) : null);
+                const ma30 = list.map(item => item.ma30 !== null && item.ma30 !== undefined ? parseFloat(item.ma30) : null);
+                const ma60 = list.map(item => item.ma60 !== null && item.ma60 !== undefined ? parseFloat(item.ma60) : null);
+                const ma120 = list.map(item => item.ma120 !== null && item.ma120 !== undefined ? parseFloat(item.ma120) : null);
+                const ma200 = list.map(item => item.ma200 !== null && item.ma200 !== undefined ? parseFloat(item.ma200) : null);
+                
+                // 如果API没有返回MA数据，则实时计算MA5和MA10（向后兼容）
+                const hasMaData = ma5.some(v => v !== null);
+                if (!hasMaData) {
+                    function calcMA(arr, n) {
+                        const result = [];
+                        for (let i = 0; i < arr.length; i++) {
+                            if (i < n - 1) { result.push(null); continue; }
+                            let sum = 0;
+                            for (let j = 0; j < n; j++) sum += Number(arr[i - j][1]);
+                            result.push((sum / n).toFixed(2));
+                        }
+                        return result;
                     }
-                    return result;
+                    const ma5_calc = calcMA(kline, 5);
+                    const ma10_calc = calcMA(kline, 10);
+                    for (let i = 0; i < ma5.length; i++) {
+                        if (ma5[i] === null) ma5[i] = ma5_calc[i] !== '-' ? parseFloat(ma5_calc[i]) : null;
+                        if (ma10[i] === null) ma10[i] = ma10_calc[i] !== '-' ? parseFloat(ma10_calc[i]) : null;
+                    }
                 }
-                const ma5 = calcMA(kline, 5);
-                const ma10 = calcMA(kline, 10);
+                
                 // 成交量
                 const volume = list.map(item => item.volume);
                 // 更新option - 根据数据量调整显示效果
@@ -2853,10 +2870,15 @@ const StockPage = {
                 option.series[0].data = kline;
                 option.series[1].data = ma5;
                 option.series[2].data = ma10;
-                option.series[3].data = volume;
-                option.series[4].data = dif;
-                option.series[5].data = dea;
-                option.series[6].data = macd;
+                option.series[3].data = ma20;  // MA20
+                option.series[4].data = ma30;  // MA30
+                option.series[5].data = ma60;  // MA60
+                option.series[6].data = ma120; // MA120
+                option.series[7].data = ma200; // MA200
+                option.series[8].data = volume; // 成交量（索引从8开始）
+                option.series[9].data = dif;
+                option.series[10].data = dea;
+                option.series[11].data = macd;
 
                 // 根据当前选择的副图指标设置显示状态
                 const subIndicatorSelect = document.querySelector('.sub-indicator-select');
@@ -2868,15 +2890,15 @@ const StockPage = {
                     const d = list.map(item => item.d !== null && item.d !== undefined ? parseFloat(item.d) : null);
                     const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
 
-                    // 设置KDJ系列数据
-                    if (option.series[7]) option.series[7].data = k;
-                    if (option.series[8]) option.series[8].data = d;
-                    if (option.series[9]) option.series[9].data = j;
+                    // 设置KDJ系列数据（索引调整：series[12]=K, [13]=D, [14]=J）
+                    if (option.series[12]) option.series[12].data = k;
+                    if (option.series[13]) option.series[13].data = d;
+                    if (option.series[14]) option.series[14].data = j;
                     
                     // 清除RSI数据，避免切换时显示残留数据
-                    if (option.series[10]) option.series[10].data = [];
-                    if (option.series[11]) option.series[11].data = [];
-                    if (option.series[12]) option.series[12].data = [];
+                    if (option.series[15]) option.series[15].data = [];
+                    if (option.series[16]) option.series[16].data = [];
+                    if (option.series[17]) option.series[17].data = [];
                 } else if (currentSubIndicator === 'rsi') {
                     // RSI数据（仅在indicator为rsi时）
                     const rsi6 = list.map(item => item.rsi6 !== null && item.rsi6 !== undefined ? parseFloat(item.rsi6) : null);

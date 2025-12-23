@@ -11,6 +11,9 @@ from .five_day_change_calculator import FiveDayChangeCalculator
 from .extended_change_calculator import ExtendedChangeCalculator
 from .thirty_day_change_calculator import ThirtyDayChangeCalculator
 from backend_core.utils.macd_calculator import MACDCalculator
+from backend_core.utils.ma_calculator import MACalculator
+from backend_core.utils.kdj_calculator import KDJCalculator
+from backend_core.utils.rsi_calculator import RSICalculator
 from datetime import timedelta
 
 class HistoricalQuoteCollector(TushareCollector):
@@ -79,6 +82,50 @@ class HistoricalQuoteCollector(TushareCollector):
                 END IF;
             END
             $$;
+        '''))
+        # 初始化MA指标表结构
+        session.execute(text('''
+            CREATE TABLE IF NOT EXISTS ma_indicators (
+                code VARCHAR(20) NOT NULL,
+                date VARCHAR(20) NOT NULL,
+                market_type VARCHAR(10) NOT NULL,
+                ma5 REAL,
+                ma10 REAL,
+                ma20 REAL,
+                ma30 REAL,
+                ma60 REAL,
+                ma120 REAL,
+                ma200 REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (code, date, market_type)
+            )
+        '''))
+        # 初始化KDJ指标表结构
+        session.execute(text('''
+            CREATE TABLE IF NOT EXISTS kdj_indicators (
+                code VARCHAR(20) NOT NULL,
+                date VARCHAR(20) NOT NULL,
+                market_type VARCHAR(10) NOT NULL,
+                k REAL,
+                d REAL,
+                j REAL,
+                rsv REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (code, date, market_type)
+            )
+        '''))
+        # 初始化RSI指标表结构
+        session.execute(text('''
+            CREATE TABLE IF NOT EXISTS rsi_indicators (
+                code VARCHAR(20) NOT NULL,
+                date VARCHAR(20) NOT NULL,
+                market_type VARCHAR(10) NOT NULL,
+                rsi6 REAL,
+                rsi12 REAL,
+                rsi24 REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (code, date, market_type)
+            )
         '''))
         session.commit()
         session.close()
@@ -238,6 +285,479 @@ class HistoricalQuoteCollector(TushareCollector):
             
         except Exception as e:
             self.logger.error(f"批量计算MACD指标失败: {e}")
+            session.rollback()
+            return {
+                'total': 0,
+                'success': 0,
+                'skipped': 0,
+                'failed': 0,
+                'details': [str(e)]
+            }
+    
+    def _calculate_and_save_ma_for_date(self, session, target_date: str) -> dict:
+        """
+        计算并保存指定日期的MA指标
+        
+        Args:
+            session: 数据库会话
+            target_date: 目标日期 (YYYY-MM-DD)
+            
+        Returns:
+            dict: 计算结果统计
+        """
+        try:
+            # 获取该日期所有有数据的股票代码
+            result = session.execute(text("""
+                SELECT DISTINCT code 
+                FROM historical_quotes 
+                WHERE date = :target_date
+            """), {'target_date': target_date})
+            
+            stock_codes = [row[0] for row in result.fetchall()]
+            
+            if not stock_codes:
+                self.logger.warning(f"日期 {target_date} 没有股票数据")
+                return {
+                    'total': 0,
+                    'success': 0,
+                    'skipped': 0,
+                    'failed': 0,
+                    'details': []
+                }
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            
+            # 查询开始日期（需要至少200天历史数据用于MA200）
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=250)).strftime('%Y-%m-%d')
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少200天的收盘价数据
+                    result = session.execute(text("""
+                        SELECT date, close 
+                        FROM historical_quotes 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 5:  # 至少需要5天数据才能计算MA5
+                        skipped_count += 1
+                        continue
+                    
+                    # 构建DataFrame
+                    df_data = []
+                    dates = []
+                    for row in rows:
+                        date_val = row[0]
+                        if isinstance(date_val, datetime.datetime):
+                            date_str = date_val.strftime('%Y-%m-%d')
+                        elif isinstance(date_val, str):
+                            date_str = date_val
+                        else:
+                            date_str = str(date_val)
+                        dates.append(date_str)
+                        df_data.append({
+                            'date': date_str,
+                            'close': float(row[1]) if row[1] else None
+                        })
+                    
+                    df = pd.DataFrame(df_data)
+                    df['date'] = pd.to_datetime(df['date'])
+                    df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
+                    
+                    if 'close' not in df.columns or len(df) == 0:
+                        skipped_count += 1
+                        continue
+                    
+                    # 计算MA指标
+                    ma_df = MACalculator.calculate_ma_for_dataframe(df, periods=[5, 10, 20, 30, 60, 120, 200])
+                    
+                    # 保存MA数据（只保存目标日期的数据）
+                    saved = False
+                    for _, row in ma_df.iterrows():
+                        date_str = row['date'].strftime('%Y-%m-%d') if isinstance(row['date'], pd.Timestamp) else str(row['date'])
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO ma_indicators
+                                (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200, created_at)
+                                VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    ma5 = EXCLUDED.ma5,
+                                    ma10 = EXCLUDED.ma10,
+                                    ma20 = EXCLUDED.ma20,
+                                    ma30 = EXCLUDED.ma30,
+                                    ma60 = EXCLUDED.ma60,
+                                    ma120 = EXCLUDED.ma120,
+                                    ma200 = EXCLUDED.ma200,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'A股',
+                                'ma5': self._safe_value(row.get('ma5')),
+                                'ma10': self._safe_value(row.get('ma10')),
+                                'ma20': self._safe_value(row.get('ma20')),
+                                'ma30': self._safe_value(row.get('ma30')),
+                                'ma60': self._safe_value(row.get('ma60')),
+                                'ma120': self._safe_value(row.get('ma120')),
+                                'ma200': self._safe_value(row.get('ma200')),
+                                'created_at': datetime.datetime.now()
+                            })
+                            saved = True
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} MA数据失败: {e}")
+                            continue
+                    
+                    if saved:
+                        success_count += 1
+                    else:
+                        skipped_count += 1
+                    
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+                    self.logger.error(f"计算股票 {stock_code} MA指标失败: {e}")
+                    continue
+            
+            # 提交事务
+            session.commit()
+            
+            return {
+                'total': len(stock_codes),
+                'success': success_count,
+                'skipped': skipped_count,
+                'failed': failed_count,
+                'details': failed_details
+            }
+            
+        except Exception as e:
+            self.logger.error(f"批量计算MA指标失败: {e}")
+            session.rollback()
+            return {
+                'total': 0,
+                'success': 0,
+                'skipped': 0,
+                'failed': 0,
+                'details': [str(e)]
+            }
+    
+    def _calculate_and_save_kdj_for_date(self, session, target_date: str) -> dict:
+        """
+        计算并保存指定日期的KDJ指标
+        
+        Args:
+            session: 数据库会话
+            target_date: 目标日期 (YYYY-MM-DD)
+            
+        Returns:
+            dict: 计算结果统计
+        """
+        try:
+            # 获取该日期所有有数据的股票代码
+            result = session.execute(text("""
+                SELECT DISTINCT code 
+                FROM historical_quotes 
+                WHERE date = :target_date
+            """), {'target_date': target_date})
+            
+            stock_codes = [row[0] for row in result.fetchall()]
+            
+            if not stock_codes:
+                self.logger.warning(f"日期 {target_date} 没有股票数据")
+                return {
+                    'total': 0,
+                    'success': 0,
+                    'skipped': 0,
+                    'failed': 0,
+                    'details': []
+                }
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            
+            # 查询开始日期（需要至少9天历史数据用于KDJ）
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            calculator = KDJCalculator()
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少9天的收盘价、最高价、最低价数据
+                    result = session.execute(text("""
+                        SELECT date, close, high, low 
+                        FROM historical_quotes 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL 
+                        AND high IS NOT NULL 
+                        AND low IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 9:  # 至少需要9天数据才能计算KDJ
+                        skipped_count += 1
+                        continue
+                    
+                    # 提取数据列表
+                    dates = []
+                    closes = []
+                    highs = []
+                    lows = []
+                    for row in rows:
+                        date_val = row[0]
+                        if isinstance(date_val, datetime.datetime):
+                            date_str = date_val.strftime('%Y-%m-%d')
+                        elif isinstance(date_val, str):
+                            date_str = date_val
+                        else:
+                            date_str = str(date_val)
+                        dates.append(date_str)
+                        closes.append(float(row[1]))
+                        highs.append(float(row[2]))
+                        lows.append(float(row[3]))
+                    
+                    # 批量计算KDJ
+                    kdj_results = calculator.calculate_kdj_batch(closes, highs, lows)
+                    
+                    if not kdj_results:
+                        failed_count += 1
+                        failed_details.append(f"{stock_code}: KDJ计算失败")
+                        continue
+                    
+                    # 保存KDJ数据（只保存目标日期的数据）
+                    saved = False
+                    for i, kdj_data in enumerate(kdj_results):
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO kdj_indicators
+                                (code, date, market_type, k, d, j, rsv, created_at)
+                                VALUES (:code, :date, :market_type, :k, :d, :j, :rsv, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    k = EXCLUDED.k,
+                                    d = EXCLUDED.d,
+                                    j = EXCLUDED.j,
+                                    rsv = EXCLUDED.rsv,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'A股',
+                                'k': kdj_data['k'],
+                                'd': kdj_data['d'],
+                                'j': kdj_data['j'],
+                                'rsv': kdj_data['rsv'],
+                                'created_at': datetime.datetime.now()
+                            })
+                            saved = True
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} KDJ数据失败: {e}")
+                            continue
+                    
+                    if saved:
+                        success_count += 1
+                    else:
+                        skipped_count += 1
+                    
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+                    self.logger.error(f"计算股票 {stock_code} KDJ指标失败: {e}")
+                    continue
+            
+            # 提交事务
+            session.commit()
+            
+            return {
+                'total': len(stock_codes),
+                'success': success_count,
+                'skipped': skipped_count,
+                'failed': failed_count,
+                'details': failed_details
+            }
+            
+        except Exception as e:
+            self.logger.error(f"批量计算KDJ指标失败: {e}")
+            session.rollback()
+            return {
+                'total': 0,
+                'success': 0,
+                'skipped': 0,
+                'failed': 0,
+                'details': [str(e)]
+            }
+    
+    def _calculate_and_save_rsi_for_date(self, session, target_date: str) -> dict:
+        """
+        计算并保存指定日期的RSI指标
+        
+        Args:
+            session: 数据库会话
+            target_date: 目标日期 (YYYY-MM-DD)
+            
+        Returns:
+            dict: 计算结果统计
+        """
+        try:
+            # 获取该日期所有有数据的股票代码
+            result = session.execute(text("""
+                SELECT DISTINCT code 
+                FROM historical_quotes 
+                WHERE date = :target_date
+            """), {'target_date': target_date})
+            
+            stock_codes = [row[0] for row in result.fetchall()]
+            
+            if not stock_codes:
+                self.logger.warning(f"日期 {target_date} 没有股票数据")
+                return {
+                    'total': 0,
+                    'success': 0,
+                    'skipped': 0,
+                    'failed': 0,
+                    'details': []
+                }
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            
+            # 查询开始日期（需要至少30天历史数据用于RSI24）
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
+            
+            calculator = RSICalculator()
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少30天的收盘价数据
+                    result = session.execute(text("""
+                        SELECT date, close 
+                        FROM historical_quotes 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 7:  # rsi6至少需要7天数据
+                        skipped_count += 1
+                        continue
+                    
+                    # 提取数据列表
+                    dates = []
+                    closes = []
+                    for row in rows:
+                        date_val = row[0]
+                        if isinstance(date_val, datetime.datetime):
+                            date_str = date_val.strftime('%Y-%m-%d')
+                        elif isinstance(date_val, str):
+                            date_str = date_val
+                        else:
+                            date_str = str(date_val)
+                        dates.append(date_str)
+                        closes.append(float(row[1]))
+                    
+                    # 批量计算RSI
+                    rsi_results = calculator.calculate_rsi_batch(closes)
+                    
+                    if not rsi_results:
+                        failed_count += 1
+                        failed_details.append(f"{stock_code}: RSI计算失败")
+                        continue
+                    
+                    # 保存RSI数据（只保存目标日期的数据）
+                    saved = False
+                    for i, rsi_data in enumerate(rsi_results):
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO rsi_indicators
+                                (code, date, market_type, rsi6, rsi12, rsi24, created_at)
+                                VALUES (:code, :date, :market_type, :rsi6, :rsi12, :rsi24, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    rsi6 = EXCLUDED.rsi6,
+                                    rsi12 = EXCLUDED.rsi12,
+                                    rsi24 = EXCLUDED.rsi24,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'A股',
+                                'rsi6': rsi_data.get('rsi6'),
+                                'rsi12': rsi_data.get('rsi12'),
+                                'rsi24': rsi_data.get('rsi24'),
+                                'created_at': datetime.datetime.now()
+                            })
+                            saved = True
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} RSI数据失败: {e}")
+                            continue
+                    
+                    if saved:
+                        success_count += 1
+                    else:
+                        skipped_count += 1
+                    
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+                    self.logger.error(f"计算股票 {stock_code} RSI指标失败: {e}")
+                    continue
+            
+            # 提交事务
+            session.commit()
+            
+            return {
+                'total': len(stock_codes),
+                'success': success_count,
+                'skipped': skipped_count,
+                'failed': failed_count,
+                'details': failed_details
+            }
+            
+        except Exception as e:
+            self.logger.error(f"批量计算RSI指标失败: {e}")
             session.rollback()
             return {
                 'total': 0,
@@ -564,6 +1084,150 @@ class HistoricalQuoteCollector(TushareCollector):
                         session.commit()
                     except Exception as log_error:
                         self.logger.error(f"记录MACD计算失败日志时出错: {log_error}")
+                
+                # MACD指标计算完成后，再计算MA指标
+                try:
+                    self.logger.info("开始自动计算MA指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    ma_result = self._calculate_and_save_ma_for_date(session, target_date)
+                    
+                    self.logger.info(
+                        "MA指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
+                        ma_result['total'],
+                        ma_result['success'],
+                        ma_result['skipped'],
+                        ma_result['failed']
+                    )
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'ma_calculation',
+                        'operation_desc': f'计算日期: {target_date}\n总计股票: {ma_result["total"]}\n成功计算: {ma_result["success"]}\n跳过: {ma_result["skipped"]}\n失败计算: {ma_result["failed"]}',
+                        'affected_rows': ma_result['success'],
+                        'status': 'success' if ma_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(ma_result['details']) if ma_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                    
+                except Exception as ma_error:
+                    self.logger.error(f"自动计算MA指标失败: {ma_error}")
+                    try:
+                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                        session.execute(text('''
+                            INSERT INTO historical_collect_operation_logs 
+                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                        '''), {
+                            'operation_type': 'ma_calculation',
+                            'operation_desc': f'计算日期: {target_date}',
+                            'affected_rows': 0,
+                            'status': 'error',
+                            'error_message': str(ma_error),
+                            'collect_source': 'tushare'
+                        })
+                        session.commit()
+                    except Exception as log_error:
+                        self.logger.error(f"记录MA计算失败日志时出错: {log_error}")
+                
+                # MA指标计算完成后，再计算KDJ指标
+                try:
+                    self.logger.info("开始自动计算KDJ指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    kdj_result = self._calculate_and_save_kdj_for_date(session, target_date)
+                    
+                    self.logger.info(
+                        "KDJ指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
+                        kdj_result['total'],
+                        kdj_result['success'],
+                        kdj_result['skipped'],
+                        kdj_result['failed']
+                    )
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'kdj_calculation',
+                        'operation_desc': f'计算日期: {target_date}\n总计股票: {kdj_result["total"]}\n成功计算: {kdj_result["success"]}\n跳过: {kdj_result["skipped"]}\n失败计算: {kdj_result["failed"]}',
+                        'affected_rows': kdj_result['success'],
+                        'status': 'success' if kdj_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(kdj_result['details']) if kdj_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                    
+                except Exception as kdj_error:
+                    self.logger.error(f"自动计算KDJ指标失败: {kdj_error}")
+                    try:
+                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                        session.execute(text('''
+                            INSERT INTO historical_collect_operation_logs 
+                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                        '''), {
+                            'operation_type': 'kdj_calculation',
+                            'operation_desc': f'计算日期: {target_date}',
+                            'affected_rows': 0,
+                            'status': 'error',
+                            'error_message': str(kdj_error),
+                            'collect_source': 'tushare'
+                        })
+                        session.commit()
+                    except Exception as log_error:
+                        self.logger.error(f"记录KDJ计算失败日志时出错: {log_error}")
+                
+                # KDJ指标计算完成后，再计算RSI指标
+                try:
+                    self.logger.info("开始自动计算RSI指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    rsi_result = self._calculate_and_save_rsi_for_date(session, target_date)
+                    
+                    self.logger.info(
+                        "RSI指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
+                        rsi_result['total'],
+                        rsi_result['success'],
+                        rsi_result['skipped'],
+                        rsi_result['failed']
+                    )
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'rsi_calculation',
+                        'operation_desc': f'计算日期: {target_date}\n总计股票: {rsi_result["total"]}\n成功计算: {rsi_result["success"]}\n跳过: {rsi_result["skipped"]}\n失败计算: {rsi_result["failed"]}',
+                        'affected_rows': rsi_result['success'],
+                        'status': 'success' if rsi_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(rsi_result['details']) if rsi_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                    
+                except Exception as rsi_error:
+                    self.logger.error(f"自动计算RSI指标失败: {rsi_error}")
+                    try:
+                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                        session.execute(text('''
+                            INSERT INTO historical_collect_operation_logs 
+                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                        '''), {
+                            'operation_type': 'rsi_calculation',
+                            'operation_desc': f'计算日期: {target_date}',
+                            'affected_rows': 0,
+                            'status': 'error',
+                            'error_message': str(rsi_error),
+                            'collect_source': 'tushare'
+                        })
+                        session.commit()
+                    except Exception as log_error:
+                        self.logger.error(f"记录RSI计算失败日志时出错: {log_error}")
             
             return True
         except Exception as e:

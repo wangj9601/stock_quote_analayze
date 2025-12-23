@@ -525,6 +525,11 @@ const StockPage = {
                 },
                 { name: 'MA5', type: 'line', data: [], smooth: true, lineStyle: { width: 2, color: '#fbbf24' }, showSymbol: false },
                 { name: 'MA10', type: 'line', data: [], smooth: true, lineStyle: { width: 2, color: '#3b82f6' }, showSymbol: false },
+                { name: 'MA20', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#a855f7' }, showSymbol: false, show: false },
+                { name: 'MA30', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#ec4899' }, showSymbol: false, show: false },
+                { name: 'MA60', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#10b981' }, showSymbol: false, show: false },
+                { name: 'MA120', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#f59e0b' }, showSymbol: false, show: false },
+                { name: 'MA200', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#6366f1' }, showSymbol: false, show: false },
                 {
                     name: '成交量',
                     type: 'bar',
@@ -677,7 +682,7 @@ const StockPage = {
                             result += '最低:' + item.data[3] + ' 最高:' + item.data[4] + '<br/>';
                         }
                         // MA均线
-                        else if (item.seriesName === 'MA5' || item.seriesName === 'MA10') {
+                        else if (item.seriesName === 'MA5' || item.seriesName === 'MA10' || item.seriesName === 'MA20' || item.seriesName === 'MA30' || item.seriesName === 'MA60' || item.seriesName === 'MA120' || item.seriesName === 'MA200') {
                             result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
                         }
                     });
@@ -1012,7 +1017,7 @@ const StockPage = {
                 this.volume = d.volume;
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
-                this.pe_dynamic = d.pe_dynamic;
+                this.pe_dynamic = null;
 
                 this.updateStockInfo();
                 this.updateStockDetails();
@@ -1078,7 +1083,7 @@ const StockPage = {
             '成交量': this.volume,
             '成交额': this.turnover,
             '换手率': this.turnover_rate,
-            '市盈率': this.pe_dynamic
+            '市盈率': null
         };
         document.querySelectorAll('.detail-item').forEach(item => {
             const label = item.querySelector('.label').textContent;
@@ -2350,21 +2355,22 @@ const StockPage = {
         }
 
         // 显示成交量系列，隐藏其他指标系列
+        // series索引：[0]=K线, [1-7]=MA5/10/20/30/60/120/200, [8]=成交量, [9-11]=MACD, [12-14]=KDJ, [15-17]=RSI
         if (option.series) {
-            if (option.series[3]) {
-                option.series[3].show = true;
-                option.series[3].xAxisIndex = 1;
-                option.series[3].yAxisIndex = 1;
+            if (option.series[8]) {
+                option.series[8].show = true;
+                option.series[8].xAxisIndex = 1;
+                option.series[8].yAxisIndex = 1;
             }
-            if (option.series[4]) option.series[4].show = false; // DIF
-            if (option.series[5]) option.series[5].show = false; // DEA
-            if (option.series[6]) option.series[6].show = false; // MACD
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
+            if (option.series[9]) option.series[9].show = false; // DIF
+            if (option.series[10]) option.series[10].show = false; // DEA
+            if (option.series[11]) option.series[11].show = false; // MACD
+            if (option.series[12]) option.series[12].show = false; // K
+            if (option.series[13]) option.series[13].show = false; // D
+            if (option.series[14]) option.series[14].show = false; // J
+            if (option.series[15]) option.series[15].show = false; // RSI6
+            if (option.series[16]) option.series[16].show = false; // RSI12
+            if (option.series[17]) option.series[17].show = false; // RSI24
         }
 
         // 更新dataZoom的xAxisIndex
@@ -2384,9 +2390,9 @@ const StockPage = {
             option.grid[1].top = '100%';
         }
 
-        // 隐藏成交量系列
-        if (option.series && option.series[3]) {
-            option.series[3].show = false;
+        // 隐藏成交量系列（索引8）
+        if (option.series && option.series[8]) {
+            option.series[8].show = false;
         }
     },
 
@@ -2536,8 +2542,8 @@ const StockPage = {
             };
 
             // 如果MACD数据存在，计算合适的Y轴范围
-            if (option.series && option.series[6] && option.series[6].data) {
-                const macdData = option.series[6].data.filter(d => d !== null && d !== undefined && !isNaN(d));
+            if (option.series && option.series[11] && option.series[11].data) {
+                const macdData = option.series[11].data.filter(d => d !== null && d !== undefined && !isNaN(d));
                 if (macdData.length > 0) {
                     const minValue = Math.min(...macdData);
                     const maxValue = Math.max(...macdData);
@@ -2556,41 +2562,41 @@ const StockPage = {
         }
 
         // 显示MACD系列，隐藏其他指标系列
+        // series索引：[0]=K线, [1-7]=MA5/10/20/30/60/120/200, [8]=成交量, [9-11]=MACD, [12-14]=KDJ, [15-17]=RSI
         if (option.series) {
             // 先隐藏所有副图指标系列
-            if (option.series[3]) option.series[3].show = false; // 成交量
-            if (option.series[4]) option.series[4].show = false; // DIF (先设为false)
-            if (option.series[5]) option.series[5].show = false; // DEA (先设为false)
-            if (option.series[6]) option.series[6].show = false; // MACD (先设为false)
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
+            if (option.series[8]) option.series[8].show = false; // 成交量
+            if (option.series[9]) option.series[9].show = false; // DIF (先设为false)
+            if (option.series[10]) option.series[10].show = false; // DEA (先设为false)
+            if (option.series[11]) option.series[11].show = false; // MACD (先设为false)
+            if (option.series[12]) option.series[12].show = false; // K
+            if (option.series[13]) option.series[13].show = false; // D
+            if (option.series[14]) option.series[14].show = false; // J
+            if (option.series[15]) option.series[15].show = false; // RSI6
+            if (option.series[16]) option.series[16].show = false; // RSI12
+            if (option.series[17]) option.series[17].show = false; // RSI24
 
             // 然后只显示MACD系列
-            if (option.series[4]) {
-                option.series[4].show = true; // DIF
-                option.series[4].xAxisIndex = 2;
-                option.series[4].yAxisIndex = 2;
-                // DIF线：红色虚线（与参考图一致）
-                if (!option.series[4].lineStyle) {
-                    option.series[4].lineStyle = {};
+            if (option.series[9]) {
+                option.series[9].show = true; // DIF
+                option.series[9].xAxisIndex = 2;
+                option.series[9].yAxisIndex = 2;
+                // DIF线：白色（与参考图一致）
+                if (!option.series[9].lineStyle) {
+                    option.series[9].lineStyle = {};
                 }
-                option.series[4].lineStyle.color = '#dc2626'; // 红色
-                option.series[4].lineStyle.width = 2;
-                option.series[4].lineStyle.type = 'dashed'; // 虚线
-                option.series[4].smooth = true;
-                option.series[4].showSymbol = false;
-                option.series[4].z = 2; // 线条在上层
-                console.log('[showMACDChart] DIF系列已显示，数据长度:', option.series[4].data ? option.series[4].data.length : 0);
+                option.series[9].lineStyle.color = '#ffffff'; // 白色
+                option.series[9].lineStyle.width = 1.5;
+                option.series[9].smooth = true;
+                option.series[9].showSymbol = false;
+                option.series[9].z = 2; // 线条在上层
+                console.log('[showMACDChart] DIF系列已显示，数据长度:', option.series[9].data ? option.series[9].data.length : 0);
             }
-            if (option.series[5]) {
-                option.series[5].show = true; // DEA
-                option.series[5].xAxisIndex = 2;
-                option.series[5].yAxisIndex = 2;
-                // DEA线：蓝色虚线（与参考图一致）
+            if (option.series[10]) {
+                option.series[10].show = true; // DEA
+                option.series[10].xAxisIndex = 2;
+                option.series[10].yAxisIndex = 2;
+                // DEA线：黄色（与参考图一致）
                 if (!option.series[5].lineStyle) {
                     option.series[5].lineStyle = {};
                 }
@@ -2959,81 +2965,69 @@ const StockPage = {
             });
 
             // 先隐藏所有副图指标系列
-            if (option.series[3]) option.series[3].show = false; // 成交量
-            if (option.series[4]) option.series[4].show = false; // DIF
-            if (option.series[5]) option.series[5].show = false; // DEA
-            if (option.series[6]) option.series[6].show = false; // MACD
-            if (option.series[7]) option.series[7].show = false; // K (先设为false)
-            if (option.series[8]) option.series[8].show = false; // D (先设为false)
-            if (option.series[9]) option.series[9].show = false; // J (先设为false)
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
-
-            console.log('[showKDJChart] 隐藏所有系列后的show状态:', {
-                series3: option.series[3] ? option.series[3].show : 'N/A',
-                series4: option.series[4] ? option.series[4].show : 'N/A',
-                series5: option.series[5] ? option.series[5].show : 'N/A',
-                series6: option.series[6] ? option.series[6].show : 'N/A',
-                series7: option.series[7] ? option.series[7].show : 'N/A',
-                series8: option.series[8] ? option.series[8].show : 'N/A',
-                series9: option.series[9] ? option.series[9].show : 'N/A',
-                series10: option.series[10] ? option.series[10].show : 'N/A',
-                series11: option.series[11] ? option.series[11].show : 'N/A',
-                series12: option.series[12] ? option.series[12].show : 'N/A'
-            });
+            // series索引：[0]=K线, [1-7]=MA5/10/20/30/60/120/200, [8]=成交量, [9-11]=MACD, [12-14]=KDJ, [15-17]=RSI
+            if (option.series[8]) option.series[8].show = false; // 成交量
+            if (option.series[9]) option.series[9].show = false; // DIF
+            if (option.series[10]) option.series[10].show = false; // DEA
+            if (option.series[11]) option.series[11].show = false; // MACD
+            if (option.series[12]) option.series[12].show = false; // K (先设为false)
+            if (option.series[13]) option.series[13].show = false; // D (先设为false)
+            if (option.series[14]) option.series[14].show = false; // J (先设为false)
+            if (option.series[15]) option.series[15].show = false; // RSI6
+            if (option.series[16]) option.series[16].show = false; // RSI12
+            if (option.series[17]) option.series[17].show = false; // RSI24
 
             // 然后只显示KDJ系列
-            if (option.series[7]) {
+            if (option.series[12]) {
                 // K线：确保是line类型，显示为白色线条
-                option.series[7].name = 'K';
-                option.series[7].type = 'line';
-                option.series[7].show = true;  // 明确设置为true
-                option.series[7].xAxisIndex = 2;
-                option.series[7].yAxisIndex = 2;
-                if (!option.series[7].lineStyle) {
-                    option.series[7].lineStyle = {};
+                option.series[12].name = 'K';
+                option.series[12].type = 'line';
+                option.series[12].show = true;  // 明确设置为true
+                option.series[12].xAxisIndex = 2;
+                option.series[12].yAxisIndex = 2;
+                if (!option.series[12].lineStyle) {
+                    option.series[12].lineStyle = {};
                 }
-                option.series[7].lineStyle.width = 1.5;
-                option.series[7].lineStyle.color = '#ffffff'; // 白色
-                option.series[7].smooth = true;
-                option.series[7].showSymbol = false;
-                option.series[7].z = 2;
-                console.log('[showKDJChart] K系列已显示，数据长度:', option.series[7].data ? option.series[7].data.length : 0);
+                option.series[12].lineStyle.width = 1.5;
+                option.series[12].lineStyle.color = '#ffffff'; // 白色
+                option.series[12].smooth = true;
+                option.series[12].showSymbol = false;
+                option.series[12].z = 2;
+                console.log('[showKDJChart] K系列已显示，数据长度:', option.series[12].data ? option.series[12].data.length : 0);
             }
-            if (option.series[8]) {
+            if (option.series[13]) {
                 // D线：确保是line类型，显示为黄色线条
-                option.series[8].name = 'D';
-                option.series[8].type = 'line';
-                option.series[8].show = true;  // 明确设置为true
-                option.series[8].xAxisIndex = 2;
-                option.series[8].yAxisIndex = 2;
-                if (!option.series[8].lineStyle) {
-                    option.series[8].lineStyle = {};
+                option.series[13].name = 'D';
+                option.series[13].type = 'line';
+                option.series[13].show = true;  // 明确设置为true
+                option.series[13].xAxisIndex = 2;
+                option.series[13].yAxisIndex = 2;
+                if (!option.series[13].lineStyle) {
+                    option.series[13].lineStyle = {};
                 }
-                option.series[8].lineStyle.width = 1.5;
-                option.series[8].lineStyle.color = '#fbbf24'; // 黄色
-                option.series[8].smooth = true;
-                option.series[8].showSymbol = false;
-                option.series[8].z = 2;
-                console.log('[showKDJChart] D系列已显示，数据长度:', option.series[8].data ? option.series[8].data.length : 0);
+                option.series[13].lineStyle.width = 1.5;
+                option.series[13].lineStyle.color = '#fbbf24'; // 黄色
+                option.series[13].smooth = true;
+                option.series[13].showSymbol = false;
+                option.series[13].z = 2;
+                console.log('[showKDJChart] D系列已显示，数据长度:', option.series[13].data ? option.series[13].data.length : 0);
             }
-            if (option.series[9]) {
+            if (option.series[14]) {
                 // J线：确保是line类型，显示为紫色线条
-                option.series[9].name = 'J';
-                option.series[9].type = 'line';
-                option.series[9].show = true;  // 明确设置为true
-                option.series[9].xAxisIndex = 2;
-                option.series[9].yAxisIndex = 2;
-                if (!option.series[9].lineStyle) {
-                    option.series[9].lineStyle = {};
+                option.series[14].name = 'J';
+                option.series[14].type = 'line';
+                option.series[14].show = true;  // 明确设置为true
+                option.series[14].xAxisIndex = 2;
+                option.series[14].yAxisIndex = 2;
+                if (!option.series[14].lineStyle) {
+                    option.series[14].lineStyle = {};
                 }
-                option.series[9].lineStyle.width = 1.5;
-                option.series[9].lineStyle.color = '#a855f7'; // 紫色
-                option.series[9].smooth = true;
-                option.series[9].showSymbol = false;
-                option.series[9].z = 2;
-                console.log('[showKDJChart] J系列已显示，数据长度:', option.series[9].data ? option.series[9].data.length : 0);
+                option.series[14].lineStyle.width = 1.5;
+                option.series[14].lineStyle.color = '#a855f7'; // 紫色
+                option.series[14].smooth = true;
+                option.series[14].showSymbol = false;
+                option.series[14].z = 2;
+                console.log('[showKDJChart] J系列已显示，数据长度:', option.series[14].data ? option.series[14].data.length : 0);
             }
         }
 
@@ -3382,7 +3376,7 @@ const StockPage = {
         // 定期更新股价数据
         setInterval(() => {
             this.updateRealTimeData();
-        }, 300000); // 每5分钟更新一次
+        }, 1800000); // 每30分钟更新一次
 
         // 监听窗口大小变化
         window.addEventListener('resize', () => {
@@ -3413,7 +3407,7 @@ const StockPage = {
                 this.volume = d.volume;
                 this.turnover = d.turnover;
                 this.turnover_rate = d.turnover_rate;
-                this.pe_dynamic = d.pe_dynamic;
+                this.pe_dynamic = null;
 
                 this.updateStockInfo();
                 this.updateStockDetails();
@@ -3605,8 +3599,36 @@ const StockPage = {
                     }
                     return result;
                 }
-                const ma5 = calcMA(kline, 5);
-                const ma10 = calcMA(kline, 10);
+                // MA数据：优先使用API返回的MA数据，如果没有则实时计算MA5和MA10
+                const ma5 = list.map(item => item.ma5 !== null && item.ma5 !== undefined ? parseFloat(item.ma5) : null);
+                const ma10 = list.map(item => item.ma10 !== null && item.ma10 !== undefined ? parseFloat(item.ma10) : null);
+                const ma20 = list.map(item => item.ma20 !== null && item.ma20 !== undefined ? parseFloat(item.ma20) : null);
+                const ma30 = list.map(item => item.ma30 !== null && item.ma30 !== undefined ? parseFloat(item.ma30) : null);
+                const ma60 = list.map(item => item.ma60 !== null && item.ma60 !== undefined ? parseFloat(item.ma60) : null);
+                const ma120 = list.map(item => item.ma120 !== null && item.ma120 !== undefined ? parseFloat(item.ma120) : null);
+                const ma200 = list.map(item => item.ma200 !== null && item.ma200 !== undefined ? parseFloat(item.ma200) : null);
+                
+                // 如果API没有返回MA数据，则实时计算MA5和MA10（向后兼容）
+                const hasMaData = ma5.some(v => v !== null);
+                if (!hasMaData) {
+                    const calcMA = (arr, n) => {
+                        const result = [];
+                        for (let i = 0; i < arr.length; i++) {
+                            if (i < n - 1) { result.push(null); continue; }
+                            let sum = 0;
+                            for (let j = 0; j < n; j++) sum += Number(arr[i - j][1]);
+                            result.push((sum / n).toFixed(2));
+                        }
+                        return result;
+                    };
+                    const ma5_calc = calcMA(kline, 5);
+                    const ma10_calc = calcMA(kline, 10);
+                    for (let i = 0; i < ma5.length; i++) {
+                        if (ma5[i] === null) ma5[i] = ma5_calc[i] !== '-' ? parseFloat(ma5_calc[i]) : null;
+                        if (ma10[i] === null) ma10[i] = ma10_calc[i] !== '-' ? parseFloat(ma10_calc[i]) : null;
+                    }
+                }
+                
                 // 成交量
                 const volume = list.map(item => item.volume);
 
@@ -3618,7 +3640,12 @@ const StockPage = {
                 option.series[0].data = kline;
                 option.series[1].data = ma5;
                 option.series[2].data = ma10;
-                option.series[3].data = volume;
+                option.series[3].data = ma20;  // MA20
+                option.series[4].data = ma30;  // MA30
+                option.series[5].data = ma60;  // MA60
+                option.series[6].data = ma120; // MA120
+                option.series[7].data = ma200; // MA200
+                option.series[8].data = volume; // 成交量（索引从8开始，因为前面有7个MA系列）
 
                 // 根据当前指标类型，只处理对应的数据
                 console.log('[loadKlineData] 处理指标数据，指标类型:', targetIndicator);
@@ -3645,30 +3672,30 @@ const StockPage = {
                         sampleData: sampleMacd
                     });
 
-                    // 设置MACD系列数据
-                    if (!option.series[4]) {
-                        console.error('[loadKlineData] series[4] (DIF) 不存在！');
+                    // 设置MACD系列数据（索引调整：series[9]=DIF, [10]=DEA, [11]=MACD）
+                    if (!option.series[9]) {
+                        console.error('[loadKlineData] series[9] (DIF) 不存在！');
                     } else {
-                option.series[4].data = dif;
-                        option.series[4].type = 'line';
+                        option.series[9].data = dif;
+                        option.series[9].type = 'line';
                     }
-                    if (!option.series[5]) {
-                        console.error('[loadKlineData] series[5] (DEA) 不存在！');
+                    if (!option.series[10]) {
+                        console.error('[loadKlineData] series[10] (DEA) 不存在！');
                     } else {
-                option.series[5].data = dea;
-                        option.series[5].type = 'line';
+                        option.series[10].data = dea;
+                        option.series[10].type = 'line';
                     }
-                    if (!option.series[6]) {
-                        console.error('[loadKlineData] series[6] (MACD) 不存在！');
+                    if (!option.series[11]) {
+                        console.error('[loadKlineData] series[11] (MACD) 不存在！');
                     } else {
-                option.series[6].data = macd;
-                        option.series[6].type = 'bar';
+                        option.series[11].data = macd;
+                        option.series[11].type = 'bar';
                         // 确保MACD柱状图的配置正确
-                        if (!option.series[6].itemStyle) {
-                            option.series[6].itemStyle = {};
+                        if (!option.series[11].itemStyle) {
+                            option.series[11].itemStyle = {};
                         }
-                        if (typeof option.series[6].itemStyle.color !== 'function') {
-                            option.series[6].itemStyle.color = function (params) {
+                        if (typeof option.series[11].itemStyle.color !== 'function') {
+                            option.series[11].itemStyle.color = function (params) {
                                 if (params.value === null || params.value === undefined || isNaN(params.value)) {
                                     return 'transparent';
                                 }
@@ -3684,15 +3711,15 @@ const StockPage = {
                     const d = list.map(item => item.d !== null && item.d !== undefined ? parseFloat(item.d) : null);
                     const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
 
-                    // 设置KDJ系列数据
-                    if (option.series[7]) option.series[7].data = k;
-                    if (option.series[8]) option.series[8].data = d;
-                    if (option.series[9]) option.series[9].data = j;
+                    // 设置KDJ系列数据（索引调整：series[12]=K, [13]=D, [14]=J）
+                    if (option.series[12]) option.series[12].data = k;
+                    if (option.series[13]) option.series[13].data = d;
+                    if (option.series[14]) option.series[14].data = j;
                     
                     // 清除RSI数据，避免切换时显示残留数据
-                    if (option.series[10]) option.series[10].data = [];
-                    if (option.series[11]) option.series[11].data = [];
-                    if (option.series[12]) option.series[12].data = [];
+                    if (option.series[15]) option.series[15].data = [];
+                    if (option.series[16]) option.series[16].data = [];
+                    if (option.series[17]) option.series[17].data = [];
                 }
 
                 // RSI数据（仅在indicator为rsi时）
@@ -3701,15 +3728,15 @@ const StockPage = {
                     const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
                     const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
 
-                    // 设置RSI系列数据
-                    if (option.series[10]) option.series[10].data = rsi6;
-                    if (option.series[11]) option.series[11].data = rsi12;
-                    if (option.series[12]) option.series[12].data = rsi24;
+                    // 设置RSI系列数据（索引调整：series[15]=RSI6, [16]=RSI12, [17]=RSI24）
+                    if (option.series[15]) option.series[15].data = rsi6;
+                    if (option.series[16]) option.series[16].data = rsi12;
+                    if (option.series[17]) option.series[17].data = rsi24;
                     
                     // 清除KDJ数据，避免切换时显示残留数据
-                    if (option.series[7]) option.series[7].data = [];
-                    if (option.series[8]) option.series[8].data = [];
-                    if (option.series[9]) option.series[9].data = [];
+                    if (option.series[12]) option.series[12].data = [];
+                    if (option.series[13]) option.series[13].data = [];
+                    if (option.series[14]) option.series[14].data = [];
                 }
                 
                 // 如果当前指标不是KDJ也不是RSI，清除这两个指标的数据

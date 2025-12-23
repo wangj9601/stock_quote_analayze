@@ -26,6 +26,7 @@ from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
+from backend_core.utils.ma_calculator import MACalculator
 from datetime import datetime, timedelta
 
 # 配置日志
@@ -49,9 +50,9 @@ class AkshareHistoricalCollector:
         self.failed_count = 0
         self.failed_stocks = []
         self._init_macd_table()
-        self._init_macd_table()
         self._init_kdj_table()
         self._init_rsi_table()
+        self._init_ma_table()
         
     def __del__(self):
         """析构函数，确保session被关闭"""
@@ -328,6 +329,14 @@ class AkshareHistoricalCollector:
                     self._calculate_and_save_rsi(stock_code, start_date, end_date)
                 except Exception as e:
                     logger.warning(f"股票 {stock_code} RSI指标计算失败: {e}")
+            
+            # 计算并保存MA指标
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_ma(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} MA指标计算失败: {e}")
+            
             time.sleep(random.uniform(0.5, 1.5))
             
             return True
@@ -710,6 +719,103 @@ class AkshareHistoricalCollector:
             
         except Exception as e:
             logger.error(f"计算股票 {stock_code} RSI指标失败: {e}")
+            self.session.rollback()
+    
+    def _calculate_and_save_ma(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存MA指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票最近至少200天的收盘价数据（用于计算MA200）
+            result = self.session.execute(text("""
+                SELECT date, close
+                FROM historical_quotes
+                WHERE code = :code
+                ORDER BY date ASC
+            """), {'code': stock_code})
+            
+            historical_data = result.fetchall()
+            
+            if len(historical_data) < 5:  # 至少需要5天数据才能计算MA5
+                logger.debug(f"股票 {stock_code} 数据不足，无法计算MA指标")
+                return
+            
+            # 构建DataFrame
+            df_data = []
+            for row in historical_data:
+                df_data.append({
+                    'date': row[0],
+                    'close': float(row[1]) if row[1] else None
+                })
+            
+            df = pd.DataFrame(df_data)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
+            
+            if 'close' not in df.columns or len(df) == 0:
+                logger.debug(f"股票 {stock_code} 收盘价数据无效")
+                return
+            
+            # 计算MA指标
+            ma_df = MACalculator.calculate_ma_for_dataframe(df, periods=[5, 10, 20, 30, 60, 120, 200])
+            
+            # 保存MA数据
+            ma_saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for _, row in ma_df.iterrows():
+                date_obj = row['date'] if isinstance(row['date'], datetime) else datetime.strptime(str(row['date']), '%Y-%m-%d').date()
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d') if isinstance(date_obj, datetime) else str(date_obj)
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO ma_indicators
+                        (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200, created_at)
+                        VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            ma5 = EXCLUDED.ma5,
+                            ma10 = EXCLUDED.ma10,
+                            ma20 = EXCLUDED.ma20,
+                            ma30 = EXCLUDED.ma30,
+                            ma60 = EXCLUDED.ma60,
+                            ma120 = EXCLUDED.ma120,
+                            ma200 = EXCLUDED.ma200,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'A股',
+                        'ma5': row.get('ma5'),
+                        'ma10': row.get('ma10'),
+                        'ma20': row.get('ma20'),
+                        'ma30': row.get('ma30'),
+                        'ma60': row.get('ma60'),
+                        'ma120': row.get('ma120'),
+                        'ma200': row.get('ma200'),
+                        'created_at': datetime.now()
+                    })
+                    ma_saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} MA数据失败: {e}")
+                    continue
+            
+            if ma_saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} MA指标计算完成，保存 {ma_saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} MA指标失败: {e}")
             self.session.rollback()
     
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):

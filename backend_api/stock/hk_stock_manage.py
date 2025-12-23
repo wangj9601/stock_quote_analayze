@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import akshare as ak
 from sqlalchemy import text, create_engine, func
-from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators
+from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口
@@ -729,6 +729,36 @@ async def get_hk_kline_hist(
                             item.update(rsi_dict[item['date']])
                 except Exception as e:
                     print(f"[hk_kline_hist] RSI数据查询失败: {e}")
+            
+            # 查询MA数据（MA总是返回，因为它是K线图的基础指标）
+            try:
+                ma_query = db.query(MAIndicators).filter(
+                    MAIndicators.code == code,
+                    MAIndicators.market_type == '港股',
+                    MAIndicators.date >= start_date,
+                    MAIndicators.date <= end_date
+                ).order_by(MAIndicators.date.asc())
+                
+                ma_records = ma_query.all()
+                ma_dict = {}
+                for record in ma_records:
+                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                    ma_dict[date_str] = {
+                        "ma5": round(float(record.ma5), 4) if record.ma5 is not None else None,
+                        "ma10": round(float(record.ma10), 4) if record.ma10 is not None else None,
+                        "ma20": round(float(record.ma20), 4) if record.ma20 is not None else None,
+                        "ma30": round(float(record.ma30), 4) if record.ma30 is not None else None,
+                        "ma60": round(float(record.ma60), 4) if record.ma60 is not None else None,
+                        "ma120": round(float(record.ma120), 4) if record.ma120 is not None else None,
+                        "ma200": round(float(record.ma200), 4) if record.ma200 is not None else None
+                    }
+                
+                # 将MA数据合并到K线数据中
+                for item in result:
+                    if item['date'] in ma_dict:
+                        item.update(ma_dict[item['date']])
+            except Exception as e:
+                print(f"[hk_kline_hist] MA数据查询失败: {e}")
             
             # 如果没有指定indicator或indicator为vol，只返回基础K线数据和成交量（已经在result中）
             

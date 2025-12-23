@@ -1,0 +1,92 @@
+-- Table: public.historical_quotes_hk
+
+-- DROP TABLE IF EXISTS public.historical_quotes_hk;
+
+CREATE TABLE IF NOT EXISTS public.historical_quotes_hk
+(
+    code text COLLATE pg_catalog."default" NOT NULL,
+    ts_code text COLLATE pg_catalog."default",
+    name text COLLATE pg_catalog."default",
+    date text COLLATE pg_catalog."default" NOT NULL,
+    open real,
+    high real,
+    low real,
+    close real,
+    pre_close real,
+    volume real,
+    amount real,
+    amplitude real,
+    turnover_rate real,
+    change_percent real,
+    change real,
+    five_day_change_percent real,
+    ten_day_change_percent real,
+    sixty_day_change_percent real,
+    thirty_day_change_percent real,
+    collected_source text COLLATE pg_catalog."default",
+    collected_date timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    english_name text COLLATE pg_catalog."default",
+    change_amount real,
+    create_date timestamp without time zone,
+    CONSTRAINT historical_quotes_hk_pkey PRIMARY KEY (code, date)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.historical_quotes_hk
+    OWNER to postgres;
+-- Index: idx_historical_quotes_hk_code
+
+-- DROP INDEX IF EXISTS public.idx_historical_quotes_hk_code;
+
+CREATE INDEX IF NOT EXISTS idx_historical_quotes_hk_code
+    ON public.historical_quotes_hk USING btree
+    (code COLLATE pg_catalog."default" ASC NULLS LAST)
+    TABLESPACE pg_default;
+-- Index: idx_historical_quotes_hk_collected_date
+
+-- DROP INDEX IF EXISTS public.idx_historical_quotes_hk_collected_date;
+
+CREATE INDEX IF NOT EXISTS idx_historical_quotes_hk_collected_date
+    ON public.historical_quotes_hk USING btree
+    (collected_date ASC NULLS LAST)
+    TABLESPACE pg_default;
+-- Index: idx_historical_quotes_hk_date
+
+-- DROP INDEX IF EXISTS public.idx_historical_quotes_hk_date;
+
+CREATE INDEX IF NOT EXISTS idx_historical_quotes_hk_date
+    ON public.historical_quotes_hk USING btree
+    (date COLLATE pg_catalog."default" ASC NULLS LAST)
+    TABLESPACE pg_default;
+
+
+
+
+    -- Table: public.ma_indicators
+
+-- DROP TABLE IF EXISTS public.ma_indicators;
+
+CREATE TABLE IF NOT EXISTS public.ma_indicators
+(
+    code character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    date character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    ma5 real,
+    ma10 real,
+    ma20 real,
+    ma30 real,
+    ma60 real,
+    ma120 real,
+    ma200 real,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ma_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.ma_indicators
+    OWNER to postgres;
+
+
+    
