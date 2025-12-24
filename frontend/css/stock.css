@@ -451,7 +451,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0.5rem 0;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid #334155;
 }
 
 .indicator-row:last-child {
@@ -460,13 +460,13 @@ body {
 
 .indicator-name {
     font-weight: 500;
-    color: #374151;
+    color: #ffffff;
     font-size: 0.9rem;
 }
 
 .indicator-value {
     font-weight: 600;
-    color: #1f2937;
+    color: #ffffff;
 }
 
 .indicator-signal {
@@ -1377,7 +1377,7 @@ mark {
     justify-content: space-between;
     align-items: center;
     padding: 8px 0;
-    border-bottom: 1px solid #ecf0f1;
+    border-bottom: 1px solid #334155;
 }
 
 .indicator-row:last-child {
@@ -1386,13 +1386,13 @@ mark {
 
 .indicator-name {
     font-size: 14px;
-    color: #2c3e50;
+    color: #ffffff;
     font-weight: 500;
 }
 
 .indicator-value {
     font-size: 14px;
-    color: #34495e;
+    color: #ffffff;
     font-weight: 600;
 }
 

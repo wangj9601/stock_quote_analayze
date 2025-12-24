@@ -191,7 +191,7 @@ class MABackfillProcessor:
         
         Args:
             stock_code: 股票代码
-            market_type: 市场类型（'A股' 或 '港股'）
+            market_type: 市场类型（'CN' 或 'HK'）
             date: 日期
             
         Returns:
@@ -221,7 +221,7 @@ class MABackfillProcessor:
         
         Args:
             stock_code: 股票代码
-            market_type: 市场类型（'A股' 或 '港股'）
+            market_type: 市场类型（'CN' 或 'HK'）
             start_date: 开始日期（可选）
             end_date: 结束日期（可选）
             skip_existing: 是否跳过已存在的数据
@@ -230,8 +230,8 @@ class MABackfillProcessor:
             bool: 是否成功
         """
         try:
-            # 转换市场类型标识（'A股'/'港股' -> 'CN'/'HK'）
-            query_market_type = 'CN' if market_type == 'A股' else 'HK'
+            # market_type 已经是 'CN' 或 'HK' 格式
+            query_market_type = market_type
             
             # 获取历史收盘价数据
             rows = self.get_historical_closes(stock_code, query_market_type, start_date, end_date)
@@ -243,23 +243,61 @@ class MABackfillProcessor:
             
             # 构建DataFrame
             df_data = []
-            dates = []
             for row in rows:
                 date_val = row[0]
+                close_val = row[1]
+                
+                # 统一处理日期格式
                 if isinstance(date_val, datetime):
                     date_str = date_val.strftime('%Y-%m-%d')
                 elif isinstance(date_val, str):
                     date_str = date_val
+                    # 处理 YYYYMMDD 格式（8位数字）
+                    if len(date_str) == 8 and date_str.isdigit():
+                        date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
                 else:
                     date_str = str(date_val)
-                dates.append(date_str)
+                    # 处理 YYYYMMDD 格式（8位数字）
+                    if len(date_str) == 8 and date_str.isdigit():
+                        date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+                
                 df_data.append({
                     'date': date_str,
-                    'close': float(row[1]) if row[1] else None
+                    'close': float(close_val) if close_val else None
                 })
             
             df = pd.DataFrame(df_data)
-            df['date'] = pd.to_datetime(df['date'])
+            
+            # 统一转换日期格式：先尝试标准格式，再尝试YYYYMMDD格式
+            def parse_date(date_str):
+                if pd.isna(date_str) or date_str is None:
+                    return pd.NaT
+                date_str = str(date_str).strip()
+                
+                # 尝试 YYYY-MM-DD 格式
+                if len(date_str) == 10 and '-' in date_str:
+                    try:
+                        return pd.to_datetime(date_str, format='%Y-%m-%d')
+                    except:
+                        pass
+                
+                # 尝试 YYYYMMDD 格式（8位数字）
+                if len(date_str) == 8 and date_str.isdigit():
+                    try:
+                        return pd.to_datetime(date_str, format='%Y%m%d')
+                    except:
+                        pass
+                
+                # 默认尝试自动解析
+                try:
+                    return pd.to_datetime(date_str)
+                except:
+                    return pd.NaT
+            
+            df['date'] = df['date'].apply(parse_date)
+            
+            # 删除无效日期和无效收盘价
+            df = df.dropna(subset=['date', 'close'])
             df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
             
             if 'close' not in df.columns or len(df) == 0:
@@ -403,8 +441,8 @@ class MABackfillProcessor:
             for i, stock_code in enumerate(stocks):
                 current_market_type = market_types[i] if i < len(market_types) else market_type
                 
-                # 转换为数据库中的市场类型标识
-                db_market_type = 'A股' if current_market_type == 'CN' else '港股'
+                # 转换为数据库中的市场类型标识（使用 CN/HK 格式）
+                db_market_type = current_market_type  # 'CN' 或 'HK'
                 
                 logger.info(f"进度: {i+1}/{len(stocks)} - 处理股票 {stock_code} ({db_market_type})")
                 
