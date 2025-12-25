@@ -38,6 +38,11 @@ const routes = [
         component: () => import('@/views/QuotesView.vue')
       },
       {
+        path: 'indicators',
+        name: 'Indicators',
+        component: () => import('@/views/IndicatorsView.vue')
+      },
+      {
         path: 'datasource',
         name: 'DataSource',
         component: () => import('@/views/DataSourceView.vue')
@@ -79,15 +84,15 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
-  
+
   // 如果认证状态还未初始化完成，等待初始化
   if (!authStore.isInitialized) {
     console.log('⏳ 认证状态未初始化，等待初始化完成...')
     await authStore.initAuth()
   }
-  
+
   console.log(`🔒 路由守卫检查: ${to.path}, 认证状态: ${authStore.isAuthenticated}`)
-  
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     console.log('❌ 需要认证但未登录，重定向到登录页面')
     next('/login')

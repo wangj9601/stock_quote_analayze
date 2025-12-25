@@ -303,7 +303,7 @@ scheduler.add_job(collect_akshare_turnover_rate, 'cron', day_of_week='mon-fri', 
 scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
 scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
 scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
-scheduler.add_job(collect_hk_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='49', id='hk_realtime')
+scheduler.add_job(collect_hk_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='41', id='hk_realtime')
 scheduler.add_job(collect_hk_historical, 'cron', day_of_week='mon-fri', hour=16, minute=50, id='hk_historical')
 scheduler.add_job(generate_weekly_data, 'cron', day_of_week='mon-fri', hour=16, minute=25, id='generate_weekly')
 scheduler.add_job(generate_hk_weekly_data, 'cron', day_of_week='mon-fri', hour=16, minute=53, id='generate_hk_weekly')

@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import akshare as ak
 from sqlalchemy import text, create_engine, func
-from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators
+from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口
@@ -647,10 +647,11 @@ async def get_hk_kline_hist(
             
             # 根据indicator参数决定查询哪些指标数据
             # 默认返回vol（成交量），vol总是返回
-            # 如果指定了indicator（macd/kdj/rsi），则只返回对应的指标数据
+            # 如果指定了indicator（macd/kdj/rsi/boll），则返回对应的指标数据
+            indicator_list = indicator.split(',') if indicator else []
             
-            # 查询MACD数据（仅在indicator为macd时）
-            if indicator == 'macd':
+            # 查询MACD数据
+            if 'macd' in indicator_list:
                 try:
                     macd_query = db.query(MACDIndicators).filter(
                         MACDIndicators.code == code,
@@ -662,7 +663,7 @@ async def get_hk_kline_hist(
                     macd_records = macd_query.all()
                     macd_dict = {}
                     for record in macd_records:
-                        date_str = str(record.date)  # 港股date是String类型
+                        date_str = str(record.date)
                         macd_dict[date_str] = {
                             "dif": round(float(record.dif), 4) if record.dif is not None else None,
                             "dea": round(float(record.dea), 4) if record.dea is not None else None,
@@ -676,8 +677,8 @@ async def get_hk_kline_hist(
                 except Exception as e:
                     print(f"[hk_kline_hist] MACD数据查询失败: {e}")
             
-            # 查询KDJ数据（仅在indicator为kdj时）
-            elif indicator == 'kdj':
+            # 查询KDJ数据
+            if 'kdj' in indicator_list:
                 try:
                     kdj_query = db.query(KDJIndicators).filter(
                         KDJIndicators.code == code,
@@ -689,7 +690,7 @@ async def get_hk_kline_hist(
                     kdj_records = kdj_query.all()
                     kdj_dict = {}
                     for record in kdj_records:
-                        date_str = str(record.date)  # 港股date是String类型
+                        date_str = str(record.date)
                         kdj_dict[date_str] = {
                             "k": round(float(record.k), 4) if record.k is not None else None,
                             "d": round(float(record.d), 4) if record.d is not None else None,
@@ -703,8 +704,8 @@ async def get_hk_kline_hist(
                 except Exception as e:
                     print(f"[hk_kline_hist] KDJ数据查询失败: {e}")
 
-            # 查询RSI数据（仅在indicator为rsi时）
-            elif indicator == 'rsi':
+            # 查询RSI数据
+            if 'rsi' in indicator_list:
                 try:
                     rsi_query = db.query(RSIIndicators).filter(
                         RSIIndicators.code == code,
@@ -716,7 +717,7 @@ async def get_hk_kline_hist(
                     rsi_records = rsi_query.all()
                     rsi_dict = {}
                     for record in rsi_records:
-                        date_str = str(record.date)  # 港股date是String类型
+                        date_str = str(record.date)
                         rsi_dict[date_str] = {
                             "rsi6": round(float(record.rsi6), 4) if record.rsi6 is not None else None,
                             "rsi12": round(float(record.rsi12), 4) if record.rsi12 is not None else None,
@@ -729,6 +730,33 @@ async def get_hk_kline_hist(
                             item.update(rsi_dict[item['date']])
                 except Exception as e:
                     print(f"[hk_kline_hist] RSI数据查询失败: {e}")
+            
+            # 查询BOLL数据
+            if 'boll' in indicator_list:
+                try:
+                    boll_query = db.query(BOLLIndicators).filter(
+                        BOLLIndicators.code == code,
+                        BOLLIndicators.market_type == 'HK',
+                        BOLLIndicators.date >= start_date,
+                        BOLLIndicators.date <= end_date
+                    ).order_by(BOLLIndicators.date.asc())
+                    
+                    boll_records = boll_query.all()
+                    boll_dict = {}
+                    for record in boll_records:
+                        date_str = str(record.date)
+                        boll_dict[date_str] = {
+                            "boll_mid": round(float(record.mid), 4) if record.mid is not None else None,
+                            "boll_upper": round(float(record.upper), 4) if record.upper is not None else None,
+                            "boll_lower": round(float(record.lower), 4) if record.lower is not None else None
+                        }
+                    
+                    # 将BOLL数据合并到K线数据中
+                    for item in result:
+                        if item['date'] in boll_dict:
+                            item.update(boll_dict[item['date']])
+                except Exception as e:
+                    print(f"[hk_kline_hist] BOLL数据查询失败: {e}")
             
             # 查询MA数据（MA总是返回，因为它是K线图的基础指标）
             try:

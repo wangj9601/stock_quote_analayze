@@ -541,6 +541,18 @@ class MAIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class BOLLIndicators(Base):
+    """BOLL指标数据表（A股和港股共用）"""
+    __tablename__ = 'boll_indicators'
+    code = Column(String, primary_key=True)
+    date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
+    market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
+    mid = Column(Float)  # 中轨线 (通常为20日收盘价简单平均线)
+    upper = Column(Float)  # 上轨线 (中轨线 + K倍标准差)
+    lower = Column(Float)  # 下轨线 (中轨线 - K倍标准差)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class TradingNotes(Base):
     __tablename__ = 'trading_notes'
     id = Column(Integer, primary_key=True, autoincrement=True)

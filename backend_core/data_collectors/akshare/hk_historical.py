@@ -18,6 +18,7 @@ from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.ma_calculator import MACalculator
+from backend_core.utils.boll_calculator import BOLLCalculator
 
 class HKHistoricalQuoteCollector(AKShareCollector):
     """港股历史行情数据采集器"""
@@ -121,6 +122,18 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     ma60 REAL,
                     ma120 REAL,
                     ma200 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            session.execute(text('''
+                CREATE TABLE IF NOT EXISTS boll_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    mid REAL,
+                    upper REAL,
+                    lower REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
@@ -435,6 +448,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     self._calculate_and_save_ma_hk(list(affected_stocks), target_date, session)
                 except Exception as e:
                     self.logger.warning(f"港股MA指标计算失败: {e}")
+
+                try:
+                    self._calculate_and_save_boll_hk(list(affected_stocks), target_date, session)
+                except Exception as e:
+                    self.logger.warning(f"港股BOLL指标计算失败: {e}")
             
             # 操作日志记录
             try:
@@ -843,5 +861,96 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     
         except Exception as e:
             self.logger.error(f"批量计算港股MA指标失败: {e}")
+            session.rollback()
+
+    def _calculate_and_save_boll_hk(self, stock_codes: list, target_date: str, session):
+        """
+        计算并保存港股BOLL指标
+        
+        Args:
+            stock_codes: 股票代码列表
+            target_date: 目标日期 (YYYY-MM-DD)
+            session: 数据库会话
+        """
+        try:
+            calculator = BOLLCalculator()
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少30天的收盘价数据
+                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+                    
+                    result = session.execute(text("""
+                        SELECT date, close
+                        FROM historical_quotes_hk 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 20:
+                        continue
+                    
+                    # 提取数据列表
+                    dates = [str(row[0]) for row in rows]
+                    closes = [float(row[1]) for row in rows]
+                    
+                    # 使用BOLL计算器批量计算
+                    boll_results = calculator.calculate_boll_batch(closes)
+                    
+                    if not boll_results:
+                        continue
+                    
+                    # 保存BOLL数据（只保存目标日期的数据）
+                    for i, boll_data in enumerate(boll_results):
+                        if boll_data['mid'] is None:
+                            continue
+                            
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO boll_indicators
+                                (code, date, market_type, mid, upper, lower, created_at)
+                                VALUES (:code, :date, :market_type, :mid, :upper, :lower, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    mid = EXCLUDED.mid,
+                                    upper = EXCLUDED.upper,
+                                    lower = EXCLUDED.lower,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'HK',
+                                'mid': boll_data['mid'],
+                                'upper': boll_data['upper'],
+                                'lower': boll_data['lower'],
+                                'created_at': datetime.now()
+                            })
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} BOLL数据失败: {e}")
+                            continue
+                    
+                    session.commit()
+                    self.logger.debug(f"股票 {stock_code} BOLL指标计算完成")
+                    
+                except Exception as e:
+                    self.logger.error(f"计算股票 {stock_code} BOLL指标失败: {e}")
+                    session.rollback()
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"批量计算港股BOLL指标失败: {e}")
             session.rollback()
 

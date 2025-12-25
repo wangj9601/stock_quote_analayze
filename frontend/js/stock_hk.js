@@ -55,6 +55,8 @@ const StockPage = {
     currentPeriod: '1d',
     analysisDataLoaded: false, // 添加标志跟踪智能分析数据是否已加载
     isInWatchlist: false, // 跟踪股票是否已在自选股中
+    currentSubIndicator: 'vol', // 当前选中的副图指标
+    currentMainIndicator: 'ma', // 当前选中的主图指标
     //API_BASE_URL: 'http://192.168.31.237:5000',
 
     // 初始化
@@ -677,6 +679,10 @@ const StockPage = {
                 formatter: function (params) {
                     let result = params[0].name + '<br/>';
                     let macdInfo = '';
+                    let kdjInfo = '';
+                    let rsiInfo = '';
+                    let bollInfo = '';
+
                     params.forEach(function (item) {
                         if (item.seriesName === 'K线') {
                             result += item.marker + ' ' + item.seriesName + ': ';
@@ -688,46 +694,47 @@ const StockPage = {
                             macdInfo += item.marker + ' DEA: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
                         } else if (item.seriesName === 'MACD') {
                             macdInfo += item.marker + ' MACD: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
-                        } else {
-                            result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
-                        }
-                    });
-                    if (macdInfo) {
-                        result += '<br/>MACD(12,26,9)<br/>' + macdInfo;
-                    }
-
-                    let kdjInfo = '';
-                    params.forEach(function (item) {
-                        if (item.seriesName === 'K') {
+                        } else if (item.seriesName === 'K') {
                             kdjInfo += item.marker + ' K: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
                         } else if (item.seriesName === 'D') {
                             kdjInfo += item.marker + ' D: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
                         } else if (item.seriesName === 'J') {
                             kdjInfo += item.marker + ' J: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
-                        }
-                    });
-                    if (kdjInfo) {
-                        result += '<br/>KDJ(9,3,3)<br/>' + kdjInfo;
-                    }
-
-                    let rsiInfo = '';
-                    params.forEach(function (item) {
-                        if (item.seriesName === 'RSI6') {
+                        } else if (item.seriesName === 'RSI6') {
                             rsiInfo += item.marker + ' RSI6: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
                         } else if (item.seriesName === 'RSI12') {
                             rsiInfo += item.marker + ' RSI12: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
                         } else if (item.seriesName === 'RSI24') {
                             rsiInfo += item.marker + ' RSI24: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
+                        } else if (item.seriesName === '布林带上轨') {
+                            bollInfo += '上轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                        } else if (item.seriesName === '布林带中线') {
+                            bollInfo += '中轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                        } else if (item.seriesName === '布林带下轨') {
+                            bollInfo += '下轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
+                        } else if (item.seriesName.includes('MA') || item.seriesName.includes('EMA')) {
+                            result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
                         }
                     });
+
+                    if (bollInfo) {
+                        result += '<br/>BOLL(20,2)<br/>' + bollInfo + '<br/>';
+                    }
+                    if (macdInfo) {
+                        result += '<br/>MACD(12,26,9)<br/>' + macdInfo;
+                    }
+                    if (kdjInfo) {
+                        result += '<br/>KDJ(9,3,3)<br/>' + kdjInfo;
+                    }
                     if (rsiInfo) {
                         result += '<br/>RSI(6,12,24)<br/>' + rsiInfo;
                     }
+
                     return result;
                 }
             },
             legend: {
-                data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', '成交量', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24'],
+                data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', '成交量', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24', '布林带中线', '布林带上轨', '布林带下轨'],
                 top: '1%',
                 textStyle: {
                     color: '#999'
@@ -2098,7 +2105,7 @@ const StockPage = {
     },
 
     // 更新主图指标
-    updateMainIndicator(indicator) {
+    async updateMainIndicator(indicator) {
         console.log(`[技术指标] 切换到${indicator}指标`);
 
         if (!this.klineChart) {
@@ -2106,26 +2113,26 @@ const StockPage = {
             return;
         }
 
-        const option = this.klineChart.getOption();
+        // 更新当前选中的主图指标
+        this.currentMainIndicator = indicator;
 
-        // 清除现有的技术指标线
-        this.clearTechnicalIndicators(option);
+        // 如果是boll指标，需要重新加载数据
+        if (indicator === 'boll') {
+            await this.loadKlineData();
+        } else {
+            const option = this.klineChart.getOption();
+            // 清除现有的技术指标线
+            this.clearTechnicalIndicators(option);
 
-        switch (indicator) {
-            case 'ma':
+            if (indicator === 'ma') {
                 this.addMAIndicators(option);
-                break;
-            case 'ema':
+            } else if (indicator === 'ema') {
                 this.addEMAIndicators(option);
-                break;
-            case 'boll':
-                this.addBollingerBands(option);
-                break;
-            default:
-                console.warn(`[技术指标] 未知指标类型: ${indicator}`);
+            }
+
+            this.klineChart.setOption(option);
         }
 
-        this.klineChart.setOption(option);
         CommonUtils.showToast(`已切换到${this.getIndicatorName(indicator)}`, 'success');
     },
 
@@ -2238,7 +2245,7 @@ const StockPage = {
 
     showMACDChart(option) {
         console.log('[showMACDChart] 开始显示MACD图表');
-        
+
         // 显示MACD区域（grid[2]），隐藏成交量区域（grid[1]）
         if (option.grid && option.grid[1]) {
             option.grid[1].height = '0%';
@@ -2264,14 +2271,14 @@ const StockPage = {
             option.xAxis[2].show = true; // 明确显示xAxis
             option.xAxis[2].type = 'category';
             option.xAxis[2].boundaryGap = option.xAxis[0].boundaryGap !== undefined ? option.xAxis[0].boundaryGap : false;
-            
+
             // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
             if (!option.xAxis[2].axisLabel) {
                 option.xAxis[2].axisLabel = {};
             }
             option.xAxis[2].axisLabel.show = true;
             option.xAxis[2].axisLabel.color = '#dc2626';
-            option.xAxis[2].axisLabel.formatter = function(value, index) {
+            option.xAxis[2].axisLabel.formatter = function (value, index) {
                 // 格式化日期显示月份，例如：2023-08-10 -> 08
                 if (value && typeof value === 'string' && value.length >= 7) {
                     const month = value.substring(5, 7);
@@ -2279,19 +2286,19 @@ const StockPage = {
                 }
                 return value;
             };
-            
+
             // 设置xAxis[2]的axisLine和axisTick
             option.xAxis[2].axisLine = { show: false };
             option.xAxis[2].axisTick = { show: false };
             option.xAxis[2].splitLine = { show: false };
         }
-        
+
         // 确保yAxis[2]的零线显示（红色虚线）
         if (option.yAxis && option.yAxis[2]) {
             option.yAxis[2].show = true; // 明确显示yAxis
             option.yAxis[2].type = 'value';
             option.yAxis[2].scale = true; // 确保包含零值
-            
+
             // 确保splitLine显示零线
             if (!option.yAxis[2].splitLine) {
                 option.yAxis[2].splitLine = {};
@@ -2302,7 +2309,7 @@ const StockPage = {
                 color: '#dc2626',
                 width: 1
             };
-            
+
             // 设置yAxis[2]的其他属性
             option.yAxis[2].axisLine = { show: false };
             option.yAxis[2].axisTick = { show: false };
@@ -2358,13 +2365,13 @@ const StockPage = {
                 }
             });
         }
-        
+
         console.log('[showMACDChart] MACD图表配置完成，grid[2].show:', option.grid && option.grid[2] ? option.grid[2].show : 'N/A');
     },
 
     hideMACDChart(option) {
         console.log('[hideMACDChart] 开始隐藏MACD图表');
-        
+
         // 隐藏MACD区域（grid[2]）
         if (option.grid && option.grid[2]) {
             option.grid[2].height = '0%';
@@ -2397,7 +2404,7 @@ const StockPage = {
                 option.series[6].show = false; // MACD
             }
         }
-        
+
         console.log('[hideMACDChart] MACD图表已隐藏');
     },
 
@@ -2424,7 +2431,7 @@ const StockPage = {
             if (option.xAxis[2].axisLabel) {
                 option.xAxis[2].axisLabel.show = true;
                 option.xAxis[2].axisLabel.color = '#dc2626';
-                option.xAxis[2].axisLabel.formatter = function(value, index) {
+                option.xAxis[2].axisLabel.formatter = function (value, index) {
                     // 格式化日期显示月份，例如：2023-08-10 -> 08
                     if (value && typeof value === 'string' && value.length >= 7) {
                         const month = value.substring(5, 7);
@@ -2440,7 +2447,7 @@ const StockPage = {
                 option.xAxis[2].splitLine = { show: false };
             }
         }
-        
+
         // 确保yAxis[2]的零线显示（红色虚线）
         if (option.yAxis && option.yAxis[2]) {
             // 确保splitLine显示零线
@@ -2548,7 +2555,7 @@ const StockPage = {
             if (option.xAxis[2].axisLabel) {
                 option.xAxis[2].axisLabel.show = true;
                 option.xAxis[2].axisLabel.color = '#dc2626';
-                option.xAxis[2].axisLabel.formatter = function(value, index) {
+                option.xAxis[2].axisLabel.formatter = function (value, index) {
                     // 格式化日期显示月份，例如：2023-08-10 -> 08
                     if (value && typeof value === 'string' && value.length >= 7) {
                         const month = value.substring(5, 7);
@@ -2564,7 +2571,7 @@ const StockPage = {
                 option.xAxis[2].splitLine = { show: false };
             }
         }
-        
+
         // 确保yAxis[2]的零线显示（红色虚线）
         if (option.yAxis && option.yAxis[2]) {
             // 确保splitLine显示零线
@@ -2587,7 +2594,7 @@ const StockPage = {
             if (option.series[4]) option.series[4].show = false; // DIF
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
-            
+
             // 清除KDJ数据，避免显示残留数据
             if (option.series[7]) {
                 option.series[7].show = false; // K
@@ -2738,8 +2745,8 @@ const StockPage = {
         }
     },
 
-    // 修改loadKlineData，支持period参数
-    async loadKlineData() {
+    // 修改loadKlineData，支持period参数和indicator参数
+    async loadKlineData(indicator = null) {
         console.log('[loadKlineData] 开始加载K线数据');
         console.log('[loadKlineData] 股票代码:', this.stockCode);
         console.log('[loadKlineData] 当前周期:', this.currentPeriod);
@@ -2755,6 +2762,10 @@ const StockPage = {
             let startDate = (new Date(today.getFullYear() - 5, today.getMonth(), today.getDate())).toISOString().split('T')[0];
             let period = 'daily';
             let url = '';
+
+            // 确定要加载的指标类型
+            const targetSubIndicator = indicator || this.currentSubIndicator || 'vol';
+            const targetMainIndicator = this.currentMainIndicator || 'ma';
             if (this.currentPeriod === '1w') {
                 period = 'weekly';
                 url = `${API_BASE_URL}/api/stock/hk/kline_hist?code=${this.stockCode}&period=${period}&start_date=${startDate}&end_date=${endDate}&adjust=`;
@@ -2775,7 +2786,27 @@ const StockPage = {
                 url = `${API_BASE_URL}/api/stock/hk/kline_hist?code=${this.stockCode}&period=daily&start_date=${startDate}&end_date=${endDate}&adjust=`;
             }
 
+            // 构建请求指标列表
+            let indicatorsToFetch = [];
+            if (targetSubIndicator === 'macd') {
+                indicatorsToFetch.push('macd');
+            } else if (targetSubIndicator === 'kdj') {
+                indicatorsToFetch.push('kdj');
+            } else if (targetSubIndicator === 'rsi') {
+                indicatorsToFetch.push('rsi');
+            }
+
+            if (targetMainIndicator === 'boll') {
+                indicatorsToFetch.push('boll');
+            }
+
+            if (indicatorsToFetch.length > 0) {
+                url += `&indicator=${indicatorsToFetch.join(',')}`;
+            }
+
             console.log('[loadKlineData] 请求URL:', url);
+            console.log('[loadKlineData] 目标子图指标:', targetSubIndicator);
+            console.log('[loadKlineData] 目标主图指标:', targetMainIndicator);
             const resp = await fetch(url);
             const data = await resp.json();
             console.log('[loadKlineData] API响应:', data);
@@ -2825,115 +2856,112 @@ const StockPage = {
                     // 返回正确的ECharts candlestick格式
                     return [open, close, low, high];
                 });
-                // MA数据：优先使用API返回的MA数据，如果没有则实时计算MA5和MA10
-                const ma5 = list.map(item => item.ma5 !== null && item.ma5 !== undefined ? parseFloat(item.ma5) : null);
-                const ma10 = list.map(item => item.ma10 !== null && item.ma10 !== undefined ? parseFloat(item.ma10) : null);
-                const ma20 = list.map(item => item.ma20 !== null && item.ma20 !== undefined ? parseFloat(item.ma20) : null);
-                const ma30 = list.map(item => item.ma30 !== null && item.ma30 !== undefined ? parseFloat(item.ma30) : null);
-                const ma60 = list.map(item => item.ma60 !== null && item.ma60 !== undefined ? parseFloat(item.ma60) : null);
-                const ma120 = list.map(item => item.ma120 !== null && item.ma120 !== undefined ? parseFloat(item.ma120) : null);
-                const ma200 = list.map(item => item.ma200 !== null && item.ma200 !== undefined ? parseFloat(item.ma200) : null);
-                
-                // 如果API没有返回MA数据，则实时计算MA5和MA10（向后兼容）
-                const hasMaData = ma5.some(v => v !== null);
-                if (!hasMaData) {
-                    function calcMA(arr, n) {
-                        const result = [];
-                        for (let i = 0; i < arr.length; i++) {
-                            if (i < n - 1) { result.push(null); continue; }
-                            let sum = 0;
-                            for (let j = 0; j < n; j++) sum += Number(arr[i - j][1]);
-                            result.push((sum / n).toFixed(2));
-                        }
-                        return result;
-                    }
-                    const ma5_calc = calcMA(kline, 5);
-                    const ma10_calc = calcMA(kline, 10);
-                    for (let i = 0; i < ma5.length; i++) {
-                        if (ma5[i] === null) ma5[i] = ma5_calc[i] !== '-' ? parseFloat(ma5_calc[i]) : null;
-                        if (ma10[i] === null) ma10[i] = ma10_calc[i] !== '-' ? parseFloat(ma10_calc[i]) : null;
-                    }
-                }
-                
-                // 成交量
-                const volume = list.map(item => item.volume);
+
                 // 更新option - 根据数据量调整显示效果
                 const option = this.klineChart.getOption();
-                // MACD数据
-                const dif = list.map(item => item.dif !== null && item.dif !== undefined ? parseFloat(item.dif) : null);
-                const dea = list.map(item => item.dea !== null && item.dea !== undefined ? parseFloat(item.dea) : null);
-                const macd = list.map(item => item.macd !== null && item.macd !== undefined ? parseFloat(item.macd) : null);
 
+                // 设置X轴数据
                 option.xAxis[0].data = dates;
                 option.xAxis[1].data = dates;
                 option.xAxis[2].data = dates;
-                option.series[0].data = kline;
-                option.series[1].data = ma5;
-                option.series[2].data = ma10;
-                option.series[3].data = ma20;  // MA20
-                option.series[4].data = ma30;  // MA30
-                option.series[5].data = ma60;  // MA60
-                option.series[6].data = ma120; // MA120
-                option.series[7].data = ma200; // MA200
-                option.series[8].data = volume; // 成交量（索引从8开始）
-                option.series[9].data = dif;
-                option.series[10].data = dea;
-                option.series[11].data = macd;
 
-                // 根据当前选择的副图指标设置显示状态
-                const subIndicatorSelect = document.querySelector('.sub-indicator-select');
-                const currentSubIndicator = subIndicatorSelect ? subIndicatorSelect.value : 'vol';
-                
-                // KDJ数据（仅在indicator为kdj时）
-                if (currentSubIndicator === 'kdj') {
+                // 设置K线和均线数据
+                option.series[0].data = kline;
+
+                // 设置副图成交量数据
+                const volumes = list.map(item => parseFloat(item.volume) || 0);
+                option.series[3].data = volumes;
+
+                // 处理子图指标数据
+                console.log('[loadKlineData] 处理指标数据');
+
+                // MACD数据
+                if (list[0] && 'macd' in list[0]) {
+                    const dif = list.map(item => item.dif !== null && item.dif !== undefined ? parseFloat(item.dif) : null);
+                    const dea = list.map(item => item.dea !== null && item.dea !== undefined ? parseFloat(item.dea) : null);
+                    const macd = list.map(item => item.macd !== null && item.macd !== undefined ? parseFloat(item.macd) : null);
+
+                    if (option.series[4]) option.series[4].data = dif;
+                    if (option.series[5]) option.series[5].data = dea;
+                    if (option.series[6]) option.series[6].data = macd;
+                }
+
+                // KDJ数据
+                if (list[0] && 'k' in list[0]) {
                     const k = list.map(item => item.k !== null && item.k !== undefined ? parseFloat(item.k) : null);
                     const d = list.map(item => item.d !== null && item.d !== undefined ? parseFloat(item.d) : null);
                     const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
 
-                    // 设置KDJ系列数据（索引调整：series[12]=K, [13]=D, [14]=J）
-                    if (option.series[12]) option.series[12].data = k;
-                    if (option.series[13]) option.series[13].data = d;
-                    if (option.series[14]) option.series[14].data = j;
-                    
-                    // 清除RSI数据，避免切换时显示残留数据
-                    if (option.series[15]) option.series[15].data = [];
-                    if (option.series[16]) option.series[16].data = [];
-                    if (option.series[17]) option.series[17].data = [];
-                } else if (currentSubIndicator === 'rsi') {
-                    // RSI数据（仅在indicator为rsi时）
+                    if (option.series[7]) option.series[7].data = k;
+                    if (option.series[8]) option.series[8].data = d;
+                    if (option.series[9]) option.series[9].data = j;
+                }
+
+                // RSI数据
+                if (list[0] && 'rsi6' in list[0]) {
                     const rsi6 = list.map(item => item.rsi6 !== null && item.rsi6 !== undefined ? parseFloat(item.rsi6) : null);
                     const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
                     const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
 
-                    // 设置RSI系列数据
                     if (option.series[10]) option.series[10].data = rsi6;
                     if (option.series[11]) option.series[11].data = rsi12;
                     if (option.series[12]) option.series[12].data = rsi24;
-                    
-                    // 清除KDJ数据，避免切换时显示残留数据
-                    if (option.series[7]) option.series[7].data = [];
-                    if (option.series[8]) option.series[8].data = [];
-                    if (option.series[9]) option.series[9].data = [];
+                }
+
+                // BOLL数据
+                if (list[0] && 'boll_mid' in list[0]) {
+                    this.bollData = {
+                        mid: list.map(item => item.boll_mid !== null && item.boll_mid !== undefined ? parseFloat(item.boll_mid) : null),
+                        upper: list.map(item => item.boll_upper !== null && item.boll_upper !== undefined ? parseFloat(item.boll_upper) : null),
+                        lower: list.map(item => item.boll_lower !== null && item.boll_lower !== undefined ? parseFloat(item.boll_lower) : null)
+                    };
+                    console.log('[loadKlineData] BOLL数据已加载');
                 } else {
-                    // 如果当前指标不是KDJ也不是RSI，清除这两个指标的数据
+                    this.bollData = null;
+                }
+
+                // 清除其他指标的数据，避免残留
+                if (!list[0] || !('macd' in list[0])) {
+                    if (option.series[4]) option.series[4].data = [];
+                    if (option.series[5]) option.series[5].data = [];
+                    if (option.series[6]) option.series[6].data = [];
+                }
+                if (!list[0] || !('k' in list[0])) {
                     if (option.series[7]) option.series[7].data = [];
                     if (option.series[8]) option.series[8].data = [];
                     if (option.series[9]) option.series[9].data = [];
+                }
+                if (!list[0] || !('rsi6' in list[0])) {
                     if (option.series[10]) option.series[10].data = [];
                     if (option.series[11]) option.series[11].data = [];
                     if (option.series[12]) option.series[12].data = [];
                 }
-                if (currentSubIndicator === 'macd') {
+
+                // 更新状态标志
+                this.currentSubIndicator = targetSubIndicator;
+
+                // 更新主图技术指标
+                this.clearTechnicalIndicators(option);
+                if (targetMainIndicator === 'ma') {
+                    this.addMAIndicators(option);
+                } else if (targetMainIndicator === 'ema') {
+                    this.addEMAIndicators(option);
+                } else if (targetMainIndicator === 'boll') {
+                    this.addBollingerBands(option);
+                }
+
+                // 更新副图显示状态
+                if (targetSubIndicator === 'macd') {
                     this.showMACDChart(option);
                     this.hideVolumeChart(option);
                     this.hideKDJChart(option);
                     this.hideRSIChart(option);
-                } else if (currentSubIndicator === 'kdj') {
+                } else if (targetSubIndicator === 'kdj') {
                     this.showKDJChart(option);
                     this.hideVolumeChart(option);
                     this.hideMACDChart(option);
                     this.hideRSIChart(option);
-                } else if (currentSubIndicator === 'rsi') {
+                } else if (targetSubIndicator === 'rsi') {
                     this.showRSIChart(option);
                     this.hideVolumeChart(option);
                     this.hideMACDChart(option);
@@ -3113,12 +3141,9 @@ const StockPage = {
 
     // 清除技术指标线
     clearTechnicalIndicators(option) {
-        // 移除所有技术指标相关的series
+        const mainTechNames = ['MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', 'EMA12', 'EMA26', '布林带中线', '布林带上轨', '布林带下轨', '布林带区域', '布林带区域填充'];
         option.series = option.series.filter(series => {
-            return !series.name.includes('MA') &&
-                !series.name.includes('EMA') &&
-                !series.name.includes('布林带') &&
-                !series.name.includes('BB');
+            return !mainTechNames.includes(series.name);
         });
     },
 
@@ -3204,67 +3229,55 @@ const StockPage = {
 
     // 添加布林带
     addBollingerBands(option) {
-        const klineData = option.series[0].data;
-        if (!klineData || klineData.length === 0) {
-            console.warn('[布林带] 没有K线数据');
-            return;
+        let bb;
+        if (this.bollData) {
+            console.log('[布林带] 使用后端返回的数据');
+            bb = {
+                middle: this.bollData.mid,
+                upper: this.bollData.upper,
+                lower: this.bollData.lower
+            };
+        } else {
+            console.log('[布林带] 后端数据不存在，执行前端计算');
+            const klineData = option.series[0].data;
+            if (!klineData || klineData.length === 0) {
+                console.warn('[布林带] 没有K线数据');
+                return;
+            }
+            const closes = klineData.map(item => item[1]);
+            bb = this.calculateBollingerBands(closes, 20, 2);
         }
 
-        // 计算收盘价
-        const closes = klineData.map(item => item[1]); // 收盘价
-
-        // 计算布林带（使用标准参数：20日移动平均，2倍标准差）
-        const bb = this.calculateBollingerBands(closes, 20, 2);
-
-        // 添加布林带中线（MA20）
         option.series.push({
             name: '布林带中线',
             type: 'line',
             data: bb.middle,
             smooth: true,
-            lineStyle: {
-                width: 1.5,
-                color: '#8b5cf6',
-                type: 'solid',
-                opacity: 0.8
-            },
+            lineStyle: { width: 1.5, color: '#8b5cf6', type: 'solid', opacity: 0.8 },
             showSymbol: false,
             z: 10
         });
 
-        // 添加布林带上轨
         option.series.push({
             name: '布林带上轨',
             type: 'line',
             data: bb.upper,
             smooth: true,
-            lineStyle: {
-                width: 1,
-                color: '#64748b',
-                type: 'solid',
-                opacity: 0.7
-            },
+            lineStyle: { width: 1, color: '#f472b6', type: 'solid', opacity: 0.7 },
             showSymbol: false,
             z: 5
         });
 
-        // 添加布林带下轨
         option.series.push({
             name: '布林带下轨',
             type: 'line',
             data: bb.lower,
             smooth: true,
-            lineStyle: {
-                width: 1,
-                color: '#64748b',
-                type: 'solid',
-                opacity: 0.7
-            },
+            lineStyle: { width: 1, color: '#60a5fa', type: 'solid', opacity: 0.7 },
             showSymbol: false,
             z: 5
         });
 
-        // 添加布林带填充区域
         option.series.push({
             name: '布林带区域',
             type: 'line',
@@ -3277,9 +3290,9 @@ const StockPage = {
                     type: 'linear',
                     x: 0, y: 0, x2: 0, y2: 1,
                     colorStops: [
-                        { offset: 0, color: 'rgba(100, 116, 139, 0.05)' },
+                        { offset: 0, color: 'rgba(244, 114, 182, 0.05)' },
                         { offset: 0.5, color: 'rgba(139, 92, 246, 0.03)' },
-                        { offset: 1, color: 'rgba(100, 116, 139, 0.05)' }
+                        { offset: 1, color: 'rgba(96, 165, 250, 0.05)' }
                     ]
                 }
             },
@@ -3293,17 +3306,7 @@ const StockPage = {
             lineStyle: { opacity: 0 },
             showSymbol: false,
             stack: 'bollinger',
-            areaStyle: {
-                color: {
-                    type: 'linear',
-                    x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                        { offset: 0, color: 'rgba(100, 116, 139, 0.05)' },
-                        { offset: 0.5, color: 'rgba(139, 92, 246, 0.03)' },
-                        { offset: 1, color: 'rgba(100, 116, 139, 0.05)' }
-                    ]
-                }
-            },
+            areaStyle: { color: 'transparent' },
             z: 1
         });
     },

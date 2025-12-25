@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators
+from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
@@ -774,10 +774,11 @@ async def get_kline_hist(
             
             # 根据indicator参数决定查询哪些指标数据
             # 默认返回vol（成交量），vol总是返回
-            # 如果指定了indicator（macd/kdj/rsi），则只返回对应的指标数据
+            # 如果指定了indicator（macd/kdj/rsi/boll），则返回对应的指标数据
+            indicator_list = indicator.split(',') if indicator else []
             
-            # 查询MACD数据（仅在indicator为macd时）
-            if indicator == 'macd':
+            # 查询MACD数据
+            if 'macd' in indicator_list:
                 try:
                     macd_query = db.query(MACDIndicators).filter(
                         MACDIndicators.code == code,
@@ -803,10 +804,9 @@ async def get_kline_hist(
                 except Exception as e:
                     print(f"[kline_hist] MACD数据查询失败: {e}")
             
-            # 查询KDJ数据（仅在indicator为kdj时）
-            elif indicator == 'kdj':
+            # 查询KDJ数据
+            if 'kdj' in indicator_list:
                 try:
-                    print(f"[kline_hist] 开始查询KDJ数据: code={code}, start_date={start_date}, end_date={end_date}")
                     kdj_query = db.query(KDJIndicators).filter(
                         KDJIndicators.code == code,
                         KDJIndicators.market_type == 'CN',
@@ -815,7 +815,6 @@ async def get_kline_hist(
                     ).order_by(KDJIndicators.date.asc())
                     
                     kdj_records = kdj_query.all()
-                    print(f"[kline_hist] KDJ数据查询结果: 找到{len(kdj_records)}条记录")
                     kdj_dict = {}
                     for record in kdj_records:
                         date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
@@ -825,25 +824,15 @@ async def get_kline_hist(
                             "j": round(float(record.j), 4) if record.j is not None else None
                         }
                     
-                    print(f"[kline_hist] KDJ数据字典大小: {len(kdj_dict)}")
-                    if len(kdj_dict) > 0:
-                        sample_dates = list(kdj_dict.keys())[:5]
-                        print(f"[kline_hist] KDJ数据示例日期: {sample_dates}")
-                    
                     # 将KDJ数据合并到K线数据中
-                    merged_count = 0
                     for item in result:
                         if item['date'] in kdj_dict:
                             item.update(kdj_dict[item['date']])
-                            merged_count += 1
-                    print(f"[kline_hist] KDJ数据合并完成: 合并了{merged_count}条数据到{len(result)}条K线数据中")
                 except Exception as e:
                     print(f"[kline_hist] KDJ数据查询失败: {e}")
-                    import traceback
-                    traceback.print_exc()
 
-            # 查询RSI数据（仅在indicator为rsi时）
-            elif indicator == 'rsi':
+            # 查询RSI数据
+            if 'rsi' in indicator_list:
                 try:
                     rsi_query = db.query(RSIIndicators).filter(
                         RSIIndicators.code == code,
@@ -868,6 +857,37 @@ async def get_kline_hist(
                             item.update(rsi_dict[item['date']])
                 except Exception as e:
                     print(f"[kline_hist] RSI数据查询失败: {e}")
+            
+            # 查询BOLL数据
+            if 'boll' in indicator_list:
+                try:
+                    boll_query = db.query(BOLLIndicators).filter(
+                        BOLLIndicators.code == code,
+                        BOLLIndicators.market_type == 'CN',
+                        BOLLIndicators.date >= start_date,
+                        BOLLIndicators.date <= end_date
+                    ).order_by(BOLLIndicators.date.asc())
+                    
+                    boll_records = boll_query.all()
+                    boll_dict = {}
+                    for record in boll_records:
+                        # 兼容字符串和日期类型
+                        date_str = record.date
+                        if hasattr(date_str, 'strftime'):
+                            date_str = date_str.strftime('%Y-%m-%d')
+                        
+                        boll_dict[date_str] = {
+                            "boll_mid": round(float(record.mid), 4) if record.mid is not None else None,
+                            "boll_upper": round(float(record.upper), 4) if record.upper is not None else None,
+                            "boll_lower": round(float(record.lower), 4) if record.lower is not None else None
+                        }
+                    
+                    # 将BOLL数据合并到K线数据中
+                    for item in result:
+                        if item['date'] in boll_dict:
+                            item.update(boll_dict[item['date']])
+                except Exception as e:
+                    print(f"[kline_hist] BOLL数据查询失败: {e}")
             
             # 查询MA数据（MA总是返回，因为它是K线图的基础指标）
             try:

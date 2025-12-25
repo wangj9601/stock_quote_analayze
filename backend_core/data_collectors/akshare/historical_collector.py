@@ -27,6 +27,7 @@ from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.ma_calculator import MACalculator
+from backend_core.utils.boll_calculator import BOLLCalculator
 from datetime import datetime, timedelta
 
 # 配置日志
@@ -53,6 +54,7 @@ class AkshareHistoricalCollector:
         self._init_kdj_table()
         self._init_rsi_table()
         self._init_ma_table()
+        self._init_boll_table()
         
     def __del__(self):
         """析构函数，确保session被关闭"""
@@ -102,29 +104,29 @@ class AkshareHistoricalCollector:
         except Exception as e:
             logger.warning(f"RSI指标表初始化失败（可能已存在）: {e}")
             self.session.rollback()
-        """初始化MACD指标表结构"""
+
+    def _init_boll_table(self):
+        """初始化BOLL指标表结构"""
         try:
             self.session.execute(text('''
-                CREATE TABLE IF NOT EXISTS macd_indicators (
+                CREATE TABLE IF NOT EXISTS boll_indicators (
                     code VARCHAR(20) NOT NULL,
                     date VARCHAR(20) NOT NULL,
                     market_type VARCHAR(10) NOT NULL,
-                    dif REAL,
-                    dea REAL,
-                    macd REAL,
-                    ema12 REAL,
-                    ema26 REAL,
+                    mid REAL,
+                    upper REAL,
+                    lower REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
             '''))
             self.session.commit()
-            logger.debug("MACD指标表初始化完成")
+            logger.debug("BOLL指标表初始化完成")
         except Exception as e:
-            logger.warning(f"MACD指标表初始化失败（可能已存在）: {e}")
+            logger.warning(f"BOLL指标表初始化失败（可能已存在）: {e}")
             self.session.rollback()
-    
-    def get_stock_list(self) -> List[Dict[str, str]]:
+
+    def _init_ma_table(self):
         """
         从stock_basic_info表获取股票列表
         
@@ -336,6 +338,13 @@ class AkshareHistoricalCollector:
                     self._calculate_and_save_ma(stock_code, start_date, end_date)
                 except Exception as e:
                     logger.warning(f"股票 {stock_code} MA指标计算失败: {e}")
+            
+            # 计算并保存BOLL指标
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_boll(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} BOLL指标计算失败: {e}")
             
             time.sleep(random.uniform(0.5, 1.5))
             
@@ -816,6 +825,102 @@ class AkshareHistoricalCollector:
             
         except Exception as e:
             logger.error(f"计算股票 {stock_code} MA指标失败: {e}")
+            self.session.rollback()
+
+    def _calculate_and_save_boll(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存BOLL指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票最近至少30天的收盘价数据（BOLL20需要至少20天）
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            result = self.session.execute(text("""
+                SELECT date, close
+                FROM historical_quotes 
+                WHERE code = :stock_code 
+                AND date >= :query_start_date 
+                AND date <= :end_date
+                AND close IS NOT NULL 
+                ORDER BY date ASC
+            """), {
+                'stock_code': stock_code,
+                'query_start_date': query_start_date,
+                'end_date': end_date
+            })
+            
+            rows = result.fetchall()
+            if len(rows) < 20:
+                logger.debug(f"股票 {stock_code} 历史数据不足20天，跳过BOLL计算")
+                return
+            
+            # 提取数据列表
+            dates = [row[0] for row in rows]
+            closes = [float(row[1]) for row in rows]
+            
+            # 使用BOLL计算器批量计算
+            calculator = BOLLCalculator()
+            boll_results = calculator.calculate_boll_batch(closes)
+            
+            if not boll_results:
+                return
+            
+            # 保存BOLL数据（只保存日期范围内的数据）
+            boll_saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for i, boll_data in enumerate(boll_results):
+                if boll_data['mid'] is None:
+                    continue
+                    
+                date_val = dates[i]
+                if isinstance(date_val, str):
+                    date_obj = datetime.strptime(date_val, '%Y-%m-%d').date()
+                else:
+                    date_obj = date_val.date() if hasattr(date_val, 'date') else date_val
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d')
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO boll_indicators
+                        (code, date, market_type, mid, upper, lower, created_at)
+                        VALUES (:code, :date, :market_type, :mid, :upper, :lower, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            mid = EXCLUDED.mid,
+                            upper = EXCLUDED.upper,
+                            lower = EXCLUDED.lower,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'CN',
+                        'mid': boll_data['mid'],
+                        'upper': boll_data['upper'],
+                        'lower': boll_data['lower'],
+                        'created_at': datetime.now()
+                    })
+                    boll_saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} BOLL数据失败: {e}")
+                    continue
+            
+            if boll_saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} BOLL指标计算完成，保存 {boll_saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} BOLL指标失败: {e}")
             self.session.rollback()
     
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
