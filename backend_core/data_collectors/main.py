@@ -315,7 +315,7 @@ scheduler.add_job(generate_semiannual_data, 'cron', day_of_week='mon-fri', hour=
 scheduler.add_job(generate_hk_semiannual_data, 'cron', day_of_week='mon-fri', hour=17, minute=8, id='generate_hk_semiannual')
 scheduler.add_job(generate_annual_data, 'cron', day_of_week='mon-fri', hour=16, minute=48, id='generate_annual')
 scheduler.add_job(generate_hk_annual_data, 'cron', day_of_week='mon-fri', hour=17, minute=12, id='generate_hk_annual')
-scheduler.add_job(collect_hk_index_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='5,35', id='hk_index_realtime')
+scheduler.add_job(collect_hk_index_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='35', id='hk_index_realtime')
 scheduler.add_job(collect_hk_index_historical, 'cron', day_of_week='mon-fri', hour=17, minute=5, id='hk_index_historical')
 
 if __name__ == "__main__":

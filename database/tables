@@ -89,4 +89,25 @@ ALTER TABLE IF EXISTS public.ma_indicators
     OWNER to postgres;
 
 
+-- Table: public.boll_indicators
+
+-- DROP TABLE IF EXISTS public.boll_indicators;
+
+CREATE TABLE IF NOT EXISTS public.boll_indicators
+(
+    code character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    date character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    mid real,
+    upper real,
+    lower real,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT boll_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.boll_indicators
+    OWNER to postgres;
     
+        
