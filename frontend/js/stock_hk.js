@@ -667,6 +667,17 @@ const StockPage = {
                     lineStyle: { width: 1.5, color: '#a855f7' },
                     showSymbol: false,
                     z: 2
+                },
+                {
+                    name: 'MAVOL20',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: [],
+                    smooth: true,
+                    lineStyle: { width: 1.5, color: '#a855f7' },
+                    showSymbol: false,
+                    z: 2
                 }
             ],
             tooltip: {
@@ -712,10 +723,23 @@ const StockPage = {
                             bollInfo += '中轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
                         } else if (item.seriesName === '布林带下轨') {
                             bollInfo += '下轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
+                        } else if (item.seriesName === 'MAVOL20') {
+                            // 成交量均线信息
                         } else if (item.seriesName.includes('MA') || item.seriesName.includes('EMA')) {
                             result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
                         }
                     });
+
+                    // 专门处理成交量和MAVOL
+                    let volInfo = '';
+                    params.forEach(function (item) {
+                        if (item.seriesName === '成交量') {
+                            volInfo += '<br/>成交量<br/>' + item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + ' ';
+                        } else if (item.seriesName === 'MAVOL20') {
+                            volInfo += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-');
+                        }
+                    });
+                    if (volInfo) result += volInfo + '<br/>';
 
                     if (bollInfo) {
                         result += '<br/>BOLL(20,2)<br/>' + bollInfo + '<br/>';
@@ -734,7 +758,7 @@ const StockPage = {
                 }
             },
             legend: {
-                data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', '成交量', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24', '布林带中线', '布林带上轨', '布林带下轨'],
+                data: ['K线', 'MA5', 'MA10', '成交量', 'MAVOL20', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24', '布林带中线', '布林带上轨', '布林带下轨'],
                 top: '1%',
                 textStyle: {
                     color: '#999'
@@ -749,6 +773,11 @@ const StockPage = {
         this.hideMACDChart(initOption);
         this.hideKDJChart(initOption);
         this.hideRSIChart(initOption);
+        // 显示MAVOL20
+        if (initOption.legend && initOption.legend[0]) {
+            initOption.legend[0].selected = initOption.legend[0].selected || {};
+            initOption.legend[0].selected['MAVOL20'] = true;
+        }
         this.klineChart.setOption(initOption);
     },
 
@@ -2209,6 +2238,12 @@ const StockPage = {
                 option.series[3].xAxisIndex = 1;
                 option.series[3].yAxisIndex = 1;
             }
+            // 显示MAVOL20系列
+            if (option.series[13]) {
+                option.series[13].show = true;
+                option.series[13].xAxisIndex = 1;
+                option.series[13].yAxisIndex = 1;
+            }
             if (option.series[4]) option.series[4].show = false; // DIF
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
@@ -2240,6 +2275,9 @@ const StockPage = {
         // 隐藏成交量系列
         if (option.series && option.series[3]) {
             option.series[3].show = false;
+        }
+        if (option.series && option.series[13]) {
+            option.series[13].show = false;
         }
     },
 
@@ -2319,6 +2357,9 @@ const StockPage = {
         if (option.series) {
             if (option.series[3]) {
                 option.series[3].show = false; // 隐藏成交量
+            }
+            if (option.series[13]) {
+                option.series[13].show = false; // 隐藏MAVOL20
             }
             if (option.series[4]) {
                 option.series[4].show = true; // DIF
@@ -2467,6 +2508,7 @@ const StockPage = {
         // 显示KDJ系列，隐藏成交量和MACD系列
         if (option.series) {
             if (option.series[3]) option.series[3].show = false; // 隐藏成交量
+            if (option.series[13]) option.series[13].show = false; // 隐藏MAVOL20
             if (option.series[4]) option.series[4].show = false; // DIF
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
@@ -2526,6 +2568,8 @@ const StockPage = {
 
         // 隐藏KDJ系列
         if (option.series) {
+            if (option.series[3]) option.series[3].show = false; // Assuming this is for MAVOL20 or another series
+            if (option.series[13]) option.series[13].show = false; // Assuming this is for MAVOL20 or another series
             if (option.series[7]) option.series[7].show = false; // K
             if (option.series[8]) option.series[8].show = false; // D
             if (option.series[9]) option.series[9].show = false; // J
@@ -2591,6 +2635,7 @@ const StockPage = {
         // 显示RSI系列，隐藏成交量、MACD、KDJ系列
         if (option.series) {
             if (option.series[3]) option.series[3].show = false; // 隐藏成交量
+            if (option.series[13]) option.series[13].show = false; // 隐藏MAVOL20
             if (option.series[4]) option.series[4].show = false; // DIF
             if (option.series[5]) option.series[5].show = false; // DEA
             if (option.series[6]) option.series[6].show = false; // MACD
@@ -2871,6 +2916,12 @@ const StockPage = {
                 // 设置副图成交量数据
                 const volumes = list.map(item => parseFloat(item.volume) || 0);
                 option.series[3].data = volumes;
+
+                // 设置MAVOL20数据
+                const mavol20 = list.map(item => item.mavol20 !== null && item.mavol20 !== undefined ? parseFloat(item.mavol20) : null);
+                if (option.series[13]) {
+                    option.series[13].data = mavol20;
+                }
 
                 // 处理子图指标数据
                 console.log('[loadKlineData] 处理指标数据');

@@ -28,6 +28,7 @@ from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.boll_calculator import BOLLCalculator
+from backend_core.utils.mavol_calculator import MAVOLCalculator
 from datetime import datetime, timedelta
 
 # 配置日志
@@ -55,6 +56,7 @@ class AkshareHistoricalCollector:
         self._init_rsi_table()
         self._init_ma_table()
         self._init_boll_table()
+        self._init_mavol_table()
         
     def __del__(self):
         """析构函数，确保session被关闭"""
@@ -153,6 +155,31 @@ class AkshareHistoricalCollector:
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
             return []
+
+    def _init_mavol_table(self):
+        """初始化MAVOL指标表结构"""
+        try:
+            self.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS mavol_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    mavol5 REAL,
+                    mavol10 REAL,
+                    mavol20 REAL,
+                    mavol30 REAL,
+                    mavol60 REAL,
+                    mavol120 REAL,
+                    mavol200 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            self.session.commit()
+            logger.debug("MAVOL指标表初始化完成")
+        except Exception as e:
+            logger.warning(f"MAVOL指标表初始化失败（可能已存在）: {e}")
+            self.session.rollback()
     
     def check_existing_data(self, stock_code: str, start_date: str, end_date: str) -> List[str]:
         """
@@ -345,6 +372,13 @@ class AkshareHistoricalCollector:
                     self._calculate_and_save_boll(stock_code, start_date, end_date)
                 except Exception as e:
                     logger.warning(f"股票 {stock_code} BOLL指标计算失败: {e}")
+            
+            # 计算并保存MAVOL指标
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_mavol(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} MAVOL指标计算失败: {e}")
             
             time.sleep(random.uniform(0.5, 1.5))
             
@@ -825,6 +859,105 @@ class AkshareHistoricalCollector:
             
         except Exception as e:
             logger.error(f"计算股票 {stock_code} MA指标失败: {e}")
+            self.session.rollback()
+
+    def _calculate_and_save_mavol(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存MAVOL指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票的历史成交量数据
+            result = self.session.execute(text("""
+                SELECT date, volume
+                FROM historical_quotes
+                WHERE code = :code
+                ORDER BY date ASC
+            """), {'code': stock_code})
+            
+            historical_data = result.fetchall()
+            
+            if len(historical_data) < 5:  # 至少需要5天数据才能计算MAVOL5
+                logger.debug(f"股票 {stock_code} 数据不足，无法计算MAVOL指标")
+                return
+            
+            # 构建DataFrame
+            df_data = []
+            for row in historical_data:
+                df_data.append({
+                    'date': row[0],
+                    'volume': float(row[1]) if row[1] else None
+                })
+            
+            df = pd.DataFrame(df_data)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
+            
+            if 'volume' not in df.columns or len(df) == 0:
+                logger.debug(f"股票 {stock_code} 成交量数据无效")
+                return
+            
+            # 计算MAVOL指标
+            mavol_df = MAVOLCalculator.calculate_mavol_for_dataframe(df, periods=[5, 10, 20, 30, 60, 120, 200])
+            
+            # 保存MAVOL数据
+            mavol_saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for _, row in mavol_df.iterrows():
+                date_obj = row['date'].date() if isinstance(row['date'], datetime) else row['date']
+                if hasattr(date_obj, 'date'):
+                    date_obj = date_obj.date()
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d')
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO mavol_indicators
+                        (code, date, market_type, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200, created_at)
+                        VALUES (:code, :date, :market_type, :mavol5, :mavol10, :mavol20, :mavol30, :mavol60, :mavol120, :mavol200, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            mavol5 = EXCLUDED.mavol5,
+                            mavol10 = EXCLUDED.mavol10,
+                            mavol20 = EXCLUDED.mavol20,
+                            mavol30 = EXCLUDED.mavol30,
+                            mavol60 = EXCLUDED.mavol60,
+                            mavol120 = EXCLUDED.mavol120,
+                            mavol200 = EXCLUDED.mavol200,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'CN',
+                        'mavol5': self._safe_value(row.get('mavol5')),
+                        'mavol10': self._safe_value(row.get('mavol10')),
+                        'mavol20': self._safe_value(row.get('mavol20')),
+                        'mavol30': self._safe_value(row.get('mavol30')),
+                        'mavol60': self._safe_value(row.get('mavol60')),
+                        'mavol120': self._safe_value(row.get('mavol120')),
+                        'mavol200': self._safe_value(row.get('mavol200')),
+                        'created_at': datetime.now()
+                    })
+                    mavol_saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} MAVOL数据失败: {e}")
+                    continue
+            
+            if mavol_saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} MAVOL指标计算完成，保存 {mavol_saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} MAVOL指标失败: {e}")
             self.session.rollback()
 
     def _calculate_and_save_boll(self, stock_code: str, start_date: str, end_date: str):

@@ -111,3 +111,98 @@ ALTER TABLE IF EXISTS public.boll_indicators
     OWNER to postgres;
     
         
+        -- Table: public.mavol_indicators
+
+-- DROP TABLE IF EXISTS public.mavol_indicators;
+
+CREATE TABLE IF NOT EXISTS public.mavol_indicators
+(
+    code character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    date character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    mavol5 real,
+    mavol10 real,
+    mavol20 real,
+    mavol30 real,
+    mavol60 real,
+    mavol120 real,
+    mavol200 real,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT mavol_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.mavol_indicators
+    OWNER to postgres;
+
+
+    -- Table: public.macd_indicators
+
+-- DROP TABLE IF EXISTS public.macd_indicators;
+
+CREATE TABLE IF NOT EXISTS public.macd_indicators
+(
+    code character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    date character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    dif real,
+    dea real,
+    macd real,
+    ema12 real,
+    ema26 real,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT macd_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.macd_indicators
+    OWNER to postgres;
+
+
+    -- Table: public.kdj_indicators
+
+-- DROP TABLE IF EXISTS public.kdj_indicators;
+
+CREATE TABLE IF NOT EXISTS public.kdj_indicators
+(
+    code character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    date character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    k real,
+    d real,
+    j real,
+    rsv real,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT kdj_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.kdj_indicators
+    OWNER to postgres;
+
+
+    -- Table: public.rsi_indicators
+
+-- DROP TABLE IF EXISTS public.rsi_indicators;
+
+CREATE TABLE IF NOT EXISTS public.rsi_indicators
+(
+    code character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    date character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    rsi6 real,
+    rsi12 real,
+    rsi24 real,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT rsi_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.rsi_indicators
+    OWNER to postgres;
+
+    

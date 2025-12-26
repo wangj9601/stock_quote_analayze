@@ -16,9 +16,9 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
-from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.boll_calculator import BOLLCalculator
+from backend_core.utils.mavol_calculator import MAVOLCalculator
 
 class HKHistoricalQuoteCollector(AKShareCollector):
     """港股历史行情数据采集器"""
@@ -134,6 +134,22 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     mid REAL,
                     upper REAL,
                     lower REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            session.execute(text('''
+                CREATE TABLE IF NOT EXISTS mavol_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    mavol5 REAL,
+                    mavol10 REAL,
+                    mavol20 REAL,
+                    mavol30 REAL,
+                    mavol60 REAL,
+                    mavol120 REAL,
+                    mavol200 REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
@@ -453,6 +469,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     self._calculate_and_save_boll_hk(list(affected_stocks), target_date, session)
                 except Exception as e:
                     self.logger.warning(f"港股BOLL指标计算失败: {e}")
+                
+                try:
+                    self._calculate_and_save_mavol_hk(list(affected_stocks), target_date, session)
+                except Exception as e:
+                    self.logger.warning(f"港股MAVOL指标计算失败: {e}")
             
             # 操作日志记录
             try:
@@ -837,7 +858,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                             """), {
                                 'code': stock_code,
                                 'date': date_str,
-                                'market_type': '港股',
+                                'market_type': 'HK',
                                 'ma5': self._safe_value(row.get('ma5')),
                                 'ma10': self._safe_value(row.get('ma10')),
                                 'ma20': self._safe_value(row.get('ma20')),
