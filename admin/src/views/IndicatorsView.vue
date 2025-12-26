@@ -291,6 +291,69 @@
             </div>
           </div>
         </el-tab-pane>
+
+        <!-- MAVOL 成交量移动平均线 -->
+        <el-tab-pane label="MAVOL" name="mavol">
+          <div class="tab-content">
+            <div class="filter-section">
+              <el-row :gutter="16" align="middle">
+                <el-col :span="6">
+                  <el-input v-model="filters.code" placeholder="股票代码" clearable @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
+                    <el-option label="A股 (CN)" value="CN" />
+                    <el-option label="港股 (HK)" value="HK" />
+                  </el-select>
+                </el-col>
+                <el-col :span="4">
+                  <el-date-picker v-model="filters.start_date" type="date" placeholder="开始日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-date-picker v-model="filters.end_date" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+              </el-row>
+            </div>
+
+            <el-table :data="tableData" v-loading="loading" stripe style="width: 100%">
+              <el-table-column prop="code" label="代码" width="100" />
+              <el-table-column prop="date" label="日期" width="120" />
+              <el-table-column prop="mavol5" label="MAVOL5">
+                <template #default="scope">{{ scope.row.mavol5?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol10" label="MAVOL10">
+                <template #default="scope">{{ scope.row.mavol10?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol20" label="MAVOL20">
+                <template #default="scope">{{ scope.row.mavol20?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol30" label="MAVOL30">
+                <template #default="scope">{{ scope.row.mavol30?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol60" label="MAVOL60">
+                <template #default="scope">{{ scope.row.mavol60?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol120" label="MAVOL120">
+                <template #default="scope">{{ scope.row.mavol120?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol200" label="MAVOL200">
+                <template #default="scope">{{ scope.row.mavol200?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+            </el-table>
+
+            <div class="pagination-section">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :total="total"
+                :page-sizes="[20, 50, 100]"
+                layout="total, sizes, prev, pager, next, jumper"
+                @current-change="handlePageChange"
+                @size-change="handleSizeChange"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
