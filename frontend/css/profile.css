@@ -1252,6 +1252,132 @@
     cursor: not-allowed;
 }
 
+/* 交易日志样式 */
+.trading-logs-section {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+}
+
+.trading-logs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.trading-logs-tabs {
+    display: flex;
+    gap: 8px;
+    background: #f3f4f6;
+    padding: 4px;
+    border-radius: 999px;
+}
+
+.trading-logs-tab {
+    border: none;
+    background: transparent;
+    color: #374151;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.trading-logs-tab.active {
+    background: #2563eb;
+    color: #fff;
+}
+
+.trading-logs-panels {
+    margin-top: 8px;
+}
+
+.trading-logs-panel {
+    display: none;
+}
+
+.trading-logs-panel.active {
+    display: block;
+}
+
+.trading-log-form {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.trading-log-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.trading-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.trading-log-item {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.trading-log-item.empty {
+    text-align: center;
+    color: #6b7280;
+}
+
+.trading-log-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.trading-log-title {
+    font-weight: 600;
+    color: #111827;
+}
+
+.trading-log-sub {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.trading-log-content {
+    color: #374151;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 10px 0;
+    word-break: break-word;
+}
+
+.trading-log-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+    .trading-logs-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .trading-log-form .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -1270,4 +1396,69 @@
         transform: translateY(0);
         opacity: 1;
     }
-} 
+}
+
+/* 详细日志样式增强 */
+.trading-log-item.detailed-log {
+    border-left: 4px solid #2563eb;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.trading-log-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.tag-blue { background: #dbeafe; color: #1e40af; }
+.tag-orange { background: #ffedd5; color: #9a3412; }
+.tag-green { background: #dcfce7; color: #166534; }
+
+.trading-log-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    background: #f8fafc;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.grid-item b {
+    color: #64748b;
+    margin-right: 4px;
+}
+
+.trading-log-section {
+    font-size: 13px;
+}
+
+.trading-log-section b {
+    display: block;
+    margin-bottom: 4px;
+    color: #1f2937;
+}
+
+.log-text {
+    color: #4b5563;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.log-image-thumb img {
+    border: 1px solid #e2e8f0;
+    transition: transform 0.2s;
+}
+
+.log-image-thumb img:hover {
+    transform: scale(1.05);
+}

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,9 +9,10 @@
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/profile.css">
 </head>
+
 <body>
-<script src="components/header.js"></script>
-<script>loadHeader('profile');</script>
+    <script src="components/header.js"></script>
+    <script>loadHeader('profile');</script>
     <!-- 主要内容 -->
     <main class="main-content">
         <div class="container">
@@ -54,6 +56,7 @@
                     <button class="profile-tab active" data-tab="overview">投资概况</button>
                     <button class="profile-tab" data-tab="portfolio">投资组合</button>
                     <button class="profile-tab" data-tab="transactions">交易记录</button>
+                    <button class="profile-tab" data-tab="trading-logs">交易日志</button>
                     <button class="profile-tab" data-tab="analysis">投资分析</button>
                     <button class="profile-tab" data-tab="settings">账户设置</button>
                 </div>
@@ -153,7 +156,7 @@
                                 <button class="btn btn-primary add-position-btn">新增持仓</button>
                             </div>
                         </div>
-                        
+
                         <div class="portfolio-table">
                             <table class="table">
                                 <thead>
@@ -190,13 +193,176 @@
                                 <button class="btn btn-secondary export-btn">导出记录</button>
                             </div>
                         </div>
-                        
+
                         <div class="transactions-list" id="transactionsList"></div>
-                        
+
                         <div class="pagination">
                             <button class="pagination-btn">上一页</button>
                             <span class="pagination-info">第 1 页，共 15 页</span>
                             <button class="pagination-btn">下一页</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 交易日志 -->
+                <div class="tab-panel" id="trading-logs">
+                    <div class="trading-logs-section">
+                        <div class="trading-logs-header">
+                            <h3>交易日志</h3>
+                            <div class="trading-logs-tabs">
+                                <button class="trading-logs-tab active" data-log-tab="daily">每日日志</button>
+                                <button class="trading-logs-tab" data-log-tab="weekly">每周日志</button>
+                                <button class="trading-logs-tab" data-log-tab="trade">单笔日志</button>
+                            </div>
+                        </div>
+
+                        <div class="trading-logs-panels">
+                            <div class="trading-logs-panel active" id="trading-logs-daily">
+                                <form class="trading-log-form" id="dailyLogForm">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>日期 <span class="required">*</span></label>
+                                            <input type="date" id="dailyLogDate" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>情绪/状态</label>
+                                            <select id="dailyLogMood">
+                                                <option value="">-</option>
+                                                <option value="good">良好</option>
+                                                <option value="normal">一般</option>
+                                                <option value="bad">较差</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>复盘要点 <span class="required">*</span></label>
+                                        <textarea id="dailyLogContent" rows="5" placeholder="记录当天交易计划、执行、得失、明日改进"
+                                            required></textarea>
+                                    </div>
+                                    <div class="form-actions">
+                                        <input type="hidden" id="dailyLogId" value="">
+                                        <button type="button" class="btn btn-secondary"
+                                            id="dailyLogResetBtn">清空</button>
+                                        <button type="submit" class="btn btn-primary" id="dailyLogSubmitBtn">保存</button>
+                                    </div>
+                                </form>
+                                <div class="trading-log-list" id="dailyLogList"></div>
+                            </div>
+
+                            <div class="trading-logs-panel" id="trading-logs-weekly">
+                                <form class="trading-log-form" id="weeklyLogForm">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>周起始日 <span class="required">*</span></label>
+                                            <input type="date" id="weeklyLogWeekStart" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>本周总结评分</label>
+                                            <select id="weeklyLogScore">
+                                                <option value="">-</option>
+                                                <option value="A">A</option>
+                                                <option value="B">B</option>
+                                                <option value="C">C</option>
+                                                <option value="D">D</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>周总结 <span class="required">*</span></label>
+                                        <textarea id="weeklyLogContent" rows="6" placeholder="记录本周策略、执行、盈亏归因、下周计划"
+                                            required></textarea>
+                                    </div>
+                                    <div class="form-actions">
+                                        <input type="hidden" id="weeklyLogId" value="">
+                                        <button type="button" class="btn btn-secondary"
+                                            id="weeklyLogResetBtn">清空</button>
+                                        <button type="submit" class="btn btn-primary"
+                                            id="weeklyLogSubmitBtn">保存</button>
+                                    </div>
+                                </form>
+                                <div class="trading-log-list" id="weeklyLogList"></div>
+                            </div>
+
+                            <div class="trading-logs-panel" id="trading-logs-trade">
+                                <form class="trading-log-form" id="tradeLogForm">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>股票代码 <span class="required">*</span></label>
+                                            <input type="text" id="tradeLogStockCode" placeholder="如: 600519" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>股票名称</label>
+                                            <input type="text" id="tradeLogStockName" placeholder="自动填充">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>交易日期 <span class="required">*</span></label>
+                                            <input type="date" id="tradeLogDate" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>买入价</label>
+                                            <input type="number" id="tradeLogBuyPrice" step="0.01" placeholder="0.00">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>仓位大小</label>
+                                            <input type="text" id="tradeLogPositionSize" placeholder="如: 10% 或 1000股">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>止损点</label>
+                                            <input type="number" id="tradeLogStopLoss" step="0.01" placeholder="0.00">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>止盈点</label>
+                                            <input type="number" id="tradeLogTakeProfit" step="0.01" placeholder="0.00">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>交易前的思路 (为什么进场, 是否符合系统, 市场环境)</label>
+                                        <textarea id="tradeLogThinking" rows="3" placeholder="记录交易决策链路"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>市场环境描述</label>
+                                        <textarea id="tradeLogMarketContext" rows="2"
+                                            placeholder="大盘环境、行业热度等"></textarea>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>是否严格执行计划</label>
+                                            <select id="tradeLogStrictlyExecute">
+                                                <option value="严格执行">严格执行</option>
+                                                <option value="部分执行">部分执行</option>
+                                                <option value="未执行">未执行</option>
+                                                <option value="违背计划">违背计划</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>是否存在情绪化操作</label>
+                                            <select id="tradeLogEmotionalTrading">
+                                                <option value="无">无</option>
+                                                <option value="轻微">轻微</option>
+                                                <option value="严重">严重</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>交易结果与反思</label>
+                                        <textarea id="tradeLogContent" rows="4" placeholder="总结经验教训"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>截图链接 (URL)</label>
+                                        <input type="text" id="tradeLogImageUrl" placeholder="http://...">
+                                    </div>
+                                    <div class="form-actions">
+                                        <input type="hidden" id="tradeLogId" value="">
+                                        <button type="button" class="btn btn-secondary"
+                                            id="tradeLogResetBtn">清空</button>
+                                        <button type="submit" class="btn btn-primary"
+                                            id="tradeLogSubmitBtn">保存记录</button>
+                                    </div>
+                                </form>
+                                <div class="trading-log-list" id="tradeLogList"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -420,7 +586,8 @@
                 </div>
                 <div class="form-group">
                     <label for="quantity">交易数量 <span class="required">*</span></label>
-                    <input type="number" id="quantity" name="quantity" placeholder="请输入股数" min="1" step="100" value="100" required>
+                    <input type="number" id="quantity" name="quantity" placeholder="请输入股数" min="1" step="100"
+                        value="100" required>
                     <small class="form-hint">必须是100的整数倍</small>
                 </div>
                 <div class="form-group">
@@ -452,6 +619,7 @@
             </a>
         </div>
     </footer>
-        
+
 </body>
-</html> 
+
+</html>

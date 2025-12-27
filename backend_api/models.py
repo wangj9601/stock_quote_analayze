@@ -582,6 +582,62 @@ class TradingNotes(Base):
     created_by = Column(String(50))     # 创建用户
     
 
+class TradingJournalLog(Base):
+    """交易日志（个人复盘）：支持每日、每周"""
+
+    __tablename__ = 'trading_journal_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    log_type = Column(String(10), nullable=False, index=True)  # daily / weekly
+
+    # daily: log_date；weekly: week_start
+    log_date = Column(Date, nullable=True, index=True)
+    week_start = Column(Date, nullable=True, index=True)
+
+    mood = Column(String(20), nullable=True)
+    score = Column(String(5), nullable=True)
+    content = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'log_type', 'log_date', 'week_start', name='uq_trading_journal_user_type_date'),
+    )
+
+
+class TradeExecutionLog(Base):
+    """单笔交易执行日志"""
+    __tablename__ = 'trade_execution_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    stock_code = Column(String(20), nullable=False)
+    stock_name = Column(String(50))
+    trade_date = Column(Date, nullable=False)
+    
+    # 交易前的思路
+    entry_thinking = Column(Text)     # 进场理由 & 是否符合系统
+    market_context = Column(Text)     # 市场环境
+    
+    # 交易参数
+    buy_price = Column(Float)
+    position_size = Column(String(50)) # 仓位
+    stop_loss = Column(Float)
+    take_profit = Column(Float)
+    
+    # 结果与盘后
+    strictly_execute = Column(String(50)) # 是否严格执行 (e.g., "严格执行", "偏差较大")
+    emotional_trading = Column(String(50)) # 是否情绪化 (e.g., "无", "轻微", "严重")
+    content = Column(Text)                # 交易结果总结
+    
+    image_url = Column(String(500))       # 截图
+    
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class SimTradeAccount(Base):
     """模拟交易账户"""
     __tablename__ = "sim_trade_accounts"

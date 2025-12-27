@@ -10,11 +10,22 @@ from typing import List, Optional
 from datetime import date, datetime
 from pydantic import BaseModel
 
-from database import get_db
-from models import TradingNotes, HistoricalQuotes
+from database import get_db, engine
+from auth import get_current_user
+from models import TradingNotes, HistoricalQuotes, TradingJournalLog, User, TradeExecutionLog
 from sqlalchemy import text
 
 router = APIRouter(prefix="/api/trading_notes", tags=["trading_notes"])
+
+
+def ensure_trading_journal_table(db: Session) -> None:
+    """在缺少迁移工具的情况下，尽力保证交易日志表存在。"""
+    try:
+        TradingJournalLog.__table__.create(bind=engine, checkfirst=True)
+        TradeExecutionLog.__table__.create(bind=engine, checkfirst=True)
+    except Exception:
+        db.rollback()
+
 
 # Pydantic模型
 class TradingNoteCreate(BaseModel):
@@ -43,6 +54,322 @@ class TradingNoteResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TradingJournalDailyCreate(BaseModel):
+    log_date: date
+    mood: Optional[str] = None
+    content: str
+
+
+class TradingJournalWeeklyCreate(BaseModel):
+    week_start: date
+    score: Optional[str] = None
+    content: str
+
+
+class TradingJournalUpdate(BaseModel):
+    mood: Optional[str] = None
+    score: Optional[str] = None
+    content: Optional[str] = None
+
+
+class TradingJournalResponse(BaseModel):
+    id: int
+    user_id: int
+    log_type: str
+    log_date: Optional[date]
+    week_start: Optional[date]
+    mood: Optional[str]
+    score: Optional[str]
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TradeExecutionLogCreate(BaseModel):
+    stock_code: str
+    stock_name: Optional[str] = None
+    trade_date: date
+    entry_thinking: Optional[str] = None
+    market_context: Optional[str] = None
+    buy_price: Optional[float] = None
+    position_size: Optional[str] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    strictly_execute: Optional[str] = None
+    emotional_trading: Optional[str] = None
+    content: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class TradeExecutionLogResponse(TradeExecutionLogCreate):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/journals", response_model=List[TradingJournalResponse])
+def list_trading_journals(
+    log_type: str = Query(..., description="daily / weekly"),
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    if log_type not in ("daily", "weekly"):
+        raise HTTPException(status_code=400, detail="log_type 必须是 daily 或 weekly")
+
+    q = db.query(TradingJournalLog).filter(
+        TradingJournalLog.user_id == current_user.id,
+        TradingJournalLog.log_type == log_type,
+    )
+
+    if log_type == "daily":
+        if start_date:
+            q = q.filter(TradingJournalLog.log_date >= start_date)
+        if end_date:
+            q = q.filter(TradingJournalLog.log_date <= end_date)
+        q = q.order_by(TradingJournalLog.log_date.desc().nullslast())
+    else:
+        if start_date:
+            q = q.filter(TradingJournalLog.week_start >= start_date)
+        if end_date:
+            q = q.filter(TradingJournalLog.week_start <= end_date)
+        q = q.order_by(TradingJournalLog.week_start.desc().nullslast())
+
+    return q.all()
+
+
+@router.post("/journals/daily", response_model=TradingJournalResponse)
+def upsert_daily_journal(
+    payload: TradingJournalDailyCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    existing = db.query(TradingJournalLog).filter(
+        TradingJournalLog.user_id == current_user.id,
+        TradingJournalLog.log_type == "daily",
+        TradingJournalLog.log_date == payload.log_date,
+    ).first()
+
+    now = datetime.now()
+    if existing:
+        existing.mood = payload.mood
+        existing.content = payload.content
+        existing.updated_at = now
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    record = TradingJournalLog(
+        user_id=current_user.id,
+        log_type="daily",
+        log_date=payload.log_date,
+        week_start=None,
+        mood=payload.mood,
+        score=None,
+        content=payload.content,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.post("/journals/weekly", response_model=TradingJournalResponse)
+def upsert_weekly_journal(
+    payload: TradingJournalWeeklyCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    existing = db.query(TradingJournalLog).filter(
+        TradingJournalLog.user_id == current_user.id,
+        TradingJournalLog.log_type == "weekly",
+        TradingJournalLog.week_start == payload.week_start,
+    ).first()
+
+    now = datetime.now()
+    if existing:
+        existing.score = payload.score
+        existing.content = payload.content
+        existing.updated_at = now
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    record = TradingJournalLog(
+        user_id=current_user.id,
+        log_type="weekly",
+        log_date=None,
+        week_start=payload.week_start,
+        mood=None,
+        score=payload.score,
+        content=payload.content,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.put("/journals/{journal_id}", response_model=TradingJournalResponse)
+def update_trading_journal(
+    journal_id: int,
+    payload: TradingJournalUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    record = db.query(TradingJournalLog).filter(
+        TradingJournalLog.id == journal_id,
+        TradingJournalLog.user_id == current_user.id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="交易日志不存在")
+
+    if payload.mood is not None:
+        record.mood = payload.mood
+    if payload.score is not None:
+        record.score = payload.score
+    if payload.content is not None:
+        record.content = payload.content
+    record.updated_at = datetime.now()
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.delete("/journals/{journal_id}")
+def delete_trading_journal(
+    journal_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    record = db.query(TradingJournalLog).filter(
+        TradingJournalLog.id == journal_id,
+        TradingJournalLog.user_id == current_user.id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="交易日志不存在")
+
+    db.delete(record)
+    db.commit()
+    return {"message": "交易日志删除成功"}
+
+
+# --- Trade Execution Log Routes ---
+
+@router.get("/trade_logs", response_model=List[TradeExecutionLogResponse])
+def list_trade_execution_logs(
+    stock_code: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    q = db.query(TradeExecutionLog).filter(TradeExecutionLog.user_id == current_user.id)
+    
+    if stock_code:
+        q = q.filter(TradeExecutionLog.stock_code == stock_code)
+    if start_date:
+        q = q.filter(TradeExecutionLog.trade_date >= start_date)
+    if end_date:
+        q = q.filter(TradeExecutionLog.trade_date <= end_date)
+        
+    return q.order_by(TradeExecutionLog.trade_date.desc()).all()
+
+
+@router.post("/trade_logs", response_model=TradeExecutionLogResponse)
+def create_trade_execution_log(
+    payload: TradeExecutionLogCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    now = datetime.now()
+    record = TradeExecutionLog(
+        user_id=current_user.id,
+        stock_code=payload.stock_code,
+        stock_name=payload.stock_name,
+        trade_date=payload.trade_date,
+        entry_thinking=payload.entry_thinking,
+        market_context=payload.market_context,
+        buy_price=payload.buy_price,
+        position_size=payload.position_size,
+        stop_loss=payload.stop_loss,
+        take_profit=payload.take_profit,
+        strictly_execute=payload.strictly_execute,
+        emotional_trading=payload.emotional_trading,
+        content=payload.content,
+        image_url=payload.image_url,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.put("/trade_logs/{log_id}", response_model=TradeExecutionLogResponse)
+def update_trade_execution_log(
+    log_id: int,
+    payload: TradeExecutionLogCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    record = db.query(TradeExecutionLog).filter(
+        TradeExecutionLog.id == log_id,
+        TradeExecutionLog.user_id == current_user.id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    for key, value in payload.model_dump().items():
+        setattr(record, key, value)
+    
+    record.updated_at = datetime.now()
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.delete("/trade_logs/{log_id}")
+def delete_trade_execution_log(
+    log_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_trading_journal_table(db)
+    record = db.query(TradeExecutionLog).filter(
+        TradeExecutionLog.id == log_id,
+        TradeExecutionLog.user_id == current_user.id,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    db.delete(record)
+    db.commit()
+    return {"message": "记录删除成功"}
 
 class HistoricalQuoteWithNotes(BaseModel):
     code: str

@@ -3,6 +3,11 @@ const ProfilePage = {
     state: {
         dashboard: null,
         positions: [],
+        tradingLogs: {
+            daily: [],
+            weekly: [],
+            trade: [],
+        },
     },
 
     async init() {
@@ -10,6 +15,7 @@ const ProfilePage = {
             await CommonUtils.auth.init();
             this.bindTabs();
             this.bindActions();
+            this.initTradingLogs();
             await this.loadDashboard();
         } catch (error) {
             console.error('个人中心初始化失败:', error);
@@ -28,6 +34,10 @@ const ProfilePage = {
                 document.querySelectorAll('.tab-panel').forEach((panel) => {
                     panel.classList.toggle('active', panel.id === target);
                 });
+
+                if (target === 'trading-logs') {
+                    this.refreshTradingLogs();
+                }
             });
         });
     },
@@ -42,6 +52,556 @@ const ProfilePage = {
 
         // 绑定交易表单事件
         this.bindTradeModal();
+    },
+
+    initTradingLogs() {
+        this.bindTradingLogTabs();
+        this.bindTradingLogForms();
+        this.refreshTradingLogs();
+    },
+
+    async fetchTradingLogsFromApi(logType) {
+        const url = `${API_BASE_URL}/api/trading_notes/journals?log_type=${encodeURIComponent(logType)}`;
+        const resp = await authFetch(url);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || err.message || '获取交易日志失败');
+        }
+        return await resp.json();
+    },
+
+    async refreshTradingLogs() {
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        try {
+            const [daily, weekly, trade] = await Promise.all([
+                this.fetchTradingLogsFromApi('daily'),
+                this.fetchTradingLogsFromApi('weekly'),
+                this.fetchTradeLogsFromApi(),
+            ]);
+            this.state.tradingLogs.daily = Array.isArray(daily) ? daily : [];
+            this.state.tradingLogs.weekly = Array.isArray(weekly) ? weekly : [];
+            this.state.tradingLogs.trade = Array.isArray(trade) ? trade : [];
+            this.renderTradingLogsFromState();
+        } catch (e) {
+            console.error('刷新交易日志失败:', e);
+            CommonUtils.showToast(e.message || '刷新交易日志失败', 'error');
+        }
+    },
+
+    bindTradingLogTabs() {
+        document.querySelectorAll('.trading-logs-tab').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tab = btn.dataset.logTab;
+                document.querySelectorAll('.trading-logs-tab').forEach((b) => {
+                    b.classList.toggle('active', b.dataset.logTab === tab);
+                });
+                document.querySelectorAll('.trading-logs-panel').forEach((panel) => {
+                    const isActive = (tab === 'daily' && panel.id === 'trading-logs-daily')
+                        || (tab === 'weekly' && panel.id === 'trading-logs-weekly')
+                        || (tab === 'trade' && panel.id === 'trading-logs-trade');
+                    panel.classList.toggle('active', isActive);
+                });
+            });
+        });
+    },
+
+    bindTradingLogForms() {
+        const dailyForm = document.getElementById('dailyLogForm');
+        const weeklyForm = document.getElementById('weeklyLogForm');
+        const dailyResetBtn = document.getElementById('dailyLogResetBtn');
+        const weeklyResetBtn = document.getElementById('weeklyLogResetBtn');
+        const tradeForm = document.getElementById('tradeLogForm');
+        const tradeResetBtn = document.getElementById('tradeLogResetBtn');
+
+        if (dailyForm) {
+            dailyForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveDailyLog();
+            });
+        }
+
+        if (weeklyForm) {
+            weeklyForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveWeeklyLog();
+            });
+        }
+
+        if (tradeForm) {
+            tradeForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveTradeLog();
+            });
+            const stockCodeInput = document.getElementById('tradeLogStockCode');
+            if (stockCodeInput) {
+                stockCodeInput.addEventListener('blur', () => {
+                    this.fetchStockNameForLog(stockCodeInput.value.trim());
+                });
+            }
+        }
+
+        if (dailyResetBtn) {
+            dailyResetBtn.addEventListener('click', () => this.resetDailyLogForm());
+        }
+
+        if (weeklyResetBtn) {
+            weeklyResetBtn.addEventListener('click', () => this.resetWeeklyLogForm());
+        }
+
+        if (tradeResetBtn) {
+            tradeResetBtn.addEventListener('click', () => this.resetTradeLogForm());
+        }
+    },
+
+    generateLogId(prefix) {
+        return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    },
+
+    async saveDailyLog() {
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const idEl = document.getElementById('dailyLogId');
+        const dateEl = document.getElementById('dailyLogDate');
+        const moodEl = document.getElementById('dailyLogMood');
+        const contentEl = document.getElementById('dailyLogContent');
+
+        if (!dateEl || !contentEl) return;
+
+        const date = dateEl.value;
+        const content = contentEl.value.trim();
+        const mood = moodEl ? moodEl.value : '';
+        const id = idEl ? idEl.value : '';
+
+        if (!date) {
+            CommonUtils.showToast('请选择日期', 'error');
+            dateEl.focus();
+            return;
+        }
+        if (!content) {
+            CommonUtils.showToast('请填写复盘要点', 'error');
+            contentEl.focus();
+            return;
+        }
+
+        try {
+            if (id) {
+                const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/journals/${encodeURIComponent(id)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mood, content }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || err.message || '更新失败');
+                }
+            } else {
+                const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/journals/daily`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ log_date: date, mood, content }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || err.message || '保存失败');
+                }
+            }
+
+            await this.refreshTradingLogs();
+            this.resetDailyLogForm();
+            CommonUtils.showToast('每日日志已保存', 'success');
+        } catch (e) {
+            console.error('保存每日日志失败:', e);
+            CommonUtils.showToast(e.message || '保存失败', 'error');
+        }
+    },
+
+    async saveWeeklyLog() {
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const idEl = document.getElementById('weeklyLogId');
+        const startEl = document.getElementById('weeklyLogWeekStart');
+        const scoreEl = document.getElementById('weeklyLogScore');
+        const contentEl = document.getElementById('weeklyLogContent');
+
+        if (!startEl || !contentEl) return;
+
+        const week_start = startEl.value;
+        const content = contentEl.value.trim();
+        const score = scoreEl ? scoreEl.value : '';
+        const id = idEl ? idEl.value : '';
+
+        if (!week_start) {
+            CommonUtils.showToast('请选择周起始日', 'error');
+            startEl.focus();
+            return;
+        }
+        if (!content) {
+            CommonUtils.showToast('请填写周总结', 'error');
+            contentEl.focus();
+            return;
+        }
+
+        try {
+            if (id) {
+                const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/journals/${encodeURIComponent(id)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ score, content }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || err.message || '更新失败');
+                }
+            } else {
+                const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/journals/weekly`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ week_start, score, content }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || err.message || '保存失败');
+                }
+            }
+
+            await this.refreshTradingLogs();
+            this.resetWeeklyLogForm();
+            CommonUtils.showToast('每周日志已保存', 'success');
+        } catch (e) {
+            console.error('保存每周日志失败:', e);
+            CommonUtils.showToast(e.message || '保存失败', 'error');
+        }
+    },
+
+    async fetchTradeLogsFromApi() {
+        const url = `${API_BASE_URL}/api/trading_notes/trade_logs`;
+        const resp = await authFetch(url);
+        if (!resp.ok) return [];
+        return await resp.json();
+    },
+
+    async saveTradeLog() {
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const fields = [
+            'tradeLogId', 'tradeLogStockCode', 'tradeLogStockName', 'tradeLogDate',
+            'tradeLogBuyPrice', 'tradeLogPositionSize', 'tradeLogStopLoss', 'tradeLogTakeProfit',
+            'tradeLogThinking', 'tradeLogMarketContext', 'tradeLogStrictlyExecute',
+            'tradeLogEmotionalTrading', 'tradeLogContent', 'tradeLogImageUrl'
+        ];
+        const data = {};
+        fields.forEach(f => {
+            const el = document.getElementById(f);
+            if (el) data[f] = el.value;
+        });
+
+        if (!data.tradeLogStockCode || !data.tradeLogDate) {
+            CommonUtils.showToast('股票代码和日期必填', 'error');
+            return;
+        }
+
+        const payload = {
+            stock_code: data.tradeLogStockCode,
+            stock_name: data.tradeLogStockName,
+            trade_date: data.tradeLogDate,
+            buy_price: data.tradeLogBuyPrice ? parseFloat(data.tradeLogBuyPrice) : null,
+            position_size: data.tradeLogPositionSize,
+            stop_loss: data.tradeLogStopLoss ? parseFloat(data.tradeLogStopLoss) : null,
+            take_profit: data.tradeLogTakeProfit ? parseFloat(data.tradeLogTakeProfit) : null,
+            entry_thinking: data.tradeLogThinking,
+            market_context: data.tradeLogMarketContext,
+            strictly_execute: data.tradeLogStrictlyExecute,
+            emotional_trading: data.tradeLogEmotionalTrading,
+            content: data.tradeLogContent,
+            image_url: data.tradeLogImageUrl
+        };
+
+        try {
+            const id = data.tradeLogId;
+            const url = id ? `${API_BASE_URL}/api/trading_notes/trade_logs/${id}` : `${API_BASE_URL}/api/trading_notes/trade_logs`;
+            const method = id ? 'PUT' : 'POST';
+
+            const resp = await authFetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!resp.ok) throw new Error('保存失败');
+
+            await this.refreshTradingLogs();
+            this.resetTradeLogForm();
+            CommonUtils.showToast('记录已保存', 'success');
+        } catch (e) {
+            CommonUtils.showToast(e.message, 'error');
+        }
+    },
+
+    resetTradeLogForm() {
+        const fields = [
+            'tradeLogId', 'tradeLogStockCode', 'tradeLogStockName', 'tradeLogDate',
+            'tradeLogBuyPrice', 'tradeLogPositionSize', 'tradeLogStopLoss', 'tradeLogTakeProfit',
+            'tradeLogThinking', 'tradeLogMarketContext', 'tradeLogStrictlyExecute',
+            'tradeLogEmotionalTrading', 'tradeLogContent', 'tradeLogImageUrl'
+        ];
+        fields.forEach(f => {
+            const el = document.getElementById(f);
+            if (el) {
+                if (el.tagName === 'SELECT') {
+                    el.value = (f === 'tradeLogStrictlyExecute') ? '严格执行' : '无';
+                } else {
+                    el.value = '';
+                }
+                if (f === 'tradeLogStockCode' || f === 'tradeLogDate') el.disabled = false;
+            }
+        });
+    },
+
+    async deleteTradeLog(id) {
+        if (!confirm('确认删除这条交易记录吗？')) return;
+        try {
+            const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/trade_logs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            if (!resp.ok) throw new Error('删除失败');
+            await this.refreshTradingLogs();
+        } catch (e) {
+            CommonUtils.showToast(e.message, 'error');
+        }
+    },
+
+    resetDailyLogForm() {
+        const idEl = document.getElementById('dailyLogId');
+        const dateEl = document.getElementById('dailyLogDate');
+        const moodEl = document.getElementById('dailyLogMood');
+        const contentEl = document.getElementById('dailyLogContent');
+
+        if (idEl) idEl.value = '';
+        if (dateEl) dateEl.value = '';
+        if (dateEl) dateEl.disabled = false;
+        if (moodEl) moodEl.value = '';
+        if (contentEl) contentEl.value = '';
+    },
+
+    resetWeeklyLogForm() {
+        const idEl = document.getElementById('weeklyLogId');
+        const startEl = document.getElementById('weeklyLogWeekStart');
+        const scoreEl = document.getElementById('weeklyLogScore');
+        const contentEl = document.getElementById('weeklyLogContent');
+
+        if (idEl) idEl.value = '';
+        if (startEl) startEl.value = '';
+        if (startEl) startEl.disabled = false;
+        if (scoreEl) scoreEl.value = '';
+        if (contentEl) contentEl.value = '';
+    },
+
+    editDailyLog(id) {
+        const record = (this.state.tradingLogs.daily || []).find((x) => String(x.id) === String(id));
+        if (!record) return;
+
+        const idEl = document.getElementById('dailyLogId');
+        const dateEl = document.getElementById('dailyLogDate');
+        const moodEl = document.getElementById('dailyLogMood');
+        const contentEl = document.getElementById('dailyLogContent');
+
+        if (idEl) idEl.value = record.id;
+        if (dateEl) dateEl.value = record.log_date;
+        if (dateEl) dateEl.disabled = true;
+        if (moodEl) moodEl.value = record.mood || '';
+        if (contentEl) contentEl.value = record.content || '';
+
+        const dailyTab = document.querySelector('.trading-logs-tab[data-log-tab="daily"]');
+        if (dailyTab) dailyTab.click();
+    },
+
+    editWeeklyLog(id) {
+        const record = (this.state.tradingLogs.weekly || []).find((x) => String(x.id) === String(id));
+        if (!record) return;
+
+        const idEl = document.getElementById('weeklyLogId');
+        const startEl = document.getElementById('weeklyLogWeekStart');
+        const scoreEl = document.getElementById('weeklyLogScore');
+        const contentEl = document.getElementById('weeklyLogContent');
+
+        if (idEl) idEl.value = record.id;
+        if (startEl) startEl.value = record.week_start;
+        if (startEl) startEl.disabled = true;
+        if (scoreEl) scoreEl.value = record.score || '';
+        if (contentEl) contentEl.value = record.content || '';
+
+        const weeklyTab = document.querySelector('.trading-logs-tab[data-log-tab="weekly"]');
+        if (weeklyTab) weeklyTab.click();
+    },
+
+    editTradeLog(id) {
+        const record = (this.state.tradingLogs.trade || []).find((x) => String(x.id) === String(id));
+        if (!record) return;
+
+        const fieldMap = {
+            tradeLogId: 'id',
+            tradeLogStockCode: 'stock_code',
+            tradeLogStockName: 'stock_name',
+            tradeLogDate: 'trade_date',
+            tradeLogBuyPrice: 'buy_price',
+            tradeLogPositionSize: 'position_size',
+            tradeLogStopLoss: 'stop_loss',
+            tradeLogTakeProfit: 'take_profit',
+            tradeLogThinking: 'entry_thinking',
+            tradeLogMarketContext: 'market_context',
+            tradeLogStrictlyExecute: 'strictly_execute',
+            tradeLogEmotionalTrading: 'emotional_trading',
+            tradeLogContent: 'content',
+            tradeLogImageUrl: 'image_url'
+        };
+
+        Object.keys(fieldMap).forEach(elId => {
+            const el = document.getElementById(elId);
+            if (el) {
+                el.value = record[fieldMap[elId]] || '';
+                if (elId === 'tradeLogStockCode' || elId === 'tradeLogDate') el.disabled = true;
+            }
+        });
+
+        const tradeTab = document.querySelector('.trading-logs-tab[data-log-tab="trade"]');
+        if (tradeTab) tradeTab.click();
+    },
+
+    async deleteDailyLog(id) {
+        if (!confirm('确认删除这条每日日志吗？')) return;
+        try {
+            const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/journals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || err.message || '删除失败');
+            }
+            await this.refreshTradingLogs();
+        } catch (e) {
+            console.error('删除每日日志失败:', e);
+            CommonUtils.showToast(e.message || '删除失败', 'error');
+        }
+    },
+
+    async deleteWeeklyLog(id) {
+        if (!confirm('确认删除这条每周日志吗？')) return;
+        try {
+            const resp = await authFetch(`${API_BASE_URL}/api/trading_notes/journals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || err.message || '删除失败');
+            }
+            await this.refreshTradingLogs();
+        } catch (e) {
+            console.error('删除每周日志失败:', e);
+            CommonUtils.showToast(e.message || '删除失败', 'error');
+        }
+    },
+
+    renderTradingLogsFromState() {
+        const dailyContainer = document.getElementById('dailyLogList');
+        const weeklyContainer = document.getElementById('weeklyLogList');
+        const tradeContainer = document.getElementById('tradeLogList');
+        if (!dailyContainer || !weeklyContainer || !tradeContainer) return;
+
+        const daily = (this.state.tradingLogs.daily || []).slice().sort((a, b) => String(b.log_date || '').localeCompare(String(a.log_date || '')));
+        const weekly = (this.state.tradingLogs.weekly || []).slice().sort((a, b) => String(b.week_start || '').localeCompare(String(a.week_start || '')));
+        const trade = (this.state.tradingLogs.trade || []).slice().sort((a, b) => String(b.trade_date || '').localeCompare(String(a.trade_date || '')));
+
+        dailyContainer.innerHTML = daily.length
+            ? daily.map((x) => {
+                const moodText = x.mood === 'good' ? '良好' : x.mood === 'normal' ? '一般' : x.mood === 'bad' ? '较差' : '-';
+                return `
+                    <div class="trading-log-item">
+                        <div class="trading-log-meta">
+                            <div class="trading-log-title">${x.log_date}</div>
+                            <div class="trading-log-sub">情绪：${moodText}</div>
+                        </div>
+                        <div class="trading-log-content">${this.escapeHtml(x.content || '')}</div>
+                        <div class="trading-log-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="ProfilePage.editDailyLog('${x.id}')">编辑</button>
+                            <button class="btn btn-sm btn-danger" style="margin-left:6px;" onclick="ProfilePage.deleteDailyLog('${x.id}')">删除</button>
+                        </div>
+                    </div>`;
+            }).join('')
+            : '<div class="trading-log-item empty">暂无每日日志</div>';
+
+        weeklyContainer.innerHTML = weekly.length
+            ? weekly.map((x) => {
+                const scoreText = x.score ? `评分：${x.score}` : '评分：-';
+                return `
+                    <div class="trading-log-item">
+                        <div class="trading-log-meta">
+                            <div class="trading-log-title">周起始日：${x.week_start}</div>
+                            <div class="trading-log-sub">${scoreText}</div>
+                        </div>
+                        <div class="trading-log-content">${this.escapeHtml(x.content || '')}</div>
+                        <div class="trading-log-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="ProfilePage.editWeeklyLog('${x.id}')">编辑</button>
+                            <button class="btn btn-sm btn-danger" style="margin-left:6px;" onclick="ProfilePage.deleteWeeklyLog('${x.id}')">删除</button>
+                        </div>
+                    </div>`;
+            }).join('')
+            : '<div class="trading-log-item empty">暂无每周日志</div>';
+
+        tradeContainer.innerHTML = trade.length
+            ? trade.map((x) => {
+                const imgThumb = x.image_url ? `<div class="log-image-thumb"><img src="${x.image_url}" onclick="window.open('${x.image_url}')" style="max-width:100px; cursor:pointer; border-radius:4px; margin-top:8px;"></div>` : '';
+                return `
+                    <div class="trading-log-item detailed-log">
+                        <div class="trading-log-meta">
+                            <div class="trading-log-title">${x.stock_name || x.stock_code} (${x.stock_code}) - ${x.trade_date}</div>
+                            <div class="trading-log-tags">
+                                <span class="tag tag-blue">${x.strictly_execute}</span>
+                                <span class="tag tag-orange">情绪：${x.emotional_trading}</span>
+                            </div>
+                        </div>
+                        <div class="trading-log-grid">
+                            <div class="grid-item"><b>买入价:</b> ${x.buy_price || '--'}</div>
+                            <div class="grid-item"><b>仓位:</b> ${x.position_size || '--'}</div>
+                            <div class="grid-item"><b>止损:</b> ${x.stop_loss || '--'}</div>
+                            <div class="grid-item"><b>止盈:</b> ${x.take_profit || '--'}</div>
+                        </div>
+                        <div class="trading-log-section">
+                            <b>进场思路:</b>
+                            <div class="log-text">${this.escapeHtml(x.entry_thinking || '无')}</div>
+                        </div>
+                        <div class="trading-log-section">
+                            <b>反思总结:</b>
+                            <div class="log-text">${this.escapeHtml(x.content || '无')}</div>
+                        </div>
+                        ${imgThumb}
+                        <div class="trading-log-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="ProfilePage.editTradeLog('${x.id}')">编辑</button>
+                            <button class="btn btn-sm btn-danger" style="margin-left:6px;" onclick="ProfilePage.deleteTradeLog('${x.id}')">删除</button>
+                        </div>
+                    </div>`;
+            }).join('')
+            : '<div class="trading-log-item empty">暂无单笔交易日志</div>';
+    },
+
+    async fetchStockNameForLog(code) {
+        if (!code) return;
+        const nameInput = document.getElementById('tradeLogStockName');
+        if (!nameInput || nameInput.value.trim()) return;
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/stock/list?query=${encodeURIComponent(code)}&limit=1`);
+            const data = await response.json();
+            if (data.success && data.data && data.data.length > 0) {
+                const stock = data.data[0];
+                if (stock.code === code && stock.name) {
+                    nameInput.value = stock.name;
+                }
+            }
+        } catch (e) { }
+    },
+
+    escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/\n/g, '<br>');
     },
 
     bindTradeModal() {
