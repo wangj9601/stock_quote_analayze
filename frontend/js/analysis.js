@@ -1,6 +1,7 @@
 // 分析页面功能模块
 const AnalysisPage = {
     currentTab: 'market-analysis',
+    currentStockCode: '', // 当前分析的股票代码
 
     // 初始化
     init() {
@@ -123,8 +124,16 @@ const AnalysisPage = {
             stockCode = query.split(' ')[0];
         }
 
+        // 保存当前分析的股票代码
+        this.currentStockCode = stockCode;
+
         // 显示分析结果
         await this.showAnalysisResult(stockCode);
+
+        // 如果当前在分析报告标签页，自动刷新行情
+        if (this.currentTab === 'reports') {
+            this.loadReports();
+        }
     },
 
     // 显示分析结果
@@ -395,10 +404,93 @@ const AnalysisPage = {
         this.loadReportsList();
     },
 
-    // 加载报告列表
-    loadReportsList() {
-        // 报告列表已在HTML中静态定义
-        console.log('分析报告已加载');
+    // 加载报告列表 (现在改为加载本周每一天的历史行情)
+    async loadReportsList() {
+        const tableBody = document.getElementById('weeklyQuotesBody');
+        const reportTitle = document.getElementById('reportTitle');
+        if (!tableBody) return;
+
+        // 计算本周日期范围
+        const now = new Date();
+        const day = now.getDay(); // 0 是周日, 1 是周一...
+        const diffToMonday = day === 0 ? 6 : day - 1; // 如果是周日，回退6天到周一
+
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - diffToMonday);
+
+        const formatDate = (d) => d.toISOString().split('T')[0];
+        const startDate = formatDate(monday);
+        const endDate = formatDate(now);
+
+        // 设置标题
+        if (this.currentStockCode) {
+            reportTitle.textContent = `${this.currentStockCode} 本周每日行情 (${startDate} 至 ${endDate})`;
+        } else {
+            reportTitle.textContent = `本周市场每日行情 (默认示例)`;
+        }
+
+        try {
+            // 使用日线接口查询指定日期范围
+            let url = `${API_BASE_URL}/api/quotes/history?page=1&size=10&start_date=${startDate}&end_date=${endDate}`;
+            if (this.currentStockCode) {
+                url += `&code=${this.currentStockCode}`;
+            } else {
+                url += `&code=000001`;
+            }
+
+            const resp = await authFetch(url);
+            if (!resp.ok) throw new Error('获取日线数据失败');
+
+            const result = await resp.json();
+            // 注意：/api/quotes/history 返回的结构是 { items: [...], total: ... }
+            const items = result.items || [];
+
+            if (items.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="10" style="padding: 3rem; text-align: center; color: #94a3b8;">未找到该股票在本周 (${startDate} ~ ${endDate}) 的每日行情数据</td></tr>`;
+                return;
+            }
+
+            // 获取股票名称（如果有的话）
+            const firstItem = items[0];
+            if (this.currentStockCode) {
+                // 如果后端没返回名称，我们可以尝试从 items 中找或者保持原样
+            }
+
+            // 渲染表格
+            tableBody.innerHTML = items.map(item => {
+                const changePercent = item.change_percent || 0;
+                const changeColor = changePercent >= 0 ? '#dc2626' : '#16a34a';
+                const sign = changePercent > 0 ? '+' : '';
+
+                // 格式化日期 (处理可能的 ISO 格式或 Date 对象)
+                let displayDate = item.date;
+                if (typeof displayDate === 'string' && displayDate.includes('T')) {
+                    displayDate = displayDate.split('T')[0];
+                }
+
+                return `
+                    <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                        <td style="padding: 1rem; color: #1e293b; font-weight: 500;">${item.code}</td>
+                        <td style="padding: 1rem; color: #1e293b;">${item.name || '--'}</td>
+                        <td style="padding: 1rem; color: #64748b;">${displayDate}</td>
+                        <td style="padding: 1rem; color: #1e293b;">${(item.open || 0).toFixed(2)}</td>
+                        <td style="padding: 1rem; color: #dc2626; font-weight: 500;">${(item.high || 0).toFixed(2)}</td>
+                        <td style="padding: 1rem; color: #16a34a; font-weight: 500;">${(item.low || 0).toFixed(2)}</td>
+                        <td style="padding: 1rem; color: ${changeColor}; font-weight: 600;">
+                            ${(item.close || 0).toFixed(2)}
+                            <span style="font-size: 0.75rem; margin-left: 4px;">(${sign}${changePercent.toFixed(2)}%)</span>
+                        </td>
+                        <td style="padding: 1rem; color: #64748b;">${((item.volume || 0) / 10000).toFixed(2)}万</td>
+                        <td style="padding: 1rem; color: #64748b;">${((item.amount || 0) / 100000000).toFixed(2)}亿</td>
+                        <td style="padding: 1rem; color: #64748b;">${item.turnover_rate ? item.turnover_rate.toFixed(2) + '%' : '--'}</td>
+                    </tr>
+                `;
+            }).join('');
+
+        } catch (e) {
+            console.error('加载每日行情失败:', e);
+            tableBody.innerHTML = `<tr><td colspan="10" style="padding: 3rem; text-align: center; color: #dc2626;">数据加载失败: ${e.message}</td></tr>`;
+        }
     },
 
     // 过滤报告
