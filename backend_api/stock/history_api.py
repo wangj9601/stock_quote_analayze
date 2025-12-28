@@ -77,7 +77,7 @@ def get_stock_history(
                 tn.updated_at as notes_updated_at,
                 kdj.k, kdj.d, kdj.j,
                 rsi.rsi6, rsi.rsi12, rsi.rsi24,
-                mavol.mavol5, mavol.mavol10, mavol.mavol20, mavol.mavol30, mavol.mavol60, mavol.mavol120, mavol.mavol200
+                mav.mavol5, mav.mavol10, mav.mavol20, mav.mavol30, mav.mavol60, mav.mavol120, mav.mavol200
             FROM historical_quotes h
             LEFT JOIN trading_notes tn ON h.code = tn.stock_code AND h.date::date = tn.trade_date
             LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'CN'
@@ -94,7 +94,7 @@ def get_stock_history(
                 h.cumulative_change_percent, h.five_day_change_percent, h.ten_day_change_percent, h.thirty_day_change_percent, h.sixty_day_change_percent, h.remarks,
                 kdj.k, kdj.d, kdj.j,
                 rsi.rsi6, rsi.rsi12, rsi.rsi24,
-                mavol.mavol5, mavol.mavol10, mavol.mavol20, mavol.mavol30, mavol.mavol60, mavol.mavol120, mavol.mavol200
+                mav.mavol5, mav.mavol10, mav.mavol20, mav.mavol30, mav.mavol60, mav.mavol120, mav.mavol200
             FROM historical_quotes h
             LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'CN'
             LEFT JOIN rsi_indicators rsi ON h.code = rsi.code AND h.date = rsi.date AND rsi.market_type = 'CN'
@@ -208,7 +208,7 @@ def get_stock_history(
                         tn.updated_at as notes_updated_at,
                         kdj.k, kdj.d, kdj.j,
                         rsi.rsi6, rsi.rsi12, rsi.rsi24,
-                        mavol.mavol5, mavol.mavol10, mavol.mavol20, mavol.mavol30, mavol.mavol60, mavol.mavol120, mavol.mavol200
+                        mav.mavol5, mav.mavol10, mav.mavol20, mav.mavol30, mav.mavol60, mav.mavol120, mav.mavol200
                     FROM historical_quotes_hk h
                     LEFT JOIN trading_notes tn ON h.code = tn.stock_code AND CAST(h.date AS DATE) = CAST(tn.trade_date AS DATE)
                     LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'HK'
@@ -224,7 +224,7 @@ def get_stock_history(
                         NULL as cumulative_change_percent, h.five_day_change_percent, h.ten_day_change_percent, h.thirty_day_change_percent, h.sixty_day_change_percent, NULL as remarks,
                         kdj.k, kdj.d, kdj.j,
                         rsi.rsi6, rsi.rsi12, rsi.rsi24,
-                        mavol.mavol5, mavol.mavol10, mavol.mavol20, mavol.mavol30, mavol.mavol60, mavol.mavol120, mavol.mavol200
+                        mav.mavol5, mav.mavol10, mav.mavol20, mav.mavol30, mav.mavol60, mav.mavol120, mav.mavol200
                     FROM historical_quotes_hk h
                     LEFT JOIN kdj_indicators kdj ON h.code = kdj.code AND h.date = kdj.date AND kdj.market_type = 'HK'
                     LEFT JOIN rsi_indicators rsi ON h.code = rsi.code AND h.date = rsi.date AND rsi.market_type = 'HK'
@@ -289,7 +289,14 @@ def get_stock_history(
                             "j": row[26],
                             "rsi6": row[27],
                             "rsi12": row[28],
-                            "rsi24": row[29]
+                            "rsi24": row[29],
+                            "mavol5": row[30],
+                            "mavol10": row[31],
+                            "mavol20": row[32],
+                            "mavol30": row[33],
+                            "mavol60": row[34],
+                            "mavol120": row[35],
+                            "mavol200": row[36]
                         })
                     else:
                         item.update({
@@ -298,7 +305,14 @@ def get_stock_history(
                             "j": row[20],
                             "rsi6": row[21],
                             "rsi12": row[22],
-                            "rsi24": row[23]
+                            "rsi24": row[23],
+                            "mavol5": row[24],
+                            "mavol10": row[25],
+                            "mavol20": row[26],
+                            "mavol30": row[27],
+                            "mavol60": row[28],
+                            "mavol120": row[29],
+                            "mavol200": row[30]
                         })
                     
                     items.append(item)

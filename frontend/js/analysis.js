@@ -8,7 +8,7 @@ const AnalysisPage = {
         this.loadMarketAnalysis();
         this.drawFundFlowChart();
         this.startDataUpdate();
-        
+
         // 确保搜索弹窗隐藏
         const searchModal = document.getElementById('searchModal');
         if (searchModal) {
@@ -65,12 +65,12 @@ const AnalysisPage = {
     // 切换标签
     switchTab(tabId) {
         this.currentTab = tabId;
-        
+
         // 隐藏所有面板
         document.querySelectorAll('.tab-panel').forEach(panel => {
             panel.classList.remove('active');
         });
-        
+
         // 显示目标面板
         const targetPanel = document.getElementById(tabId);
         if (targetPanel) {
@@ -108,79 +108,141 @@ const AnalysisPage = {
     },
 
     // 执行快速分析
-    performQuickAnalysis() {
+    async performQuickAnalysis() {
         const stockInput = document.querySelector('.stock-input');
         const query = stockInput.value.trim();
-        
+
         if (!query) {
             CommonUtils.showToast('请输入股票代码或名称', 'warning');
             return;
         }
 
+        // 解析出股票代码（处理“000001 平安银行”这种格式）
+        let stockCode = query;
+        if (query.includes(' ')) {
+            stockCode = query.split(' ')[0];
+        }
+
         // 显示分析结果
-        this.showAnalysisResult(query);
+        await this.showAnalysisResult(stockCode);
     },
 
     // 显示分析结果
-    showAnalysisResult(stockCode) {
+    async showAnalysisResult(stockCode) {
         const resultDiv = document.getElementById('analysisResult');
-        
-        // 模拟分析过程
+
+        // 显示加载动画
         resultDiv.innerHTML = `
-            <div style="text-align: center; color: #6b7280;">
-                <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
-                <p>正在分析 ${stockCode}，请稍候...</p>
+            <div style="text-align: center; color: #6b7280; padding: 3rem;">
+                <div class="loading-spinner" style="font-size: 2.5rem; margin-bottom: 1rem; animation: rotate 2s linear infinite;">⏳</div>
+                <p style="font-size: 1.1rem;">正在调用 Gemini AI 引擎深度分析 ${stockCode}...</p>
+                <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 0.5rem;">分析包含：技术指标、趋势预测、压力位及 AI 见解</p>
             </div>
+            <style>
+                @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            </style>
         `;
 
-        // 模拟异步分析
-        setTimeout(() => {
-            const mockAnalysis = this.generateMockAnalysis(stockCode);
-            resultDiv.innerHTML = mockAnalysis;
-        }, 2000);
-    },
+        try {
+            const url = `${API_BASE_URL}/api/analysis/stock/${stockCode}`;
+            const resp = await authFetch(url);
 
-    // 生成模拟分析结果
-    generateMockAnalysis(stockCode) {
-        const score = 65 + Math.random() * 30; // 65-95分
-        const recommendation = score > 80 ? '买入' : score > 70 ? '持有' : '观望';
-        const riskLevel = score > 80 ? '中低风险' : score > 70 ? '中等风险' : '中高风险';
-        
-        return `
-            <div class="analysis-result-content" style="padding: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h3 style="font-size: 1.2rem; font-weight: 600; color: #1f2937;">${stockCode} 智能分析报告</h3>
-                    <div style="text-align: right;">
-                        <div style="font-size: 2rem; font-weight: 700; color: ${score > 80 ? '#16a34a' : score > 70 ? '#f59e0b' : '#dc2626'};">${Math.round(score)}分</div>
-                        <div style="font-size: 0.9rem; color: #6b7280;">综合评分</div>
+            if (!resp.ok) {
+                const errorData = await resp.json();
+                throw new Error(errorData.message || '分析请求失败');
+            }
+
+            const result = await resp.json();
+            if (!result.success && !result.data) {
+                throw new Error(result.message || '获取分析结果失败');
+            }
+
+            const data = result.data;
+            const rec = data.trading_recommendation || {};
+            const pred = data.price_prediction || {};
+            const ai = data.ai_insight || 'AI 分析暂时不可用';
+
+            // 格式化 AI 文本 (处理换行)
+            const formattedAiInsight = ai.replace(/\n/g, '<br>');
+
+            resultDiv.innerHTML = `
+                <div class="analysis-result-content" style="padding: 1.5rem; animation: fadeIn 0.5s ease-out;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem;">
+                        <div>
+                            <h3 style="font-size: 1.4rem; font-weight: 700; color: #1e293b; margin-bottom: 4px;">${stockCode} 智能分析报告</h3>
+                            <div style="font-size: 0.85rem; color: #64748b;">分析时间：${data.analysis_time}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 2.5rem; font-weight: 800; color: ${rec.strength > 75 ? '#16a34a' : rec.strength > 50 ? '#f59e0b' : '#dc2626'}; line-height: 1;">${Math.round(rec.strength || 0)}<span style="font-size: 1rem; font-weight: 500;">分</span></div>
+                            <div style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">多空强度</div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #f1f5f9;">
+                            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">投资建议</div>
+                            <div style="font-size: 1.25rem; font-weight: 700; color: ${rec.action === 'buy' ? '#16a34a' : rec.action === 'sell' ? '#dc2626' : '#64748b'};">
+                                ${rec.action === 'buy' ? '强烈建议买入' : rec.action === 'sell' ? '建议减持/离场' : '建议持股观望'}
+                            </div>
+                        </div>
+                        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #f1f5f9;">
+                            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">风险等级</div>
+                            <div style="font-size: 1.25rem; font-weight: 700; color: ${rec.risk_level === 'low' ? '#16a34a' : rec.risk_level === 'medium' ? '#f59e0b' : '#dc2626'};">
+                                ${rec.risk_level === 'low' ? '低风险' : rec.risk_level === 'medium' ? '中等风险' : '高风险'}
+                            </div>
+                        </div>
+                        <div style="background: #f8fafc; padding: 1.2rem; border-radius: 10px; border: 1px solid #f1f5f9;">
+                            <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">30日目标价</div>
+                            <div style="font-size: 1.25rem; font-weight: 700; color: #1e293b;">¥ ${pred.target_price || '--'}</div>
+                            <div style="font-size: 0.75rem; color: ${pred.change_percent >= 0 ? '#16a34a' : '#dc2626'}; margin-top: 2px;">
+                                预期跌涨: ${pred.change_percent > 0 ? '+' : ''}${pred.change_percent}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                        <div style="background: #fdf2f2; padding: 1.2rem; border-radius: 10px; border: 1px solid #fee2e2;">
+                            <h4 style="font-size: 1rem; font-weight: 700; color: #991b1b; margin-bottom: 0.8rem; display: flex; align-items: center;">
+                                <span style="margin-right: 8px;">🎯</span> 关键支撑/阻力位
+                            </h4>
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                                    <span style="color: #ef4444;">阻力位:</span>
+                                    <span style="font-weight: 600;">${(data.key_levels.resistance_levels || []).join(' / ') || '无'}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                                    <span style="color: #22c55e;">支撑位:</span>
+                                    <span style="font-weight: 600;">${(data.key_levels.support_levels || []).join(' / ') || '无'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: #f0f9ff; padding: 1.2rem; border-radius: 10px; border: 1px solid #e0f2fe;">
+                            <h4 style="font-size: 1rem; font-weight: 700; color: #075985; margin-bottom: 0.8rem; display: flex; align-items: center;">
+                                <span style="margin-right: 8px;">🤖</span> Gemini AI 深度见解
+                            </h4>
+                            <div style="color: #0c4a6e; font-size: 0.9rem; line-height: 1.6; max-height: 200px; overflow-y: auto; white-space: pre-wrap;">
+                                ${formattedAiInsight}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; font-size: 0.8rem; color: #94a3b8; text-align: center;">
+                        * AI 分析结果基于历史数据及技术指标，不构成投资建议，股市有风险，入市需谨慎。
                     </div>
                 </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div style="background: #f8fafc; padding: 1rem; border-radius: 6px;">
-                        <div style="font-size: 0.8rem; color: #6b7280; margin-bottom: 0.5rem;">投资建议</div>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: ${recommendation === '买入' ? '#16a34a' : recommendation === '持有' ? '#f59e0b' : '#6b7280'};">${recommendation}</div>
-                    </div>
-                    <div style="background: #f8fafc; padding: 1rem; border-radius: 6px;">
-                        <div style="font-size: 0.8rem; color: #6b7280; margin-bottom: 0.5rem;">风险等级</div>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: #374151;">${riskLevel}</div>
-                    </div>
-                    <div style="background: #f8fafc; padding: 1rem; border-radius: 6px;">
-                        <div style="font-size: 0.8rem; color: #6b7280; margin-bottom: 0.5rem;">目标价位</div>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: #374151;">${(Math.random() * 50 + 20).toFixed(2)}</div>
-                    </div>
+            `;
+        } catch (e) {
+            console.error('分析失败:', e);
+            resultDiv.innerHTML = `
+                <div style="text-align: center; color: #dc2626; padding: 2rem;">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
+                    <p>分析失败: ${e.message}</p>
+                    <button class="btn btn-primary" onclick="AnalysisPage.performQuickAnalysis()" style="margin-top: 1rem;">重试</button>
                 </div>
-                
-                <div style="border-top: 1px solid #e2e8f0; padding-top: 1rem;">
-                    <h4 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">关键因素</h4>
-                    <ul style="color: #6b7280; font-size: 0.9rem; line-height: 1.5;">
-                        <li>技术面：${Math.random() > 0.5 ? '多头排列，趋势向好' : '震荡整理，方向待明'}</li>
-                        <li>基本面：${Math.random() > 0.5 ? '业绩稳定，成长性良好' : '估值合理，安全边际较高'}</li>
-                        <li>资金面：${Math.random() > 0.5 ? '主力资金净流入' : '散户参与度较高'}</li>
-                    </ul>
-                </div>
-            </div>
-        `;
+            `;
+            CommonUtils.showToast(e.message, 'error');
+        }
     },
 
     // 加载市场分析
@@ -195,10 +257,10 @@ const AnalysisPage = {
         const temperature = 50 + Math.random() * 40; // 50-90
         const meterFill = document.querySelector('.meter-fill');
         const temperatureValue = document.querySelector('.temperature-value');
-        
+
         if (meterFill && temperatureValue) {
             meterFill.style.width = `${temperature}%`;
-            
+
             let status, color;
             if (temperature > 80) {
                 status = '过热';
@@ -210,7 +272,7 @@ const AnalysisPage = {
                 status = '正常';
                 color = '#16a34a';
             }
-            
+
             temperatureValue.textContent = `${Math.round(temperature)}°C ${status}`;
             temperatureValue.style.color = color;
         }
@@ -220,11 +282,11 @@ const AnalysisPage = {
     updateTrendAnalysis() {
         const trends = ['bullish', 'bearish', 'neutral'];
         const trendSignals = document.querySelectorAll('.trend-signal');
-        
+
         trendSignals.forEach(signal => {
             const randomTrend = trends[Math.floor(Math.random() * trends.length)];
             signal.className = `trend-signal ${randomTrend}`;
-            
+
             switch (randomTrend) {
                 case 'bullish':
                     signal.textContent = '看多';
@@ -313,7 +375,7 @@ const AnalysisPage = {
     updateStrategyRecommendations() {
         // 策略推荐已在HTML中静态定义，这里可以添加动态更新逻辑
         const strategyItems = document.querySelectorAll('.strategy-item');
-        
+
         strategyItems.forEach(item => {
             const stockTags = item.querySelectorAll('.stock-tag');
             stockTags.forEach(tag => {
@@ -344,9 +406,9 @@ const AnalysisPage = {
         const filters = document.querySelectorAll('.filter-select');
         const typeFilter = filters[0].value;
         const industryFilter = filters[1].value;
-        
+
         CommonUtils.showToast(`筛选条件：${typeFilter}/${industryFilter}`, 'info');
-        
+
         // 实际项目中这里会根据过滤条件重新加载报告列表
     },
 

@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import logging
+import os
+import google.generativeai as genai
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db
@@ -718,6 +720,59 @@ class StockAnalysisService:
             logger.warning(f"判断股票类型失败: {str(e)}")
             # 默认根据代码长度判断
             return len(stock_code) == 5
+
+    def _get_gemini_analysis(self, stock_code: str, historical_data: List[Dict], technical_indicators: Dict) -> str:
+        """调用 Gemini 获取 AI 深度分析结果"""
+        try:
+            # 获取 API Key
+            api_key = os.getenv("GEMINI_API_KEY")
+            print(f"Gemini API Key: {api_key}")
+            if not api_key:
+                try:
+                    from config import GEMINI_API_KEY
+                    api_key = GEMINI_API_KEY
+                except:
+                    pass
+            
+            if not api_key:
+                return "未配置 Gemini API Key，请联系管理员"
+
+            # 配置 Gemini API，确保 Key 干净无空格
+            genai.configure(api_key=api_key.strip())
+            
+            # 使用标准的 1.5-flash 模型
+            model = genai.GenerativeModel('gemini-3-pro-preview')
+
+            # 准备上下文
+            recent_data = historical_data[-10:] # 最近10个交易日数据
+            
+            prompt = f"""
+            你是一位专业的资深股票分析师。请根据以下提供的股票数据和技术指标，为股票代码 {stock_code} 提供一份简洁而深刻的市场见解。
+            
+            最近价格数据:
+            {recent_data}
+            
+            主要技术指标:
+            {technical_indicators}
+            
+            请从以下三个维度进行分析:
+            1. 趋势判断: 当前处于什么趋势？转折信号是否出现？
+            2. 风险提示: 当前最核心的操作风险是什么？
+            3. 具体建议: 给投资者的核心操作准则（不超过3条）。
+            
+            输出要求: 直接给出重点，格式清晰，不要使用模板式的开场白，保持专业且易于理解。
+            """
+
+            # 调用模型生成内容
+            response = model.generate_content(prompt)
+            
+            if response and hasattr(response, 'text'):
+                return response.text
+            return "AI 分析未能生成有效内容"
+            
+        except Exception as e:
+            logger.error(f"Gemini 分析异常: {str(e)}")
+            return f"AI 分析服务暂不可用: {str(e)}"
     
     def get_stock_analysis(self, stock_code: str) -> Dict:
         """获取股票智能分析结果"""
@@ -774,6 +829,9 @@ class StockAnalysisService:
             # 关键价位
             key_levels = KeyLevels.calculate_key_levels(historical_data, current_price)
             
+            # AI 深度分析 (Gemini)
+            ai_insight = self._get_gemini_analysis(stock_code, historical_data, technical_indicators)
+            
             return {
                 "success": True,
                 "data": {
@@ -782,6 +840,7 @@ class StockAnalysisService:
                     "trading_recommendation": trading_recommendation,
                     "key_levels": key_levels,
                     "current_price": current_price,
+                    "ai_insight": ai_insight,
                     "analysis_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
             }

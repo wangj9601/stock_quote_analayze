@@ -15,10 +15,10 @@
           class="nav-item"
           :class="{ active: $route.path === item.path }"
         >
-          <el-icon class="nav-icon">
+          <el-icon class="nav-icon" :key="'icon-' + item.path">
             <component :is="item.icon" />
           </el-icon>
-          <span class="nav-text">{{ item.name }}</span>
+          <span class="nav-text" :key="'text-' + item.path">{{ item.name }}</span>
         </router-link>
       </nav>
       
@@ -59,7 +59,7 @@
 
       <!-- 页面内容 -->
       <div class="admin-content">
-        <router-view />
+        <router-view :key="$route.fullPath" />
       </div>
       
       <!-- ICP备案信息 -->
@@ -122,11 +122,8 @@ const currentPageTitle = computed(() => {
 
 // 生命周期钩子
 onMounted(() => {
-  console.log('🏗️ AdminLayout已挂载，检查认证状态...')
-  if (!authStore.isAuthenticated) {
-    console.log('❌ 未认证，重定向到登录页面')
-    router.push('/login')
-  } else {
+  console.log('🏗️ AdminLayout已挂载')
+  if (authStore.isAuthenticated) {
     console.log('✅ 认证状态正常，用户:', authStore.user?.username)
   }
 })

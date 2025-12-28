@@ -194,60 +194,6 @@
         </el-tabs>
       </el-tab-pane>
 
-      <!-- A股实时数据采集 -->
-      <el-tab-pane label="A股实时数据采集" name="ashare_realtime">
-        <el-card>
-          <div class="text-center mb-8">
-            <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">A股实时数据采集</h2>
-            <p class="text-gray-600">采集并更新A股实时行情数据（写入 stock_realtime_quote）</p>
-          </div>
-
-          <div class="max-w-2xl mx-auto">
-            <el-form :key="'ashare-realtime-form'" @submit.prevent="startAShareRealtimeCollection" :model="ashareRealtimeForm" label-width="120px">
-              <el-form-item label="股票选择">
-                <el-radio-group v-model="ashareRealtimeForm.collection_type">
-                  <el-radio value="single">单个股票采集</el-radio>
-                  <el-radio value="all">全量股票采集</el-radio>
-                </el-radio-group>
-              </el-form-item>
-
-              <el-form-item v-if="ashareRealtimeForm.collection_type === 'single'" label="股票代码" required>
-                <el-input
-                  v-model="ashareRealtimeForm.stock_code"
-                  placeholder="请输入股票代码，例如：000001"
-                  clearable
-                />
-              </el-form-item>
-
-              <el-alert
-                v-if="ashareRealtimeForm.collection_type === 'all'"
-                title="全量采集说明"
-                type="info"
-                :closable="false"
-                show-icon
-                class="mb-4"
-              >
-                <p>将采集并更新全部A股实时行情数据。</p>
-              </el-alert>
-
-              <el-form-item>
-                <el-button
-                  type="primary"
-                  :loading="ashareRealtimeLoading"
-                  :disabled="!!currentTask"
-                  @click="startAShareRealtimeCollection"
-                >
-                  <el-icon v-if="ashareRealtimeLoading" class="mr-2"><Loading /></el-icon>
-                  {{ ashareRealtimeLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
-                </el-button>
-                <el-button @click="resetAShareRealtimeForm">重置</el-button>
-              </el-form-item>
-            </el-form>
-          </div>
-        </el-card>
-      </el-tab-pane>
-
       <!-- 港股历史数据采集 -->
       <el-tab-pane label="港股历史数据采集" name="hkshare">
         <el-tabs v-model="activeHKShareTab">
@@ -348,60 +294,6 @@
             </el-card>
           </el-tab-pane>
         </el-tabs>
-      </el-tab-pane>
-
-      <!-- 港股实时数据采集 -->
-      <el-tab-pane label="港股实时数据采集" name="hkshare_realtime">
-        <el-card>
-          <div class="text-center mb-8">
-            <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">港股实时数据采集</h2>
-            <p class="text-gray-600">采集并更新港股实时行情数据（写入 stock_realtime_quote_hk）</p>
-          </div>
-
-          <div class="max-w-2xl mx-auto">
-            <el-form :key="'hk-realtime-form'" @submit.prevent="startHKRealtimeCollection" :model="hkRealtimeForm" label-width="120px">
-              <el-form-item label="股票选择">
-                <el-radio-group v-model="hkRealtimeForm.collection_type">
-                  <el-radio value="single">单个股票采集</el-radio>
-                  <el-radio value="all">全量股票采集</el-radio>
-                </el-radio-group>
-              </el-form-item>
-
-              <el-form-item v-if="hkRealtimeForm.collection_type === 'single'" label="港股代码" required>
-                <el-input
-                  v-model="hkRealtimeForm.stock_code"
-                  placeholder="请输入港股代码（5位数字），例如：00700"
-                  clearable
-                />
-              </el-form-item>
-
-              <el-alert
-                v-if="hkRealtimeForm.collection_type === 'all'"
-                title="全量采集说明"
-                type="info"
-                :closable="false"
-                show-icon
-                class="mb-4"
-              >
-                <p>将采集并更新全部港股实时行情数据。</p>
-              </el-alert>
-
-              <el-form-item>
-                <el-button
-                  type="primary"
-                  :loading="hkRealtimeLoading"
-                  :disabled="!!currentTask"
-                  @click="startHKRealtimeCollection"
-                >
-                  <el-icon v-if="hkRealtimeLoading" class="mr-2"><Loading /></el-icon>
-                  {{ hkRealtimeLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
-                </el-button>
-                <el-button @click="resetHKRealtimeForm">重置</el-button>
-              </el-form-item>
-            </el-form>
-          </div>
-        </el-card>
       </el-tab-pane>
     </el-tabs>
 
@@ -556,11 +448,6 @@ interface HKFormData {
   force_update: boolean
 }
 
-interface RealtimeFormData {
-  collection_type: 'single' | 'all'
-  stock_code: string
-}
-
 interface RequestData {
   start_date: string
   end_date: string
@@ -595,17 +482,6 @@ const hkForm = ref<HKFormData>({
   force_update: false
 })
 
-// 实时采集表单
-const ashareRealtimeForm = ref<RealtimeFormData>({
-  collection_type: 'single',
-  stock_code: ''
-})
-
-const hkRealtimeForm = ref<RealtimeFormData>({
-  collection_type: 'single',
-  stock_code: ''
-})
-
 // TuShare表单数据
 interface TushareFormData {
   start_date: string
@@ -625,8 +501,6 @@ const currentTask = ref<CurrentTask | null>(null)
 const loading = ref(false)
 const hkLoading = ref(false)
 const tushareLoading = ref(false)
-const ashareRealtimeLoading = ref(false)
-const hkRealtimeLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
 // 方法
@@ -834,20 +708,6 @@ const resetHKForm = () => {
   }
 }
 
-const resetAShareRealtimeForm = () => {
-  ashareRealtimeForm.value = {
-    collection_type: 'single',
-    stock_code: ''
-  }
-}
-
-const resetHKRealtimeForm = () => {
-  hkRealtimeForm.value = {
-    collection_type: 'single',
-    stock_code: ''
-  }
-}
-
 const resetTushareForm = () => {
   tushareForm.value = {
     start_date: '',
@@ -900,60 +760,6 @@ const startTushareCollection = async () => {
     ElMessage.error(errorMsg)
   } finally {
     tushareLoading.value = false
-  }
-}
-
-const startAShareRealtimeCollection = async () => {
-  try {
-    ashareRealtimeLoading.value = true
-    if (ashareRealtimeForm.value.collection_type === 'single' && !ashareRealtimeForm.value.stock_code) {
-      ElMessage.error('请输入股票代码')
-      return
-    }
-
-    const payload = {
-      market: 'CN',
-      stock_codes: ashareRealtimeForm.value.collection_type === 'single' ? [ashareRealtimeForm.value.stock_code] : [],
-      full_collection_mode: ashareRealtimeForm.value.collection_type === 'all'
-    }
-
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime`, payload)
-    if (response.data.status === 'started') {
-      ElMessage.success('A股实时采集任务已启动')
-      loadTasks()
-      loadCurrentTask()
-    }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '启动失败')
-  } finally {
-    ashareRealtimeLoading.value = false
-  }
-}
-
-const startHKRealtimeCollection = async () => {
-  try {
-    hkRealtimeLoading.value = true
-    if (hkRealtimeForm.value.collection_type === 'single' && !hkRealtimeForm.value.stock_code) {
-      ElMessage.error('请输入港股代码')
-      return
-    }
-
-    const payload = {
-      market: 'HK',
-      stock_codes: hkRealtimeForm.value.collection_type === 'single' ? [hkRealtimeForm.value.stock_code] : [],
-      full_collection_mode: hkRealtimeForm.value.collection_type === 'all'
-    }
-
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime`, payload)
-    if (response.data.status === 'started') {
-      ElMessage.success('港股实时采集任务已启动')
-      loadTasks()
-      loadCurrentTask()
-    }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '启动失败')
-  } finally {
-    hkRealtimeLoading.value = false
   }
 }
 

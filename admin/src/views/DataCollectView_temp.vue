@@ -1,44 +1,44 @@
-<template>
+﻿<template>
   <div class="datacollect-view">
-    <!-- 当前任务状态 -->
+    <!-- 褰撳墠浠诲姟鐘舵€?-->
     <div v-if="currentTask" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div class="flex items-center">
         <el-icon class="text-yellow-600 mr-3"><Warning /></el-icon>
         <div>
-          <h3 class="text-sm font-medium text-yellow-800">当前有任务正在运行</h3>
+          <h3 class="text-sm font-medium text-yellow-800">褰撳墠鏈変换鍔℃鍦ㄨ繍琛?/h3>
           <p class="text-sm text-yellow-700 mt-1">
-            任务ID: {{ currentTask.task_id }} | 
-            开始时间: {{ formatTime(currentTask.start_time) }}
+            浠诲姟ID: {{ currentTask.task_id }} | 
+            寮€濮嬫椂闂? {{ formatTime(currentTask.start_time) }}
           </p>
         </div>
       </div>
     </div>
 
-    <!-- 标签页 -->
+    <!-- 鏍囩椤?-->
     <el-tabs v-model="activeMainTab" class="mb-8">
-      <!-- A股历史数据采集 -->
-      <el-tab-pane label="A股历史数据采集" name="ashare">
+      <!-- A鑲″巻鍙叉暟鎹噰闆?-->
+      <el-tab-pane label="A鑲″巻鍙叉暟鎹噰闆? name="ashare">
         <el-tabs v-model="activeAShareTab">
-          <!-- AkShare标签页 -->
-          <el-tab-pane label="历史数据采集-AkShare" name="akshare">
+          <!-- AkShare鏍囩椤?-->
+          <el-tab-pane label="鍘嗗彶鏁版嵁閲囬泦-AkShare" name="akshare">
             <el-card>
               <div class="text-center mb-8">
                 <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-                <h2 class="text-2xl font-bold text-gray-900 mb-2">历史数据采集-AkShare</h2>
-                <p class="text-gray-600">使用akshare采集A股历史行情数据（单任务执行，防重复采集）</p>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">鍘嗗彶鏁版嵁閲囬泦-AkShare</h2>
+                <p class="text-gray-600">浣跨敤akshare閲囬泦A鑲″巻鍙茶鎯呮暟鎹紙鍗曚换鍔℃墽琛岋紝闃查噸澶嶉噰闆嗭級</p>
               </div>
 
-              <!-- 采集配置表单 -->
+              <!-- 閲囬泦閰嶇疆琛ㄥ崟 -->
               <div class="max-w-2xl mx-auto">
                 <el-form @submit.prevent="startCollection" :model="form" label-width="120px">
-                  <!-- 日期范围 -->
+                  <!-- 鏃ユ湡鑼冨洿 -->
                   <el-row :gutter="20">
                     <el-col :span="12">
-                      <el-form-item label="开始日期" required>
+                      <el-form-item label="寮€濮嬫棩鏈? required>
                         <el-date-picker
                           v-model="form.start_date"
                           type="date"
-                          placeholder="选择开始日期"
+                          placeholder="閫夋嫨寮€濮嬫棩鏈?
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           style="width: 100%"
@@ -46,11 +46,11 @@
                       </el-form-item>
                     </el-col>
                     <el-col :span="12">
-                      <el-form-item label="结束日期" required>
+                      <el-form-item label="缁撴潫鏃ユ湡" required>
                         <el-date-picker
                           v-model="form.end_date"
                           type="date"
-                          placeholder="选择结束日期"
+                          placeholder="閫夋嫨缁撴潫鏃ユ湡"
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           style="width: 100%"
@@ -59,54 +59,54 @@
                     </el-col>
                   </el-row>
 
-                  <!-- 股票选择 -->
-                  <el-form-item label="股票选择">
+                  <!-- 鑲＄エ閫夋嫨 -->
+                  <el-form-item label="鑲＄エ閫夋嫨">
                     <el-radio-group v-model="form.collection_type">
-                      <el-radio value="single">单个股票采集</el-radio>
-                      <el-radio value="multiple">多个股票采集</el-radio>
-                      <el-radio value="all">全量股票采集</el-radio>
+                      <el-radio value="single">鍗曚釜鑲＄エ閲囬泦</el-radio>
+                      <el-radio value="multiple">澶氫釜鑲＄エ閲囬泦</el-radio>
+                      <el-radio value="all">鍏ㄩ噺鑲＄エ閲囬泦</el-radio>
                     </el-radio-group>
                   </el-form-item>
 
-                  <!-- 单个股票代码输入 -->
-                  <el-form-item v-if="form.collection_type === 'single'" label="股票代码" required>
+                  <!-- 鍗曚釜鑲＄エ浠ｇ爜杈撳叆 -->
+                  <el-form-item v-if="form.collection_type === 'single'" label="鑲＄エ浠ｇ爜" required>
                     <el-input
                       v-model="form.single_stock_code"
-                      placeholder="请输入股票代码，例如：000001"
+                      placeholder="璇疯緭鍏ヨ偂绁ㄤ唬鐮侊紝渚嬪锛?00001"
                       clearable
                     />
-                    <div class="text-sm text-gray-500 mt-1">支持输入单个股票代码进行采集</div>
+                    <div class="text-sm text-gray-500 mt-1">鏀寔杈撳叆鍗曚釜鑲＄エ浠ｇ爜杩涜閲囬泦</div>
                   </el-form-item>
 
-                  <!-- 多个股票代码输入 -->
-                  <el-form-item v-if="form.collection_type === 'multiple'" label="股票代码" required>
+                  <!-- 澶氫釜鑲＄エ浠ｇ爜杈撳叆 -->
+                  <el-form-item v-if="form.collection_type === 'multiple'" label="鑲＄エ浠ｇ爜" required>
                     <el-input
                       v-model="form.stock_codes_text"
                       type="textarea"
                       :rows="5"
-                      placeholder="请输入股票代码，每行一个，例如：&#10;000001&#10;000002&#10;000858"
+                      placeholder="璇疯緭鍏ヨ偂绁ㄤ唬鐮侊紝姣忚涓€涓紝渚嬪锛?#10;000001&#10;000002&#10;000858"
                     />
-                    <div class="text-sm text-gray-500 mt-1">支持输入多个股票代码，每行一个</div>
+                    <div class="text-sm text-gray-500 mt-1">鏀寔杈撳叆澶氫釜鑲＄エ浠ｇ爜锛屾瘡琛屼竴涓?/div>
                   </el-form-item>
 
-                  <!-- 全量采集说明 -->
+                  <!-- 鍏ㄩ噺閲囬泦璇存槑 -->
                   <el-alert
                     v-if="form.collection_type === 'all'"
-                    title="全量采集说明"
+                    title="鍏ㄩ噺閲囬泦璇存槑"
                     type="info"
                     :closable="false"
                     show-icon
                   >
-                    <p>将采集数据库中所有股票的历史数据。由于akshare限流要求，系统采用单任务执行模式，
-                    已采集过的股票数据将被跳过，避免重复采集。</p>
+                    <p>灏嗛噰闆嗘暟鎹簱涓墍鏈夎偂绁ㄧ殑鍘嗗彶鏁版嵁銆傜敱浜巃kshare闄愭祦瑕佹眰锛岀郴缁熼噰鐢ㄥ崟浠诲姟鎵ц妯″紡锛?
+                    宸查噰闆嗚繃鐨勮偂绁ㄦ暟鎹皢琚烦杩囷紝閬垮厤閲嶅閲囬泦銆?/p>
                   </el-alert>
 
-                  <!-- 测试模式 -->
+                  <!-- 娴嬭瘯妯″紡 -->
                   <el-form-item>
-                    <el-checkbox v-model="form.test_mode">测试模式（只采集前5只股票）</el-checkbox>
+                    <el-checkbox v-model="form.test_mode">娴嬭瘯妯″紡锛堝彧閲囬泦鍓?鍙偂绁級</el-checkbox>
                   </el-form-item>
 
-                  <!-- 操作按钮 -->
+                  <!-- 鎿嶄綔鎸夐挳 -->
                   <el-form-item>
                     <el-button
                       type="primary"
@@ -115,35 +115,35 @@
                       @click="startCollection"
                     >
                       <el-icon v-if="loading" class="mr-2"><Loading /></el-icon>
-                      {{ loading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ loading ? '鍚姩涓?..' : (currentTask ? '绛夊緟褰撳墠浠诲姟瀹屾垚' : '寮€濮嬮噰闆?) }}
                     </el-button>
-                    <el-button @click="resetForm">重置</el-button>
+                    <el-button @click="resetForm">閲嶇疆</el-button>
                   </el-form-item>
                 </el-form>
               </div>
             </el-card>
           </el-tab-pane>
 
-          <!-- TuShare标签页 -->
-          <el-tab-pane label="历史数据采集-TuShare" name="tushare">
+          <!-- TuShare鏍囩椤?-->
+          <el-tab-pane label="鍘嗗彶鏁版嵁閲囬泦-TuShare" name="tushare">
             <el-card>
               <div class="text-center mb-8">
                 <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-                <h2 class="text-2xl font-bold text-gray-900 mb-2">历史数据采集-TuShare</h2>
-                <p class="text-gray-600">使用tushare采集A股全量历史行情数据</p>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">鍘嗗彶鏁版嵁閲囬泦-TuShare</h2>
+                <p class="text-gray-600">浣跨敤tushare閲囬泦A鑲″叏閲忓巻鍙茶鎯呮暟鎹?/p>
               </div>
 
-              <!-- TuShare采集配置表单 -->
+              <!-- TuShare閲囬泦閰嶇疆琛ㄥ崟 -->
               <div class="max-w-2xl mx-auto">
                 <el-form @submit.prevent="startTushareCollection" :model="tushareForm" label-width="120px">
-                  <!-- 日期范围 -->
+                  <!-- 鏃ユ湡鑼冨洿 -->
                   <el-row :gutter="20">
                     <el-col :span="12">
-                      <el-form-item label="开始日期" required>
+                      <el-form-item label="寮€濮嬫棩鏈? required>
                         <el-date-picker
                           v-model="tushareForm.start_date"
                           type="date"
-                          placeholder="选择开始日期"
+                          placeholder="閫夋嫨寮€濮嬫棩鏈?
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           style="width: 100%"
@@ -151,11 +151,11 @@
                       </el-form-item>
                     </el-col>
                     <el-col :span="12">
-                      <el-form-item label="结束日期" required>
+                      <el-form-item label="缁撴潫鏃ユ湡" required>
                         <el-date-picker
                           v-model="tushareForm.end_date"
                           type="date"
-                          placeholder="选择结束日期"
+                          placeholder="閫夋嫨缁撴潫鏃ユ湡"
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           style="width: 100%"
@@ -164,17 +164,17 @@
                     </el-col>
                   </el-row>
 
-                  <!-- 强制更新选项 -->
+                  <!-- 寮哄埗鏇存柊閫夐」 -->
                   <el-form-item>
                     <el-checkbox v-model="tushareForm.force_update">
-                      强制更新（如果已存在此日期的历史数据，将先删除后插入）
+                      寮哄埗鏇存柊锛堝鏋滃凡瀛樺湪姝ゆ棩鏈熺殑鍘嗗彶鏁版嵁锛屽皢鍏堝垹闄ゅ悗鎻掑叆锛?
                     </el-checkbox>
                     <div class="text-sm text-gray-500 mt-1">
-                      未选择强制更新时，如果已存在数据则跳过插入
+                      鏈€夋嫨寮哄埗鏇存柊鏃讹紝濡傛灉宸插瓨鍦ㄦ暟鎹垯璺宠繃鎻掑叆
                     </div>
                   </el-form-item>
 
-                  <!-- 操作按钮 -->
+                  <!-- 鎿嶄綔鎸夐挳 -->
                   <el-form-item>
                     <el-button
                       type="primary"
@@ -183,9 +183,9 @@
                       @click="startTushareCollection"
                     >
                       <el-icon v-if="tushareLoading" class="mr-2"><Loading /></el-icon>
-                      {{ tushareLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ tushareLoading ? '鍚姩涓?..' : (currentTask ? '绛夊緟褰撳墠浠诲姟瀹屾垚' : '寮€濮嬮噰闆?) }}
                     </el-button>
-                    <el-button @click="resetTushareForm">重置</el-button>
+                    <el-button @click="resetTushareForm">閲嶇疆</el-button>
                   </el-form-item>
                 </el-form>
               </div>
@@ -194,81 +194,27 @@
         </el-tabs>
       </el-tab-pane>
 
-      <!-- A股实时数据采集 -->
-      <el-tab-pane label="A股实时数据采集" name="ashare_realtime">
-        <el-card>
-          <div class="text-center mb-8">
-            <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">A股实时数据采集</h2>
-            <p class="text-gray-600">采集并更新A股实时行情数据（写入 stock_realtime_quote）</p>
-          </div>
-
-          <div class="max-w-2xl mx-auto">
-            <el-form :key="'ashare-realtime-form'" @submit.prevent="startAShareRealtimeCollection" :model="ashareRealtimeForm" label-width="120px">
-              <el-form-item label="股票选择">
-                <el-radio-group v-model="ashareRealtimeForm.collection_type">
-                  <el-radio value="single">单个股票采集</el-radio>
-                  <el-radio value="all">全量股票采集</el-radio>
-                </el-radio-group>
-              </el-form-item>
-
-              <el-form-item v-if="ashareRealtimeForm.collection_type === 'single'" label="股票代码" required>
-                <el-input
-                  v-model="ashareRealtimeForm.stock_code"
-                  placeholder="请输入股票代码，例如：000001"
-                  clearable
-                />
-              </el-form-item>
-
-              <el-alert
-                v-if="ashareRealtimeForm.collection_type === 'all'"
-                title="全量采集说明"
-                type="info"
-                :closable="false"
-                show-icon
-                class="mb-4"
-              >
-                <p>将采集并更新全部A股实时行情数据。</p>
-              </el-alert>
-
-              <el-form-item>
-                <el-button
-                  type="primary"
-                  :loading="ashareRealtimeLoading"
-                  :disabled="!!currentTask"
-                  @click="startAShareRealtimeCollection"
-                >
-                  <el-icon v-if="ashareRealtimeLoading" class="mr-2"><Loading /></el-icon>
-                  {{ ashareRealtimeLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
-                </el-button>
-                <el-button @click="resetAShareRealtimeForm">重置</el-button>
-              </el-form-item>
-            </el-form>
-          </div>
-        </el-card>
-      </el-tab-pane>
-
-      <!-- 港股历史数据采集 -->
-      <el-tab-pane label="港股历史数据采集" name="hkshare">
+      <!-- 娓偂鍘嗗彶鏁版嵁閲囬泦 -->
+      <el-tab-pane label="娓偂鍘嗗彶鏁版嵁閲囬泦" name="hkshare">
         <el-tabs v-model="activeHKShareTab">
-          <el-tab-pane label="港股历史数据采集-AkShare" name="hk_akshare">
+          <el-tab-pane label="娓偂鍘嗗彶鏁版嵁閲囬泦-AkShare" name="hk_akshare">
             <el-card>
               <div class="text-center mb-8">
                 <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-                <h2 class="text-2xl font-bold text-gray-900 mb-2">港股历史数据采集-AkShare</h2>
-                <p class="text-gray-600">使用akshare采集港股历史行情数据</p>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">娓偂鍘嗗彶鏁版嵁閲囬泦-AkShare</h2>
+                <p class="text-gray-600">浣跨敤akshare閲囬泦娓偂鍘嗗彶琛屾儏鏁版嵁</p>
               </div>
 
               <div class="max-w-2xl mx-auto">
                 <el-form @submit.prevent="startHKCollection" :model="hkForm" label-width="120px">
-                  <!-- 日期范围 -->
+                  <!-- 鏃ユ湡鑼冨洿 -->
                   <el-row :gutter="20">
                     <el-col :span="12">
-                      <el-form-item label="开始日期" required>
+                      <el-form-item label="寮€濮嬫棩鏈? required>
                         <el-date-picker
                           v-model="hkForm.start_date"
                           type="date"
-                          placeholder="选择开始日期"
+                          placeholder="閫夋嫨寮€濮嬫棩鏈?
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           style="width: 100%"
@@ -276,11 +222,11 @@
                       </el-form-item>
                     </el-col>
                     <el-col :span="12">
-                      <el-form-item label="结束日期" required>
+                      <el-form-item label="缁撴潫鏃ユ湡" required>
                         <el-date-picker
                           v-model="hkForm.end_date"
                           type="date"
-                          placeholder="选择结束日期"
+                          placeholder="閫夋嫨缁撴潫鏃ユ湡"
                           format="YYYY-MM-DD"
                           value-format="YYYY-MM-DD"
                           style="width: 100%"
@@ -289,48 +235,48 @@
                     </el-col>
                   </el-row>
 
-                  <!-- 采集类型 -->
-                  <el-form-item label="采集类型" required>
+                  <!-- 閲囬泦绫诲瀷 -->
+                  <el-form-item label="閲囬泦绫诲瀷" required>
                     <el-radio-group v-model="hkForm.collection_type">
-                      <el-radio label="specified">指定股票</el-radio>
-                      <el-radio label="all">全量采集</el-radio>
+                      <el-radio label="specified">鎸囧畾鑲＄エ</el-radio>
+                      <el-radio label="all">鍏ㄩ噺閲囬泦</el-radio>
                     </el-radio-group>
                   </el-form-item>
 
-                  <!-- 港股代码 -->
-                  <el-form-item label="港股代码" required v-if="hkForm.collection_type === 'specified'">
+                  <!-- 娓偂浠ｇ爜 -->
+                  <el-form-item label="娓偂浠ｇ爜" required v-if="hkForm.collection_type === 'specified'">
                     <el-input
                       v-model="hkForm.stock_codes_text"
                       type="textarea"
                       :rows="5"
-                      placeholder="请输入港股代码（5位数字），每行一个，例如：&#10;00700&#10;09988"
+                      placeholder="璇疯緭鍏ユ腐鑲′唬鐮侊紙5浣嶆暟瀛楋級锛屾瘡琛屼竴涓紝渚嬪锛?#10;00700&#10;09988"
                     />
-                    <div class="text-sm text-gray-500 mt-1">请输入需要采集的港股代码</div>
+                    <div class="text-sm text-gray-500 mt-1">璇疯緭鍏ラ渶瑕侀噰闆嗙殑娓偂浠ｇ爜</div>
                   </el-form-item>
 
-                  <!-- 全量采集说明 -->
+                  <!-- 鍏ㄩ噺閲囬泦璇存槑 -->
                   <el-alert
                     v-if="hkForm.collection_type === 'all'"
-                    title="全量采集说明"
+                    title="鍏ㄩ噺閲囬泦璇存槑"
                     type="info"
                     :closable="false"
                     show-icon
                     class="mb-4"
                   >
-                    <p>将采集数据库中所有港股的历史数据。由于akshare限流要求，系统采用单任务执行模式，每次采集间隔5秒。</p>
+                    <p>灏嗛噰闆嗘暟鎹簱涓墍鏈夋腐鑲＄殑鍘嗗彶鏁版嵁銆傜敱浜巃kshare闄愭祦瑕佹眰锛岀郴缁熼噰鐢ㄥ崟浠诲姟鎵ц妯″紡锛屾瘡娆￠噰闆嗛棿闅?绉掋€?/p>
                   </el-alert>
 
-                  <!-- 强制更新选项 -->
+                  <!-- 寮哄埗鏇存柊閫夐」 -->
                   <el-form-item>
                     <el-checkbox v-model="hkForm.force_update">
-                      强制更新（如果已存在此日期的历史数据，将重新采集并更新）
+                      寮哄埗鏇存柊锛堝鏋滃凡瀛樺湪姝ゆ棩鏈熺殑鍘嗗彶鏁版嵁锛屽皢閲嶆柊閲囬泦骞舵洿鏂帮級
                     </el-checkbox>
                     <div class="text-sm text-gray-500 mt-1">
-                      未选择强制更新时，如果已存在数据则跳过插入
+                      鏈€夋嫨寮哄埗鏇存柊鏃讹紝濡傛灉宸插瓨鍦ㄦ暟鎹垯璺宠繃鎻掑叆
                     </div>
                   </el-form-item>
 
-                  <!-- 操作按钮 -->
+                  <!-- 鎿嶄綔鎸夐挳 -->
                   <el-form-item>
                     <el-button
                       type="primary"
@@ -339,9 +285,9 @@
                       @click="startHKCollection"
                     >
                       <el-icon v-if="hkLoading" class="mr-2"><Loading /></el-icon>
-                      {{ hkLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ hkLoading ? '鍚姩涓?..' : (currentTask ? '绛夊緟褰撳墠浠诲姟瀹屾垚' : '寮€濮嬮噰闆?) }}
                     </el-button>
-                    <el-button @click="resetHKForm">重置</el-button>
+                    <el-button @click="resetHKForm">閲嶇疆</el-button>
                   </el-form-item>
                 </el-form>
               </div>
@@ -349,75 +295,21 @@
           </el-tab-pane>
         </el-tabs>
       </el-tab-pane>
-
-      <!-- 港股实时数据采集 -->
-      <el-tab-pane label="港股实时数据采集" name="hkshare_realtime">
-        <el-card>
-          <div class="text-center mb-8">
-            <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
-            <h2 class="text-2xl font-bold text-gray-900 mb-2">港股实时数据采集</h2>
-            <p class="text-gray-600">采集并更新港股实时行情数据（写入 stock_realtime_quote_hk）</p>
-          </div>
-
-          <div class="max-w-2xl mx-auto">
-            <el-form :key="'hk-realtime-form'" @submit.prevent="startHKRealtimeCollection" :model="hkRealtimeForm" label-width="120px">
-              <el-form-item label="股票选择">
-                <el-radio-group v-model="hkRealtimeForm.collection_type">
-                  <el-radio value="single">单个股票采集</el-radio>
-                  <el-radio value="all">全量股票采集</el-radio>
-                </el-radio-group>
-              </el-form-item>
-
-              <el-form-item v-if="hkRealtimeForm.collection_type === 'single'" label="港股代码" required>
-                <el-input
-                  v-model="hkRealtimeForm.stock_code"
-                  placeholder="请输入港股代码（5位数字），例如：00700"
-                  clearable
-                />
-              </el-form-item>
-
-              <el-alert
-                v-if="hkRealtimeForm.collection_type === 'all'"
-                title="全量采集说明"
-                type="info"
-                :closable="false"
-                show-icon
-                class="mb-4"
-              >
-                <p>将采集并更新全部港股实时行情数据。</p>
-              </el-alert>
-
-              <el-form-item>
-                <el-button
-                  type="primary"
-                  :loading="hkRealtimeLoading"
-                  :disabled="!!currentTask"
-                  @click="startHKRealtimeCollection"
-                >
-                  <el-icon v-if="hkRealtimeLoading" class="mr-2"><Loading /></el-icon>
-                  {{ hkRealtimeLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
-                </el-button>
-                <el-button @click="resetHKRealtimeForm">重置</el-button>
-              </el-form-item>
-            </el-form>
-          </div>
-        </el-card>
-      </el-tab-pane>
     </el-tabs>
 
-    <!-- 任务列表 -->
+    <!-- 浠诲姟鍒楄〃 -->
     <el-card>
       <template #header>
         <div class="flex justify-between items-center">
-          <span>采集任务</span>
+          <span>閲囬泦浠诲姟</span>
           <el-button type="text" @click="loadTasks" :icon="Refresh">
-            刷新
+            鍒锋柊
           </el-button>
         </div>
       </template>
 
       <div v-if="tasks.length === 0" class="text-center text-gray-500 py-8">
-        暂无采集任务
+        鏆傛棤閲囬泦浠诲姟
       </div>
       <div v-else class="space-y-4">
         <el-card
@@ -428,9 +320,9 @@
         >
           <div class="flex justify-between items-start mb-3">
             <div>
-              <h4 class="font-medium text-gray-900">任务 {{ task.task_id }}</h4>
+              <h4 class="font-medium text-gray-900">浠诲姟 {{ task.task_id }}</h4>
               <p class="text-sm text-gray-500">
-                {{ formatTime(task.start_time) }} - {{ task.end_time ? formatTime(task.end_time) : '进行中' }}
+                {{ formatTime(task.start_time) }} - {{ task.end_time ? formatTime(task.end_time) : '杩涜涓? }}
               </p>
             </div>
             <div class="flex items-center space-x-2">
@@ -446,41 +338,41 @@
                 size="small"
                 @click="cancelTask(task.task_id)"
               >
-                取消
+                鍙栨秷
               </el-button>
             </div>
           </div>
           
-          <!-- 进度条 -->
+          <!-- 杩涘害鏉?-->
           <div v-if="task.status === 'running'" class="mb-3">
             <div class="flex justify-between text-sm text-gray-600 mb-1">
-              <span>进度</span>
+              <span>杩涘害</span>
               <span>{{ task.progress }}%</span>
             </div>
             <el-progress :percentage="task.progress" />
           </div>
 
-          <!-- 统计信息 -->
+          <!-- 缁熻淇℃伅 -->
           <el-row :gutter="20" class="text-sm">
             <el-col :span="6">
-              <span class="text-gray-500">总股票数:</span>
+              <span class="text-gray-500">鎬昏偂绁ㄦ暟:</span>
               <span class="font-medium">{{ task.total_stocks }}</span>
             </el-col>
             <el-col :span="6">
-              <span class="text-gray-500">成功:</span>
+              <span class="text-gray-500">鎴愬姛:</span>
               <span class="font-medium text-green-600">{{ task.success_count }}</span>
             </el-col>
             <el-col :span="6">
-              <span class="text-gray-500">失败:</span>
+              <span class="text-gray-500">澶辫触:</span>
               <span class="font-medium text-red-600">{{ task.failed_count }}</span>
             </el-col>
             <el-col :span="6">
-              <span class="text-gray-500">新增数据:</span>
+              <span class="text-gray-500">鏂板鏁版嵁:</span>
               <span class="font-medium text-blue-600">{{ task.collected_count }}</span>
             </el-col>
           </el-row>
 
-          <!-- 错误信息 -->
+          <!-- 閿欒淇℃伅 -->
           <el-alert
             v-if="task.error_message"
             :title="task.error_message"
@@ -516,7 +408,7 @@ import {
 import axios from 'axios'
 import { API_BASE } from '@/config/api'
 
-// 类型定义
+// 绫诲瀷瀹氫箟
 interface Task {
   task_id: string
   status: string
@@ -556,11 +448,6 @@ interface HKFormData {
   force_update: boolean
 }
 
-interface RealtimeFormData {
-  collection_type: 'single' | 'all'
-  stock_code: string
-}
-
 interface RequestData {
   start_date: string
   end_date: string
@@ -571,12 +458,12 @@ interface RequestData {
   force_update?: boolean
 }
 
-// 标签页状态
+// 鏍囩椤电姸鎬?
 const activeMainTab = ref('ashare')
 const activeAShareTab = ref('akshare')
 const activeHKShareTab = ref('hk_akshare')
 
-// 表单数据
+// 琛ㄥ崟鏁版嵁
 const form = ref<FormData>({
   start_date: '',
   end_date: '',
@@ -586,7 +473,7 @@ const form = ref<FormData>({
   test_mode: false
 })
 
-// HK表单数据
+// HK琛ㄥ崟鏁版嵁
 const hkForm = ref<HKFormData>({
   start_date: '',
   end_date: '',
@@ -595,18 +482,7 @@ const hkForm = ref<HKFormData>({
   force_update: false
 })
 
-// 实时采集表单
-const ashareRealtimeForm = ref<RealtimeFormData>({
-  collection_type: 'single',
-  stock_code: ''
-})
-
-const hkRealtimeForm = ref<RealtimeFormData>({
-  collection_type: 'single',
-  stock_code: ''
-})
-
-// TuShare表单数据
+// TuShare琛ㄥ崟鏁版嵁
 interface TushareFormData {
   start_date: string
   end_date: string
@@ -619,44 +495,42 @@ const tushareForm = ref<TushareFormData>({
   force_update: false
 })
 
-// 状态数据
+// 鐘舵€佹暟鎹?
 const tasks = ref<Task[]>([])
 const currentTask = ref<CurrentTask | null>(null)
 const loading = ref(false)
 const hkLoading = ref(false)
 const tushareLoading = ref(false)
-const ashareRealtimeLoading = ref(false)
-const hkRealtimeLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
-// 方法
+// 鏂规硶
 const startCollection = async () => {
   try {
     loading.value = true
     
-    // 验证表单
+    // 楠岃瘉琛ㄥ崟
     if (!form.value.start_date || !form.value.end_date) {
-      ElMessage.error('请选择开始日期和结束日期')
+      ElMessage.error('璇烽€夋嫨寮€濮嬫棩鏈熷拰缁撴潫鏃ユ湡')
       return
     }
     
-    // 检查当前任务状态
+    // 妫€鏌ュ綋鍓嶄换鍔＄姸鎬?
     if (currentTask.value) {
-      ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
+      ElMessage.error('宸叉湁閲囬泦浠诲姟姝ｅ湪杩愯锛岃绛夊緟瀹屾垚鍚庡啀鍚姩鏂颁换鍔?)
       return
     }
     
-    // 准备请求数据
+    // 鍑嗗璇锋眰鏁版嵁
     const requestData: RequestData = {
       start_date: form.value.start_date,
       end_date: form.value.end_date,
       test_mode: form.value.test_mode
     }
 
-    // 根据采集类型设置股票代码
+    // 鏍规嵁閲囬泦绫诲瀷璁剧疆鑲＄エ浠ｇ爜
     if (form.value.collection_type === 'single') {
       if (!form.value.single_stock_code.trim()) {
-        ElMessage.error('请输入股票代码')
+        ElMessage.error('璇疯緭鍏ヨ偂绁ㄤ唬鐮?)
         return
       }
       requestData.stock_codes = [form.value.single_stock_code.trim()]
@@ -667,38 +541,38 @@ const startCollection = async () => {
         .filter(code => code.length > 0)
       
       if (stockCodes.length === 0) {
-        ElMessage.error('请输入至少一个股票代码')
+        ElMessage.error('璇疯緭鍏ヨ嚦灏戜竴涓偂绁ㄤ唬鐮?)
         return
       }
       
       requestData.stock_codes = stockCodes
     } else if (form.value.collection_type === 'all') {
-      // 全量采集模式
+      // 鍏ㄩ噺閲囬泦妯″紡
       requestData.full_collection_mode = true
     }
 
-    console.log('发送请求:', requestData)
+    console.log('鍙戦€佽姹?', requestData)
     const response = await axios.post(`${API_BASE}/api/data-collection/historical`, requestData)
     
     if (response.data.status === 'started') {
-      ElMessage.success('采集任务已启动')
+      ElMessage.success('閲囬泦浠诲姟宸插惎鍔?)
       loadTasks()
       loadCurrentTask()
     }
     
   } catch (error: any) {
-    console.error('启动采集任务失败:', error)
-    let errorMsg = '启动采集任务失败'
+    console.error('鍚姩閲囬泦浠诲姟澶辫触:', error)
+    let errorMsg = '鍚姩閲囬泦浠诲姟澶辫触'
     
     if (error.response) {
-      // 服务器响应了错误状态码
-      errorMsg = error.response.data?.detail || `服务器错误 (${error.response.status})`
+      // 鏈嶅姟鍣ㄥ搷搴斾簡閿欒鐘舵€佺爜
+      errorMsg = error.response.data?.detail || `鏈嶅姟鍣ㄩ敊璇?(${error.response.status})`
     } else if (error.request) {
-      // 请求已发出但没有收到响应
-      errorMsg = '无法连接到服务器，请检查网络连接'
+      // 璇锋眰宸插彂鍑轰絾娌℃湁鏀跺埌鍝嶅簲
+      errorMsg = '鏃犳硶杩炴帴鍒版湇鍔″櫒锛岃妫€鏌ョ綉缁滆繛鎺?
     } else {
-      // 其他错误
-      errorMsg = error.message || '未知错误'
+      // 鍏朵粬閿欒
+      errorMsg = error.message || '鏈煡閿欒'
     }
     
     ElMessage.error(errorMsg)
@@ -711,24 +585,24 @@ const startHKCollection = async () => {
   try {
     hkLoading.value = true
     
-    // 验证表单
+    // 楠岃瘉琛ㄥ崟
     if (!hkForm.value.start_date || !hkForm.value.end_date) {
-      ElMessage.error('请选择开始日期和结束日期')
+      ElMessage.error('璇烽€夋嫨寮€濮嬫棩鏈熷拰缁撴潫鏃ユ湡')
       return
     }
 
     if (hkForm.value.collection_type === 'specified' && !hkForm.value.stock_codes_text.trim()) {
-      ElMessage.error('请输入港股代码')
+      ElMessage.error('璇疯緭鍏ユ腐鑲′唬鐮?)
       return
     }
     
-    // 检查当前任务状态
+    // 妫€鏌ュ綋鍓嶄换鍔＄姸鎬?
     if (currentTask.value) {
-      ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
+      ElMessage.error('宸叉湁閲囬泦浠诲姟姝ｅ湪杩愯锛岃绛夊緟瀹屾垚鍚庡啀鍚姩鏂颁换鍔?)
       return
     }
     
-    // 准备请求数据
+    // 鍑嗗璇锋眰鏁版嵁
     const requestData: RequestData = {
       start_date: hkForm.value.start_date,
       end_date: hkForm.value.end_date,
@@ -747,25 +621,25 @@ const startHKCollection = async () => {
       requestData.full_collection_mode = true
     }
 
-    console.log('发送港股采集请求:', requestData)
+    console.log('鍙戦€佹腐鑲￠噰闆嗚姹?', requestData)
     const response = await axios.post(`${API_BASE}/api/data-collection/historical`, requestData)
     
     if (response.data.status === 'started') {
-      ElMessage.success('港股采集任务已启动')
+      ElMessage.success('娓偂閲囬泦浠诲姟宸插惎鍔?)
       loadTasks()
       loadCurrentTask()
     }
     
   } catch (error: any) {
-    console.error('启动港股采集任务失败:', error)
-    let errorMsg = '启动港股采集任务失败'
+    console.error('鍚姩娓偂閲囬泦浠诲姟澶辫触:', error)
+    let errorMsg = '鍚姩娓偂閲囬泦浠诲姟澶辫触'
     
     if (error.response) {
-      errorMsg = error.response.data?.detail || `服务器错误 (${error.response.status})`
+      errorMsg = error.response.data?.detail || `鏈嶅姟鍣ㄩ敊璇?(${error.response.status})`
     } else if (error.request) {
-      errorMsg = '无法连接到服务器，请检查网络连接'
+      errorMsg = '鏃犳硶杩炴帴鍒版湇鍔″櫒锛岃妫€鏌ョ綉缁滆繛鎺?
     } else {
-      errorMsg = error.message || '未知错误'
+      errorMsg = error.message || '鏈煡閿欒'
     }
     
     ElMessage.error(errorMsg)
@@ -779,7 +653,7 @@ const loadTasks = async () => {
     const response = await axios.get(`${API_BASE}/api/data-collection/tasks`)
     tasks.value = response.data
   } catch (error) {
-    console.error('加载任务列表失败:', error)
+    console.error('鍔犺浇浠诲姟鍒楄〃澶辫触:', error)
   }
 }
 
@@ -788,27 +662,27 @@ const loadCurrentTask = async () => {
     const response = await axios.get(`${API_BASE}/api/data-collection/current-task`)
     currentTask.value = response.data.current_task
   } catch (error) {
-    console.error('加载当前任务信息失败:', error)
+    console.error('鍔犺浇褰撳墠浠诲姟淇℃伅澶辫触:', error)
   }
 }
 
 const cancelTask = async (taskId: string) => {
   try {
-    await ElMessageBox.confirm('确定要取消这个任务吗？', '确认取消', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm('纭畾瑕佸彇娑堣繖涓换鍔″悧锛?, '纭鍙栨秷', {
+      confirmButtonText: '纭畾',
+      cancelButtonText: '鍙栨秷',
       type: 'warning'
     })
 
     await axios.delete(`${API_BASE}/api/data-collection/tasks/${taskId}`)
-    ElMessage.success('任务已取消')
+    ElMessage.success('浠诲姟宸插彇娑?)
     loadTasks()
     loadCurrentTask()
     
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('取消任务失败:', error)
-      ElMessage.error(error.response?.data?.detail || '取消任务失败')
+      console.error('鍙栨秷浠诲姟澶辫触:', error)
+      ElMessage.error(error.response?.data?.detail || '鍙栨秷浠诲姟澶辫触')
     }
   }
 }
@@ -834,20 +708,6 @@ const resetHKForm = () => {
   }
 }
 
-const resetAShareRealtimeForm = () => {
-  ashareRealtimeForm.value = {
-    collection_type: 'single',
-    stock_code: ''
-  }
-}
-
-const resetHKRealtimeForm = () => {
-  hkRealtimeForm.value = {
-    collection_type: 'single',
-    stock_code: ''
-  }
-}
-
 const resetTushareForm = () => {
   tushareForm.value = {
     start_date: '',
@@ -860,19 +720,19 @@ const startTushareCollection = async () => {
   try {
     tushareLoading.value = true
     
-    // 验证表单
+    // 楠岃瘉琛ㄥ崟
     if (!tushareForm.value.start_date || !tushareForm.value.end_date) {
-      ElMessage.error('请选择开始日期和结束日期')
+      ElMessage.error('璇烽€夋嫨寮€濮嬫棩鏈熷拰缁撴潫鏃ユ湡')
       return
     }
     
-    // 检查当前任务状态
+    // 妫€鏌ュ綋鍓嶄换鍔＄姸鎬?
     if (currentTask.value) {
-      ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
+      ElMessage.error('宸叉湁閲囬泦浠诲姟姝ｅ湪杩愯锛岃绛夊緟瀹屾垚鍚庡啀鍚姩鏂颁换鍔?)
       return
     }
 
-    console.log('发送TuShare采集请求:', tushareForm.value)
+    console.log('鍙戦€乀uShare閲囬泦璇锋眰:', tushareForm.value)
     const response = await axios.post(`${API_BASE}/api/data-collection/tushare-historical`, {
       start_date: tushareForm.value.start_date,
       end_date: tushareForm.value.end_date,
@@ -880,21 +740,21 @@ const startTushareCollection = async () => {
     })
     
     if (response.data.status === 'started') {
-      ElMessage.success('TuShare采集任务已启动')
+      ElMessage.success('TuShare閲囬泦浠诲姟宸插惎鍔?)
       loadTasks()
       loadCurrentTask()
     }
     
   } catch (error: any) {
-    console.error('启动TuShare采集任务失败:', error)
-    let errorMsg = '启动TuShare采集任务失败'
+    console.error('鍚姩TuShare閲囬泦浠诲姟澶辫触:', error)
+    let errorMsg = '鍚姩TuShare閲囬泦浠诲姟澶辫触'
     
     if (error.response) {
-      errorMsg = error.response.data?.detail || `服务器错误 (${error.response.status})`
+      errorMsg = error.response.data?.detail || `鏈嶅姟鍣ㄩ敊璇?(${error.response.status})`
     } else if (error.request) {
-      errorMsg = '无法连接到服务器，请检查网络连接'
+      errorMsg = '鏃犳硶杩炴帴鍒版湇鍔″櫒锛岃妫€鏌ョ綉缁滆繛鎺?
     } else {
-      errorMsg = error.message || '未知错误'
+      errorMsg = error.message || '鏈煡閿欒'
     }
     
     ElMessage.error(errorMsg)
@@ -903,66 +763,12 @@ const startTushareCollection = async () => {
   }
 }
 
-const startAShareRealtimeCollection = async () => {
-  try {
-    ashareRealtimeLoading.value = true
-    if (ashareRealtimeForm.value.collection_type === 'single' && !ashareRealtimeForm.value.stock_code) {
-      ElMessage.error('请输入股票代码')
-      return
-    }
-
-    const payload = {
-      market: 'CN',
-      stock_codes: ashareRealtimeForm.value.collection_type === 'single' ? [ashareRealtimeForm.value.stock_code] : [],
-      full_collection_mode: ashareRealtimeForm.value.collection_type === 'all'
-    }
-
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime`, payload)
-    if (response.data.status === 'started') {
-      ElMessage.success('A股实时采集任务已启动')
-      loadTasks()
-      loadCurrentTask()
-    }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '启动失败')
-  } finally {
-    ashareRealtimeLoading.value = false
-  }
-}
-
-const startHKRealtimeCollection = async () => {
-  try {
-    hkRealtimeLoading.value = true
-    if (hkRealtimeForm.value.collection_type === 'single' && !hkRealtimeForm.value.stock_code) {
-      ElMessage.error('请输入港股代码')
-      return
-    }
-
-    const payload = {
-      market: 'HK',
-      stock_codes: hkRealtimeForm.value.collection_type === 'single' ? [hkRealtimeForm.value.stock_code] : [],
-      full_collection_mode: hkRealtimeForm.value.collection_type === 'all'
-    }
-
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime`, payload)
-    if (response.data.status === 'started') {
-      ElMessage.success('港股实时采集任务已启动')
-      loadTasks()
-      loadCurrentTask()
-    }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '启动失败')
-  } finally {
-    hkRealtimeLoading.value = false
-  }
-}
-
 const getStatusText = (status: string): string => {
   const statusMap: Record<string, string> = {
-    'running': '运行中',
-    'completed': '已完成',
-    'failed': '失败',
-    'cancelled': '已取消'
+    'running': '杩愯涓?,
+    'completed': '宸插畬鎴?,
+    'failed': '澶辫触',
+    'cancelled': '宸插彇娑?
   }
   return statusMap[status] || status
 }
@@ -987,7 +793,7 @@ const startPolling = () => {
   pollingInterval.value = setInterval(() => {
     loadTasks()
     loadCurrentTask()
-  }, 5000) // 每5秒刷新一次
+  }, 5000) // 姣?绉掑埛鏂颁竴娆?
 }
 
 const stopPolling = () => {
@@ -997,7 +803,7 @@ const stopPolling = () => {
   }
 }
 
-// 生命周期
+// 鐢熷懡鍛ㄦ湡
 onMounted(() => {
   loadTasks()
   loadCurrentTask()

@@ -731,8 +731,23 @@ class DataCollectionStatus(BaseModel):
     error_message: Optional[str] = None
     failed_details: List[str] = []
 
+class RealtimeCollectionRequest(BaseModel):
+    """实时数据采集请求模型"""
+    market: str = 'CN'  # CN: A股, HK: 港股
+    stock_code: Optional[str] = None  # 单个股票采集时填写
+    full_collection_mode: bool = False  # 全量采集
+
+class RealtimeCollectionResponse(BaseModel):
+    """实时数据采集响应模型"""
+    task_id: str
+    status: str
+    message: str
+    market: str = 'CN'
+    stock_code: Optional[str] = None
+    full_collection_mode: bool = False
+
 class TushareHistoricalCollectionRequest(BaseModel):
     """TuShare历史数据采集请求模型"""
     start_date: str
     end_date: str
-    force_update: bool = False  # 强制更新：如果已存在数据，先删除后插入 
+    force_update: bool = False  # 强制更新：如果已存在数据，先删除后插入

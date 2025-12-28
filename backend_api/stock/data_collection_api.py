@@ -18,7 +18,14 @@ import time
 import random
 
 from backend_api.database import get_db
-from backend_api.models import DataCollectionRequest, DataCollectionResponse, DataCollectionStatus, TushareHistoricalCollectionRequest
+from backend_api.models import (
+    DataCollectionRequest,
+    DataCollectionResponse,
+    DataCollectionStatus,
+    TushareHistoricalCollectionRequest,
+    RealtimeCollectionRequest,
+    RealtimeCollectionResponse,
+)
 from sqlalchemy import text
 
 router = APIRouter(prefix="/api/data-collection", tags=["数据采集"])
@@ -1058,6 +1065,7 @@ async def list_collection_tasks():
 @router.delete("/tasks/{task_id}")
 async def cancel_collection_task(task_id: str):
     """取消采集任务"""
+    global current_task_id
     try:
         with task_lock:
             if task_id not in collection_tasks:
@@ -1127,6 +1135,393 @@ async def get_current_task():
     except Exception as e:
         logger.error(f"获取当前任务信息失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取当前任务信息失败: {str(e)}")
+
+
+def _normalize_code(raw_code: Any) -> str:
+    if raw_code is None:
+        return ''
+    code = str(raw_code).strip()
+    if '.' in code:
+        code = code.split('.')[0]
+    if len(code) > 2 and code[:2].isalpha() and code[2:].isdigit():
+        # 兼容新浪数据源：SH600000 / SZ000001
+        code = code[2:]
+    return code
+
+
+def _safe_float(val: Any) -> Optional[float]:
+    try:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        if isinstance(val, str) and val.strip() in ['', '-', 'None', 'nan']:
+            return None
+        return float(val)
+    except Exception:
+        return None
+
+
+def _is_task_cancelled(task_id: str) -> bool:
+    with task_lock:
+        if task_id not in collection_tasks:
+            return True
+        return collection_tasks[task_id].get('status') == 'cancelled'
+
+
+def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional[str], full_collection_mode: bool):
+    """运行实时数据采集任务（后台任务）"""
+    global current_task_id
+    try:
+        logger.info(f"开始执行实时数据采集任务: {task_id}, market={market}, stock_code={stock_code}, full={full_collection_mode}")
+
+        from backend_api.database import SessionLocal
+        db = SessionLocal()
+        try:
+            trade_date = datetime.now().strftime('%Y-%m-%d')
+
+            if market == 'HK':
+                try:
+                    df = ak.stock_hk_spot_em()
+                except Exception as e:
+                    logger.warning(f"港股实时接口 stock_hk_spot_em 调用失败，尝试 stock_hk_spot: {e}")
+                    df = ak.stock_hk_spot()
+
+                if df is None or df.empty:
+                    raise RuntimeError('港股实时行情数据为空')
+
+                if stock_code and str(stock_code).strip():
+                    code = str(stock_code).strip()
+                    # 兼容字段名
+                    code_col = '代码' if '代码' in df.columns else ('symbol' if 'symbol' in df.columns else None)
+                    if code_col:
+                        df = df[df[code_col].astype(str).str.strip() == code]
+
+                total = len(df)
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id]['total_stocks'] = total
+
+                processed = 0
+                success = 0
+                failed_details: List[str] = []
+
+                for _, row in df.iterrows():
+                    if _is_task_cancelled(task_id):
+                        logger.info(f"实时采集任务已取消: {task_id}")
+                        return
+
+                    processed += 1
+                    try:
+                        code_val = None
+                        for k in ['代码', '股票代码', 'symbol', 'code']:
+                            if k in df.columns:
+                                v = row.get(k)
+                                if v is not None and pd.notna(v):
+                                    code_val = str(v).strip()
+                                    if code_val:
+                                        break
+                        if not code_val:
+                            continue
+
+                        name_val = None
+                        for k in ['中文名称', '名称', 'name', '股票名称']:
+                            if k in df.columns:
+                                v = row.get(k)
+                                if v is not None and pd.notna(v):
+                                    name_val = str(v).strip()
+                                    if name_val:
+                                        break
+
+                        def safe_get(*keys):
+                            for k in keys:
+                                if k in df.columns:
+                                    v = row.get(k)
+                                    if v is not None and pd.notna(v):
+                                        return v
+                            return None
+
+                        data = {
+                            'code': code_val,
+                            'trade_date': trade_date,
+                            'name': name_val or code_val,
+                            'english_name': str(safe_get('英文名称', '英文名', 'engname', 'english_name')).strip() if safe_get('英文名称', '英文名', 'engname', 'english_name') is not None else None,
+                            'current_price': _safe_float(safe_get('最新价', '现价', 'lasttrade')),
+                            'change_percent': _safe_float(safe_get('涨跌幅', '涨跌%', 'changepercent')),
+                            'change_amount': _safe_float(safe_get('涨跌额', '涨跌', 'pricechange')),
+                            'volume': _safe_float(safe_get('成交量', 'volume')),
+                            'amount': _safe_float(safe_get('成交额', 'amount')),
+                            'high': _safe_float(safe_get('最高', 'high')),
+                            'low': _safe_float(safe_get('最低', 'low')),
+                            'open': _safe_float(safe_get('今开', '开盘', 'open')),
+                            'pre_close': _safe_float(safe_get('昨收', '昨收价', 'prevclose')),
+                            'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        }
+
+                        # 检查数据是否有效（现价和成交量不能同时为空）
+                        if data['current_price'] is None and data['volume'] is None:
+                            logger.debug(f"跳过港股 {data['code']} ({data['name']}): 实时行情数据为空")
+                            with task_lock:
+                                if task_id in collection_tasks:
+                                    collection_tasks[task_id]['skipped_count'] += 1
+                            continue
+
+
+                        # 基础信息
+                        db.execute(text('''
+                            INSERT INTO stock_basic_info_hk (code, name, create_date)
+                            VALUES (:code, :name, :create_date)
+                            ON CONFLICT (code) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                create_date = EXCLUDED.create_date
+                        '''), {'code': data['code'], 'name': data['name'], 'create_date': data['update_time']})
+
+                        # 实时行情
+                        db.execute(text('''
+                            INSERT INTO stock_realtime_quote_hk
+                            (code, trade_date, name, english_name, current_price, change_percent, change_amount, volume, amount,
+                             high, low, open, pre_close, update_time)
+                            VALUES
+                            (:code, :trade_date, :name, :english_name, :current_price, :change_percent, :change_amount, :volume, :amount,
+                             :high, :low, :open, :pre_close, :update_time)
+                            ON CONFLICT (code, trade_date) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                english_name = EXCLUDED.english_name,
+                                current_price = EXCLUDED.current_price,
+                                change_percent = EXCLUDED.change_percent,
+                                change_amount = EXCLUDED.change_amount,
+                                volume = EXCLUDED.volume,
+                                amount = EXCLUDED.amount,
+                                high = EXCLUDED.high,
+                                low = EXCLUDED.low,
+                                open = EXCLUDED.open,
+                                pre_close = EXCLUDED.pre_close,
+                                update_time = EXCLUDED.update_time
+                        '''), data)
+
+                        db.commit()
+                        success += 1
+                    except Exception as e:
+                        db.rollback()
+                        failed_details.append(str(e))
+
+                    with task_lock:
+                        if task_id in collection_tasks:
+                            total_stocks = max(1, collection_tasks[task_id].get('total_stocks') or total)
+                            collection_tasks[task_id]['processed_stocks'] = processed
+                            collection_tasks[task_id]['success_count'] = success
+                            collection_tasks[task_id]['failed_count'] = len(failed_details)
+                            collection_tasks[task_id]['collected_count'] = success
+                            collection_tasks[task_id]['failed_details'] = failed_details[-200:]
+                            collection_tasks[task_id]['progress'] = min(100, int((processed / total_stocks) * 100))
+
+            else:
+                try:
+                    df = ak.stock_zh_a_spot_em()
+                    data_source = 'em'
+                except Exception as e:
+                    logger.warning(f"A股实时接口 stock_zh_a_spot_em 调用失败，尝试 stock_zh_a_spot: {e}")
+                    df = ak.stock_zh_a_spot()
+                    data_source = 'sina'
+
+                if df is None or df.empty:
+                    raise RuntimeError('A股实时行情数据为空')
+
+                if stock_code and str(stock_code).strip():
+                    code = str(stock_code).strip()
+                    if '代码' in df.columns:
+                        if data_source == 'sina':
+                            df = df[df['代码'].astype(str).apply(_normalize_code) == code]
+                        else:
+                            df = df[df['代码'].astype(str).str.strip() == code]
+
+                total = len(df)
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id]['total_stocks'] = total
+
+                processed = 0
+                success = 0
+                failed_details: List[str] = []
+
+                for _, row in df.iterrows():
+                    if _is_task_cancelled(task_id):
+                        logger.info(f"实时采集任务已取消: {task_id}")
+                        return
+
+                    processed += 1
+                    try:
+                        code_val = _normalize_code(row.get('代码'))
+                        if not code_val:
+                            continue
+                        if stock_code and code_val != str(stock_code).strip():
+                            continue
+
+                        trade_date = datetime.now().strftime('%Y-%m-%d')
+                        data = {
+                            'code': code_val,
+                            'trade_date': trade_date,
+                            'name': str(row.get('名称') or code_val),
+                            'current_price': _safe_float(row.get('最新价')),
+                            'change_percent': _safe_float(row.get('涨跌幅')),
+                            'volume': _safe_float(row.get('成交量')),
+                            'amount': _safe_float(row.get('成交额')),
+                            'high': _safe_float(row.get('最高')),
+                            'low': _safe_float(row.get('最低')),
+                            'open': _safe_float(row.get('今开')),
+                            'pre_close': _safe_float(row.get('昨收')),
+                            'turnover_rate': _safe_float(row.get('换手率')) if '换手率' in df.columns else None,
+                            'pe_dynamic': _safe_float(row.get('市盈率-动态')) if '市盈率-动态' in df.columns else _safe_float(row.get('市盈率')),
+                            'total_market_value': _safe_float(row.get('总市值')) if '总市值' in df.columns else None,
+                            'pb_ratio': _safe_float(row.get('市净率')) if '市净率' in df.columns else None,
+                            'circulating_market_value': _safe_float(row.get('流通市值')) if '流通市值' in df.columns else None,
+                            'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        }
+
+                        # 检查数据是否有效（现价和成交量不能同时为空）
+                        if data['current_price'] is None and data['volume'] is None:
+                            logger.debug(f"跳过A股 {data['code']} ({data['name']}): 实时行情数据为空")
+                            with task_lock:
+                                if task_id in collection_tasks:
+                                    collection_tasks[task_id]['skipped_count'] += 1
+                            continue
+
+
+                        db.execute(text('''
+                            INSERT INTO stock_basic_info (code, name, create_date)
+                            VALUES (:code, :name, :create_date)
+                            ON CONFLICT (code) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                create_date = EXCLUDED.create_date
+                        '''), {'code': data['code'], 'name': data['name'], 'create_date': data['update_time']})
+
+                        db.execute(text('''
+                            INSERT INTO stock_realtime_quote
+                            (code, trade_date, name, current_price, change_percent, volume, amount,
+                             high, low, open, pre_close, turnover_rate, pe_dynamic, total_market_value, pb_ratio,
+                             circulating_market_value, update_time)
+                            VALUES
+                            (:code, :trade_date, :name, :current_price, :change_percent, :volume, :amount,
+                             :high, :low, :open, :pre_close, :turnover_rate, :pe_dynamic, :total_market_value, :pb_ratio,
+                             :circulating_market_value, :update_time)
+                            ON CONFLICT (code, trade_date) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                current_price = EXCLUDED.current_price,
+                                change_percent = EXCLUDED.change_percent,
+                                volume = EXCLUDED.volume,
+                                amount = EXCLUDED.amount,
+                                high = EXCLUDED.high,
+                                low = EXCLUDED.low,
+                                open = EXCLUDED.open,
+                                pre_close = EXCLUDED.pre_close,
+                                turnover_rate = EXCLUDED.turnover_rate,
+                                pe_dynamic = EXCLUDED.pe_dynamic,
+                                total_market_value = EXCLUDED.total_market_value,
+                                pb_ratio = EXCLUDED.pb_ratio,
+                                circulating_market_value = EXCLUDED.circulating_market_value,
+                                update_time = EXCLUDED.update_time
+                        '''), data)
+
+                        db.commit()
+                        success += 1
+                    except Exception as e:
+                        db.rollback()
+                        failed_details.append(str(e))
+
+                    with task_lock:
+                        if task_id in collection_tasks:
+                            total_stocks = max(1, collection_tasks[task_id].get('total_stocks') or total)
+                            collection_tasks[task_id]['processed_stocks'] = processed
+                            collection_tasks[task_id]['success_count'] = success
+                            collection_tasks[task_id]['failed_count'] = len(failed_details)
+                            collection_tasks[task_id]['collected_count'] = success
+                            collection_tasks[task_id]['failed_details'] = failed_details[-200:]
+                            collection_tasks[task_id]['progress'] = min(100, int((processed / total_stocks) * 100))
+
+            with task_lock:
+                if task_id in collection_tasks:
+                    collection_tasks[task_id].update({
+                        'status': 'completed',
+                        'progress': 100,
+                        'end_time': datetime.now(),
+                    })
+
+            logger.info(f"实时数据采集任务完成: {task_id}")
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"实时数据采集任务执行失败: {task_id}, 错误: {e}")
+        with task_lock:
+            if task_id in collection_tasks:
+                collection_tasks[task_id].update({
+                    'status': 'failed',
+                    'end_time': datetime.now(),
+                    'error_message': str(e),
+                })
+    finally:
+        with task_execution_lock:
+            if current_task_id == task_id:
+                current_task_id = None
+                logger.info(f"已清除当前任务ID: {task_id}")
+
+
+@router.post('/realtime', response_model=RealtimeCollectionResponse)
+async def start_realtime_collection(
+    request: RealtimeCollectionRequest,
+    background_tasks: BackgroundTasks,
+):
+    """启动实时数据采集任务（A股/港股，支持单个/全量）"""
+    global current_task_id
+    try:
+        market = (request.market or 'CN').upper()
+        if market not in ['CN', 'HK']:
+            raise HTTPException(status_code=400, detail='market只支持CN/HK')
+
+        single_code = (request.stock_code or '').strip() or None
+        full_mode = bool(request.full_collection_mode)
+        if single_code and full_mode:
+            raise HTTPException(status_code=400, detail='单股采集与全量采集不可同时指定')
+
+        with task_execution_lock:
+            if current_task_id is not None:
+                raise HTTPException(status_code=400, detail='已有采集任务正在运行，请等待完成后再启动新任务')
+
+        task_id = f"realtime_collection_{market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
+
+        with task_lock:
+            collection_tasks[task_id] = {
+                'status': 'running',
+                'progress': 0,
+                'total_stocks': 0,
+                'processed_stocks': 0,
+                'success_count': 0,
+                'failed_count': 0,
+                'collected_count': 0,
+                'skipped_count': 0,
+                'start_time': datetime.now(),
+                'end_time': None,
+                'error_message': None,
+                'failed_details': [],
+            }
+
+        with task_execution_lock:
+            current_task_id = task_id
+
+        background_tasks.add_task(run_realtime_collection_task, task_id, market, single_code, full_mode)
+
+        return RealtimeCollectionResponse(
+            task_id=task_id,
+            status='started',
+            message='实时数据采集任务已启动',
+            market=market,
+            stock_code=single_code,
+            full_collection_mode=full_mode,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"启动实时数据采集任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动采集任务失败: {str(e)}")
 
 class TushareDataCollector:
     """Tushare数据采集器"""

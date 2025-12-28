@@ -47,3 +47,5 @@ CORS_CONFIG = {
     "allow_methods": ["*"],
     "allow_headers": ["*"]
 } 
+# Gemini AI API Key
+GEMINI_API_KEY = "AIzaSyDhgCArPllwqHBfwRBNjDreqI3l8r0gyxY0"
