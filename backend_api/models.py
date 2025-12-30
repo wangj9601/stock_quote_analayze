@@ -585,6 +585,7 @@ class MeanFrequencyResonanceIndicators(Base):
     
     ma20_d = Column(Float)                    # 移动平均线 MA20 (d)
     mavol20_m = Column(Float)                 # 移动平均成交量 MAVOL20 (m)
+    bias = Column(Float)                      # 乖离率 (Bias) = (Pt - d) / d
     
     created_at = Column(DateTime, default=datetime.now)
 

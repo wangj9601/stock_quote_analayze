@@ -84,6 +84,7 @@ class AkshareHistoricalCollector:
                     efficiency_m20_minus_m REAL,
                     ma20_d REAL,
                     mavol20_m REAL,
+                    bias REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
@@ -163,8 +164,8 @@ class AkshareHistoricalCollector:
                 try:
                     self.session.execute(text("""
                         INSERT INTO mean_frequency_resonance_indicators
-                        (code, date, market_type, macro_displacement_delta, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, created_at)
-                        VALUES (:code, :date, :market_type, :delta, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :created_at)
+                        (code, date, market_type, macro_displacement_delta, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
+                        VALUES (:code, :date, :market_type, :delta, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
                         ON CONFLICT (code, date, market_type) DO UPDATE SET
                             macro_displacement_delta = EXCLUDED.macro_displacement_delta,
                             instant_deviation = EXCLUDED.instant_deviation,
@@ -173,6 +174,7 @@ class AkshareHistoricalCollector:
                             efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
                             ma20_d = EXCLUDED.ma20_d,
                             mavol20_m = EXCLUDED.mavol20_m,
+                            bias = EXCLUDED.bias,
                             created_at = EXCLUDED.created_at
                     """), {
                         'code': stock_code,
@@ -185,6 +187,7 @@ class AkshareHistoricalCollector:
                         'efficiency': res['efficiency_m20_minus_m'],
                         'ma20': res['ma20_d'],
                         'mavol20': res['mavol20_m'],
+                        'bias': res['bias'],
                         'created_at': datetime.now()
                     })
                     saved_count += 1
@@ -200,9 +203,27 @@ class AkshareHistoricalCollector:
             logger.error(f"计算股票 {stock_code} 均值频率共振指标失败: {e}")
             self.session.rollback()
 
-        """析构函数，确保session被关闭"""
-        if hasattr(self, 'session'):
-            self.session.close()
+    def _init_macd_table(self):
+        """初始化MACD指标表结构"""
+        try:
+            self.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS macd_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    dif REAL,
+                    dea REAL,
+                    macd REAL,
+                    ema12 REAL,
+                    ema26 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            self.session.commit()
+        except Exception as e:
+            logger.warning(f"MACD指标表初始化失败: {e}")
+            self.session.rollback()
 
     def _init_kdj_table(self):
         """初始化KDJ指标表结构"""

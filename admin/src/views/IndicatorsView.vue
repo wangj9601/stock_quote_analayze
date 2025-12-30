@@ -395,6 +395,13 @@
                   </span>
                 </template>
               </el-table-column>
+              <el-table-column prop="bias" label="乖离率(Bias)" width="120">
+                <template #default="scope">
+                  <span :style="{ color: scope.row.bias > 0 ? '#f56c6c' : '#67c23a' }">
+                    {{ scope.row.bias ? (scope.row.bias * 100).toFixed(2) + '%' : '-' }}
+                  </span>
+                </template>
+              </el-table-column>
               <el-table-column prop="rising_days_z" label="上涨天数Z" width="110">
                 <template #default="scope">{{ scope.row.rising_days_z || '-' }}</template>
               </el-table-column>

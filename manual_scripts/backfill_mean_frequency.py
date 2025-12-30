@@ -75,6 +75,9 @@ def calculate_and_save_indicators(db, stock_code, market_type, force_update=True
     # Instant Deviation (d20 - d) = Close - MA20
     df['instant_deviation'] = df['close'] - df['ma20']
     
+    # Bias = (Close - MA20) / MA20
+    df['bias'] = (df['close'] - df['ma20']) / df['ma20']
+    
     # Efficiency (m20 - m) = Volume - MAVOL20
     df['efficiency'] = df['volume'] - df['mavol20']
     
@@ -127,6 +130,7 @@ def calculate_and_save_indicators(db, stock_code, market_type, force_update=True
             "efficiency_m20_minus_m": row['efficiency'],
             "ma20_d": row['ma20'],
             "mavol20_m": row['mavol20'],
+            "bias": row['bias'],
             "created_at": datetime.now()
         }
         records.append(record)

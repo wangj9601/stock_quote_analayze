@@ -167,6 +167,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     efficiency_m20_minus_m REAL,
                     ma20_d REAL,
                     mavol20_m REAL,
+                    bias REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
@@ -996,4 +997,105 @@ class HKHistoricalQuoteCollector(AKShareCollector):
         except Exception as e:
             self.logger.error(f"批量计算港股BOLL指标失败: {e}")
             session.rollback()
+
+    def _calculate_and_save_mean_frequency_hk(self, stock_codes: list, target_date: str, session):
+        """
+        计算并保存港股均值频率共振指标
+        
+        Args:
+            stock_codes: 股票代码列表
+            target_date: 目标日期 (YYYY-MM-DD)
+            session: 数据库会话
+        """
+        try:
+            calculator = MeanFrequencyResonanceCalculator()
+            
+            for stock_code in stock_codes:
+                try:
+                    # 查询该股票最近至少30天的收盘价和成交量数据
+                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+                    
+                    result = session.execute(text("""
+                        SELECT date, close, volume
+                        FROM historical_quotes_hk 
+                        WHERE code = :stock_code 
+                        AND date >= :query_start_date 
+                        AND date <= :target_date
+                        AND close IS NOT NULL
+                        AND volume IS NOT NULL
+                        ORDER BY date ASC
+                    """), {
+                        'stock_code': stock_code,
+                        'query_start_date': query_start_date,
+                        'target_date': target_date
+                    })
+                    
+                    rows = result.fetchall()
+                    if len(rows) < 20:
+                        continue
+                    
+                    # 提取数据列表
+                    dates = [str(row[0]) for row in rows]
+                    closes = [float(row[1]) for row in rows]
+                    volumes = [float(row[2]) for row in rows]
+                    
+                    # 计算
+                    results = calculator.calculate(closes, volumes)
+                    
+                    if not results:
+                        continue
+                    
+                    # 保存数据（只保存目标日期的数据）
+                    for i, res in enumerate(results):
+                        if res is None:
+                            continue
+                            
+                        date_str = dates[i]
+                        
+                        # 只保存目标日期的数据
+                        if date_str != target_date:
+                            continue
+                        
+                        try:
+                            session.execute(text("""
+                                INSERT INTO mean_frequency_resonance_indicators
+                                (code, date, market_type, macro_displacement_delta, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
+                                VALUES (:code, :date, :market_type, :delta, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
+                                ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                    macro_displacement_delta = EXCLUDED.macro_displacement_delta,
+                                    instant_deviation = EXCLUDED.instant_deviation,
+                                    rising_days_z = EXCLUDED.rising_days_z,
+                                    falling_days_f = EXCLUDED.falling_days_f,
+                                    efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
+                                    ma20_d = EXCLUDED.ma20_d,
+                                    mavol20_m = EXCLUDED.mavol20_m,
+                                    bias = EXCLUDED.bias,
+                                    created_at = EXCLUDED.created_at
+                            """), {
+                                'code': stock_code,
+                                'date': date_str,
+                                'market_type': 'HK',
+                                'delta': res['macro_displacement_delta'],
+                                'instant_deviation': res['instant_deviation'],
+                                'z': res['rising_days_z'],
+                                'f': res['falling_days_f'],
+                                'efficiency': res['efficiency_m20_minus_m'],
+                                'ma20': res['ma20_d'],
+                                'mavol20': res['mavol20_m'],
+                                'bias': res['bias'],
+                                'created_at': datetime.now()
+                            })
+                        except Exception as e:
+                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} 均值频率共振数据失败: {e}")
+                            continue
+                            
+                    session.commit()
+                    
+                except Exception as e:
+                    self.logger.error(f"计算股票 {stock_code} 均值频率共振指标失败: {e}")
+                    session.rollback()
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"批量计算港股均值频率共振指标失败: {e}")
 

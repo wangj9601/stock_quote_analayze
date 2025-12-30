@@ -78,7 +78,8 @@ class MeanFrequencyResonanceCalculator:
                     'instant_deviation': float(df['instant_deviation'].iloc[i]),
                     'efficiency_m20_minus_m': float(df['efficiency'].iloc[i]),
                     'rising_days_z': int(df['z'].iloc[i]),
-                    'falling_days_f': int(df['f'].iloc[i])
+                    'falling_days_f': int(df['f'].iloc[i]),
+                    'bias': float((df['close'].iloc[i] - df['ma20'].iloc[i]) / df['ma20'].iloc[i]) if df['ma20'].iloc[i] != 0 else 0.0
                 })
                 
         return results
