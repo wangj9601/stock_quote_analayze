@@ -10,7 +10,8 @@ from sqlalchemy import desc, asc, or_
 from datetime import datetime
 
 from backend_api.models import (
-    MAIndicators, MACDIndicators, RSIIndicators, KDJIndicators, BOLLIndicators, MAVOLIndicators, User
+    MAIndicators, MACDIndicators, RSIIndicators, KDJIndicators, BOLLIndicators, MAVOLIndicators, 
+    MeanFrequencyResonanceIndicators, User
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_admin_user
@@ -223,6 +224,40 @@ async def get_mavol_indicators(
         query = query.filter(MAVOLIndicators.date <= end_date)
         
     query = query.order_by(desc(MAVOLIndicators.date), MAVOLIndicators.code)
+    result = paginate_query(query, page, page_size)
+    
+    return {
+        "success": True,
+        "data": result["items"],
+        "total": result["total"],
+        "page": page,
+        "page_size": page_size
+    }
+
+@router.get("/pvfrs")
+async def get_pvfrs_indicators(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    code: Optional[str] = None,
+    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """查询 PVFRS 均值频率共振指标"""
+    query = db.query(MeanFrequencyResonanceIndicators)
+    
+    if code:
+        query = query.filter(MeanFrequencyResonanceIndicators.code == code)
+    if market_type:
+        query = query.filter(MeanFrequencyResonanceIndicators.market_type == market_type)
+    if start_date:
+        query = query.filter(MeanFrequencyResonanceIndicators.date >= start_date)
+    if end_date:
+        query = query.filter(MeanFrequencyResonanceIndicators.date <= end_date)
+        
+    query = query.order_by(desc(MeanFrequencyResonanceIndicators.date), MeanFrequencyResonanceIndicators.code)
     result = paginate_query(query, page, page_size)
     
     return {

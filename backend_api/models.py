@@ -553,6 +553,7 @@ class BOLLIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+
 class MAVOLIndicators(Base):
     """MAVOL成交量移动平均线指标数据表（A股和港股共用）"""
     __tablename__ = 'mavol_indicators'
@@ -566,6 +567,25 @@ class MAVOLIndicators(Base):
     mavol60 = Column(Float)  # 60日成交量移动平均
     mavol120 = Column(Float)  # 120日成交量移动平均
     mavol200 = Column(Float)  # 200日成交量移动平均
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class MeanFrequencyResonanceIndicators(Base):
+    """均值频率共振量化交易指标数据表（A股和港股共用）"""
+    __tablename__ = 'mean_frequency_resonance_indicators'
+    code = Column(String, primary_key=True)
+    date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
+    market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
+    
+    macro_displacement_delta = Column(Float)  # 宏观位移 Delta (d20 - d1)
+    instant_deviation = Column(Float)         # 即时偏离度 (d20 - d) (Close - MA20)
+    rising_days_z = Column(Integer)           # 上涨的天数 (Z)
+    falling_days_f = Column(Integer)          # 下跌的天数 (F)
+    efficiency_m20_minus_m = Column(Float)    # 进出效率指标 (m20 - m) (Vol - MAVOL20)
+    
+    ma20_d = Column(Float)                    # 移动平均线 MA20 (d)
+    mavol20_m = Column(Float)                 # 移动平均成交量 MAVOL20 (m)
+    
     created_at = Column(DateTime, default=datetime.now)
 
 

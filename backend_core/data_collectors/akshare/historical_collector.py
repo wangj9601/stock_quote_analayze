@@ -27,8 +27,11 @@ from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.ma_calculator import MACalculator
+
+
 from backend_core.utils.boll_calculator import BOLLCalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
+from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 from datetime import datetime, timedelta
 
 # 配置日志
@@ -41,6 +44,7 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
 
 class AkshareHistoricalCollector:
     """使用akshare采集历史行情数据"""
@@ -57,8 +61,145 @@ class AkshareHistoricalCollector:
         self._init_ma_table()
         self._init_boll_table()
         self._init_mavol_table()
+        self._init_mean_frequency_table()
         
     def __del__(self):
+        """析构函数，确保session被关闭"""
+        if hasattr(self, 'session'):
+            self.session.close()
+
+
+    def _init_mean_frequency_table(self):
+        """初始化均值频率共振指标表结构"""
+        try:
+            self.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS mean_frequency_resonance_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    macro_displacement_delta REAL,
+                    instant_deviation REAL,
+                    rising_days_z INTEGER,
+                    falling_days_f INTEGER,
+                    efficiency_m20_minus_m REAL,
+                    ma20_d REAL,
+                    mavol20_m REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            self.session.commit()
+            logger.debug("均值频率共振指标表初始化完成")
+        except Exception as e:
+            logger.warning(f"均值频率共振指标表初始化失败（可能已存在）: {e}")
+            self.session.rollback()
+
+    # ... (existing methods)
+
+
+
+    def _calculate_and_save_mean_frequency(self, stock_code: str, start_date: str, end_date: str):
+        """
+        计算并保存均值频率共振指标
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+        """
+        try:
+            # 查询该股票最近至少30天的收盘价和成交量数据
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            result = self.session.execute(text("""
+                SELECT date, close, volume
+                FROM historical_quotes 
+                WHERE code = :stock_code 
+                AND date >= :query_start_date 
+                AND date <= :end_date
+                AND close IS NOT NULL 
+                AND volume IS NOT NULL
+                ORDER BY date ASC
+            """), {
+                'stock_code': stock_code,
+                'query_start_date': query_start_date,
+                'end_date': end_date
+            })
+            
+            rows = result.fetchall()
+            if len(rows) < 20: 
+                logger.debug(f"股票 {stock_code} 历史数据不足20天，跳过均值频率共振计算")
+                return
+            
+            # 提取数据列表
+            dates = [row[0] for row in rows]
+            closes = [float(row[1]) for row in rows]
+            volumes = [float(row[2]) for row in rows]
+            
+            # 计算
+            calculator = MeanFrequencyResonanceCalculator()
+            results = calculator.calculate(closes, volumes)
+            
+            if not results:
+                return
+            
+            # 保存数据
+            saved_count = 0
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            for i, res in enumerate(results):
+                if res is None:
+                    continue
+                    
+                date_obj = dates[i] if isinstance(dates[i], datetime) else datetime.strptime(str(dates[i]), '%Y-%m-%d').date()
+                
+                # 只保存日期范围内的数据
+                if date_obj < start_date_obj or date_obj > end_date_obj:
+                    continue
+                
+                date_str = date_obj.strftime('%Y-%m-%d') if isinstance(date_obj, datetime) else str(date_obj)
+                
+                try:
+                    self.session.execute(text("""
+                        INSERT INTO mean_frequency_resonance_indicators
+                        (code, date, market_type, macro_displacement_delta, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, created_at)
+                        VALUES (:code, :date, :market_type, :delta, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :created_at)
+                        ON CONFLICT (code, date, market_type) DO UPDATE SET
+                            macro_displacement_delta = EXCLUDED.macro_displacement_delta,
+                            instant_deviation = EXCLUDED.instant_deviation,
+                            rising_days_z = EXCLUDED.rising_days_z,
+                            falling_days_f = EXCLUDED.falling_days_f,
+                            efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
+                            ma20_d = EXCLUDED.ma20_d,
+                            mavol20_m = EXCLUDED.mavol20_m,
+                            created_at = EXCLUDED.created_at
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'market_type': 'CN',
+                        'delta': res['macro_displacement_delta'],
+                        'instant_deviation': res['instant_deviation'],
+                        'z': res['rising_days_z'],
+                        'f': res['falling_days_f'],
+                        'efficiency': res['efficiency_m20_minus_m'],
+                        'ma20': res['ma20_d'],
+                        'mavol20': res['mavol20_m'],
+                        'created_at': datetime.now()
+                    })
+                    saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存股票 {stock_code} 日期 {date_str} 均值频率共振数据失败: {e}")
+                    continue
+            
+            if saved_count > 0:
+                self.session.commit()
+                logger.debug(f"股票 {stock_code} 均值频率共振指标计算完成，保存 {saved_count} 条数据")
+            
+        except Exception as e:
+            logger.error(f"计算股票 {stock_code} 均值频率共振指标失败: {e}")
+            self.session.rollback()
+
         """析构函数，确保session被关闭"""
         if hasattr(self, 'session'):
             self.session.close()
@@ -380,7 +521,15 @@ class AkshareHistoricalCollector:
                 except Exception as e:
                     logger.warning(f"股票 {stock_code} MAVOL指标计算失败: {e}")
             
+            # 计算并保存均值频率共振指标
+            if success_count > 0:
+                try:
+                    self._calculate_and_save_mean_frequency(stock_code, start_date, end_date)
+                except Exception as e:
+                    logger.warning(f"股票 {stock_code} 均值频率共振指标计算失败: {e}")
+            
             time.sleep(random.uniform(0.5, 1.5))
+
             
             return True
             

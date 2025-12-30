@@ -19,6 +19,7 @@ from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.boll_calculator import BOLLCalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
+from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 
 class HKHistoricalQuoteCollector(AKShareCollector):
     """港股历史行情数据采集器"""
@@ -150,6 +151,22 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     mavol60 REAL,
                     mavol120 REAL,
                     mavol200 REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (code, date, market_type)
+                )
+            '''))
+            session.execute(text('''
+                CREATE TABLE IF NOT EXISTS mean_frequency_resonance_indicators (
+                    code VARCHAR(20) NOT NULL,
+                    date VARCHAR(20) NOT NULL,
+                    market_type VARCHAR(10) NOT NULL,
+                    macro_displacement_delta REAL,
+                    instant_deviation REAL,
+                    rising_days_z INTEGER,
+                    falling_days_f INTEGER,
+                    efficiency_m20_minus_m REAL,
+                    ma20_d REAL,
+                    mavol20_m REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
@@ -474,6 +491,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     self._calculate_and_save_mavol_hk(list(affected_stocks), target_date, session)
                 except Exception as e:
                     self.logger.warning(f"港股MAVOL指标计算失败: {e}")
+                
+                try:
+                    self._calculate_and_save_mean_frequency_hk(list(affected_stocks), target_date, session)
+                except Exception as e:
+                    self.logger.warning(f"港股均值频率共振指标计算失败: {e}")
             
             # 操作日志记录
             try:

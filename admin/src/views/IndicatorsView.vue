@@ -354,6 +354,81 @@
             </div>
           </div>
         </el-tab-pane>
+
+        <!-- PVFRS 均值频率共振策略 -->
+        <el-tab-pane label="PVFRS (均值频率共振)" name="pvfrs">
+          <div class="tab-content">
+            <div class="filter-section">
+              <el-row :gutter="16" align="middle">
+                <el-col :span="6">
+                  <el-input v-model="filters.code" placeholder="股票代码" clearable @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
+                    <el-option label="A股 (CN)" value="CN" />
+                    <el-option label="港股 (HK)" value="HK" />
+                  </el-select>
+                </el-col>
+                <el-col :span="4">
+                  <el-date-picker v-model="filters.start_date" type="date" placeholder="开始日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-date-picker v-model="filters.end_date" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+              </el-row>
+            </div>
+
+            <el-table :data="tableData" v-loading="loading" stripe style="width: 100%">
+              <el-table-column prop="code" label="代码" width="100" />
+              <el-table-column prop="date" label="日期" width="120" />
+              <el-table-column prop="macro_displacement_delta" label="宏观位移Δ" width="120">
+                <template #default="scope">
+                  <span :style="{ color: scope.row.macro_displacement_delta > 0 ? '#f56c6c' : '#67c23a' }">
+                    {{ scope.row.macro_displacement_delta?.toFixed(3) || '-' }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="instant_deviation" label="即时偏离度" width="120">
+                <template #default="scope">
+                  <span :style="{ color: scope.row.instant_deviation > 0 ? '#f56c6c' : '#67c23a' }">
+                    {{ scope.row.instant_deviation?.toFixed(3) || '-' }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="rising_days_z" label="上涨天数Z" width="110">
+                <template #default="scope">{{ scope.row.rising_days_z || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="falling_days_f" label="下跌天数F" width="110">
+                <template #default="scope">{{ scope.row.falling_days_f || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="efficiency_m20_minus_m" label="进出效率" width="120">
+                <template #default="scope">
+                  <span :style="{ color: scope.row.efficiency_m20_minus_m > 0 ? '#f56c6c' : '#67c23a' }">
+                    {{ scope.row.efficiency_m20_minus_m?.toFixed(2) || '-' }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="ma20_d" label="MA20">
+                <template #default="scope">{{ scope.row.ma20_d?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="mavol20_m" label="MAVOL20">
+                <template #default="scope">{{ scope.row.mavol20_m?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+            </el-table>
+
+            <div class="pagination-section">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :total="total"
+                :page-sizes="[20, 50, 100]"
+                layout="total, sizes, prev, pager, next, jumper"
+                @current-change="handlePageChange"
+                @size-change="handleSizeChange"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>

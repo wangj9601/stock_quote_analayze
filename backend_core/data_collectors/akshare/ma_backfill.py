@@ -315,25 +315,25 @@ class MABackfillProcessor:
             for _, row in ma_df.iterrows():
                 date_str = row['date'].strftime('%Y-%m-%d') if isinstance(row['date'], pd.Timestamp) else str(row['date'])
                 
-                # 检查是否已存在
-                if skip_existing and self.check_existing_ma(stock_code, market_type, date_str):
-                    skipped_count += 1
-                    continue
-                
                 try:
+                    # 先删除已存在的数据(强制删除，兼容日期格式差异)
+                    self.session.execute(text("""
+                        DELETE FROM ma_indicators
+                        WHERE code = :code 
+                        AND market_type = :market_type
+                        AND (date = :date OR date LIKE :date_pattern)
+                    """), {
+                        'code': stock_code,
+                        'date': date_str,
+                        'date_pattern': f"{date_str}%",
+                        'market_type': market_type
+                    })
+                    
+                    # 插入新数据
                     self.session.execute(text("""
                         INSERT INTO ma_indicators
                         (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200, created_at)
                         VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200, :created_at)
-                        ON CONFLICT (code, date, market_type) DO UPDATE SET
-                            ma5 = EXCLUDED.ma5,
-                            ma10 = EXCLUDED.ma10,
-                            ma20 = EXCLUDED.ma20,
-                            ma30 = EXCLUDED.ma30,
-                            ma60 = EXCLUDED.ma60,
-                            ma120 = EXCLUDED.ma120,
-                            ma200 = EXCLUDED.ma200,
-                            created_at = EXCLUDED.created_at
                     """), {
                         'code': stock_code,
                         'date': date_str,

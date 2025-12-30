@@ -723,25 +723,22 @@ class StockAnalysisService:
 
     def _get_gemini_analysis(self, stock_code: str, historical_data: List[Dict], technical_indicators: Dict) -> str:
         """调用 Gemini 获取 AI 深度分析结果"""
+
         try:
-            # 获取 API Key
-            api_key = os.getenv("GEMINI_API_KEY")
-            print(f"Gemini API Key: {api_key}")
-            if not api_key:
-                try:
-                    from config import GEMINI_API_KEY
-                    api_key = GEMINI_API_KEY
-                except:
-                    pass
-            
-            if not api_key:
-                return "未配置 Gemini API Key，请联系管理员"
+
+            # 设置你的代理端口（请根据你代理软件的实际端口修改，常见为 7890 或 1080）
+            os.environ['HTTP_PROXY'] = 'http://127.0.0.1:9910'
+            os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:9910'
+
+            # 1. 配置 API 密钥
+            API_KEY = "AIzaSyBH1CWisGCsTgWiPsCvjbwV60wq8I-DKgQ"
+            genai.configure(api_key=API_KEY)
 
             # 配置 Gemini API，确保 Key 干净无空格
-            genai.configure(api_key=api_key.strip())
+            # genai.configure(api_key=api_key.strip())
             
             # 使用标准的 1.5-flash 模型
-            model = genai.GenerativeModel('gemini-3-pro-preview')
+            model = genai.GenerativeModel('gemini-3-flash-preview')
 
             # 准备上下文
             recent_data = historical_data[-10:] # 最近10个交易日数据

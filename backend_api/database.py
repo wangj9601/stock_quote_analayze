@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 import os
-from config import DATABASE_CONFIG
+from backend_api.config import DATABASE_CONFIG
 from fastapi import Depends
 from typing import Generator
 

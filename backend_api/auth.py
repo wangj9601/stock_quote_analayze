@@ -13,9 +13,9 @@ import hashlib
 import logging
 import bcrypt
 
-from models import User, Admin, TokenData
-from database import get_db, SessionLocal
-from config import JWT_CONFIG
+from backend_api.models import User, Admin, TokenData
+from backend_api.database import get_db, SessionLocal
+from backend_api.config import JWT_CONFIG
 
 # 配置日志
 logger = logging.getLogger(__name__)
