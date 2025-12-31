@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票指标数据</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <style>
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #333;
+        }
+
+        .stock-info {
+            font-size: 16px;
+            color: #666;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            color: #606266;
+            background: #f5f7fa;
+        }
+
+        .tab:hover {
+            color: #409eff;
+            background-color: #ecf5ff;
+        }
+
+        .tab.active {
+            color: #fff;
+            background-color: #409eff;
+            border-color: #409eff;
+        }
+
+        .content-area {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table th,
+        .data-table td {
+            border: 1px solid #ebeef5;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .data-table th {
+            background-color: #f5f7fa;
+            color: #606266;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table tr:hover {
+            background-color: #f5f7fa;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #909399;
+        }
+
+        .error {
+            text-align: center;
+            padding: 50px;
+            color: #f56c6c;
+            font-size: 18px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 30px;
+            color: #909399;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>指标数据查询</h1>
+            <div class="stock-info" id="stockInfo">加载中...</div>
+        </div>
+
+        <div id="loading" class="loading">正在加载数据...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="mainContent" style="display: none;">
+            <div class="tabs" id="tabs">
+                <div class="tab active" data-tab="ma">MA 移动平均线</div>
+                <div class="tab" data-tab="macd">MACD</div>
+                <div class="tab" data-tab="kdj">KDJ</div>
+                <div class="tab" data-tab="rsi">RSI</div>
+                <div class="tab" data-tab="boll">BOLL</div>
+                <div class="tab" data-tab="mavol">MAVOL</div>
+                <div class="tab" data-tab="pvfrs">PVFRS 共振指标</div>
+            </div>
+
+            <div class="content-area">
+                <div class="tab-content" id="maContent"></div>
+                <div class="tab-content" id="macdContent" style="display: none;"></div>
+                <div class="tab-content" id="kdjContent" style="display: none;"></div>
+                <div class="tab-content" id="rsiContent" style="display: none;"></div>
+                <div class="tab-content" id="bollContent" style="display: none;"></div>
+                <div class="tab-content" id="mavolContent" style="display: none;"></div>
+                <div class="tab-content" id="pvfrsContent" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/indicator_data.js"></script>
+</body>
+
+</html>

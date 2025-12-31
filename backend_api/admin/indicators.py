@@ -267,3 +267,166 @@ async def get_pvfrs_indicators(
         "page": page,
         "page_size": page_size
     }
+
+@router.get("/details")
+async def get_indicator_details(
+    code: str = Query(..., description="股票代码"),
+    date: str = Query(..., description="日期 YYYY-MM-DD"),
+    market_type: str = Query("CN", description="CN 或 HK"),
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """查询指定股票和日期的所有指标数据"""
+    
+    # helper to process query result to dict or None
+    def row_to_dict(row):
+        if not row:
+            return None
+        d = row.__dict__.copy()
+        if '_sa_instance_state' in d:
+            del d['_sa_instance_state']
+        return d
+
+    # Run queries
+    ma_data = db.query(MAIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+    macd_data = db.query(MACDIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+    kdj_data = db.query(KDJIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+    rsi_data = db.query(RSIIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+    boll_data = db.query(BOLLIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+    mavol_data = db.query(MAVOLIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+    pvfrs_data = db.query(MeanFrequencyResonanceIndicators).filter_by(code=code, date=date, market_type=market_type).first()
+
+    return {
+        "success": True,
+        "data": {
+            "code": code,
+            "date": date,
+            "market_type": market_type,
+            "ma": row_to_dict(ma_data),
+            "macd": row_to_dict(macd_data),
+            "kdj": row_to_dict(kdj_data),
+            "rsi": row_to_dict(rsi_data),
+            "boll": row_to_dict(boll_data),
+            "mavol": row_to_dict(mavol_data),
+            "pvfrs": row_to_dict(pvfrs_data)
+        }
+    }
+
+@router.get("/history")
+async def get_indicator_history(
+    code: str = Query(..., description="股票代码"),
+    start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    market_type: str = Query("CN", description="CN 或 HK"),
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """查询指定股票和日期范围的所有指标数据"""
+    
+    # 辅助函数：将查询结果转换为以日期为键的字典
+    def list_to_date_dict(items):
+        result = {}
+        for item in items:
+            d = item.__dict__.copy()
+            if '_sa_instance_state' in d:
+                del d['_sa_instance_state']
+            
+            # 确保日期格式一致
+            date_key = str(d.get('date'))
+            result[date_key] = d
+        return result
+
+    # 并行查询所有指标表
+    # 注意：这里假设数据量不大（单只股票一段时间），直接全部查询后在内存合并
+    
+    # 1. MA
+    ma_items = db.query(MAIndicators).filter(
+        MAIndicators.code == code,
+        MAIndicators.date >= start_date,
+        MAIndicators.date <= end_date
+    ).all()
+    ma_dict = list_to_date_dict(ma_items)
+    
+    # 2. MACD
+    macd_items = db.query(MACDIndicators).filter(
+        MACDIndicators.code == code,
+        MACDIndicators.date >= start_date,
+        MACDIndicators.date <= end_date
+    ).all()
+    macd_dict = list_to_date_dict(macd_items)
+    
+    # 3. KDJ
+    kdj_items = db.query(KDJIndicators).filter(
+        KDJIndicators.code == code,
+        KDJIndicators.date >= start_date,
+        KDJIndicators.date <= end_date
+    ).all()
+    kdj_dict = list_to_date_dict(kdj_items)
+    
+    # 4. RSI
+    rsi_items = db.query(RSIIndicators).filter(
+        RSIIndicators.code == code,
+        RSIIndicators.date >= start_date,
+        RSIIndicators.date <= end_date
+    ).all()
+    rsi_dict = list_to_date_dict(rsi_items)
+    
+    # 5. BOLL
+    boll_items = db.query(BOLLIndicators).filter(
+        BOLLIndicators.code == code,
+        BOLLIndicators.date >= start_date,
+        BOLLIndicators.date <= end_date
+    ).all()
+    boll_dict = list_to_date_dict(boll_items)
+    
+    # 6. MAVOL
+    mavol_items = db.query(MAVOLIndicators).filter(
+        MAVOLIndicators.code == code,
+        MAVOLIndicators.date >= start_date,
+        MAVOLIndicators.date <= end_date
+    ).all()
+    mavol_dict = list_to_date_dict(mavol_items)
+    
+    # 7. PVFRS
+    pvfrs_items = db.query(MeanFrequencyResonanceIndicators).filter(
+        MeanFrequencyResonanceIndicators.code == code,
+        MeanFrequencyResonanceIndicators.date >= start_date,
+        MeanFrequencyResonanceIndicators.date <= end_date
+    ).all()
+    pvfrs_dict = list_to_date_dict(pvfrs_items)
+    
+    # 收集所有涉及的日期
+    all_dates = set()
+    all_dates.update(ma_dict.keys())
+    all_dates.update(macd_dict.keys())
+    all_dates.update(kdj_dict.keys())
+    all_dates.update(rsi_dict.keys())
+    all_dates.update(boll_dict.keys())
+    all_dates.update(mavol_dict.keys())
+    all_dates.update(pvfrs_dict.keys())
+    
+    # 排序日期（降序，最近的在前）
+    sorted_dates = sorted(list(all_dates), reverse=True)
+    
+    # 构建最终列表
+    result_list = []
+    for date in sorted_dates:
+        result_list.append({
+            "code": code,
+            "date": date,
+            "market_type": market_type,
+            "ma": ma_dict.get(date),
+            "macd": macd_dict.get(date),
+            "kdj": kdj_dict.get(date),
+            "rsi": rsi_dict.get(date),
+            "boll": boll_dict.get(date),
+            "mavol": mavol_dict.get(date),
+            "pvfrs": pvfrs_dict.get(date)
+        })
+        
+    return {
+        "success": True,
+        "data": result_list,
+        "total": len(result_list)
+    }
+

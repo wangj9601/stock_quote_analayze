@@ -206,3 +206,28 @@ ALTER TABLE IF EXISTS public.rsi_indicators
     OWNER to postgres;
 
     
+-- Table: public.mean_frequency_resonance_indicators
+
+-- DROP TABLE IF EXISTS public.mean_frequency_resonance_indicators;
+
+CREATE TABLE IF NOT EXISTS public.mean_frequency_resonance_indicators
+(
+    code character varying COLLATE pg_catalog."default" NOT NULL,
+    date character varying COLLATE pg_catalog."default" NOT NULL,
+    market_type character varying COLLATE pg_catalog."default" NOT NULL,
+    macro_displacement_delta double precision,
+    instant_deviation double precision,
+    rising_days_z integer,
+    falling_days_f integer,
+    efficiency_m20_minus_m double precision,
+    ma20_d double precision,
+    mavol20_m double precision,
+    created_at timestamp without time zone,
+    bias real,
+    CONSTRAINT mean_frequency_resonance_indicators_pkey PRIMARY KEY (code, date, market_type)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.mean_frequency_resonance_indicators
+    OWNER to postgres;    

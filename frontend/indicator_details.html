@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票指标详情</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <style>
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #333;
+        }
+
+        .stock-info {
+            font-size: 16px;
+            color: #666;
+        }
+
+        .indicator-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .indicator-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            transition: transform 0.3s;
+        }
+
+        .indicator-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px dashed #f0f0f0;
+        }
+
+        .data-label {
+            color: #909399;
+            font-size: 14px;
+        }
+
+        .data-value {
+            color: #303133;
+            font-weight: 500;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #909399;
+        }
+
+        .error {
+            text-align: center;
+            padding: 50px;
+            color: #f56c6c;
+            font-size: 18px;
+        }
+
+        .no-data {
+            color: #909399;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>指标详情数据</h1>
+            <div class="stock-info" id="stockInfo">加载中...</div>
+        </div>
+
+        <div id="loading" class="loading">正在加载数据...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div class="indicator-grid" id="indicatorGrid" style="display: none;">
+            <!-- MA -->
+            <div class="indicator-card">
+                <div class="card-title">MA 移动平均线</div>
+                <div class="card-content" id="maContent"></div>
+            </div>
+
+            <!-- MACD -->
+            <div class="indicator-card">
+                <div class="card-title">MACD 指数平滑异同移动平均线</div>
+                <div class="card-content" id="macdContent"></div>
+            </div>
+
+            <!-- KDJ -->
+            <div class="indicator-card">
+                <div class="card-title">KDJ 随机指标</div>
+                <div class="card-content" id="kdjContent"></div>
+            </div>
+
+            <!-- RSI -->
+            <div class="indicator-card">
+                <div class="card-title">RSI 相对强弱指标</div>
+                <div class="card-content" id="rsiContent"></div>
+            </div>
+
+            <!-- BOLL -->
+            <div class="indicator-card">
+                <div class="card-title">BOLL 布林带</div>
+                <div class="card-content" id="bollContent"></div>
+            </div>
+
+            <!-- MAVOL -->
+            <div class="indicator-card">
+                <div class="card-title">MAVOL 成交量均线</div>
+                <div class="card-content" id="mavolContent"></div>
+            </div>
+
+            <!-- PVFRS -->
+            <div class="indicator-card" style="grid-column: 1 / -1;">
+                <div class="card-title">PVFRS 均值频率共振指标</div>
+                <div class="card-content" id="pvfrsContent"
+                    style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/indicator_details.js"></script>
+</body>
+
+</html>

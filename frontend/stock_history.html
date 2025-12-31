@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
     <link rel="stylesheet" href="css/stock.css">
     <link rel="stylesheet" href="css/stock_history.css">
 </head>
+
 <body>
     <!-- 头部导航将由JavaScript动态加载 -->
     <script src="components/header.js"></script>
@@ -37,6 +39,8 @@
                 <div class="toolbar-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
                     <button id="searchBtn">查询</button>
                     <button id="exportBtn">导出</button>
+                    <button id="showIndicatorsBtn" class="calculate-btn"
+                        style="background-color: #67c23a;">显示指标数据</button>
                     <button id="calculateFiveDayBtn" class="calculate-btn">计算5天升跌</button>
                     <button id="calculateTenDayBtn" class="calculate-btn">计算10天涨跌</button>
                     <button id="calculateThirtyDayBtn" class="calculate-btn">计算30天涨跌</button>
@@ -46,7 +50,22 @@
             <table class="history-table" id="historyTable">
                 <thead>
                     <tr>
-                        <!--th>股票代码</th--><th>股票名称</th><th>日期</th><th>开盘</th><th>收盘</th><th>涨跌额</th><th>成交额</th><th>涨跌幅</th><th>成交量</th><th>换手率</th><th>5天涨跌%</th><th>10天涨跌%</th><th>30天涨跌%</th><th>60天涨跌%</th><th>备注</th>
+                        <!--th>股票代码</th-->
+                        <th>股票名称</th>
+                        <th>日期</th>
+                        <th>开盘</th>
+                        <th>收盘</th>
+                        <th>涨跌额</th>
+                        <th>成交额</th>
+                        <th>涨跌幅</th>
+                        <th>成交量</th>
+                        <th>换手率</th>
+                        <th>5天涨跌%</th>
+                        <th>10天涨跌%</th>
+                        <th>30天涨跌%</th>
+                        <th>60天涨跌%</th>
+                        <th>指标数据</th>
+                        <th>备注</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -135,7 +154,8 @@
                 京ICP备18061239号-1
             </a>
         </div>
-    </footer>    
-   
+    </footer>
+
 </body>
+
 </html>
