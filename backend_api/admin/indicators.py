@@ -14,7 +14,7 @@ from backend_api.models import (
     MeanFrequencyResonanceIndicators, User
 )
 from backend_api.database import get_db
-from backend_api.auth import get_current_admin_user
+from backend_api.auth import get_current_admin_user, get_current_user
 
 router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
 
@@ -273,7 +273,7 @@ async def get_indicator_details(
     code: str = Query(..., description="股票代码"),
     date: str = Query(..., description="日期 YYYY-MM-DD"),
     market_type: str = Query("CN", description="CN 或 HK"),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """查询指定股票和日期的所有指标数据"""
@@ -318,7 +318,7 @@ async def get_indicator_history(
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
     market_type: str = Query("CN", description="CN 或 HK"),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """查询指定股票和日期范围的所有指标数据"""
@@ -343,7 +343,8 @@ async def get_indicator_history(
     ma_items = db.query(MAIndicators).filter(
         MAIndicators.code == code,
         MAIndicators.date >= start_date,
-        MAIndicators.date <= end_date
+        MAIndicators.date <= end_date,
+        MAIndicators.market_type == market_type
     ).all()
     ma_dict = list_to_date_dict(ma_items)
     
@@ -351,7 +352,8 @@ async def get_indicator_history(
     macd_items = db.query(MACDIndicators).filter(
         MACDIndicators.code == code,
         MACDIndicators.date >= start_date,
-        MACDIndicators.date <= end_date
+        MACDIndicators.date <= end_date,
+        MACDIndicators.market_type == market_type
     ).all()
     macd_dict = list_to_date_dict(macd_items)
     
@@ -359,7 +361,8 @@ async def get_indicator_history(
     kdj_items = db.query(KDJIndicators).filter(
         KDJIndicators.code == code,
         KDJIndicators.date >= start_date,
-        KDJIndicators.date <= end_date
+        KDJIndicators.date <= end_date,
+        KDJIndicators.market_type == market_type
     ).all()
     kdj_dict = list_to_date_dict(kdj_items)
     
@@ -367,7 +370,8 @@ async def get_indicator_history(
     rsi_items = db.query(RSIIndicators).filter(
         RSIIndicators.code == code,
         RSIIndicators.date >= start_date,
-        RSIIndicators.date <= end_date
+        RSIIndicators.date <= end_date,
+        RSIIndicators.market_type == market_type
     ).all()
     rsi_dict = list_to_date_dict(rsi_items)
     
@@ -375,7 +379,8 @@ async def get_indicator_history(
     boll_items = db.query(BOLLIndicators).filter(
         BOLLIndicators.code == code,
         BOLLIndicators.date >= start_date,
-        BOLLIndicators.date <= end_date
+        BOLLIndicators.date <= end_date,
+        BOLLIndicators.market_type == market_type
     ).all()
     boll_dict = list_to_date_dict(boll_items)
     
@@ -383,7 +388,8 @@ async def get_indicator_history(
     mavol_items = db.query(MAVOLIndicators).filter(
         MAVOLIndicators.code == code,
         MAVOLIndicators.date >= start_date,
-        MAVOLIndicators.date <= end_date
+        MAVOLIndicators.date <= end_date,
+        MAVOLIndicators.market_type == market_type
     ).all()
     mavol_dict = list_to_date_dict(mavol_items)
     
@@ -391,7 +397,8 @@ async def get_indicator_history(
     pvfrs_items = db.query(MeanFrequencyResonanceIndicators).filter(
         MeanFrequencyResonanceIndicators.code == code,
         MeanFrequencyResonanceIndicators.date >= start_date,
-        MeanFrequencyResonanceIndicators.date <= end_date
+        MeanFrequencyResonanceIndicators.date <= end_date,
+        MeanFrequencyResonanceIndicators.market_type == market_type
     ).all()
     pvfrs_dict = list_to_date_dict(pvfrs_items)
     

@@ -8,24 +8,24 @@ async function authFetch(url, options = {}) {
     if (token) {
         options.headers['Authorization'] = 'Bearer ' + token;
     }
-    
+
     const response = await fetch(url, options);
-    
+
     // 检查401错误，自动处理token失效
     if (response.status === 401) {
         console.log('Token已失效，清除本地存储并跳转到登录页');
         localStorage.removeItem('access_token');
         localStorage.removeItem('userInfo');
         localStorage.removeItem('token');
-        
+
         // 如果不在登录页面，跳转到登录页
-        if (!window.location.pathname.includes('login.html') && 
+        if (!window.location.pathname.includes('login.html') &&
             !window.location.pathname.includes('test-login.html')) {
             CommonUtils.showToast('登录已过期，请重新登录', 'error');
             window.location.href = 'login.html';
         }
     }
-    
+
     return response;
 }
 
@@ -42,9 +42,9 @@ async function smartFetch(url, options = {}) {
         '/api/admin/',
         '/api/simtrade'
     ];
-    
+
     const needsAuth = authRequiredEndpoints.some(endpoint => url.includes(endpoint));
-    
+
     if (needsAuth) {
         return await authFetch(url, options);
     } else {
@@ -64,12 +64,12 @@ const CommonUtils = {
             try {
                 const response = await authFetch(`${API_BASE_URL}/api/auth/status`);
                 const result = await response.json();
-                
+
                 if (result.success && result.logged_in) {
                     return result.user;
                 } else {
                     // 如果不在登录页面且未登录，跳转到登录页
-                    if (!window.location.pathname.includes('login.html') && 
+                    if (!window.location.pathname.includes('login.html') &&
                         !window.location.pathname.includes('test-login.html')) {
                         window.location.href = 'login.html';
                         return false;
@@ -100,14 +100,14 @@ const CommonUtils = {
                 } catch (error) {
                     console.error('登出请求失败:', error);
                 }
-                
+
                 // 清除所有本地存储
                 localStorage.removeItem('userInfo');
                 localStorage.removeItem('rememberedUsername');
                 localStorage.clear(); // 确保清除所有缓存
-                
+
                 CommonUtils.showToast('已安全退出', 'success');
-                
+
                 // 强制跳转到登录页面
                 // 使用replace而不是href，防止用户通过后退按钮返回
                 window.location.replace('login.html');
@@ -121,11 +121,11 @@ const CommonUtils = {
             // 更新导航栏用户信息
             const userStatus = document.getElementById('userStatus');
             const userMenu = document.getElementById('userMenu');
-            
+
             if (userStatus) {
                 userStatus.textContent = user.username || '已登录';
             }
-            
+
             if (userMenu) {
                 userMenu.style.cursor = 'pointer';
             }
@@ -135,32 +135,39 @@ const CommonUtils = {
             userNameElements.forEach(el => {
                 el.textContent = user.username;
             });
-            
+
             console.log('用户显示更新完成:', user.username);
         },
 
         // 初始化认证
         async init() {
             // 等待header组件加载完成
-            await new Promise(resolve => {
-                const checkHeader = () => {
-                    if (document.getElementById('userMenu')) {
-                        resolve();
-                    } else {
-                        setTimeout(checkHeader, 50);
-                    }
-                };
-                checkHeader();
-            });
-            
+            // 提示：并非所有页面都有header（如指标数据弹窗），如果没引用header.js则不等待
+            const hasHeader = Array.from(document.querySelectorAll('script')).some(s => s.src.includes('header.js'));
+
+            if (hasHeader) {
+                await new Promise((resolve) => {
+                    const maxWait = 2000; // 最多等2秒
+                    const start = Date.now();
+                    const checkHeader = () => {
+                        if (document.getElementById('userMenu') || (Date.now() - start > maxWait)) {
+                            resolve();
+                        } else {
+                            setTimeout(checkHeader, 50);
+                        }
+                    };
+                    checkHeader();
+                });
+            }
+
             // 检查登录状态
             const user = await this.checkLogin();
-            
+
             // 更新用户显示
             if (user) {
                 this.updateUserDisplay(user);
             }
-            
+
             // 绑定登出事件
             setTimeout(() => {
                 document.querySelectorAll('.logout-btn').forEach(btn => {
@@ -178,17 +185,17 @@ const CommonUtils = {
         modal: null,
         input: null,
         results: null,
-        
+
         init() {
             this.modal = document.getElementById('searchModal');
             this.input = document.querySelector('.search-input');
             this.results = document.querySelector('.search-results');
-            
+
             // 如果页面没有搜索功能，跳过
             if (!this.modal || !this.input || !this.results) {
                 return;
             }
-            
+
             // 绑定事件
             const searchBtn = document.querySelector('.search-btn');
             if (searchBtn) {
@@ -196,26 +203,26 @@ const CommonUtils = {
                     this.show();
                 });
             }
-            
+
             const closeBtn = document.querySelector('.close-search');
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
                     this.hide();
                 });
             }
-            
+
             // 点击背景关闭
             this.modal.addEventListener('click', (e) => {
                 if (e.target === this.modal) {
                     this.hide();
                 }
             });
-            
+
             // 搜索输入
             this.input.addEventListener('input', (e) => {
                 this.handleSearch(e.target.value);
             });
-            
+
             // ESC键关闭
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && this.modal.classList.contains('show')) {
@@ -223,14 +230,14 @@ const CommonUtils = {
                 }
             });
         },
-        
+
         show() {
             if (this.modal) {
                 this.modal.classList.add('show');
                 this.input.focus();
             }
         },
-        
+
         hide() {
             if (this.modal) {
                 this.modal.classList.remove('show');
@@ -238,13 +245,13 @@ const CommonUtils = {
                 this.results.innerHTML = '';
             }
         },
-        
+
         handleSearch(query) {
             if (!query.trim()) {
                 this.results.innerHTML = '';
                 return;
             }
-            
+
             // 模拟搜索结果
             const mockResults = [
                 { code: '000001', name: '平安银行' },
@@ -254,21 +261,21 @@ const CommonUtils = {
                 { code: '000858', name: '五粮液' },
                 { code: '002415', name: '海康威视' },
             ];
-            
-            const filtered = mockResults.filter(stock => 
-                stock.code.includes(query) || 
+
+            const filtered = mockResults.filter(stock =>
+                stock.code.includes(query) ||
                 stock.name.includes(query)
             );
-            
+
             this.renderResults(filtered);
         },
-        
+
         renderResults(results) {
             if (results.length === 0) {
                 this.results.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">未找到相关股票</div>';
                 return;
             }
-            
+
             this.results.innerHTML = results.map(stock => `
                 <div class="search-item" onclick="CommonUtils.search.selectStock('${stock.code}')">
                     <span class="code">${stock.code}</span>
@@ -276,13 +283,13 @@ const CommonUtils = {
                 </div>
             `).join('');
         },
-        
+
         selectStock(code) {
             // 跳转到个股详情页
             window.location.href = `stock.html?code=${code}`;
         }
     },
-    
+
     // 数字格式化
     formatNumber(num) {
         if (Math.abs(num) >= 1e8) {
@@ -292,26 +299,26 @@ const CommonUtils = {
         }
         return num.toString();
     },
-    
+
     // 价格格式化
     formatPrice(price) {
         return parseFloat(price).toFixed(2);
     },
-    
+
     // 涨跌幅格式化
     formatChange(change, percent) {
         const changeStr = change >= 0 ? `+${change.toFixed(2)}` : change.toFixed(2);
         const percentStr = percent >= 0 ? `+${percent.toFixed(2)}%` : `${percent.toFixed(2)}%`;
         return `${changeStr} (${percentStr})`;
     },
-    
+
     // 获取涨跌样式类
     getChangeClass(value) {
         if (value > 0) return 'positive';
         if (value < 0) return 'negative';
         return '';
     },
-    
+
     // 模拟数据更新
     updateData() {
         // 模拟实时数据更新
@@ -325,31 +332,31 @@ const CommonUtils = {
             }
         });
     },
-    
+
     updatePrice(element) {
         const currentPrice = parseFloat(element.textContent);
         const change = (Math.random() - 0.5) * 0.1;
         const newPrice = Math.max(0.01, currentPrice + change);
         element.textContent = this.formatPrice(newPrice);
     },
-    
+
     updateIndex(element) {
         const currentValue = parseFloat(element.textContent.replace(',', ''));
         const change = (Math.random() - 0.5) * 10;
         const newValue = Math.max(1, currentValue + change);
         element.textContent = newValue.toLocaleString('zh-CN', { minimumFractionDigits: 2 });
     },
-    
+
     // 显示加载状态
     showLoading(element) {
         element.innerHTML = '<span class="loading"></span>';
     },
-    
+
     // 隐藏加载状态
     hideLoading(element, content) {
         element.innerHTML = content;
     },
-    
+
     // Toast提示
     showToast(message, type = 'info') {
         const toast = document.createElement('div');
@@ -367,9 +374,9 @@ const CommonUtils = {
             animation: slideIn 0.3s ease;
         `;
         toast.textContent = message;
-        
+
         document.body.appendChild(toast);
-        
+
         setTimeout(() => {
             toast.style.animation = 'slideOut 0.3s ease';
             setTimeout(() => {
@@ -377,20 +384,20 @@ const CommonUtils = {
             }, 300);
         }, 3000);
     },
-    
+
     // 初始化
     init() {
         // 初始化认证
         this.auth.init();
-        
+
         // 初始化搜索
         this.search.init();
-        
+
         // 定期更新数据
         // setInterval(() => {
         //     this.updateData();
         // }, 5000);
-        
+
         // 添加动画样式
         if (!document.querySelector('#common-animations')) {
             const style = document.createElement('style');
@@ -487,10 +494,10 @@ const CommonUtils = {
             document.head.appendChild(style);
         }
     },
-    
+
     // 按钮功能认证装饰器
-    requireAuth: function(func) {
-        return function(...args) {
+    requireAuth: function (func) {
+        return function (...args) {
             const userInfo = CommonUtils.auth.getUserInfo();
             if (!userInfo || !userInfo.id) {
                 CommonUtils.showToast('请先登录后再使用此功能', 'warning');
@@ -501,9 +508,9 @@ const CommonUtils = {
             return func.apply(this, args);
         };
     },
-    
+
     // 检查登录状态并处理失效
-    checkLoginAndHandleExpiry: function() {
+    checkLoginAndHandleExpiry: function () {
         const userInfo = CommonUtils.auth.getUserInfo();
         if (!userInfo || !userInfo.id) {
             CommonUtils.showToast('请先登录后再使用此功能', 'warning');
@@ -512,13 +519,13 @@ const CommonUtils = {
         }
         return true;
     },
-    
+
     // 异步检查登录状态并处理失效
-    checkLoginAndHandleExpiryAsync: async function() {
+    checkLoginAndHandleExpiryAsync: async function () {
         try {
             const response = await authFetch(`${API_BASE_URL}/api/auth/status`);
             const result = await response.json();
-            
+
             if (result.success && result.logged_in) {
                 return result.user;
             } else {
@@ -532,34 +539,34 @@ const CommonUtils = {
             return null;
         }
     },
-    
+
     // 测试登录提示后自动跳转（用于调试）
-    testLoginPromptRedirect: function() {
+    testLoginPromptRedirect: function () {
         console.log('测试登录提示后自动跳转...');
-        
+
         // 清除本地存储模拟登录失效
         localStorage.removeItem('access_token');
         localStorage.removeItem('userInfo');
         localStorage.removeItem('token');
-        
+
         // 测试登录检查（应该显示提示并跳转）
         const result = CommonUtils.checkLoginAndHandleExpiry();
         console.log('登录检查结果:', result);
-        
+
         // 注意：这个测试会实际跳转到登录页面
         return result;
     },
-    
+
     // 股票搜索工具函数（优先使用localStorage缓存）
     stockSearch: {
         // 搜索股票（优先使用缓存）
-        search: async function(keyword, limit = 20) {
+        search: async function (keyword, limit = 20) {
             if (!keyword || !keyword.trim()) {
                 return [];
             }
-            
+
             const trimmedKeyword = keyword.trim().toLowerCase();
-            
+
             // 优先使用localStorage缓存
             const cached = localStorage.getItem('stockBasicInfo');
             if (cached) {
@@ -570,7 +577,7 @@ const CommonUtils = {
                         const name = (stock.name || '').toLowerCase();
                         return code.includes(trimmedKeyword) || name.includes(trimmedKeyword);
                     }).slice(0, limit);
-                    
+
                     console.log(`从本地缓存搜索到 ${results.length} 条结果`);
                     return results;
                 } catch (error) {
@@ -578,19 +585,19 @@ const CommonUtils = {
                     // 继续使用API搜索
                 }
             }
-            
+
             // 降级：调用API搜索
             try {
-                const API_BASE_URL = (typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL) 
-                    ? window.API_BASE_URL 
-                    : (typeof Config !== 'undefined' && Config.getApiBaseUrl) 
-                        ? Config.getApiBaseUrl() 
+                const API_BASE_URL = (typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL)
+                    ? window.API_BASE_URL
+                    : (typeof Config !== 'undefined' && Config.getApiBaseUrl)
+                        ? Config.getApiBaseUrl()
                         : 'http://192.168.31.237:5000';
-                
+
                 const url = `${API_BASE_URL}/api/stock/list?query=${encodeURIComponent(keyword)}&limit=${limit}`;
                 const response = await fetch(url);
                 const data = await response.json();
-                
+
                 if (data.success && data.data) {
                     console.log(`从API搜索到 ${data.data.length} 条结果`);
                     return data.data;
@@ -598,12 +605,12 @@ const CommonUtils = {
             } catch (error) {
                 console.error('API搜索失败:', error);
             }
-            
+
             return [];
         },
-        
+
         // 获取所有股票信息（从缓存）
-        getAllStocks: function() {
+        getAllStocks: function () {
             const cached = localStorage.getItem('stockBasicInfo');
             if (cached) {
                 try {
@@ -614,9 +621,9 @@ const CommonUtils = {
             }
             return [];
         },
-        
+
         // 检查是否有缓存
-        hasCache: function() {
+        hasCache: function () {
             return !!localStorage.getItem('stockBasicInfo');
         }
     }

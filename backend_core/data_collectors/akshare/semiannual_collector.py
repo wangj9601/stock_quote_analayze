@@ -76,7 +76,16 @@ class SemiAnnualDataGenerator:
                 return True
                 
             df = pd.DataFrame(rows, columns=['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'name'])
-            df['date'] = pd.to_datetime(df['date'])
+            # 处理日期格式：支持 YYYY-MM-DD 和 YYYYMMDD 格式
+            def normalize_date(date_val):
+                if isinstance(date_val, str):
+                    # 如果是 YYYYMMDD 格式（8位数字），转换为 YYYY-MM-DD
+                    if len(date_val) == 8 and date_val.isdigit():
+                        return f"{date_val[:4]}-{date_val[4:6]}-{date_val[6:8]}"
+                return date_val
+            df['date'] = df['date'].apply(normalize_date)
+            df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
+            df = df.dropna(subset=['date'])  # 删除无法解析的日期行
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             

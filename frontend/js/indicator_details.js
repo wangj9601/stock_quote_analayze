@@ -1,5 +1,5 @@
 
-const API_BASE_URL = Config.getApiBaseUrl();
+//const API_BASE_URL = Config.getApiBaseUrl();
 
 document.addEventListener('DOMContentLoaded', () => {
     // 获取URL参数

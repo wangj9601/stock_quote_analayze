@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db
 from models import HistoricalQuotes, StockRealtimeQuote, HistoricalQuotesHK, StockRealtimeQuoteHK, StockBasicInfoHK, StockBasicInfo
+import signal
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -722,51 +725,63 @@ class StockAnalysisService:
             return len(stock_code) == 5
 
     def _get_gemini_analysis(self, stock_code: str, historical_data: List[Dict], technical_indicators: Dict) -> str:
-        """调用 Gemini 获取 AI 深度分析结果"""
+        """调用 Gemini 获取 AI 深度分析结果（带超时保护）"""
+        
+        def _call_gemini():
+            """内部函数，用于在线程中执行 Gemini 调用"""
+            try:
+                # 设置你的代理端口（请根据你代理软件的实际端口修改，常见为 7890 或 1080）
+                os.environ['HTTP_PROXY'] = 'http://127.0.0.1:9910'
+                os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:9910'
 
+                # 1. 配置 API 密钥
+                API_KEY = "AIzaSyBH1CWisGCsTgWiPsCvjbwV60wq8I-DKgQ"
+                genai.configure(api_key=API_KEY)
+                
+                # 使用标准的 1.5-flash 模型
+                model = genai.GenerativeModel('gemini-3-flash-preview')
+
+                # 准备上下文
+                recent_data = historical_data[-10:] # 最近10个交易日数据
+                
+                prompt = f"""
+                你是一位专业的资深股票分析师。请根据以下提供的股票数据和技术指标，为股票代码 {stock_code} 提供一份简洁而深刻的市场见解。
+                
+                最近价格数据:
+                {recent_data}
+                
+                主要技术指标:
+                {technical_indicators}
+                
+                请从以下三个维度进行分析:
+                1. 趋势判断: 当前处于什么趋势？转折信号是否出现？
+                2. 风险提示: 当前最核心的操作风险是什么？
+                3. 具体建议: 给投资者的核心操作准则（不超过3条）。
+                
+                输出要求: 直接给出重点，格式清晰，不要使用模板式的开场白，保持专业且易于理解。
+                """
+
+                # 调用模型生成内容
+                response = model.generate_content(prompt)
+                
+                if response and hasattr(response, 'text'):
+                    return response.text
+                return "AI 分析未能生成有效内容"
+                
+            except Exception as e:
+                logger.error(f"Gemini 分析异常: {str(e)}")
+                raise  # 重新抛出异常以便外层捕获
+        
+        # 使用线程池执行器添加超时保护
         try:
-
-            # 设置你的代理端口（请根据你代理软件的实际端口修改，常见为 7890 或 1080）
-            os.environ['HTTP_PROXY'] = 'http://127.0.0.1:9910'
-            os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:9910'
-
-            # 1. 配置 API 密钥
-            API_KEY = "AIzaSyBH1CWisGCsTgWiPsCvjbwV60wq8I-DKgQ"
-            genai.configure(api_key=API_KEY)
-
-            # 配置 Gemini API，确保 Key 干净无空格
-            # genai.configure(api_key=api_key.strip())
-            
-            # 使用标准的 1.5-flash 模型
-            model = genai.GenerativeModel('gemini-3-flash-preview')
-
-            # 准备上下文
-            recent_data = historical_data[-10:] # 最近10个交易日数据
-            
-            prompt = f"""
-            你是一位专业的资深股票分析师。请根据以下提供的股票数据和技术指标，为股票代码 {stock_code} 提供一份简洁而深刻的市场见解。
-            
-            最近价格数据:
-            {recent_data}
-            
-            主要技术指标:
-            {technical_indicators}
-            
-            请从以下三个维度进行分析:
-            1. 趋势判断: 当前处于什么趋势？转折信号是否出现？
-            2. 风险提示: 当前最核心的操作风险是什么？
-            3. 具体建议: 给投资者的核心操作准则（不超过3条）。
-            
-            输出要求: 直接给出重点，格式清晰，不要使用模板式的开场白，保持专业且易于理解。
-            """
-
-            # 调用模型生成内容
-            response = model.generate_content(prompt)
-            
-            if response and hasattr(response, 'text'):
-                return response.text
-            return "AI 分析未能生成有效内容"
-            
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_call_gemini)
+                # 设置10秒超时
+                result = future.result(timeout=10)
+                return result
+        except FutureTimeoutError:
+            logger.warning(f"Gemini API 调用超时（10秒），跳过AI分析")
+            return "AI 分析服务超时，请稍后重试"
         except Exception as e:
             logger.error(f"Gemini 分析异常: {str(e)}")
             return f"AI 分析服务暂不可用: {str(e)}"
@@ -826,8 +841,12 @@ class StockAnalysisService:
             # 关键价位
             key_levels = KeyLevels.calculate_key_levels(historical_data, current_price)
             
-            # AI 深度分析 (Gemini)
-            ai_insight = self._get_gemini_analysis(stock_code, historical_data, technical_indicators)
+            # AI 深度分析 (Gemini) - 使用超时保护，失败不影响其他结果
+            try:
+                ai_insight = self._get_gemini_analysis(stock_code, historical_data, technical_indicators)
+            except Exception as e:
+                logger.warning(f"AI分析失败，使用默认值: {str(e)}")
+                ai_insight = "AI 分析服务暂不可用"
             
             return {
                 "success": True,

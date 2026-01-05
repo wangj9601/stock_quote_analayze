@@ -1,5 +1,5 @@
 
-const API_BASE_URL = Config.getApiBaseUrl();
+//const API_BASE_URL = Config.getApiBaseUrl();
 
 let globalData = [];
 
