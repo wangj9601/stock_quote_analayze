@@ -136,7 +136,16 @@ class HistoricalQuoteCollector(TushareCollector):
     def extract_code_from_ts_code(self, ts_code: str) -> str:
         return ts_code.split(".")[0] if ts_code else ""
     
-    def _calculate_and_save_macd_for_date(self, session, target_date: str) -> dict:
+    def _get_watchlist_codes(self, session) -> set:
+        """获取所有用户的自选股代码"""
+        try:
+            result = session.execute(text("SELECT DISTINCT stock_code FROM watchlist"))
+            return {str(row[0]) for row in result.fetchall()}
+        except Exception as e:
+            self.logger.error(f"获取自选股列表失败: {e}")
+            return set()
+
+    def _calculate_and_save_macd_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
         """
         计算并保存指定日期的MACD指标
         
@@ -159,6 +168,11 @@ class HistoricalQuoteCollector(TushareCollector):
             
             stock_codes = [row[0] for row in result.fetchall()]
             
+            # 如果提供了自选股列表，则只计算自选股
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+                self.logger.info(f"限制为 {len(stock_codes)} 只自选股计算MACD")
+
             if not stock_codes:
                 self.logger.warning(f"日期 {target_date} 没有股票数据")
                 return {
@@ -294,7 +308,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 'details': [str(e)]
             }
     
-    def _calculate_and_save_ma_for_date(self, session, target_date: str) -> dict:
+    def _calculate_and_save_ma_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
         """
         计算并保存指定日期的MA指标
         
@@ -315,6 +329,11 @@ class HistoricalQuoteCollector(TushareCollector):
             
             stock_codes = [row[0] for row in result.fetchall()]
             
+            # 如果提供了自选股列表，则只计算自选股
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+                self.logger.info(f"限制为 {len(stock_codes)} 只自选股计算MA")
+
             if not stock_codes:
                 self.logger.warning(f"日期 {target_date} 没有股票数据")
                 return {
@@ -457,7 +476,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 'details': [str(e)]
             }
     
-    def _calculate_and_save_kdj_for_date(self, session, target_date: str) -> dict:
+    def _calculate_and_save_kdj_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
         """
         计算并保存指定日期的KDJ指标
         
@@ -478,6 +497,11 @@ class HistoricalQuoteCollector(TushareCollector):
             
             stock_codes = [row[0] for row in result.fetchall()]
             
+            # 如果提供了自选股列表，则只计算自选股
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+                self.logger.info(f"限制为 {len(stock_codes)} 只自选股计算KDJ")
+
             if not stock_codes:
                 self.logger.warning(f"日期 {target_date} 没有股票数据")
                 return {
@@ -616,7 +640,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 'details': [str(e)]
             }
     
-    def _calculate_and_save_rsi_for_date(self, session, target_date: str) -> dict:
+    def _calculate_and_save_rsi_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
         """
         计算并保存指定日期的RSI指标
         
@@ -637,6 +661,11 @@ class HistoricalQuoteCollector(TushareCollector):
             
             stock_codes = [row[0] for row in result.fetchall()]
             
+            # 如果提供了自选股列表，则只计算自选股
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+                self.logger.info(f"限制为 {len(stock_codes)} 只自选股计算RSI")
+
             if not stock_codes:
                 self.logger.warning(f"日期 {target_date} 没有股票数据")
                 return {
@@ -1037,11 +1066,16 @@ class HistoricalQuoteCollector(TushareCollector):
                     except Exception as log_error:
                         self.logger.error(f"记录30日涨跌幅计算失败日志时出错: {log_error}")
                 
-                # 30日涨跌幅计算完成后，再计算MACD指标
+                # 30日涨跌幅计算完成后，再计算MACD等指标（仅针对自选股）
                 try:
-                    self.logger.info("开始自动计算MACD指标...")
                     target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    macd_result = self._calculate_and_save_macd_for_date(session, target_date)
+                    
+                    # 获取自选股列表
+                    watchlist_codes = self._get_watchlist_codes(session)
+                    self.logger.info(f"获取到 {len(watchlist_codes)} 只自选股")
+
+                    self.logger.info("开始自动计算MACD指标...")
+                    macd_result = self._calculate_and_save_macd_for_date(session, target_date, watchlist_codes=watchlist_codes)
                     
                     self.logger.info(
                         "MACD指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
@@ -1089,7 +1123,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 try:
                     self.logger.info("开始自动计算MA指标...")
                     target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    ma_result = self._calculate_and_save_ma_for_date(session, target_date)
+                    ma_result = self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=watchlist_codes)
                     
                     self.logger.info(
                         "MA指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
@@ -1137,7 +1171,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 try:
                     self.logger.info("开始自动计算KDJ指标...")
                     target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    kdj_result = self._calculate_and_save_kdj_for_date(session, target_date)
+                    kdj_result = self._calculate_and_save_kdj_for_date(session, target_date, watchlist_codes=watchlist_codes)
                     
                     self.logger.info(
                         "KDJ指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
@@ -1185,7 +1219,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 try:
                     self.logger.info("开始自动计算RSI指标...")
                     target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    rsi_result = self._calculate_and_save_rsi_for_date(session, target_date)
+                    rsi_result = self._calculate_and_save_rsi_for_date(session, target_date, watchlist_codes=watchlist_codes)
                     
                     self.logger.info(
                         "RSI指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",

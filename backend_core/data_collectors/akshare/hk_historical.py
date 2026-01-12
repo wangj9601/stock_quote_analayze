@@ -194,6 +194,15 @@ class HKHistoricalQuoteCollector(AKShareCollector):
         """
         return None if pd.isna(val) else float(val)
     
+    def _get_watchlist_codes(self, session) -> set:
+        """获取所有用户的自选股代码"""
+        try:
+            result = session.execute(text("SELECT DISTINCT stock_code FROM watchlist"))
+            return {str(row[0]) for row in result.fetchall()}
+        except Exception as e:
+            self.logger.error(f"获取自选股列表失败: {e}")
+            return set()
+    
     def collect_historical_quotes(self, date_str: str) -> bool:
         """
         采集指定日期的港股历史行情数据（从实时行情表读取并同步到历史行情表）
@@ -461,42 +470,51 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             session.commit()
             self.logger.info(f"{target_date} 共有 {affected} 条港股实时数据同步到了历史行情表")
             
-            # 计算并保存MACD指标（对已处理的股票）
+            # 计算并保存各项指标（仅对自选股中的股票）
             if affected_stocks:
-                try:
-                    self._calculate_and_save_macd_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股MACD指标计算失败: {e}")
-            
-                try:
-                    self._calculate_and_save_kdj_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股KDJ指标计算失败: {e}")
-
-                try:
-                    self._calculate_and_save_rsi_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股RSI指标计算失败: {e}")
-
-                try:
-                    self._calculate_and_save_ma_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股MA指标计算失败: {e}")
-
-                try:
-                    self._calculate_and_save_boll_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股BOLL指标计算失败: {e}")
+                # 获取自选股列表
+                watchlist_codes = self._get_watchlist_codes(session)
+                target_stocks = [s for s in affected_stocks if s in watchlist_codes]
                 
-                try:
-                    self._calculate_and_save_mavol_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股MAVOL指标计算失败: {e}")
+                if not target_stocks:
+                    self.logger.info("同步完成，但没有自选股需要计算指标")
+                else:
+                    self.logger.info(f"开始为 {len(target_stocks)} 只自选股计算指标...")
+                    
+                    try:
+                        self._calculate_and_save_macd_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股MACD指标计算失败: {e}")
                 
-                try:
-                    self._calculate_and_save_mean_frequency_hk(list(affected_stocks), target_date, session)
-                except Exception as e:
-                    self.logger.warning(f"港股均值频率共振指标计算失败: {e}")
+                    try:
+                        self._calculate_and_save_kdj_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股KDJ指标计算失败: {e}")
+
+                    try:
+                        self._calculate_and_save_rsi_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股RSI指标计算失败: {e}")
+
+                    try:
+                        self._calculate_and_save_ma_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股MA指标计算失败: {e}")
+
+                    try:
+                        self._calculate_and_save_boll_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股BOLL指标计算失败: {e}")
+                    
+                    try:
+                        self._calculate_and_save_mavol_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股MAVOL指标计算失败: {e}")
+                    
+                    try:
+                        self._calculate_and_save_mean_frequency_hk(target_stocks, target_date, session)
+                    except Exception as e:
+                        self.logger.warning(f"港股均值频率共振指标计算失败: {e}")
             
             # 操作日志记录
             try:

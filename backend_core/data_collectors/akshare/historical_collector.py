@@ -318,6 +318,16 @@ class AkshareHistoricalCollector:
             logger.error(f"获取股票列表失败: {e}")
             return []
 
+    def _get_watchlist_codes(self) -> set:
+        """获取所有用户的自选股代码"""
+        try:
+            result = self.session.execute(text("SELECT DISTINCT stock_code FROM watchlist"))
+            # 确保代码是字符串格式
+            return {str(row[0]) for row in result.fetchall()}
+        except Exception as e:
+            logger.error(f"获取自选股列表失败: {e}")
+            return set()
+
     def _init_mavol_table(self):
         """初始化MAVOL指标表结构"""
         try:
@@ -376,7 +386,7 @@ class AkshareHistoricalCollector:
             logger.error(f"检查股票 {stock_code} 已存在数据失败: {e}")
             return []
     
-    def collect_single_stock_data(self, stock_code: str, start_date: str, end_date: str) -> bool:
+    def collect_single_stock_data(self, stock_code: str, start_date: str, end_date: str, watchlist_codes: Optional[set] = None) -> bool:
         """
         采集单只股票的历史数据
         
@@ -498,6 +508,20 @@ class AkshareHistoricalCollector:
             
             logger.info(f"股票 {stock_code} 处理完成: 新增 {success_count} 条，跳过 {skip_count} 条")
             
+            # 检查是否为自选股，只有自选股才计算指标
+            is_watchlist = False
+            if watchlist_codes is not None:
+                is_watchlist = stock_code in watchlist_codes
+            else:
+                # 如果没有传入，则实时查询一次（虽然效率较低，但保证正确性）
+                temp_watchlist = self._get_watchlist_codes()
+                is_watchlist = stock_code in temp_watchlist
+            
+            if not is_watchlist:
+                logger.info(f"股票 {stock_code} 非自选股，跳过指标计算")
+                time.sleep(random.uniform(0.1, 0.3))
+                return True
+
             # 计算并保存MACD指标（仅对新增的数据）
             if success_count > 0:
                 try:
@@ -609,12 +633,16 @@ class AkshareHistoricalCollector:
             self.failed_count = 0
             self.failed_stocks = []
             
+            # 获取自选股列表
+            watchlist_codes = self._get_watchlist_codes()
+            logger.info(f"获取到 {len(watchlist_codes)} 只自选股")
+
             # 批量采集
             success_count = 0
             for i, stock in enumerate(stocks, 1):
                 logger.info(f"进度: {i}/{len(stocks)} - 采集股票 {stock['code']} ({stock['name']})")
                 
-                if self.collect_single_stock_data(stock['code'], start_date, end_date):
+                if self.collect_single_stock_data(stock['code'], start_date, end_date, watchlist_codes=watchlist_codes):
                     success_count += 1
                 
                 # 每处理10只股票输出一次进度

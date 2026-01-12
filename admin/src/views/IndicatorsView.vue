@@ -1,17 +1,18 @@
 <template>
   <div class="indicators-view">
-    <div class="page-header">
-      <h1>指标数据查询</h1>
-      <div class="header-actions">
-        <el-button @click="refreshData" :loading="loading">
-          <el-icon><Refresh /></el-icon>
-          刷新数据
-        </el-button>
-      </div>
-    </div>
-
     <el-card class="query-section">
-      <el-tabs v-model="activeIndicator" @tab-change="handleTabChange">
+      <el-tabs v-model="activeMainTab" @tab-change="handleMainTabChange">
+        <!-- 指标数据查询 -->
+        <el-tab-pane label="指标数据查询" name="query">
+          <div class="tab-header">
+            <div class="header-actions">
+              <el-button @click="refreshData" :loading="loading">
+                <el-icon><Refresh /></el-icon>
+                刷新数据
+              </el-button>
+            </div>
+          </div>
+          <el-tabs v-model="activeIndicator" @tab-change="handleTabChange">
         <!-- MA 移动平均线 -->
         <el-tab-pane label="MA (移动平均线)" name="ma">
           <div class="tab-content">
@@ -437,28 +438,131 @@
           </div>
         </el-tab-pane>
       </el-tabs>
+        </el-tab-pane>
+
+        <!-- 指标数据生成 -->
+        <el-tab-pane label="指标数据生成" name="generate">
+          <div class="tab-content">
+            <div class="generation-section">
+              <el-row :gutter="16" class="mb-4">
+                <el-col :span="8">
+                  <el-input v-model="generationForm.code" placeholder="请输入股票代码" clearable>
+                    <template #prepend>股票代码</template>
+                  </el-input>
+                </el-col>
+                <el-col :span="8">
+                  <el-select v-model="generationForm.market_type" placeholder="选择市场类型" style="width: 100%">
+                    <el-option label="A股 (CN)" value="CN" />
+                    <el-option label="港股 (HK)" value="HK" />
+                  </el-select>
+                </el-col>
+                <el-col :span="8">
+                  <el-button type="primary" @click="generateIndicators" :loading="generating" :disabled="!canGenerate">
+                    <el-icon><Setting /></el-icon>
+                    生成指标数据
+                  </el-button>
+                </el-col>
+              </el-row>
+
+              <el-divider content-position="left">选择要生成的指标</el-divider>
+              
+              <el-row :gutter="16">
+                <el-col :span="24">
+                  <el-checkbox-group v-model="generationForm.indicators">
+                    <el-row :gutter="16">
+                      <el-col :span="6">
+                        <el-checkbox label="ma" border>MA (移动平均线)</el-checkbox>
+                      </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="mavol" border>MAVOL (成交量移动平均)</el-checkbox>
+                      </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="macd" border>MACD</el-checkbox>
+                      </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="kdj" border>KDJ</el-checkbox>
+                      </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="rsi" border>RSI</el-checkbox>
+                      </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="boll" border>BOLL (布林带)</el-checkbox>
+                      </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="pvfrs" border>PVFRS</el-checkbox>
+                      </el-col>
+                    </el-row>
+                  </el-checkbox-group>
+                </el-col>
+              </el-row>
+
+              <el-divider content-position="left">生成结果</el-divider>
+              
+              <div v-if="generationResult" class="result-section">
+                <el-alert
+                  :title="generationResult.success ? '生成成功' : '生成失败'"
+                  :type="generationResult.success ? 'success' : 'error'"
+                  :description="generationResult.message"
+                  show-icon
+                  :closable="false"
+                />
+                
+                <div v-if="generationResult.details" class="mt-4">
+                  <el-descriptions title="生成详情" border>
+                    <el-descriptions-item 
+                      v-for="(value, key) in generationResult.details" 
+                      :key="key"
+                      :label="getIndicatorLabel(key)"
+                    >
+                      <el-tag :type="value.success ? 'success' : 'danger'">
+                        {{ value.success ? '成功' : '失败' }}: {{ value.message || value.count || '-' }}
+                      </el-tag>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { apiService } from '@/services/api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
+const generating = ref(false)
+const activeMainTab = ref('query')
 const activeIndicator = ref('ma')
 const tableData = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const generationResult = ref(null)
 
 const filters = reactive({
   code: '',
   market_type: '',
   start_date: '',
   end_date: ''
+})
+
+const generationForm = reactive({
+  code: '',
+  market_type: '',
+  indicators: []
+})
+
+const canGenerate = computed(() => {
+  return generationForm.code && 
+         generationForm.market_type && 
+         generationForm.indicators.length > 0 &&
+         !generating.value
 })
 
 const fetchData = async () => {
@@ -506,7 +610,77 @@ const handleSizeChange = (size: number) => {
 }
 
 const refreshData = () => {
-  fetchData()
+  if (activeMainTab.value === 'query') {
+    fetchData()
+  }
+}
+
+const handleMainTabChange = () => {
+  generationResult.value = null
+}
+
+const getIndicatorLabel = (key: string) => {
+  const labels = {
+    ma: 'MA (移动平均线)',
+    mavol: 'MAVOL (成交量移动平均)',
+    macd: 'MACD',
+    kdj: 'KDJ',
+    rsi: 'RSI',
+    boll: 'BOLL (布林带)',
+    pvfrs: 'PVFRS'
+  }
+  return labels[key] || key
+}
+
+const generateIndicators = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要为股票 ${generationForm.code}(${generationForm.market_type === 'CN' ? 'A股' : '港股'}) 生成选中的指标数据吗？`,
+      '确认生成',
+      {
+        confirmButtonText: '确定生成',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  generating.value = true
+  generationResult.value = null
+  
+  try {
+    const response: any = await apiService.post('/indicators/generate', {
+      code: generationForm.code,
+      market_type: generationForm.market_type,
+      indicators: generationForm.indicators
+    })
+    
+    if (response.success) {
+      generationResult.value = {
+        success: true,
+        message: `成功为股票 ${generationForm.code} 生成指标数据`,
+        details: response.data
+      }
+      ElMessage.success('指标数据生成成功')
+    } else {
+      generationResult.value = {
+        success: false,
+        message: response.message || '生成失败'
+      }
+      ElMessage.error('指标数据生成失败')
+    }
+  } catch (error) {
+    console.error('Generate indicators error:', error)
+    generationResult.value = {
+      success: false,
+      message: '网络请求失败'
+    }
+    ElMessage.error('网络请求失败')
+  } finally {
+    generating.value = false
+  }
 }
 
 onMounted(() => {
@@ -535,6 +709,10 @@ onMounted(() => {
   @apply p-4;
 }
 
+.tab-header {
+  @apply flex justify-end mb-4 p-4;
+}
+
 .filter-section {
   @apply mb-6 p-4 bg-gray-50 rounded-lg;
 }
@@ -543,7 +721,19 @@ onMounted(() => {
   @apply mt-6 flex justify-end;
 }
 
+.generation-section {
+  @apply p-4;
+}
+
+.result-section {
+  @apply mt-4;
+}
+
 :deep(.el-tabs__header) {
   @apply px-4 pt-4;
+}
+
+:deep(.el-checkbox-group .el-checkbox) {
+  @apply mb-3;
 }
 </style>

@@ -102,7 +102,7 @@ const menuItems = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
   { path: '/users', name: '用户管理', icon: User },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
-  { path: '/indicators', name: '指标查询', icon: Histogram },
+  { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },
