@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, date
 import random
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from . import get_current_active_user, User
+from . import User
 
 from database import get_db
 from auth import get_current_admin
@@ -227,7 +227,7 @@ async def get_recent_activities(
         )
 
 @router.get("/dashboard/user-activity")
-async def get_user_activity(current_user: User = Depends(get_current_active_user)):
+async def get_user_activity(current_user: Any = Depends(get_current_admin)):
     """获取用户活跃度数据"""
     return {
         "success": True,
@@ -235,7 +235,7 @@ async def get_user_activity(current_user: User = Depends(get_current_active_user
     }
 
 @router.get("/dashboard/data-collection")
-async def get_data_collection(current_user: User = Depends(get_current_active_user)):
+async def get_data_collection(current_user: Any = Depends(get_current_admin)):
     """获取数据采集状态"""
     return {
         "success": True,
@@ -243,7 +243,7 @@ async def get_data_collection(current_user: User = Depends(get_current_active_us
     }
 
 @router.get("/dashboard/activities")
-async def get_activities(current_user: User = Depends(get_current_active_user)):
+async def get_activities(current_user: Any = Depends(get_current_admin)):
     """获取最近活动列表"""
     return {
         "success": True,

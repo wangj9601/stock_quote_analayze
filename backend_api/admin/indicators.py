@@ -16,7 +16,7 @@ from backend_api.models import (
     MAVOLIndicators, MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK, User
 )
 from backend_api.database import get_db
-from backend_api.auth import get_current_admin_user, get_current_user
+from backend_api.auth import get_current_admin, get_current_user
 
 router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
 
@@ -38,7 +38,7 @@ async def get_ma_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 MA 移动平均线指标"""
@@ -72,7 +72,7 @@ async def get_macd_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 MACD 指标"""
@@ -108,7 +108,7 @@ async def get_rsi_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 RSI 指标"""
@@ -142,7 +142,7 @@ async def get_kdj_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 KDJ 指标"""
@@ -176,7 +176,7 @@ async def get_boll_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 BOLL 布林带指标"""
@@ -210,7 +210,7 @@ async def get_mavol_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 MAVOL 成交量移动平均线指标"""
@@ -244,7 +244,7 @@ async def get_pvfrs_indicators(
     market_type: Optional[str] = Query(None, description="CN 或 HK"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询 PVFRS 均值频率共振指标"""
@@ -275,7 +275,7 @@ async def get_indicator_details(
     code: str = Query(..., description="股票代码"),
     date: str = Query(..., description="日期 YYYY-MM-DD"),
     market_type: str = Query("CN", description="CN 或 HK"),
-    current_user: User = Depends(get_current_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询指定股票和日期的所有指标数据"""
@@ -320,7 +320,7 @@ async def get_indicator_history(
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
     market_type: str = Query("CN", description="CN 或 HK"),
-    current_user: User = Depends(get_current_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询指定股票和日期范围的所有指标数据"""
@@ -442,7 +442,7 @@ async def get_indicator_history(
 @router.post("/generate")
 async def generate_indicators(
     request: Dict[str, Any],
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """生成指定股票的指标数据"""

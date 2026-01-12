@@ -21,7 +21,7 @@ from models import (
     User, QuoteSyncTask, QuoteSyncTaskCreate
 )
 from database import get_db
-from auth import get_current_user, get_current_admin_user
+from auth import get_current_user, get_current_admin
 
 # 定义分页响应模型
 class PaginatedResponse(BaseModel):
@@ -50,7 +50,7 @@ async def get_realtime_quotes(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     keyword: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取实时行情数据"""
@@ -84,7 +84,7 @@ async def get_historical_quotes(
     date_range: str = Query("today", regex="^(today|week|month|custom)$"),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取历史行情数据"""
@@ -138,7 +138,7 @@ async def export_quote_data(
     date_range: str = Query("today", regex="^(today|week|month|custom)$"),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """导出行情数据"""

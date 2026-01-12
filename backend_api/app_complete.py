@@ -3,7 +3,7 @@
 提供数据同步功能的接口
 """
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -16,7 +16,7 @@ from models import (
     User, QuoteSyncTask, QuoteSyncTaskCreate, QuoteSyncTaskInDB
 )
 from database import get_db
-from auth import get_current_admin_user
+from auth import get_current_admin
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -83,7 +83,7 @@ async def sync_market_data(db: Session, task_id: int):
 async def create_sync_task(
     task: QuoteSyncTaskCreate,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """创建数据同步任务"""
@@ -116,7 +116,7 @@ async def create_sync_task(
 @router.get("/tasks", response_model=List[QuoteSyncTaskInDB])
 async def get_sync_tasks(
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取同步任务列表"""
@@ -130,7 +130,7 @@ async def get_sync_tasks(
 @router.get("/tasks/{task_id}", response_model=QuoteSyncTaskInDB)
 async def get_sync_task(
     task_id: int,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取同步任务详情"""

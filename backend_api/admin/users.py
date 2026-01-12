@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from models import UserCreate, UserUpdate, UserInDB
 from database import get_db
 from auth import get_password_hash
-from . import get_current_active_user
+from auth import get_current_admin
 from models import User
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin"])
@@ -31,7 +31,7 @@ async def get_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None),
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取用户列表"""
@@ -65,7 +65,7 @@ async def get_users(
 @router.post("", response_model=UserInDB)
 async def create_user(
     user: UserCreate,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """创建新用户"""
@@ -116,7 +116,7 @@ async def create_user(
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """更新用户信息"""
@@ -140,7 +140,7 @@ async def update_user(
 async def update_user_status(
     user_id: int,
     status: str,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """更新用户状态"""
@@ -164,7 +164,7 @@ async def update_user_status(
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: int,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """删除用户"""
@@ -185,7 +185,7 @@ async def delete_user(
 async def change_user_password(
     user_id: int,
     body: ChangePasswordRequest,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """管理员直接修改指定用户密码"""
@@ -210,7 +210,7 @@ async def change_user_password(
 @router.post("/{user_id}/password/reset")
 async def reset_user_password(
     user_id: int,
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """管理员重置指定用户密码为系统默认值"""
@@ -229,7 +229,7 @@ async def reset_user_password(
 
 @router.get("/stats")
 async def get_user_stats(
-    current_user = Depends(get_current_active_user),
+    current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取用户统计信息"""

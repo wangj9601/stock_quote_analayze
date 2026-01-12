@@ -1,0 +1,35 @@
+﻿数据库连接URL字节: b'postgresql+psycopg2://postgres:qidianspacetime@localhost:5432/stock_analysis'
+
+--- Checking Stock: 02565 ---
+Historical Quotes (HK): 125
+ma_indicators: 1
+macd_indicators: 1
+rsi_indicators: 1
+kdj_indicators: 1
+boll_indicators: 1
+mavol_indicators: 1
+Last Quote Date: 2026-01-12
+Recent Quotes:
+  2026-01-12: close=73.35, volume=316200.0
+  2025-12-25: close=65.0, volume=100000.0
+  2025-12-24: close=65.0, volume=100000.0
+  2025-12-23: close=62.25, volume=227000.0
+  2025-12-22: close=62.95, volume=255000.0
+  2025-12-19: close=63.0, volume=228000.0
+  2025-12-18: close=63.7, volume=222000.0
+  2025-12-17: close=64.15, volume=201500.0
+  2025-12-16: close=64.9, volume=174500.0
+  2025-12-15: close=65.35, volume=324500.0
+
+--- Checking Stock: 00700 ---
+Historical Quotes (HK): 2
+ma_indicators: 0
+macd_indicators: 0
+rsi_indicators: 0
+kdj_indicators: 0
+boll_indicators: 0
+mavol_indicators: 0
+Last Quote Date: 2026-01-12
+Recent Quotes:
+  2026-01-12: close=623.0, volume=27530128.0
+  2025-12-25: close=603.0, volume=7324553.0

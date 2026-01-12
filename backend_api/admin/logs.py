@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import text, desc
 from sqlalchemy.orm import Session
 from backend_api.database import get_db
-from backend_api.admin import get_current_active_user
+from backend_api.auth import get_current_admin
 
 router = APIRouter(prefix="/api/admin/logs", tags=["admin-logs"])
 
@@ -86,7 +86,7 @@ async def get_log_tables():
 @router.get("/stats")
 async def get_overall_stats(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """获取全局统计信息"""
     try:
@@ -150,7 +150,7 @@ async def query_logs(
     operation_type: Optional[str] = Query(None, description="操作类型筛选"),
     stock_code: Optional[str] = Query(None, description="股票代码筛选"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """查询指定日志表的数据"""
     
@@ -268,7 +268,7 @@ async def get_log_stats(
     table_key: str,
     days: Optional[int] = Query(None, ge=1, le=365, description="统计天数，不传则统计全部数据"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """获取指定日志表的统计信息"""
     
@@ -362,7 +362,7 @@ async def get_recent_logs(
     table_key: str,
     limit: int = Query(10, ge=1, le=50, description="记录数量"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """获取最近的日志记录"""
     

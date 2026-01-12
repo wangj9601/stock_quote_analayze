@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import text, desc
 from sqlalchemy.orm import Session
 from backend_api.database import get_db
-from backend_api.admin import get_current_active_user
+from backend_api.auth import get_current_admin
 
 router = APIRouter(prefix="/api/admin/operation-logs", tags=["operation-logs"])
 
@@ -39,7 +39,7 @@ async def query_operation_logs(
     log_status: Optional[str] = Query(None, description="日志状态筛选"),
     log_type: Optional[str] = Query(None, description="日志类型筛选"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """查询系统操作日志数据"""
     
@@ -125,7 +125,7 @@ async def query_operation_logs(
 async def get_operation_logs_stats(
     days: Optional[int] = Query(None, ge=1, le=365, description="统计天数，不传则统计全部数据"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """获取系统操作日志统计信息"""
     
@@ -208,7 +208,7 @@ async def get_operation_logs_stats(
 async def get_recent_operation_logs(
     limit: int = Query(10, ge=1, le=50, description="记录数量"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user = Depends(get_current_admin)
 ):
     """获取最近的系统操作日志记录"""
     
