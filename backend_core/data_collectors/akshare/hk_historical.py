@@ -3,6 +3,7 @@
 负责采集港股历史行情数据并存储到数据库
 """
 
+from time import time
 import akshare as ak
 import pandas as pd
 from typing import Optional, Dict, Any

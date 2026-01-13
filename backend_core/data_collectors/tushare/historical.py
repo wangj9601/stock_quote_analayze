@@ -14,6 +14,9 @@ from backend_core.utils.macd_calculator import MACDCalculator
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
+from backend_core.utils.boll_calculator import BOLLCalculator
+from backend_core.utils.mavol_calculator import MAVOLCalculator
+from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 from datetime import timedelta
 
 class HistoricalQuoteCollector(TushareCollector):
@@ -123,6 +126,54 @@ class HistoricalQuoteCollector(TushareCollector):
                 rsi6 REAL,
                 rsi12 REAL,
                 rsi24 REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (code, date, market_type)
+            )
+        '''))
+        # 初始化BOLL指标表结构
+        session.execute(text('''
+            CREATE TABLE IF NOT EXISTS boll_indicators (
+                code VARCHAR(20) NOT NULL,
+                date VARCHAR(20) NOT NULL,
+                market_type VARCHAR(10) NOT NULL,
+                mid REAL,
+                upper REAL,
+                lower REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (code, date, market_type)
+            )
+        '''))
+        # 初始化MAVOL指标表结构
+        session.execute(text('''
+            CREATE TABLE IF NOT EXISTS mavol_indicators (
+                code VARCHAR(20) NOT NULL,
+                date VARCHAR(20) NOT NULL,
+                market_type VARCHAR(10) NOT NULL,
+                mavol5 REAL,
+                mavol10 REAL,
+                mavol20 REAL,
+                mavol30 REAL,
+                mavol60 REAL,
+                mavol120 REAL,
+                mavol200 REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (code, date, market_type)
+            )
+        '''))
+        # 初始化均值频率共振指标表结构
+        session.execute(text('''
+            CREATE TABLE IF NOT EXISTS mean_frequency_resonance_indicators (
+                code VARCHAR(20) NOT NULL,
+                date VARCHAR(20) NOT NULL,
+                market_type VARCHAR(10) NOT NULL,
+                macro_displacement_delta REAL,
+                instant_deviation REAL,
+                rising_days_z INTEGER,
+                falling_days_f INTEGER,
+                efficiency_m20_minus_m REAL,
+                ma20_d REAL,
+                mavol20_m REAL,
+                bias REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (code, date, market_type)
             )
@@ -795,7 +846,231 @@ class HistoricalQuoteCollector(TushareCollector):
                 'failed': 0,
                 'details': [str(e)]
             }
-    
+
+    def _calculate_and_save_boll_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
+        """计算并保存指定日期的BOLL指标"""
+        try:
+            result = session.execute(text("""
+                SELECT DISTINCT code 
+                FROM historical_quotes 
+                WHERE date = :target_date
+            """), {'target_date': target_date})
+            stock_codes = [row[0] for row in result.fetchall()]
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+            if not stock_codes:
+                return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': []}
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            calculator = BOLLCalculator()
+            for stock_code in stock_codes:
+                try:
+                    result = session.execute(text("""
+                        SELECT date, close FROM historical_quotes 
+                        WHERE code = :stock_code AND date >= :query_start_date AND date <= :target_date
+                        AND close IS NOT NULL ORDER BY date ASC
+                    """), {'stock_code': stock_code, 'query_start_date': query_start_date, 'target_date': target_date})
+                    rows = result.fetchall()
+                    if len(rows) < 20:
+                        skipped_count += 1
+                        continue
+                    dates = [str(row[0]) for row in rows]
+                    closes = [float(row[1]) for row in rows]
+                    boll_results = calculator.calculate_boll_batch(closes)
+                    if not boll_results:
+                        failed_count += 1
+                        continue
+                    saved = False
+                    for i, boll_data in enumerate(boll_results):
+                        # 处理日期格式，确保与 target_date 一致
+                        date_val = dates[i]
+                        if isinstance(date_val, datetime.datetime):
+                           date_str = date_val.strftime('%Y-%m-%d')
+                        else:
+                           date_str = str(date_val)
+                           
+                        if date_str != target_date: continue
+                        session.execute(text("""
+                            INSERT INTO boll_indicators (code, date, market_type, mid, upper, lower, created_at)
+                            VALUES (:code, :date, :market_type, :mid, :upper, :lower, :created_at)
+                            ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                mid = EXCLUDED.mid, upper = EXCLUDED.upper, lower = EXCLUDED.lower, created_at = EXCLUDED.created_at
+                        """), {
+                            'code': stock_code, 'date': date_str, 'market_type': 'A股',
+                            'mid': boll_data.get('mid'), 'upper': boll_data.get('upper'), 'lower': boll_data.get('lower'),
+                            'created_at': datetime.datetime.now()
+                        })
+                        saved = True
+                    if saved: success_count += 1
+                    else: skipped_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+            session.commit()
+            return {'total': len(stock_codes), 'success': success_count, 'skipped': skipped_count, 'failed': failed_count, 'details': failed_details}
+        except Exception as e:
+            session.rollback()
+            return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': [str(e)]}
+
+    def _calculate_and_save_mavol_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
+        """计算并保存指定日期的MAVOL指标"""
+        try:
+            result = session.execute(text("""
+                SELECT DISTINCT code 
+                FROM historical_quotes 
+                WHERE date = :target_date
+            """), {'target_date': target_date})
+            stock_codes = [row[0] for row in result.fetchall()]
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+            if not stock_codes:
+                return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': []}
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=300)).strftime('%Y-%m-%d')
+            calculator = MAVOLCalculator()
+            for stock_code in stock_codes:
+                try:
+                    result = session.execute(text("""
+                        SELECT date, volume FROM historical_quotes 
+                        WHERE code = :stock_code AND date >= :query_start_date AND date <= :target_date
+                        AND volume IS NOT NULL ORDER BY date ASC
+                    """), {'stock_code': stock_code, 'query_start_date': query_start_date, 'target_date': target_date})
+                    rows = result.fetchall()
+                    if len(rows) < 5:
+                        skipped_count += 1
+                        continue
+                    dates = [str(row[0]) for row in rows]
+                    volumes = [float(row[1]) for row in rows]
+                    mavol_results = calculator.calculate_mavol_batch(volumes)
+                    if not mavol_results:
+                        failed_count += 1
+                        continue
+                    saved = False
+                    for i, mavol_data in enumerate(mavol_results):
+                        # 处理日期格式
+                        date_val = dates[i]
+                        if isinstance(date_val, datetime.datetime):
+                           date_str = date_val.strftime('%Y-%m-%d')
+                        else:
+                           date_str = str(date_val)
+                           
+                        if date_str != target_date: continue
+                        session.execute(text("""
+                            INSERT INTO mavol_indicators (code, date, market_type, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200, created_at)
+                            VALUES (:code, :date, :market_type, :m5, :m10, :m20, :m30, :m60, :m120, :m200, :created_at)
+                            ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                mavol5 = EXCLUDED.mavol5, mavol10 = EXCLUDED.mavol10, mavol20 = EXCLUDED.mavol20,
+                                mavol30 = EXCLUDED.mavol30, mavol60 = EXCLUDED.mavol60, mavol120 = EXCLUDED.mavol120,
+                                mavol200 = EXCLUDED.mavol200, created_at = EXCLUDED.created_at
+                        """), {
+                            'code': stock_code, 'date': date_str, 'market_type': 'A股',
+                            'm5': mavol_data.get('mavol5'), 'm10': mavol_data.get('mavol10'), 'm20': mavol_data.get('mavol20'),
+                            'm30': mavol_data.get('mavol30'), 'm60': mavol_data.get('mavol60'), 'm120': mavol_data.get('mavol120'),
+                            'm200': mavol_data.get('mavol200'), 'created_at': datetime.datetime.now()
+                        })
+                        saved = True
+                    if saved: success_count += 1
+                    else: skipped_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+            session.commit()
+            return {'total': len(stock_codes), 'success': success_count, 'skipped': skipped_count, 'failed': failed_count, 'details': failed_details}
+        except Exception as e:
+            session.rollback()
+            return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': [str(e)]}
+
+    def _calculate_and_save_mean_frequency_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
+        """计算并保存指定日期的均值频率共振指标"""
+        try:
+            result = session.execute(text("""
+                SELECT DISTINCT code FROM historical_quotes WHERE date = :target_date
+            """), {'target_date': target_date})
+            stock_codes = [row[0] for row in result.fetchall()]
+            if watchlist_codes is not None:
+                stock_codes = [code for code in stock_codes if code in watchlist_codes]
+            if not stock_codes:
+                return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': []}
+            
+            success_count = 0
+            skipped_count = 0
+            failed_count = 0
+            failed_details = []
+            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            calculator = MeanFrequencyResonanceCalculator()
+            for stock_code in stock_codes:
+                try:
+                    result = session.execute(text("""
+                        SELECT date, close, volume FROM historical_quotes 
+                        WHERE code = :stock_code AND date >= :query_start_date AND date <= :target_date
+                        AND close IS NOT NULL AND volume IS NOT NULL ORDER BY date ASC
+                    """), {'stock_code': stock_code, 'query_start_date': query_start_date, 'target_date': target_date})
+                    rows = result.fetchall()
+                    if len(rows) < 20:
+                        skipped_count += 1
+                        continue
+                    dates = [str(row[0]) for row in rows]
+                    closes = [float(row[1]) for row in rows]
+                    volumes = [float(row[2]) for row in rows]
+                    mf_results = calculator.calculate(closes, volumes)
+                    if not mf_results:
+                        failed_count += 1
+                        continue
+                    saved = False
+                    for i, res in enumerate(mf_results):
+                        if res is None: continue
+                        
+                        # 处理日期格式
+                        date_val = dates[i]
+                        if isinstance(date_val, datetime.datetime):
+                           date_str = date_val.strftime('%Y-%m-%d')
+                        else:
+                           date_str = str(date_val)
+                           
+                        if date_str != target_date: continue
+                        
+                        session.execute(text("""
+                            INSERT INTO mean_frequency_resonance_indicators
+                            (code, date, market_type, macro_displacement_delta, instant_deviation, rising_days_z, falling_days_f, 
+                             efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
+                            VALUES (:code, :date, :market_type, :delta, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
+                            ON CONFLICT (code, date, market_type) DO UPDATE SET
+                                macro_displacement_delta = EXCLUDED.macro_displacement_delta,
+                                instant_deviation = EXCLUDED.instant_deviation,
+                                rising_days_z = EXCLUDED.rising_days_z,
+                                falling_days_f = EXCLUDED.falling_days_f,
+                                efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
+                                ma20_d = EXCLUDED.ma20_d,
+                                mavol20_m = EXCLUDED.mavol20_m,
+                                bias = EXCLUDED.bias,
+                                created_at = EXCLUDED.created_at
+                        """), {
+                            'code': stock_code, 'date': date_str, 'market_type': 'A股',
+                            'delta': res['macro_displacement_delta'], 'instant_deviation': res['instant_deviation'],
+                            'z': res['rising_days_z'], 'f': res['falling_days_f'], 'efficiency': res['efficiency_m20_minus_m'],
+                            'ma20': res['ma20_d'], 'mavol20': res['mavol20_m'], 'bias': res['bias'],
+                            'created_at': datetime.datetime.now()
+                        })
+                        saved = True
+                    if saved: success_count += 1
+                    else: skipped_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    failed_details.append(f"{stock_code}: {str(e)}")
+            session.commit()
+            return {'total': len(stock_codes), 'success': success_count, 'skipped': skipped_count, 'failed': failed_count, 'details': failed_details}
+        except Exception as e:
+            session.rollback()
+            return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': [str(e)]}
+
     def collect_historical_quotes(self, date_str: str) -> bool:
         self._init_db()  # 初始化表结构
         session = SessionLocal()  # 新建 session
@@ -1262,6 +1537,75 @@ class HistoricalQuoteCollector(TushareCollector):
                         session.commit()
                     except Exception as log_error:
                         self.logger.error(f"记录RSI计算失败日志时出错: {log_error}")
+
+                # RSI指标计算完成后，计算BOLL指标
+                try:
+                    self.logger.info("开始自动计算BOLL指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    boll_result = self._calculate_and_save_boll_for_date(session, target_date, watchlist_codes=watchlist_codes)
+                    self.logger.info(f"BOLL指标计算完成: 成功 {boll_result['success']}, 失败 {boll_result['failed']}")
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'boll_calculation',
+                        'operation_desc': f'计算日期: {target_date}',
+                        'affected_rows': boll_result['success'],
+                        'status': 'success' if boll_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(boll_result['details']) if boll_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                except Exception as boll_error:
+                    self.logger.error(f"自动计算BOLL指标失败: {boll_error}")
+
+                # 计算MAVOL指标
+                try:
+                    self.logger.info("开始自动计算MAVOL指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    mavol_result = self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=watchlist_codes)
+                    self.logger.info(f"MAVOL指标计算完成: 成功 {mavol_result['success']}, 失败 {mavol_result['failed']}")
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'mavol_calculation',
+                        'operation_desc': f'计算日期: {target_date}',
+                        'affected_rows': mavol_result['success'],
+                        'status': 'success' if mavol_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(mavol_result['details']) if mavol_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                except Exception as mavol_error:
+                    self.logger.error(f"自动计算MAVOL指标失败: {mavol_error}")
+
+                # 计算均值频率共振 (PVFRS) 指标
+                try:
+                    self.logger.info("开始自动计算均值频率共振指标...")
+                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    mf_result = self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=watchlist_codes)
+                    self.logger.info(f"均值频率共振指标计算完成: 成功 {mf_result['success']}, 失败 {mf_result['failed']}")
+                    
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'mean_frequency_resonance_calculation',
+                        'operation_desc': f'计算日期: {target_date}',
+                        'affected_rows': mf_result['success'],
+                        'status': 'success' if mf_result['failed'] == 0 else 'partial_success',
+                        'error_message': '\n'.join(mf_result['details']) if mf_result['failed'] > 0 else None,
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                except Exception as mf_error:
+                    self.logger.error(f"自动计算均值频率共振指标失败: {mf_error}")
             
             return True
         except Exception as e:
