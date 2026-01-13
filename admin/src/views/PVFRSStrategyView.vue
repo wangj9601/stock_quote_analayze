@@ -271,8 +271,8 @@
                   
                   <div class="task-progress">
                     <el-progress 
-                      :percentage="currentTask.progress" 
-                      :status="currentTask.status"
+                      :percentage="currentTask?.progress ?? 0" 
+                      :status="progressStatus"
                     />
                     <p class="task-message">{{ currentTask.message }}</p>
                   </div>
@@ -315,13 +315,13 @@
                         :type="result.totalReturn > 0 ? 'success' : 'danger'"
                         size="small"
                       >
-                        {{ (result.totalReturn * 100).toFixed(2) }}%
+                        {{ formatPercent(result.totalReturn, 2) }}
                       </el-tag>
                     </div>
                     <div class="result-stats">
-                      <span>年化: {{ (result.annualReturn * 100).toFixed(2) }}%</span>
-                      <span>夏普: {{ result.sharpeRatio?.toFixed(2) || 'N/A' }}</span>
-                      <span>胜率: {{ (result.winRate * 100).toFixed(1) }}%</span>
+                      <span>年化: {{ formatPercent(result.annualReturn, 2) }}</span>
+                      <span>夏普: {{ formatNumber(result.sharpeRatio, 2) }}</span>
+                      <span>胜率: {{ formatPercent(result.winRate, 1) }}</span>
                     </div>
                   </div>
                 </div>
@@ -362,31 +362,31 @@
                     </el-descriptions-item>
                     <el-descriptions-item label="总收益率">
                       <span :class="selectedResult.totalReturn > 0 ? 'text-success' : 'text-danger'">
-                        {{ (selectedResult.totalReturn * 100).toFixed(2) }}%
+                        {{ formatPercent(selectedResult.totalReturn, 2) }}
                       </span>
                     </el-descriptions-item>
                     <el-descriptions-item label="年化收益率">
                       <span :class="selectedResult.annualReturn > 0 ? 'text-success' : 'text-danger'">
-                        {{ (selectedResult.annualReturn * 100).toFixed(2) }}%
+                        {{ formatPercent(selectedResult.annualReturn, 2) }}
                       </span>
                     </el-descriptions-item>
                     <el-descriptions-item label="最大回撤">
-                      {{ (selectedResult.maxDrawdown * 100).toFixed(2) }}%
+                      {{ formatPercent(selectedResult.maxDrawdown, 2) }}
                     </el-descriptions-item>
                     <el-descriptions-item label="夏普比率">
-                      {{ selectedResult.sharpeRatio?.toFixed(2) || 'N/A' }}
+                      {{ formatNumber(selectedResult.sharpeRatio, 2) }}
                     </el-descriptions-item>
                     <el-descriptions-item label="胜率">
-                      {{ (selectedResult.winRate * 100).toFixed(1) }}%
+                      {{ formatPercent(selectedResult.winRate, 1) }}
                     </el-descriptions-item>
                     <el-descriptions-item label="盈亏比">
-                      {{ selectedResult.profitFactor?.toFixed(2) || 'N/A' }}
+                      {{ formatNumber(selectedResult.profitFactor, 2) }}
                     </el-descriptions-item>
                     <el-descriptions-item label="交易次数">
                       {{ selectedResult.totalTrades }}
                     </el-descriptions-item>
                     <el-descriptions-item label="平均持有天数">
-                      {{ selectedResult.avgHoldingPeriod?.toFixed(1) }}天
+                      {{ formatNumber(selectedResult.avgHoldingPeriod, 1) }}天
                     </el-descriptions-item>
                   </el-descriptions>
                   
@@ -555,6 +555,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { API_BASE } from '../config/api'
 import { 
   QuestionFilled, 
   Refresh, 
@@ -562,6 +563,50 @@ import {
   UploadFilled 
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+
+const toNumberOrNull = (v: any): number | null => {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+const formatNumber = (v: any, digits = 2): string => {
+  const n = toNumberOrNull(v)
+  if (n === null) return 'N/A'
+  return n.toFixed(digits)
+}
+
+const formatPercent = (v: any, digits = 2): string => {
+  const n = toNumberOrNull(v)
+  if (n === null) return 'N/A'
+  return `${(n * 100).toFixed(digits)}%`
+}
+
+const normalizeBacktestResult = (raw: any) => {
+  const totalReturn = toNumberOrNull(raw.totalReturn ?? raw.total_return) ?? 0
+  const annualReturn = toNumberOrNull(raw.annualReturn ?? raw.annual_return) ?? 0
+  const maxDrawdown = toNumberOrNull(raw.maxDrawdown ?? raw.max_drawdown) ?? 0
+
+  return {
+    ...raw,
+    code: raw.code ?? raw.stock_code ?? raw.stockCode,
+    market: raw.market ?? raw.market_type ?? raw.marketType,
+    startDate: raw.startDate ?? raw.start_date,
+    endDate: raw.endDate ?? raw.end_date,
+    initialCapital: toNumberOrNull(raw.initialCapital ?? raw.initial_capital),
+    finalCapital: toNumberOrNull(raw.finalCapital ?? raw.final_capital),
+    totalReturn,
+    annualReturn,
+    maxDrawdown,
+    sharpeRatio: toNumberOrNull(raw.sharpeRatio ?? raw.sharpe_ratio),
+    winRate: toNumberOrNull(raw.winRate ?? raw.win_rate),
+    profitFactor: toNumberOrNull(raw.profitFactor ?? raw.profit_factor),
+    totalTrades: raw.totalTrades ?? raw.total_trades,
+    avgHoldingPeriod: toNumberOrNull(raw.avgHoldingPeriod ?? raw.avg_holding_period),
+    equityCurve: raw.equityCurve ?? raw.equity_curve,
+    trades: raw.trades ?? []
+  }
+}
 
 // 响应式数据
 const activeTab = ref('config')
@@ -621,10 +666,19 @@ const canStartBacktest = computed(() => {
   return false
 })
 
+const progressStatus = computed(() => {
+  const status = (currentTask.value as any)?.status
+  if (!status) return ''
+  if (status === 'completed') return 'success'
+  if (status === 'failed') return 'exception'
+  if (status === 'cancelled') return 'warning'
+  return ''
+})
+
 // 方法
 const loadConfig = async () => {
   try {
-    const response = await fetch('/api/admin/pvfrs/config')
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/config`)
     const config = await response.json()
     Object.assign(strategyConfig, config.strategy_params || {})
     ElMessage.success('配置加载成功')
@@ -636,7 +690,7 @@ const loadConfig = async () => {
 const saveConfig = async () => {
   saving.value = true
   try {
-    const response = await fetch('/api/admin/pvfrs/config', {
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/config`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -690,40 +744,35 @@ const handleStockFileChange = (file: any) => {
 const startBacktest = async () => {
   backtestLoading.value = true
   
-  // 创建任务对象
-  currentTask.value = {
-    id: Date.now(),
-    step: 1,
-    progress: 0,
-    status: 'active',
-    message: '正在准备数据...',
-    log: ''
-  }
-  
   try {
     const formData = new FormData()
     formData.append('mode', backtestForm.mode)
     formData.append('market', backtestForm.market)
     formData.append('start_date', backtestForm.startDate)
     formData.append('end_date', backtestForm.endDate)
-    formData.append('initial_capital', backtestForm.initialCapital)
+    formData.append('initial_capital', String(backtestForm.initialCapital))
     
     if (backtestForm.mode === 'single') {
       formData.append('code', backtestForm.code)
     } else if (backtestForm.mode === 'batch') {
       formData.append('stock_file', backtestForm.stockFile)
+    } else if (backtestForm.mode === 'optimize') {
+      formData.append('code', backtestForm.code)
     }
     
-    const response = await fetch('/api/admin/pvfrs/backtest', {
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest`, {
       method: 'POST',
       body: formData
     })
     
     if (response.ok) {
+      const task = await response.json()
+      currentTask.value = task
       // 开始轮询任务状态
       pollTaskStatus()
     } else {
-      ElMessage.error('回测任务提交失败')
+      const errorText = await response.text()
+      ElMessage.error(errorText || '回测任务提交失败')
       currentTask.value = null
     }
   } catch (error) {
@@ -738,7 +787,7 @@ const pollTaskStatus = async () => {
   if (!currentTask.value) return
   
   try {
-    const response = await fetch(`/api/admin/pvfrs/task/${currentTask.value.id}`)
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/task/${currentTask.value.id}`)
     const task = await response.json()
     
     currentTask.value = task
@@ -773,9 +822,11 @@ const resetBacktestForm = () => {
 
 const loadResults = async () => {
   try {
-    const response = await fetch('/api/admin/pvfrs/results')
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`)
     const results = await response.json()
-    backtestResults.value = results
+    backtestResults.value = Array.isArray(results)
+      ? results.map(normalizeBacktestResult)
+      : []
   } catch (error) {
     ElMessage.error('加载回测结果失败')
   }
@@ -791,7 +842,7 @@ const clearResults = () => {
     type: 'warning'
   }).then(async () => {
     try {
-      const response = await fetch('/api/admin/pvfrs/results', {
+      const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`, {
         method: 'DELETE'
       })
       

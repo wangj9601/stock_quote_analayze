@@ -78,7 +78,7 @@ class PVFRSBacktestRunner:
             strategy = PVFRSStrategy(params)
             
             # 创建回测引擎
-            engine = PVFRSBacktestEngine(strategy, initial_capital)
+            engine = PVFRSBacktestEngine(strategy, initial_capital, market_type)
             
             # 运行回测
             result = engine.run_backtest(data)

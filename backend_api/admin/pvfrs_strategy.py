@@ -12,8 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import cast, Date as SA_Date
 
 from backend_api.database import get_db
+from backend_api.models import MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK
+from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 from backend_core.strategies.pvfrs_backtest_runner import PVFRSBacktestRunner
 from backend_core.strategies.pvfrs_data_loader import PVFRSDataLoader
 from backend_core.strategies.pvfrs_performance_analyzer import PVFRSPerformanceAnalyzer, PVFRSReportGenerator
@@ -132,12 +135,26 @@ async def save_strategy_config(config: Dict):
 
 @router.post("/backtest", response_model=TaskStatus)
 async def submit_backtest(
-    request: BacktestRequest,
+    mode: str = Form(...),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    market: str = Form("CN"),
+    code: Optional[str] = Form(None),
+    initial_capital: float = Form(100000),
     stock_file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
     """提交回测任务"""
     try:
+        request = BacktestRequest(
+            mode=mode,
+            code=code,
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
+        )
+
         # 生成任务ID
         task_id = f"pvfrs_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
@@ -162,6 +179,74 @@ async def submit_backtest(
 async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_file: Optional[UploadFile], db: Session):
     """执行回测任务"""
     try:
+        def _get_history_rows(code: str, market_type: str):
+            if market_type == 'CN':
+                start_dt = datetime.strptime(request.start_date, "%Y-%m-%d").date()
+                end_dt = datetime.strptime(request.end_date, "%Y-%m-%d").date()
+                date_col = cast(HistoricalQuotes.date, SA_Date)
+                return db.query(HistoricalQuotes).filter(
+                    HistoricalQuotes.code == code,
+                    date_col >= start_dt,
+                    date_col <= end_dt
+                ).order_by(date_col.asc()).all()
+            return db.query(HistoricalQuotesHK).filter(
+                HistoricalQuotesHK.code == code,
+                HistoricalQuotesHK.date >= request.start_date,
+                HistoricalQuotesHK.date <= request.end_date
+            ).order_by(HistoricalQuotesHK.date.asc()).all()
+
+        def _has_pvfrs(code: str, market_type: str) -> bool:
+            return db.query(MeanFrequencyResonanceIndicators).filter(
+                MeanFrequencyResonanceIndicators.code == code,
+                MeanFrequencyResonanceIndicators.market_type == market_type,
+                MeanFrequencyResonanceIndicators.date >= request.start_date,
+                MeanFrequencyResonanceIndicators.date <= request.end_date
+            ).first() is not None
+
+        def _ensure_pvfrs(code: str, market_type: str):
+            if _has_pvfrs(code, market_type):
+                return
+
+            history_rows = _get_history_rows(code, market_type)
+            if not history_rows:
+                return
+
+            closes = [float(r.close or 0) for r in history_rows]
+            volumes = [float(r.volume or 0) for r in history_rows]
+            calc = MeanFrequencyResonanceCalculator()
+            pvfrs_list = calc.calculate(closes, volumes)
+
+            for i, row in enumerate(history_rows):
+                if i >= len(pvfrs_list):
+                    break
+                pv = pvfrs_list[i]
+                if pv is None:
+                    continue
+                if market_type == 'CN':
+                    date_str = str(getattr(row, 'date', None))[:10] if getattr(row, 'date', None) is not None else None
+                else:
+                    date_str = row.date
+                if not date_str:
+                    continue
+                if date_str < request.start_date or date_str > request.end_date:
+                    continue
+
+                db.merge(MeanFrequencyResonanceIndicators(
+                    code=code,
+                    date=date_str,
+                    market_type=market_type,
+                    ma20_d=pv.get('ma20_d'),
+                    mavol20_m=pv.get('mavol20_m'),
+                    macro_displacement_delta=pv.get('macro_displacement_delta'),
+                    instant_deviation=pv.get('instant_deviation'),
+                    efficiency_m20_minus_m=pv.get('efficiency_m20_minus_m'),
+                    rising_days_z=pv.get('rising_days_z'),
+                    falling_days_f=pv.get('falling_days_f'),
+                    bias=pv.get('bias')
+                ))
+
+            db.commit()
+
         # 更新任务状态
         running_tasks[task_id].step = 1
         running_tasks[task_id].progress = 20
@@ -175,6 +260,18 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
             running_tasks[task_id].step = 2
             running_tasks[task_id].progress = 40
             running_tasks[task_id].message = f"正在回测股票 {request.code}..."
+
+            history_rows = _get_history_rows(request.code, request.market)
+            if not history_rows:
+                running_tasks[task_id].status = "failed"
+                running_tasks[task_id].message = "回测失败：数据库中缺少该股票的历史行情数据（HistoricalQuotes）"
+                return
+
+            _ensure_pvfrs(request.code, request.market)
+            if not _has_pvfrs(request.code, request.market):
+                running_tasks[task_id].status = "failed"
+                running_tasks[task_id].message = "回测失败：数据库中缺少PVFRS指标数据（mean_frequency_resonance_indicators）"
+                return
             
             result = runner.run_single_backtest(
                 request.code,
@@ -216,6 +313,15 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
             running_tasks[task_id].step = 2
             running_tasks[task_id].progress = 30
             running_tasks[task_id].message = f"正在批量回测 {len(stock_codes)} 只股票..."
+
+            # 批量场景：尽量为每只股票补 PVFRS 指标（如果有历史行情）
+            for c in stock_codes:
+                try:
+                    if _get_history_rows(c, request.market):
+                        _ensure_pvfrs(c, request.market)
+                except Exception:
+                    # 忽略单只股票指标计算失败，回测时会自然跳过无数据股票
+                    continue
             
             results = runner.run_batch_backtest(
                 stock_codes,
@@ -242,6 +348,18 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
             running_tasks[task_id].step = 2
             running_tasks[task_id].progress = 30
             running_tasks[task_id].message = f"正在优化参数 {request.code}..."
+
+            history_rows = _get_history_rows(request.code, request.market)
+            if not history_rows:
+                running_tasks[task_id].status = "failed"
+                running_tasks[task_id].message = "优化失败：数据库中缺少该股票的历史行情数据（HistoricalQuotes）"
+                return
+
+            _ensure_pvfrs(request.code, request.market)
+            if not _has_pvfrs(request.code, request.market):
+                running_tasks[task_id].status = "failed"
+                running_tasks[task_id].message = "优化失败：数据库中缺少PVFRS指标数据（mean_frequency_resonance_indicators）"
+                return
             
             optimization_result = runner.run_parameter_optimization(
                 request.code,
@@ -290,7 +408,7 @@ async def clear_backtest_results():
     try:
         # 清空结果文件
         results_file = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "backend_core/strategies/backtest_results.json"
         )
         if os.path.exists(results_file):
@@ -450,7 +568,7 @@ def save_optimization_result(task_id: str, optimization_result: Dict, request: B
 def load_backtest_results() -> List[Dict]:
     """加载回测结果"""
     results_file = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "backend_core/strategies/backtest_results.json"
     )
     
@@ -466,7 +584,7 @@ def load_backtest_results() -> List[Dict]:
 def save_backtest_results(results: List[Dict]):
     """保存回测结果"""
     results_file = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "backend_core/strategies/backtest_results.json"
     )
     

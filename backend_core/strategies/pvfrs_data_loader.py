@@ -10,6 +10,7 @@ from typing import List, Dict, Optional
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
+from sqlalchemy import cast, Date as SA_Date
 
 # 导入模型
 from backend_api.models import (
@@ -51,6 +52,12 @@ class PVFRSDataLoader:
         
         # 加载价格数据
         price_data = self._load_price_data(code, market_type, start_date, end_date)
+
+        # 统一日期格式，避免 date 字段格式不一致导致无法合并
+        if not pvfrs_data.empty and 'date' in pvfrs_data.columns:
+            pvfrs_data['date'] = pvfrs_data['date'].astype(str).str[:10]
+        if not price_data.empty and 'date' in price_data.columns:
+            price_data['date'] = price_data['date'].astype(str).str[:10]
         
         # 合并数据
         merged_data = self._merge_data(pvfrs_data, price_data)
@@ -85,7 +92,7 @@ class PVFRSDataLoader:
             data = []
             for item in results:
                 data.append({
-                    'date': item.date,
+                    'date': str(item.date)[:10] if item.date is not None else None,
                     'macro_displacement_delta': item.macro_displacement_delta or 0,
                     'instant_deviation': item.instant_deviation or 0,
                     'rising_days_z': item.rising_days_z or 0,
@@ -114,12 +121,13 @@ class PVFRSDataLoader:
             if market_type == "CN":
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+                date_col = cast(HistoricalQuotes.date, SA_Date)
                 # A股数据
                 query = self.db.query(HistoricalQuotes).filter(
                     HistoricalQuotes.code == code,
-                    HistoricalQuotes.date >= start_dt,
-                    HistoricalQuotes.date <= end_dt
-                ).order_by(asc(HistoricalQuotes.date))
+                    date_col >= start_dt,
+                    date_col <= end_dt
+                ).order_by(asc(date_col))
                 
                 results = query.all()
                 
@@ -131,7 +139,7 @@ class PVFRSDataLoader:
                 data = []
                 for item in results:
                     data.append({
-                        'date': item.date.strftime('%Y-%m-%d') if item.date else None,
+                        'date': str(item.date)[:10] if item.date is not None else None,
                         'open': item.open or 0,
                         'high': item.high or 0,
                         'low': item.low or 0,

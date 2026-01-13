@@ -49,6 +49,7 @@ from trading_notes_routes import router as trading_notes_router
 from trading_routes import router as simtrade_router
 from news_channel_routes import router as news_channel_router
 from admin.indicators import router as indicator_router
+from admin.pvfrs_strategy import router as pvfrs_strategy_router
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -122,6 +123,7 @@ app.include_router(trading_notes_router)
 app.include_router(simtrade_router)
 app.include_router(news_channel_router)  # 添加资讯频道路由
 app.include_router(indicator_router)  # 添加指标查询路由
+app.include_router(pvfrs_strategy_router)  # 添加PVFRS策略路由
 
 # 根路由重定向到管理后台
 @app.get("/")

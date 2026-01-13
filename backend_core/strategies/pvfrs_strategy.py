@@ -414,11 +414,12 @@ class MomentumConfirmator:
 class PVFRSBacktestEngine:
     """PVFRS回测引擎"""
     
-    def __init__(self, strategy: PVFRSStrategy, initial_capital: float = 100000):
+    def __init__(self, strategy: PVFRSStrategy, initial_capital: float = 100000, market_type: str = "CN"):
         self.strategy = strategy
         self.params = strategy.params
         self.initial_capital = initial_capital
         self.current_capital = initial_capital
+        self.market_type = market_type
         self.position = None  # 当前持仓
         self.trades = []
         self.equity_curve = []
@@ -503,7 +504,7 @@ class PVFRSBacktestEngine:
     
     def _execute_sell(self, signal: Signal, row: pd.Series):
         """执行卖出"""
-        if self.position:
+        if self.position and self._can_sell(signal.date):
             self._close_position(signal.date, row['close'], signal.reason)
     
     def _close_position(self, exit_date: str, exit_price: float, reason: str):
@@ -546,6 +547,10 @@ class PVFRSBacktestEngine:
         """检查风险管理"""
         if not self.position:
             return
+
+        # A股 T+1：买入当日不允许卖出（止损/止盈/强制平仓也一样）
+        if not self._can_sell(row['date']):
+            return
             
         entry_price = self.position['entry_price']
         current_price = row['close']
@@ -562,6 +567,21 @@ class PVFRSBacktestEngine:
         # 最大持有天数
         elif self._get_holding_days(row['date']) >= self.params['max_holding_days']:
             self._close_position(row['date'], current_price, f"最大持有天数: {self.params['max_holding_days']}天")
+
+    def _can_sell(self, current_date: str) -> bool:
+        """是否允许卖出（A股 T+1：买入当日不可卖出）"""
+        if not self.position:
+            return False
+        if self.market_type != 'CN':
+            return True
+
+        # 日期字符串按 YYYY-MM-DD 可直接比较
+        entry_date = self.position.get('entry_date')
+        if not entry_date:
+            return True
+        if str(current_date)[:10] <= str(entry_date)[:10]:
+            return False
+        return True
     
     def _get_holding_days(self, current_date: str) -> int:
         """计算持有天数"""
