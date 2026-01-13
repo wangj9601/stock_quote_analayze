@@ -43,6 +43,11 @@ const routes = [
         component: () => import('@/views/IndicatorsView.vue')
       },
       {
+        path: 'pvfrs-strategy',
+        name: 'PVFRSStrategy',
+        component: () => import('@/views/PVFRSStrategyView.vue')
+      },
+      {
         path: 'datasource',
         name: 'DataSource',
         component: () => import('@/views/DataSourceView.vue')

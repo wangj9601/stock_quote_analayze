@@ -11,6 +11,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+import re
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -33,6 +34,19 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def load_jsonc(file_path: str) -> Dict:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 移除 /* ... */ 注释
+    content = re.sub(r'/\*.*?\*/', '', content, flags=re.S)
+
+    # 移除 // 注释（不处理字符串内的 //，按配置文件场景足够使用）
+    content = re.sub(r'(^|\s)//.*$', r'\1', content, flags=re.M)
+
+    return json.loads(content)
 
 class PVFRSBacktestRunner:
     """PVFRS策略回测运行器"""
@@ -313,8 +327,7 @@ def main():
     custom_params = {}
     backtest_config = {}
     if args.params_file and os.path.exists(args.params_file):
-        with open(args.params_file, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = load_jsonc(args.params_file)
 
         # 兼容两种格式：
         # 1) 分层结构（推荐）：{"strategy_params": {...}, ...}
