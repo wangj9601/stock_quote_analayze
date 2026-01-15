@@ -1,6 +1,19 @@
 {
   "strategy_params": {
-    "buy_bias_min": 0.03
+    "buy_macro_displacement_min": 0,
+    "buy_instant_deviation_min": 0,
+    "buy_rising_days_advantage": true,
+    "buy_efficiency_min": 0,
+    "buy_bias_min": 0.02,
+    "buy_relative_displacement_min": 0.05,
+    "buy_consecutive_days": 3,
+    "sell_bias_max": 0.1,
+    "sell_instant_deviation_max": 0.05,
+    "sell_price_volume_divergence": true,
+    "stop_loss": -0.1,
+    "take_profit": 0.2,
+    "max_position_size": 0.1,
+    "max_holding_days": 30
   },
   "backtest_config": {
     "initial_capital": 100000,
