@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import { getCurrentEnvConfig, logEnvironmentInfo } from '@/config/environment'
+import { getApiConfig } from '@/config/api'
 
 class ApiService {
   private api: AxiosInstance
@@ -9,9 +10,11 @@ class ApiService {
     // 打印环境信息
     logEnvironmentInfo()
     
+    const apiConfig = getApiConfig()
+    
     this.api = axios.create({
       baseURL: import.meta.env.VITE_API_BASE_URL || getCurrentEnvConfig().apiBaseUrl,
-      timeout: 30000,
+      timeout: apiConfig.timeout,
       headers: {
         'Content-Type': 'application/json'
       }

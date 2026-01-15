@@ -32,7 +32,7 @@ class MAVOLCalculator:
         # 计算各个周期的MAVOL
         for period in periods:
             col_name = f'mavol{period}'
-            df[col_name] = df['volume'].rolling(window=period, min_periods=1).mean()
+            df[col_name] = df['volume'].rolling(window=period, min_periods=period).mean()
         
         return df.round(2)  # 成交量保留2位小数即可
     
@@ -54,7 +54,7 @@ class MAVOLCalculator:
             result = {}
             
             for period in periods:
-                ma_value = volume_series.rolling(window=period, min_periods=1).mean().iloc[-1]
+                ma_value = volume_series.rolling(window=period, min_periods=period).mean().iloc[-1]
                 result[f'mavol{period}'] = round(float(ma_value), 2) if not pd.isna(ma_value) else None
             
             return result
@@ -82,7 +82,7 @@ class MAVOLCalculator:
             # 预计算所有MA值以提高效率
             ma_dict = {}
             for period in periods:
-                ma_dict[f'mavol{period}'] = volume_series.rolling(window=period, min_periods=1).mean()
+                ma_dict[f'mavol{period}'] = volume_series.rolling(window=period, min_periods=period).mean()
             
             for i in range(len(volumes)):
                 result_item = {}

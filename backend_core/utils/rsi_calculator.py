@@ -75,8 +75,8 @@ class RSICalculator:
                 for period in self.periods:
                     key = f'rsi{period}'
                     val = rsi_results[period].iloc[i]
-                    # 确保是有效浮点数
-                    if pd.isna(val) or np.isinf(val):
+                    # 确保在计算初期（数据不足周期）返回 None
+                    if i < period or pd.isna(val) or np.isinf(val):
                         item[key] = None
                     else:
                         item[key] = round(float(val), 4)

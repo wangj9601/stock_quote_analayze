@@ -23,8 +23,24 @@ router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
 def paginate_query(query, page, page_size):
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
+    
+    # 处理 nan 值
+    import math
+    def clean_item(item):
+        if not item:
+            return item
+        d = item.__dict__.copy()
+        if '_sa_instance_state' in d:
+            del d['_sa_instance_state']
+        for key, value in d.items():
+            if isinstance(value, float) and math.isnan(value):
+                d[key] = None
+        return d
+    
+    cleaned_items = [clean_item(item) for item in items]
+    
     return {
-        "items": items,
+        "items": cleaned_items,
         "total": total,
         "page": page,
         "page_size": page_size
@@ -287,6 +303,13 @@ async def get_indicator_details(
         d = row.__dict__.copy()
         if '_sa_instance_state' in d:
             del d['_sa_instance_state']
+        
+        # 处理 nan 值，将其转换为 None
+        import math
+        for key, value in d.items():
+            if isinstance(value, float) and math.isnan(value):
+                d[key] = None
+        
         return d
 
     # Run queries

@@ -3,17 +3,17 @@ export const API_CONFIG = {
   // 开发环境
   development: {
     baseURL: 'http://localhost:5000',
-    timeout: 30000
+    timeout: 300000
   },
   // 生产环境 - 移除 /api 前缀，因为后端路由已统一包含
   production: {
     baseURL: 'https://www.icemaplecity.com',
-    timeout: 30000
+    timeout: 300000
   },
   // 测试环境
   test: {
     baseURL: 'http://localhost:5000',
-    timeout: 30000
+    timeout: 300000
   }
 }
 

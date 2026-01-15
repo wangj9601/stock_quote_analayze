@@ -32,7 +32,7 @@ class MACalculator:
         # 计算各个周期的MA
         for period in periods:
             col_name = f'ma{period}'
-            df[col_name] = df['close'].rolling(window=period, min_periods=1).mean()
+            df[col_name] = df['close'].rolling(window=period, min_periods=period).mean()
         
         return df.round(4)  # 保留4位小数
     
@@ -54,7 +54,7 @@ class MACalculator:
             result = {}
             
             for period in periods:
-                ma_value = close_series.rolling(window=period, min_periods=1).mean().iloc[-1]
+                ma_value = close_series.rolling(window=period, min_periods=period).mean().iloc[-1]
                 result[f'ma{period}'] = round(float(ma_value), 4) if not pd.isna(ma_value) else None
             
             return result
@@ -83,7 +83,7 @@ class MACalculator:
                 result_item = {}
                 for period in periods:
                     # 使用rolling计算，min_periods=1确保即使数据不足也能计算
-                    ma_value = close_series.iloc[:i+1].rolling(window=period, min_periods=1).mean().iloc[-1]
+                    ma_value = close_series.iloc[:i+1].rolling(window=period, min_periods=period).mean().iloc[-1]
                     result_item[f'ma{period}'] = round(float(ma_value), 4) if not pd.isna(ma_value) else None
                 results.append(result_item)
             

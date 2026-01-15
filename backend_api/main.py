@@ -142,4 +142,11 @@ async def startup_event():
         raise
 
 if __name__ == "__main__":
-    uvicorn.run("backend_api.main:app", host="0.0.0.0", port=5000, reload=True) 
+    uvicorn.run(
+        "backend_api.main:app", 
+        host="0.0.0.0", 
+        port=5000, 
+        reload=True,
+        timeout_keep_alive=300,
+        timeout_graceful_shutdown=300
+    )

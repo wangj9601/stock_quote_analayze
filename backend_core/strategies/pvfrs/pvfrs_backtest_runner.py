@@ -16,13 +16,13 @@ import re
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from backend_core.strategies.pvfrs_strategy import (
+from backend_core.strategies.pvfrs.pvfrs_strategy import (
     PVFRSStrategy, PVFRSBacktestEngine, SignalType
-)
-from backend_core.strategies.pvfrs_data_loader import (
+)   
+from backend_core.strategies.pvfrs.pvfrs_data_loader import (
     PVFRSDataLoader, load_pvfrs_data, get_pvfrs_stocks
 )
-from backend_core.strategies.pvfrs_performance_analyzer import (
+from backend_core.strategies.pvfrs.pvfrs_performance_analyzer import (
     PVFRSPerformanceAnalyzer, PVFRSReportGenerator,
     analyze_pvfrs_performance, generate_pvfrs_report
 )

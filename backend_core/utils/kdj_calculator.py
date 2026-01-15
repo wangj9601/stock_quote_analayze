@@ -51,15 +51,15 @@ class KDJCalculator:
             
             # 计算RSV
             # RSV = (Close - Lowest Low) / (Highest High - Lowest Low) * 100
-            lowest_low = low_series.rolling(window=self.n, min_periods=0).min()
-            highest_high = high_series.rolling(window=self.n, min_periods=0).max()
+            lowest_low = low_series.rolling(window=self.n, min_periods=self.n).min()
+            highest_high = high_series.rolling(window=self.n, min_periods=self.n).max()
             
             # 处理分母为0的情况
             denominator = highest_high - lowest_low
             denominator = denominator.replace(0, np.nan) # 避免除以0
             
             rsv = (close_series - lowest_low) / denominator * 100
-            rsv = rsv.fillna(0) # 填充为0或其他合适的值
+            # rsv = rsv.fillna(0) # 不再填充为0，保持NaN以识别不足期
             
             # 计算K, D, J
             # K = 2/3 * Prev K + 1/3 * RSV
@@ -75,25 +75,38 @@ class KDJCalculator:
             d = 50.0
             
             for r in rsv:
-                k = (self.m1 - 1) / self.m1 * k + 1 / self.m1 * r
-                d = (self.m2 - 1) / self.m2 * d + 1 / self.m2 * k
-                j = 3 * k - 2 * d
-                
-                k_values.append(k)
-                d_values.append(d)
-                j_values.append(j)
+                if pd.isna(r):
+                    # 如果RSV是NaN，记录为None并保持k, d为初始值（或根据需要处理）
+                    k_values.append(None)
+                    d_values.append(None)
+                    j_values.append(None)
+                else:
+                    k = (self.m1 - 1) / self.m1 * k + 1 / self.m1 * r
+                    d = (self.m2 - 1) / self.m2 * d + 1 / self.m2 * k
+                    j = 3 * k - 2 * d
+                    
+                    k_values.append(k)
+                    d_values.append(d)
+                    j_values.append(j)
             
             # 构建结果列表
             results = []
             for i in range(len(closes)):
-                # 如果数据点不足周期N，虽然rolling设置了min_periods=0能算出RSV，但通常认为初期数据不稳定
-                # 这里我们直接返回计算结果，由使用者决定是否展示
-                results.append({
-                    'k': round(float(k_values[i]), 4),
-                    'd': round(float(d_values[i]), 4),
-                    'j': round(float(j_values[i]), 4),
-                    'rsv': round(float(rsv.iloc[i]), 4)
-                })
+                # 如果数据点不足周期N，返回None
+                if i < self.n - 1:
+                    results.append({
+                        'k': None,
+                        'd': None,
+                        'j': None,
+                        'rsv': None
+                    })
+                else:
+                    results.append({
+                        'k': round(float(k_values[i]), 4) if k_values[i] is not None else None,
+                        'd': round(float(d_values[i]), 4) if d_values[i] is not None else None,
+                        'j': round(float(j_values[i]), 4) if j_values[i] is not None else None,
+                        'rsv': round(float(rsv.iloc[i]), 4) if not pd.isna(rsv.iloc[i]) else None
+                    })
             
             return results
         except Exception as e:

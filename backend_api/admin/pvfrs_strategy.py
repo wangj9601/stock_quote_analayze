@@ -17,16 +17,16 @@ from sqlalchemy import cast, Date as SA_Date
 from backend_api.database import get_db
 from backend_api.models import MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK
 from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
-from backend_core.strategies.pvfrs_backtest_runner import PVFRSBacktestRunner
-from backend_core.strategies.pvfrs_data_loader import PVFRSDataLoader
-from backend_core.strategies.pvfrs_performance_analyzer import PVFRSPerformanceAnalyzer, PVFRSReportGenerator
+from backend_core.strategies.pvfrs.pvfrs_backtest_runner import PVFRSBacktestRunner
+from backend_core.strategies.pvfrs.pvfrs_data_loader import PVFRSDataLoader
+from backend_core.strategies.pvfrs.pvfrs_performance_analyzer import PVFRSPerformanceAnalyzer, PVFRSReportGenerator
 
 router = APIRouter(prefix="/api/admin/pvfrs", tags=["PVFRS策略管理"])
 
 # 配置文件路径
 CONFIG_FILE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-    "backend_core/strategies/pvfrs_config.json"
+    "backend_core/strategies/pvfrs/pvfrs_config.json"
 )
 
 # 全局任务存储（生产环境建议使用数据库或Redis）
@@ -409,7 +409,7 @@ async def clear_backtest_results():
         # 清空结果文件
         results_file = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "backend_core/strategies/backtest_results.json"
+            "backend_core/strategies/pvfrs/backtest_results.json"
         )
         if os.path.exists(results_file):
             os.remove(results_file)
@@ -569,7 +569,7 @@ def load_backtest_results() -> List[Dict]:
     """加载回测结果"""
     results_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "backend_core/strategies/backtest_results.json"
+        "backend_core/strategies/pvfrs/backtest_results.json"
     )
     
     if os.path.exists(results_file):
@@ -585,7 +585,7 @@ def save_backtest_results(results: List[Dict]):
     """保存回测结果"""
     results_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "backend_core/strategies/backtest_results.json"
+        "backend_core/strategies/pvfrs/backtest_results.json"
     )
     
     with open(results_file, 'w', encoding='utf-8') as f:

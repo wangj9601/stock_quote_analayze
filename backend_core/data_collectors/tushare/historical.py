@@ -479,7 +479,7 @@ class HistoricalQuoteCollector(TushareCollector):
                             """), {
                                 'code': stock_code,
                                 'date': date_str,
-                                'market_type': 'A股',
+                                'market_type': 'CN',
                                 'ma5': self._safe_value(row.get('ma5')),
                                 'ma10': self._safe_value(row.get('ma10')),
                                 'ma20': self._safe_value(row.get('ma20')),
@@ -646,7 +646,7 @@ class HistoricalQuoteCollector(TushareCollector):
                             """), {
                                 'code': stock_code,
                                 'date': date_str,
-                                'market_type': 'A股',
+                                'market_type': 'CN',
                                 'k': kdj_data['k'],
                                 'd': kdj_data['d'],
                                 'j': kdj_data['j'],
@@ -803,7 +803,7 @@ class HistoricalQuoteCollector(TushareCollector):
                             """), {
                                 'code': stock_code,
                                 'date': date_str,
-                                'market_type': 'A股',
+                                'market_type': 'CN',
                                 'rsi6': rsi_data.get('rsi6'),
                                 'rsi12': rsi_data.get('rsi12'),
                                 'rsi24': rsi_data.get('rsi24'),
@@ -900,7 +900,7 @@ class HistoricalQuoteCollector(TushareCollector):
                             ON CONFLICT (code, date, market_type) DO UPDATE SET
                                 mid = EXCLUDED.mid, upper = EXCLUDED.upper, lower = EXCLUDED.lower, created_at = EXCLUDED.created_at
                         """), {
-                            'code': stock_code, 'date': date_str, 'market_type': 'A股',
+                            'code': stock_code, 'date': date_str, 'market_type': 'CN',
                             'mid': boll_data.get('mid'), 'upper': boll_data.get('upper'), 'lower': boll_data.get('lower'),
                             'created_at': datetime.datetime.now()
                         })
@@ -971,7 +971,7 @@ class HistoricalQuoteCollector(TushareCollector):
                                 mavol30 = EXCLUDED.mavol30, mavol60 = EXCLUDED.mavol60, mavol120 = EXCLUDED.mavol120,
                                 mavol200 = EXCLUDED.mavol200, created_at = EXCLUDED.created_at
                         """), {
-                            'code': stock_code, 'date': date_str, 'market_type': 'A股',
+                            'code': stock_code, 'date': date_str, 'market_type': 'CN',
                             'm5': mavol_data.get('mavol5'), 'm10': mavol_data.get('mavol10'), 'm20': mavol_data.get('mavol20'),
                             'm30': mavol_data.get('mavol30'), 'm60': mavol_data.get('mavol60'), 'm120': mavol_data.get('mavol120'),
                             'm200': mavol_data.get('mavol200'), 'created_at': datetime.datetime.now()
@@ -1053,7 +1053,7 @@ class HistoricalQuoteCollector(TushareCollector):
                                 bias = EXCLUDED.bias,
                                 created_at = EXCLUDED.created_at
                         """), {
-                            'code': stock_code, 'date': date_str, 'market_type': 'A股',
+                            'code': stock_code, 'date': date_str, 'market_type': 'CN',
                             'delta': res['macro_displacement_delta'], 'instant_deviation': res['instant_deviation'],
                             'z': res['rising_days_z'], 'f': res['falling_days_f'], 'efficiency': res['efficiency_m20_minus_m'],
                             'ma20': res['ma20_d'], 'mavol20': res['mavol20_m'], 'bias': res['bias'],

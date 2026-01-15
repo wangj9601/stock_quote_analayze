@@ -1144,12 +1144,12 @@ onMounted(() => {
 }
 
 .help-section li {
-  margin-bottom: 5px;
+  margin-bottom: 10px;
 }
 
 .chart-container {
   width: 100%;
-  height: 400px;
+  height: 500px;
 }
 
 .upload-demo {
