@@ -185,24 +185,84 @@
                     />
                   </el-form-item>
                   
-                  <el-form-item label="股票文件" v-if="backtestForm.mode === 'batch'">
-                    <el-upload
-                      class="upload-demo"
-                      drag
-                      :auto-upload="false"
-                      :on-change="handleStockFileChange"
-                      accept=".txt"
-                    >
-                      <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-                      <div class="el-upload__text">
-                        将股票列表文件拖到此处，或<em>点击上传</em>
-                      </div>
-                      <template #tip>
-                        <div class="el-upload__tip">
-                          txt文件，每行一个股票代码
+                  <el-form-item label="批量股票" v-if="backtestForm.mode === 'batch'">
+                    <el-tabs v-model="batchInputMode" type="border-card">
+                      <el-tab-pane label="文件上传" name="upload">
+                        <el-upload
+                          class="upload-demo"
+                          drag
+                          :auto-upload="false"
+                          :on-change="handleStockFileChange"
+                          accept=".txt,.csv"
+                        >
+                          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                          <div class="el-upload__text">
+                            将股票列表文件拖到此处，或<em>点击上传</em>
+                          </div>
+                          <template #tip>
+                            <div class="el-upload__tip">
+                              支持 txt/csv 文件，每行一个股票代码（如：688256 或 600519）
+                            </div>
+                          </template>
+                        </el-upload>
+                        <div v-if="uploadedStocks.length > 0" style="margin-top: 10px;">
+                          <el-alert
+                            title="已上传股票列表"
+                            type="success"
+                            :closable="false"
+                            show-icon
+                          >
+                            <template #default>
+                              <div style="max-height: 100px; overflow-y: auto;">
+                                {{ uploadedStocks.join(', ') }}
+                              </div>
+                              <div style="margin-top: 5px;">
+                                共 {{ uploadedStocks.length }} 只股票
+                              </div>
+                            </template>
+                          </el-alert>
                         </div>
-                      </template>
-                    </el-upload>
+                      </el-tab-pane>
+                      
+                      <el-tab-pane label="手动录入" name="manual">
+                        <el-input
+                          v-model="batchStockCodes"
+                          type="textarea"
+                          :rows="6"
+                          placeholder="请输入股票代码，每行一个，例如：&#10;688256&#10;600519&#10;000001&#10;300750"
+                        />
+                        <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                          <span style="color: #909399; font-size: 12px;">
+                            支持 A 股（6 位数字）和港股（5 位数字）
+                          </span>
+                          <el-button 
+                            type="primary" 
+                            size="small" 
+                            @click="parseBatchStocks"
+                            :disabled="!batchStockCodes.trim()"
+                          >
+                            解析股票代码
+                          </el-button>
+                        </div>
+                        <div v-if="parsedStocks.length > 0" style="margin-top: 10px;">
+                          <el-alert
+                            title="已解析股票列表"
+                            type="success"
+                            :closable="false"
+                            show-icon
+                          >
+                            <template #default>
+                              <div style="max-height: 100px; overflow-y: auto;">
+                                {{ parsedStocks.join(', ') }}
+                              </div>
+                              <div style="margin-top: 5px;">
+                                共 {{ parsedStocks.length }} 只股票
+                              </div>
+                            </template>
+                          </el-alert>
+                        </div>
+                      </el-tab-pane>
+                    </el-tabs>
                   </el-form-item>
                   
                   <el-form-item label="市场类型">
@@ -243,6 +303,12 @@
                 </el-form>
                 
                 <div class="backtest-actions">
+                  <!-- 调试信息 -->
+                  <div v-if="backtestForm.mode === 'batch'" style="margin-bottom: 10px; font-size: 12px; color: #909399;">
+                    调试: {{ batchInputMode === 'manual' ? `手动模式(${parsedStocks.length}只)` : `上传模式(${uploadedStocks.length}只)` }} 
+                    | 按钮{{ canStartBacktest ? '可' : '不可' }}点击
+                  </div>
+                  
                   <el-button 
                     type="primary" 
                     @click="startBacktest" 
@@ -556,6 +622,7 @@
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { API_BASE } from '../config/api'
+import { useAuthStore } from '@/stores/auth'
 import { 
   QuestionFilled, 
   Refresh, 
@@ -563,6 +630,17 @@ import {
   UploadFilled 
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+
+const authStore = useAuthStore()
+
+const getAuthToken = () => {
+  return authStore.token || localStorage.getItem('admin_token')
+}
+
+const getAuthHeaders = () => {
+  const t = getAuthToken()
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
 
 const toNumberOrNull = (v: any): number | null => {
   if (v === null || v === undefined || v === '') return null
@@ -646,6 +724,12 @@ const backtestForm = reactive({
   stockFile: null
 })
 
+// 批量录入相关
+const batchInputMode = ref('upload')
+const uploadedStocks = ref<string[]>([])
+const parsedStocks = ref<string[]>([])
+const batchStockCodes = ref('')
+
 // 当前任务
 const currentTask = ref(null)
 
@@ -656,12 +740,20 @@ const selectedResultTrades = ref([])
 
 // 计算属性
 const canStartBacktest = computed(() => {
+  if (!backtestForm.startDate || !backtestForm.endDate) {
+    return false
+  }
+  
   if (backtestForm.mode === 'single') {
-    return backtestForm.code && backtestForm.startDate && backtestForm.endDate
+    return backtestForm.code.trim() !== ''
   } else if (backtestForm.mode === 'batch') {
-    return backtestForm.stockFile && backtestForm.startDate && backtestForm.endDate
+    // 批量模式：检查文件上传或手动录入
+    const hasFile = backtestForm.stockFile !== null
+    const hasManualStocks = batchInputMode.value === 'manual' && parsedStocks.value.length > 0
+    const hasUploadedStocks = batchInputMode.value === 'upload' && uploadedStocks.value.length > 0
+    return hasFile || hasManualStocks || hasUploadedStocks
   } else if (backtestForm.mode === 'optimize') {
-    return backtestForm.code && backtestForm.startDate && backtestForm.endDate
+    return backtestForm.code.trim() !== ''
   }
   return false
 })
@@ -678,7 +770,11 @@ const progressStatus = computed(() => {
 // 方法
 const loadConfig = async () => {
   try {
-    const response = await fetch(`${API_BASE}/api/admin/pvfrs/config`)
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/config`, {
+      headers: {
+        ...getAuthHeaders()
+      }
+    })
     const config = await response.json()
     Object.assign(strategyConfig, config.strategy_params || {})
     ElMessage.success('配置加载成功')
@@ -693,7 +789,8 @@ const saveConfig = async () => {
     const response = await fetch(`${API_BASE}/api/admin/pvfrs/config`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
       },
       body: JSON.stringify({
         strategy_params: strategyConfig
@@ -737,47 +834,160 @@ const resetConfig = () => {
   })
 }
 
-const handleStockFileChange = (file: any) => {
+const handleStockFileChange = async (file: any) => {
   backtestForm.stockFile = file.raw
+  
+  // 解析上传的文件内容
+  try {
+    const text = await readFileContent(file.raw)
+    const stocks = parseStockCodes(text)
+    uploadedStocks.value = stocks
+    ElMessage.success(`成功解析 ${stocks.length} 只股票`)
+  } catch (error) {
+    ElMessage.error('文件解析失败，请检查文件格式')
+    uploadedStocks.value = []
+  }
+}
+
+const readFileContent = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        resolve(e.target.result as string)
+      } else {
+        reject(new Error('文件读取失败'))
+      }
+    }
+    reader.onerror = () => reject(new Error('文件读取错误'))
+    reader.readAsText(file, 'utf-8')
+  })
+}
+
+const parseStockCodes = (text: string): string[] => {
+  const lines = text.split('\n')
+  const stocks: string[] = []
+  
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed) {
+      // 支持多种格式：纯数字、带后缀的代码
+      const code = trimmed.replace(/[^\d]/g, '') // 只保留数字
+      if (code.length >= 5 && code.length <= 6) {
+        stocks.push(code)
+      }
+    }
+  }
+  
+  // 去重并排序
+  return [...new Set(stocks)].sort()
+}
+
+const parseBatchStocks = () => {
+  try {
+    const stocks = parseStockCodes(batchStockCodes.value)
+    parsedStocks.value = stocks
+    if (stocks.length > 0) {
+      ElMessage.success(`成功解析 ${stocks.length} 只股票`)
+    } else {
+      ElMessage.warning('未找到有效的股票代码')
+    }
+  } catch (error) {
+    ElMessage.error('股票代码解析失败')
+    parsedStocks.value = []
+  }
 }
 
 const startBacktest = async () => {
   backtestLoading.value = true
   
   try {
-    const formData = new FormData()
-    formData.append('mode', backtestForm.mode)
-    formData.append('market', backtestForm.market)
-    formData.append('start_date', backtestForm.startDate)
-    formData.append('end_date', backtestForm.endDate)
-    formData.append('initial_capital', String(backtestForm.initialCapital))
+    const token = getAuthToken()
+    if (!token) {
+      ElMessage.error('请先登录')
+      return
+    }
+
+    // 验证输入
+    if (backtestForm.mode === 'single' && !backtestForm.code.trim()) {
+      ElMessage.error('请输入股票代码')
+      backtestLoading.value = false
+      return
+    }
+    
+    let requestData = {
+      mode: backtestForm.mode,
+      market: backtestForm.market,
+      start_date: backtestForm.startDate,
+      end_date: backtestForm.endDate,
+      initial_capital: backtestForm.initialCapital
+    }
     
     if (backtestForm.mode === 'single') {
-      formData.append('code', backtestForm.code)
+      requestData.code = backtestForm.code
     } else if (backtestForm.mode === 'batch') {
-      formData.append('stock_file', backtestForm.stockFile)
+      const stocks = batchInputMode.value === 'upload' ? uploadedStocks.value : parsedStocks.value
+      if (stocks.length === 0) {
+        ElMessage.error('请提供股票代码列表')
+        backtestLoading.value = false
+        return
+      }
+      
+      if (batchInputMode.value === 'upload' && backtestForm.stockFile) {
+        // 文件上传方式
+        const formData = new FormData()
+        Object.keys(requestData).forEach(key => {
+          formData.append(key, requestData[key])
+        })
+        formData.append('stock_file', backtestForm.stockFile)
+        
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/upload`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: formData
+        })
+        
+        const result = await response.json()
+        if (response.ok) {
+          ElMessage.success('回测任务提交成功')
+          currentTask.value = result
+          pollTaskStatus()
+        } else {
+          ElMessage.error(result.detail || '回测任务提交失败')
+        }
+        
+        backtestLoading.value = false
+        return
+      } else {
+        // 手动录入方式，直接发送股票代码列表
+        requestData.stock_codes = stocks
+      }
     } else if (backtestForm.mode === 'optimize') {
-      formData.append('code', backtestForm.code)
+      requestData.code = backtestForm.code
     }
     
     const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest`, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(requestData)
     })
     
+    const result = await response.json()
     if (response.ok) {
-      const task = await response.json()
-      currentTask.value = task
-      // 开始轮询任务状态
+      ElMessage.success('回测任务提交成功')
+      currentTask.value = result
       pollTaskStatus()
     } else {
-      const errorText = await response.text()
-      ElMessage.error(errorText || '回测任务提交失败')
-      currentTask.value = null
+      ElMessage.error(result.detail || '回测任务提交失败')
     }
   } catch (error) {
     ElMessage.error('回测任务提交失败')
-    currentTask.value = null
+    console.error(error)
   } finally {
     backtestLoading.value = false
   }
@@ -787,7 +997,11 @@ const pollTaskStatus = async () => {
   if (!currentTask.value) return
   
   try {
-    const response = await fetch(`${API_BASE}/api/admin/pvfrs/task/${currentTask.value.id}`)
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/task/${currentTask.value.id}`, {
+      headers: {
+        ...getAuthHeaders()
+      }
+    })
     const task = await response.json()
     
     currentTask.value = task
@@ -795,10 +1009,8 @@ const pollTaskStatus = async () => {
     if (task.status === 'completed') {
       ElMessage.success('回测完成')
       loadResults()
-      currentTask.value = null
     } else if (task.status === 'failed') {
       ElMessage.error('回测失败')
-      currentTask.value = null
     } else {
       // 继续轮询
       setTimeout(pollTaskStatus, 2000)
@@ -818,17 +1030,27 @@ const resetBacktestForm = () => {
     initialCapital: 100000,
     stockFile: null
   })
+  
+  // 重置批量录入相关状态
+  batchInputMode.value = 'upload'
+  uploadedStocks.value = []
+  parsedStocks.value = []
+  batchStockCodes.value = ''
 }
 
 const loadResults = async () => {
   try {
-    const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`)
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`, {
+      headers: {
+        ...getAuthHeaders()
+      }
+    })
     const results = await response.json()
     backtestResults.value = Array.isArray(results)
       ? results.map(normalizeBacktestResult)
       : []
   } catch (error) {
-    ElMessage.error('加载回测结果失败')
+    ElMessage.error('获取回测结果失败')
   }
 }
 
@@ -837,19 +1059,23 @@ const selectResult = (result: any) => {
   selectedResultTrades.value = result.trades || []
 }
 
-const clearResults = () => {
-  ElMessageBox.confirm('确定要清空所有回测结果吗？', '确认清空', {
+const clearResults = async () => {
+  ElMessageBox.confirm('确定要清空所有回测结果吗？此操作不可恢复！', '确认清空', {
     type: 'warning'
   }).then(async () => {
     try {
       const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          ...getAuthHeaders()
+        }
       })
       
       if (response.ok) {
-        backtestResults.value = []
-        selectedResult.value = null
         ElMessage.success('回测结果已清空')
+        loadResults()
+      } else {
+        ElMessage.error('清空失败')
       }
     } catch (error) {
       ElMessage.error('清空失败')
@@ -1159,5 +1385,54 @@ onMounted(() => {
 :deep(.el-upload-dragger) {
   width: 100%;
   height: 120px;
+}
+
+.batch-input-tabs {
+  margin-top: 10px;
+}
+
+.stock-preview {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.stock-preview-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #606266;
+}
+
+.stock-list {
+  max-height: 80px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #303133;
+  background-color: #fff;
+  padding: 8px;
+  border-radius: 3px;
+  border: 1px solid #dcdfe6;
+}
+
+.stock-count {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.manual-input-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.hint-text {
+  color: #909399;
+  font-size: 12px;
 }
 </style>
