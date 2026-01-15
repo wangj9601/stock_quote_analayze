@@ -5,7 +5,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -731,9 +731,6 @@ class DataCollectionResponse(BaseModel):
     message: str
     start_date: str
     end_date: str
-    stock_codes: Optional[List[str]] = None
-    test_mode: bool = False
-    full_collection_mode: bool = False  # 新增：全量采集模式
     market: str = 'CN'
 
 class DataCollectionStatus(BaseModel):
@@ -772,3 +769,89 @@ class TushareHistoricalCollectionRequest(BaseModel):
     start_date: str
     end_date: str
     force_update: bool = False  # 强制更新：如果已存在数据，先删除后插入
+
+# PVFRS回测相关模型
+class PVFRSBacktestTask(Base):
+    """PVFRS回测任务表"""
+    __tablename__ = "pvfrs_backtest_tasks"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(50), unique=True, nullable=False, index=True)
+    mode = Column(String(20), nullable=False)  # single, batch, optimize
+    stock_codes = Column(Text)  # JSON格式存储股票代码列表
+    market = Column(String(10), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    initial_capital = Column(Float, nullable=False)
+    status = Column(String(20), default="running")  # running, completed, failed, cancelled
+    progress = Column(Integer, default=0)  # 0-100
+    current_step = Column(String(50))  # 当前步骤描述
+    error_message = Column(Text)  # 错误信息
+    created_at = Column(DateTime, default=datetime.now)
+    completed_at = Column(DateTime, nullable=True)
+
+class PVFRSBacktestResult(Base):
+    """PVFRS回测结果表"""
+    __tablename__ = "pvfrs_backtest_results"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(50), ForeignKey("pvfrs_backtest_tasks.task_id"), nullable=False, index=True)
+    stock_code = Column(String(20), nullable=False, index=True)
+    market = Column(String(10), nullable=False)
+    backtest_date = Column(Date, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    initial_capital = Column(Float, nullable=False)
+    final_capital = Column(Float, nullable=False)
+    total_return = Column(Float, nullable=False)
+    annual_return = Column(Float, nullable=False)
+    max_drawdown = Column(Float, nullable=False)
+    sharpe_ratio = Column(Float, nullable=False)
+    win_rate = Column(Float, nullable=False)
+    profit_factor = Column(Float, nullable=False)
+    total_trades = Column(Integer, nullable=False)
+    avg_holding_period = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # 关联任务
+    task = relationship("PVFRSBacktestTask", backref="results")
+
+class PVFRSTradeRecord(Base):
+    """PVFRS交易记录表"""
+    __tablename__ = "pvfrs_trade_records"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    result_id = Column(Integer, ForeignKey("pvfrs_backtest_results.id"), nullable=False)
+    stock_code = Column(String(20), nullable=False)
+    market = Column(String(10), nullable=False)
+    entry_date = Column(Date, nullable=False)
+    exit_date = Column(Date, nullable=False)
+    entry_price = Column(Float, nullable=False)
+    exit_price = Column(Float, nullable=False)
+    pnl = Column(Float, nullable=False)
+    pnl_percent = Column(Float, nullable=False)
+    exit_reason = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # 关联回测结果
+    result = relationship("PVFRSBacktestResult", backref="trades")
+
+class PVFRSEquityCurve(Base):
+    """PVFRS收益曲线表"""
+    __tablename__ = "pvfrs_equity_curves"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    result_id = Column(Integer, ForeignKey("pvfrs_backtest_results.id"), nullable=False)
+    stock_code = Column(String(20), nullable=False)
+    market = Column(String(10), nullable=False)
+    curve_date = Column(Date, nullable=False)
+    equity = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # 关联回测结果
+    result = relationship("PVFRSBacktestResult", backref="equity_curve")
+    
+    # 复合索引
+    __table_args__ = (
+        Index('idx_result_curve_date', 'result_id', 'curve_date'),
+    )
