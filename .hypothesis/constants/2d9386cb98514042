@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\strategies\pvfrs\pvfrs_data_loader.py
+# hypothesis_version: 6.150.2
+
+['%Y-%m-%d', 'CN', 'PVFRS数据或价格数据为空，无法合并', 'bias', 'close', 'data_types', 'date', 'date_range', 'end', 'end_date', 'errors', 'falling_days_f', 'high', 'inner', 'instant_deviation', 'is_valid', 'low', 'ma20_d', 'mavol20_m', 'max', 'mean', 'min', 'missing_values', 'open', 'price_stats', 'quality_score', 'rising_days_z', 'start', 'start_date', 'statistics', 'std', 'total_records', 'trading_days', 'volume', 'volume_stats', 'warnings', '存在Z+F大于20的异常数据', '存在负成交量', '存在非正价格', '数据为空']

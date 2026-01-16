@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\utils\boll_calculator.py
+# hypothesis_version: 6.150.2
+
+['boll_lower', 'boll_mid', 'boll_upper', 'close', 'lower', 'mid', 'std', 'upper']

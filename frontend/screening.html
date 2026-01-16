@@ -27,6 +27,7 @@
             <button class="strategy-tab" data-strategy="keep-increasing" id="keepIncreasingTab">持续上涨(MA30向上)</button>
             <button class="strategy-tab" data-strategy="long-lower-shadow" id="longLowerShadowTab">长下影线</button>
             <button class="strategy-tab" data-strategy="low-nine" id="lowNineTab">低九策略</button>
+            <button class="strategy-tab" data-strategy="one-yang-three-lines" id="oneYangThreeLinesTab">一阳穿三线</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -458,6 +459,68 @@
                         <tbody id="resultsTableBody-low-nine">
                             <tr>
                                 <td colspan="11" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 一阳穿三线策略标签页内容 -->
+        <div id="one-yang-three-lines-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围:</strong>全部A股（排除ST股票）</li>
+                    <li><strong>时间范围:</strong>最近20个交易日</li>
+                    <li><strong>选股条件:</strong></li>
+                    <li class="condition-item">1. 一根带量长阳线突破至少三条移动平均线（MA5/10/20/30/60/120）</li>
+                    <li class="condition-item">2. 长阳线要求：实体占比≥70%，涨幅≥3%</li>
+                    <li class="condition-item">3. 成交量放大：当日成交量≥前5日平均成交量的2倍</li>
+                    <li class="condition-item">4. 换手率理想范围：3%-10%</li>
+                    <li class="condition-item">5. 位置判别：根据60日最高价回撤幅度判断低位/中位/高位</li>
+                    <li class="condition-item">6. 自动排除所有ST股票（包括ST、*ST、S*ST等）</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-one-yang-three-lines" class="refresh-btn" data-strategy="one-yang-three-lines">刷新筛选</button>
+                <span id="searchDate-one-yang-three-lines" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-one-yang-three-lines" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-one-yang-three-lines" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-one-yang-three-lines" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-one-yang-three-lines" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-one-yang-three-lines" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>信号日期</th>
+                                <th>当前价格</th>
+                                <th>穿越均线</th>
+                                <th>成交量倍数</th>
+                                <th>换手率</th>
+                                <th>位置类型</th>
+                                <th>回撤幅度</th>
+                                <th>BIAS30</th>
+                                <th>信号评分</th>
+                                <th>风险提示</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-one-yang-three-lines">
+                            <tr>
+                                <td colspan="13" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
                             </tr>
                         </tbody>
                     </table>

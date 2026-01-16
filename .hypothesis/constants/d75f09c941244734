@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\database.py
+# hypothesis_version: 6.150.2
+
+['echo', 'max_overflow', 'pool_size', 'url', '数据库连接URL:']

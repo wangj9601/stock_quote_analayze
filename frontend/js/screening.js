@@ -140,6 +140,10 @@ const ScreeningPage = {
             suffix = 'keep-increasing';
         } else if (strategy === 'long-lower-shadow') {
             suffix = 'long-lower-shadow';
+        } else if (strategy === 'low-nine') {
+            suffix = 'low-nine';
+        } else if (strategy === 'one-yang-three-lines') {
+            suffix = 'one-yang-three-lines';
         } else {
             suffix = 'cyb';
         }
@@ -204,6 +208,10 @@ const ScreeningPage = {
                     `upper_shadow_ratio=${upperShadowRatio}&` +
                     `min_amplitude=${minAmplitude}&` +
                     `recent_days=${recentDays}`;
+            } else if (strategy === 'low-nine') {
+                url = `${apiBaseUrl}/api/screening/low-nine-strategy`;
+            } else if (strategy === 'one-yang-three-lines') {
+                url = `${apiBaseUrl}/api/screening/one-yang-three-lines`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -275,7 +283,11 @@ const ScreeningPage = {
             } else if (strategy === 'keep-increasing') {
                 colSpan = 8;
             } else if (strategy === 'long-lower-shadow') {
+                colSpan = 13;
+            } else if (strategy === 'low-nine') {
                 colSpan = 11;
+            } else if (strategy === 'one-yang-three-lines') {
+                colSpan = 13;
             } else {
                 colSpan = 12;
             }
@@ -311,6 +323,10 @@ const ScreeningPage = {
             suffix = 'keep-increasing';
         } else if (strategy === 'long-lower-shadow') {
             suffix = 'long-lower-shadow';
+        } else if (strategy === 'low-nine') {
+            suffix = 'low-nine';
+        } else if (strategy === 'one-yang-three-lines') {
+            suffix = 'one-yang-three-lines';
         } else {
             suffix = 'cyb';
         }
@@ -334,7 +350,11 @@ const ScreeningPage = {
             } else if (strategy === 'keep-increasing') {
                 colSpan = 8;
             } else if (strategy === 'long-lower-shadow') {
+                colSpan = 13;
+            } else if (strategy === 'low-nine') {
                 colSpan = 11;
+            } else if (strategy === 'one-yang-three-lines') {
+                colSpan = 13;
             } else {
                 colSpan = 12;
             }
@@ -471,6 +491,67 @@ const ScreeningPage = {
                         <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
                         <td>${stock.ma20 ? stock.ma20.toFixed(2) : '--'}</td>
                         <td class="${stock.deviation_from_ma20 < 0 ? 'negative' : (stock.deviation_from_ma20 > 0 ? 'positive' : '')}">${stock.deviation_from_ma20 ? (stock.deviation_from_ma20 * 100).toFixed(2) + '%' : '--'}</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else if (strategy === 'low-nine') {
+                // 低九策略表格
+                html += `
+                    <tr>
+                        <td><span class="stock-code">${stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name}</span></td>
+                        <td>${stock.pattern_start_date || '--'}</td>
+                        <td>${stock.pattern_end_date || '--'}</td>
+                        <td>${stock.pattern_start_price ? stock.pattern_start_price.toFixed(2) : '--'}</td>
+                        <td class="price-negative">${stock.nine_day_decline ? stock.nine_day_decline.toFixed(2) + '%' : '--'}</td>
+                        <td>${stock.nine_day_high ? stock.nine_day_high.toFixed(2) : '--'}</td>
+                        <td>${stock.nine_day_low ? stock.nine_day_low.toFixed(2) : '--'}</td>
+                        <td>${stock.current_price ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else if (strategy === 'one-yang-three-lines') {
+                // 一阳穿三线策略表格
+                // 位置类型颜色标识
+                let positionClass = '';
+                if (stock.position_type === '低位') {
+                    positionClass = 'position-low';
+                } else if (stock.position_type === '中位') {
+                    positionClass = 'position-mid';
+                } else if (stock.position_type === '高位') {
+                    positionClass = 'position-high';
+                }
+                
+                // 风险提示
+                const riskWarnings = stock.risk_warnings && stock.risk_warnings.length > 0 
+                    ? stock.risk_warnings.join('；') 
+                    : '--';
+                
+                html += `
+                    <tr>
+                        <td><span class="stock-code">${stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name}</span></td>
+                        <td>${stock.signal_date || '--'}</td>
+                        <td>${stock.current_price ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td><span class="crossed-lines">${stock.crossed_lines || '--'}</span></td>
+                        <td>${stock.volume_ratio ? stock.volume_ratio.toFixed(2) : '--'}</td>
+                        <td>${stock.turnover_rate ? stock.turnover_rate.toFixed(2) + '%' : '--'}</td>
+                        <td><span class="${positionClass}">${stock.position_type || '--'}</span></td>
+                        <td>${stock.retracement ? stock.retracement.toFixed(2) + '%' : '--'}</td>
+                        <td>${stock.bias30 ? stock.bias30.toFixed(2) + '%' : '--'}</td>
+                        <td><span class="signal-score">${stock.signal_score || '--'}</span></td>
+                        <td><span class="risk-warnings">${riskWarnings}</span></td>
                         <td>
                             <div class="action-links">
                                 <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>

@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\main.py
+# hypothesis_version: 6.150.2
+
+[300, 3600, 5000, '*', '/', '0.0.0.0', '1.0.0', '__main__', 'a', 'app.log', 'backend_api.main:app', 'message', 'startup', 'utf-8', '数据库初始化完成', '正在初始化数据库...', '股票分析系统API', '股票分析系统的后端API服务']

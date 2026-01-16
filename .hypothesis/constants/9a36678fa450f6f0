@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\watchlist_manage.py
+# hypothesis_version: 6.150.2
+
+[100, 400, 500, '%Y-%m-%d', ',', '-', '--', '/api/watchlist', '/delete_by_code', '/groups', '/groups/{group_id}', '/{watchlist_id}', 'amount', 'change_amount', 'change_percent', 'code', 'current_price', 'data', 'default', 'group_name', 'high', 'low', 'message', 'name', 'open', 'pb_ratio', 'pe_dynamic', 'pre_close', 'success', 'total_market_value', 'turnover_rate', 'update_time', 'volume', 'watchlist', 'watchlist_id', '不能删除默认分组', '分组不存在', '分组删除成功', '分组更新成功', '删除成功', '自选股不存在', '该分组名已存在', '该股票已在自选股列表中']

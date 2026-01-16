@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\admin\operation_logs.py
+# hypothesis_version: 6.150.2
+
+[100, 365, 500, ' AND ', ', ', '/info', '/query', '/recent', '/stats', 'WHERE ', 'affected_count', 'columns', 'count', 'daily_stats', 'data', 'date', 'description', 'display_name', 'end_date', 'error_count', 'error_info', 'id', 'is_all_data', 'limit', 'log_message', 'log_status', 'log_time', 'log_type', 'log_type_stats', 'offset', 'operation-logs', 'operation_logs', 'page', 'page_size', 'pagination', 'period_days', 'start_date', 'status', 'status_stats', 'success_count', 'table_name', 'total_count', 'total_pages', '开始日期 (YYYY-MM-DD)', '日志状态筛选', '日志类型筛选', '每页记录数', '系统操作日志', '结束日期 (YYYY-MM-DD)', '统计天数，不传则统计全部数据', '记录数量', '页码']

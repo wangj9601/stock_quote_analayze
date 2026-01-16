@@ -306,7 +306,7 @@
 
 
 
-/* ²ßÂÔ²ÎÊıÅäÖÃÇøÓòÑùÊ½ */
+/* ï¿½ï¿½ï¿½Ô²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 .strategy-params-card {
     background: #fff;
     border: 2px solid #e3f2fd;
@@ -417,4 +417,48 @@
     .param-presets {
         flex-wrap: wrap;
     }
+}
+
+/* ä¸€é˜³ç©¿ä¸‰çº¿ç­–ç•¥æ ·å¼ */
+.position-low {
+    color: #4caf50;
+    font-weight: 600;
+    background: #e8f5e9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.position-mid {
+    color: #ff9800;
+    font-weight: 600;
+    background: #fff3e0;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.position-high {
+    color: #f44336;
+    font-weight: 600;
+    background: #ffebee;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.crossed-lines {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.signal-score {
+    font-weight: 600;
+    color: #1976d2;
+}
+
+.risk-warnings {
+    font-size: 12px;
+    color: #f44336;
+    max-width: 200px;
+    display: inline-block;
 }

@@ -855,3 +855,36 @@ class PVFRSEquityCurve(Base):
     __table_args__ = (
         Index('idx_result_curve_date', 'result_id', 'curve_date'),
     )
+
+class OneYangThreeLinesSignal(Base):
+    """一阳穿三线策略信号表"""
+    __tablename__ = "one_yang_three_lines_signals"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(50), nullable=False)
+    signal_date = Column(Date, nullable=False, index=True)
+    current_price = Column(Float)
+    ma5 = Column(Float)
+    ma10 = Column(Float)
+    ma20 = Column(Float)
+    ma30 = Column(Float)
+    ma60 = Column(Float)
+    ma120 = Column(Float)
+    crossed_lines = Column(String(100))  # 穿越的均线组合，如"MA5+MA10+MA20"
+    crossed_count = Column(Integer)  # 穿越数量
+    volume_ratio = Column(Float)  # 成交量倍数
+    turnover_rate = Column(Float)  # 换手率
+    position_type = Column(String(20))  # 位置类型：低位/中位/高位
+    retracement = Column(Float)  # 回撤幅度
+    bias5 = Column(Float)  # 5日乖离率
+    bias10 = Column(Float)  # 10日乖离率
+    bias30 = Column(Float)  # 30日乖离率
+    signal_score = Column(Integer)  # 信号质量评分
+    risk_warnings = Column(Text)  # 风险提示，JSON格式存储列表
+    created_at = Column(DateTime, default=datetime.now)
+    
+    # 唯一约束：同一股票同一日期只能有一条记录
+    __table_args__ = (
+        UniqueConstraint('code', 'signal_date', name='uq_one_yang_signal_code_date'),
+    )

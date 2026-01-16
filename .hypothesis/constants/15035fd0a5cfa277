@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\base.py
+# hypothesis_version: 6.150.2
+
+[365, '%Y%m%d', 'T', 'akshare', 'daily', 'financial', 'log_dir', 'logs', 'max_retries', 'profile', 'qfq', 'records', 'retry_delay', 'utf-8', 'valuation', 'w', '开始获取所有股票的实时行情...', '开始获取股票列表...', '重试次数用尽']

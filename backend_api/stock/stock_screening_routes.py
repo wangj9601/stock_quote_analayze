@@ -15,6 +15,7 @@ from stock.high_tight_flag_strategy import HighTightFlagStrategy
 from stock.keep_increasing_strategy import KeepIncreasingStrategy
 from stock.long_lower_shadow_strategy import LongLowerShadowStrategy
 from stock.low_nine_strategy import LowNineStrategy
+from stock.one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -374,4 +375,118 @@ async def get_low_nine_strategy(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"低九策略选股执行失败: {str(e)}"
+        )
+
+
+@router.get("/one-yang-three-lines")
+async def get_one_yang_three_lines_strategy(
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(100, ge=1, le=500, description="每页数量，最大500"),
+    start_date: str = Query(None, description="开始日期，格式：YYYY-MM-DD"),
+    end_date: str = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    db: Session = Depends(get_db)
+):
+    """
+    一阳穿三线选股策略（又称"出水芙蓉"）
+    
+    策略条件:
+    1. 长阳线：收盘价>开盘价，实体占比>=70%，涨幅>=3%
+    2. 穿越至少三条均线（MA5/10/20/30/60/120中的任意三条或更多）
+    3. 放量突破：成交量>=前5日平均成交量的2倍
+    4. 位置判别：根据60日最高价回撤幅度判断低位/中位/高位
+    5. 乖离率计算：BIAS5/10/30，BIAS30>10%时风险提示
+    6. 信号质量评分：综合穿线数量、成交量、换手率、位置、乖离率
+    
+    股票范围:
+    - 全部A股
+    - 自动排除ST股票（包括ST、*ST、S*ST等所有ST类股票）
+    
+    Args:
+        page: 页码（可选，默认1）
+        page_size: 每页数量（可选，默认100，最大500）
+        start_date: 开始日期（可选）
+        end_date: 结束日期（可选）
+        db: 数据库会话
+    
+    Returns:
+        符合条件的股票列表，按信号质量评分降序排列
+    """
+    try:
+        logger.info(f"开始执行一阳穿三线选股策略 - 页码: {page}, 每页: {page_size}")
+        if start_date:
+            logger.info(f"日期范围: {start_date} 至 {end_date or '今天'}")
+        
+        # 参数验证
+        if start_date:
+            try:
+                datetime.strptime(start_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="开始日期格式错误，应为 YYYY-MM-DD"
+                )
+        
+        if end_date:
+            try:
+                datetime.strptime(end_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="结束日期格式错误，应为 YYYY-MM-DD"
+                )
+        
+        if start_date and end_date and start_date > end_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="开始日期不能晚于结束日期"
+            )
+        
+        # 执行选股策略
+        all_results = OneYangThreeLinesStrategy.screening_one_yang_three_lines_strategy(db)
+        
+        # 日期范围过滤（如果提供）
+        if start_date or end_date:
+            filtered_results = []
+            for result in all_results:
+                signal_date = result.get("signal_date", "")
+                if start_date and signal_date < start_date:
+                    continue
+                if end_date and signal_date > end_date:
+                    continue
+                filtered_results.append(result)
+            all_results = filtered_results
+        
+        # 分页处理
+        total = len(all_results)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_results = all_results[start_idx:end_idx]
+        
+        logger.info(f"一阳穿三线选股策略执行完成，找到 {total} 只符合条件的股票，返回第 {page} 页（共 {len(paginated_results)} 只）")
+        
+        return JSONResponse({
+            "success": True,
+            "data": paginated_results,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+            "search_date": datetime.now().strftime("%Y-%m-%d"),
+            "strategy_name": "一阳穿三线",
+            "date_range": {
+                "start_date": start_date,
+                "end_date": end_date
+            } if start_date or end_date else None
+        })
+        
+    except HTTPException:
+        # 重新抛出HTTP异常
+        raise
+    except Exception as e:
+        logger.error(f"执行一阳穿三线选股策略失败: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"一阳穿三线选股策略执行失败: {str(e)}"
         )

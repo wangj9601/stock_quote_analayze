@@ -83,3 +83,48 @@ class MeanFrequencyResonanceCalculator:
                 })
                 
         return results
+    
+    def calculate_for_dataframe(self, history_rows, window=20):
+        """
+        从数据库查询结果计算均值频率共振指标，返回 DataFrame
+        
+        Args:
+            history_rows: 数据库查询结果列表（ORM 对象）
+            window: 计算窗口，默认为20
+            
+        Returns:
+            pd.DataFrame: 包含日期和所有指标的 DataFrame
+        """
+        if len(history_rows) < window:
+            return pd.DataFrame()
+        
+        # 从 ORM 对象提取数据
+        dates = []
+        closes = []
+        volumes = []
+        
+        for row in history_rows:
+            dates.append(row.date)
+            closes.append(float(row.close))
+            volumes.append(float(row.volume))
+        
+        # 使用现有的 calculate 方法计算指标
+        results = self.calculate(closes, volumes, window)
+        
+        # 构建 DataFrame
+        data = []
+        for i, result in enumerate(results):
+            if result is not None:
+                data.append({
+                    'date': dates[i],
+                    'ma20_d': result['ma20_d'],
+                    'mavol20_m': result['mavol20_m'],
+                    'macro_displacement_delta': result['macro_displacement_delta'],
+                    'instant_deviation': result['instant_deviation'],
+                    'efficiency_m20_minus_m': result['efficiency_m20_minus_m'],
+                    'rising_days_z': result['rising_days_z'],
+                    'falling_days_f': result['falling_days_f'],
+                    'bias': result['bias']
+                })
+        
+        return pd.DataFrame(data)

@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\one_yang_three_lines_strategy.py
+# hypothesis_version: 6.150.2
+
+[0.0, 0.03, 0.7, 2.0, 3.0, 5.0, 10.0, 100, 120, 250, '%Y-%m-%d', '+', '-', '=', 'amount', 'bias10', 'bias30', 'bias5', 'body_length', 'body_ratio', 'change_percent', 'close', 'code', 'crossed_count', 'crossed_lines', 'current_price', 'date', 'end_date', 'high', 'is_yang', 'low', 'ma10', 'ma120', 'ma20', 'ma30', 'ma5', 'ma60', 'name', 'open', 'position_type', 'retracement', 'risk_warnings', 'signal_date', 'signal_score', 'start_date', 'strftime', 'total_length', 'turnover_rate', 'volume', 'volume_ratio', '中位', '乖离过大，注意回调风险', '低位', '动能不足', '可能存在对倒', '开始执行一阳穿三线选股策略', '未知', '警惕诱多', '高位']

@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\stock_fund_flow.py
+# hypothesis_version: 6.150.2
+
+[400, 404, 500, '-', '/api/stock_fund_flow', '/history', '/today', 'bj', 'code', 'data', 'date', 'large_net_inflow', 'main_net_inflow', 'message', 'records', 'sh', 'stock_fund_flow', 'success', 'sz', '主力净流入-净额', '今日', '代码', '大单净流入-净额', '日期', '缺少股票代码参数code', '股票代码']

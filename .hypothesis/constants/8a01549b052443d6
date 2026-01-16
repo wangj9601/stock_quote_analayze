@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\__init__.py
+# hypothesis_version: 6.150.2
+
+['AKShareCollector', 'IndexQuoteCollector']

@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\stock_analysis_routes.py
+# hypothesis_version: 6.150.2
+
+[200, 365, 400, 500, '/api/analysis', '/levels/{stock_code}', '/stock/{stock_code}', 'action', 'analysis_time', 'change_percent', 'confidence', 'current_price', 'data', 'error', 'kdj', 'key_levels', 'macd', 'message', 'prediction', 'price_prediction', 'recommendation', 'risk_level', 'rsi', 'signal', 'stock_code', 'strength', 'success', 'target_price', 'technical_indicators', 'technical_summary', '无法获取历史数据', '智能分析', '股票代码格式错误（A股6位，港股5位）', '预测天数']

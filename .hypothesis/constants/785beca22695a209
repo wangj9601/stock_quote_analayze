@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\config.py
+# hypothesis_version: 6.150.2
+
+[1440, '*', '1.0.0', 'HS256', 'algorithm', 'allow_credentials', 'allow_headers', 'allow_methods', 'allow_origins', 'description', 'echo', 'max_overflow', 'pool_size', 'secret_key', 'title', 'url', 'utf-8', 'version', 'your-secret-key-here', '数据库连接URL字节:', '股票分析系统API', '股票分析系统的后端API服务']

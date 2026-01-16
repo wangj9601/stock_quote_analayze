@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\realtime.py
+# hypothesis_version: 6.150.2
+
+[0.2, '%Y-%m-%d', '%Y-%m-%d %H:%M:%S', 'DeadlockDetected', 'LockNotAvailable', 'affected_rows', 'akshare', 'amount', 'change_percent', 'code', 'collect_source', 'create_date', 'created_at', 'current_price', 'data_source', 'db_file', 'empty', 'error', 'error_message', 'high', 'low', 'name', 'open', 'operation_desc', 'operation_type', 'pb_ratio', 'pe_dynamic', 'pre_close', 'session', 'sina', 'status', 'success', 'total_market_value', 'trade_date', 'turnover_rate', 'update_time', 'volume', '今开', '代码', '全部股票行情数据采集并入库完成', '名称', '市净率', '市盈率', '市盈率-动态', '总市值', '成交量', '成交额', '换手率', '昨收', '最低', '最新价', '最高', '流通市值', '涨跌幅', '记录错误日志失败: %s', '采集到 %d 条股票行情数据', '采集或入库时出错: %s', '采集股票实时行情数据失败']

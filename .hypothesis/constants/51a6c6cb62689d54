@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\auth_routes.py
+# hypothesis_version: 6.150.2
+
+['******', '/api/auth', '/login', '/logout', '/status', 'Bearer', 'POST', 'WWW-Authenticate', 'a', 'access_token', 'active', 'api/auth/login', 'auth', 'auth.log', 'bearer', 'logged_in', 'message', 'password', 'sub', 'success', 'token_type', 'unknown', 'user', 'user-agent', 'user_id', 'utf-8', '创建响应失败', '创建访问令牌失败', '已成功登出', '未提供认证令牌', '用户名或密码错误', '账号已被禁用']

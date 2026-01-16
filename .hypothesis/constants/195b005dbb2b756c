@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\multi_period_quotes_routes.py
+# hypothesis_version: 6.150.2
+
+[400, 500, ' AND ', '/api/quotes', '1=1', 'amount', 'annual', 'annual_quotes', 'change_percent', 'close', 'code', 'daily', 'data', 'date', 'date <= :end_date', 'date >= :start_date', 'end_date', 'high', 'historical_quotes', 'keyword', 'limit', 'low', 'message', 'monthly', 'monthly_quotes', 'name', 'offset', 'open', 'page', 'page_size', 'period', 'quarterly', 'quarterly_quotes', 'quotes', 'semiannual', 'semiannual_quotes', 'start_date', 'success', 'total', 'volume', 'weekly', 'weekly_quotes', '开始日期 YYYY-MM-DD', '搜索关键词(股票代码或名称)', '每页数量', '结束日期 YYYY-MM-DD', '页码']

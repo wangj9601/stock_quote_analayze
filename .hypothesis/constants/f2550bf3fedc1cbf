@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\stock_screening_routes.py
+# hypothesis_version: 6.150.2
+
+[0.01, 0.02, 0.1, 0.3, 0.5, 1.0, 3.0, 100, 500, '%Y-%m-%d', '/api/screening', '/low-nine-strategy', 'data', 'date_range', 'end_date', 'limit', 'lower_shadow_ratio', 'min_amplitude', 'months', 'page', 'page_size', 'parameters', 'recent_days', 'screening', 'search_date', 'signal_date', 'start_date', 'strategy_name', 'success', 'test_mode', 'total', 'total_pages', 'upper_shadow_ratio', '一阳穿三线', '低九策略', '停机坪', '创业板中线选股策略', '回踩年线', '开始执行停机坪选股策略', '开始执行回踩年线选股策略', '开始执行持续上涨（MA30向上）选股策略', '开始执行高而窄的旗形选股策略', '开始日期不能晚于结束日期', '开始日期，格式：YYYY-MM-DD', '持续上涨（MA30向上）', '最小振幅要求（默认2%）', '查询月数（3-4个月）', '检查最近N个交易日（默认2天）', '每页数量，最大500', '结束日期，格式：YYYY-MM-DD', '长下影阳线', '页码，从1开始', '高而窄的旗形']

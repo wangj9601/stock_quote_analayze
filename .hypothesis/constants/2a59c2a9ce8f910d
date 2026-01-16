@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\admin\quotes.py
+# hypothesis_version: 6.150.2
+
+[100, '%Y%m%d_%H%M%S', '%Y-%m-%d %H:%M:%S', '/api/admin/quotes', '/historical', '/realtime', '/{quote_type}/export', 'admin_quotes', 'custom', 'data', 'download_url', 'exports', 'filename', 'historical', 'message', 'month', 'openpyxl', 'page', 'page_size', 'quotes.log', 'realtime', 'success', 'today', 'total', 'week', '开盘价', '成交量', '成交额', '数据导出成功', '无效的数据类型', '昨收价', '更新时间', '最低价', '最新价', '最高价', '涨跌幅', '股票代码', '股票名称', '自定义日期范围需要提供开始和结束日期', '行情数据']

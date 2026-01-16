@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\hk_index_realtime.py
+# hypothesis_version: 6.150.2
+
+[500, '%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '-', '__main__', 'affected_rows', 'akshare', 'amount', 'change', 'change_amount', 'change_percent', 'code', 'collect_time', 'current', 'db_file', 'english_name', 'error', 'error_message', 'high', 'low', 'name', 'open', 'operation_desc', 'operation_type', 'pct_chg', 'pre_close', 'price', 'status', 'success', 'trade_date', 'update_time', 'vol', 'volume', '今开', '代码', '名称', '成交量', '成交额', '昨收', '最低', '最新价', '最高', '未能获取任何港股指数数据', '涨跌幅', '涨跌额', '采集失败', '采集或入库时出错: %s', '采集港股指数实时行情数据失败', '重试次数用尽']

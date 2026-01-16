@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\long_lower_shadow_strategy.py
+# hypothesis_version: 6.150.2
+
+[0.0, 0.02, 0.3, 1.0, 100, '%Y-%m-%d', 'amount', 'amplitude', 'body_length', 'change_percent', 'close', 'code', 'current_price', 'date', 'deviation_from_ma20', 'end_date', 'high', 'low', 'lower_shadow', 'ma20', 'name', 'open', 'pattern_close', 'pattern_date', 'pattern_high', 'pattern_low', 'pattern_open', 'shadow_body_ratio', 'start_date', 'strftime', 'upper_shadow', 'upper_shadow_ratio', 'volume']

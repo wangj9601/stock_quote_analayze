@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\historical.py
+# hypothesis_version: 6.150.2
+
+[100, '"', '%Y%m%d', "'", 'A股', '[^\\d\\.\\-]', 'daily', 'db_file', 'qfq', '代码', '名称', '开盘', '成交量', '成交额', '接收到中断信号，正在安全退出...', '收盘', '日期格式错误，请使用YYYYMMDD格式', '最低', '最高', '检测到中断信号，正在安全退出...', '涨跌幅', '程序被用户中断', '连接错误次数过多，程序退出']

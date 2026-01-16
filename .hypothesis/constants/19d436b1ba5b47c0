@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\high_tight_flag_strategy.py
+# hypothesis_version: 6.150.2
+
+[0.0, 1.9, 9.5, 100, '%Y-%m-%d', 'amount', 'change_percent', 'close', 'code', 'current_price', 'date', 'end_date', 'high', 'low', 'name', 'open', 'period_low', 'price_ratio', 'start_date', 'strftime', 'volume']

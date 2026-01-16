@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\realtime_index_spot_ak.py
+# hypothesis_version: 6.150.2
+
+[100, '%Y-%m-%d %H:%M:%S', 'affected_rows', 'akshare', 'amount', 'amplitude', 'change', 'code', 'collect_time', 'created_at', 'db_file', 'error', 'error_message', 'first', 'high', 'index_spot_type', 'low', 'name', 'open', 'operation_desc', 'operation_type', 'pct_chg', 'pre_close', 'price', 'session', 'status', 'success', 'update_time', 'volume', 'volume_ratio', '上证', '上证系列指数', '中证', '今开', '代码', '全指', '全部指数实时行情数据采集并入库完成', '创业', '名称', '基金指数', '成交量', '成交额', '成功使用新浪接口获取指数数据', '振幅', '新', '新浪接口返回None', '新浪接口返回空数据', '昨收', '最低', '最新价', '最高', '未能获取有效的指数数据', '沪深', '沪深重要指数', '涨跌幅', '涨跌额', '深证', '深证系列指数', '科创', '红利', '综合', '采集或入库时出错: %s', '采集指数实时行情数据失败', '量比', '１００', '１８０', '３８０', '５０', 'Ａ股', 'Ｂ股', 'ＣＮ', 'Ｓ０', 'ＳＥＥ', 'ＳＨＥ', 'ＳＴＡＲ']

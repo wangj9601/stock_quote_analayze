@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\auth.py
+# hypothesis_version: 6.150.2
+
+[50000, 'Bearer', 'WWW-Authenticate', 'algorithm', 'api/auth/login', 'auto', 'bcrypt', 'exp', 'ignore', 'is_admin', 'secret_key', 'sha256_crypt', 'sub', 'utf-8', '使用旧 SHA-256 哈希验证成功', '密码不能为空', '无效的管理员认证凭据', '无效的认证凭据', '需要管理员权限']

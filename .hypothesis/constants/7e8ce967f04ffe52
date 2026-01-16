@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\keep_increasing_strategy.py
+# hypothesis_version: 6.150.2
+
+[0.0, 1.0, 1.2, 100, '%Y-%m-%d', 'amount', 'change_percent', 'close', 'code', 'current_ma30', 'current_price', 'date', 'end_date', 'high', 'low', 'ma30', 'ma30_before_30', 'ma30_increase_ratio', 'ma30_step1', 'ma30_step2', 'name', 'open', 'start_date', 'strftime', 'volume']

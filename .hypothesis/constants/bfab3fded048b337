@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\low_nine_strategy.py
+# hypothesis_version: 6.150.2
+
+[0.0, 100, '%Y-%m-%d', '-', '=', 'amount', 'change_percent', 'close', 'code', 'current_price', 'date', 'decline_ratio', 'end_date', 'high', 'low', 'max_price_in_9days', 'min_price_in_9days', 'name', 'open', 'pattern_end_date', 'pattern_start_date', 'pattern_start_price', 'start_date', 'strftime', 'volume', '开始执行低九策略选股']

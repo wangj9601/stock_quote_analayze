@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\config\config.py
+# hypothesis_version: 6.150.2
+
+['akshare', 'backend_core', 'data', 'database', 'db_file', 'log_dir', 'logs', 'max_retries', 'models', 'proxy_pool', 'random_delay_range', 'retry_delay', 'ssl_verify', 'stock_analysis.db', 'timeout', 'token', 'tushare', 'use_fallback_sources']

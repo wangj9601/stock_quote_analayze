@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\user_manage.py
+# hypothesis_version: 6.150.2
+
+['/api/users', '/login', '/me', '/me/password', '/register', '/search', '/status', 'Bearer', 'WWW-Authenticate', 'access_token', 'active', 'bearer', 'data', 'last_login', 'message', 'status', 'sub', 'success', 'token_type', 'user', 'user_id', 'users', '密码修改成功', '旧密码错误', '用户名已存在', '用户名已被使用', '用户名或密码错误', '账号已被禁用', '邮箱已被注册']

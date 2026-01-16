@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\admin\users.py
+# hypothesis_version: 6.150.2
+
+[100, '/api/admin/users', '/stats', '/test', '/{user_id}', '/{user_id}/password', '/{user_id}/status', '2024-01-01T00:00:00Z', 'active', 'admin', 'bingfengtang$91', 'created_at', 'data', 'default', 'disabled', 'email', 'id', 'message', 'page', 'pageSize', 'role', 'status', 'suspended', 'test@example.com', 'test_user', 'timestamp', 'total', 'updated_at', 'user', 'username', '密码修改成功', '密码已重置为默认值', '密码长度不能少于6位', '新密码长度不能少于6位', '无效的状态值', '用户不存在', '用户删除成功', '用户名或邮箱已存在', '用户管理API正常工作']

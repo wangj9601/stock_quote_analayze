@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\admin\indicators.py
+# hypothesis_version: 6.150.2
+
+[100, '/boll', '/details', '/generate', '/history', '/kdj', '/ma', '/macd', '/mavol', '/pvfrs', '/rsi', 'CN', 'CN 或 HK', '_sa_instance_state', 'admin_indicators', 'bias', 'boll', 'boll_lower', 'boll_mid', 'boll_upper', 'close', 'code', 'count', 'd', 'data', 'date', 'dea', 'dif', 'ema12', 'ema26', 'falling_days_f', 'high', 'indicators', 'instant_deviation', 'items', 'j', 'k', 'kdj', 'low', 'ma', 'ma10', 'ma120', 'ma20', 'ma200', 'ma20_d', 'ma30', 'ma5', 'ma60', 'macd', 'market_type', 'mavol', 'mavol10', 'mavol120', 'mavol20', 'mavol200', 'mavol20_m', 'mavol30', 'mavol5', 'mavol60', 'message', 'open', 'page', 'page_size', 'pvfrs', 'rising_days_z', 'rsi', 'rsi12', 'rsi24', 'rsi6', 'rsv', 'success', 'total', 'volume', '开始日期 YYYY-MM-DD', '日期 YYYY-MM-DD', '结束日期 YYYY-MM-DD', '股票代码']

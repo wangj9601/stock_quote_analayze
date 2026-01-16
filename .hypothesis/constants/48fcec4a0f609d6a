@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\hk_index_historical_collector.py
+# hypothesis_version: 6.150.2
+
+[500, '%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '=', '__main__', 'affected_rows', 'akshare', 'amount', 'change', 'close', 'code', 'collected_date', 'collected_source', 'date', 'db_file', 'error', 'error_message', 'failed', 'high', 'low', 'message', 'name', 'open', 'operation_desc', 'operation_type', 'partial_success', 'pct_chg', 'processed_dates', 'realtime_quotes', 'skipped', 'status', 'success', 'total_failed', 'total_skipped', 'total_success', 'trade_date', 'volume', '测试采集当天历史行情数据']

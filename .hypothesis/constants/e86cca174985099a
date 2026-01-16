@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\admin\auth.py
+# hypothesis_version: 6.150.2
+
+['/api/admin/auth', '/login', '/logout', '/me', '/verify', 'Bearer', 'WWW-Authenticate', 'access_token', 'admin', 'admin-auth', 'bearer', 'is_admin', 'message', 'sub', 'token_type', 'valid', '用户名或密码错误', '登出成功']

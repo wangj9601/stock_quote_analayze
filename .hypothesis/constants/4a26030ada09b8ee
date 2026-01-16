@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\utils\mean_frequency_calculator.py
+# hypothesis_version: 6.150.2
+
+[0.0, 'bias', 'close', 'date', 'delta', 'efficiency', 'f', 'falling_days_f', 'instant_deviation', 'is_falling', 'is_rising', 'ma20', 'ma20_d', 'mavol20', 'mavol20_m', 'rising_days_z', 'volume', 'z']

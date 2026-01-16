@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\strategies\pvfrs\pvfrs_strategy.py
+# hypothesis_version: 6.150.2
+
+[-0.1, 0.02, 0.05, 0.08, 0.1, 0.2, 0.25, 1.0, 5.0, 6.0, 365.25, 252, 100000, '%Y-%m-%d', ', ', 'CN', 'bias', 'bias_sufficient', 'buy', 'buy_bias_min', 'buy_consecutive_days', 'buy_efficiency_min', 'close', 'date', 'efficiency_positive', 'entry_date', 'entry_price', 'equity', 'falling_days_f', 'frequency_reversal', 'hold', 'instant_deviation', 'ma20_d', 'macro_reversal', 'max_holding_days', 'max_position_size', 'overbought', 'overextended', 'position', 'position_size', 'price', 'price_reversal', 'quantity', 'rising_days_z', 'sell', 'sell_bias_max', 'signal', 'stop_loss', 'take_profit', 'volume_reversal', '下跌频率占优', '价格跌破均线', '偏离过远', '回测结束', '宏观位移转负', '成交量萎缩', '超买', '趋势反转: ']

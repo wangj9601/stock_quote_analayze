@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\stock\stock_screening.py
+# hypothesis_version: 6.150.2
+
+[0.0, 0.01, 0.02, 0.8, 0.97, 1.0, 1.03, 1.5, 9.5, 9.8, 100, 249, 250, 400, '%Y-%m-%d', 'amount', 'breakthrough_date', 'breakthrough_price', 'change_percent', 'close', 'code', 'current_price', 'date', 'doji_dates', 'end_date', 'gap_dates', 'high', 'highest_date', 'highest_price', 'highest_volume', 'index', 'inf', 'limit_up_date', 'limit_up_high', 'limit_up_low', 'limit_up_price', 'low', 'lowest_date', 'lowest_price', 'lowest_volume', 'ma10', 'ma20', 'ma250', 'ma5', 'name', 'open', 'price_ratio', 'start_date', 'strftime', 'trading_days_diff', 'volume', 'volume_ratio']

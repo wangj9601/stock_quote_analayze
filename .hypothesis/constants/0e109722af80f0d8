@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\trading_routes.py
+# hypothesis_version: 6.150.2
+
+[0.0, 1e-06, 1000000.0, 100, 200, 400, 500, '/account', '/api/simtrade', '/dashboard', '/orders', '/positions', 'buy', 'filled', 'sell', 'simtrade', '交易方向必须为 buy 或 sell', '可用持仓不足', '无效的成交价格', '暂无该股票行情，无法获取成交价格', '账户现金余额不足']

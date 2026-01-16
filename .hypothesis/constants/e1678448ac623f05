@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_api\market_routes.py
+# hypothesis_version: 6.150.2
+
+[0.0, 500, '%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '-', '/api/market', '/hk-indices', '/indices', '/industry_board', '000', '000001', '000300', '159', '399', '399001', '399006', 'amount', 'board_code', 'board_name', 'change', 'change_amount', 'change_percent', 'code', 'current', 'data', 'data_source', 'database_realtime', 'error', 'latest_price', 'leading_stock_code', 'leading_stock_name', 'market', 'message', 'name', 'success', 'timestamp', 'top_stocks', 'total_market_value', 'total_stocks', 'traceback', 'turnover_rate', 'update_time', 'volume', '上证指数', '创业板指', '沪深300', '深圳成指', '深证成指', '获取板块行情数据失败', '获取板块龙头股数据失败']

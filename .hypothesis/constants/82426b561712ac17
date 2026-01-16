@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\data_collectors\akshare\enhanced_base.py
+# hypothesis_version: 6.150.2
+
+[365, 429, 500, 502, 503, 504, '%Y%m%d', 'GET', 'HEAD', 'OPTIONS', 'T', 'User-Agent', 'akshare', 'connection', 'daily', 'empty', 'eof', 'headers', 'http://', 'https://', 'log_dir', 'logs', 'max_retries', 'proxy_pool', 'qfq', 'retry_delay', 'ssl', 'stock_bj_a_spot_em', 'stock_sh_a_spot_em', 'stock_sz_a_spot_em', 'stock_zh_a_spot_em', 'timeout', 'utf-8', 'w', '代码', '开始获取所有股票的实时行情...', '开始获取股票列表...', '所有数据源都失败了', '重试次数用尽']
