@@ -9,11 +9,10 @@ from datetime import datetime, timedelta, date
 import random
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from . import User
+from backend_api.models import User, Watchlist, WatchlistGroup
 
-from database import get_db
-from auth import get_current_admin
-from models import Watchlist, WatchlistGroup
+from backend_api.database import get_db
+from backend_api.auth import get_current_admin
 
 router = APIRouter(prefix="/api/admin/dashboard", tags=["admin"])
 

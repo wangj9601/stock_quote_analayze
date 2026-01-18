@@ -36,27 +36,6 @@
 
     <!-- 主内容区 -->
     <main class="admin-main">
-      <!-- 头部 -->
-      <header class="admin-header">
-        <div class="header-left">
-          <h1 class="text-2xl font-bold text-gray-900">{{ currentPageTitle }}</h1>
-          <div class="breadcrumb">
-            <span>管理后台</span>
-            <span>/</span>
-            <span>{{ currentPageTitle }}</span>
-          </div>
-        </div>
-        
-        <div class="header-right">
-          <div class="user-menu">
-            <span class="user-name">{{ user?.username || '管理员' }}</span>
-            <el-avatar :size="32" class="user-avatar">
-              <el-icon><User /></el-icon>
-            </el-avatar>
-          </div>
-        </div>
-      </header>
-
       <!-- 页面内容 -->
       <div class="admin-content">
         <router-view :key="$route.fullPath" />
@@ -105,6 +84,7 @@ const menuItems = [
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/pvfrs-strategy', name: 'PVFRS交易策略', icon: TrendCharts },
   { path: '/pvfrs-management', name: 'PVFRS策略管理', icon: DataAnalysis },
+  { path: '/selection-results', name: 'PVFRS选股结果', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },

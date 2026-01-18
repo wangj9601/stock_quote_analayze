@@ -78,7 +78,11 @@ class BacktestReport:
     
     def to_dict(self) -> Dict:
         """转换为字典格式"""
-        return asdict(self)
+        result = asdict(self)
+        # 如果存在 comprehensive_data，也包含进去
+        if hasattr(self, 'comprehensive_data') and self.comprehensive_data:
+            result['comprehensive_data'] = self.comprehensive_data
+        return result
 
 
 class IAdminInterface:
@@ -872,25 +876,36 @@ class AdminInterface(IAdminInterface):
             stock_data_dict = {}
             total_stocks = len(config.stock_pool)
             
-            for i, symbol in enumerate(config.stock_pool):
-                try:
-                    # 获取股票历史数据
-                    data = self.data_interface.get_historical_data(
-                        symbol, config.start_date, config.end_date
-                    )
-                    if data and len(data) >= 20:  # 确保有足够的数据
-                        stock_data_dict[symbol] = data
-                    
-                    # 更新数据准备进度
-                    data_progress = 10 + (i + 1) / total_stocks * 20  # 10-30%
-                    self.execution_monitor.update_progress(
-                        task_id, int(data_progress), 
-                        f"准备数据 ({i+1}/{total_stocks}): {symbol}"
-                    )
-                    
-                except Exception as e:
-                    logger.warning(f"获取股票 {symbol} 数据失败: {str(e)}")
-                    continue
+            # 获取数据库会话用于数据查询
+            from backend_api.database import get_db
+            db = next(get_db())
+            
+            try:
+                for i, symbol in enumerate(config.stock_pool):
+                    try:
+                        # 使用 frontend_interface 的方法获取数据（它已经实现了数据库查询）
+                        # 或者直接使用 data_interface，它会自动从数据库获取
+                        data = self._get_stock_data_from_db(
+                            db, symbol, config.start_date, config.end_date
+                        )
+                        if data and len(data) >= 20:  # 确保有足够的数据
+                            stock_data_dict[symbol] = data
+                            logger.info(f"成功获取股票 {symbol} 的 {len(data)} 条数据")
+                        else:
+                            logger.warning(f"股票 {symbol} 数据不足: {len(data) if data else 0} 条")
+                        
+                        # 更新数据准备进度
+                        data_progress = 10 + (i + 1) / total_stocks * 20  # 10-30%
+                        self.execution_monitor.update_progress(
+                            task_id, int(data_progress), 
+                            f"准备数据 ({i+1}/{total_stocks}): {symbol}"
+                        )
+                        
+                    except Exception as e:
+                        logger.warning(f"获取股票 {symbol} 数据失败: {str(e)}")
+                        continue
+            finally:
+                db.close()
             
             if not stock_data_dict:
                 raise PVFRSException("没有获取到有效的股票数据")
@@ -946,6 +961,72 @@ class AdminInterface(IAdminInterface):
             # 重新抛出异常，让监控器处理
             raise
     
+    def _get_stock_data_from_db(self, db, symbol: str, start_date: str, end_date: str) -> List[MarketData]:
+        """从数据库获取股票历史数据
+        
+        Args:
+            db: 数据库会话
+            symbol: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            List[MarketData]: 市场数据列表
+        """
+        try:
+            from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
+            from sqlalchemy import desc, asc, cast, Date as SA_Date
+            from datetime import datetime
+            
+            # 判断是A股还是港股
+            is_hk = (symbol.startswith('0') and len(symbol) == 5) or symbol.startswith('HK') or symbol.startswith('hk')
+            
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+            
+            market_data_list = []
+            
+            if is_hk:
+                # 港股数据
+                date_col = cast(HistoricalQuotesHK.date, SA_Date)
+                quotes = db.query(HistoricalQuotesHK).filter(
+                    HistoricalQuotesHK.code == symbol,
+                    date_col >= start_dt,
+                    date_col <= end_dt
+                ).order_by(asc(date_col)).all()
+            else:
+                # A股数据
+                date_col = cast(HistoricalQuotes.date, SA_Date)
+                quotes = db.query(HistoricalQuotes).filter(
+                    HistoricalQuotes.code == symbol,
+                    date_col >= start_dt,
+                    date_col <= end_dt
+                ).order_by(asc(date_col)).all()
+            
+            for quote in quotes:
+                try:
+                    market_data = MarketData(
+                        symbol=symbol,
+                        date=str(quote.date)[:10] if quote.date else "",
+                        open=float(quote.open) if quote.open else 0.0,
+                        high=float(quote.high) if quote.high else 0.0,
+                        low=float(quote.low) if quote.low else 0.0,
+                        close=float(quote.close) if quote.close else 0.0,
+                        volume=int(quote.volume) if quote.volume else 0,
+                        amount=float(quote.amount) if hasattr(quote, 'amount') and quote.amount else 0.0
+                    )
+                    market_data_list.append(market_data)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"跳过无效数据: {symbol} {quote.date} - {e}")
+                    continue
+            
+            logger.info(f"成功获取股票 {symbol} 的 {len(market_data_list)} 条历史数据 ({start_date} 到 {end_date})")
+            return market_data_list
+            
+        except Exception as e:
+            logger.error(f"从数据库获取股票 {symbol} 数据失败: {str(e)}")
+            return []
+    
     def _update_task_progress(self, task_id: str, progress: int, current_step: str) -> None:
         """更新任务进度
         
@@ -992,6 +1073,23 @@ class AdminInterface(IAdminInterface):
         # 转换交易记录为字典格式
         trades_dict = []
         for trade in backtest_result.trades:
+            # 计算持有天数
+            holding_days = None
+            if trade.entry_date and trade.exit_date:
+                try:
+                    entry_dt = datetime.strptime(trade.entry_date, '%Y-%m-%d')
+                    exit_dt = datetime.strptime(trade.exit_date, '%Y-%m-%d')
+                    holding_days = (exit_dt - entry_dt).days
+                except (ValueError, TypeError):
+                    holding_days = None
+            
+            # 计算收益率
+            return_rate = None
+            if trade.pnl_percent is not None:
+                return_rate = trade.pnl_percent
+            elif trade.entry_price and trade.exit_price and trade.entry_price > 0:
+                return_rate = (trade.exit_price - trade.entry_price) / trade.entry_price
+            
             trade_dict = {
                 'symbol': trade.symbol,
                 'entry_date': trade.entry_date,
@@ -1000,8 +1098,8 @@ class AdminInterface(IAdminInterface):
                 'exit_price': trade.exit_price,
                 'quantity': trade.quantity,
                 'pnl': trade.pnl,
-                'return_rate': trade.return_rate,
-                'holding_days': trade.holding_days,
+                'return_rate': return_rate,
+                'holding_days': holding_days,
                 'exit_reason': trade.exit_reason
             }
             trades_dict.append(trade_dict)
@@ -1297,10 +1395,10 @@ class AdminInterface(IAdminInterface):
                 },
                 'trading': {
                     'total_trades': len(report.trades),
-                    'winning_trades': len([t for t in report.trades if t['pnl'] > 0]),
-                    'losing_trades': len([t for t in report.trades if t['pnl'] < 0]),
-                    'total_pnl': sum(t['pnl'] for t in report.trades),
-                    'avg_holding_days': sum(t['holding_days'] for t in report.trades) / len(report.trades) if report.trades else 0
+                    'winning_trades': len([t for t in report.trades if t.get('pnl') and t['pnl'] > 0]),
+                    'losing_trades': len([t for t in report.trades if t.get('pnl') and t['pnl'] < 0]),
+                    'total_pnl': sum(t.get('pnl', 0) for t in report.trades if t.get('pnl') is not None),
+                    'avg_holding_days': sum(t.get('holding_days', 0) for t in report.trades if t.get('holding_days') is not None) / len([t for t in report.trades if t.get('holding_days') is not None]) if report.trades and any(t.get('holding_days') is not None for t in report.trades) else 0
                 }
             }
             
@@ -1444,9 +1542,9 @@ class AdminInterface(IAdminInterface):
                 <div class="section">
                     <h2>交易统计</h2>
                     <p>总交易次数: {len(report.trades)}</p>
-                    <p>盈利交易: {len([t for t in report.trades if t['pnl'] > 0])}</p>
-                    <p>亏损交易: {len([t for t in report.trades if t['pnl'] < 0])}</p>
-                    <p>总盈亏: {sum(t['pnl'] for t in report.trades):.2f} 元</p>
+                    <p>盈利交易: {len([t for t in report.trades if t.get('pnl') is not None and t.get('pnl', 0) > 0])}</p>
+                    <p>亏损交易: {len([t for t in report.trades if t.get('pnl') is not None and t.get('pnl', 0) < 0])}</p>
+                    <p>总盈亏: {sum(t.get('pnl', 0) for t in report.trades if t.get('pnl') is not None):.2f} 元</p>
                 </div>
                 
                 <div class="section">

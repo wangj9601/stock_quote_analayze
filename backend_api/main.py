@@ -100,6 +100,14 @@ except ImportError as e:
     print(f"❌ history_router 导入失败: {e}")
     history_router = None
 
+# 尝试导入新闻路由
+try:
+    from .news_channel_routes import router as news_router
+    print("✅ news_router 导入成功")
+except ImportError as e:
+    print(f"❌ news_router 导入失败: {e}")
+    news_router = None
+
 # 创建FastAPI应用
 app = FastAPI(
     title="股票分析系统API",
@@ -186,6 +194,95 @@ if history_router is not None:
     print("✅ history路由注册成功")
 else:
     print("❌ history路由未注册")
+
+# 注册新闻路由
+if news_router is not None:
+    app.include_router(news_router)
+    print("✅ 新闻路由注册成功")
+else:
+    print("❌ 新闻路由未注册")
+
+# 尝试导入admin路由
+try:
+    from .admin.auth import router as admin_auth_router
+    print("✅ admin_auth_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_auth_router 导入失败: {e}")
+    admin_auth_router = None
+
+try:
+    from .admin.dashboard import router as admin_dashboard_router
+    print("✅ admin_dashboard_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_dashboard_router 导入失败: {e}")
+    admin_dashboard_router = None
+
+try:
+    from .admin.indicators import router as admin_indicators_router
+    print("✅ admin_indicators_router 导入成功")
+    # 打印路由信息用于调试
+    if admin_indicators_router:
+        print(f"   - 路由前缀: {admin_indicators_router.prefix}")
+        print(f"   - 路由数量: {len(admin_indicators_router.routes)}")
+        # 打印所有路由路径
+        for route in admin_indicators_router.routes:
+            if hasattr(route, 'path'):
+                print(f"   - 路由路径: {route.path}")
+except ImportError as e:
+    print(f"❌ admin_indicators_router 导入失败: {e}")
+    import traceback
+    traceback.print_exc()
+    admin_indicators_router = None
+except Exception as e:
+    print(f"❌ admin_indicators_router 导入时发生其他错误: {e}")
+    import traceback
+    traceback.print_exc()
+    admin_indicators_router = None
+
+# 注册admin路由
+if admin_auth_router is not None:
+    app.include_router(admin_auth_router)
+    print("✅ admin auth路由注册成功")
+
+if admin_dashboard_router is not None:
+    app.include_router(admin_dashboard_router)
+    print("✅ admin dashboard路由注册成功")
+
+if admin_indicators_router is not None:
+    app.include_router(admin_indicators_router)
+    print("✅ admin indicators路由注册成功")
+else:
+    print("❌ admin indicators路由未注册")
+
+# 尝试导入PVFRS admin路由
+try:
+    from backend_api.admin.pvfrs_admin_routes import router as pvfrs_admin_router
+    print("✅ pvfrs_admin_router 导入成功")
+    # 打印路由信息用于调试
+    if pvfrs_admin_router:
+        print(f"   - 路由前缀: {pvfrs_admin_router.prefix}")
+        print(f"   - 路由数量: {len(pvfrs_admin_router.routes)}")
+        # 打印所有路由路径
+        for route in pvfrs_admin_router.routes:
+            if hasattr(route, 'path'):
+                print(f"   - 路由路径: {route.path}")
+except ImportError as e:
+    print(f"❌ pvfrs_admin_router 导入失败: {e}")
+    import traceback
+    traceback.print_exc()
+    pvfrs_admin_router = None
+except Exception as e:
+    print(f"❌ pvfrs_admin_router 导入时发生其他错误: {e}")
+    import traceback
+    traceback.print_exc()
+    pvfrs_admin_router = None
+
+# 注册PVFRS admin路由
+if pvfrs_admin_router is not None:
+    app.include_router(pvfrs_admin_router)
+    print("✅ PVFRS admin路由注册成功")
+else:
+    print("❌ PVFRS admin路由未注册（导入失败）")
 
 # 注册PVFRS前端路由
 if pvfrs_frontend_router is not None:

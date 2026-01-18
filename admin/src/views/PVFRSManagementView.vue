@@ -180,6 +180,10 @@ const notification = reactive({
   duration: 4500
 })
 
+// 告警提示防抖：记录上次提示时间，避免频繁提示
+let lastAlertNotificationTime = 0
+const ALERT_NOTIFICATION_INTERVAL = 60000 // 60秒内最多提示一次告警
+
 // 子组件引用
 const backtestRef = ref()
 const reportRef = ref()
@@ -249,6 +253,14 @@ const handleConfigSaved = (config: any) => {
 }
 
 const handleAlert = (alert: any) => {
+  // 防抖：如果距离上次提示时间太短，则不提示
+  const now = Date.now()
+  if (now - lastAlertNotificationTime < ALERT_NOTIFICATION_INTERVAL) {
+    console.log('告警提示过于频繁，已忽略本次提示')
+    return
+  }
+  
+  lastAlertNotificationTime = now
   showNotification('warning', '监控告警', alert.message)
 }
 

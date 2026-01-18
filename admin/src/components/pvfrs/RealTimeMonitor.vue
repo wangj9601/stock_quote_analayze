@@ -134,6 +134,11 @@ const chartContainer = ref()
 let chart: any = null
 let monitorTimer: NodeJS.Timeout | null = null
 
+// 已提示的告警ID集合，用于避免重复提示
+const notifiedAlertIds = ref(new Set<string>())
+// 上次告警数量，用于检测告警数量是否增加
+let lastAlertCount = 0
+
 // 监控数据
 const monitorData = reactive({
   activeSignals: 0,
@@ -154,12 +159,12 @@ const startMonitoring = async () => {
   await refreshAlerts()
   initChart()
   
-  // 开始定时刷新
+  // 开始定时刷新（增加间隔，减少频繁提示）
   monitorTimer = setInterval(() => {
     refreshMonitorData()
     refreshAlerts()
     updateChart()
-  }, 5000) // 每5秒刷新一次
+  }, 30000) // 每30秒刷新一次，减少频繁提示
 }
 
 const stopMonitoring = () => {
@@ -171,30 +176,80 @@ const stopMonitoring = () => {
 
 const refreshMonitorData = async () => {
   try {
-    const data = await pvfrsApi.getMonitoringData()
-    Object.assign(monitorData, data)
+    const response = await pvfrsApi.getMonitoringData()
+    // 确保从响应中正确提取数据并映射到前端期望的结构
+    const data = response?.data || {}
+    
+    // 映射后端数据结构到前端期望的结构
+    monitorData.activeSignals = data.active_stocks || 0
+    monitorData.alerts = data.total_signals || 0
+    monitorData.performance = data.performance?.success_rate || 0
+    monitorData.riskLevel = data.status === 'running' ? 'LOW' : 'HIGH'
+    
   } catch (error) {
     console.error('获取监控数据失败:', error)
+    // 设置默认值
+    monitorData.activeSignals = 0
+    monitorData.alerts = 0
+    monitorData.performance = 0
+    monitorData.riskLevel = 'UNKNOWN'
   }
 }
 
 const refreshAlerts = async () => {
   try {
     loading.value = true
-    const alertsData = await pvfrsApi.getMonitoringAlerts()
-    alerts.value = alertsData || []
+    const response = await pvfrsApi.getMonitoringAlerts()
+    // 确保从响应中正确提取数据数组并映射字段
+    let alertsData = response?.data || []
     
-    // 检查是否有新告警
-    const newAlerts = alerts.value.filter(alert => !alert.acknowledged)
-    if (newAlerts.length > 0) {
-      emit('alert-triggered', {
-        count: newAlerts.length,
-        message: `发现 ${newAlerts.length} 个新告警`
-      })
+    // 确保 alertsData 是数组
+    if (!Array.isArray(alertsData)) {
+      // 如果响应本身就是数组，使用它
+      if (Array.isArray(response)) {
+        alertsData = response
+      } else {
+        // 否则使用空数组
+        alertsData = []
+      }
     }
+    
+    // 映射后端字段到前端期望的字段
+    alerts.value = alertsData.map(alert => ({
+      ...alert,
+      level: alert.severity?.toUpperCase() || 'LOW', // severity -> level
+      source: alert.type || 'system' // type -> source
+    }))
+    
+    // 检查未确认的告警数量
+    const unacknowledgedCount = alerts.value.filter(alert => !alert.acknowledged).length
+    
+    // 只在告警数量增加时才提示（避免重复提示）
+    if (unacknowledgedCount > lastAlertCount) {
+      const newAlerts = alerts.value.filter(alert => 
+        !alert.acknowledged && !notifiedAlertIds.value.has(alert.id)
+      )
+      
+      if (newAlerts.length > 0) {
+        // 记录已提示的告警ID
+        newAlerts.forEach(alert => {
+          notifiedAlertIds.value.add(alert.id)
+        })
+        
+        emit('alert-triggered', {
+          count: newAlerts.length,
+          message: `发现 ${newAlerts.length} 个新告警`
+        })
+      }
+    }
+    
+    // 更新上次告警数量
+    lastAlertCount = unacknowledgedCount
     
   } catch (error) {
     console.error('获取告警列表失败:', error)
+    // 确保在错误情况下alerts仍然是数组
+    alerts.value = []
   } finally {
     loading.value = false
   }
@@ -204,6 +259,8 @@ const acknowledgeAlert = async (alert: any) => {
   try {
     await pvfrsApi.acknowledgeAlert(alert.id)
     alert.acknowledged = true
+    // 从已提示列表中移除，如果该告警再次出现（未确认状态），可以再次提示
+    notifiedAlertIds.value.delete(alert.id)
     ElMessage.success('告警已确认')
   } catch (error) {
     ElMessage.error('确认告警失败')
@@ -217,6 +274,8 @@ const acknowledgeAllAlerts = async () => {
     for (const alert of unacknowledgedAlerts) {
       await pvfrsApi.acknowledgeAlert(alert.id)
       alert.acknowledged = true
+      // 从已提示列表中移除
+      notifiedAlertIds.value.delete(alert.id)
     }
     
     ElMessage.success(`已确认 ${unacknowledgedAlerts.length} 个告警`)

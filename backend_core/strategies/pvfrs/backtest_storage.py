@@ -113,10 +113,10 @@ class BacktestStorage:
                 initial_capital = config_data.get('initial_capital', 0.0)
                 stock_count = len(config_data.get('stock_pool', []))
                 
-                # 交易统计
+                # 交易统计（处理 None 值）
                 trades = report_data.get('trades', [])
                 total_trades = len(trades)
-                winning_trades = len([t for t in trades if t.get('pnl', 0) > 0])
+                winning_trades = len([t for t in trades if t.get('pnl') is not None and t.get('pnl', 0) > 0])
                 
                 # 序列化完整数据
                 full_data_json = json.dumps(report_data, ensure_ascii=False)

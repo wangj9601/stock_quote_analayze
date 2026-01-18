@@ -31,9 +31,31 @@ class PVFRSApiService {
 
   // 回测任务管理
   async createBacktestTask(taskData: any) {
-    return this.request('/api/frontend/pvfrs/backtest', {
+    // 转换前端格式到后端期望的格式
+    const backendData: any = {
+      start_date: taskData.startDate || taskData.start_date,
+      end_date: taskData.endDate || taskData.end_date,
+      initial_capital: taskData.initialCapital || taskData.initial_capital || 100000,
+      strategy_params: taskData.strategy_params || {},
+      risk_params: taskData.risk_params || {}
+    }
+    
+    // 处理股票池
+    if (taskData.mode === 'single' && taskData.stockCode) {
+      backendData.code = taskData.stockCode
+    } else if (taskData.mode === 'batch' && taskData.stockList) {
+      backendData.stockList = taskData.stockList
+    } else if (taskData.stock_pool) {
+      backendData.stock_pool = taskData.stock_pool
+    } else if (taskData.code) {
+      backendData.code = taskData.code
+    } else if (taskData.stock_codes) {
+      backendData.stock_codes = taskData.stock_codes
+    }
+    
+    return this.request('/api/admin/pvfrs/backtest/create', {
       method: 'POST',
-      body: JSON.stringify(taskData),
+      body: JSON.stringify(backendData),
     })
   }
 
@@ -44,6 +66,10 @@ class PVFRSApiService {
 
   async getBacktestTask(taskId: string) {
     return this.request(`/api/admin/pvfrs/backtest/tasks/${taskId}`)
+  }
+
+  async getTaskLogs(taskId: string) {
+    return this.request(`/api/admin/pvfrs/backtest/logs/${taskId}`)
   }
 
   async pauseBacktestTask(taskId: string) {
@@ -157,6 +183,16 @@ class PVFRSApiService {
   async getPerformanceMetrics(params: any = {}) {
     const queryString = new URLSearchParams(params).toString()
     return this.request(`/api/frontend/pvfrs/monitor/performance?${queryString}`)
+  }
+
+  // 选股结果
+  async getSelectionResults(params: any = {}) {
+    const queryString = new URLSearchParams(params).toString()
+    return this.request(`/api/frontend/pvfrs/selection-results?${queryString}`)
+  }
+
+  async getSelectionSummary() {
+    return this.request('/api/frontend/pvfrs/selection-summary')
   }
 
   // 数据分析
@@ -274,6 +310,47 @@ class PVFRSApiService {
       method: 'POST',
       body: JSON.stringify(taskData),
     })
+  }
+
+  // 下载任务结果（通过任务ID）
+  async downloadTaskResults(taskId: string, reportId?: string) {
+    // 如果提供了 reportId，直接使用；否则尝试通过任务ID获取报告
+    let finalReportId = reportId
+    
+    if (!finalReportId) {
+      try {
+        // 尝试通过任务ID获取报告
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${taskId}`, {
+          headers: this.getAuthHeaders(),
+        })
+        
+        if (response.ok) {
+          const reportData = await response.json()
+          if (reportData && reportData.data && reportData.data.report_id) {
+            finalReportId = reportData.data.report_id
+          } else if (reportData && reportData.report_id) {
+            finalReportId = reportData.report_id
+          }
+        }
+      } catch (error) {
+        console.error('获取报告ID失败:', error)
+      }
+    }
+    
+    if (!finalReportId) {
+      throw new Error('任务没有关联的报告ID')
+    }
+    
+    // 使用报告下载端点
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${finalReportId}/download`, {
+      headers: this.getAuthHeaders(),
+    })
+    
+    if (!response.ok) {
+      throw new Error('Download failed')
+    }
+    
+    return response.blob()
   }
 }
 

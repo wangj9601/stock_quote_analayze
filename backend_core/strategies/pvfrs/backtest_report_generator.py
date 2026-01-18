@@ -97,6 +97,42 @@ class BacktestReportGenerator:
         
         logger.info("回测报告生成器初始化完成")
     
+    def _calculate_holding_days(self, trade: Trade) -> Optional[int]:
+        """计算交易持有天数
+        
+        Args:
+            trade: 交易记录
+            
+        Returns:
+            Optional[int]: 持有天数，如果无法计算则返回 None
+        """
+        if not trade.entry_date or not trade.exit_date:
+            return None
+        
+        try:
+            entry_dt = datetime.strptime(trade.entry_date, '%Y-%m-%d')
+            exit_dt = datetime.strptime(trade.exit_date, '%Y-%m-%d')
+            return (exit_dt - entry_dt).days
+        except (ValueError, TypeError):
+            return None
+    
+    def _calculate_return_rate(self, trade: Trade) -> Optional[float]:
+        """计算交易收益率
+        
+        Args:
+            trade: 交易记录
+            
+        Returns:
+            Optional[float]: 收益率，如果无法计算则返回 None
+        """
+        if trade.pnl_percent is not None:
+            return trade.pnl_percent
+        
+        if trade.entry_price and trade.exit_price and trade.entry_price > 0:
+            return (trade.exit_price - trade.entry_price) / trade.entry_price
+        
+        return None
+    
     def generate_comprehensive_report(self, backtest_result: BacktestResult, 
                                     initial_capital: float,
                                     start_date: str, end_date: str) -> Dict:
@@ -265,8 +301,8 @@ class BacktestReportGenerator:
         days = len(equity_curve)
         annual_return = (1 + total_return) ** (365 / days) - 1 if days > 0 else 0
         
-        # 胜率
-        winning_trades = len([t for t in trades if t.pnl > 0])
+        # 胜率（处理 None 值）
+        winning_trades = len([t for t in trades if t.pnl is not None and t.pnl > 0])
         total_trades = len(trades)
         win_rate = winning_trades / total_trades if total_trades > 0 else 0
         
@@ -401,14 +437,15 @@ class BacktestReportGenerator:
         else:
             downside_deviation = 0
         
-        # 交易相关风险指标
-        maximum_loss = min(t.pnl for t in trades) if trades else 0
+        # 交易相关风险指标（过滤 None 值）
+        pnl_values = [t.pnl for t in trades if t.pnl is not None]
+        maximum_loss = min(pnl_values) if pnl_values else 0
         
-        # 计算最大连续亏损次数
+        # 计算最大连续亏损次数（处理 None 值）
         consecutive_losses = 0
         max_consecutive_losses = 0
         for trade in trades:
-            if trade.pnl < 0:
+            if trade.pnl is not None and trade.pnl < 0:
                 consecutive_losses += 1
                 max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
             else:
@@ -441,14 +478,15 @@ class BacktestReportGenerator:
             return TradeAnalysis(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         
         total_trades = len(trades)
-        winning_trades = len([t for t in trades if t.pnl > 0])
-        losing_trades = len([t for t in trades if t.pnl < 0])
+        # 处理 None 值，确保 pnl 不为 None
+        winning_trades = len([t for t in trades if t.pnl is not None and t.pnl > 0])
+        losing_trades = len([t for t in trades if t.pnl is not None and t.pnl < 0])
         
         win_rate = winning_trades / total_trades if total_trades > 0 else 0
         
-        # 平均盈利和亏损
-        wins = [t.pnl for t in trades if t.pnl > 0]
-        losses = [t.pnl for t in trades if t.pnl < 0]
+        # 平均盈利和亏损（过滤 None 值）
+        wins = [t.pnl for t in trades if t.pnl is not None and t.pnl > 0]
+        losses = [t.pnl for t in trades if t.pnl is not None and t.pnl < 0]
         
         avg_win = sum(wins) / len(wins) if wins else 0
         avg_loss = sum(losses) / len(losses) if losses else 0
@@ -459,12 +497,18 @@ class BacktestReportGenerator:
         else:
             profit_factor = float('inf') if avg_win > 0 else 0
         
-        # 平均持有天数
-        avg_holding_days = sum(t.holding_days for t in trades) / total_trades if total_trades > 0 else 0
+        # 平均持有天数（计算并过滤 None 值）
+        holding_days_list = []
+        for t in trades:
+            holding_days = self._calculate_holding_days(t)
+            if holding_days is not None:
+                holding_days_list.append(holding_days)
+        avg_holding_days = sum(holding_days_list) / len(holding_days_list) if holding_days_list else 0
         
-        # 最佳和最差交易
-        best_trade = max(t.pnl for t in trades) if trades else 0
-        worst_trade = min(t.pnl for t in trades) if trades else 0
+        # 最佳和最差交易（过滤 None 值）
+        pnl_values = [t.pnl for t in trades if t.pnl is not None]
+        best_trade = max(pnl_values) if pnl_values else 0
+        worst_trade = min(pnl_values) if pnl_values else 0
         
         # 连胜连败统计
         win_streak = 0
@@ -473,7 +517,11 @@ class BacktestReportGenerator:
         largest_loss_streak = 0
         
         for trade in trades:
-            if trade.pnl > 0:
+            # 处理 None 值
+            if trade.pnl is None:
+                win_streak = 0
+                loss_streak = 0
+            elif trade.pnl > 0:
                 win_streak += 1
                 loss_streak = 0
                 largest_win_streak = max(largest_win_streak, win_streak)
@@ -481,7 +529,7 @@ class BacktestReportGenerator:
                 loss_streak += 1
                 win_streak = 0
                 largest_loss_streak = max(largest_loss_streak, loss_streak)
-            else:
+            else:  # pnl == 0
                 win_streak = 0
                 loss_streak = 0
         
@@ -626,12 +674,20 @@ class BacktestReportGenerator:
             current_drawdown['duration'] = len(equity_curve) - current_drawdown['start_index']
             drawdown_periods.append(current_drawdown)
         
-        # 统计分析
+        # 统计分析（过滤 None 值）
         if drawdown_periods:
-            max_drawdown_period = max(drawdown_periods, key=lambda x: x['max_drawdown'])
-            longest_drawdown_period = max(drawdown_periods, key=lambda x: x['duration'])
-            avg_drawdown = sum(dd['max_drawdown'] for dd in drawdown_periods) / len(drawdown_periods)
-            avg_duration = sum(dd['duration'] for dd in drawdown_periods) / len(drawdown_periods)
+            # 过滤掉 max_drawdown 或 duration 为 None 的项
+            valid_drawdowns = [dd for dd in drawdown_periods if dd.get('max_drawdown') is not None and dd.get('duration') is not None]
+            if valid_drawdowns:
+                max_drawdown_period = max(valid_drawdowns, key=lambda x: x['max_drawdown'])
+                longest_drawdown_period = max(valid_drawdowns, key=lambda x: x['duration'])
+                avg_drawdown = sum(dd['max_drawdown'] for dd in valid_drawdowns) / len(valid_drawdowns)
+                avg_duration = sum(dd['duration'] for dd in valid_drawdowns) / len(valid_drawdowns)
+            else:
+                max_drawdown_period = None
+                longest_drawdown_period = None
+                avg_drawdown = 0
+                avg_duration = 0
         else:
             max_drawdown_period = None
             longest_drawdown_period = None
@@ -676,13 +732,21 @@ class BacktestReportGenerator:
             
             stats = symbol_stats[symbol]
             stats['total_trades'] += 1
-            if trade.pnl > 0:
-                stats['winning_trades'] += 1
-            stats['total_pnl'] += trade.pnl
-            stats['total_return'] += trade.return_rate
-            stats['avg_holding_days'] += trade.holding_days
-            stats['best_trade'] = max(stats['best_trade'], trade.pnl)
-            stats['worst_trade'] = min(stats['worst_trade'], trade.pnl)
+            # 处理 None 值
+            if trade.pnl is not None:
+                if trade.pnl > 0:
+                    stats['winning_trades'] += 1
+                stats['total_pnl'] += trade.pnl
+                stats['best_trade'] = max(stats['best_trade'], trade.pnl)
+                stats['worst_trade'] = min(stats['worst_trade'], trade.pnl)
+            
+            return_rate = self._calculate_return_rate(trade)
+            if return_rate is not None:
+                stats['total_return'] += return_rate
+            
+            holding_days = self._calculate_holding_days(trade)
+            if holding_days is not None:
+                stats['avg_holding_days'] += holding_days
         
         # 计算平均值
         for symbol, stats in symbol_stats.items():
@@ -740,18 +804,31 @@ class BacktestReportGenerator:
                 'return': return_rate
             })
         
-        # 交易分布图数据
+        # 交易分布图数据（计算并过滤 None 值）
+        pnl_values = [trade.pnl for trade in trades if trade.pnl is not None]
+        holding_days_list = []
+        return_rates_list = []
+        
+        for trade in trades:
+            holding_days = self._calculate_holding_days(trade)
+            if holding_days is not None:
+                holding_days_list.append(holding_days)
+            
+            return_rate = self._calculate_return_rate(trade)
+            if return_rate is not None:
+                return_rates_list.append(return_rate)
+        
         trade_distribution_data = {
-            'pnl_values': [trade.pnl for trade in trades],
-            'holding_days': [trade.holding_days for trade in trades],
-            'return_rates': [trade.return_rate for trade in trades]
+            'pnl_values': pnl_values,
+            'holding_days': holding_days_list,
+            'return_rates': return_rates_list
         }
         
-        # 胜率统计数据
+        # 胜率统计数据（处理 None 值）
         win_loss_data = {
-            'wins': len([t for t in trades if t.pnl > 0]),
-            'losses': len([t for t in trades if t.pnl < 0]),
-            'breakevens': len([t for t in trades if t.pnl == 0])
+            'wins': len([t for t in trades if t.pnl is not None and t.pnl > 0]),
+            'losses': len([t for t in trades if t.pnl is not None and t.pnl < 0]),
+            'breakevens': len([t for t in trades if t.pnl is not None and t.pnl == 0])
         }
         
         return {

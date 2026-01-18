@@ -179,11 +179,24 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" label="状态" width="150">
           <template #default="scope">
-            <el-tag :type="getStatusTagType(scope.row.status)">
-              {{ getStatusLabel(scope.row.status) }}
-            </el-tag>
+            <div class="status-cell">
+              <el-tag :type="getStatusTagType(scope.row.status)">
+                {{ getStatusLabel(scope.row.status) }}
+              </el-tag>
+              <el-tooltip 
+                v-if="scope.row.status === 'failed' && scope.row.error_message" 
+                :content="scope.row.error_message" 
+                placement="top" 
+                effect="dark"
+                :show-after="200"
+              >
+                <el-icon class="error-icon" style="margin-left: 8px; color: #f56c6c; cursor: pointer;">
+                  <Warning />
+                </el-icon>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="progress" label="进度" width="120">
@@ -270,7 +283,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Refresh, 
   Delete, 
-  UploadFilled 
+  UploadFilled,
+  Warning
 } from '@element-plus/icons-vue'
 import TaskDetail from './TaskDetail.vue'
 
@@ -347,11 +361,13 @@ const canCreateTask = computed(() => {
   return true
 })
 
+// 确保表格数据始终是数组
 const filteredTasks = computed(() => {
+  const taskList = Array.isArray(tasks.value) ? tasks.value : []
   if (!statusFilter.value) {
-    return tasks.value
+    return taskList
   }
-  return tasks.value.filter(task => task.status === statusFilter.value)
+  return taskList.filter(task => task.status === statusFilter.value)
 })
 
 // 发射事件
@@ -408,12 +424,23 @@ const refreshTasks = async () => {
       status: statusFilter.value
     })
     
-    tasks.value = result.tasks || []
-    totalTasks.value = result.total || 0
+    // 后端返回的格式是 { success: true, data: [...], total: ... }
+    // 确保 data 始终是数组
+    if (result && typeof result === 'object') {
+      const taskData = result.data || result.tasks || []
+      tasks.value = Array.isArray(taskData) ? taskData : []
+      totalTasks.value = result.total || 0
+    } else {
+      tasks.value = []
+      totalTasks.value = 0
+    }
     
   } catch (error) {
     ElMessage.error('获取任务列表失败')
     console.error('获取任务列表失败:', error)
+    // 确保即使出错，tasks 也是数组
+    tasks.value = []
+    totalTasks.value = 0
   } finally {
     loading.value = false
   }
@@ -642,6 +669,14 @@ onMounted(() => {
 
 .task-table {
   @apply w-full;
+}
+
+.status-cell {
+  @apply flex items-center;
+}
+
+.error-icon {
+  @apply cursor-pointer;
 }
 
 .pagination-wrapper {

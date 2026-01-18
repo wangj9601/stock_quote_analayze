@@ -308,11 +308,11 @@ class StrategyComparator:
         metrics_data['calmar_ratio'] = []
         
         for report in reports:
-            # 盈亏比
+            # 盈亏比（处理 None 值）
             trades = report.get('trades', [])
             if trades:
-                wins = [t['pnl'] for t in trades if t['pnl'] > 0]
-                losses = [t['pnl'] for t in trades if t['pnl'] < 0]
+                wins = [t.get('pnl') for t in trades if t.get('pnl') is not None and t.get('pnl', 0) > 0]
+                losses = [t.get('pnl') for t in trades if t.get('pnl') is not None and t.get('pnl', 0) < 0]
                 avg_win = sum(wins) / len(wins) if wins else 0
                 avg_loss = sum(losses) / len(losses) if losses else 0
                 profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else 0
@@ -392,18 +392,25 @@ class StrategyComparator:
             if not values:
                 continue
             
-            # 找出最佳和最差
+            # 找出最佳和最差（过滤 None 值）
+            valid_values = [v for v in values if v is not None]
+            if not valid_values:
+                continue
+            
             is_higher_better = self.metric_directions.get(metric_name, True)
             if is_higher_better:
-                best_index = values.index(max(values))
-                worst_index = values.index(min(values))
+                best_index = values.index(max(valid_values))
+                worst_index = values.index(min(valid_values))
             else:
-                best_index = values.index(min(values))
-                worst_index = values.index(max(values))
+                best_index = values.index(min(valid_values))
+                worst_index = values.index(max(valid_values))
             
-            # 计算统计指标
-            average = sum(values) / len(values)
-            variance = sum((v - average) ** 2 for v in values) / len(values)
+            # 计算统计指标（过滤 None 值）
+            valid_values = [v for v in values if v is not None]
+            if not valid_values:
+                continue
+            average = sum(valid_values) / len(valid_values)
+            variance = sum((v - average) ** 2 for v in valid_values) / len(valid_values)
             std_deviation = math.sqrt(variance)
             
             comparison_metric = ComparisonMetric(
@@ -443,11 +450,12 @@ class StrategyComparator:
                     metric_value = metrics_data[metric_name][i]
                     metric_values = metrics_data[metric_name]
                     
-                    # 标准化分数 (0-100)
-                    if len(metric_values) > 1:
-                        min_val = min(metric_values)
-                        max_val = max(metric_values)
-                        if max_val != min_val:
+                    # 标准化分数 (0-100)（过滤 None 值）
+                    valid_metric_values = [v for v in metric_values if v is not None]
+                    if len(valid_metric_values) > 1:
+                        min_val = min(valid_metric_values)
+                        max_val = max(valid_metric_values)
+                        if max_val != min_val and metric_value is not None:
                             if self.metric_directions.get(metric_name, True):
                                 # 越大越好
                                 normalized_score = (metric_value - min_val) / (max_val - min_val) * 100
@@ -656,10 +664,15 @@ class StrategyComparator:
                 if metric_name in comparison_metrics:
                     metric = comparison_metrics[metric_name]
                     if i < len(metric.values):
-                        # 标准化到0-100
+                        # 标准化到0-100（过滤 None 值）
                         value = metric.values[i]
-                        min_val = min(metric.values)
-                        max_val = max(metric.values)
+                        if value is None:
+                            continue
+                        valid_values = [v for v in metric.values if v is not None]
+                        if not valid_values:
+                            continue
+                        min_val = min(valid_values)
+                        max_val = max(valid_values)
                         
                         if max_val != min_val:
                             if self.metric_directions.get(metric_name, True):
@@ -868,16 +881,20 @@ class StrategyComparator:
         score_diff = best_strategy.overall_score - worst_strategy.overall_score
         summary_parts.append(f"策略间性能差异为 {score_diff:.1f} 分")
         
-        # 关键指标表现
+        # 关键指标表现（过滤 None 值）
         if 'annual_return' in comparison_metrics:
             annual_returns = comparison_metrics['annual_return']
-            best_return = max(annual_returns.values)
-            summary_parts.append(f"最高年化收益率为 {best_return:.2%}")
+            valid_returns = [v for v in annual_returns.values if v is not None]
+            if valid_returns:
+                best_return = max(valid_returns)
+                summary_parts.append(f"最高年化收益率为 {best_return:.2%}")
         
         if 'max_drawdown' in comparison_metrics:
             drawdowns = comparison_metrics['max_drawdown']
-            min_drawdown = min(drawdowns.values)
-            summary_parts.append(f"最小最大回撤为 {min_drawdown:.2%}")
+            valid_drawdowns = [v for v in drawdowns.values if v is not None]
+            if valid_drawdowns:
+                min_drawdown = min(valid_drawdowns)
+                summary_parts.append(f"最小最大回撤为 {min_drawdown:.2%}")
         
         return "，".join(summary_parts) + "。"
     

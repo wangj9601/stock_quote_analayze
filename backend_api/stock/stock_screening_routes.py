@@ -8,6 +8,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
+from typing import Optional
+
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+
+from backend_api.auth import SECRET_KEY, ALGORITHM
+from backend_api.models import Watchlist, TokenData
 
 from backend_api.database import get_db
 from .stock_screening import StockScreeningStrategy
@@ -20,6 +27,9 @@ from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/screening", tags=["screening"])
+
+# OAuth2 scheme (optional auth)
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
 
 # 添加调试日志
 logger.info("stock_screening_routes.py 模块加载完成，开始注册路由...")
@@ -43,6 +53,8 @@ async def get_pvfrs_strategy(
     date: str = Query(None, description="目标日期，格式：YYYY-MM-DD，不提供则使用当前日期"),
     limit: int = Query(None, ge=1, description="最大返回结果数量，不限制则返回所有符合条件的股票"),
     min_strength: float = Query(0.3, ge=0.0, le=1.0, description="最低信号强度阈值，默认0.3"),
+    scope: str = Query("all", description="股票范围：all(全部), watchlist(自选)"),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db)
 ):
     """PVFRS量价频三维共振演化策略选股"""
@@ -85,7 +97,94 @@ async def get_pvfrs_strategy(
             frontend_interface.set_selection_config(max_results=10000, min_strength=min_strength)
         
         # 获取选股结果
-        selection_results = frontend_interface.get_selection_results(date)
+        stock_pool = None
+        
+        # 处理自选股筛选
+        if scope == 'watchlist':
+            if not token:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="查看自选股需要登录",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            try:
+                # 验证 token
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                username: str = payload.get("sub")
+                if username is None:
+                    raise HTTPException(status_code=401, detail="无效的认证凭据")
+                
+                # 获取用户信息 (可选，如果只需user_id也可以从payload获取如果存了的话，TokenData定义了username)
+                # 这里暂时通过username查询用户ID
+                from backend_api.models import User
+                user = db.query(User).filter(User.username == username).first()
+                if not user:
+                    raise HTTPException(status_code=401, detail="用户不存在")
+                
+                # 查询自选股
+                watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+                if not watchlist_items:
+                    # 如果自选股为空，直接返回空结果
+                    return JSONResponse({
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": date or datetime.now().strftime("%Y-%m-%d"),
+                        "strategy_name": "PVFRS量价频三维共振演化策略",
+                        "scope": "watchlist",
+                        "message": "您的自选股列表为空"
+                    })
+                
+                stock_pool = [item.stock_code for item in watchlist_items]
+                logger.info(f"用户 {username} 请求筛选自选股，共 {len(stock_pool)} 只")
+                
+            except JWTError:
+                raise HTTPException(status_code=401, detail="无效的认证凭据")
+        
+        # 获取选股结果 (传入 stock_pool)
+        selection_results = frontend_interface.get_selection_results(date, stock_pool=stock_pool)
+        
+        # 批量获取实时行情数据（用于获取当前价格和涨跌幅）
+        from backend_api.models import StockRealtimeQuote, StockRealtimeQuoteHK
+        from sqlalchemy import func
+        import pandas as pd
+        
+        # 获取所有股票代码
+        stock_codes = [result.symbol for result in selection_results]
+        if stock_codes:
+            # 获取最新交易日期
+            latest_date_result = pd.read_sql_query("""
+                SELECT MAX(trade_date) as latest_date 
+                FROM stock_realtime_quote 
+                WHERE change_percent IS NOT NULL
+            """, db.bind)
+            
+            latest_trade_date = None
+            if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
+                latest_trade_date = latest_date_result.iloc[0]['latest_date']
+            
+            # 批量查询实时行情（A股）
+            realtime_quotes_a = {}
+            if latest_trade_date:
+                quotes_a = db.query(StockRealtimeQuote).filter(
+                    StockRealtimeQuote.code.in_(stock_codes),
+                    StockRealtimeQuote.trade_date == latest_trade_date
+                ).all()
+                realtime_quotes_a = {q.code: q for q in quotes_a}
+            
+            # 批量查询实时行情（港股）
+            hk_codes = [code for code in stock_codes if not (code.startswith('6') or code.startswith('0') or code.startswith('3'))]
+            realtime_quotes_hk = {}
+            if hk_codes and latest_trade_date:
+                quotes_hk = db.query(StockRealtimeQuoteHK).filter(
+                    StockRealtimeQuoteHK.code.in_(hk_codes),
+                    StockRealtimeQuoteHK.trade_date == latest_trade_date
+                ).all()
+                realtime_quotes_hk = {q.code: q for q in quotes_hk}
+        else:
+            realtime_quotes_a = {}
+            realtime_quotes_hk = {}
         
         # 转换为API响应格式
         results_data = []
@@ -94,18 +193,55 @@ async def get_pvfrs_strategy(
             
             # 提取指标信息
             indicators = result_dict.get('indicators', {})
-            price_dimension_info = indicators.get('price_dimension', {})
-            frequency_dimension_info = indicators.get('frequency_dimension', {})
-            volume_dimension_info = indicators.get('volume_dimension', {})
-            pvfrs_indicators = indicators.get('pvfrs_indicators', {})
             
-            # 提取条件验证信息
-            conditions_met = result.conditions_met or {}
+            # 从 resonance_analysis.details 中获取维度信息
+            resonance_analysis = indicators.get('resonance_analysis', {})
+            resonance_details = resonance_analysis.get('details', {})
             
-            # 计算状态文本
-            price_dimension_status = "满足" if conditions_met.get("price_dimension_met", False) else "--"
-            frequency_dimension_status = "满足" if conditions_met.get("frequency_dimension_met", False) else "--"
-            volume_dimension_status = "满足" if conditions_met.get("volume_dimension_met", False) else "--"
+            # 调试日志：输出指标结构信息
+            if len(results_data) < 1:  # 只打印第一条数据的调试信息，避免日志过多
+                logger.info(f"[DEBUG] resonance_details keys: {list(resonance_details.keys())}")
+                logger.info(f"[DEBUG] indicators keys: {list(indicators.keys())}")
+            
+            # 优先从 resonance_analysis.details 中获取，如果不存在则从顶层 indicators 中获取
+            price_indicators = resonance_details.get('price_indicators') or indicators.get('price_dimension') or {}
+            frequency_indicators = resonance_details.get('frequency_indicators') or indicators.get('frequency_dimension') or {}
+            volume_indicators = resonance_details.get('volume_indicators') or indicators.get('volume_dimension') or {}
+            
+            # log debug info if still empty
+            if not price_indicators:
+                logger.debug(f"Stock {result.symbol} missing price_indicators")
+            entry_timing_analysis = indicators.get('entry_timing_analysis', {})
+            
+            # 从维度分析中提取详细状态文本
+            # 价格维度状态 - 显示实际数值
+            if price_indicators and isinstance(price_indicators, dict) and price_indicators:
+                macro_displacement = price_indicators.get('macro_displacement', 0) or 0
+                instant_deviation = price_indicators.get('instant_deviation', 0) or 0
+                # 显示关键指标值
+                price_dimension_status = f"宏观位移: {macro_displacement:.2f}"
+            else:
+                price_dimension_status = "--"
+            
+            # 频率维度状态 - 显示实际数值
+            if frequency_indicators and isinstance(frequency_indicators, dict) and frequency_indicators:
+                rising_days = frequency_indicators.get('rising_days', 0) or 0
+                falling_days = frequency_indicators.get('falling_days', 0) or 0
+                # 显示涨跌天数
+                frequency_dimension_status = f"上涨{rising_days}天/下跌{falling_days}天"
+            else:
+                frequency_dimension_status = "--"
+            
+            # 成交量维度状态 - 显示实际数值
+            if volume_indicators and isinstance(volume_indicators, dict) and volume_indicators:
+                efficiency_ratio = volume_indicators.get('efficiency_ratio', 0) or 0
+                # 显示效率比
+                volume_dimension_status = f"效率比: {efficiency_ratio:.2f}"
+            else:
+                volume_dimension_status = "--"
+            
+            # 获取条件验证信息
+            conditions_met = result_dict.get('conditions_met', {})
             
             # 共振状态
             resonance_detected = conditions_met.get("resonance_detected", False)
@@ -118,9 +254,47 @@ async def get_pvfrs_strategy(
             else:
                 resonance_status = "--"
             
-            # 入场时机状态
-            entry_timing_met = conditions_met.get("entry_timing_met", False)
-            entry_timing_status = "满足" if entry_timing_met else "--"
+            # 入场时机状态（从 entry_timing_analysis 中提取）
+            entry_timing_status = "--"
+            if entry_timing_analysis and isinstance(entry_timing_analysis, dict):
+                comprehensive_assessment = entry_timing_analysis.get('comprehensive_assessment', {})
+                if comprehensive_assessment and isinstance(comprehensive_assessment, dict):
+                    timing_score = comprehensive_assessment.get('score', 0)
+                    optimal_timing = comprehensive_assessment.get('optimal_timing', False)
+                    good_timing = comprehensive_assessment.get('good_timing', False)
+                    
+                    if optimal_timing:
+                        entry_timing_status = f"最佳时机({timing_score:.2f})"
+                    elif good_timing:
+                        entry_timing_status = f"良好时机({timing_score:.2f})"
+                    elif timing_score > 0:
+                        entry_timing_status = f"评分:{timing_score:.2f}"
+                else:
+                    # 尝试直接获取评分
+                    timing_score = entry_timing_analysis.get('timing_score', 0)
+                    if timing_score > 0:
+                        entry_timing_status = f"评分:{timing_score:.2f}"
+            
+            # 如果没有从 entry_timing_analysis 中获取到，尝试从 conditions_met 中获取
+            if entry_timing_status == "--":
+                entry_timing_met = conditions_met.get("entry_timing_optimized", False)
+                if entry_timing_met:
+                    entry_timing_status = "满足"
+                else:
+                    entry_timing_status = "--"
+            
+            # 获取当前价格和涨跌幅（从实时行情表）
+            stock_code = result.symbol
+            current_price = result_dict.get('price', None)  # 先使用历史数据中的价格
+            change_percent = None
+            
+            # 优先从实时行情表获取
+            realtime_quote = realtime_quotes_a.get(stock_code) or realtime_quotes_hk.get(stock_code)
+            if realtime_quote:
+                if hasattr(realtime_quote, 'current_price') and realtime_quote.current_price:
+                    current_price = float(realtime_quote.current_price)
+                if hasattr(realtime_quote, 'change_percent') and realtime_quote.change_percent is not None:
+                    change_percent = float(realtime_quote.change_percent)
             
             # 投资建议（从 indicators 中提取）
             investment_advice_dict = indicators.get('investment_advice', {})
@@ -143,13 +317,14 @@ async def get_pvfrs_strategy(
                 "strategy_type": "PVFRS",
                 "signal_date": date or datetime.now().strftime("%Y-%m-%d"),
                 # 添加前端期望的字段
-                "current_price": result_dict.get('price', None),  # 使用 price 作为 current_price
+                "current_price": current_price,  # 使用从实时行情表获取的价格
                 "price_dimension_status": price_dimension_status,
                 "frequency_dimension_status": frequency_dimension_status,
                 "volume_dimension_status": volume_dimension_status,
                 "resonance_status": resonance_status,
                 "entry_timing_status": entry_timing_status,
                 "investment_advice": investment_advice,
+                "current_change_percent": change_percent if change_percent is not None else 0.0,  # 添加当前涨跌幅（前端期望的字段名）
                 # 保留原有的 analysis_dimensions 字段
                 "analysis_dimensions": {
                     "price_dimension": conditions_met.get("price_dimension_met", False),
@@ -170,7 +345,8 @@ async def get_pvfrs_strategy(
             "strategy_name": "PVFRS量价频三维共振演化策略",
             "parameters": {
                 "limit": limit or "无限制",
-                "min_strength": min_strength
+                "min_strength": min_strength,
+                "scope": scope
             }
         })
     

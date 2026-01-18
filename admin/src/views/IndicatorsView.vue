@@ -575,14 +575,20 @@ const fetchData = async () => {
     }
     const response: any = await apiService.get(`/indicators/${activeIndicator.value}`, { params })
     if (response.success) {
-      tableData.value = response.data
-      total.value = response.total
+      // 确保 data 始终是数组
+      const data = response.data
+      tableData.value = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
+      total.value = response.total || (Array.isArray(data) ? data.length : (data?.total || 0))
     } else {
       ElMessage.error('获取数据失败')
+      tableData.value = []
+      total.value = 0
     }
   } catch (error) {
     console.error('Fetch indicators error:', error)
     ElMessage.error('网络请求失败')
+    tableData.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

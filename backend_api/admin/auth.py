@@ -9,15 +9,14 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel
-from models import Token, AdminInDB
-from database import get_db
-from auth import (
+from backend_api.models import Token, AdminInDB, Admin
+from backend_api.database import get_db
+from backend_api.auth import (
     authenticate_admin,
     create_access_token,
     get_current_admin,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from models import Admin
 
 class LoginRequest(BaseModel):
     username: str

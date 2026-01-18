@@ -485,7 +485,8 @@
             </div>
 
             <div class="screening-actions">
-                <button id="refreshBtn-one-yang-three-lines" class="refresh-btn" data-strategy="one-yang-three-lines">刷新筛选</button>
+                <button id="refreshBtn-one-yang-three-lines" class="refresh-btn"
+                    data-strategy="one-yang-three-lines">刷新筛选</button>
                 <span id="searchDate-one-yang-three-lines" class="search-date"></span>
             </div>
 
@@ -544,6 +545,23 @@
                     <li class="condition-item">5. <strong>入场时机:</strong> 价格穿越平均价格且成交量突破平均量</li>
                     <li class="condition-item">6. 自动排除所有ST股票（包括ST、*ST、S*ST等）</li>
                 </ul>
+            </div>
+
+            <!-- 数据来源选择 -->
+            <div class="strategy-params-card">
+                <h3>🔍 数据来源</h3>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="scopeAll" name="pvfrsScope" value="all" checked
+                            style="margin-right: 5px;">
+                        <label for="scopeAll" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="scopeWatchlist" name="pvfrsScope" value="watchlist"
+                            style="margin-right: 5px;">
+                        <label for="scopeWatchlist" style="cursor: pointer;">我的自选</label>
+                    </div>
+                </div>
             </div>
 
             <div class="screening-actions">

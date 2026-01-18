@@ -433,8 +433,9 @@ class BacktestConfigValidator:
             period_days = (end_date - start_date).days
             if period_days < 30:
                 errors.append("回测期间至少需要30天")
-            elif period_days > 3650:  # 10年
-                errors.append("回测期间不能超过10年")
+            # 移除10年限制，允许更长的回测期间
+            # elif period_days > 3650:  # 10年
+            #     errors.append("回测期间不能超过10年")
         
         except Exception as e:
             errors.append(f"日期验证异常: {str(e)}")

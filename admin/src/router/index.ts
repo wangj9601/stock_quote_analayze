@@ -53,6 +53,11 @@ const routes = [
         component: () => import('@/views/PVFRSManagementView.vue')
       },
       {
+        path: 'selection-results',
+        name: 'SelectionResults',
+        component: () => import('@/views/SelectionResultsView.vue')
+      },
+      {
         path: 'datasource',
         name: 'DataSource',
         component: () => import('@/views/DataSourceView.vue')
@@ -81,13 +86,32 @@ const routes = [
         path: 'announcements',
         name: 'Announcements',
         component: () => import('@/views/AnnouncementsView.vue')
+      },
+      {
+        path: 'reports/:id',
+        name: 'ReportDetail',
+        component: () => import('@/views/ReportDetailView.vue')
       }
     ]
   }
 ]
 
+// 根据环境确定基础路径
+// 开发环境：如果访问路径包含 /admin/，则使用 /admin/ 作为基础路径
+// 否则使用 / 作为基础路径
+const getBasePath = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return '/admin/'
+  }
+  // 开发环境：检查当前路径是否包含 /admin/
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin/')) {
+    return '/admin/'
+  }
+  return '/'
+}
+
 const router = createRouter({
-  history: createWebHistory(process.env.NODE_ENV === 'production' ? '/admin/' : '/'),
+  history: createWebHistory(getBasePath()),
   routes
 })
 

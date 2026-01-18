@@ -11,16 +11,26 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="任务状态">
-          <el-tag :type="getStatusTagType(task.status)">
-            {{ getStatusLabel(task.status) }}
-          </el-tag>
+          <div class="status-with-error">
+            <el-tag :type="getStatusTagType(task.status)">
+              {{ getStatusLabel(task.status) }}
+            </el-tag>
+            <el-alert
+              v-if="task.status === 'failed' && task.error_message"
+              :title="task.error_message"
+              type="error"
+              :closable="false"
+              show-icon
+              class="error-alert"
+            />
+          </div>
         </el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ formatDateTime(task.createdAt) }}</el-descriptions-item>
-        <el-descriptions-item label="开始时间">{{ formatDateTime(task.startedAt) }}</el-descriptions-item>
-        <el-descriptions-item label="完成时间">{{ formatDateTime(task.completedAt) }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ formatDateTime(task.createdAt || task.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="开始时间">{{ formatDateTime(task.startedAt || task.started_at) }}</el-descriptions-item>
+        <el-descriptions-item label="完成时间">{{ formatDateTime(task.completedAt || task.completed_at) }}</el-descriptions-item>
         <el-descriptions-item label="执行耗时">{{ formatDuration(task.duration) }}</el-descriptions-item>
-        <el-descriptions-item label="初始资金">¥{{ formatNumber(task.initialCapital) }}</el-descriptions-item>
-        <el-descriptions-item label="市场类型">{{ getMarketLabel(task.market) }}</el-descriptions-item>
+        <el-descriptions-item label="初始资金">¥{{ formatNumber(task.initialCapital || task.initial_capital) }}</el-descriptions-item>
+        <el-descriptions-item label="市场类型">{{ getMarketLabel(task.market || 'CN') }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -55,35 +65,54 @@
       <el-tabs v-model="activeConfigTab">
         <el-tab-pane label="基本配置" name="basic">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="回测开始日期">{{ task.startDate }}</el-descriptions-item>
-            <el-descriptions-item label="回测结束日期">{{ task.endDate }}</el-descriptions-item>
-            <el-descriptions-item label="初始资金">¥{{ formatNumber(task.initialCapital) }}</el-descriptions-item>
-            <el-descriptions-item label="交易手续费">{{ (task.commission * 100).toFixed(3) }}%</el-descriptions-item>
-            <el-descriptions-item label="滑点设置">{{ (task.slippage * 100).toFixed(2) }}%</el-descriptions-item>
+            <el-descriptions-item label="回测开始日期">{{ task.startDate || task.start_date || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="回测结束日期">{{ task.endDate || task.end_date || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="初始资金">¥{{ formatNumber(task.initialCapital || task.initial_capital) }}</el-descriptions-item>
+            <el-descriptions-item label="交易手续费">
+              {{ task.commission !== undefined && task.commission !== null ? ((task.commission * 100).toFixed(3) + '%') : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="滑点设置">
+              {{ task.slippage !== undefined && task.slippage !== null ? ((task.slippage * 100).toFixed(2) + '%') : '-' }}
+            </el-descriptions-item>
             <el-descriptions-item label="基准指数">{{ task.benchmark || '沪深300' }}</el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
         <el-tab-pane label="策略参数" name="strategy">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="买入乖离率阈值">{{ (task.config?.buyBiasMin * 100).toFixed(2) }}%</el-descriptions-item>
-            <el-descriptions-item label="卖出乖离率阈值">{{ (task.config?.sellBiasMax * 100).toFixed(2) }}%</el-descriptions-item>
-            <el-descriptions-item label="连续确认天数">{{ task.config?.buyConsecutiveDays }}天</el-descriptions-item>
-            <el-descriptions-item label="止损比例">{{ (task.config?.stopLoss * 100).toFixed(2) }}%</el-descriptions-item>
-            <el-descriptions-item label="止盈比例">{{ (task.config?.takeProfit * 100).toFixed(2) }}%</el-descriptions-item>
-            <el-descriptions-item label="最大仓位">{{ (task.config?.maxPositionSize * 100).toFixed(2) }}%</el-descriptions-item>
+            <el-descriptions-item label="买入乖离率阈值">
+              {{ task.config?.buyBiasMin !== undefined && task.config?.buyBiasMin !== null ? ((task.config.buyBiasMin * 100).toFixed(2) + '%') : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="卖出乖离率阈值">
+              {{ task.config?.sellBiasMax !== undefined && task.config?.sellBiasMax !== null ? ((task.config.sellBiasMax * 100).toFixed(2) + '%') : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="连续确认天数">
+              {{ task.config?.buyConsecutiveDays !== undefined && task.config?.buyConsecutiveDays !== null ? (task.config.buyConsecutiveDays + '天') : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="止损比例">
+              {{ task.config?.stopLoss !== undefined && task.config?.stopLoss !== null ? ((task.config.stopLoss * 100).toFixed(2) + '%') : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="止盈比例">
+              {{ task.config?.takeProfit !== undefined && task.config?.takeProfit !== null ? ((task.config.takeProfit * 100).toFixed(2) + '%') : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="最大仓位">
+              {{ task.config?.maxPositionSize !== undefined && task.config?.maxPositionSize !== null ? ((task.config.maxPositionSize * 100).toFixed(2) + '%') : '-' }}
+            </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
         
-        <el-tab-pane label="股票列表" name="stocks" v-if="task.mode === 'batch'">
+        <el-tab-pane label="股票列表" name="stocks" v-if="task.mode === 'batch' || (task.stockList && task.stockList.length > 0) || (task.stock_pool && task.stock_pool.length > 0)">
           <div class="stocks-list">
             <el-tag 
-              v-for="stock in task.stockList" 
+              v-for="stock in (task.stockList || task.stock_pool || [])" 
               :key="stock"
               class="stock-tag"
             >
               {{ stock }}
             </el-tag>
+            <div v-if="(!task.stockList || task.stockList.length === 0) && (!task.stock_pool || task.stock_pool.length === 0)" style="color: #999; padding: 10px;">
+              暂无股票列表
+            </div>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -173,7 +202,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, inject } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { API_BASE } from '@/config/api'
 import { 
   Refresh, 
   Document, 
@@ -185,8 +216,17 @@ const props = defineProps<{
   task: any
 }>()
 
+// 路由
+const router = useRouter()
+
 // 注入服务
 const pvfrsApi = inject('pvfrsApi')
+
+// 获取认证头部的辅助函数
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('admin_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 // 响应式数据
 const activeConfigTab = ref('basic')
@@ -228,20 +268,101 @@ const refreshLogs = async () => {
   }
 }
 
-const viewFullReport = () => {
-  // 跳转到报告详情页面
-  window.open(`/reports/${props.task.reportId}`, '_blank')
+const viewFullReport = async () => {
+  try {
+    // 如果没有reportId，先尝试通过任务ID获取报告
+    let reportId = props.task.reportId || props.task.report_id
+    
+    if (!reportId && props.task.status === 'completed') {
+      try {
+        // 通过任务ID获取报告数据
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${props.task.id}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        })
+        
+        if (response.ok) {
+          const reportData = await response.json()
+          // 报告数据可能在 data.report_id 或 report_id 字段
+          if (reportData && reportData.data && reportData.data.report_id) {
+            reportId = reportData.data.report_id
+          } else if (reportData && reportData.report_id) {
+            reportId = reportData.report_id
+          }
+        }
+      } catch (error) {
+        console.error('获取报告ID失败:', error)
+      }
+    }
+    
+    if (reportId) {
+      // 使用路由名称跳转，避免硬编码路径
+      // 使用 router.resolve 获取完整路径，然后在新标签页打开
+      const route = router.resolve({
+        name: 'ReportDetail',
+        params: { id: reportId }
+      })
+      window.open(route.href, '_blank')
+    } else {
+      ElMessage.warning('该任务还没有生成报告，请等待任务完成')
+    }
+  } catch (error) {
+    ElMessage.error('查看报告失败')
+    console.error('查看报告失败:', error)
+  }
 }
 
 const downloadResults = async () => {
   try {
-    const blob = await pvfrsApi.downloadTaskResults(props.task.id)
+    // 直接从任务对象获取 reportId（任务列表API已经包含了这个字段）
+    let reportId = props.task.reportId || props.task.report_id
+    
+    // 如果没有 reportId，尝试通过任务ID获取报告
+    if (!reportId && props.task.status === 'completed') {
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${props.task.id}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        })
+        
+        if (response.ok) {
+          const reportData = await response.json()
+          if (reportData && reportData.data && reportData.data.report_id) {
+            reportId = reportData.data.report_id
+          } else if (reportData && reportData.report_id) {
+            reportId = reportData.report_id
+          }
+        }
+      } catch (error) {
+        console.error('获取报告ID失败:', error)
+      }
+    }
+    
+    if (!reportId) {
+      ElMessage.warning('该任务还没有生成报告，无法下载')
+      return
+    }
+    
+    // 使用报告下载端点
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${reportId}/download`, {
+      headers: getAuthHeaders()
+    })
+    
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+    
+    const blob = await response.blob()
     
     // 创建下载链接
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `task_${props.task.id}_results.xlsx`
+    link.download = `task_${props.task.id}_results.pdf`
     link.click()
     
     window.URL.revokeObjectURL(url)
@@ -327,12 +448,16 @@ const getReturnClass = (returnValue: number) => {
 }
 
 const formatDateTime = (dateTime: string) => {
-  if (!dateTime) return '-'
-  return new Date(dateTime).toLocaleString()
+  if (!dateTime || dateTime === '-') return '-'
+  try {
+    return new Date(dateTime).toLocaleString('zh-CN')
+  } catch (e) {
+    return dateTime || '-'
+  }
 }
 
 const formatDuration = (duration: number) => {
-  if (!duration) return '-'
+  if (!duration || duration === 0 || isNaN(duration)) return '-'
   const hours = Math.floor(duration / 3600)
   const minutes = Math.floor((duration % 3600) / 60)
   const seconds = duration % 60
@@ -340,7 +465,7 @@ const formatDuration = (duration: number) => {
 }
 
 const formatNumber = (value: number, digits = 0) => {
-  if (value === null || value === undefined) return '-'
+  if (value === null || value === undefined || isNaN(value)) return '-'
   return value.toLocaleString('zh-CN', { 
     minimumFractionDigits: digits,
     maximumFractionDigits: digits 
@@ -369,6 +494,14 @@ onMounted(() => {
 .logs-card,
 .results-card {
   @apply shadow-sm;
+}
+
+.status-with-error {
+  @apply space-y-2;
+}
+
+.error-alert {
+  @apply mt-2;
 }
 
 .progress-content {

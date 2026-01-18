@@ -119,6 +119,13 @@ const ScreeningPage = {
                 this.loadScreeningResults(strategy);
             });
         });
+
+        // 绑定PVFRS策略范围切换事件
+        document.querySelectorAll('input[name="pvfrsScope"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                this.loadScreeningResults('pvfrs');
+            });
+        });
     },
 
     // 加载选股结果
@@ -215,7 +222,16 @@ const ScreeningPage = {
             } else if (strategy === 'one-yang-three-lines') {
                 url = `${apiBaseUrl}/api/screening/one-yang-three-lines`;
             } else if (strategy === 'pvfrs') {
-                url = `${apiBaseUrl}/api/screening/pvfrs-strategy`;
+                // 读取股票范围参数
+                const scopeAll = document.getElementById('scopeAll');
+                const scopeWatchlist = document.getElementById('scopeWatchlist');
+                let scope = 'all';
+
+                if (scopeWatchlist && scopeWatchlist.checked) {
+                    scope = 'watchlist';
+                }
+
+                url = `${apiBaseUrl}/api/screening/pvfrs-strategy?scope=${scope}`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -542,12 +558,12 @@ const ScreeningPage = {
                 } else if (stock.position_type === '高位') {
                     positionClass = 'position-high';
                 }
-                
+
                 // 风险提示
-                const riskWarnings = stock.risk_warnings && stock.risk_warnings.length > 0 
-                    ? stock.risk_warnings.join('；') 
+                const riskWarnings = stock.risk_warnings && stock.risk_warnings.length > 0
+                    ? stock.risk_warnings.join('；')
                     : '--';
-                
+
                 html += `
                     <tr>
                         <td><span class="stock-code">${stock.code}</span></td>
@@ -582,7 +598,7 @@ const ScreeningPage = {
                 } else {
                     strengthClass = 'strength-low';
                 }
-                
+
                 // 共振状态显示
                 const resonanceStatus = stock.resonance_status || '--';
                 let resonanceClass = '';
@@ -593,7 +609,7 @@ const ScreeningPage = {
                 } else {
                     resonanceClass = 'resonance-none';
                 }
-                
+
                 // 投资建议颜色
                 let adviceClass = '';
                 const advice = stock.investment_advice || '--';
@@ -604,7 +620,7 @@ const ScreeningPage = {
                 } else {
                     adviceClass = 'advice-wait';
                 }
-                
+
                 html += `
                     <tr>
                         <td><span class="stock-code">${stock.symbol || stock.code}</span></td>

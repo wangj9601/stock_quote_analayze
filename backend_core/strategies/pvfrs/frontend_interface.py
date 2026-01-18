@@ -48,11 +48,12 @@ class FrontendInterface:
         
         logger.info("PVFRS前端接口初始化完成")
     
-    def get_selection_results(self, date: Optional[str] = None) -> List[StockSelectionResult]:
+    def get_selection_results(self, date: Optional[str] = None, stock_pool: Optional[List[str]] = None) -> List[StockSelectionResult]:
         """获取选股结果
         
         Args:
             date: 查询日期，格式为YYYY-MM-DD，默认为当前日期
+            stock_pool: 可选，指定股票代码列表。如果提供，将只从这些股票中筛选。
             
         Returns:
             List[StockSelectionResult]: 选股结果列表
@@ -61,14 +62,18 @@ class FrontendInterface:
             if date is None:
                 date = datetime.now().strftime('%Y-%m-%d')
             
-            # 检查缓存
+            # 检查缓存 (注意：如果指定了stock_pool，则不使用常规缓存，或者需要通过stock_pool生成特定的cache_key)
+            # 为简单起见，如果指定了stock_pool，暂时跳过缓存读取，以免返回全部股票的缓存结果
             cache_key = f"selection_{date}"
-            if self.cache_enabled and self._is_cache_valid(cache_key):
+            if stock_pool is None and self.cache_enabled and self._is_cache_valid(cache_key):
                 logger.info(f"从缓存获取选股结果: {date}")
                 return self._selection_cache[cache_key]['data']
             
             # 获取股票池
-            stock_pool = self._get_stock_pool()
+            # 如果未提供stock_pool，则获取默认全量股票池
+            if stock_pool is None:
+                stock_pool = self._get_stock_pool()
+                
             logger.info(f"开始选股分析，股票池大小: {len(stock_pool)}")
             
             # 执行选股

@@ -79,6 +79,20 @@ class PVFRSDataInterface(IDataInterface):
             self.logger.error(f"获取市场数据失败 {symbol}: {e}")
             raise
     
+    def get_historical_data(self, symbol: str, start_date: str, end_date: str) -> List[MarketData]:
+        """
+        获取历史数据（get_market_data 的别名，用于兼容性）
+        
+        Args:
+            symbol: 股票代码
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+            
+        Returns:
+            List[MarketData]: 市场数据列表
+        """
+        return self.get_market_data(symbol, start_date, end_date)
+    
     def validate_data(self, data: List[MarketData]) -> bool:
         """
         验证数据完整性
@@ -207,16 +221,115 @@ class PVFRSDataInterface(IDataInterface):
         if hasattr(self.data_source, 'get_stock_data'):
             return self.data_source.get_stock_data(symbol, start_date, end_date)
         elif hasattr(self.data_source, 'query'):
-            # 数据库查询
-            sql = """
-            SELECT date, open, high, low, close, volume, amount 
-            FROM stock_data 
-            WHERE symbol = %s AND date BETWEEN %s AND %s 
-            ORDER BY date
-            """
-            return pd.read_sql(sql, self.data_source, params=[symbol, start_date, end_date])
+            # 数据库查询（SQLAlchemy Session）
+            from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
+            from sqlalchemy import desc, asc, cast, Date as SA_Date
+            from datetime import datetime
+            
+            # 判断是A股还是港股
+            is_hk = symbol.startswith('0') and len(symbol) == 5 or symbol.startswith('HK') or symbol.startswith('hk')
+            
+            try:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+                date_col = cast(HistoricalQuotes.date, SA_Date) if not is_hk else cast(HistoricalQuotesHK.date, SA_Date)
+                
+                if is_hk:
+                    # 港股数据
+                    query = self.data_source.query(HistoricalQuotesHK).filter(
+                        HistoricalQuotesHK.code == symbol,
+                        date_col >= start_dt,
+                        date_col <= end_dt
+                    ).order_by(asc(date_col))
+                else:
+                    # A股数据
+                    query = self.data_source.query(HistoricalQuotes).filter(
+                        HistoricalQuotes.code == symbol,
+                        date_col >= start_dt,
+                        date_col <= end_dt
+                    ).order_by(asc(date_col))
+                
+                results = query.all()
+                
+                if not results:
+                    self.logger.warning(f"未找到股票 {symbol} 的历史数据 ({start_date} 到 {end_date})")
+                    return pd.DataFrame()
+                
+                # 转换为DataFrame
+                data = []
+                for item in results:
+                    data.append({
+                        'date': str(item.date)[:10] if item.date else None,
+                        'open': float(item.open) if item.open else 0.0,
+                        'high': float(item.high) if item.high else 0.0,
+                        'low': float(item.low) if item.low else 0.0,
+                        'close': float(item.close) if item.close else 0.0,
+                        'volume': int(item.volume) if item.volume else 0,
+                        'amount': float(item.amount) if hasattr(item, 'amount') and item.amount else 0.0
+                    })
+                
+                return pd.DataFrame(data)
+                
+            except Exception as e:
+                self.logger.error(f"从数据库获取股票 {symbol} 数据失败: {str(e)}")
+                return pd.DataFrame()
         else:
-            raise NotImplementedError("数据源不支持股票数据获取")
+            # 如果没有数据源，尝试直接从数据库获取
+            try:
+                from backend_api.database import get_db
+                from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
+                from sqlalchemy import desc, asc, cast, Date as SA_Date
+                from datetime import datetime
+                
+                db = next(get_db())
+                try:
+                    # 判断是A股还是港股
+                    is_hk = symbol.startswith('0') and len(symbol) == 5 or symbol.startswith('HK') or symbol.startswith('hk')
+                    
+                    start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+                    end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+                    date_col = cast(HistoricalQuotes.date, SA_Date) if not is_hk else cast(HistoricalQuotesHK.date, SA_Date)
+                    
+                    if is_hk:
+                        query = db.query(HistoricalQuotesHK).filter(
+                            HistoricalQuotesHK.code == symbol,
+                            date_col >= start_dt,
+                            date_col <= end_dt
+                        ).order_by(asc(date_col))
+                    else:
+                        query = db.query(HistoricalQuotes).filter(
+                            HistoricalQuotes.code == symbol,
+                            date_col >= start_dt,
+                            date_col <= end_dt
+                        ).order_by(asc(date_col))
+                    
+                    results = query.all()
+                    
+                    if not results:
+                        self.logger.warning(f"未找到股票 {symbol} 的历史数据 ({start_date} 到 {end_date})")
+                        return pd.DataFrame()
+                    
+                    # 转换为DataFrame
+                    data = []
+                    for item in results:
+                        data.append({
+                            'date': str(item.date)[:10] if item.date else None,
+                            'open': float(item.open) if item.open else 0.0,
+                            'high': float(item.high) if item.high else 0.0,
+                            'low': float(item.low) if item.low else 0.0,
+                            'close': float(item.close) if item.close else 0.0,
+                            'volume': int(item.volume) if item.volume else 0,
+                            'amount': float(item.amount) if hasattr(item, 'amount') and item.amount else 0.0
+                        })
+                    
+                    return pd.DataFrame(data)
+                    
+                finally:
+                    db.close()
+                    
+            except Exception as e:
+                self.logger.error(f"获取股票 {symbol} 数据失败: {str(e)}")
+                raise NotImplementedError(f"无法获取股票数据: {symbol} - {str(e)}")
     
     def _convert_to_market_data(self, df: pd.DataFrame, symbol: str) -> List[MarketData]:
         """将DataFrame转换为MarketData列表"""
