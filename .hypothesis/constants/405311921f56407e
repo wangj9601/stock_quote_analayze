@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\datetimelike.py
+# hypothesis_version: 6.150.2
+
+["'{}'", 'C', 'DatetimeArray', 'K', 'Lengths must match', 'M', 'M8[ns]', 'Mm', 'NaT', 'O', 'PeriodArray', 'Tick | None', 'TimedeltaArray', '__add__', '__divmod__', '__floordiv__', '__mod__', '__mul__', '__pow__', '__rdivmod__', '__rfloordiv__', '__rmod__', '__rmul__', '__rpow__', '__rtruediv__', '__sub__', '__truediv__', '_freq', 'all', 'any', 'ceil', 'compare', 'cummax', 'cummin', 'cumprod', 'cumsum', 'date', 'datetime', 'datetime64', 'dtype', 'f', 'fiuc', 'floor', 'i8', 'infer', 'int64', 'iu', 'linear', 'm', 'm8[ns]', 'mM', 'mixed', 'ms', 'ndim', 'non-fixed', 'ns', 'period', 'prod', 'raise', 'round', 's', 'sem', 'shape', 'skew', 'std', 'string', 'subtract', 'sum', 'timedelta', 'timedelta64', 'timedelta64[ns]', 'timestamp', 'us', 'var']

@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\sparse\array.py
+# hypothesis_version: 6.150.2
+
+['...', 'M', 'NaT', 'SparseArray', '_', '__', '__len__', 'and', 'argmax', 'argmin', 'at', 'block', 'bool', 'datetime64[ns]', 'divmod', 'dtype', 'eq', 'first', 'float64', 'floordiv', 'ge', 'gt', 'ignore', 'inside', 'integer', 'iu', 'klass', 'last', 'le', 'left', 'lt', 'max', 'min', 'mod', 'ne', 'ns', 'object', 'or', 'out', 'outside', 'r', 'reduce', 'right', 'skipna', 'sparse_array', 'xor']

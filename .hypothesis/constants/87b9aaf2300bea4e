@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\ops\__init__.py
+# hypothesis_version: 6.150.2
+
+['ARITHMETIC_BINOPS', 'add', 'arithmetic_op', 'comparison_op', 'divmod', 'fill_binop', 'floordiv', 'get_array_op', 'get_op_result_name', 'invalid_comparison', 'kleene_and', 'kleene_or', 'kleene_xor', 'logical_op', 'make_flex_doc', 'mod', 'mul', 'pow', 'radd', 'rand_', 'rdiv', 'rdivmod', 'rfloordiv', 'rmod', 'rmul', 'ror_', 'rpow', 'rsub', 'rtruediv', 'rxor', 'sub', 'truediv']

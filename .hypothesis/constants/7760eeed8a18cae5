@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\apply.py
+# hypothesis_version: 6.150.2
+
+['<lambda>', 'Series', '__array__', '_compat', '_name', 'agg', 'apply', 'as_index', 'axis', 'broadcast', 'by_row', 'compat', 'corrwith', 'engine', 'engine_kwargs', 'expand', 'idxmax', 'idxmin', 'ignore', 'np.', 'numba', 'parallel', 'python', 'reduce', 'size', 'skew', 'transform']

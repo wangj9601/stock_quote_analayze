@@ -1,36 +1,27 @@
-#!/usr/bin/env python3
-"""
-项目启动脚本
-在项目根目录运行此脚本来启动后端服务
-"""
-
-import uvicorn
-import sys
 import os
+import sys
+import subprocess
 
-# 添加backend_api目录到Python路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend_api'))
+root_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Ensure PYTHONPATH includes root and backend_api
+env = os.environ.copy()
+current_path = env.get("PYTHONPATH", "")
+# Add root dir and backend_api dir to PYTHONPATH
+env["PYTHONPATH"] = f"{root_dir}{os.pathsep}{os.path.join(root_dir, 'backend_api')}{os.pathsep}{current_path}"
 
 if __name__ == "__main__":
     print("🚀 启动股票分析系统后端服务...")
-    print(f"📁 当前工作目录: {os.getcwd()}")
-    print(f"🐍 Python路径: {sys.path[0]}")
+    print(f"📁 Working Directory: {root_dir}")
+    print(f"🐍 PYTHONPATH set to include: {root_dir} and backend_api")
+    
+    # Use -m uvicorn to avoid import issues and let uvicorn handle reloading properly
+    cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app", 
+           "--host", "0.0.0.0", "--port", "5000", "--reload"]
     
     try:
-        # 启动FastAPI服务
-        uvicorn.run(
-            "main:app",  # 从backend_api目录导入main模块
-            host="0.0.0.0",
-            port=5000,
-            reload=True,
-            reload_dirs=[
-                os.path.join(os.path.dirname(__file__), 'backend_api'),
-                os.path.join(os.path.dirname(__file__), 'backend_core'),
-            ],
-            log_level="info"
-        )
+        subprocess.run(cmd, env=env, cwd=root_dir)
     except KeyboardInterrupt:
-        print("\n🛑 服务已停止")
+        print("\n🛑 Service stopped")
     except Exception as e:
-        print(f"❌ 启动服务失败: {e}")
-        sys.exit(1)
+        print(f"❌ Failed to start service: {e}")

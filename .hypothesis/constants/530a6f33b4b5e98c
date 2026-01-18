@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\accessors.py
+# hypothesis_version: 6.150.2
+
+['M', 'Mm', 'as_unit', 'day', 'days', 'hours', 'int64', 'm', 'method', 'microseconds', 'milliseconds', 'minutes', 'name', 'nanoseconds', 'orig', 'property', 'seconds', 'unit', 'week', 'year']

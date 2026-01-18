@@ -104,6 +104,7 @@ const menuItems = [
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/pvfrs-strategy', name: 'PVFRS交易策略', icon: TrendCharts },
+  { path: '/pvfrs-management', name: 'PVFRS策略管理', icon: DataAnalysis },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },

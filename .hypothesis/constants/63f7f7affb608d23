@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\reshape\merge.py
+# hypothesis_version: 6.150.2
+
+['1:1', '1:m', 'DatetimeArray', 'M', 'O', '_left_indicator', '_merge', '_right_indicator', '_x', '_y', 'asof', 'asof_merge', 'backward', 'boolean', 'both', 'bytes', 'cross', 'empty', 'ffill', 'forward', 'i8', 'ignore', 'inner', 'int8', 'integer', 'left', 'left_only', 'm', 'm:1', 'm:m', 'mM', 'many_to_many', 'many_to_one', 'merge', 'missing left_by', 'missing right_by', 'mixed', 'mixed-integer', 'nearest', 'one_to_many', 'one_to_one', 'ordered_merge', 'outer', 'pyarrow', 'right', 'right_only', 'string', 'unicode']

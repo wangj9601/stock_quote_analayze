@@ -12,13 +12,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import math
 
-from models import (
+from .models import (
     Watchlist, WatchlistGroup,
     WatchlistCreate, WatchlistInDB, WatchlistGroupCreate,
     WatchlistGroupInDB, User, StockRealtimeQuote, StockRealtimeQuoteHK
 )
-from database import get_db
-from auth import get_current_user
+from .database import get_db
+from .auth import get_current_user
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import JSONResponse
 import akshare as ak
-from database import get_db
+from backend_api.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, desc, cast, Date as SQLDate
 from fastapi import Depends
@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
+from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:

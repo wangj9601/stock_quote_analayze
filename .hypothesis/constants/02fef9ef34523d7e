@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\dtypes\astype.py
+# hypothesis_version: 6.150.2
+
+['M', 'O', 'datetime64', 'ignore', 'iu', 'm', 'm8[ns]', 'mM', 'numpy_dtype', 'raise', 'timedelta64', 'u', 'unit']

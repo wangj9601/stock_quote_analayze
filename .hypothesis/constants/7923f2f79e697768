@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\nanops.py
+# hypothesis_version: 6.150.2
+
+[0.0, 1e-14, 0.5, 1.0, 1.5, 1000, '+inf', '-inf', 'C_CONTIGUOUS', 'K', 'M', 'M8', 'M8[ns]', 'NaT', 'bi', 'biu', 'bottleneck', 'c16', 'dtype', 'f', 'f4', 'f8', 'float64', 'i8', 'ignore', 'iu', 'iub', 'iufcb', 'kendall', 'm', 'm8', 'm8[ns]', 'mM', 'mask', 'max', 'min', 'min_count', 'mixed', 'nan', 'nanmean', 'nanprod', 'nansum', 'ndim', 'ns', 'pearson', 'spearman', 'string', 'u', 'warn']

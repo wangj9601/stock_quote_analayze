@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\timedeltas.py
+# hypothesis_version: 6.150.2
+
+['D', '__abs__', '__neg__', '__pos__', 'ceil', 'components', 'floor', 'm', 'median', 'ns', 'round', 'std', 'sum', 'timedelta64', 'timedeltaindex', 'to_pytimedelta', 'total_seconds']

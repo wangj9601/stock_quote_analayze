@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\interchange\utils.py
+# hypothesis_version: 6.150.2
+
+['<', '=', '>', 'C', 'I', 'L', 'M', 'O', 'S', 'U', 'b', 'binary', 'bool', 'c', 'date32[day]', 'date64[ms]', 'double', 'duration[ms]', 'duration[ns]', 'duration[s]', 'duration[us]', 'e', 'f', 'float', 'g', 'halffloat', 'i', 'int16', 'int32', 'int64', 'int8', 'l', 'large_string', 'n', 'null', 's', 'string', 'tDm', 'tDn', 'tDs', 'tDu', 'tdD', 'tdm', 'time32[ms]', 'time32[s]', 'time64[ns]', 'time64[us]', 'timestamp[ms]', 'timestamp[ns]', 'timestamp[s]', 'timestamp[us]', 'tsm:', 'tsn:', 'tss:', 'tsu:', 'ts{resolution}:{tz}', 'ttm', 'ttn', 'tts', 'ttu', 'tt{resolution}', 'u', 'uint16', 'uint32', 'uint64', 'uint8', 'z', '|']

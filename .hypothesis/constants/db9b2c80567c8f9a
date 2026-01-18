@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\errors\__init__.py
+# hypothesis_version: 6.150.2
+
+['AbstractMethodError', 'CSSWarning', 'ClosedFileError', 'DataError', 'DatabaseError', 'DtypeWarning', 'DuplicateLabelError', 'EmptyDataError', 'IndexingError', 'IntCastingNaNError', 'InvalidColumnName', 'InvalidComparison', 'InvalidIndexError', 'InvalidVersion', 'LossySetitemError', 'MergeError', 'NoBufferPresent', 'NullFrequencyError', 'NumbaUtilError', 'OptionError', 'OutOfBoundsDatetime', 'OutOfBoundsTimedelta', 'ParserError', 'ParserWarning', 'PerformanceWarning', 'PyperclipException', 'SettingWithCopyError', 'SpecificationError', 'UnsortedIndexError', '_cacher', '_item_cache', 'classmethod', 'method', 'property', 'staticmethod']

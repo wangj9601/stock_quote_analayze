@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\api.py
+# hypothesis_version: 6.150.2
+
+['CategoricalIndex', 'DatetimeIndex', 'Index', 'IntervalIndex', 'InvalidIndexError', 'MultiIndex', 'NaT', 'PeriodIndex', 'RangeIndex', 'TimedeltaIndex', '_new_Index', 'all_indexes_same', 'array', 'default_index', 'ensure_index', 'get_unanimous_names', 'list', 'safe_sort_index', 'special', 'union_indexes']

@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\_numba\executor.py
+# hypothesis_version: 6.150.2
+
+['complex128', 'complex64', 'float32', 'float64', 'i', 'int16', 'int32', 'int64', 'int8', 'numba', 'uint16', 'uint32', 'uint64', 'uint8']

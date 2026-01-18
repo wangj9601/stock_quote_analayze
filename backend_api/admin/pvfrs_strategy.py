@@ -5,11 +5,13 @@ PVFRS策略管理API接口
 
 import os
 import json
+import pandas as pd
+from datetime import datetime, date
 import asyncio
-from datetime import datetime
-from typing import Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+import traceback
+from typing import List, Dict, Optional, Tuple
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Form, UploadFile, File
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import cast, Date as SA_Date
@@ -144,6 +146,7 @@ async def submit_backtest(
 ):
     """提交回测任务"""
     try:
+        print(f"[DEBUG] submit_backtest called: mode={request.mode}, code={request.code}, market={request.market}")
         # 解析股票代码
         stock_codes = []
         if request.mode == "single":
@@ -189,12 +192,15 @@ async def submit_backtest(
             log=""
         )
         
+        print(f"[DEBUG] about to schedule async task for task_id={task_id}")
         # 异步执行回测任务
         asyncio.create_task(execute_backtest_task(task_id, request, None, db))
         
         return running_tasks[task_id]
         
     except Exception as e:
+        print(f"[ERROR] submit_backtest exception: {e}")
+        traceback.print_exc()
         db.rollback()
         raise HTTPException(status_code=500, detail=f"提交回测任务失败: {str(e)}")
 
@@ -374,11 +380,20 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
             _update_task_status(3, 60, "正在执行回测...")
             
             runner = PVFRSBacktestRunner()
+            
+            # 加载策略参数
+            try:
+                config = load_jsonc(CONFIG_FILE_PATH)
+                custom_params = config.get("strategy_params", {})
+            except:
+                custom_params = None
+            
             result = runner.run_single_backtest(
                 request.code,
                 request.market,
                 request.start_date,
                 request.end_date,
+                params=custom_params,
                 initial_capital=request.initial_capital
             )
             
@@ -403,11 +418,20 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
                     continue
             
             runner = PVFRSBacktestRunner()
+            
+            # 加载策略参数
+            try:
+                config = load_jsonc(CONFIG_FILE_PATH)
+                custom_params = config.get("strategy_params", {})
+            except:
+                custom_params = None
+            
             results = runner.run_batch_backtest(
                 stock_codes,
                 request.market,
                 request.start_date,
                 request.end_date,
+                params=custom_params,
                 initial_capital=request.initial_capital
             )
             
@@ -428,12 +452,20 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
             _update_task_status(3, 60, "正在执行优化...")
             
             runner = PVFRSBacktestRunner()
+            
+            # 加载策略参数
+            try:
+                config = load_jsonc(CONFIG_FILE_PATH)
+                custom_params = config.get("strategy_params", {})
+            except:
+                custom_params = None
+            
             optimization_result = runner.run_parameter_optimization(
                 request.code,
                 request.market,
                 request.start_date,
                 request.end_date,
-                initial_capital=request.initial_capital
+                param_grid=custom_params
             )
             
             _update_task_status(4, 90, "正在保存优化结果...")
@@ -656,12 +688,28 @@ def save_backtest_results(results: List[Dict]):
     with open(results_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
+def _parse_date_compat(value) -> date:
+    if value is None:
+        raise ValueError("date is None")
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    s = str(value).strip()
+    if not s:
+        raise ValueError("empty date")
+    if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+        return datetime.strptime(s[:10], "%Y-%m-%d").date()
+    if len(s) == 8 and s.isdigit():
+        return datetime.strptime(s, "%Y%m%d").date()
+    raise ValueError(f"unsupported date format: {s}")
+
 def save_result_to_db(task_id: str, result, request: BacktestRequest, db: Session):
     """保存单个回测结果到数据库"""
     try:
         # 使用实际回测数据区间（优先取权益曲线日期范围），避免仅使用用户输入区间
-        actual_start_date = datetime.strptime(request.start_date, "%Y-%m-%d").date()
-        actual_end_date = datetime.strptime(request.end_date, "%Y-%m-%d").date()
+        actual_start_date = _parse_date_compat(request.start_date)
+        actual_end_date = _parse_date_compat(request.end_date)
         try:
             equity_records = result.equity_curve.to_dict('records') if getattr(result, 'equity_curve', None) is not None else []
             if equity_records:
@@ -669,7 +717,7 @@ def save_result_to_db(task_id: str, result, request: BacktestRequest, db: Sessio
                 for item in equity_records:
                     d = item.get("date")
                     if d:
-                        equity_dates.append(datetime.strptime(d, "%Y-%m-%d").date())
+                        equity_dates.append(_parse_date_compat(d))
                 if equity_dates:
                     actual_start_date = min(equity_dates)
                     actual_end_date = max(equity_dates)
@@ -706,8 +754,8 @@ def save_result_to_db(task_id: str, result, request: BacktestRequest, db: Sessio
                 result_id=db_result.id,
                 stock_code=result.stock_code,
                 market=result.market_type,
-                entry_date=datetime.strptime(trade.entry_date, "%Y-%m-%d").date(),
-                exit_date=datetime.strptime(trade.exit_date, "%Y-%m-%d").date(),
+                entry_date=_parse_date_compat(trade.entry_date),
+                exit_date=_parse_date_compat(trade.exit_date),
                 entry_price=float(trade.entry_price),
                 exit_price=float(trade.exit_price),
                 pnl=float(trade.pnl),
@@ -722,7 +770,7 @@ def save_result_to_db(task_id: str, result, request: BacktestRequest, db: Sessio
                 result_id=db_result.id,
                 stock_code=result.stock_code,
                 market=result.market_type,
-                curve_date=datetime.strptime(item["date"], "%Y-%m-%d").date(),
+                curve_date=_parse_date_compat(item["date"]),
                 equity=float(item["equity"])
             )
             db.add(curve_record)

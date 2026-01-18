@@ -144,6 +144,8 @@ const ScreeningPage = {
             suffix = 'low-nine';
         } else if (strategy === 'one-yang-three-lines') {
             suffix = 'one-yang-three-lines';
+        } else if (strategy === 'pvfrs') {
+            suffix = 'pvfrs';
         } else {
             suffix = 'cyb';
         }
@@ -212,6 +214,8 @@ const ScreeningPage = {
                 url = `${apiBaseUrl}/api/screening/low-nine-strategy`;
             } else if (strategy === 'one-yang-three-lines') {
                 url = `${apiBaseUrl}/api/screening/one-yang-three-lines`;
+            } else if (strategy === 'pvfrs') {
+                url = `${apiBaseUrl}/api/screening/pvfrs-strategy`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -288,6 +292,8 @@ const ScreeningPage = {
                 colSpan = 11;
             } else if (strategy === 'one-yang-three-lines') {
                 colSpan = 13;
+            } else if (strategy === 'pvfrs') {
+                colSpan = 12;
             } else {
                 colSpan = 12;
             }
@@ -327,6 +333,8 @@ const ScreeningPage = {
             suffix = 'low-nine';
         } else if (strategy === 'one-yang-three-lines') {
             suffix = 'one-yang-three-lines';
+        } else if (strategy === 'pvfrs') {
+            suffix = 'pvfrs';
         } else {
             suffix = 'cyb';
         }
@@ -355,6 +363,8 @@ const ScreeningPage = {
                 colSpan = 11;
             } else if (strategy === 'one-yang-three-lines') {
                 colSpan = 13;
+            } else if (strategy === 'pvfrs') {
+                colSpan = 12;
             } else {
                 colSpan = 12;
             }
@@ -556,6 +566,62 @@ const ScreeningPage = {
                             <div class="action-links">
                                 <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
                                 <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else if (strategy === 'pvfrs') {
+                // PVFRS三维共振策略表格
+                // 信号强度颜色标识
+                let strengthClass = '';
+                const signalStrength = stock.signal_strength || 0;
+                if (signalStrength >= 0.8) {
+                    strengthClass = 'strength-high';
+                } else if (signalStrength >= 0.6) {
+                    strengthClass = 'strength-mid';
+                } else {
+                    strengthClass = 'strength-low';
+                }
+                
+                // 共振状态显示
+                const resonanceStatus = stock.resonance_status || '--';
+                let resonanceClass = '';
+                if (resonanceStatus === '三维共振') {
+                    resonanceClass = 'resonance-active';
+                } else if (resonanceStatus === '部分共振') {
+                    resonanceClass = 'resonance-partial';
+                } else {
+                    resonanceClass = 'resonance-none';
+                }
+                
+                // 投资建议颜色
+                let adviceClass = '';
+                const advice = stock.investment_advice || '--';
+                if (advice === 'BUY' || advice === '买入') {
+                    adviceClass = 'advice-buy';
+                } else if (advice === 'HOLD' || advice === '持有') {
+                    adviceClass = 'advice-hold';
+                } else {
+                    adviceClass = 'advice-wait';
+                }
+                
+                html += `
+                    <tr>
+                        <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name}</span></td>
+                        <td><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
+                        <td>${stock.current_price ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td>${stock.price_dimension_status || '--'}</td>
+                        <td>${stock.frequency_dimension_status || '--'}</td>
+                        <td>${stock.volume_dimension_status || '--'}</td>
+                        <td><span class="${resonanceClass}">${resonanceStatus}</span></td>
+                        <td>${stock.entry_timing_status || '--'}</td>
+                        <td><span class="${adviceClass}">${advice}</span></td>
+                        <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_history.html?code=${stock.symbol || stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
                             </div>
                         </td>
                     </tr>

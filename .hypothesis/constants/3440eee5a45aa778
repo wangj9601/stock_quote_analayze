@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\multi.py
+# hypothesis_version: 6.150.2
+
+['CategoricalIndex', 'Codes', 'Levels', 'MultiIndex', 'NaN', 'NaT', 'O', '__abs__', '__add__', '__divmod__', '__floordiv__', '__iadd__', '__invert__', '__isub__', '__mod__', '__mul__', '__neg__', '__pos__', '__pow__', '__radd__', '__rdivmod__', '__rfloordiv__', '__rmod__', '__rmul__', '__rpow__', '__rsub__', '__rtruediv__', '__sub__', '__truediv__', 'after < before', 'all', 'any', 'axis', 'bool', 'codes', 'display.multi_sparse', 'first', 'ignore', 'int64', 'klass', 'last', 'left', 'levels', 'mM', 'mixed', 'multiindex', 'name', 'names', 'nan', 'object', 'python', 'raise', 'repeat', 'right', 'sortorder', 'start', 'stop', 'take', 'target_klass', 'uint64']

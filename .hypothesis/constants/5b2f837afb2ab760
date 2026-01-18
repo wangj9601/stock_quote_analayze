@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\parquet.py
+# hypothesis_version: 6.150.2
+
+[b'PANDAS_ATTRS', '\n - ', 'PANDAS_ATTRS', 'array', 'auto', 'brotli', 'dtype_backend', 'fastparquet', 'file_scheme', 'fs', 'fsspec', 'gzip', 'hive', 'ignore', 'io.parquet.engine', 'mode.data_manager', 'name', 'open_with', 'pandas_nulls', 'partition_on', 'preserve_index', 'pyarrow', 'pyarrow.fs', 'rb', 'schema', 'snappy', 'split_blocks', 'storage_options', 'use_nullable_dtypes', 'use_pandas_metadata', 'wb']

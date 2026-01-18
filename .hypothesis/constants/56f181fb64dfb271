@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\base.py
+# hypothesis_version: 6.150.2
+
+[1000, ',\n', ', \n', 'A', 'C', 'ExtensionArray', 'F', 'K', 'M', '__add__', '__and__', '__divmod__', '__eq__', '__floordiv__', '__ge__', '__gt__', '__le__', '__lt__', '__mod__', '__mul__', '__ne__', '__or__', '__pow__', '__radd__', '__rand__', '__rdivmod__', '__rfloordiv__', '__rmod__', '__rmul__', '__ror__', '__rpow__', '__rsub__', '__rtruediv__', '__rxor__', '__sub__', '__truediv__', '__xor__', 'all', 'any', 'argmax', 'argmin', 'average', 'axis', 'cumprod', 'cumsum', 'divmod', 'extension', 'first', 'inside', 'keep', 'last', 'left', 'm', 'mean', 'median', 'out', 'outside', 'pad', 'prod', 'quicksort', 'rdivmod', 'reduce', 'repeat', 'right', 'sem', 'skew', 'skipna', 'std', 'sum', 'var']

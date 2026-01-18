@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\parsers\base_parser.py
+# hypothesis_version: 6.150.2
+
+['"', ', ', '.', 'Mm', '_', 'cache_dates', 'chunksize', 'comment', 'compression', 'converters', 'date_format', 'date_parser', 'dayfirst', 'decimal', 'delimiter', 'doublequote', 'dtype', 'dtype_backend', 'empty', 'encoding', 'encoding_errors', 'escapechar', 'false_values', 'header', 'ignore', 'index_col', 'infer', 'integer', 'keep_date_col', 'keep_default_na', 'lineterminator', 'na_filter', 'na_fvalues', 'na_values', 'names', 'nrows', 'on_bad_lines', 'parse_dates', 'pyarrow', 'quotechar', 'quoting', 'scalar parser', 'skip_blank_lines', 'skipfooter', 'skipinitialspace', 'skiprows', 'strict', 'string', 'thousands', 'true_values', 'uint8', 'usecols', 'verbose']

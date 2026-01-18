@@ -69,33 +69,31 @@ class PVFRSStrategy:
         """初始化策略参数"""
         self.params = params or self._get_default_params()
         self.signal_detector = PVFRSSignalDetector(self.params)
-        self.divergence_detector = DivergenceDetector()
+        self.divergence_detector = DivergenceDetector(self.params)
         self.momentum_confirmator = MomentumConfirmator()
         
     def _get_default_params(self) -> Dict:
         """获取默认策略参数"""
         return {
-            # 高效率上涨严格条件
-            'buy_macro_displacement_min': 0,              # Δ > 0
-            'buy_instant_deviation_min': 0,               # d20 > d  
-            'buy_rising_days_advantage': True,            # Z > F
-            'buy_efficiency_min': 0,                      # m20 > m
+            # PVFRS四维度条件
+            'buy_macro_displacement_min': 0,
+            'buy_instant_deviation_min': 0,
+            'buy_rising_days_advantage': True,
+            'buy_efficiency_min': 0,
             
             # 增强条件
-            'buy_bias_min': 0.02,                         # bias > 2%
-            'buy_relative_displacement_min': 0.05,         # Δ/d > 5%
-            'buy_consecutive_days': 3,                    # 连续3天确认
+            'buy_bias_min': 0.02,
+            'buy_relative_displacement_min': 0.05,
+            'buy_consecutive_days': 2,
+            'buy_price_above_ma5': False,
+            'buy_ma5_above_ma20': False,
             
-            # 卖出条件
-            'sell_bias_max': 0.08,                        # bias > 8%
-            'sell_instant_deviation_max': 0.05,           # d20 - d > 5%
-            'sell_price_volume_divergence': True,         # 价涨量缩
-            
-            # 风控参数
-            'stop_loss': -0.10,                           # 止损：-10%
-            'take_profit': 0.20,                          # 止盈：+20%
-            'max_position_size': 0.1,                      # 最大仓位：10%
-            'max_holding_days': 30,                        # 最大持有天数
+            # 卖出条件 - 简单有效
+            'sell_below_ma20': True,                      # 收盘价跌破20日均线卖出
+            'stop_loss': -0.06,                           # 止损-6%
+            'take_profit': 0.25,                          # 止盈25%
+            'max_position_size': 0.1,
+            'max_holding_days': 45,
         }
     
     def generate_signals(self, data: pd.DataFrame) -> List[Signal]:
@@ -126,7 +124,7 @@ class PVFRSSignalDetector:
         self.params = params
         
     def detect_high_efficiency_uptrend(self, data: pd.DataFrame) -> List[Signal]:
-        """检测高效率上涨信号"""
+        """检测高效率上涨信号 - 提高质量"""
         signals = []
         
         for i in range(20, len(data)):  # 从第20行开始，确保有足够历史数据
@@ -141,8 +139,8 @@ class PVFRSSignalDetector:
             macro_displacement = current_row['macro_displacement_delta']
             instant_deviation = current_row['instant_deviation']
             
-            conditions_met['macro_displacement_positive'] = macro_displacement > self.params['buy_macro_displacement_min']
-            conditions_met['instant_deviation_positive'] = instant_deviation > self.params['buy_instant_deviation_min']
+            conditions_met['macro_displacement_positive'] = macro_displacement > self.params.get('buy_macro_displacement_min', 0)
+            conditions_met['instant_deviation_sufficient'] = instant_deviation > self.params.get('buy_instant_deviation_min', 0)
             
             # 2. 频率维度条件
             rising_days = current_row['rising_days_z']
@@ -151,43 +149,68 @@ class PVFRSSignalDetector:
             
             # 3. 成交量维度条件
             efficiency = current_row['efficiency_m20_minus_m']
-            conditions_met['efficiency_positive'] = efficiency > self.params['buy_efficiency_min']
+            conditions_met['efficiency_positive'] = efficiency > self.params.get('buy_efficiency_min', 0)
             
             # 检查是否满足所有严格条件
             strict_conditions_met = all([
                 conditions_met['macro_displacement_positive'],
-                conditions_met['instant_deviation_positive'],
+                conditions_met['instant_deviation_sufficient'],
                 conditions_met['rising_days_advantage'],
                 conditions_met['efficiency_positive']
             ])
             
             if not strict_conditions_met:
                 continue
+            
+            # 新增：均线趋势确认（可选，默认不启用）
+            current_price = current_row['close']
+            ma5 = current_row.get('ma5', current_price)
+            ma20 = current_row.get('ma20_d', current_price)
+            
+            # 价格必须在5日均线之上（默认不启用）
+            if self.params.get('buy_price_above_ma5', False):
+                conditions_met['price_above_ma5'] = current_price > ma5
+                if not conditions_met['price_above_ma5']:
+                    continue
+            
+            # 5日均线必须在20日均线之上（默认不启用）
+            if self.params.get('buy_ma5_above_ma20', False):
+                conditions_met['ma5_above_ma20'] = ma5 > ma20
+                if not conditions_met['ma5_above_ma20']:
+                    continue
                 
             # 检查增强条件
             bias = current_row['bias']
-            ma20 = current_row['ma20_d']
-            relative_displacement = macro_displacement / ma20 if ma20 > 0 else 0
+            ma20_val = current_row['ma20_d']
+            relative_displacement = macro_displacement / ma20_val if ma20_val > 0 else 0
             
-            conditions_met['bias_sufficient'] = bias > self.params['buy_bias_min']
-            conditions_met['relative_displacement_sufficient'] = relative_displacement > self.params['buy_relative_displacement_min']
+            conditions_met['bias_sufficient'] = bias > self.params.get('buy_bias_min', 0.02)
+            conditions_met['relative_displacement_sufficient'] = relative_displacement > self.params.get('buy_relative_displacement_min', 0.05)
+            
+            # 必须满足增强条件
+            if not (conditions_met['bias_sufficient'] and conditions_met['relative_displacement_sufficient']):
+                continue
             
             # 计算信号强度
             strength_factors = [
                 conditions_met['bias_sufficient'],
-                conditions_met['relative_displacement_sufficient']
+                conditions_met['relative_displacement_sufficient'],
+                conditions_met.get('price_above_ma5', True),
+                conditions_met.get('ma5_above_ma20', True)
             ]
             signal_strength = sum(strength_factors) / len(strength_factors)
             
             # 连续确认检查
             consecutive_days = self._check_consecutive_uptrend(data, i)
-            conditions_met['consecutive_confirmation'] = consecutive_days >= self.params['buy_consecutive_days']
+            conditions_met['consecutive_confirmation'] = consecutive_days >= self.params.get('buy_consecutive_days', 2)
             
-            if conditions_met['consecutive_confirmation']:
-                signal_strength = min(1.0, signal_strength + 0.2)
+            if not conditions_met['consecutive_confirmation']:
+                continue
+            
+            signal_strength = min(1.0, signal_strength + 0.2)
             
             # 生成买入信号
-            reason = f"高效率上涨确认: Δ={macro_displacement:.4f}, 偏离={instant_deviation:.4f}, Z>F({rising_days}>{falling_days}), 效率={efficiency:.4f}"
+            reason = f"高质量上涨: Δ={macro_displacement:.4f}, 偏离={instant_deviation:.4f}, Z>F({rising_days}>{falling_days}), 效率={efficiency:.4f}, bias={bias:.2%}"
             
             signal = Signal(
                 date=date,
@@ -202,9 +225,20 @@ class PVFRSSignalDetector:
             
         return signals
     
-    def detect_trend_reversal(self, data: pd.DataFrame) -> List[Signal]:
-        """检测趋势反转信号"""
+    def detect_trend_reversal(self, data: pd.DataFrame, current_profit_pct: float = 0) -> List[Signal]:
+        """检测趋势反转信号
+        
+        Args:
+            data: 行情数据
+            current_profit_pct: 当前持仓盈利百分比，用于动态调整反转条件
+        """
         signals = []
+        
+        # 根据盈利情况动态调整需要的反转条件数
+        if current_profit_pct < self.params['profit_stage1']:  # 盈利<15%
+            required_conditions = self.params['sell_reversal_conditions_low_profit']  # 需要3个条件
+        else:  # 盈利>=15%
+            required_conditions = self.params['sell_reversal_conditions_high_profit']  # 需要2个条件
         
         for i in range(20, len(data)):
             current_row = data.iloc[i]
@@ -262,8 +296,8 @@ class PVFRSSignalDetector:
             else:
                 conditions_met['overextended'] = False
             
-            # 如果满足2个或以上反转条件，生成卖出信号
-            if reversal_count >= 2:
+            # 根据盈利情况动态判断是否满足反转条件
+            if reversal_count >= required_conditions:
                 signal_strength = min(1.0, reversal_count / 6.0)
                 
                 reason_parts = []
@@ -280,7 +314,7 @@ class PVFRSSignalDetector:
                 if conditions_met['overextended']:
                     reason_parts.append("偏离过远")
                 
-                reason = "趋势反转: " + ", ".join(reason_parts)
+                reason = f"趋势反转({reversal_count}个条件): " + ", ".join(reason_parts)
                 
                 signal = Signal(
                     date=date,
@@ -319,9 +353,16 @@ class PVFRSSignalDetector:
 class DivergenceDetector:
     """量价背离检测器"""
     
+    def __init__(self, params: Dict = None):
+        """初始化背离检测器"""
+        self.params = params or {}
+    
     def detect_price_volume_divergence(self, data: pd.DataFrame) -> List[Signal]:
         """检测价涨量缩背离"""
         signals = []
+        
+        # 获取背离天数参数，如果没有则使用默认值3
+        divergence_days_required = self.params.get('sell_divergence_days', 3)
         
         for i in range(20, len(data)):
             current_row = data.iloc[i]
@@ -335,7 +376,8 @@ class DivergenceDetector:
                 # 检查是否持续了多天
                 divergence_days = self._check_divergence_duration(data, i)
                 
-                if divergence_days >= 2:  # 连续2天以上
+                # 从2天提升到3天
+                if divergence_days >= divergence_days_required:
                     signal_strength = min(1.0, divergence_days / 5.0)
                     
                     reason = f"价涨量缩背离持续{divergence_days}天"
@@ -357,6 +399,7 @@ class DivergenceDetector:
         """检查背离持续时间"""
         duration = 0
         
+        # 从2天提升到3天
         for i in range(current_index, max(0, current_index - 5), -1):
             if i < 20:
                 break
@@ -423,29 +466,34 @@ class PVFRSBacktestEngine:
         self.position = None  # 当前持仓
         self.trades = []
         self.equity_curve = []
+        self.highest_price = 0  # 记录持仓期间最高价，用于移动止盈
         
     def run_backtest(self, data: pd.DataFrame) -> BacktestResult:
-        """执行回测"""
+        """执行回测 - 完全重构"""
         logger.info(f"开始回测，数据范围: {data['date'].min()} 到 {data['date'].max()}")
         
-        # 生成交易信号
-        signals = self.strategy.generate_signals(data)
-        logger.info(f"生成 {len(signals)} 个交易信号")
+        # 生成买入信号
+        buy_signals = self.strategy.signal_detector.detect_high_efficiency_uptrend(data)
+        logger.info(f"生成 {len(buy_signals)} 个买入信号")
         
-        # 初始化权益曲线
+        # 初始化
         self.equity_curve = []
         self.current_capital = self.initial_capital
         self.trades = []
         self.position = None
+        self.highest_price = 0
+        self.last_trade_date = None
+        self.ma_cross_down_days = 0  # 均线死叉天数
         
         # 模拟交易
         for i, row in data.iterrows():
             date = row['date']
             current_price = row['close']
+            ma5 = row.get('ma5', current_price)
+            ma20 = row.get('ma20_d', current_price)
             
             # 更新权益曲线
             if self.position:
-                # 计算当前权益
                 unrealized_pnl = (current_price - self.position['entry_price']) * self.position['quantity']
                 current_equity = self.current_capital + unrealized_pnl
             else:
@@ -458,29 +506,60 @@ class PVFRSBacktestEngine:
                 'price': current_price
             })
             
-            # 检查当日的信号
-            daily_signals = [s for s in signals if s.date == date]
+            # 检查是否已经在今天交易过
+            already_traded_today = (self.last_trade_date == date)
             
-            for signal in daily_signals:
-                if signal.signal_type == SignalType.BUY and not self.position:
-                    # 买入信号
+            # === 卖出逻辑 - 简单有效 ===
+            if self.position and self._can_sell(date) and not already_traded_today:
+                should_sell = False
+                sell_reason = ""
+                
+                entry_price = self.position['entry_price']
+                profit_pct = (current_price - entry_price) / entry_price
+                
+                # 卖出条件1：收盘价跌破20日均线
+                if self.params.get('sell_below_ma20', True) and current_price < ma20:
+                    should_sell = True
+                    sell_reason = f"收盘价{current_price:.2f}跌破20日均线{ma20:.2f}"
+                
+                # 卖出条件2：止损
+                if not should_sell and profit_pct <= self.params.get('stop_loss', -0.06):
+                    should_sell = True
+                    sell_reason = f"止损: {profit_pct:.2%}"
+                
+                # 卖出条件3：止盈
+                if not should_sell and profit_pct >= self.params.get('take_profit', 0.25):
+                    should_sell = True
+                    sell_reason = f"止盈: {profit_pct:.2%}"
+                
+                # 卖出条件4：最大持有天数
+                if not should_sell:
+                    holding_days = self._get_holding_days(date)
+                    max_days = self.params.get('max_holding_days', 45)
+                    if holding_days >= max_days:
+                        should_sell = True
+                        sell_reason = f"最大持有{holding_days}天 (盈利{profit_pct:.2%})"
+                
+                # 执行卖出
+                if should_sell:
+                    self._close_position(date, current_price, sell_reason)
+                    self.last_trade_date = date
+                    already_traded_today = True  # 更新标志，防止同一天再买入
+            
+            # === 买入逻辑 ===
+            if not self.position and not already_traded_today:
+                daily_buy_signals = [s for s in buy_signals if s.date == date]
+                if daily_buy_signals:
+                    signal = daily_buy_signals[0]
                     self._execute_buy(signal, row)
-                elif signal.signal_type == SignalType.SELL and self.position:
-                    # 卖出信号
-                    self._execute_sell(signal, row)
-            
-            # 检查止损止盈
-            if self.position:
-                self._check_risk_management(row)
+                    self.last_trade_date = date
         
-        # 如果还有持仓，最后一天平仓
+        # 最后一天平仓
         if self.position:
             last_row = data.iloc[-1]
             self._close_position(last_row['date'], last_row['close'], "回测结束")
         
-        # 计算回测结果
         result = self._calculate_results()
-        
         logger.info(f"回测完成，总收益率: {result.total_return:.2%}")
         
         return result
@@ -488,7 +567,7 @@ class PVFRSBacktestEngine:
     def _execute_buy(self, signal: Signal, row: pd.Series):
         """执行买入"""
         entry_price = row['close']
-        position_size = self.current_capital * self.params['max_position_size']
+        position_size = self.current_capital * self.params.get('max_position_size', 0.1)
         quantity = int(position_size / entry_price)
         
         if quantity > 0:
@@ -496,16 +575,28 @@ class PVFRSBacktestEngine:
                 'entry_date': signal.date,
                 'entry_price': entry_price,
                 'quantity': quantity,
+                'initial_quantity': quantity,
                 'position_size': position_size,
-                'signal': signal
+                'signal': signal,
+                'highest_profit': 0  # 记录最高盈利
             }
+            
+            # 初始化最高价
+            self.highest_price = entry_price
             
             logger.info(f"买入: {signal.date}, 价格: {entry_price:.2f}, 数量: {quantity}, 原因: {signal.reason}")
     
     def _execute_sell(self, signal: Signal, row: pd.Series):
-        """执行卖出"""
-        if self.position and self._can_sell(signal.date):
-            self._close_position(signal.date, row['close'], signal.reason)
+        """执行卖出 - 已废弃，逻辑已整合到run_backtest中"""
+        pass
+    
+    def _calculate_reduce_percentage(self, signal: Signal, profit_pct: float) -> float:
+        """计算减仓比例 - 已废弃"""
+        pass
+    
+    def _reduce_position(self, exit_date: str, exit_price: float, reduce_pct: float, reason: str):
+        """分批减仓 - 已废弃"""
+        pass
     
     def _close_position(self, exit_date: str, exit_price: float, reason: str):
         """平仓"""
@@ -514,7 +605,7 @@ class PVFRSBacktestEngine:
             
         entry_price = self.position['entry_price']
         quantity = self.position['quantity']
-        position_size = self.position['position_size']
+        position_size = entry_price * quantity
         
         # 计算盈亏
         pnl = (exit_price - entry_price) * quantity
@@ -538,35 +629,28 @@ class PVFRSBacktestEngine:
         
         self.trades.append(trade)
         
-        logger.info(f"卖出: {exit_date}, 价格: {exit_price:.2f}, 盈亏: {pnl:.2f} ({pnl_percent:.2%}), 原因: {reason}")
+        logger.info(f"清仓: {exit_date}, 价格: {exit_price:.2f}, 盈亏: {pnl:.2f} ({pnl_percent:.2%}), 原因: {reason}")
         
         # 清空持仓
         self.position = None
+        self.highest_price = 0
     
     def _check_risk_management(self, row: pd.Series):
-        """检查风险管理"""
-        if not self.position:
-            return
-
-        # A股 T+1：买入当日不允许卖出（止损/止盈/强制平仓也一样）
-        if not self._can_sell(row['date']):
-            return
-            
-        entry_price = self.position['entry_price']
-        current_price = row['close']
-        pnl_percent = (current_price - entry_price) / entry_price
+        """检查风险管理 - 已废弃，逻辑已整合到run_backtest中"""
+        pass
+    
+    def _get_max_holding_days(self, profit_pct: float) -> int:
+        """根据盈利情况动态调整最大持有天数"""
+        base_days = self.params['max_holding_days_base']
         
-        # 止损
-        if pnl_percent <= self.params['stop_loss']:
-            self._close_position(row['date'], current_price, f"止损: {pnl_percent:.2%}")
-        
-        # 止盈
-        elif pnl_percent >= self.params['take_profit']:
-            self._close_position(row['date'], current_price, f"止盈: {pnl_percent:.2%}")
-        
-        # 最大持有天数
-        elif self._get_holding_days(row['date']) >= self.params['max_holding_days']:
-            self._close_position(row['date'], current_price, f"最大持有天数: {self.params['max_holding_days']}天")
+        if profit_pct < 0:  # 亏损
+            return int(base_days * 0.6)  # 27天
+        elif profit_pct < 0.10:  # 盈利<10%
+            return base_days  # 45天
+        elif profit_pct < 0.20:  # 盈利10-20%
+            return int(base_days * 1.3)  # 58天
+        else:  # 盈利>20%
+            return int(base_days * 1.6)  # 72天
 
     def _can_sell(self, current_date: str) -> bool:
         """是否允许卖出（A股 T+1：买入当日不可卖出）"""

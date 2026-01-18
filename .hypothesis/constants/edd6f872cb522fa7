@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\compat\__init__.py
+# hypothesis_version: 6.150.2
+
+['0', '1', 'HAS_PYARROW', 'IS64', 'ISMUSL', 'PANDAS_CI', 'PY310', 'PY311', 'PY312', 'PYPY', 'aarch64', 'arm64', 'armv', 'cygwin', 'darwin', 'is_numpy_dev', 'linux', 'little', 'pa_version_under10p1', 'pa_version_under11p0', 'pa_version_under13p0', 'pa_version_under14p0', 'pa_version_under14p1', 'pa_version_under16p0', 'pa_version_under17p0', 'pa_version_under18p0', 'pa_version_under19p0', 'pa_version_under20p0', 'pa_version_under21p0', 'ppc64', 'ppc64le', 'win32']

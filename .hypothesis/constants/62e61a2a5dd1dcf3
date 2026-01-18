@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\json\_json.py
+# hypothesis_version: 6.150.2
+
+[31536000, 31536000000, 31536000000000, 31536000000000000, ', ', '.json', 'FrameSeriesStrT', '_at', '_time', 'a', 'chunksize', 'columns', 'convert_axes', 'convert_dates', 'data', 'date', 'date_unit', 'datetime', 'dtype', 'dtype_backend', 'epoch', 'f', 'float', 'float64', 'frame', 'ignore', 'index', 'infer', 'int', 'int64', 'iso', 'keep_default_dates', 'modified', 'ms', 'name', 'nrows', 'ns', 'object', 'orient', 'path_or_buf', 'precise_float', 'pyarrow', 'pyarrow.json', 'r', 'raise', 'read', 'records', 's', 'schema', 'series', 'split', 'storage_options', 'strict', 'string', 'table', 'timedelta', 'timestamp', 'ujson', 'us', 'values', 'w']

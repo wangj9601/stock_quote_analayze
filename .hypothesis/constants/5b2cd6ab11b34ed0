@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\string_.py
+# hypothesis_version: 6.150.2
+
+['0', 'Int64', 'K', 'T', 'U', '_na_value', 'all', 'any', 'argmax', 'argmin', 'auto', 'backfill', 'bool', 'cummax', 'cummin', 'cumprod', 'cumsum', 'empty', 'extension', 'float64', 'left', 'max', 'min', 'mode.string_storage', 'object', 'pad', 'pyarrow', 'pyarrow_numpy', 'python', 'right', 'storage', 'str', 'string', 'string[pyarrow]', 'string[python]', 'sum', 'uint8']

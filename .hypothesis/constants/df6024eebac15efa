@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arraylike.py
+# hypothesis_version: 6.150.2
+
+['__add__', '__and__', '__array_priority__', '__array_ufunc__', '__call__', '__divmod__', '__eq__', '__floordiv__', '__ge__', '__gt__', '__le__', '__lt__', '__mod__', '__mul__', '__ne__', '__or__', '__pow__', '__radd__', '__rand__', '__rdivmod__', '__rfloordiv', '__rmod__', '__rmul__', '__ror__', '__rpow__', '__rsub__', '__rtruediv__', '__rxor__', '__sub__', '__truediv__', '__xor__', 'add', 'axis', 'max', 'maximum', 'min', 'minimum', 'multiply', 'name', 'numeric_only', 'out', 'out1', 'out2', 'outer', 'prod', 'reduce', 'sum', 'where']

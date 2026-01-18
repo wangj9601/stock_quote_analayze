@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\internals\array_manager.py
+# hypothesis_version: 6.150.2
+
+['_axes', '_is_numeric', 'all', 'apply', 'arrays', 'axis', 'b', 'bool', 'filter', 'func', 'interpolate', 'intp', 'iub', 'linear', 'nan', 'object', 'raise', 'setitem']

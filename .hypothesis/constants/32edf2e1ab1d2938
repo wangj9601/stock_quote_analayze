@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\groupby\ops.py
+# hypothesis_version: 6.150.2
+
+['O', '__name__', '_values', 'aggregate', 'all', 'any', 'b', 'count', 'cummax', 'cummin', 'cumprod', 'cumsum', 'fc', 'first', 'float16', 'float64', 'group_cummax', 'group_cummin', 'group_cumprod', 'group_cumsum', 'group_last', 'group_max', 'group_mean', 'group_median_float64', 'group_min', 'group_nth', 'group_ohlc', 'group_prod', 'group_rank', 'group_skew', 'group_sum', 'group_var', 'groupby', 'i', 'idxmax', 'idxmin', 'int64', 'intp', 'is_datetimelike', 'iu', 'iub', 'iufcb', 'last', 'mM', 'max', 'mean', 'median', 'min', 'name', 'object', 'ohlc', 'prod', 'rank', 'result_mask', 'sem', 'size', 'skew', 'skipna', 'std', 'sum', 'transform', 'uint8', 'var']

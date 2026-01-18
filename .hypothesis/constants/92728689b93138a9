@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\computation\ops.py
+# hypothesis_version: 6.150.2
+
+['!=', '%', '&', '*', '**', '+', '-', '/', '//', '<', '<=', '==', '>', '>=', 'UTC', '__pd_eval_local_', 'abs', 'and', 'arccos', 'arccosh', 'arcsin', 'arcsinh', 'arctan', 'arctan2', 'arctanh', 'bool', 'ceil', 'cos', 'cosh', 'exp', 'expm1', 'floor', 'in', 'int', 'log', 'log10', 'log1p', 'max', 'min', 'ndim', 'not', 'not in', 'object', 'or', 'prod', 'python', 'sin', 'sinh', 'sqrt', 'sum', 'tanh', 'type', '|', '~']

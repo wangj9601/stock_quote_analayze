@@ -15,9 +15,9 @@ import time
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from models import User, Token, UserInDB
-from database import get_db, SessionLocal
-from auth import (
+from .models import User, Token, UserInDB
+from .database import get_db, SessionLocal
+from .auth import (
     authenticate_user,
     create_access_token,
     get_current_user,

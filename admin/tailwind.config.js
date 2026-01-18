@@ -55,7 +55,7 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [require('@tailwindcss/typography')],
   corePlugins: {
     preflight: false, // 禁用Tailwind的基础样式重置，避免与Element Plus冲突
   },

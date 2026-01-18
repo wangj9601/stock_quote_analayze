@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\json\_table_schema.py
+# hypothesis_version: 6.150.2
+
+['1.4.0', 'M', 'MultiIndex', 'UTC', 'any', 'bool', 'boolean', 'constraints', 'data', 'datetime', 'datetime64[ns]', 'duration', 'enum', 'extDtype', 'fields', 'float64', 'freq', 'index', 'int64', 'integer', 'level_', 'm', 'name', 'number', 'object', 'ordered', 'pandas_version', 'primaryKey', 'schema', 'string', 'timedelta64', 'type', 'tz', 'values']

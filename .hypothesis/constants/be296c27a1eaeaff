@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\common.py
+# hypothesis_version: 6.150.2
+
+['.bz2', '.gz', '.tar', '.tar.bz2', '.tar.gz', '.tar.xz', '.xz', '.zip', '.zst', 'BaseBufferT', 'Content-Encoding', 'a', 'anon', 'b', 'botocore', 'bz2', 'cctx', 'compression', 'compression_options', 'dctx', 'file:', 'fileno', 'filepath_or_buffer', 'fsspec', 'gzip', 'http://', 'https://', 'ignore', 'infer', 'method', 'mode', 'path_or_buf', 'r', 'rb', 'read', 'readable', 's3://', 's3a://', 's3n://', 'seekable', 'storage_options', 'strict', 't', 'tar', 'utf-16', 'utf-32', 'utf-8', 'w', 'writable', 'write', 'x', 'xz', 'zip', 'zstandard', 'zstd']

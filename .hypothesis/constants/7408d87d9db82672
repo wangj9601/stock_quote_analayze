@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\integer.py
+# hypothesis_version: 6.150.2
+
+['Int16', 'Int32', 'Int64', 'Int8', 'UInt16', 'UInt32', 'UInt64', 'UInt8', 'int16', 'int32', 'int64', 'int8', 'safe', 'uint16', 'uint32', 'uint64', 'uint8']

@@ -28,6 +28,7 @@
             <button class="strategy-tab" data-strategy="long-lower-shadow" id="longLowerShadowTab">长下影线</button>
             <button class="strategy-tab" data-strategy="low-nine" id="lowNineTab">低九策略</button>
             <button class="strategy-tab" data-strategy="one-yang-three-lines" id="oneYangThreeLinesTab">一阳穿三线</button>
+            <button class="strategy-tab" data-strategy="pvfrs" id="pvfrsTab">PVFRS三维共振</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -521,6 +522,67 @@
                         <tbody id="resultsTableBody-one-yang-three-lines">
                             <tr>
                                 <td colspan="13" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PVFRS三维共振策略标签页内容 -->
+        <div id="pvfrs-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围:</strong>全部A股（排除ST股票）</li>
+                    <li><strong>时间范围:</strong>最近20个交易日</li>
+                    <li><strong>选股条件:</strong></li>
+                    <li class="condition-item">1. <strong>价格维度:</strong> 宏观位移为正(Δ>0) 且 即时强度为正(d₂₀>d)</li>
+                    <li class="condition-item">2. <strong>频率维度:</strong> 上涨频率优势(Z>F) 且 无虚假繁荣</li>
+                    <li class="condition-item">3. <strong>成交量维度:</strong> 进出效率提升(m₂₀>m) 且 量价共振</li>
+                    <li class="condition-item">4. <strong>三维共振:</strong> 价格、频率、成交量三个维度同时满足条件</li>
+                    <li class="condition-item">5. <strong>入场时机:</strong> 价格穿越平均价格且成交量突破平均量</li>
+                    <li class="condition-item">6. 自动排除所有ST股票（包括ST、*ST、S*ST等）</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-pvfrs" class="refresh-btn" data-strategy="pvfrs">刷新筛选</button>
+                <span id="searchDate-pvfrs" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-pvfrs" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-pvfrs" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-pvfrs" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-pvfrs" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-pvfrs" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>信号强度</th>
+                                <th>当前价格</th>
+                                <th>价格维度</th>
+                                <th>频率维度</th>
+                                <th>成交量维度</th>
+                                <th>共振状态</th>
+                                <th>入场时机</th>
+                                <th>投资建议</th>
+                                <th>当前涨跌幅</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-pvfrs">
+                            <tr>
+                                <td colspan="12" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
                             </tr>
                         </tbody>
                     </table>

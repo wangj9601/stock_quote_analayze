@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\dtypes\dtypes.py
+# hypothesis_version: 6.150.2
+
+[100, 101, 102, 103, ',', ', ', "A 'tz' is required.", 'IntervalDtype', 'M', 'M8[', 'None', 'O', 'Period[', 'Sparse', '[', '[\\[\\(].*[\\]\\)]', '[pyarrow]', ']', '_dtype', '_fill_value', '_is_na_fill_value', 'b', 'biufc', 'both', 'categories', 'category', 'closed', 'datetime64[ns]', 'dtype', 'f', 'fill_value', 'float64', 'freq', 'ignore', 'int64', 'interval', 'iu', 'left', 'ms', 'neither', 'ns', 'object', 'ordered', 'period[', 'pyarrow', 'pyarrow_dtype', 'right', 's', 'storage', 'str[pyarrow]', 'string[pyarrow]', 'subtype', 'timestamp', 'tz', 'tz=', 'unit', 'us', '|O08']

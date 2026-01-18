@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\internals\managers.py
+# hypothesis_version: 6.150.2
+
+[100, '0.14.1', 'all', 'astype', 'axes', 'b', 'blocks', 'convert', 'convert_dtypes', 'copy', 'diff', 'dtype', 'f', 'fancy', 'filter', 'get_values_for_csv', 'i', 'ignore', 'linear', 'mM', 'mgr_locs', 'nan', 'object', 'raise', 'setitem', 'slice', 'values']

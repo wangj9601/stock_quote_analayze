@@ -462,3 +462,76 @@
     max-width: 200px;
     display: inline-block;
 }
+
+/* PVFRS策略样式 */
+.strength-high {
+    color: #4caf50;
+    font-weight: 600;
+    background: #e8f5e9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.strength-mid {
+    color: #ff9800;
+    font-weight: 600;
+    background: #fff3e0;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.strength-low {
+    color: #f44336;
+    font-weight: 600;
+    background: #ffebee;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.resonance-active {
+    color: #4caf50;
+    font-weight: 600;
+    background: #e8f5e9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.resonance-partial {
+    color: #ff9800;
+    font-weight: 600;
+    background: #fff3e0;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.resonance-none {
+    color: #666;
+    font-weight: 500;
+    background: #f5f5f5;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.advice-buy {
+    color: #4caf50;
+    font-weight: 600;
+    background: #e8f5e9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.advice-hold {
+    color: #ff9800;
+    font-weight: 600;
+    background: #fff3e0;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.advice-wait {
+    color: #666;
+    font-weight: 500;
+    background: #f5f5f5;
+    padding: 2px 8px;
+    border-radius: 4px;
+}

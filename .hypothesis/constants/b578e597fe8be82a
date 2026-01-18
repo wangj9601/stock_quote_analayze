@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\dtypes\cast.py
+# hypothesis_version: 6.150.2
+
+[0.0, 5e-16, 5e-08, 0.0005, '<U', 'Categorical', 'Float64', 'Int64', 'M', 'M8[ns]', 'NaT', 'NumpyArrayT', 'O', 'S', 'US', 'V', 'b', 'biu', 'bool', 'boolean', 'bytes', 'c', 'datetime64', 'datetime64[ns]', 'dtype', 'f', 'fc', 'fcb', 'float64', 'floating', 'i', 'if', 'ignore', 'infer', 'int64', 'integer', 'iu', 'iuc', 'iuf', 'iufc', 'iufcb', 'iufcmM', 'm', 'mM', 'mMSU', 'mixed', 'mixed-integer', 'mixed-integer-float', 'no types given', 'ns', 'numpy_nullable', 'object', 'pyarrow', 'string', 'subtype', 'timedelta', 'timedelta64', 'timedelta64[ns]', 'u']

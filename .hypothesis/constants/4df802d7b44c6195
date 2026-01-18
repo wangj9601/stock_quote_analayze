@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\_config\__init__.py
+# hypothesis_version: 6.150.2
+
+['block', 'config', 'copy_on_write', 'data_manager', 'describe_option', 'future', 'get_option', 'infer_string', 'mode', 'nullable_dtypes', 'option_context', 'options', 'reset_option', 'set_option', 'using_copy_on_write', 'warn', 'warn_copy_on_write']

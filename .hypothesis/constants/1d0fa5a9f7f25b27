@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\datetimes.py
+# hypothesis_version: 6.150.2
+
+[1000, 1000000, 'B', 'C', 'D', 'M', 'Mon Tue Wed Thu Fri', 'S', 'both', 'data', 'date', 'datetime64', 'datetimeindex', 'dtype', 'freq', 'ignore', 'is_normalized', 'left', 'ms', 'name', 'ns', 'raise', 'right', 's', 'std', 'strftime', 'time', 'timetz', 'to_pydatetime', 'tz', 'tz_convert', 'tz_localize', 'tzinfo', 'us']

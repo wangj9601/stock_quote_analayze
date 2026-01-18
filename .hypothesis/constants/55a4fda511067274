@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\timedeltas.py
+# hypothesis_version: 6.150.2
+
+[1000, 10000, 'M', 'NaT', 'Timedelta | NaTType', 'TimedeltaArray', 'Y', '__divmod__', '__floordiv__', '__mod__', '__mul__', '__rdivmod__', '__rfloordiv__', '__rmod__', '__rtruediv__', '__truediv__', 'as_unit', 'ceil', 'cumprod', 'cumsum', 'days', 'dtype', 'float64', 'floor', 'freq', 'hours', 'i8', 'initial', 'int64', 'keepdims', 'm', 'm8', 'm8[ns]', 'microseconds', 'milliseconds', 'minutes', 'ms', 'nanoseconds', 'ns', 'out', 'raise', 'round', 's', 'seconds', 'std', 'timedelta', 'timedelta64', 'timedelta64[ns]', 'timedeltaarray', 'to_pytimedelta', 'total_seconds', 'unit', 'us', 'y']

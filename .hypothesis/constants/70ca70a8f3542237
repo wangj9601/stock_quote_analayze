@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\numeric.py
+# hypothesis_version: 6.150.2
+
+['Float', 'Int', 'UInt', '_', 'b', 'boolean', 'dtype', 'f', 'floating', 'i', 'integer', 'iu', 'iuf', 'mixed-integer-float', 'numpy_nullable', 'object', 'raise', 'string', 'u', 'unicode']

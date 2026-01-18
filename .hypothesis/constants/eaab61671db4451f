@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\masked.py
+# hypothesis_version: 6.150.2
+
+[1000, 'F', 'Float32', 'M', 'NaT', 'aggregate', 'all', 'any', 'axis', 'b', 'bool', 'bottom', 'count', 'dtype', 'elementwise', 'f', 'f8', 'first', 'float32', 'float64', 'floordiv', 'i', 'idxmax', 'idxmin', 'ignore', 'inside', 'int32', 'int64', 'int8', 'iu', 'kurt', 'last', 'left', 'm', 'max', 'mean', 'median', 'min', 'mod', 'na_option', 'ohlc', 'out', 'outside', 'pow', 'prod', 'rank', 'reduce', 'rfloordiv', 'right', 'rmod', 'rpow', 'rtruediv', 'skew', 'std', 'sum', 'top', 'truediv', 'u', 'uint32', 'uint64', 'var']

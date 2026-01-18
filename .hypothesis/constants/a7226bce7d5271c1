@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\category.py
+# hypothesis_version: 6.150.2
+
+['_reverse_indexer', 'add_categories', 'argsort', 'as_ordered', 'as_unordered', 'categorical', 'categoricalindex', 'categories', 'codes', 'ignore', 'max', 'min', 'ordered', 'remove_categories', 'rename_categories', 'reorder_categories', 'searchsorted', 'set_categories', 'tolist']

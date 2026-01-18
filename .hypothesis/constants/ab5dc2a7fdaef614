@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\parsers\c_parser_wrapper.py
+# hypothesis_version: 6.150.2
+
+[',', 'allow_leading_cols', 'compression', 'dtype', 'dtype_backend', 'encoding', 'low_memory', 'memory_map', 'numpy', 'on_bad_lines', 'pyarrow', 'storage_options', 'string', 'usecols']

@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\computation\expr.py
+# hypothesis_version: 6.150.2
+
+['!=', '&', '<', '<=', '=', '==', '>', '>=', '@', 'AST', 'Add', 'And', 'Assign', 'Attribute', 'BitAnd', 'BitOr', 'BoolOp', 'Dict', 'DictComp', 'Div', 'Eq', 'Expr', 'FloorDiv', 'GeneratorExp', 'Gt', 'GtE', 'IfExp', 'In', 'Invert', 'Is', 'IsNot', 'Lambda', 'Lt', 'LtE', 'Mod', 'Module', 'Mult', 'Not', 'NotEq', 'NotIn', 'Or', 'Pow', 'Repr', 'Set', 'SetComp', 'Sub', 'Tuple', 'UAdd', 'USub', 'Yield', '_T', '__call__', 'and', 'assigner', 'binary', 'f must be callable', 'in', 'is_datetime', 'left', 'name', 'not in', 'numexpr', 'or', 'pandas', 'pytables', 'python', 'return_type', 'right', 'unary', 'value', '|']

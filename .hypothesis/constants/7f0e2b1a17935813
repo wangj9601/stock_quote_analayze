@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\tools\times.py
+# hypothesis_version: 6.150.2
+
+['%H%M', '%H%M%S', '%H:%M', '%H:%M:%S', '%I%M%S%p', '%I%M%p', '%I:%M%p', '%I:%M:%S%p', 'O', 'ignore', 'ndim', 'raise']

@@ -1,0 +1,4 @@
+# file: E:\wangxw\work\stock_quote_analayze\backend_core\strategies\pvfrs\three_dimension_resonance.py
+# hypothesis_version: 6.150.2
+
+['analysis', 'analysis_date', 'avg_price_20d', 'avg_volume_20d', 'conditions_met', 'current_volume', 'data_length', 'dimension_pass_rates', 'efficiency_ratio', 'error', 'falling_days', 'filter_reason', 'frequency', 'frequency_advantage', 'frequency_indicators', 'has_signal', 'instant_deviation', 'macro_displacement', 'price', 'price_indicators', 'resonance_result', 'resonance_strength', 'rising_days', 'signal', 'signal_rate', 'stocks_with_signals', 'symbol', 'three_dimension', 'total_stocks', 'volume', 'volume_indicators', '数据不足，需要至少20天数据']

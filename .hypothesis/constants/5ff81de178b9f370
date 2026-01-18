@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\interval.py
+# hypothesis_version: 6.150.2
+
+[0.1, 'D', 'IntervalArray', 'IntervalIndex', '__array__', 'class', 'closed', 'closed_left', 'closed_right', 'contains', 'datetime64[ns]', 'dtype', 'examples', 'extra_attributes', 'extra_methods', 'from_arrays', 'from_breaks', 'from_tuples', 'getitem', 'i8', 'int64', 'interval', 'intervalindex', 'intp', 'is_empty', 'klass', 'left', 'loc', 'mM', 'name', 'ns', 'open_left', 'open_right', 'overlaps', 'qualname', 'right', 'set_closed', 'summary', 'target_klass', 'to_tuples', 'u1']

@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\computation\expressions.py
+# hypothesis_version: 6.150.2
+
+[1000000, '!=', '&', '*', '**', '+', '-', '/', '<', '<=', '==', '>', '>=', '^', '_', 'a_value', 'b_value', 'bool', 'compute.use_numexpr', 'cond_value', 'dtype', 'evaluate', 'float32', 'float64', 'int32', 'int64', 'r', 'safe', 'where', '|']

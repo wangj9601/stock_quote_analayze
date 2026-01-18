@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\io\parsers\python_parser.py
+# hypothesis_version: 6.150.2
+
+[100, '.', '. ', 'NULL byte', 'colspecs', 'comment', 'decimal', 'delimiter', 'doublequote', 'escapechar', 'has_index_names', 'infer', 'infer_nrows', 'line contains NUL', 'lineterminator', 'quotechar', 'quoting', 'readline', 'skip_blank_lines', 'skipfooter', 'skipinitialspace', 'skiprows', 'thousands', 'verbose', '\ufeff']

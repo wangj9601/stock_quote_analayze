@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\compat\numpy\function.py
+# hypothesis_version: 6.150.2
+
+['AxisNoneT', 'C', 'all', 'any', 'argmax', 'argmin', 'args', 'argsort', 'axes', 'axis', 'both', 'clip', 'cumsum', 'dtype', 'initial', 'keepdims', 'kind', 'kwargs', 'max', 'mean', 'median', 'min', 'mode', 'order', 'out', 'overwrite_input', 'prod', 'quicksort', 'raise', 'repeat', 'reshape', 'round', 'sort', 'stable', 'std', 'sum', 'take', 'transpose', 'var']

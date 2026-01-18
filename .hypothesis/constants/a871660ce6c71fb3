@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\arrays\period.py
+# hypothesis_version: 6.150.2
+
+[1000, "'{}'", 'B', 'BaseOffsetT', 'D', 'E', 'Incorrect dtype', 'M', 'M8[ns]', 'NaT', 'PeriodArray', 'PeriodIndex', 'Q', 'Self', '_period_dtype_code', 'asfreq', 'day', 'day_of_week', 'day_of_year', 'dayofweek', 'dayofyear', 'days_in_month', 'daysinmonth', 'dtype', 'end_time', 'f', 'freq', 'hour', 'i8', 'infer', 'inside', 'int64', 'is_leap_year', 'iu', 'klass', 'left', 'minute', 'month', 'ns', 'outside', 'period', 'periodarray', 'quarter', 'qyear', 'right', 'second', 'start', 'start_time', 'strftime', 'to_timestamp', 'tz', 'week', 'weekday', 'weekofyear', 'year']

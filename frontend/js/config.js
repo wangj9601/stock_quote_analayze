@@ -29,8 +29,16 @@ const Config = {
                 return '';
             case 'development':
             default:
-                // 开发环境使用具体的IP和端口
-                return 'http://localhost:5000';
+                // 开发环境：如果访问地址是IP地址，使用相同的IP；否则使用localhost
+                const hostname = window.location.hostname;
+                const protocol = window.location.protocol;
+                if (hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)) {
+                    // 如果是内网IP地址，使用相同的IP地址
+                    return `${protocol}//${hostname}:5000`;
+                } else {
+                    // 否则使用localhost
+                    return 'http://localhost:5000';
+                }
         }
     },
     

@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\interchange\from_dataframe.py
+# hypothesis_version: 6.150.2
+
+['14.0.0', 'D', 'UTC', '__arrow_c_stream__', '__dataframe__', '_col', 'categories', 'data', 'datetime64[ms]', 'datetime64[s]', 'is_dictionary', 'is_ordered', 'm', 'object', 'offsets', 'pandas.index', 'pyarrow', 's', 'str', 'td([Dm])', 'ts([smun]):(.*)', 'utf-8', 'validity']

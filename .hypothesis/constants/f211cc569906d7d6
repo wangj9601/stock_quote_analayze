@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\tseries\offsets.py
+# hypothesis_version: 6.150.2
+
+['BDay', 'BMonthBegin', 'BMonthEnd', 'BQuarterBegin', 'BQuarterEnd', 'BYearBegin', 'BYearEnd', 'BaseOffset', 'BusinessDay', 'BusinessHour', 'BusinessMonthBegin', 'BusinessMonthEnd', 'CBMonthBegin', 'CBMonthEnd', 'CDay', 'CustomBusinessDay', 'CustomBusinessHour', 'DateOffset', 'Day', 'Easter', 'FY5253', 'FY5253Quarter', 'Hour', 'LastWeekOfMonth', 'Micro', 'Milli', 'Minute', 'MonthBegin', 'MonthEnd', 'Nano', 'QuarterBegin', 'QuarterEnd', 'Second', 'SemiMonthBegin', 'SemiMonthEnd', 'Tick', 'Week', 'WeekOfMonth', 'YearBegin', 'YearEnd']

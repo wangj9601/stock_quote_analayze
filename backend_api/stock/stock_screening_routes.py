@@ -9,17 +9,199 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
 
-from database import get_db
-from stock.stock_screening import StockScreeningStrategy
-from stock.high_tight_flag_strategy import HighTightFlagStrategy
-from stock.keep_increasing_strategy import KeepIncreasingStrategy
-from stock.long_lower_shadow_strategy import LongLowerShadowStrategy
-from stock.low_nine_strategy import LowNineStrategy
-from stock.one_yang_three_lines_strategy import OneYangThreeLinesStrategy
+from backend_api.database import get_db
+from .stock_screening import StockScreeningStrategy
+from .high_tight_flag_strategy import HighTightFlagStrategy
+from .keep_increasing_strategy import KeepIncreasingStrategy
+from .long_lower_shadow_strategy import LongLowerShadowStrategy
+from .low_nine_strategy import LowNineStrategy
+from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/screening", tags=["screening"])
+
+# 添加调试日志
+logger.info("stock_screening_routes.py 模块加载完成，开始注册路由...")
+print("🔧 DEBUG: stock_screening_routes.py 模块加载完成")
+
+# 尝试导入PVFRS前端接口
+try:
+    from backend_core.strategies.pvfrs.frontend_interface import create_frontend_interface
+    print("🔧 DEBUG: PVFRS前端接口导入成功")
+    logger.info("PVFRS前端接口导入成功")
+    PVFRS_AVAILABLE = True
+except Exception as e:
+    print(f"🔧 DEBUG: PVFRS前端接口导入失败: {e}")
+    logger.error(f"PVFRS前端接口导入失败: {e}")
+    PVFRS_AVAILABLE = False
+
+# PVFRS 路由定义
+print("[DEBUG] 即将定义 /pvfrs-strategy 路由")
+@router.get("/pvfrs-strategy")
+async def get_pvfrs_strategy(
+    date: str = Query(None, description="目标日期，格式：YYYY-MM-DD，不提供则使用当前日期"),
+    limit: int = Query(None, ge=1, description="最大返回结果数量，不限制则返回所有符合条件的股票"),
+    min_strength: float = Query(0.3, ge=0.0, le=1.0, description="最低信号强度阈值，默认0.3"),
+    db: Session = Depends(get_db)
+):
+    """PVFRS量价频三维共振演化策略选股"""
+    print(f"🔧 DEBUG: PVFRS路由被调用 - 日期: {date}, 限制: {limit}, 最低强度: {min_strength}")
+    logger.info(f"开始执行PVFRS策略选股 - 日期: {date or '当前'}, 限制: {limit}, 最低强度: {min_strength}")
+    
+    # 检查PVFRS是否可用
+    if not PVFRS_AVAILABLE:
+        logger.error("PVFRS前端接口不可用")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": "PVFRS策略暂时不可用，请稍后重试",
+                "error": "PVFRS frontend interface not available",
+                "data": []
+            }
+        )
+    
+    try:
+        
+        # 参数验证
+        if date:
+            try:
+                datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="日期格式错误，应为 YYYY-MM-DD"
+                )
+        
+        # 创建前端接口实例
+        frontend_interface = create_frontend_interface()
+        
+        # 设置选股配置
+        if limit is not None:
+            frontend_interface.set_selection_config(max_results=limit, min_strength=min_strength)
+        else:
+            # 不限制结果数量，设置一个很大的值
+            frontend_interface.set_selection_config(max_results=10000, min_strength=min_strength)
+        
+        # 获取选股结果
+        selection_results = frontend_interface.get_selection_results(date)
+        
+        # 转换为API响应格式
+        results_data = []
+        for result in selection_results:
+            result_dict = result.to_dict()
+            
+            # 提取指标信息
+            indicators = result_dict.get('indicators', {})
+            price_dimension_info = indicators.get('price_dimension', {})
+            frequency_dimension_info = indicators.get('frequency_dimension', {})
+            volume_dimension_info = indicators.get('volume_dimension', {})
+            pvfrs_indicators = indicators.get('pvfrs_indicators', {})
+            
+            # 提取条件验证信息
+            conditions_met = result.conditions_met or {}
+            
+            # 计算状态文本
+            price_dimension_status = "满足" if conditions_met.get("price_dimension_met", False) else "--"
+            frequency_dimension_status = "满足" if conditions_met.get("frequency_dimension_met", False) else "--"
+            volume_dimension_status = "满足" if conditions_met.get("volume_dimension_met", False) else "--"
+            
+            # 共振状态
+            resonance_detected = conditions_met.get("resonance_detected", False)
+            three_dimension_resonance = conditions_met.get("three_dimension_resonance", False)
+            if three_dimension_resonance or resonance_detected:
+                resonance_status = "三维共振"
+            elif conditions_met.get("price_dimension_met", False) and \
+                 (conditions_met.get("frequency_dimension_met", False) or conditions_met.get("volume_dimension_met", False)):
+                resonance_status = "部分共振"
+            else:
+                resonance_status = "--"
+            
+            # 入场时机状态
+            entry_timing_met = conditions_met.get("entry_timing_met", False)
+            entry_timing_status = "满足" if entry_timing_met else "--"
+            
+            # 投资建议（从 indicators 中提取）
+            investment_advice_dict = indicators.get('investment_advice', {})
+            if isinstance(investment_advice_dict, dict):
+                investment_advice = investment_advice_dict.get('recommendation', '--')
+                # 如果是英文，转换为中文
+                if investment_advice == 'BUY':
+                    investment_advice = '买入'
+                elif investment_advice == 'HOLD':
+                    investment_advice = '持有'
+                elif investment_advice == 'WAIT':
+                    investment_advice = '等待'
+                elif investment_advice == 'SELL':
+                    investment_advice = '卖出'
+            else:
+                investment_advice = "--"
+            
+            # 添加选股策略特有的字段
+            result_dict.update({
+                "strategy_type": "PVFRS",
+                "signal_date": date or datetime.now().strftime("%Y-%m-%d"),
+                # 添加前端期望的字段
+                "current_price": result_dict.get('price', None),  # 使用 price 作为 current_price
+                "price_dimension_status": price_dimension_status,
+                "frequency_dimension_status": frequency_dimension_status,
+                "volume_dimension_status": volume_dimension_status,
+                "resonance_status": resonance_status,
+                "entry_timing_status": entry_timing_status,
+                "investment_advice": investment_advice,
+                # 保留原有的 analysis_dimensions 字段
+                "analysis_dimensions": {
+                    "price_dimension": conditions_met.get("price_dimension_met", False),
+                    "frequency_dimension": conditions_met.get("frequency_dimension_met", False),
+                    "volume_dimension": conditions_met.get("volume_dimension_met", False),
+                    "resonance_detected": resonance_detected
+                }
+            })
+            results_data.append(result_dict)
+        
+        logger.info(f"PVFRS策略选股执行完成，找到 {len(results_data)} 只符合条件的股票")
+        
+        return JSONResponse({
+            "success": True,
+            "data": results_data,
+            "total": len(results_data),
+            "search_date": date or datetime.now().strftime("%Y-%m-%d"),
+            "strategy_name": "PVFRS量价频三维共振演化策略",
+            "parameters": {
+                "limit": limit or "无限制",
+                "min_strength": min_strength
+            }
+        })
+    
+    except HTTPException:
+        # 重新抛出HTTP异常
+        raise
+    except Exception as e:
+        logger.error(f"执行PVFRS策略选股失败: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PVFRS策略选股执行失败: {str(e)}"
+        )
+print("[DEBUG] /pvfrs-strategy 路由定义完成")
+
+# 添加一个简单的测试路由
+@router.get("/test-pvfrs")
+async def test_pvfrs():
+    """测试PVFRS路由是否工作"""
+    return JSONResponse({
+        "success": True,
+        "message": "PVFRS测试路由工作正常",
+        "pvfrs_available": PVFRS_AVAILABLE
+    })
+
+# 调试：打印路由对象中的所有路由
+print(f"[DEBUG] router.routes count: {len(router.routes)}")
+for route in router.routes:
+    if hasattr(route, 'path'):
+        print(f"[DEBUG] route path: {route.path}, methods: {getattr(route, 'methods', None)}")
 
 
 @router.get("/cyb-midline-strategy")

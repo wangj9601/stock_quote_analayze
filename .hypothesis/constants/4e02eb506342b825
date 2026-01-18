@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\resample.py
+# hypothesis_version: 6.150.2
+
+[0.5, '-', '1970-01-01', 'BME', 'BQE', 'BYE', 'D', 'DataFrame', 'DataFrameGroupBy', 'E', 'ME', 'Min', 'Mm', 'QE', 'Resampler', 'UTC', 'W', 'YE', '_indexer', '_period_dtype_code', 'aggregate', 'args', 'args and kwargs', 'asfreq', 'ax', 'axis', 'axis must be 0', 'backward', 'bfill', 'both', 'close', 'closed', 'convention', 'count', 'dtype', 'e', 'end', 'end_day', 'epoch', 'ffill', 'first', 'forward', 'freq', 'high', 'how', 'int64', 'kind', 'kwargs', 'label', 'last', 'left', 'linear', 'low', 'max', 'mean', 'median', 'min', 'name', 'nearest', 'ns', 'nunique', 'obj', 'offset', 'ohlc', 'open', 'origin', 'period', 'prod', 'quantile', 'resample', 'right', 's', 'sem', 'shift_forward', 'size', 'sort', 'start', 'start_day', 'std', 'sum', 'timestamp', 'var']

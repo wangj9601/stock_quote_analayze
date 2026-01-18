@@ -1,0 +1,4 @@
+# file: C:\Users\admin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\ops\docstrings.py
+# hypothesis_version: 6.150.2
+
+['!=', '%', '*', '**', '+', '-', '/', '//', '<', '<=', '==', '>', '>=', 'Addition', 'Equal to', 'Exponential power', 'Floating division', 'Greater than', 'Integer division', 'Less than', 'Modulo', 'Multiplication', 'Not equal to', 'Subtraction', '__', 'add', 'dataframe', 'desc', 'df_examples', 'divmod', 'eq', 'floordiv', 'ge', 'gt', 'le', 'lt', 'mod', 'mul', 'ne', 'op', 'pow', 'r', 'radd', 'rdivmod', 'reverse', 'rfloordiv', 'rmod', 'rmul', 'rpow', 'rsub', 'rtruediv', 'see_also_desc', 'series', 'series_examples', 'series_returns', 'sub', 'truediv']
