@@ -22,9 +22,8 @@ from datetime import timedelta
 class HistoricalQuoteCollector(TushareCollector):
     
     """历史行情数据采集器"""
-    # def __init__(self, config: Optional[Dict[str, Any]] = None):
-    #     super().__init__(config)
-    #     #self.db_file = Path(self.config.get('db_file', 'database/stock_analysis.db'))
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        super().__init__(config)
     
     def _init_db(self):
         session = SessionLocal()

@@ -220,7 +220,10 @@ const ScreeningPage = {
             } else if (strategy === 'low-nine') {
                 url = `${apiBaseUrl}/api/screening/low-nine-strategy`;
             } else if (strategy === 'one-yang-three-lines') {
-                url = `${apiBaseUrl}/api/screening/one-yang-three-lines`;
+                // 获取一阳穿三线策略参数
+                const params = this.getOneYangThreeLinesParams();
+                const queryString = new URLSearchParams(params).toString();
+                url = `${apiBaseUrl}/api/screening/one-yang-three-lines?${queryString}`;
             } else if (strategy === 'pvfrs') {
                 // 读取股票范围参数
                 const scopeAll = document.getElementById('scopeAll');
@@ -599,6 +602,11 @@ const ScreeningPage = {
                     strengthClass = 'strength-low';
                 }
 
+                // 调试日志：检查股票名称
+                if (index < 3) { // 只打印前3条数据
+                    console.log(`[DEBUG] PVFRS股票 ${index}: code=${stock.symbol || stock.code}, name=${stock.name}, symbol=${stock.symbol}`);
+                }
+
                 // 共振状态显示
                 const resonanceStatus = stock.resonance_status || '--';
                 let resonanceClass = '';
@@ -624,7 +632,7 @@ const ScreeningPage = {
                 html += `
                     <tr>
                         <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
-                        <td><span class="stock-name">${stock.name}</span></td>
+                        <td><span class="stock-name">${stock.name || '--'}</span></td>
                         <td><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td>${stock.current_price ? stock.current_price.toFixed(2) : '--'}</td>
                         <td>${stock.price_dimension_status || '--'}</td>
@@ -637,7 +645,7 @@ const ScreeningPage = {
                         <td>
                             <div class="action-links">
                                 <a href="stock_history.html?code=${stock.symbol || stock.code}" class="action-link" target="_blank">历史</a>
-                                <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                                <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
                             </div>
                         </td>
                     </tr>
@@ -646,11 +654,105 @@ const ScreeningPage = {
         });
 
         resultsTableBody.innerHTML = html;
+    },
+
+    // 获取一阳穿三线策略参数
+    getOneYangThreeLinesParams() {
+        const minIncreasePercent = document.getElementById('minIncreasePercent').value;
+        const minBodyRatio = document.getElementById('minBodyRatio').value;
+        const minCrossLines = document.getElementById('minCrossLines').value;
+        const minVolumeRatio = document.getElementById('minVolumeRatio').value;
+        const minTurnoverRate = document.getElementById('minTurnoverRate').value;
+        const maxTurnoverRate = document.getElementById('maxTurnoverRate').value;
+        
+        // 获取选中的均线周期
+        const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]:checked');
+        const maPeriods = Array.from(maPeriodsCheckboxes).map(cb => cb.value);
+        
+        return {
+            min_increase_percent: parseFloat(minIncreasePercent),
+            min_body_ratio: parseFloat(minBodyRatio),
+            min_cross_lines: parseInt(minCrossLines),
+            min_volume_ratio: parseFloat(minVolumeRatio),
+            min_turnover_rate: parseFloat(minTurnoverRate),
+            max_turnover_rate: parseFloat(maxTurnoverRate),
+            ma_periods: maPeriods.join(',')
+        };
+    },
+
+    // 重置一阳穿三线策略参数
+    resetOneYangThreeLinesParams() {
+        document.getElementById('minIncreasePercent').value = '3.0';
+        document.getElementById('minBodyRatio').value = '0.7';
+        document.getElementById('minCrossLines').value = '3';
+        document.getElementById('minVolumeRatio').value = '2.0';
+        document.getElementById('minTurnoverRate').value = '3.0';
+        document.getElementById('maxTurnoverRate').value = '10.0';
+        
+        // 重置均线周期选择
+        const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]');
+        maPeriodsCheckboxes.forEach(cb => {
+            cb.checked = true; // 默认全选
+        });
+        
+        this.showMessage('参数已重置为默认值', 'success');
+    },
+
+    // 保存一阳穿三线策略参数到本地存储
+    saveOneYangThreeLinesParams() {
+        const params = this.getOneYangThreeLinesParams();
+        localStorage.setItem('oneYangThreeLinesParams', JSON.stringify(params));
+        this.showMessage('参数已保存', 'success');
+    },
+
+    // 从本地存储加载一阳穿三线策略参数
+    loadOneYangThreeLinesParams() {
+        const savedParams = localStorage.getItem('oneYangThreeLinesParams');
+        if (savedParams) {
+            try {
+                const params = JSON.parse(savedParams);
+                document.getElementById('minIncreasePercent').value = params.min_increase_percent || '3.0';
+                document.getElementById('minBodyRatio').value = params.min_body_ratio || '0.7';
+                document.getElementById('minCrossLines').value = params.min_cross_lines || '3';
+                document.getElementById('minVolumeRatio').value = params.min_volume_ratio || '2.0';
+                document.getElementById('minTurnoverRate').value = params.min_turnover_rate || '3.0';
+                document.getElementById('maxTurnoverRate').value = params.max_turnover_rate || '10.0';
+                
+                // 恢复均线周期选择
+                if (params.ma_periods) {
+                    const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]');
+                    maPeriodsCheckboxes.forEach(cb => {
+                        cb.checked = params.ma_periods.includes(cb.value);
+                    });
+                }
+            } catch (e) {
+                console.error('加载参数失败:', e);
+            }
+        }
     }
 };
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
     ScreeningPage.init();
+    
+    // 绑定一阳穿三线策略参数按钮事件
+    const resetParamsBtn = document.getElementById('resetParamsBtn');
+    const saveParamsBtn = document.getElementById('saveParamsBtn');
+    
+    if (resetParamsBtn) {
+        resetParamsBtn.addEventListener('click', () => {
+            ScreeningPage.resetOneYangThreeLinesParams();
+        });
+    }
+    
+    if (saveParamsBtn) {
+        saveParamsBtn.addEventListener('click', () => {
+            ScreeningPage.saveOneYangThreeLinesParams();
+        });
+    }
+    
+    // 加载保存的参数
+    ScreeningPage.loadOneYangThreeLinesParams();
 });
 

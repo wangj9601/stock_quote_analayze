@@ -35,7 +35,8 @@ class OneYangThreeLinesStrategy:
     @staticmethod
     def calculate_moving_averages(
         historical_data: List[Dict], 
-        current_index: int = 0
+        current_index: int = 0,
+        periods: List[int] = None
     ) -> Dict[str, float]:
         """
         计算多条移动平均线
@@ -43,12 +44,14 @@ class OneYangThreeLinesStrategy:
         Args:
             historical_data: 历史数据列表(倒序,最新在前)
             current_index: 当前日期索引
+            periods: 需要计算的均线周期列表（默认[5,10,20,30,60,120]）
             
         Returns:
             均线字典: {'ma5': float, 'ma10': float, ...}
         """
         # 定义需要计算的均线周期
-        periods = [5, 10, 20, 30, 60, 120]
+        if periods is None:
+            periods = [5, 10, 20, 30, 60, 120]
         ma_values = {}
         
         # 对每个周期计算移动平均线
@@ -81,17 +84,23 @@ class OneYangThreeLinesStrategy:
         return ma_values
     
     @staticmethod
-    def check_long_yang_candle(candle_data: Dict) -> Tuple[bool, Dict]:
+    def check_long_yang_candle(
+        candle_data: Dict, 
+        min_increase_percent: float = 3.0,
+        min_body_ratio: float = 0.7
+    ) -> Tuple[bool, Dict]:
         """
         检查是否为长阳线
         
         条件:
         1. 收盘价 > 开盘价 (阳线)
-        2. 实体长度占K线总长度 >= 70%
-        3. 涨幅 >= 3%
+        2. 实体长度占K线总长度 >= min_body_ratio
+        3. 涨幅 >= min_increase_percent%
         
         Args:
             candle_data: K线数据
+            min_increase_percent: 最小涨幅百分比（默认3.0）
+            min_body_ratio: 最小实体占比（默认0.7）
             
         Returns:
             (是否为长阳线, 阳线信息)
@@ -154,18 +163,19 @@ class OneYangThreeLinesStrategy:
         body_ratio = body_length / total_length
         candle_info['body_ratio'] = round(body_ratio, 4)
         
-        # 条件3: 判断实体占比是否 >= 70%
+        # 条件3: 判断实体占比是否 >= min_body_ratio
         # 使用rounded后的值进行比较，避免浮点数精度问题
-        if candle_info['body_ratio'] < 0.7:
+        if candle_info['body_ratio'] < min_body_ratio:
             return False, candle_info
         
         # 条件4: 计算涨幅
         change_percent = (close_price - open_price) / open_price
         candle_info['change_percent'] = round(change_percent, 4)
         
-        # 判断涨幅是否 >= 3%
+        # 判断涨幅是否 >= min_increase_percent%
         # 使用rounded后的值进行比较，避免浮点数精度问题
-        if candle_info['change_percent'] < 0.03:
+        min_increase_decimal = min_increase_percent / 100.0
+        if candle_info['change_percent'] < min_increase_decimal:
             return False, candle_info
         
         # 所有条件都满足，返回True
@@ -174,19 +184,21 @@ class OneYangThreeLinesStrategy:
     @staticmethod
     def check_cross_three_lines(
         candle_data: Dict,
-        ma_values: Dict[str, float]
+        ma_values: Dict[str, float],
+        min_cross_lines: int = 3
     ) -> Tuple[bool, List[str], int]:
         """
-        检查是否穿越至少三条均线
+        检查是否穿越至少指定数量的均线
         
         条件:
-        1. 收盘价 > 至少三条均线
-        2. 开盘价 < 这三条均线中的至少两条
-        3. 最低价 < 这三条均线中的至少一条
+        1. 收盘价 > 至少min_cross_lines条均线
+        2. 开盘价 < 这min_cross_lines条均线中的至少两条
+        3. 最低价 < 这min_cross_lines条均线中的至少一条
         
         Args:
             candle_data: K线数据
             ma_values: 均线值字典
+            min_cross_lines: 最小穿越均线数量（默认3）
             
         Returns:
             (是否穿越, 穿越的均线列表, 穿越数量)
@@ -225,9 +237,9 @@ class OneYangThreeLinesStrategy:
             if ma_value is not None and ma_value > 0:
                 valid_mas[ma_name] = float(ma_value)
         
-        # 如果有效均线少于3条，无法判断
-        if len(valid_mas) < 3:
-            logger.warning(f"有效均线数量不足3条: {len(valid_mas)}")
+        # 如果有效均线少于min_cross_lines条，无法判断
+        if len(valid_mas) < min_cross_lines:
+            logger.warning(f"有效均线数量不足{min_cross_lines}条: {len(valid_mas)}")
             return False, [], 0
         
         # 条件1: 找出收盘价大于的均线
@@ -236,8 +248,8 @@ class OneYangThreeLinesStrategy:
             if close_price > ma_value:
                 close_above_mas.append(ma_name)
         
-        # 如果收盘价大于的均线少于3条，不满足条件
-        if len(close_above_mas) < 3:
+        # 如果收盘价大于的均线少于min_cross_lines条，不满足条件
+        if len(close_above_mas) < min_cross_lines:
             return False, [], 0
         
         # 条件2: 在收盘价大于的均线中，找出开盘价小于的均线
@@ -247,8 +259,8 @@ class OneYangThreeLinesStrategy:
             if open_price < ma_value:
                 open_below_mas.append(ma_name)
         
-        # 开盘价必须小于至少2条均线
-        if len(open_below_mas) < 2:
+        # 开盘价必须小于至少min_cross_lines-1条均线（至少有一条是开盘就在均线上方）
+        if len(open_below_mas) < max(1, min_cross_lines - 1):
             return False, [], 0
         
         # 条件3: 在收盘价大于的均线中，找出最低价低于的均线
@@ -275,8 +287,8 @@ class OneYangThreeLinesStrategy:
         # 穿越的均线数量
         crossed_count = len(crossed_lines)
         
-        # 必须穿越至少3条均线
-        if crossed_count < 3:
+        # 必须穿越至少min_cross_lines条均线
+        if crossed_count < min_cross_lines:
             return False, [], 0
         
         return True, crossed_lines, crossed_count
@@ -285,19 +297,25 @@ class OneYangThreeLinesStrategy:
     def check_volume_increase(
         historical_data: List[Dict],
         current_index: int,
-        days_before: int = 5
+        days_before: int = 5,
+        min_volume_ratio: float = 2.0,
+        min_turnover_rate: float = 3.0,
+        max_turnover_rate: float = 10.0
     ) -> Tuple[bool, float, float]:
         """
         检查成交量是否放大
         
         条件:
-        1. 当日成交量 >= 前期平均成交量的2倍
-        2. 换手率在3%-10%之间为理想
+        1. 当日成交量 >= 前期平均成交量的min_volume_ratio倍
+        2. 换手率在min_turnover_rate%-max_turnover_rate%之间为理想
         
         Args:
             historical_data: 历史数据列表(倒序,最新在前)
             current_index: 当前日期索引
             days_before: 计算平均成交量的天数
+            min_volume_ratio: 最小成交量倍数（默认2.0）
+            min_turnover_rate: 最小换手率（默认3.0）
+            max_turnover_rate: 最大换手率（默认10.0）
             
         Returns:
             (是否放量, 成交量倍数, 换手率)
@@ -370,8 +388,11 @@ class OneYangThreeLinesStrategy:
         volume_ratio = current_volume / avg_volume
         volume_ratio = round(volume_ratio, 2)  # 保留2位小数
         
-        # 判断是否放量（当日成交量 >= 前期平均成交量的2倍）
-        is_volume_increase = volume_ratio >= 2.0
+        # 判断是否放量（当日成交量 >= 前期平均成交量的min_volume_ratio倍）
+        is_volume_increase = volume_ratio >= min_volume_ratio
+        
+        # 检查换手率是否在理想范围内（可选条件，不影响放量判断）
+        # 这里只返回换手率，具体的范围检查在主函数中处理
         
         return is_volume_increase, volume_ratio, turnover_rate
     
@@ -599,7 +620,14 @@ class OneYangThreeLinesStrategy:
     @staticmethod
     def screening_one_yang_three_lines_strategy(
         db: Session,
-        limit: int = None
+        limit: int = None,
+        min_increase_percent: float = 3.0,
+        min_body_ratio: float = 0.7,
+        min_cross_lines: int = 3,
+        min_volume_ratio: float = 2.0,
+        min_turnover_rate: float = 3.0,
+        max_turnover_rate: float = 10.0,
+        ma_periods: List[int] = None
     ) -> List[Dict]:
         """
         一阳穿三线选股策略主函数
@@ -607,10 +635,10 @@ class OneYangThreeLinesStrategy:
         执行流程:
         1. 获取A股股票列表(排除ST)
         2. 获取最近20个交易日的历史数据
-        3. 计算6条移动平均线(MA5/10/20/30/60/120)
-        4. 检查最新K线是否为长阳线
-        5. 检查是否穿越至少三条均线
-        6. 验证成交量放大
+        3. 计算指定周期的移动平均线
+        4. 检查最新K线是否为长阳线（使用参数化条件）
+        5. 检查是否穿越至少指定数量的均线
+        6. 验证成交量放大（使用参数化条件）
         7. 判断位置类型
         8. 计算乖离率
         9. 计算信号质量评分
@@ -619,15 +647,34 @@ class OneYangThreeLinesStrategy:
         Args:
             db: 数据库会话
             limit: 限制处理的股票数量（用于测试，None表示处理所有）
+            min_increase_percent: 最小涨幅百分比（默认3.0）
+            min_body_ratio: 最小实体占比（默认0.7）
+            min_cross_lines: 最小穿越均线数量（默认3）
+            min_volume_ratio: 最小成交量倍数（默认2.0）
+            min_turnover_rate: 最小换手率（默认3.0）
+            max_turnover_rate: 最大换手率（默认10.0）
+            ma_periods: 均线周期列表（默认[5,10,20,30,60,120]）
             
         Returns:
             符合条件的股票列表
         """
         results = []
         
+        # 设置默认均线周期
+        if ma_periods is None:
+            ma_periods = [5, 10, 20, 30, 60, 120]
+        
         try:
             logger.info("=" * 60)
             logger.info("开始执行一阳穿三线选股策略")
+            logger.info("=" * 60)
+            logger.info(f"策略参数:")
+            logger.info(f"  - 最小涨幅: {min_increase_percent}%")
+            logger.info(f"  - 最小实体占比: {min_body_ratio}")
+            logger.info(f"  - 最小穿越均线数量: {min_cross_lines}")
+            logger.info(f"  - 最小成交量倍数: {min_volume_ratio}")
+            logger.info(f"  - 换手率范围: {min_turnover_rate}% - {max_turnover_rate}%")
+            logger.info(f"  - 均线周期: {ma_periods}")
             logger.info("=" * 60)
             
             # 1. 获取A股股票列表（排除ST股票）
@@ -651,9 +698,10 @@ class OneYangThreeLinesStrategy:
             
             logger.info(f"找到 {len(stocks)} 只A股股票（已排除ST股票）")
             
-            # 2. 计算查询日期范围（需要至少120个交易日的数据以计算MA120）
+            # 2. 计算查询日期范围（需要至少最大均线周期的数据）
+            max_ma_period = max(ma_periods)
             end_date = datetime.now().date()
-            start_date = end_date - timedelta(days=250)  # 往前推250天以确保有足够数据
+            start_date = end_date - timedelta(days=max_ma_period * 2)  # 往前推足够天数以确保有足够数据
             
             start_date_str = start_date.strftime('%Y-%m-%d')
             end_date_str = end_date.strftime('%Y-%m-%d')
@@ -690,9 +738,9 @@ class OneYangThreeLinesStrategy:
                     
                     history_rows = history_query.fetchall()
                     
-                    # 至少需要120个交易日的数据以计算MA120
-                    if len(history_rows) < 120:
-                        logger.warning(f"股票 {code} 数据不足，跳过（需要120个交易日，实际{len(history_rows)}个）")
+                    # 至少需要最大均线周期的数据
+                    if len(history_rows) < max_ma_period:
+                        logger.warning(f"股票 {code} 数据不足，跳过（需要{max_ma_period}个交易日，实际{len(history_rows)}个）")
                         continue
                     
                     # 转换为字典列表
@@ -722,22 +770,26 @@ class OneYangThreeLinesStrategy:
                     current_candle = historical_data[0]
                     
                     # 4. 检查最新K线是否为长阳线
-                    is_long_yang, candle_info = OneYangThreeLinesStrategy.check_long_yang_candle(current_candle)
+                    is_long_yang, candle_info = OneYangThreeLinesStrategy.check_long_yang_candle(
+                        current_candle, min_increase_percent, min_body_ratio
+                    )
                     
                     if not is_long_yang:
                         continue
                     
-                    # 5. 计算6条移动平均线
-                    ma_values = OneYangThreeLinesStrategy.calculate_moving_averages(historical_data, current_index=0)
+                    # 5. 计算移动平均线
+                    ma_values = OneYangThreeLinesStrategy.calculate_moving_averages(
+                        historical_data, current_index=0, periods=ma_periods
+                    )
                     
                     # 检查是否所有均线都计算成功
                     if any(v is None for v in ma_values.values()):
                         logger.warning(f"股票 {code} 均线计算失败，跳过")
                         continue
                     
-                    # 6. 检查是否穿越至少三条均线
+                    # 6. 检查是否穿越至少指定数量的均线
                     is_cross, crossed_lines, crossed_count = OneYangThreeLinesStrategy.check_cross_three_lines(
-                        current_candle, ma_values
+                        current_candle, ma_values, min_cross_lines
                     )
                     
                     if not is_cross:
@@ -745,10 +797,17 @@ class OneYangThreeLinesStrategy:
                     
                     # 7. 验证成交量放大
                     is_volume_increase, volume_ratio, turnover_rate = OneYangThreeLinesStrategy.check_volume_increase(
-                        historical_data, current_index=0, days_before=5
+                        historical_data, current_index=0, days_before=5, 
+                        min_volume_ratio=min_volume_ratio, 
+                        min_turnover_rate=min_turnover_rate, 
+                        max_turnover_rate=max_turnover_rate
                     )
                     
                     if not is_volume_increase:
+                        continue
+                    
+                    # 8. 检查换手率是否在指定范围内
+                    if turnover_rate < min_turnover_rate or turnover_rate > max_turnover_rate:
                         continue
                     
                     # 8. 判断位置类型
@@ -772,10 +831,10 @@ class OneYangThreeLinesStrategy:
                     # 11. 生成风险提示
                     risk_warnings = []
                     
-                    # 换手率警告
-                    if turnover_rate < 3.0:
+                    # 换手率警告（使用参数化范围）
+                    if turnover_rate < min_turnover_rate:
                         risk_warnings.append("动能不足")
-                    elif turnover_rate > 10.0:
+                    elif turnover_rate > max_turnover_rate:
                         risk_warnings.append("可能存在对倒")
                     
                     # 高位突破警告
@@ -792,12 +851,6 @@ class OneYangThreeLinesStrategy:
                         'name': name,
                         'signal_date': current_candle.get('date'),
                         'current_price': round(current_price, 2),
-                        'ma5': round(ma_values.get('ma5', 0), 2),
-                        'ma10': round(ma_values.get('ma10', 0), 2),
-                        'ma20': round(ma_values.get('ma20', 0), 2),
-                        'ma30': round(ma_values.get('ma30', 0), 2),
-                        'ma60': round(ma_values.get('ma60', 0), 2),
-                        'ma120': round(ma_values.get('ma120', 0), 2),
                         'crossed_lines': '+'.join([ma.upper() for ma in crossed_lines]),
                         'crossed_count': crossed_count,
                         'volume_ratio': round(volume_ratio, 2),
@@ -810,6 +863,11 @@ class OneYangThreeLinesStrategy:
                         'signal_score': signal_score,
                         'risk_warnings': risk_warnings
                     }
+                    
+                    # 添加动态均线字段
+                    for period in ma_periods:
+                        ma_key = f'ma{period}'
+                        result_item[ma_key] = round(ma_values.get(ma_key, 0), 2)
                     
                     # 13. 保存信号到数据库（可选）
                     try:

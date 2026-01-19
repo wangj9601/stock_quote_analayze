@@ -12,8 +12,8 @@ from .strategy_engine import StrategyEngine
 
 
 @dataclass
-class ScreeningResult:
-    """选股结果数据类"""
+class SelectionResult:
+    """选股结果"""
     symbol: str
     date: str
     signal_strength: float
@@ -23,6 +23,7 @@ class ScreeningResult:
     volume: int
     market_cap: Optional[float] = None
     industry: Optional[str] = None
+    name: Optional[str] = None  # 添加股票名称字段
     
     def to_dict(self) -> Dict:
         """转换为字典格式"""
@@ -35,7 +36,8 @@ class ScreeningResult:
             'price': self.price,
             'volume': self.volume,
             'market_cap': self.market_cap,
-            'industry': self.industry
+            'industry': self.industry,
+            'name': self.name  # 添加name字段到返回字典
         }
 
 
@@ -399,7 +401,8 @@ class StockScreener:
                 price=latest_data.close,
                 volume=latest_data.volume,
                 market_cap=self._get_market_cap(symbol, latest_data.close),
-                industry=self._get_stock_industry(symbol)
+                industry=self._get_stock_industry(symbol),
+                name=self._get_stock_name(symbol)  # 添加股票名称
             )
             
             return screening_result
@@ -514,6 +517,29 @@ class StockScreener:
             List[Dict]: 字典格式的结果列表
         """
         return [result.to_dict() for result in results]
+    
+    def _get_stock_name(self, symbol: str) -> Optional[str]:
+        """获取股票名称
+        
+        Args:
+            symbol: 股票代码
+            
+        Returns:
+            Optional[str]: 股票名称，如果无法获取则返回None
+        """
+        try:
+            # 这里应该连接到实际的股票信息数据库
+            # 暂时返回一个基于代码的简单名称，实际应用中应该查询数据库
+            if symbol.startswith('6'):
+                return f"股票{symbol}"
+            elif symbol.startswith('0'):
+                return f"股票{symbol}"
+            elif symbol.startswith('3'):
+                return f"股票{symbol}"
+            else:
+                return f"股票{symbol}"
+        except Exception:
+            return None
     
     def get_screening_summary(self, results: List[ScreeningResult]) -> Dict:
         """获取筛选结果汇总

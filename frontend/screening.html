@@ -475,13 +475,65 @@
                     <li><strong>股票范围:</strong>全部A股（排除ST股票）</li>
                     <li><strong>时间范围:</strong>最近20个交易日</li>
                     <li><strong>选股条件:</strong></li>
-                    <li class="condition-item">1. 一根带量长阳线突破至少三条移动平均线（MA5/10/20/30/60/120）</li>
-                    <li class="condition-item">2. 长阳线要求：实体占比≥70%，涨幅≥3%</li>
-                    <li class="condition-item">3. 成交量放大：当日成交量≥前5日平均成交量的2倍</li>
-                    <li class="condition-item">4. 换手率理想范围：3%-10%</li>
+                    <li class="condition-item">1. 一根带量长阳线突破至少指定数量的移动平均线</li>
+                    <li class="condition-item">2. 长阳线要求：实体占比≥指定值，涨幅≥指定值</li>
+                    <li class="condition-item">3. 成交量放大：当日成交量≥前5日平均成交量的指定倍数</li>
+                    <li class="condition-item">4. 换手率范围：指定最小值-最大值</li>
                     <li class="condition-item">5. 位置判别：根据60日最高价回撤幅度判断低位/中位/高位</li>
                     <li class="condition-item">6. 自动排除所有ST股票（包括ST、*ST、S*ST等）</li>
                 </ul>
+            </div>
+
+            <!-- 参数设置区域 -->
+            <div class="parameters-card">
+                <h3>策略参数设置</h3>
+                <div class="parameters-grid">
+                    <div class="parameter-group">
+                        <label for="minIncreasePercent">最小涨幅 (%):</label>
+                        <input type="number" id="minIncreasePercent" value="3.0" min="0" max="50" step="0.1" class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="minBodyRatio">最小实体占比:</label>
+                        <input type="number" id="minBodyRatio" value="0.7" min="0.1" max="1.0" step="0.05" class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="minCrossLines">最小穿越均线数:</label>
+                        <select id="minCrossLines" class="param-select">
+                            <option value="2">2条</option>
+                            <option value="3" selected>3条</option>
+                            <option value="4">4条</option>
+                            <option value="5">5条</option>
+                            <option value="6">6条</option>
+                        </select>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="minVolumeRatio">最小成交量倍数:</label>
+                        <input type="number" id="minVolumeRatio" value="2.0" min="1.0" max="10.0" step="0.1" class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="minTurnoverRate">最小换手率 (%):</label>
+                        <input type="number" id="minTurnoverRate" value="3.0" min="0" max="50" step="0.1" class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="maxTurnoverRate">最大换手率 (%):</label>
+                        <input type="number" id="maxTurnoverRate" value="10.0" min="0" max="100" step="0.1" class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="maPeriods">均线周期:</label>
+                        <div class="ma-periods-checkboxes">
+                            <label><input type="checkbox" name="maPeriods" value="5" checked> MA5</label>
+                            <label><input type="checkbox" name="maPeriods" value="10" checked> MA10</label>
+                            <label><input type="checkbox" name="maPeriods" value="20" checked> MA20</label>
+                            <label><input type="checkbox" name="maPeriods" value="30" checked> MA30</label>
+                            <label><input type="checkbox" name="maPeriods" value="60" checked> MA60</label>
+                            <label><input type="checkbox" name="maPeriods" value="120" checked> MA120</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="parameter-actions">
+                    <button id="resetParamsBtn" class="reset-btn">重置默认参数</button>
+                    <button id="saveParamsBtn" class="save-btn">保存参数</button>
+                </div>
             </div>
 
             <div class="screening-actions">

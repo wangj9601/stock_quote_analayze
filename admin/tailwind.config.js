@@ -1,3 +1,5 @@
+import typography from '@tailwindcss/typography';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -55,7 +57,7 @@ export default {
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [typography],
   corePlugins: {
     preflight: false, // 禁用Tailwind的基础样式重置，避免与Element Plus冲突
   },

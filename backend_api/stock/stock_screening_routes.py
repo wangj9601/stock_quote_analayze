@@ -17,6 +17,7 @@ from backend_api.auth import SECRET_KEY, ALGORITHM
 from backend_api.models import Watchlist, TokenData
 
 from backend_api.database import get_db
+from backend_api.models import MeanFrequencyResonanceIndicators
 from .stock_screening import StockScreeningStrategy
 from .high_tight_flag_strategy import HighTightFlagStrategy
 from .keep_increasing_strategy import KeepIncreasingStrategy
@@ -146,12 +147,75 @@ async def get_pvfrs_strategy(
         selection_results = frontend_interface.get_selection_results(date, stock_pool=stock_pool)
         
         # 批量获取实时行情数据（用于获取当前价格和涨跌幅）
-        from backend_api.models import StockRealtimeQuote, StockRealtimeQuoteHK
+        from backend_api.models import StockRealtimeQuote, StockRealtimeQuoteHK, HistoricalQuotes
         from sqlalchemy import func
         import pandas as pd
         
         # 获取所有股票代码
         stock_codes = [result.symbol for result in selection_results]
+        
+        # 从历史行情数据库获取最新日期（用于查询PVFRS指标数据）
+        # 查询 historical_quotes 表中的最新日期
+        try:
+            latest_date_result = db.query(func.max(HistoricalQuotes.date)).scalar()
+            if latest_date_result:
+                # 将日期转换为字符串格式 YYYY-MM-DD（与PVFRS指标表中的date格式一致）
+                if isinstance(latest_date_result, str):
+                    target_date = latest_date_result.strip()
+                elif hasattr(latest_date_result, 'strftime'):
+                    # date 对象
+                    target_date = latest_date_result.strftime("%Y-%m-%d")
+                else:
+                    # 其他类型，尝试转换为字符串
+                    target_date = str(latest_date_result).strip()
+                logger.info(f"[DEBUG] 从历史行情数据库获取最新日期: {target_date} (用于查询PVFRS指标数据)")
+            else:
+                # 如果历史行情表中没有数据，使用传入的日期或当前日期
+                target_date = date or datetime.now().strftime("%Y-%m-%d")
+                logger.warning(f"[WARNING] 历史行情数据库中没有数据，使用日期: {target_date}")
+        except Exception as e:
+            # 如果查询失败，使用传入的日期或当前日期
+            target_date = date or datetime.now().strftime("%Y-%m-%d")
+            logger.error(f"[ERROR] 查询历史行情数据库最新日期失败: {str(e)}，使用日期: {target_date}")
+        
+        # 初始化结果数据列表（提前定义，避免后续使用时未定义错误）
+        results_data = []
+        
+        # 批量查询PVFRS指标数据（价格维度和频率维度）
+        # 注意：CN和HK数据在同一张表中，不需要区分market_type
+        pvfrs_indicators_map = {}  # {stock_code: {price_dim: ..., freq_dim: ...}}
+        if stock_codes:
+            # 确保日期格式正确（去除可能的空格）
+            target_date_clean = target_date.strip()
+            
+            # 批量查询所有股票的PVFRS指标（不区分市场类型）
+            pvfrs_indicators = db.query(MeanFrequencyResonanceIndicators).filter(
+                MeanFrequencyResonanceIndicators.code.in_(stock_codes),
+                MeanFrequencyResonanceIndicators.date == target_date_clean
+            ).all()
+            
+            for indicator in pvfrs_indicators:
+                pvfrs_indicators_map[indicator.code] = {
+                    'macro_displacement_delta': indicator.macro_displacement_delta,
+                    'rising_days_z': indicator.rising_days_z,
+                    'falling_days_f': indicator.falling_days_f,
+                    'market_type': indicator.market_type  # 保留市场类型信息，但不作为查询条件
+                }
+            
+            logger.info(f"[DEBUG] 从PVFRS指标表查询数据: 目标日期='{target_date_clean}', 查询到{len(pvfrs_indicators)}条记录, "
+                      f"股票代码={stock_codes[:5] if len(stock_codes) > 5 else stock_codes}...")  # 只显示前5个代码
+            
+            # 详细日志：显示前几条查询结果
+            if len(pvfrs_indicators) > 0 and len(results_data) == 0:  # 只在第一次循环时显示
+                for idx, ind in enumerate(pvfrs_indicators[:3]):
+                    logger.info(f"[DEBUG] 查询结果示例 {idx+1}: 代码={ind.code}, 日期={ind.date}, 市场类型={ind.market_type}, "
+                              f"上涨天数={ind.rising_days_z}, 下跌天数={ind.falling_days_f}")
+            
+            # 检查是否有股票在数据库中找不到数据
+            missing_codes = [code for code in stock_codes if code not in pvfrs_indicators_map]
+            if missing_codes and len(missing_codes) <= 10:  # 如果缺失的股票不多，记录日志
+                logger.warning(f"[DEBUG] 以下股票在PVFRS指标表中未找到数据 (日期={target_date_clean}): {missing_codes}")
+        
         if stock_codes:
             # 获取最新交易日期
             latest_date_result = pd.read_sql_query("""
@@ -186,10 +250,64 @@ async def get_pvfrs_strategy(
             realtime_quotes_a = {}
             realtime_quotes_hk = {}
         
-        # 转换为API响应格式
-        results_data = []
+        # 转换为API响应格式（results_data已在上面初始化）
         for result in selection_results:
             result_dict = result.to_dict()
+            
+            # 确保股票名称字段是真实的真实名称
+            current_name = result_dict.get('name', '')
+            if not current_name or current_name.startswith('股票'):
+                # 如果没有名称字段、名称为空，或者名称是以"股票"开头的默认值，尝试从数据库查询真实名称
+                from backend_api.models import StockBasicInfo, StockBasicInfoHK
+                
+                # 清理股票代码格式
+                stock_code = str(result.symbol).strip()
+                
+                # 尝试多种查询方式
+                stock_info = None
+                
+                # 1. 判断是否为港股 (通常是5位数字，如 00700)
+                is_hk = False
+                if len(stock_code) <= 5 and stock_code.isdigit():
+                    is_hk = True
+                elif not (stock_code.startswith('6') or stock_code.startswith('0') or stock_code.startswith('3') or 
+                          stock_code.startswith('SZ') or stock_code.startswith('SH')):
+                    is_hk = True
+                
+                if is_hk:
+                    # 查询港股基础信息
+                    stock_info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == stock_code).first()
+                    # 如果没找到且代码长度小于5，尝试补全为5位
+                    if not stock_info and len(stock_code) < 5:
+                        padded_code = stock_code.zfill(5)
+                        stock_info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == padded_code).first()
+                else:
+                    # 查询A股基础信息
+                    # 方式1：直接查询
+                    stock_info = db.query(StockBasicInfo).filter(StockBasicInfo.code == stock_code).first()
+                    
+                    # 方式2：如果失败，尝试去掉SZ前缀
+                    if not stock_info and stock_code.startswith('SZ'):
+                        clean_code = stock_code[2:]
+                        stock_info = db.query(StockBasicInfo).filter(StockBasicInfo.code == clean_code).first()
+                    
+                    # 方式3：如果失败，尝试去掉SH前缀
+                    if not stock_info and stock_code.startswith('SH'):
+                        clean_code = stock_code[2:]
+                        stock_info = db.query(StockBasicInfo).filter(StockBasicInfo.code == clean_code).first()
+                
+                if stock_info and stock_info.name:
+                    result_dict['name'] = stock_info.name
+                    logger.debug(f"[DEBUG] 从数据库查询真实name: {stock_code} -> {stock_info.name}")
+                else:
+                    # 如果数据库中也没有，保留原样或使用股票代码作为名称
+                    if not result_dict.get('name'):
+                        result_dict['name'] = f"股票{stock_code}"
+                    logger.warning(f"[WARNING] 无法找到股票真实名称，代码: {stock_code}")
+            
+            # 调试日志：检查name字段
+            if len(results_data) < 3:  # 只打印前3条数据
+                logger.info(f"[DEBUG] 股票 {result.symbol} 的name字段: '{result_dict.get('name', 'MISSING')}'")
             
             # 提取指标信息
             indicators = result_dict.get('indicators', {})
@@ -213,24 +331,63 @@ async def get_pvfrs_strategy(
                 logger.debug(f"Stock {result.symbol} missing price_indicators")
             entry_timing_analysis = indicators.get('entry_timing_analysis', {})
             
-            # 从维度分析中提取详细状态文本
-            # 价格维度状态 - 显示实际数值
-            if price_indicators and isinstance(price_indicators, dict) and price_indicators:
-                macro_displacement = price_indicators.get('macro_displacement', 0) or 0
-                instant_deviation = price_indicators.get('instant_deviation', 0) or 0
-                # 显示关键指标值
+            # 从PVFRS指标数据表中获取价格维度和频率维度数据
+            stock_code = result.symbol
+            pvfrs_data = pvfrs_indicators_map.get(stock_code)
+            
+            # 价格维度状态 - 从PVFRS指标表获取
+            if pvfrs_data and pvfrs_data.get('macro_displacement_delta') is not None:
+                macro_displacement = pvfrs_data.get('macro_displacement_delta', 0) or 0
                 price_dimension_status = f"宏观位移: {macro_displacement:.2f}"
             else:
-                price_dimension_status = "--"
+                # 如果PVFRS表中没有数据，尝试从策略分析结果中获取（向后兼容）
+                if price_indicators and isinstance(price_indicators, dict) and price_indicators:
+                    macro_displacement = price_indicators.get('macro_displacement', 0) or 0
+                    price_dimension_status = f"宏观位移: {macro_displacement:.2f}"
+                else:
+                    price_dimension_status = "--"
             
-            # 频率维度状态 - 显示实际数值
-            if frequency_indicators and isinstance(frequency_indicators, dict) and frequency_indicators:
-                rising_days = frequency_indicators.get('rising_days', 0) or 0
-                falling_days = frequency_indicators.get('falling_days', 0) or 0
-                # 显示涨跌天数
-                frequency_dimension_status = f"上涨{rising_days}天/下跌{falling_days}天"
+            # 频率维度状态 - 从PVFRS指标表获取（优先使用数据库数据）
+            if pvfrs_data:
+                # 注意：0 是有效值，不能使用 or 0，应该使用 is not None 判断
+                rising_days_z = pvfrs_data.get('rising_days_z')
+                falling_days_f = pvfrs_data.get('falling_days_f')
+                
+                if rising_days_z is not None and falling_days_f is not None:
+                    # 使用数据库中的值（强制使用，不使用策略分析的值）
+                    rising_days = int(rising_days_z)
+                    falling_days = int(falling_days_f)
+                    frequency_dimension_status = f"上涨{rising_days}天/下跌{falling_days}天"
+                    
+                    # 调试日志：对比数据库值和策略分析值
+                    if len(results_data) < 3:  # 只打印前3条数据的调试信息
+                        strategy_rising = frequency_indicators.get('rising_days') if frequency_indicators else None
+                        strategy_falling = frequency_indicators.get('falling_days') if frequency_indicators else None
+                        logger.info(f"[DEBUG] 股票 {stock_code} 频率维度 - 使用数据库值: 上涨{rising_days}天/下跌{falling_days}天, "
+                                  f"策略分析值: 上涨{strategy_rising}天/下跌{strategy_falling}天, "
+                                  f"目标日期: {target_date}")
+                else:
+                    # 如果数据库中有记录但字段为None，记录警告并尝试使用策略分析值
+                    logger.warning(f"股票 {stock_code} 在PVFRS指标表中存在记录，但上涨/下跌天数字段为None，尝试使用策略分析值")
+                    if frequency_indicators and isinstance(frequency_indicators, dict) and frequency_indicators:
+                        rising_days = frequency_indicators.get('rising_days', 0) or 0
+                        falling_days = frequency_indicators.get('falling_days', 0) or 0
+                        frequency_dimension_status = f"上涨{rising_days}天/下跌{falling_days}天"
+                    else:
+                        frequency_dimension_status = "--"
             else:
-                frequency_dimension_status = "--"
+                # 如果PVFRS表中没有数据，尝试从策略分析结果中获取（向后兼容）
+                if frequency_indicators and isinstance(frequency_indicators, dict) and frequency_indicators:
+                    rising_days = frequency_indicators.get('rising_days', 0) or 0
+                    falling_days = frequency_indicators.get('falling_days', 0) or 0
+                    frequency_dimension_status = f"上涨{rising_days}天/下跌{falling_days}天"
+                    
+                    # 调试日志：记录使用策略分析值的情况（重要警告）
+                    if len(results_data) < 3:
+                        logger.warning(f"[WARNING] 股票 {stock_code} 在PVFRS指标表中未找到数据 (日期={target_date})，使用策略分析值: "
+                                     f"上涨{rising_days}天/下跌{falling_days}天。请检查数据库中是否有该股票该日期的数据。")
+                else:
+                    frequency_dimension_status = "--"
             
             # 成交量维度状态 - 显示实际数值
             if volume_indicators and isinstance(volume_indicators, dict) and volume_indicators:
@@ -284,7 +441,6 @@ async def get_pvfrs_strategy(
                     entry_timing_status = "--"
             
             # 获取当前价格和涨跌幅（从实时行情表）
-            stock_code = result.symbol
             current_price = result_dict.get('price', None)  # 先使用历史数据中的价格
             change_percent = None
             
@@ -742,18 +898,27 @@ async def get_one_yang_three_lines_strategy(
     page_size: int = Query(100, ge=1, le=500, description="每页数量，最大500"),
     start_date: str = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: str = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    # 一阳穿三线策略参数
+    min_increase_percent: float = Query(3.0, ge=0, le=50, description="最小涨幅百分比（默认3%）"),
+    min_body_ratio: float = Query(0.7, ge=0.1, le=1.0, description="最小实体占比（默认0.7）"),
+    min_cross_lines: int = Query(3, ge=2, le=6, description="最小穿越均线数量（默认3）"),
+    min_volume_ratio: float = Query(2.0, ge=1.0, le=10.0, description="最小成交量倍数（默认2.0）"),
+    min_turnover_rate: float = Query(3.0, ge=0, le=50, description="最小换手率（默认3%）"),
+    max_turnover_rate: float = Query(10.0, ge=0, le=100, description="最大换手率（默认10%）"),
+    ma_periods: str = Query("5,10,20,30,60,120", description="均线周期，逗号分隔（默认5,10,20,30,60,120）"),
     db: Session = Depends(get_db)
 ):
     """
     一阳穿三线选股策略（又称"出水芙蓉"）
     
     策略条件:
-    1. 长阳线：收盘价>开盘价，实体占比>=70%，涨幅>=3%
-    2. 穿越至少三条均线（MA5/10/20/30/60/120中的任意三条或更多）
-    3. 放量突破：成交量>=前5日平均成交量的2倍
-    4. 位置判别：根据60日最高价回撤幅度判断低位/中位/高位
-    5. 乖离率计算：BIAS5/10/30，BIAS30>10%时风险提示
-    6. 信号质量评分：综合穿线数量、成交量、换手率、位置、乖离率
+    1. 长阳线：收盘价>开盘价，实体占比>=min_body_ratio，涨幅>=min_increase_percent%
+    2. 穿越至少min_cross_lines条均线（从ma_periods中选择）
+    3. 放量突破：成交量>=前5日平均成交量的min_volume_ratio倍
+    4. 换手率范围：min_turnover_rate% - max_turnover_rate%
+    5. 位置判别：根据60日最高价回撤幅度判断低位/中位/高位
+    6. 乖离率计算：BIAS5/10/30，BIAS30>10%时风险提示
+    7. 信号质量评分：综合穿线数量、成交量、换手率、位置、乖离率
     
     股票范围:
     - 全部A股
@@ -764,6 +929,13 @@ async def get_one_yang_three_lines_strategy(
         page_size: 每页数量（可选，默认100，最大500）
         start_date: 开始日期（可选）
         end_date: 结束日期（可选）
+        min_increase_percent: 最小涨幅百分比（默认3%）
+        min_body_ratio: 最小实体占比（默认0.7）
+        min_cross_lines: 最小穿越均线数量（默认3）
+        min_volume_ratio: 最小成交量倍数（默认2.0）
+        min_turnover_rate: 最小换手率（默认3%）
+        max_turnover_rate: 最大换手率（默认10%）
+        ma_periods: 均线周期，逗号分隔（默认5,10,20,30,60,120）
         db: 数据库会话
     
     Returns:
@@ -799,8 +971,32 @@ async def get_one_yang_three_lines_strategy(
                 detail="开始日期不能晚于结束日期"
             )
         
+        # 解析均线周期参数
+        try:
+            ma_periods_list = [int(x.strip()) for x in ma_periods.split(',')]
+            if len(ma_periods_list) < 2:
+                raise ValueError("至少需要2个均线周期")
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"均线周期参数错误: {str(e)}"
+            )
+        
+        # 构建策略参数
+        strategy_params = {
+            'min_increase_percent': min_increase_percent,
+            'min_body_ratio': min_body_ratio,
+            'min_cross_lines': min_cross_lines,
+            'min_volume_ratio': min_volume_ratio,
+            'min_turnover_rate': min_turnover_rate,
+            'max_turnover_rate': max_turnover_rate,
+            'ma_periods': ma_periods_list
+        }
+        
+        logger.info(f"策略参数: {strategy_params}")
+        
         # 执行选股策略
-        all_results = OneYangThreeLinesStrategy.screening_one_yang_three_lines_strategy(db)
+        all_results = OneYangThreeLinesStrategy.screening_one_yang_three_lines_strategy(db, **strategy_params)
         
         # 日期范围过滤（如果提供）
         if start_date or end_date:

@@ -106,6 +106,28 @@
                     <el-checkbox v-model="form.test_mode">测试模式（只采集前5只股票）</el-checkbox>
                   </el-form-item>
 
+                  <!-- 指标数据生成选项 -->
+                  <el-form-item label="指标数据生成">
+                    <div class="flex items-center mb-2">
+                      <el-checkbox 
+                        v-model="isAllSelected" 
+                        :indeterminate="isIndeterminate"
+                        @change="handleSelectAllIndicators"
+                      >
+                        全选
+                      </el-checkbox>
+                    </div>
+                    <el-checkbox-group v-model="form.indicators">
+                      <el-checkbox value="ma">MA移动平均线</el-checkbox>
+                      <el-checkbox value="mavol">MAVOL成交量移动平均线</el-checkbox>
+                      <el-checkbox value="kdj">KDJ随机指标</el-checkbox>
+                      <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
+                      <el-checkbox value="boll">BOLL布林带</el-checkbox>
+                      <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                    </el-checkbox-group>
+                    <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
+                  </el-form-item>
+
                   <!-- 操作按钮 -->
                   <el-form-item>
                     <el-button
@@ -496,7 +518,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { 
   ElMessage, 
   ElMessageBox,
@@ -546,6 +568,7 @@ interface FormData {
   single_stock_code: string
   stock_codes_text: string
   test_mode: boolean
+  indicators: string[]
 }
 
 interface HKFormData {
@@ -569,6 +592,7 @@ interface RequestData {
   full_collection_mode?: boolean
   market?: string
   force_update?: boolean
+  indicators?: string[]
 }
 
 // 标签页状态
@@ -583,7 +607,8 @@ const form = ref<FormData>({
   collection_type: 'single',
   single_stock_code: '',
   stock_codes_text: '',
-  test_mode: false
+  test_mode: false,
+  indicators: []
 })
 
 // HK表单数据
@@ -629,6 +654,32 @@ const ashareRealtimeLoading = ref(false)
 const hkRealtimeLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
+// 计算属性
+const allIndicators = ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'pvfrs']
+
+const isIndeterminate = computed(() => {
+  const selectedCount = form.value.indicators.length
+  if (selectedCount === 0) {
+    return false
+  } else if (selectedCount === allIndicators.length) {
+    return false
+  } else {
+    return true
+  }
+})
+
+const isAllSelected = computed(() => {
+  return form.value.indicators.length === allIndicators.length
+})
+
+const handleSelectAllIndicators = (checked: boolean) => {
+  if (checked) {
+    form.value.indicators = [...allIndicators]
+  } else {
+    form.value.indicators = []
+  }
+}
+
 // 方法
 const startCollection = async () => {
   try {
@@ -650,7 +701,8 @@ const startCollection = async () => {
     const requestData: RequestData = {
       start_date: form.value.start_date,
       end_date: form.value.end_date,
-      test_mode: form.value.test_mode
+      test_mode: form.value.test_mode,
+      indicators: form.value.indicators
     }
 
     // 根据采集类型设置股票代码
@@ -820,7 +872,8 @@ const resetForm = () => {
     collection_type: 'single',
     single_stock_code: '',
     stock_codes_text: '',
-    test_mode: false
+    test_mode: false,
+    indicators: []
   }
 }
 

@@ -108,6 +108,14 @@ except ImportError as e:
     print(f"❌ news_router 导入失败: {e}")
     news_router = None
 
+# 尝试导入数据采集路由
+try:
+    from .stock.data_collection_api import router as data_collection_router
+    print("✅ data_collection_router 导入成功")
+except ImportError as e:
+    print(f"❌ data_collection_router 导入失败: {e}")
+    data_collection_router = None
+
 # 创建FastAPI应用
 app = FastAPI(
     title="股票分析系统API",
@@ -201,6 +209,13 @@ if news_router is not None:
     print("✅ 新闻路由注册成功")
 else:
     print("❌ 新闻路由未注册")
+
+# 注册数据采集路由
+if data_collection_router is not None:
+    app.include_router(data_collection_router)
+    print("✅ 数据采集路由注册成功")
+else:
+    print("❌ 数据采集路由未注册")
 
 # 尝试导入admin路由
 try:

@@ -466,6 +466,16 @@
 
               <el-divider content-position="left">选择要生成的指标</el-divider>
               
+              <div class="mb-3">
+                <el-checkbox 
+                  v-model="isAllIndicatorsSelected" 
+                  :indeterminate="isIndeterminate"
+                  @change="handleSelectAllIndicators"
+                >
+                  全选
+                </el-checkbox>
+              </div>
+              
               <el-row :gutter="16">
                 <el-col :span="24">
                   <el-checkbox-group v-model="generationForm.indicators">
@@ -565,6 +575,24 @@ const canGenerate = computed(() => {
          !generating.value
 })
 
+// 全选相关计算属性
+const allIndicatorTypes = ['ma', 'mavol', 'macd', 'kdj', 'rsi', 'boll', 'pvfrs']
+
+const isAllIndicatorsSelected = computed(() => {
+  return generationForm.indicators.length === allIndicatorTypes.length
+})
+
+const isIndeterminate = computed(() => {
+  const selectedCount = generationForm.indicators.length
+  if (selectedCount === 0) {
+    return false
+  } else if (selectedCount === allIndicatorTypes.length) {
+    return false
+  } else {
+    return true
+  }
+})
+
 const fetchData = async () => {
   loading.value = true
   try {
@@ -623,6 +651,14 @@ const refreshData = () => {
 
 const handleMainTabChange = () => {
   generationResult.value = null
+}
+
+const handleSelectAllIndicators = (checked: boolean) => {
+  if (checked) {
+    generationForm.indicators = [...allIndicatorTypes]
+  } else {
+    generationForm.indicators = []
+  }
 }
 
 const getIndicatorLabel = (key: string) => {
