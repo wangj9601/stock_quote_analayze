@@ -2,6 +2,7 @@
 const ScreeningPage = {
     API_BASE_URL: Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000',
     currentStrategy: 'cyb-midline', // 当前选中的策略
+    lastResults: {}, // 存储最近一次筛选结果，用于导出
 
     // 初始化
     async init() {
@@ -120,6 +121,15 @@ const ScreeningPage = {
             });
         });
 
+        // 绑定所有导出按钮
+        document.querySelectorAll('.export-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // 从ID中提取策略名称，例如 exportBtn-one-yang-three-lines -> one-yang-three-lines
+                const strategy = btn.id.replace('exportBtn-', '');
+                this.exportToCSV(strategy);
+            });
+        });
+
         // 绑定PVFRS策略范围切换事件
         document.querySelectorAll('input[name="pvfrsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
@@ -161,6 +171,7 @@ const ScreeningPage = {
         const resultsTableBody = document.getElementById(`resultsTableBody-${suffix}`);
         const resultsCount = document.getElementById(`resultsCount-${suffix}`);
         const refreshBtn = document.getElementById(`refreshBtn-${strategy}`);
+        const exportBtn = document.getElementById(`exportBtn-${strategy}`);
         const searchDate = document.getElementById(`searchDate-${suffix}`);
 
         // 显示加载状态
@@ -173,6 +184,9 @@ const ScreeningPage = {
         }
         if (refreshBtn) {
             refreshBtn.disabled = true;
+        }
+        if (exportBtn) {
+            exportBtn.style.display = 'none';
         }
 
         try {
@@ -259,11 +273,17 @@ const ScreeningPage = {
             }
 
             if (result.success && result.data) {
+                this.lastResults[strategy] = result.data;
                 this.renderResults(result.data, result.search_date, strategy);
                 if (searchDate) {
                     searchDate.textContent = `筛选时间: ${result.search_date}`;
                 }
+                // 显示导出按钮
+                if (exportBtn && result.data.length > 0) {
+                    exportBtn.style.display = 'inline-block';
+                }
             } else {
+                this.lastResults[strategy] = [];
                 throw new Error(result.message || '未找到符合条件的股票');
             }
 
@@ -664,11 +684,11 @@ const ScreeningPage = {
         const minVolumeRatio = document.getElementById('minVolumeRatio').value;
         const minTurnoverRate = document.getElementById('minTurnoverRate').value;
         const maxTurnoverRate = document.getElementById('maxTurnoverRate').value;
-        
+
         // 获取选中的均线周期
         const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]:checked');
         const maPeriods = Array.from(maPeriodsCheckboxes).map(cb => cb.value);
-        
+
         return {
             min_increase_percent: parseFloat(minIncreasePercent),
             min_body_ratio: parseFloat(minBodyRatio),
@@ -688,13 +708,13 @@ const ScreeningPage = {
         document.getElementById('minVolumeRatio').value = '2.0';
         document.getElementById('minTurnoverRate').value = '3.0';
         document.getElementById('maxTurnoverRate').value = '10.0';
-        
+
         // 重置均线周期选择
         const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]');
         maPeriodsCheckboxes.forEach(cb => {
             cb.checked = true; // 默认全选
         });
-        
+
         this.showMessage('参数已重置为默认值', 'success');
     },
 
@@ -717,7 +737,7 @@ const ScreeningPage = {
                 document.getElementById('minVolumeRatio').value = params.min_volume_ratio || '2.0';
                 document.getElementById('minTurnoverRate').value = params.min_turnover_rate || '3.0';
                 document.getElementById('maxTurnoverRate').value = params.max_turnover_rate || '10.0';
-                
+
                 // 恢复均线周期选择
                 if (params.ma_periods) {
                     const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]');
@@ -729,29 +749,205 @@ const ScreeningPage = {
                 console.error('加载参数失败:', e);
             }
         }
+    },
+
+    // 导出结果到CSV
+    exportToCSV(strategy) {
+        const data = this.lastResults[strategy];
+        if (!data || data.length === 0) {
+            if (window.CommonUtils) {
+                CommonUtils.showToast('没有可导出的数据', 'warning');
+            } else {
+                alert('没有可导出的数据');
+            }
+            return;
+        }
+
+        let headers = [];
+        let rows = [];
+        let filename = `选股结果_${strategy}_${new Date().toISOString().split('T')[0]}.csv`;
+
+        if (strategy === 'one-yang-three-lines') {
+            headers = [
+                '股票代码', '股票名称', '信号日期', '当前价格',
+                '穿越均线', '成交量倍数', '换手率', '位置类型',
+                '回撤幅度', 'BIAS30', '信号评分', '风险提示'
+            ];
+            rows = data.map(stock => [
+                `'${stock.code}`, // 防止Excel自动转换长数字
+                stock.name,
+                stock.signal_date || '',
+                stock.current_price || '',
+                stock.crossed_lines || '',
+                stock.volume_ratio || '',
+                stock.turnover_rate ? stock.turnover_rate + '%' : '',
+                stock.position_type || '',
+                stock.retracement ? stock.retracement + '%' : '',
+                stock.bias30 ? stock.bias30 + '%' : '',
+                stock.signal_score || '',
+                (stock.risk_warnings || []).join(';')
+            ]);
+            filename = `一阳穿三线筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'cyb-midline') {
+            headers = [
+                '股票代码', '股票名称', '涨停日期', '涨停价格',
+                '突破日期', '突破价格', '当前价格', '当前涨跌幅',
+                'MA5', 'MA10', 'MA20'
+            ];
+            rows = data.map(stock => [
+                `'${stock.code}`,
+                stock.name,
+                stock.limit_up_date || '',
+                stock.limit_up_price || '',
+                stock.breakthrough_date || '',
+                stock.breakthrough_price || '',
+                stock.current_price || '',
+                stock.current_change_percent ? stock.current_change_percent + '%' : '0%',
+                stock.ma5 || '',
+                stock.ma10 || '',
+                stock.ma20 || ''
+            ]);
+            filename = `创业板中线筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'pvfrs') {
+            headers = [
+                '股票代码', '股票名称', '信号强度', '当前价格',
+                '价格维度', '频率维度', '成交量维度', '共振状态',
+                '入场时机', '投资建议', '当前涨跌幅'
+            ];
+            rows = data.map(stock => [
+                `'${stock.symbol || stock.code}`,
+                stock.name || '',
+                stock.signal_strength ? (stock.signal_strength * 100).toFixed(1) + '%' : '',
+                stock.current_price || '',
+                stock.price_dimension_status || '',
+                stock.frequency_dimension_status || '',
+                stock.volume_dimension_status || '',
+                stock.resonance_status || '',
+                stock.entry_timing_status || '',
+                stock.investment_advice || '',
+                stock.current_change_percent ? stock.current_change_percent.toFixed(2) + '%' : '0%'
+            ]);
+            filename = `PVFRS三维共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'long-lower-shadow') {
+            headers = [
+                '股票代码', '股票名称', '形态日期', '形态收盘价',
+                '下影线长度', '实体长度', '影线/实体比', '当日振幅',
+                '当前价格', '当前涨跌幅', 'MA20', '偏离MA20'
+            ];
+            rows = data.map(stock => [
+                `'${stock.code}`,
+                stock.name,
+                stock.pattern_date || '',
+                stock.pattern_close || '',
+                stock.lower_shadow || '',
+                stock.body_length || '',
+                stock.shadow_body_ratio || '',
+                stock.amplitude ? (stock.amplitude * 100).toFixed(2) + '%' : '',
+                stock.current_price || '',
+                stock.current_change_percent ? stock.current_change_percent + '%' : '0%',
+                stock.ma20 || '',
+                stock.deviation_from_ma20 ? (stock.deviation_from_ma20 * 100).toFixed(2) + '%' : ''
+            ]);
+            filename = `长下影线筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'keep-increasing') {
+            headers = [
+                '股票代码', '股票名称', '当前价格', '当前涨跌幅',
+                '当日MA30', '30日前MA30', 'MA30涨幅'
+            ];
+            rows = data.map(stock => [
+                `'${stock.code}`,
+                stock.name,
+                stock.current_price || '',
+                stock.current_change_percent ? stock.current_change_percent + '%' : '0%',
+                stock.current_ma30 || '',
+                stock.ma30_before_30 || '',
+                stock.ma30_increase_ratio ? (stock.ma30_increase_ratio * 100).toFixed(2) + '%' : ''
+            ]);
+            filename = `持续上涨(MA30向上)筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'low-nine') {
+            headers = [
+                '股票代码', '股票名称', '形态开始日期', '形态结束日期',
+                '形态开始价格', '9天跌幅', '9天最高价', '9天最低价',
+                '当前价格', '当前涨跌幅'
+            ];
+            rows = data.map(stock => [
+                `'${stock.code}`,
+                stock.name,
+                stock.pattern_start_date || '',
+                stock.pattern_end_date || '',
+                stock.pattern_start_price || '',
+                stock.nine_day_decline ? stock.nine_day_decline.toFixed(2) + '%' : '',
+                stock.nine_day_high || '',
+                stock.nine_day_low || '',
+                stock.current_price || '',
+                stock.current_change_percent ? stock.current_change_percent + '%' : '0%'
+            ]);
+            filename = `低九策略筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else {
+            // 通用导出（如果需要支持其他策略）
+            if (data.length > 0) {
+                headers = Object.keys(data[0]);
+                rows = data.map(item => headers.map(header => item[header]));
+            }
+        }
+
+        if (headers.length === 0) return;
+
+        // 构建CSV内容
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => {
+                // 处理包含逗号、换行符或引号的单元格
+                const cellStr = String(cell);
+                if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) {
+                    return `"${cellStr.replace(/"/g, '""')}"`;
+                }
+                return cellStr;
+            }).join(','))
+        ].join('\n');
+
+        // 添加 BOM 以支持 Excel 中文显示
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+
+        if (navigator.msSaveBlob) { // IE 10+
+            navigator.msSaveBlob(blob, filename);
+        } else {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        if (window.CommonUtils) {
+            CommonUtils.showToast('导出成功', 'success');
+        }
     }
 };
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
     ScreeningPage.init();
-    
+
     // 绑定一阳穿三线策略参数按钮事件
     const resetParamsBtn = document.getElementById('resetParamsBtn');
     const saveParamsBtn = document.getElementById('saveParamsBtn');
-    
+
     if (resetParamsBtn) {
         resetParamsBtn.addEventListener('click', () => {
             ScreeningPage.resetOneYangThreeLinesParams();
         });
     }
-    
+
     if (saveParamsBtn) {
         saveParamsBtn.addEventListener('click', () => {
             ScreeningPage.saveOneYangThreeLinesParams();
         });
     }
-    
+
     // 加载保存的参数
     ScreeningPage.loadOneYangThreeLinesParams();
 });

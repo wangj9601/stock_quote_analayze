@@ -9,6 +9,8 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime, date
 from dataclasses import dataclass, asdict, is_dataclass
 from decimal import Decimal
+import math
+import numpy as np
 
 from .models import (
     MarketData, PVFRSIndicators, Signal, SignalType, 
@@ -54,7 +56,7 @@ class PVFRSJSONEncoder(json.JSONEncoder):
             elif hasattr(obj, 'to_dict'):
                 return obj.to_dict()
             
-            # 处理numpy数组（如果存在）
+            # 处理numpy数据
             elif hasattr(obj, 'tolist'):
                 return obj.tolist()
             
@@ -92,8 +94,11 @@ class DataSerializer:
             PVFRSException: 序列化失败时抛出
         """
         try:
+            # 预处理数据，处理 inf 和 nan
+            sanitized_data = self._sanitize_data(data)
+            
             json_str = json.dumps(
-                data, 
+                sanitized_data, 
                 cls=PVFRSJSONEncoder,
                 ensure_ascii=ensure_ascii,
                 indent=indent,
@@ -127,6 +132,32 @@ class DataSerializer:
         except Exception as e:
             logger.error(f"数据反序列化失败: {str(e)}")
             raise PVFRSException(f"数据反序列化失败: {str(e)}")
+    
+    def _sanitize_data(self, data: Any) -> Any:
+        """递归清理数据，处理 inf 和 nan"""
+        try:
+            if isinstance(data, (float, np.float32, np.float64)):
+                if math.isinf(data):
+                    return 999.0 if data > 0 else -999.0
+                elif math.isnan(data):
+                    return 0.0
+                return float(data)
+            elif isinstance(data, (int, np.integer)):
+                return int(data)
+            elif isinstance(data, dict):
+                return {k: self._sanitize_data(v) for k, v in data.items()}
+            elif isinstance(data, (list, tuple, np.ndarray)):
+                if hasattr(data, 'tolist'):
+                    return self._sanitize_data(data.tolist())
+                return [self._sanitize_data(i) for i in data]
+            elif is_dataclass(data):
+                return self._sanitize_data(asdict(data))
+            elif hasattr(data, 'to_dict') and not isinstance(data, type): # Avoid class objects
+                return self._sanitize_data(data.to_dict())
+            return data
+        except Exception as e:
+            logger.warning(f"清理数据失败: {str(e)}")
+            return data
     
     def serialize_market_data(self, market_data: Union[MarketData, List[MarketData]]) -> str:
         """序列化市场数据

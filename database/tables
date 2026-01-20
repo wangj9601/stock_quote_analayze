@@ -231,3 +231,63 @@ TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS public.mean_frequency_resonance_indicators
     OWNER to postgres;    
+
+
+
+    -- 策略配置表
+CREATE TABLE pvfrs_strategy_configs (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    config_params JSONB NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 任务管理表（增强版）
+CREATE TABLE pvfrs_backtest_tasks (
+    id SERIAL PRIMARY KEY,
+    task_id VARCHAR(50) UNIQUE NOT NULL,
+    strategy_config_id INTEGER REFERENCES pvfrs_strategy_configs(id),
+    mode VARCHAR(20) NOT NULL,
+    stock_codes JSONB NOT NULL,
+    market VARCHAR(10) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    initial_capital DECIMAL(15,2) NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    progress INTEGER DEFAULT 0,
+    current_step TEXT,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    estimated_duration INTEGER,
+    priority INTEGER DEFAULT 5
+);
+
+-- 回测结果表（增强版）
+CREATE TABLE pvfrs_backtest_results (
+    id SERIAL PRIMARY KEY,
+    task_id VARCHAR(50) REFERENCES pvfrs_backtest_tasks(task_id),
+    strategy_config_id INTEGER REFERENCES pvfrs_strategy_configs(id),
+    stock_code VARCHAR(20) NOT NULL,
+    market VARCHAR(10) NOT NULL,
+    backtest_date DATE NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    initial_capital DECIMAL(15,2) NOT NULL,
+    final_capital DECIMAL(15,2) NOT NULL,
+    total_return DECIMAL(10,6) NOT NULL,
+    annual_return DECIMAL(10,6) NOT NULL,
+    max_drawdown DECIMAL(10,6) NOT NULL,
+    sharpe_ratio DECIMAL(10,6) NOT NULL,
+    win_rate DECIMAL(5,4) NOT NULL,
+    profit_factor DECIMAL(10,6) NOT NULL,
+    total_trades INTEGER NOT NULL,
+    winning_trades INTEGER NOT NULL,
+    avg_holding_period DECIMAL(8,2) NOT NULL,
+    volatility DECIMAL(10,6) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);

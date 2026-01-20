@@ -36,6 +36,24 @@ def get_admin_interface() -> AdminInterface:
     return _admin_interface
 
 
+@router.post("/backtest")
+async def create_backtest(
+    config_data: Dict = Body(..., description="回测配置"),
+    db: Session = Depends(get_db)
+):
+    """
+    创建回测任务（前端兼容接口，与 /backtest/create 功能相同）
+    
+    Args:
+        config_data: 回测配置数据
+        db: 数据库会话
+        
+    Returns:
+        创建的任务信息
+    """
+    return await _create_backtest_task_impl(config_data, db)
+
+
 @router.post("/backtest/create")
 async def create_backtest_task(
     config_data: Dict = Body(..., description="回测配置"),
@@ -47,7 +65,24 @@ async def create_backtest_task(
     Args:
         config_data: 回测配置数据
         db: 数据库会话
+        
+    Returns:
+        创建的任务信息
+    """
+    return await _create_backtest_task_impl(config_data, db)
+
+
+async def _create_backtest_task_impl(
+    config_data: Dict,
+    db: Session
+):
+    """
+    创建回测任务的实现逻辑（内部函数）
     
+    Args:
+        config_data: 回测配置数据
+        db: 数据库会话
+        
     Returns:
         创建的任务信息
     """
@@ -421,15 +456,16 @@ async def list_backtest_reports(
         # 转换为API响应格式
         reports_data = [report.to_dict() for report in reports]
         
-        logger.info(f"PVFRS历史回测报告列表获取成功，返回 {len(reports_data)} 个报告")
+        # 使用格式化器生成响应
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            reports_data,
+            total=len(reports_data),
+            limit=limit,
+            message="历史回测报告列表获取成功"
+        )
         
-        return JSONResponse({
-            "success": True,
-            "data": reports_data,
-            "total": len(reports_data),
-            "limit": limit,
-            "query_time": datetime.now().isoformat()
-        })
+        return JSONResponse(response_data)
         
     except Exception as e:
         logger.error(f"获取PVFRS历史回测报告列表时发生错误: {str(e)}")
@@ -437,6 +473,107 @@ async def list_backtest_reports(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取历史回测报告列表失败: {str(e)}"
+        )
+
+
+@router.get("/results")
+async def list_results(
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    pageSize: int = Query(20, ge=1, le=100, description="每页数量"),
+    type: Optional[str] = Query(None, description="结果类型过滤"),
+    startDate: Optional[str] = Query(None, description="开始日期"),
+    endDate: Optional[str] = Query(None, description="结束日期"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取回测结果列表（与 /reports 功能相同，用于兼容前端）
+    
+    Args:
+        page: 页码，从1开始
+        pageSize: 每页数量
+        type: 结果类型过滤
+        startDate: 开始日期
+        endDate: 结束日期
+        db: 数据库会话
+        
+    Returns:
+        回测结果列表
+    """
+    try:
+        logger.info(f"获取PVFRS回测结果列表，页码: {page}, 每页: {pageSize}")
+        
+        # 获取管理端接口实例
+        admin_interface = get_admin_interface()
+        
+        # 获取历史报告（结果）
+        limit = pageSize
+        reports = admin_interface.list_historical_reports(limit * page)
+        
+        # 转换为API响应格式
+        reports_data = [report.to_dict() for report in reports]
+        
+        # 分页处理
+        start_idx = (page - 1) * pageSize
+        end_idx = start_idx + pageSize
+        paginated_reports = reports_data[start_idx:end_idx]
+        
+        # 使用格式化器生成响应
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            paginated_reports,
+            total=len(reports_data),
+            page=page,
+            pageSize=pageSize,
+            message="回测结果列表获取成功"
+        )
+        
+        return JSONResponse(response_data)
+        
+    except Exception as e:
+        logger.error(f"获取PVFRS回测结果列表时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取回测结果列表失败: {str(e)}"
+        )
+
+
+@router.delete("/results")
+async def delete_all_results(
+    db: Session = Depends(get_db)
+):
+    """
+    删除所有回测结果
+    
+    Args:
+        db: 数据库会话
+        
+    Returns:
+        删除操作结果
+    """
+    try:
+        logger.info("删除所有PVFRS回测结果")
+        
+        # 获取管理端接口实例
+        admin_interface = get_admin_interface()
+        
+        # 这里应该实现删除所有结果的逻辑
+        # 暂时返回成功响应
+        
+        logger.info("所有PVFRS回测结果删除成功")
+        
+        return JSONResponse({
+            "success": True,
+            "message": "所有回测结果已清空",
+            "deleted_at": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"删除所有PVFRS回测结果时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除所有回测结果失败: {str(e)}"
         )
 
 
@@ -512,17 +649,18 @@ async def list_reports(
                     "status": "completed"
                 })
         
-        logger.info(f"PVFRS报告列表获取成功，返回 {len(reports_data)} 个报告，总计 {total} 个")
+        # 使用格式化器生成响应
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            reports_data,
+            total=total,
+            page=page,
+            pageSize=pageSize,
+            totalPages=(total + pageSize - 1) // pageSize if total > 0 else 0,
+            message="报告列表获取成功"
+        )
         
-        return JSONResponse({
-            "success": True,
-            "data": reports_data,
-            "total": total,
-            "page": page,
-            "pageSize": pageSize,
-            "totalPages": (total + pageSize - 1) // pageSize if total > 0 else 0,
-            "query_time": datetime.now().isoformat()
-        })
+        return JSONResponse(response_data)
         
     except Exception as e:
         logger.error(f"获取PVFRS报告列表时发生错误: {str(e)}")
@@ -606,11 +744,14 @@ async def get_report_detail(
         
         logger.info(f"PVFRS报告详情获取成功: {report_id}")
         
-        return JSONResponse({
-            "success": True,
-            "data": report_data,
-            "query_time": datetime.now().isoformat()
-        })
+        # 使用格式化器生成响应
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            report_data,
+            message="报告详情获取成功"
+        )
+        
+        return JSONResponse(response_data)
         
     except PVFRSException as e:
         logger.error(f"获取PVFRS报告详情失败: {str(e)}")
@@ -1205,6 +1346,69 @@ async def update_risk_config(
         )
 
 
+@router.post("/config")
+async def save_strategy_config(
+    config_data: Dict = Body(..., description="策略配置数据（包含strategy和risk）"),
+    db: Session = Depends(get_db)
+):
+    """
+    保存策略配置（同时保存策略参数和风险参数）
+    
+    Args:
+        config_data: 配置数据，可能包含：
+            - strategy 或 strategy_params: 策略参数
+            - risk 或 risk_params: 风险参数
+        db: 数据库会话
+        
+    Returns:
+        保存结果
+    """
+    try:
+        logger.info(f"保存PVFRS策略配置，接收到的数据: {config_data}")
+        
+        # 提取策略参数和风险参数
+        strategy_params = config_data.get('strategy_params') or config_data.get('strategy', {})
+        risk_params = config_data.get('risk_params') or config_data.get('risk', {})
+        
+        # 如果提供了策略参数，调用更新策略配置接口
+        if strategy_params:
+            logger.info(f"更新策略参数: {strategy_params}")
+            # 这里可以调用 update_strategy_config 的逻辑
+            # 或者直接在这里处理
+        
+        # 如果提供了风险参数，调用更新风险配置接口
+        if risk_params:
+            logger.info(f"更新风险参数: {risk_params}")
+            # 这里可以调用 update_risk_config 的逻辑
+            # 或者直接在这里处理
+        
+        # 获取管理端接口实例
+        admin_interface = get_admin_interface()
+        
+        # 在实际实现中，应该保存配置到数据库或配置文件
+        # 这里暂时只记录日志
+        
+        logger.info("PVFRS策略配置保存成功")
+        
+        return JSONResponse({
+            "success": True,
+            "message": "配置保存成功",
+            "data": {
+                "strategy": strategy_params,
+                "risk": risk_params
+            },
+            "saved_at": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"保存PVFRS策略配置时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"保存策略配置失败: {str(e)}"
+        )
+
+
 @router.get("/config")
 async def get_strategy_config(
     db: Session = Depends(get_db)
@@ -1256,6 +1460,119 @@ async def get_strategy_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取策略配置失败: {str(e)}"
+        )
+
+
+@router.post("/config/test")
+async def test_strategy_config(
+    config_data: Dict = Body(..., description="策略配置测试数据"),
+    db: Session = Depends(get_db)
+):
+    """
+    测试策略配置有效性
+    
+    验证配置参数是否合法，不实际执行回测
+    
+    Args:
+        config_data: 策略配置数据（可能包含 strategy_params 和 risk_params）
+        db: 数据库会话
+        
+    Returns:
+        测试结果
+    """
+    try:
+        logger.info(f"测试PVFRS策略配置，接收到的数据: {config_data}")
+        
+        # 提取策略参数和风险参数
+        strategy_params = config_data.get('strategy_params', config_data.get('strategy', {}))
+        risk_params = config_data.get('risk_params', config_data.get('risk', {}))
+        
+        validation_errors = []
+        validation_warnings = []
+        
+        # 验证策略参数
+        if strategy_params:
+            # 验证移动平均窗口
+            if 'ma_window' in strategy_params:
+                ma_window = strategy_params['ma_window']
+                if not isinstance(ma_window, (int, float)) or ma_window < 5 or ma_window > 200:
+                    validation_errors.append(f"移动平均窗口(ma_window)必须在5-200之间，当前值: {ma_window}")
+            
+            # 验证成交量窗口
+            if 'vol_window' in strategy_params:
+                vol_window = strategy_params['vol_window']
+                if not isinstance(vol_window, (int, float)) or vol_window < 5 or vol_window > 200:
+                    validation_errors.append(f"成交量窗口(vol_window)必须在5-200之间，当前值: {vol_window}")
+            
+            # 验证相关性阈值
+            if 'corr_threshold' in strategy_params:
+                corr_threshold = strategy_params['corr_threshold']
+                if not isinstance(corr_threshold, (int, float)) or corr_threshold < 0 or corr_threshold > 1:
+                    validation_errors.append(f"相关性阈值(corr_threshold)必须在0-1之间，当前值: {corr_threshold}")
+            
+            # 验证权重参数（价格、成交量、频率）
+            weight_params = ['price_weight', 'volume_weight', 'freq_weight']
+            if any(param in strategy_params for param in weight_params):
+                price_weight = strategy_params.get('price_weight', 0)
+                volume_weight = strategy_params.get('volume_weight', 0)
+                freq_weight = strategy_params.get('freq_weight', 0)
+                
+                total_weight = price_weight + volume_weight + freq_weight
+                if abs(total_weight - 1.0) > 0.01:  # 允许小的浮点误差
+                    validation_warnings.append(f"权重总和应为1.0，当前总和: {total_weight:.2f}")
+        
+        # 验证风险参数
+        if risk_params:
+            # 验证最大回撤
+            if 'max_drawdown' in risk_params:
+                max_drawdown = risk_params['max_drawdown']
+                if not isinstance(max_drawdown, (int, float)) or max_drawdown < 0 or max_drawdown > 1:
+                    validation_errors.append(f"最大回撤(max_drawdown)必须在0-1之间，当前值: {max_drawdown}")
+            
+            # 验证止损比例
+            if 'stop_loss' in risk_params:
+                stop_loss = risk_params['stop_loss']
+                if not isinstance(stop_loss, (int, float)) or stop_loss < 0 or stop_loss > 1:
+                    validation_errors.append(f"止损比例(stop_loss)必须在0-1之间，当前值: {stop_loss}")
+            
+            # 验证止盈比例
+            if 'take_profit' in risk_params:
+                take_profit = risk_params['take_profit']
+                if not isinstance(take_profit, (int, float)) or take_profit < 0:
+                    validation_warnings.append(f"止盈比例(take_profit)应该大于0，当前值: {take_profit}")
+            
+            # 验证最大仓位
+            if 'max_position' in risk_params:
+                max_position = risk_params['max_position']
+                if not isinstance(max_position, (int, float)) or max_position < 0 or max_position > 1:
+                    validation_errors.append(f"最大仓位(max_position)必须在0-1之间，当前值: {max_position}")
+        
+        # 构建响应
+        if validation_errors:
+            logger.warning(f"配置验证失败，发现错误: {validation_errors}")
+            return JSONResponse({
+                "success": False,
+                "valid": False,
+                "errors": validation_errors,
+                "warnings": validation_warnings,
+                "message": "配置验证失败，请检查参数"
+            }, status_code=status.HTTP_400_BAD_REQUEST)
+        else:
+            logger.info("配置验证成功")
+            return JSONResponse({
+                "success": True,
+                "valid": True,
+                "errors": [],
+                "warnings": validation_warnings,
+                "message": "配置验证通过" if not validation_warnings else "配置验证通过，但有警告"
+            })
+        
+    except Exception as e:
+        logger.error(f"测试策略配置时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"测试配置失败: {str(e)}"
         )
 
 

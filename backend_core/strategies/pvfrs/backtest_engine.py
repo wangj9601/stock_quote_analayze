@@ -632,7 +632,7 @@ class BacktestEngine(IBacktestEngine):
         
         gross_profit = sum([t.pnl for t in winning_trades]) if winning_trades else 0.0
         gross_loss = abs(sum([t.pnl for t in losing_trades])) if losing_trades else 0.0
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else 999.0
         
         # 计算平均持有期
         avg_holding_period = 0.0

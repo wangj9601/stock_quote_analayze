@@ -34,12 +34,12 @@ oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_er
 
 # 添加调试日志
 logger.info("stock_screening_routes.py 模块加载完成，开始注册路由...")
-print("🔧 DEBUG: stock_screening_routes.py 模块加载完成")
+print("[DEBUG] stock_screening_routes.py 模块加载完成")
 
 # 尝试导入PVFRS前端接口
 try:
     from backend_core.strategies.pvfrs.frontend_interface import create_frontend_interface
-    print("🔧 DEBUG: PVFRS前端接口导入成功")
+    print(" DEBUG: PVFRS前端接口导入成功")
     logger.info("PVFRS前端接口导入成功")
     PVFRS_AVAILABLE = True
 except Exception as e:

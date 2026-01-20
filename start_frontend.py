@@ -9,8 +9,8 @@ import sys
 import webbrowser
 import time
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from socketserver import TCPServer
 import threading
+import socket
 import urllib.parse
 
 class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
@@ -39,18 +39,31 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 def check_port(port):
+    """检查端口是否可用（Windows兼容版本）"""
     try:
-        with TCPServer(("0.0.0.0", port), None) as server:
+        # 创建一个socket并尝试绑定端口
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # 尝试绑定到端口
+            result = sock.bind(('0.0.0.0', port))
+            # 如果绑定成功，说明端口可用
             return True
     except OSError:
+        # 端口已被占用
+        return False
+    except Exception:
+        # 其他错误，认为端口不可用
         return False
 
-def find_available_port(start_port=8000):
+def find_available_port(start_port=8000, max_attempts=100):
+    """查找可用端口"""
     port = start_port
-    while port < start_port + 100:
+    attempts = 0
+    while attempts < max_attempts:
         if check_port(port):
             return port
         port += 1
+        attempts += 1
     return None
 
 def start_server(port):

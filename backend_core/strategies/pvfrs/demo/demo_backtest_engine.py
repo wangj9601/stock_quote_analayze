@@ -313,7 +313,7 @@ def demo_individual_components():
         max_drawdown=0.02,
         sharpe_ratio=1.5,
         win_rate=1.0,
-        profit_factor=float('inf'),
+        profit_factor=999.0,
         total_trades=1,
         winning_trades=1,
         losing_trades=0,

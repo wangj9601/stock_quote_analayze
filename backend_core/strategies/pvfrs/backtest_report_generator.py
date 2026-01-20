@@ -495,7 +495,7 @@ class BacktestReportGenerator:
         if avg_loss != 0:
             profit_factor = abs(avg_win / avg_loss)
         else:
-            profit_factor = float('inf') if avg_win > 0 else 0
+            profit_factor = 999.0 if avg_win > 0 else 0
         
         # 平均持有天数（计算并过滤 None 值）
         holding_days_list = []

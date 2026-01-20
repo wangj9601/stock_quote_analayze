@@ -165,8 +165,17 @@ app.add_middleware(RequestLoggingMiddleware)
 if auth_router is not None:
     app.include_router(auth_router)
     print("✅ 认证路由注册成功")
+    # 打印认证路由的详细信息
+    if hasattr(auth_router, 'routes'):
+        print(f"   认证路由前缀: {auth_router.prefix}")
+        print(f"   认证路由数量: {len(auth_router.routes)}")
+        for route in auth_router.routes:
+            if hasattr(route, 'path') and hasattr(route, 'methods'):
+                print(f"   - {list(route.methods)} {route.path}")
 else:
     print("❌ 认证路由未注册")
+    import traceback
+    traceback.print_exc()
 
 # 注册watchlist路由
 if watchlist_router is not None:

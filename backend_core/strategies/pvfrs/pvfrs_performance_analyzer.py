@@ -183,8 +183,8 @@ class PVFRSPerformanceAnalyzer:
         avg_loss = total_loss / loss_count if loss_count > 0 else 0
         
         # 盈亏比
-        profit_factor = total_profit / total_loss if total_loss > 0 else float('inf')
-        avg_win_loss_ratio = avg_profit / avg_loss if avg_loss > 0 else float('inf')
+        profit_factor = total_profit / total_loss if total_loss > 0 else 999.0
+        avg_win_loss_ratio = avg_profit / avg_loss if avg_loss > 0 else 999.0
         
         # 最大单笔盈亏
         max_profit = max([t.pnl for t in trades]) if trades else 0

@@ -50,6 +50,7 @@
 
             <div class="screening-actions">
                 <button id="refreshBtn-cyb" class="refresh-btn" data-strategy="cyb-midline">刷新筛选</button>
+                <button id="exportBtn-cyb-midline" class="export-btn" style="display:none;">导出CSV</button>
                 <span id="searchDate-cyb" class="search-date"></span>
             </div>
 
@@ -270,6 +271,7 @@
             <div class="screening-actions">
                 <button id="refreshBtn-keep-increasing" class="refresh-btn"
                     data-strategy="keep-increasing">刷新筛选</button>
+                <button id="exportBtn-keep-increasing" class="export-btn" style="display:none;">导出CSV</button>
                 <span id="searchDate-keep-increasing" class="search-date"></span>
             </div>
 
@@ -368,6 +370,7 @@
             <div class="screening-actions">
                 <button id="refreshBtn-long-lower-shadow" class="refresh-btn"
                     data-strategy="long-lower-shadow">刷新筛选</button>
+                <button id="exportBtn-long-lower-shadow" class="export-btn" style="display:none;">导出CSV</button>
                 <span id="searchDate-long-lower-shadow" class="search-date"></span>
             </div>
 
@@ -426,6 +429,7 @@
 
             <div class="screening-actions">
                 <button id="refreshBtn-low-nine" class="refresh-btn" data-strategy="low-nine">刷新筛选</button>
+                <button id="exportBtn-low-nine" class="export-btn" style="display:none;">导出CSV</button>
                 <span id="searchDate-low-nine" class="search-date"></span>
             </div>
 
@@ -490,11 +494,13 @@
                 <div class="parameters-grid">
                     <div class="parameter-group">
                         <label for="minIncreasePercent">最小涨幅 (%):</label>
-                        <input type="number" id="minIncreasePercent" value="3.0" min="0" max="50" step="0.1" class="param-input">
+                        <input type="number" id="minIncreasePercent" value="3.0" min="0" max="50" step="0.1"
+                            class="param-input">
                     </div>
                     <div class="parameter-group">
                         <label for="minBodyRatio">最小实体占比:</label>
-                        <input type="number" id="minBodyRatio" value="0.7" min="0.1" max="1.0" step="0.05" class="param-input">
+                        <input type="number" id="minBodyRatio" value="0.7" min="0.1" max="1.0" step="0.05"
+                            class="param-input">
                     </div>
                     <div class="parameter-group">
                         <label for="minCrossLines">最小穿越均线数:</label>
@@ -508,15 +514,18 @@
                     </div>
                     <div class="parameter-group">
                         <label for="minVolumeRatio">最小成交量倍数:</label>
-                        <input type="number" id="minVolumeRatio" value="2.0" min="1.0" max="10.0" step="0.1" class="param-input">
+                        <input type="number" id="minVolumeRatio" value="2.0" min="1.0" max="10.0" step="0.1"
+                            class="param-input">
                     </div>
                     <div class="parameter-group">
                         <label for="minTurnoverRate">最小换手率 (%):</label>
-                        <input type="number" id="minTurnoverRate" value="3.0" min="0" max="50" step="0.1" class="param-input">
+                        <input type="number" id="minTurnoverRate" value="3.0" min="0" max="50" step="0.1"
+                            class="param-input">
                     </div>
                     <div class="parameter-group">
                         <label for="maxTurnoverRate">最大换手率 (%):</label>
-                        <input type="number" id="maxTurnoverRate" value="10.0" min="0" max="100" step="0.1" class="param-input">
+                        <input type="number" id="maxTurnoverRate" value="10.0" min="0" max="100" step="0.1"
+                            class="param-input">
                     </div>
                     <div class="parameter-group">
                         <label for="maPeriods">均线周期:</label>
@@ -539,6 +548,7 @@
             <div class="screening-actions">
                 <button id="refreshBtn-one-yang-three-lines" class="refresh-btn"
                     data-strategy="one-yang-three-lines">刷新筛选</button>
+                <button id="exportBtn-one-yang-three-lines" class="export-btn" style="display:none;">导出CSV</button>
                 <span id="searchDate-one-yang-three-lines" class="search-date"></span>
             </div>
 
@@ -618,6 +628,7 @@
 
             <div class="screening-actions">
                 <button id="refreshBtn-pvfrs" class="refresh-btn" data-strategy="pvfrs">刷新筛选</button>
+                <button id="exportBtn-pvfrs" class="export-btn" style="display:none;">导出CSV</button>
                 <span id="searchDate-pvfrs" class="search-date"></span>
             </div>
 

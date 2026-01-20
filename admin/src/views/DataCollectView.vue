@@ -117,7 +117,7 @@
                         全选
                       </el-checkbox>
                     </div>
-                    <el-checkbox-group v-model="form.indicators">
+                    <el-checkbox-group v-model="safeIndicators">
                       <el-checkbox value="ma">MA移动平均线</el-checkbox>
                       <el-checkbox value="mavol">MAVOL成交量移动平均线</el-checkbox>
                       <el-checkbox value="kdj">KDJ随机指标</el-checkbox>
@@ -608,7 +608,7 @@ const form = ref<FormData>({
   single_stock_code: '',
   stock_codes_text: '',
   test_mode: false,
-  indicators: []
+  indicators: [] as string[]  // 明确类型，确保始终是数组
 })
 
 // HK表单数据
@@ -657,8 +657,20 @@ const pollingInterval = ref<NodeJS.Timeout | null>(null)
 // 计算属性
 const allIndicators = ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'pvfrs']
 
+// 确保 indicators 始终是数组的计算属性
+const safeIndicators = computed({
+  get: () => {
+    const indicators = form.value.indicators
+    return Array.isArray(indicators) ? indicators : []
+  },
+  set: (val) => {
+    form.value.indicators = Array.isArray(val) ? val : []
+  }
+})
+
 const isIndeterminate = computed(() => {
-  const selectedCount = form.value.indicators.length
+  const indicators = safeIndicators.value
+  const selectedCount = indicators.length
   if (selectedCount === 0) {
     return false
   } else if (selectedCount === allIndicators.length) {
@@ -669,14 +681,14 @@ const isIndeterminate = computed(() => {
 })
 
 const isAllSelected = computed(() => {
-  return form.value.indicators.length === allIndicators.length
+  return safeIndicators.value.length === allIndicators.length
 })
 
 const handleSelectAllIndicators = (checked: boolean) => {
   if (checked) {
-    form.value.indicators = [...allIndicators]
+    safeIndicators.value = [...allIndicators]
   } else {
-    form.value.indicators = []
+    safeIndicators.value = []
   }
 }
 
@@ -702,7 +714,7 @@ const startCollection = async () => {
       start_date: form.value.start_date,
       end_date: form.value.end_date,
       test_mode: form.value.test_mode,
-      indicators: form.value.indicators
+      indicators: safeIndicators.value  // 使用安全的数组值
     }
 
     // 根据采集类型设置股票代码
@@ -829,9 +841,23 @@ const startHKCollection = async () => {
 const loadTasks = async () => {
   try {
     const response = await axios.get(`${API_BASE}/api/data-collection/tasks`)
-    tasks.value = response.data
+    // 确保 tasks.value 始终是数组
+    const data = response.data
+    if (Array.isArray(data)) {
+      tasks.value = data
+    } else if (data && Array.isArray(data.tasks)) {
+      tasks.value = data.tasks
+    } else if (data && Array.isArray(data.data)) {
+      tasks.value = data.data
+    } else {
+      // 如果数据格式不符合预期，设置为空数组
+      console.warn('任务列表数据格式不符合预期:', data)
+      tasks.value = []
+    }
   } catch (error) {
     console.error('加载任务列表失败:', error)
+    // 发生错误时确保 tasks 是空数组
+    tasks.value = []
   }
 }
 
@@ -873,7 +899,11 @@ const resetForm = () => {
     single_stock_code: '',
     stock_codes_text: '',
     test_mode: false,
-    indicators: []
+    indicators: [] as string[]  // 确保始终是数组
+  }
+  // 额外检查，确保 indicators 是数组
+  if (!Array.isArray(form.value.indicators)) {
+    form.value.indicators = []
   }
 }
 
