@@ -401,29 +401,32 @@ async def get_system_status(
     try:
         logger.info("获取PVFRS系统状态")
         
-        # 简化系统状态，避免可能导致超时的调用
+        # 从 MonitorService 获取最新监控数据
+        from backend_core.strategies.pvfrs.monitor_service import monitor_service
+        monitor_data = monitor_service.get_monitoring_data()
+        
         system_status = {
-            "status": "running",
+            "status": monitor_data.get("status", "running"),
             "version": "2.1.0",
             "uptime": "运行中",
-            "last_update": datetime.now().isoformat(),
+            "last_update": monitor_data.get("last_update", datetime.now().isoformat()),
             "components": {
                 "frontend_interface": "running",
                 "data_collector": "running", 
                 "strategy_engine": "running",
-                "database": "connected"
+                "database": "connected" if monitor_data.get("status") != "error" else "disconnected"
             },
             "performance": {
-                "cpu_usage": 45.2,
-                "memory_usage": 67.8,
-                "disk_usage": 23.1,
-                "response_time": 0.12
+                "cpu_usage": monitor_data.get("system_health", {}).get("cpu_usage", 0),
+                "memory_usage": monitor_data.get("system_health", {}).get("memory_usage", 0),
+                "disk_usage": monitor_data.get("system_health", {}).get("disk_usage", 0),
+                "response_time": monitor_data.get("performance", {}).get("avg_response_time", 0.05)
             },
             "statistics": {
-                "total_stocks": 4500,
-                "active_signals": 25,
-                "processed_today": 156,
-                "success_rate": 98.5
+                "total_stocks": monitor_data.get("total_signals", 0),
+                "active_signals": monitor_data.get("active_stocks", 0),
+                "processed_today": monitor_data.get("strong_signals", 0),
+                "success_rate": monitor_data.get("performance", {}).get("success_rate", 0)
             }
         }
         
@@ -598,45 +601,17 @@ async def get_monitoring_data():
     try:
         logger.info("获取PVFRS实时监控数据")
         
-        # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
-        
-        # 获取接口状态
-        interface_status = frontend_interface.get_interface_status()
-        
-        # 模拟监控数据
-        monitoring_data = {
-            "status": "running",
-            "last_update": datetime.now().isoformat(),
-            "active_stocks": 25,
-            "total_signals": 156,
-            "strong_signals": 42,
-            "system_health": {
-                "cpu_usage": 45.2,
-                "memory_usage": 67.8,
-                "disk_usage": 23.1
-            },
-            "performance": {
-                "avg_response_time": 0.12,
-                "success_rate": 98.5,
-                "error_rate": 1.5
-            },
-            "interface_status": interface_status
-        }
+        from backend_core.strategies.pvfrs.monitor_service import monitor_service
+        monitoring_data = monitor_service.get_monitoring_data()
         
         logger.info("PVFRS实时监控数据获取成功")
         return JSONResponse({
             "success": True,
             "data": monitoring_data
         })
-        
     except Exception as e:
         logger.error(f"获取PVFRS实时监控数据时发生错误: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取监控数据失败: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/monitor/alerts")
@@ -652,36 +627,8 @@ async def get_monitoring_alerts():
     try:
         logger.info("获取PVFRS监控告警列表")
         
-        # 模拟告警数据
-        alerts = [
-            {
-                "id": "alert_001",
-                "type": "warning",
-                "title": "信号强度下降",
-                "message": "整体信号强度较昨日下降15%",
-                "timestamp": datetime.now().isoformat(),
-                "severity": "medium",
-                "acknowledged": False
-            },
-            {
-                "id": "alert_002", 
-                "type": "error",
-                "title": "数据更新延迟",
-                "message": "股票数据更新延迟超过5分钟",
-                "timestamp": (datetime.now().timestamp() - 300) * 1000,
-                "severity": "high",
-                "acknowledged": False
-            },
-            {
-                "id": "alert_003",
-                "type": "info",
-                "title": "新策略版本",
-                "message": "PVFRS策略v2.1.0已发布，建议更新",
-                "timestamp": (datetime.now().timestamp() - 3600) * 1000,
-                "severity": "low",
-                "acknowledged": True
-            }
-        ]
+        from backend_core.strategies.pvfrs.monitor_service import monitor_service
+        alerts = monitor_service.get_monitoring_alerts()
         
         logger.info("PVFRS监控告警列表获取成功")
         return JSONResponse({
@@ -689,14 +636,9 @@ async def get_monitoring_alerts():
             "data": alerts,
             "total": len(alerts)
         })
-        
     except Exception as e:
         logger.error(f"获取PVFRS监控告警列表时发生错误: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取告警列表失败: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/monitor/alerts/{alert_id}/acknowledge")
@@ -705,114 +647,45 @@ async def acknowledge_alert(alert_id: str):
     确认监控告警
     
     标记指定告警为已确认状态。
-    
-    Args:
-        alert_id: 告警ID
-        
-    Returns:
-        操作结果
     """
     try:
         logger.info(f"确认PVFRS监控告警: {alert_id}")
         
-        # 这里可以添加实际的告警确认逻辑
-        # 比如更新数据库中的告警状态
+        from backend_core.strategies.pvfrs.monitor_service import monitor_service
+        success = monitor_service.acknowledge_alert(int(alert_id))
         
-        logger.info(f"PVFRS监控告警确认成功: {alert_id}")
-        return JSONResponse({
-            "success": True,
-            "message": f"告警 {alert_id} 已确认",
-            "acknowledged_at": datetime.now().isoformat()
-        })
-        
+        if success:
+            return JSONResponse({
+                "success": True,
+                "message": f"告警 {alert_id} 已确认",
+                "acknowledged_at": datetime.now().isoformat()
+            })
+        else:
+            raise HTTPException(status_code=404, detail="未找到该告警")
     except Exception as e:
         logger.error(f"确认PVFRS监控告警时发生错误: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"确认告警失败: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/monitor/performance")
 async def get_performance_metrics(
     timeRange: str = Query("1h", description="时间范围: 1h, 6h, 1d, 1w"),
-    interval: str = Query("1m", description="数据间隔: 1m, 5m, 15m, 1h")
+    interval: str = Query("15m", description="数据间隔: 1m, 5m, 15m, 1h")
 ):
     """
     获取性能指标数据
-    
-    提供PVFRS策略的性能指标时间序列数据。
-    
-    Args:
-        timeRange: 时间范围
-        interval: 数据间隔
-        
-    Returns:
-        性能指标数据
     """
     try:
         logger.info(f"获取PVFRS性能指标数据 - 时间范围: {timeRange}, 间隔: {interval}")
         
-        # 模拟性能指标数据
-        import random
-        import math
+        from backend_core.strategies.pvfrs.monitor_service import monitor_service
+        performance_data = monitor_service.get_performance_metrics(timeRange, interval)
         
-        # 生成时间序列数据
-        now = datetime.now()
-        data_points = []
-        
-        # 根据时间范围确定数据点数量
-        if timeRange == "1h":
-            points = 60
-        elif timeRange == "6h":
-            points = 72
-        elif timeRange == "1d":
-            points = 96
-        else:  # 1w
-            points = 168
-        
-        for i in range(points):
-            timestamp = (now.timestamp() - (points - i) * 60) * 1000  # 每分钟一个点
-            
-            # 生成模拟的性能指标
-            signal_strength = 0.6 + 0.3 * math.sin(i * 0.1) + random.uniform(-0.05, 0.05)
-            response_time = 0.1 + 0.05 * math.cos(i * 0.15) + random.uniform(-0.02, 0.02)
-            success_rate = 95 + 5 * math.sin(i * 0.08) + random.uniform(-2, 2)
-            
-            data_points.append({
-                "timestamp": timestamp,
-                "signal_strength": round(signal_strength, 3),
-                "response_time": round(response_time, 3),
-                "success_rate": round(success_rate, 1),
-                "active_connections": random.randint(20, 40),
-                "memory_usage": round(60 + 20 * math.sin(i * 0.12), 1)
-            })
-        
-        performance_data = {
-            "timeRange": timeRange,
-            "interval": interval,
-            "data": data_points,
-            "summary": {
-                "avg_signal_strength": round(sum(p["signal_strength"] for p in data_points) / len(data_points), 3),
-                "avg_response_time": round(sum(p["response_time"] for p in data_points) / len(data_points), 3),
-                "avg_success_rate": round(sum(p["success_rate"] for p in data_points) / len(data_points), 1),
-                "peak_memory_usage": max(p["memory_usage"] for p in data_points),
-                "min_signal_strength": min(p["signal_strength"] for p in data_points),
-                "max_signal_strength": max(p["signal_strength"] for p in data_points)
-            }
-        }
-        
-        logger.info(f"PVFRS性能指标数据获取成功，数据点数: {len(data_points)}")
+        logger.info("PVFRS性能指标数据获取成功")
         return JSONResponse({
             "success": True,
             "data": performance_data
         })
-        
     except Exception as e:
         logger.error(f"获取PVFRS性能指标数据时发生错误: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取性能指标失败: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))

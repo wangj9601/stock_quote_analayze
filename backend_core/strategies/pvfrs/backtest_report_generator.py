@@ -151,9 +151,25 @@ class BacktestReportGenerator:
             logger.info("开始生成综合回测报告")
             
             # 1. 计算资金曲线
-            equity_curve = self._calculate_equity_curve(
-                backtest_result.trades, initial_capital, start_date, end_date
-            )
+            if backtest_result.equity_curve and len(backtest_result.equity_curve) > 0:
+                # 如果回测结果已经包含权益曲线，直接使用，确保数据一致性
+                equity_curve_raw = backtest_result.equity_curve
+                # 转换为 PerformanceMetrics 期望的格式
+                equity_curve = []
+                for point in equity_curve_raw:
+                    # 确保 point 是字典并且包含必要的键
+                    equity_curve.append(EquityPoint(
+                        date=point.get('date', ''),
+                        equity=point.get('total_value', 0.0),
+                        return_rate=0.0,  # 后面会重新计算
+                        drawdown=0.0,    # 后面会重新计算
+                        benchmark_return=0.0
+                    ))
+            else:
+                # 否则根据交易记录计算
+                equity_curve = self._calculate_equity_curve(
+                    backtest_result.trades, initial_capital, start_date, end_date
+                )
             
             # 2. 计算性能指标
             performance_metrics = self._calculate_performance_metrics(
@@ -297,9 +313,9 @@ class BacktestReportGenerator:
         final_equity = equity_curve[-1].equity
         total_return = (final_equity - initial_capital) / initial_capital
         
-        # 年化收益率
+        # 年化收益率 (使用252个交易日)
         days = len(equity_curve)
-        annual_return = (1 + total_return) ** (365 / days) - 1 if days > 0 else 0
+        annual_return = (1 + total_return) ** (252 / days) - 1 if days > 0 else 0
         
         # 胜率（处理 None 值）
         winning_trades = len([t for t in trades if t.pnl is not None and t.pnl > 0])
@@ -320,15 +336,26 @@ class BacktestReportGenerator:
         
         # 波动率
         if len(daily_returns) > 1:
-            mean_return = sum(daily_returns) / len(daily_returns)
-            variance = sum((r - mean_return) ** 2 for r in daily_returns) / (len(daily_returns) - 1)
-            volatility = math.sqrt(variance * 365)  # 年化波动率
+            avg_return = sum(daily_returns) / len(daily_returns)
+            variance = sum((r - avg_return) ** 2 for r in daily_returns) / len(daily_returns)
+            volatility = math.sqrt(variance * 252)  # 年化波动率
         else:
             volatility = 0
         
-        # 夏普比率
+        # 夏普比率 (使用252日转换)
         if volatility > 0:
-            sharpe_ratio = (annual_return - self.risk_free_rate) / volatility
+            # 重新计算以确保一致性: (年化收益 - 年化无风险) / 年化波动
+            # 或者: (日均收益 - 日无风险) / 日波动 * sqrt(252)
+            daily_rf = self.risk_free_rate / 252
+            if len(daily_returns) > 0:
+                avg_daily_return = sum(daily_returns) / len(daily_returns)
+                daily_std = math.sqrt(sum((r - avg_daily_return) ** 2 for r in daily_returns) / len(daily_returns))
+                if daily_std > 0:
+                    sharpe_ratio = ((avg_daily_return - daily_rf) / daily_std) * math.sqrt(252)
+                else:
+                    sharpe_ratio = 0
+            else:
+                sharpe_ratio = 0
         else:
             sharpe_ratio = 0
         

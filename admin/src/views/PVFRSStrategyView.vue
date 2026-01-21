@@ -478,6 +478,47 @@
           </el-row>
         </div>
       </el-tab-pane>
+
+      <!-- 交易明细 -->
+      <el-tab-pane label="交易明细" name="trades" :disabled="!selectedResult">
+        <div class="trades-section">
+          <el-card v-if="selectedResult" :header="`交易明细 - ${selectedResult.code}`">
+            <el-table :data="selectedResultTrades" stripe style="width: 100%">
+              <el-table-column prop="entryDate" label="买入日期" width="120" />
+              <el-table-column prop="exitDate" label="卖出日期" width="120" />
+              <el-table-column prop="entryPrice" label="买入价格" width="100">
+                <template #default="scope">
+                  ¥{{ scope.row.entryPrice?.toFixed(2) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="exitPrice" label="卖出价格" width="100">
+                <template #default="scope">
+                  ¥{{ scope.row.exitPrice?.toFixed(2) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="pnl" label="盈亏金额" width="120">
+                <template #default="scope">
+                  <span :class="scope.row.pnl > 0 ? 'text-success' : 'text-danger'">
+                    ¥{{ scope.row.pnl?.toFixed(2) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="pnlPercent" label="盈亏比例" width="120">
+                <template #default="scope">
+                  <span :class="scope.row.pnlPercent > 0 ? 'text-success' : 'text-danger'">
+                    {{ (scope.row.pnlPercent * 100).toFixed(2) }}%
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="holdingDays" label="持有天数" width="100" />
+              <el-table-column prop="exitReason" label="退出原因" />
+            </el-table>
+          </el-card>
+          <el-card v-else>
+            <el-empty description="请先在'回测结果'中选择一个结果" />
+          </el-card>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 帮助对话框 -->
@@ -570,43 +611,6 @@
       </div>
     </el-dialog>
 
-    <!-- 交易明细对话框 -->
-    <el-dialog
-      v-model="showTradesDialog"
-      title="交易明细"
-      width="90%"
-    >
-      <el-table :data="selectedResultTrades" stripe>
-        <el-table-column prop="entryDate" label="买入日期" width="120" />
-        <el-table-column prop="exitDate" label="卖出日期" width="120" />
-        <el-table-column prop="entryPrice" label="买入价格" width="100">
-          <template #default="scope">
-            ¥{{ scope.row.entryPrice?.toFixed(2) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="exitPrice" label="卖出价格" width="100">
-          <template #default="scope">
-            ¥{{ scope.row.exitPrice?.toFixed(2) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="pnl" label="盈亏金额" width="120">
-          <template #default="scope">
-            <span :class="scope.row.pnl > 0 ? 'text-success' : 'text-danger'">
-              ¥{{ scope.row.pnl?.toFixed(2) }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="pnlPercent" label="盈亏比例" width="120">
-          <template #default="scope">
-            <span :class="scope.row.pnlPercent > 0 ? 'text-success' : 'text-danger'">
-              {{ (scope.row.pnlPercent * 100).toFixed(2) }}%
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="exitReason" label="卖出原因" />
-      </el-table>
-    </el-dialog>
-
     <!-- 收益曲线对话框 -->
     <el-dialog
       v-model="showChartDialog"
@@ -689,7 +693,6 @@ const normalizeBacktestResult = (raw: any) => {
 // 响应式数据
 const activeTab = ref('config')
 const showHelpDialog = ref(false)
-const showTradesDialog = ref(false)
 const showChartDialog = ref(false)
 const chartContainer = ref<HTMLElement>()
 const saving = ref(false)
@@ -997,7 +1000,7 @@ const pollTaskStatus = async () => {
   if (!currentTask.value) return
   
   try {
-    const response = await fetch(`${API_BASE}/api/admin/pvfrs/task/${currentTask.value.id}`, {
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/progress/${currentTask.value.id}`, {
       headers: {
         ...getAuthHeaders()
       }
@@ -1084,7 +1087,7 @@ const clearResults = async () => {
 }
 
 const showDetailedTrades = () => {
-  showTradesDialog.value = true
+  activeTab.value = 'trades'
 }
 
 const showEquityCurve = async () => {

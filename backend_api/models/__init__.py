@@ -11,7 +11,9 @@ from .pvfrs_enhanced import (
     PVFRSBacktestTask,
     PVFRSBacktestResult,
     PVFRSTradeRecord,
-    PVFRSEquityCurve
+    PVFRSEquityCurve,
+    PVFRSAlert,
+    PVFRSMonitorMetric
 )
 
 # 导入原有模型以保持兼容性
@@ -128,6 +130,8 @@ __all__ = [
     'PVFRSBacktestResult',
     'PVFRSTradeRecord',
     'PVFRSEquityCurve',
+    'PVFRSAlert',
+    'PVFRSMonitorMetric',
     'User',
     'Admin',
     'AdminInDB',

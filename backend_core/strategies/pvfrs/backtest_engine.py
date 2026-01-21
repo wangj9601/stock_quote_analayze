@@ -841,10 +841,15 @@ class BacktestEngine(IBacktestEngine):
         if trading_days <= 0:
             return 0.0
         
-        years = trading_days / 252  # 假设一年252个交易日
+        # 使用252个交易日作为基准
+        years = trading_days / 252
         if years <= 0:
             return 0.0
         
+        # 防止负收益导致计算异常
+        if total_return <= -1:
+            return -1.0
+            
         return (1 + total_return) ** (1 / years) - 1
     
     def _calculate_max_drawdown(self, equity_curve: List[Dict]) -> float:
@@ -872,11 +877,12 @@ class BacktestEngine(IBacktestEngine):
         
         return max_dd
     
-    def _calculate_sharpe_ratio(self, equity_curve: List[Dict]) -> float:
+    def _calculate_sharpe_ratio(self, equity_curve: List[Dict], risk_free_rate: float = 0.03) -> float:
         """计算夏普比率
         
         Args:
             equity_curve: 权益曲线
+            risk_free_rate: 年化无风险利率 (默认3%)
             
         Returns:
             float: 夏普比率
@@ -896,17 +902,20 @@ class BacktestEngine(IBacktestEngine):
         if not daily_returns:
             return 0.0
         
-        # 计算平均收益率和标准差
-        avg_return = sum(daily_returns) / len(daily_returns)
-        variance = sum([(r - avg_return) ** 2 for r in daily_returns]) / len(daily_returns)
-        std_dev = variance ** 0.5
+        # 计算平均日收益率和标准差
+        avg_daily_return = sum(daily_returns) / len(daily_returns)
+        variance = sum([(r - avg_daily_return) ** 2 for r in daily_returns]) / len(daily_returns)
+        daily_std_dev = variance ** 0.5
         
-        if std_dev == 0:
+        if daily_std_dev == 0:
             return 0.0
         
-        # 年化夏普比率（假设无风险利率为0）
-        annual_sharpe = (avg_return * 252 ** 0.5) / (std_dev * 252 ** 0.5)
-        return annual_sharpe
+        # 将年化无风险利率转换为日无风险利率
+        daily_rf = risk_free_rate / 252
+        
+        # 年化夏普比率 = (平均日收益率 - 日无风险利率) / 日收益率标准差 * sqrt(252)
+        sharpe = ((avg_daily_return - daily_rf) / daily_std_dev) * (252 ** 0.5)
+        return sharpe
     
     def get_backtest_status(self) -> Dict:
         """获取回测状态

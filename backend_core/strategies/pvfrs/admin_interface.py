@@ -36,6 +36,7 @@ class BacktestConfig:
     initial_capital: float    # 初始资金
     strategy_params: Dict     # 策略参数
     risk_params: Dict         # 风险管理参数
+    name: Optional[str] = None # 任务名称
     
     def to_dict(self) -> Dict:
         """转换为字典格式"""
@@ -46,6 +47,7 @@ class BacktestConfig:
 class BacktestTask:
     """回测任务数据结构"""
     task_id: str              # 任务ID
+    name: str                 # 任务名称
     config: BacktestConfig    # 回测配置
     status: str               # 任务状态：pending, running, completed, failed
     progress: int             # 进度百分比 (0-100)
@@ -160,26 +162,42 @@ class AdminInterface(IAdminInterface):
         self.execution_monitor.start_monitoring()
         
         logger.info("PVFRS管理端接口初始化完成")
+
+    def get_strategy_configs(self) -> List[Dict]:
+        """获取所有策略配置"""
+        from backend_api.models import PVFRSStrategyConfig as SA_Config
+        from backend_api.database import SessionLocal
+        with SessionLocal() as db:
+            configs = db.query(SA_Config).all()
+            return [{"id": c.id, "name": c.name, "description": c.description, "config_params": c.config_params, "is_active": c.is_active} for c in configs]
+
+    def save_strategy_config(self, config_data: Dict) -> int:
+        """保存或更新策略配置"""
+        from backend_api.models import PVFRSStrategyConfig as SA_Config
+        from backend_api.database import SessionLocal
+        with SessionLocal() as db:
+            name = config_data.get('name')
+            config = db.query(SA_Config).filter_by(name=name).first()
+            if not config:
+                config = SA_Config(name=name)
+                db.add(config)
+            
+            config.description = config_data.get('description', config.description)
+            config.config_params = config_data.get('config_params', config.config_params)
+            config.is_active = config_data.get('is_active', True)
+            
+            db.commit()
+            return config.id
     
     def create_backtest(self, config: BacktestConfig) -> str:
-        """创建回测任务，返回任务ID
-        
-        Args:
-            config: 回测配置
-            
-        Returns:
-            str: 任务ID
-            
-        Raises:
-            PVFRSException: 创建任务失败时抛出
-        """
+        """创建回测任务，返回任务ID"""
         try:
             # 检查并发任务数限制
             if len(self.active_tasks) >= self.max_concurrent_tasks:
                 raise PVFRSException(f"已达到最大并发任务数限制 ({self.max_concurrent_tasks})")
             
             # 生成任务ID
-            task_id = f"pvfrs_backtest_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            task_id = f"pvfrs_bt_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%H%M%S')}"
             
             # 验证配置
             self._validate_backtest_config(config)
@@ -187,6 +205,7 @@ class AdminInterface(IAdminInterface):
             # 创建任务
             task = BacktestTask(
                 task_id=task_id,
+                name=config.name or f"回测任务-{task_id[:8]}",
                 config=config,
                 status="pending",
                 progress=0,
@@ -194,10 +213,13 @@ class AdminInterface(IAdminInterface):
                 created_at=datetime.now().isoformat()
             )
             
-            # 添加到活跃任务列表
+            # 保存到持久化存储
+            self.storage.save_task(task.to_dict())
+            
+            # 添加到活跃任务列表 (缓存)
             self.active_tasks[task_id] = task
             
-            logger.info(f"创建回测任务成功: {task_id}")
+            logger.info(f"创建回测任务成功并已持久化: {task_id}")
             return task_id
             
         except Exception as e:
@@ -205,63 +227,54 @@ class AdminInterface(IAdminInterface):
             raise PVFRSException(f"创建回测任务失败: {str(e)}")
     
     def get_backtest_progress(self, task_id: str) -> Dict:
-        """获取回测进度
-        
-        Args:
-            task_id: 任务ID
-            
-        Returns:
-            Dict: 回测进度信息
-            
-        Raises:
-            PVFRSException: 任务不存在时抛出
-        """
+        """获取回测进度，优先查询执行器，其次查询DB"""
         try:
-            # 首先从执行监控器获取进度信息
+            # 1. 首先尝试从实时监控器获取进度
             monitor_progress = self.execution_monitor.get_task_progress(task_id)
+            if monitor_progress:
+                return monitor_progress
             
-            # 查找任务
-            task = None
-            if task_id in self.active_tasks:
-                task = self.active_tasks[task_id]
-            elif task_id in self.completed_tasks:
-                task = self.completed_tasks[task_id]
+            # 2. 从内存缓存中获取基础信息
+            task = self.active_tasks.get(task_id) or self.completed_tasks.get(task_id)
             
-            if not task and not monitor_progress:
+            # 3. 如果内存中没有，尝试从数据库获取任务状态
+            if not task:
+                from backend_api.models import PVFRSBacktestTask as SA_BacktestTask
+                from backend_api.database import SessionLocal
+                with SessionLocal() as db:
+                    sa_task = db.query(SA_BacktestTask).filter_by(task_id=task_id).first()
+                    if sa_task:
+                        return {
+                            "task_id": task_id,
+                            "status": sa_task.status,
+                            "progress": sa_task.progress,
+                            "current_step": sa_task.current_step,
+                            "error_message": sa_task.error_message,
+                            "created_at": sa_task.created_at.isoformat() if sa_task.created_at else None,
+                            "started_at": sa_task.started_at.isoformat() if sa_task.started_at else None,
+                            "completed_at": sa_task.completed_at.isoformat() if sa_task.completed_at else None
+                        }
+
+            if not task:
                 raise PVFRSException(f"任务 {task_id} 不存在")
             
-            # 构建进度信息
-            if monitor_progress:
-                # 使用监控器的进度信息
-                progress_info = monitor_progress.copy()
-                
-                # 添加任务配置摘要
-                if task:
-                    progress_info["config_summary"] = {
-                        "start_date": task.config.start_date,
-                        "end_date": task.config.end_date,
-                        "stock_count": len(task.config.stock_pool),
-                        "initial_capital": task.config.initial_capital
-                    }
-            else:
-                # 使用传统的任务信息
-                progress_info = {
-                    "task_id": task_id,
-                    "status": task.status,
-                    "progress": task.progress,
-                    "current_step": task.current_step,
-                    "created_at": task.created_at,
-                    "started_at": task.started_at,
-                    "completed_at": task.completed_at,
-                    "error_message": task.error_message,
-                    "estimated_remaining_time": self._estimate_remaining_time(task),
-                    "config_summary": {
-                        "start_date": task.config.start_date,
-                        "end_date": task.config.end_date,
-                        "stock_count": len(task.config.stock_pool),
-                        "initial_capital": task.config.initial_capital
-                    }
+            # 4. 返回内存中的任务信息
+            progress_info = {
+                "task_id": task_id,
+                "status": task.status,
+                "progress": task.progress,
+                "current_step": task.current_step,
+                "created_at": task.created_at,
+                "started_at": task.started_at,
+                "completed_at": task.completed_at,
+                "error_message": task.error_message,
+                "config_summary": {
+                    "start_date": task.config.start_date,
+                    "end_date": task.config.end_date,
+                    "stock_count": len(task.config.stock_pool),
+                    "initial_capital": task.config.initial_capital
                 }
+            }
             
             return progress_info
             
@@ -860,60 +873,51 @@ class AdminInterface(IAdminInterface):
             return False
     
     def _execute_backtest_with_monitor(self, task_id: str) -> None:
-        """使用监控器执行回测任务的内部方法
-        
-        Args:
-            task_id: 任务ID
-        """
+        """使用监控器执行回测任务的内部方法"""
         try:
             task = self.active_tasks[task_id]
             config = task.config
             
-            # 更新进度：准备数据
+            # 更新进度及DB状态
             self.execution_monitor.update_progress(task_id, 10, "准备历史数据")
+            self.storage.save_task({'task_id': task_id, 'status': 'running', 'progress': 10, 'current_step': '准备历史数据'}, None)
             
             # 获取历史数据
             stock_data_dict = {}
             total_stocks = len(config.stock_pool)
             
-            # 获取数据库会话用于数据查询
-            from backend_api.database import get_db
-            db = next(get_db())
-            
-            try:
+            from backend_api.database import SessionLocal
+            with SessionLocal() as db:
                 for i, symbol in enumerate(config.stock_pool):
                     try:
-                        # 使用 frontend_interface 的方法获取数据（它已经实现了数据库查询）
-                        # 或者直接使用 data_interface，它会自动从数据库获取
-                        data = self._get_stock_data_from_db(
-                            db, symbol, config.start_date, config.end_date
-                        )
-                        if data and len(data) >= 20:  # 确保有足够的数据
+                        data = self._get_stock_data_from_db(db, symbol, config.start_date, config.end_date)
+                        if data and len(data) >= 20:
                             stock_data_dict[symbol] = data
-                            logger.info(f"成功获取股票 {symbol} 的 {len(data)} 条数据")
-                        else:
-                            logger.warning(f"股票 {symbol} 数据不足: {len(data) if data else 0} 条")
                         
-                        # 更新数据准备进度
-                        data_progress = 10 + (i + 1) / total_stocks * 20  # 10-30%
-                        self.execution_monitor.update_progress(
-                            task_id, int(data_progress), 
-                            f"准备数据 ({i+1}/{total_stocks}): {symbol}"
-                        )
-                        
+                        # 每隔10个股票或者最后一个更新一次DB状态，平衡性能
+                        if (i + 1) % 10 == 0 or (i + 1) == total_stocks:
+                            data_progress = 10 + (i + 1) / total_stocks * 20  # 10-30%
+                            self.execution_monitor.update_progress(
+                                task_id, int(data_progress), 
+                                f"准备数据 ({i+1}/{total_stocks}): {symbol}"
+                            )
+                            self.storage.save_task({
+                                'task_id': task_id, 
+                                'progress': int(data_progress), 
+                                'total_stocks': total_stocks,
+                                'processed_stocks': i + 1,
+                                'current_step': f"准备数据 ({i+1}/{total_stocks})"
+                            }, db)
                     except Exception as e:
                         logger.warning(f"获取股票 {symbol} 数据失败: {str(e)}")
-                        continue
-            finally:
-                db.close()
             
             if not stock_data_dict:
                 raise PVFRSException("没有获取到有效的股票数据")
             
-            # 更新进度：开始回测
-            self.execution_monitor.update_progress(task_id, 35, "开始执行PVFRS策略回测")
-            
             # 执行回测
+            self.execution_monitor.update_progress(task_id, 35, "策略回测中...")
+            self.storage.save_task({'task_id': task_id, 'progress': 35, 'current_step': '核心引擎回测中'}, None)
+            
             backtest_result = self.pvfrs_system.backtest_engine.run_backtest_with_data(
                 stock_data_dict=stock_data_dict,
                 start_date=config.start_date,
@@ -921,44 +925,49 @@ class AdminInterface(IAdminInterface):
                 initial_capital=config.initial_capital
             )
             
-            # 更新进度：生成报告
-            self.execution_monitor.update_progress(task_id, 80, "生成回测报告")
+            # 生成报告
+            self.execution_monitor.update_progress(task_id, 80, "分析生成报告")
+            self.storage.save_task({'task_id': task_id, 'progress': 80, 'current_step': '生成综合分析报告'}, None)
             
-            # 创建回测报告
             report = self._create_backtest_report(task_id, config, backtest_result)
             
-            # 保存报告
+            # 保存报告及明细到DB
             report_id = self.save_backtest_report(report)
-            
-            # 更新进度：完成
-            self.execution_monitor.update_progress(task_id, 100, "回测完成")
             
             # 标记任务完成
             task.status = "completed"
+            task.progress = 100
             task.completed_at = datetime.now().isoformat()
+            self.storage.save_task({
+                'task_id': task_id, 
+                'status': 'completed', 
+                'progress': 100, 
+                'completed_at': task.completed_at,
+                'current_step': '已完成'
+            }, None)
             
             # 移动到已完成任务列表
             self.completed_tasks[task_id] = task
             if task_id in self.active_tasks:
                 del self.active_tasks[task_id]
             
-            logger.info(f"回测任务 {task_id} 执行完成，报告ID: {report_id}")
+            logger.info(f"回测任务 {task_id} 执行完成并持久化，报告ID: {report_id}")
             
         except Exception as e:
-            logger.error(f"回测任务 {task_id} 执行失败: {str(e)}")
-            
-            # 更新任务状态为失败
+            logger.error(f"回测任务 {task_id} 执行异常: {str(e)}")
             if task_id in self.active_tasks:
                 task = self.active_tasks[task_id]
                 task.status = "failed"
                 task.error_message = str(e)
                 task.completed_at = datetime.now().isoformat()
-                
-                # 移动到已完成任务列表
+                self.storage.save_task({
+                    'task_id': task_id, 
+                    'status': 'failed', 
+                    'error_message': str(e),
+                    'completed_at': task.completed_at
+                }, None)
                 self.completed_tasks[task_id] = task
                 del self.active_tasks[task_id]
-            
-            # 重新抛出异常，让监控器处理
             raise
     
     def _get_stock_data_from_db(self, db, symbol: str, start_date: str, end_date: str) -> List[MarketData]:
@@ -1026,6 +1035,20 @@ class AdminInterface(IAdminInterface):
         except Exception as e:
             logger.error(f"从数据库获取股票 {symbol} 数据失败: {str(e)}")
             return []
+
+    def get_trades(self, task_id: str) -> List[Dict]:
+        """获取指定任务的交易明细"""
+        report = self.get_historical_report(task_id)
+        if report:
+            return report.trades
+        return []
+
+    def get_equity_curve(self, task_id: str) -> List[Dict]:
+        """获取指定任务的收益曲线"""
+        report = self.get_historical_report(task_id)
+        if report:
+            return report.equity_curve
+        return []
     
     def _update_task_progress(self, task_id: str, progress: int, current_step: str) -> None:
         """更新任务进度
@@ -1723,28 +1746,50 @@ class AdminInterface(IAdminInterface):
             return {'error': str(e)}
     
     def get_task_list(self, status_filter: Optional[str] = None) -> List[Dict]:
-        """获取任务列表
-        
-        Args:
-            status_filter: 状态过滤器，可选值：pending, running, completed, failed, cancelled
-            
-        Returns:
-            List[Dict]: 任务列表
-        """
+        """获取任务列表，支持从数据库读取历史任务"""
         try:
-            all_tasks = list(self.active_tasks.values()) + list(self.completed_tasks.values())
+            from backend_api.models import PVFRSBacktestTask as SA_Task
+            from backend_api.database import SessionLocal
             
-            # 状态过滤
-            if status_filter:
-                all_tasks = [task for task in all_tasks if task.status == status_filter]
+            task_list = []
+            with SessionLocal() as db:
+                query = db.query(SA_Task)
+                if status_filter:
+                    query = query.filter_by(status=status_filter)
+                
+                tasks = query.order_by(SA_Task.created_at.desc()).limit(100).all()
+                for t in tasks:
+                    task_list.append({
+                        "task_id": t.task_id,
+                        "name": t.task_name,
+                        "status": t.status,
+                        "progress": t.progress,
+                        "current_step": t.current_step,
+                        "error_message": t.error_message,
+                        "created_at": t.created_at.isoformat() if t.created_at else None,
+                        "started_at": t.started_at.isoformat() if t.started_at else None,
+                        "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+                        "config": {
+                            "market": t.market,
+                            "start_date": t.start_date.isoformat() if t.start_date else None,
+                            "end_date": t.end_date.isoformat() if t.end_date else None,
+                            "stock_pool": t.stock_codes,
+                            "initial_capital": float(t.initial_capital) if t.initial_capital else 0.0
+                        }
+                    })
             
-            # 按创建时间降序排序
-            all_tasks.sort(key=lambda t: t.created_at, reverse=True)
+            # 合并内存中还未入库（如果有）的活跃任务
+            memo_task_ids = [t['task_id'] for t in task_list]
+            for tid, t_obj in self.active_tasks.items():
+                if tid not in memo_task_ids:
+                    task_dict = t_obj.to_dict()
+                    if not status_filter or task_dict.get('status') == status_filter:
+                        task_list.append(task_dict)
             
-            # 转换为字典格式
-            task_list = [task.to_dict() for task in all_tasks]
+            # 重新排序
+            task_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
             
-            logger.info(f"获取任务列表完成，返回 {len(task_list)} 个任务")
+            logger.info(f"从DB和内存获取任务列表完成，共 {len(task_list)} 个任务")
             return task_list
             
         except Exception as e:

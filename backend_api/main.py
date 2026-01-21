@@ -340,6 +340,15 @@ async def startup_event():
         logger.info("正在初始化数据库...")
         #init_db()
         logger.info("数据库初始化完成")
+        
+        # 启动PVFRS监控后台线程
+        try:
+            from backend_core.strategies.pvfrs.monitor_service import monitor_service
+            monitor_service.start_background_monitoring()
+            logger.info("✅ PVFRS 后台监控已启动")
+        except Exception as e:
+            logger.warning(f"⚠️ PVFRS 后台监控启动失败: {e}")
+            
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
         raise

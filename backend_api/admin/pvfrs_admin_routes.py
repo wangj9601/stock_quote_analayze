@@ -54,6 +54,65 @@ async def create_backtest(
     return await _create_backtest_task_impl(config_data, db)
 
 
+@router.get("/strategy/configs")
+async def get_strategy_configs(
+    db: Session = Depends(get_db)
+):
+    """获取所有策略配置"""
+    try:
+        admin_interface = get_admin_interface()
+        configs = admin_interface.get_strategy_configs()
+        return {"success": True, "data": configs}
+    except Exception as e:
+        logger.error(f"获取策略配置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/strategy/configs")
+async def save_strategy_config(
+    config_data: Dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """保存策略配置"""
+    try:
+        admin_interface = get_admin_interface()
+        config_id = admin_interface.save_strategy_config(config_data)
+        return {"success": True, "data": {"id": config_id}, "message": "策略配置保存成功"}
+    except Exception as e:
+        logger.error(f"保存策略配置失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/backtest/trades/{task_id}")
+async def get_backtest_trades(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取回测交易明细"""
+    try:
+        admin_interface = get_admin_interface()
+        trades = admin_interface.get_trades(task_id)
+        return {"success": True, "data": trades}
+    except Exception as e:
+        logger.error(f"获取回测交易明细失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/backtest/equity/{task_id}")
+async def get_backtest_equity(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取回测收益曲线明细"""
+    try:
+        admin_interface = get_admin_interface()
+        equity = admin_interface.get_equity_curve(task_id)
+        return {"success": True, "data": equity}
+    except Exception as e:
+        logger.error(f"获取回测收益曲线失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/backtest/create")
 async def create_backtest_task(
     config_data: Dict = Body(..., description="回测配置"),
@@ -142,7 +201,8 @@ async def _create_backtest_task_impl(
             stock_pool=stock_pool,
             initial_capital=float(config_data['initial_capital']),
             strategy_params=config_data.get('strategy_params', {}),
-            risk_params=config_data.get('risk_params', {})
+            risk_params=config_data.get('risk_params', {}),
+            name=config_data.get('name') or config_data.get('taskName') or config_data.get('task_name')
         )
         
         logger.info(f"构建的回测配置: 开始日期={backtest_config.start_date}, 结束日期={backtest_config.end_date}, 股票数量={len(stock_pool)}, 初始资金={backtest_config.initial_capital}")
@@ -1093,7 +1153,7 @@ async def list_backtest_tasks(
             task_dict = {
                 "id": task_id,
                 "task_id": task_id,
-                "name": f"回测任务-{task_id[:8]}",  # 使用任务ID前8位作为名称
+                "name": task.get('name') or task.get('task_name') or f"回测任务-{task_id[:8]}",
                 "status": task.get('status', 'pending'),
                 # 时间字段（同时提供两种格式以兼容前端）
                 "created_at": task.get('created_at', ''),

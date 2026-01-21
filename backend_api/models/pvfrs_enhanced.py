@@ -38,6 +38,7 @@ class PVFRSBacktestTaskEnhanced(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(String(50), unique=True, nullable=False, index=True)
     strategy_config_id = Column(Integer, ForeignKey("pvfrs_strategy_configs.id"), nullable=False, index=True)
+    task_name = Column(String(200))  # 任务自定义名称
     mode = Column(String(20), nullable=False)  # single, batch, optimize
     stock_codes = Column(JSON, nullable=False)
     market = Column(String(10), nullable=False)
@@ -46,6 +47,8 @@ class PVFRSBacktestTaskEnhanced(Base):
     initial_capital = Column(DECIMAL(15,2), nullable=False)
     status = Column(String(20), default="pending", index=True)  # pending, running, completed, failed, cancelled
     progress = Column(Integer, default=0)
+    total_stocks = Column(Integer, default=0)
+    processed_stocks = Column(Integer, default=0)
     current_step = Column(Text)
     error_message = Column(Text)
     created_at = Column(DateTime, default=datetime.now, index=True)
@@ -92,6 +95,9 @@ class PVFRSBacktestResultEnhanced(Base):
     winning_trades = Column(Integer, nullable=False)
     avg_holding_period = Column(DECIMAL(8,2), nullable=False)
     volatility = Column(DECIMAL(10,6), nullable=False)
+    report_id = Column(String(50), unique=True, index=True)
+    config_snapshot = Column(JSON)  # 回测时使用的完整参数快照
+    summary_data = Column(JSON)     # 其他摘要指标
     created_at = Column(DateTime, default=datetime.now, index=True)
     
     # 关联关系
@@ -116,7 +122,8 @@ class PVFRSTradeRecordEnhanced(Base):
     result_id = Column(Integer, ForeignKey("pvfrs_backtest_results_enhanced.id"), nullable=False, index=True)
     stock_code = Column(String(20), nullable=False, index=True)
     market = Column(String(10), nullable=False)
-    trade_date = Column(Date, nullable=False, index=True)
+    trade_date = Column(Date, nullable=True, index=True)  # 非已结单交易可能为Null
+    entry_date = Column(Date, index=True)               # 入场日期
     entry_time = Column(DateTime)
     exit_time = Column(DateTime)
     entry_price = Column(DECIMAL(10,4), nullable=False)
@@ -174,3 +181,38 @@ PVFRSBacktestTask = PVFRSBacktestTaskEnhanced
 PVFRSBacktestResult = PVFRSBacktestResultEnhanced
 PVFRSTradeRecord = PVFRSTradeRecordEnhanced
 PVFRSEquityCurve = PVFRSEquityCurveEnhanced
+
+class PVFRSAlert(Base):
+    """PVFRS告警记录表"""
+    __tablename__ = "pvfrs_alerts"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    level = Column(String(20), nullable=False)  # LOW, MEDIUM, HIGH, CRITICAL
+    type = Column(String(50))  # signal, data, system, strategy
+    title = Column(String(100), nullable=False)
+    message = Column(Text, nullable=False)
+    timestamp = Column(DateTime, default=datetime.now, index=True)
+    severity = Column(String(20))  # 兼容前端字段：low, medium, high, critical
+    acknowledged = Column(Boolean, default=False, index=True)
+    acknowledged_at = Column(DateTime)
+    source = Column(String(50))  # 告警来源
+    details = Column(JSON)  # 详细信息
+    
+    __table_args__ = (
+        Index('idx_pvfrs_alerts_timestamp', 'timestamp'),
+        Index('idx_pvfrs_alerts_ack', 'acknowledged'),
+    )
+
+class PVFRSMonitorMetric(Base):
+    """PVFRS监控指标时间序列表"""
+    __tablename__ = "pvfrs_monitor_metrics"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.now, index=True)
+    metric_name = Column(String(50), nullable=False, index=True)
+    metric_value = Column(Float, nullable=False)
+    tags = Column(JSON)  # 比如 { "market": "CN" }
+    
+    __table_args__ = (
+        Index('idx_pvfrs_metrics_name_time', 'metric_name', 'timestamp'),
+    )
