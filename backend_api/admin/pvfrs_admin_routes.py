@@ -17,6 +17,9 @@ from backend_core.strategies.pvfrs.admin_interface import (
     AdminInterface, BacktestConfig, BacktestTask, BacktestReport, 
     create_admin_interface
 )
+from backend_core.strategies.pvfrs.admin_interface_enhanced import (
+    AdminInterfaceEnhanced, create_admin_interface_enhanced
+)
 from backend_core.strategies.pvfrs.models import PVFRSException
 from backend_core.strategies.pvfrs.serialization import get_formatter, validate_data
 
@@ -26,6 +29,7 @@ router = APIRouter(prefix="/api/admin/pvfrs", tags=["PVFRS管理端接口"])
 
 # 全局管理端接口实例
 _admin_interface: Optional[AdminInterface] = None
+_admin_interface_enhanced: Optional[AdminInterfaceEnhanced] = None
 
 
 def get_admin_interface() -> AdminInterface:
@@ -34,6 +38,14 @@ def get_admin_interface() -> AdminInterface:
     if _admin_interface is None:
         _admin_interface = create_admin_interface()
     return _admin_interface
+
+
+def get_admin_interface_enhanced() -> AdminInterfaceEnhanced:
+    """获取增强版管理端接口实例"""
+    global _admin_interface_enhanced
+    if _admin_interface_enhanced is None:
+        _admin_interface_enhanced = create_admin_interface_enhanced()
+    return _admin_interface_enhanced
 
 
 @router.post("/backtest")
@@ -90,7 +102,7 @@ async def get_backtest_trades(
 ):
     """获取回测交易明细"""
     try:
-        admin_interface = get_admin_interface()
+        admin_interface = get_admin_interface_enhanced()
         trades = admin_interface.get_trades(task_id)
         return {"success": True, "data": trades}
     except Exception as e:

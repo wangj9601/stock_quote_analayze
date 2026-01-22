@@ -5,6 +5,7 @@ PVFRS策略管理增强接口
 
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, date, timedelta
+from decimal import Decimal
 import logging
 import json
 import uuid
@@ -26,6 +27,7 @@ class BacktestConfig:
     initial_capital: float
     strategy_params: Dict
     risk_params: Dict
+    name: Optional[str] = None
     mode: str = "single"
     force_update: bool = False
 
@@ -92,7 +94,8 @@ class AdminInterfaceEnhanced:
                 market="CN",
                 start_date=datetime.strptime(config.start_date, "%Y-%m-%d").date(),
                 end_date=datetime.strptime(config.end_date, "%Y-%m-%d").date(),
-                initial_capital=config.initial_capital
+                initial_capital=config.initial_capital,
+                task_name=config.name
             )
             
             logger.info(f"创建回测任务成功: {task_id}")
@@ -111,6 +114,7 @@ class AdminInterfaceEnhanced:
             
             return {
                 'task_id': task.task_id,
+                'name': task.task_name,
                 'status': task.status,
                 'progress': task.progress,
                 'current_step': task.current_step,
@@ -205,6 +209,11 @@ class AdminInterfaceEnhanced:
             # 获取收益曲线
             equity_curve = self.service.get_equity_curve(result.id)
             
+            # 转换对象为字典的辅助函数
+            def sa_to_dict(obj):
+                if not obj: return {}
+                return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+            
             # 构建报告数据
             report_data = {
                 'report_id': report_id,
@@ -230,8 +239,8 @@ class AdminInterfaceEnhanced:
                     'avg_holding_period': float(result.avg_holding_period),
                     'volatility': float(result.volatility)
                 },
-                'trades': [asdict(trade) for trade in trades],
-                'equity_curve': [asdict(point) for point in equity_curve],
+                'trades': [sa_to_dict(trade) for trade in trades],
+                'equity_curve': [sa_to_dict(point) for point in equity_curve],
                 'created_at': result.created_at.isoformat()
             }
             
@@ -240,6 +249,123 @@ class AdminInterfaceEnhanced:
         except Exception as e:
             logger.error(f"获取报告失败: {str(e)}")
             return None
+
+    def get_trades(self, task_id: str) -> List[Dict]:
+        """获取指定任务的交易明细"""
+        try:
+            results = self.service.get_backtest_results(task_id)
+            if not results:
+                return []
+            
+            result = results[0]
+            trades = self.service.get_trade_records(result.id)
+            
+            def sa_to_dict(obj):
+                if not obj: return {}
+                from datetime import datetime, date
+                
+                trade_dict = {}
+                for c in obj.__table__.columns:
+                    value = getattr(obj, c.name)
+                    # 处理日期时间字段
+                    if isinstance(value, datetime):
+                        trade_dict[c.name] = value.isoformat() if value else None
+                    elif isinstance(value, date):
+                        trade_dict[c.name] = value.strftime('%Y-%m-%d') if value else None
+                    elif isinstance(value, Decimal):
+                        trade_dict[c.name] = float(value)
+                    else:
+                        trade_dict[c.name] = value
+                
+                # 确保 entry_date 字段存在（从 entry_time 或 entry_date 提取）
+                if 'entry_date' not in trade_dict or not trade_dict.get('entry_date'):
+                    if trade_dict.get('entry_time'):
+                        try:
+                            if isinstance(trade_dict['entry_time'], str):
+                                # 如果是字符串，尝试解析
+                                entry_dt = datetime.fromisoformat(trade_dict['entry_time'].replace('Z', '+00:00'))
+                            else:
+                                entry_dt = trade_dict['entry_time']
+                            trade_dict['entry_date'] = entry_dt.strftime('%Y-%m-%d') if isinstance(entry_dt, datetime) else None
+                        except (ValueError, AttributeError, TypeError):
+                            # 如果已经是字符串格式，尝试直接提取日期部分
+                            if isinstance(trade_dict.get('entry_time'), str):
+                                trade_dict['entry_date'] = trade_dict['entry_time'][:10] if len(trade_dict['entry_time']) >= 10 else None
+                            else:
+                                trade_dict['entry_date'] = None
+                
+                # 确保 exit_time 字段正确格式化
+                # 数据库字段是 exit_time (DateTime)，需要确保正确返回
+                exit_time_value = trade_dict.get('exit_time')
+                exit_reason = trade_dict.get('exit_reason')
+                exit_price = trade_dict.get('exit_price', 0)
+                
+                # 判断交易是否已完成
+                is_completed = bool(exit_reason) or (exit_price and float(exit_price) > 0)
+                
+                # 如果 exit_time 是空字符串，转换为 None
+                if exit_time_value == '':
+                    exit_time_value = None
+                    trade_dict['exit_time'] = None
+                
+                # 如果 exit_time 已经有值（从数据库读取的 DateTime），确保格式正确
+                if exit_time_value and isinstance(exit_time_value, str):
+                    # 如果已经是 ISO 格式字符串，直接使用
+                    # 确保格式是前端可以识别的（ISO 8601 格式）
+                    try:
+                        # 验证格式是否正确
+                        datetime.fromisoformat(exit_time_value.replace('Z', '+00:00'))
+                    except (ValueError, AttributeError):
+                        # 如果格式不对，尝试修复
+                        try:
+                            # 尝试解析为日期时间
+                            if len(exit_time_value) == 10:  # 只有日期部分 'YYYY-MM-DD'
+                                exit_dt = datetime.strptime(exit_time_value, '%Y-%m-%d')
+                                trade_dict['exit_time'] = exit_dt.isoformat()
+                            else:
+                                # 尝试其他格式
+                                exit_dt = datetime.strptime(exit_time_value, '%Y-%m-%d %H:%M:%S')
+                                trade_dict['exit_time'] = exit_dt.isoformat()
+                        except (ValueError, TypeError):
+                            logger.warning(f"无法解析 exit_time 格式: {exit_time_value}")
+                            pass
+                
+                # 如果 exit_time 为空但交易已完成，尝试从 exit_date 获取
+                if is_completed and not trade_dict.get('exit_time'):
+                    exit_date_value = trade_dict.get('exit_date')
+                    if exit_date_value:
+                        try:
+                            if isinstance(exit_date_value, str):
+                                exit_dt = datetime.strptime(exit_date_value, '%Y-%m-%d')
+                            elif isinstance(exit_date_value, date):
+                                exit_dt = datetime.combine(exit_date_value, datetime.min.time())
+                            else:
+                                exit_dt = None
+                            if exit_dt:
+                                trade_dict['exit_time'] = exit_dt.isoformat()
+                                logger.info(f"从 exit_date 推断 exit_time: {trade_dict.get('stock_code')} -> {exit_dt.isoformat()}")
+                        except (ValueError, TypeError, AttributeError):
+                            logger.warning(f"无法从 exit_date 转换 exit_time: {exit_date_value}")
+                            pass
+                
+                # 确保 exit_time 不为空字符串（前端判断需要）
+                if trade_dict.get('exit_time') == '':
+                    trade_dict['exit_time'] = None
+                
+                # 调试日志：记录 exit_time 的值（仅对已完成的交易）
+                if is_completed:
+                    logger.info(f"交易记录 - stock_code: {trade_dict.get('stock_code')}, "
+                               f"exit_time: {trade_dict.get('exit_time')}, "
+                               f"exit_reason: {exit_reason}, exit_price: {exit_price}, "
+                               f"exit_time类型: {type(trade_dict.get('exit_time'))}, "
+                               f"exit_date: {trade_dict.get('exit_date')}")
+                
+                return trade_dict
+            
+            return [sa_to_dict(trade) for trade in trades]
+        except Exception as e:
+            logger.error(f"获取交易记录失败: {str(e)}")
+            return []
     
     def list_backtest_tasks(self, status: Optional[str] = None, 
                           limit: int = 50, offset: int = 0) -> List[Dict]:
@@ -253,7 +379,9 @@ class AdminInterfaceEnhanced:
                 results = self.service.get_backtest_results(task.task_id)
                 
                 task_data = {
+                    'id': task.id,
                     'task_id': task.task_id,
+                    'name': task.task_name or task.task_id,
                     'strategy_name': task.strategy_config.name if task.strategy_config else 'Unknown',
                     'status': task.status,
                     'progress': task.progress,

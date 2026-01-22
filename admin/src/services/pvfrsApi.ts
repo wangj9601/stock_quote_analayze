@@ -33,13 +33,14 @@ class PVFRSApiService {
   async createBacktestTask(taskData: any) {
     // 转换前端格式到后端期望的格式
     const backendData: any = {
+      name: taskData.name,
       start_date: taskData.startDate || taskData.start_date,
       end_date: taskData.endDate || taskData.end_date,
       initial_capital: taskData.initialCapital || taskData.initial_capital || 100000,
       strategy_params: taskData.strategy_params || {},
       risk_params: taskData.risk_params || {}
     }
-    
+
     // 处理股票池
     if (taskData.mode === 'single' && taskData.stockCode) {
       backendData.code = taskData.stockCode
@@ -52,11 +53,15 @@ class PVFRSApiService {
     } else if (taskData.stock_codes) {
       backendData.stock_codes = taskData.stock_codes
     }
-    
+
     return this.request('/api/admin/pvfrs/backtest/create', {
       method: 'POST',
       body: JSON.stringify(backendData),
     })
+  }
+
+  async getBacktestTrades(taskId: string) {
+    return this.request(`/api/admin/pvfrs/backtest/trades/${taskId}`)
   }
 
   async getBacktestTasks(params: any = {}) {
@@ -111,11 +116,11 @@ class PVFRSApiService {
     const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${reportId}/download`, {
       headers: this.getAuthHeaders(),
     })
-    
+
     if (!response.ok) {
       throw new Error('Download failed')
     }
-    
+
     return response.blob()
   }
 
@@ -206,11 +211,11 @@ class PVFRSApiService {
     const response = await fetch(`${API_BASE}/api/admin/pvfrs/analysis/${analysisType}/export?${queryString}`, {
       headers: this.getAuthHeaders(),
     })
-    
+
     if (!response.ok) {
       throw new Error('Export failed')
     }
-    
+
     return response.blob()
   }
 
@@ -286,11 +291,11 @@ class PVFRSApiService {
     const response = await fetch(`${API_BASE}/api/admin/pvfrs/logs/export?${queryString}`, {
       headers: this.getAuthHeaders(),
     })
-    
+
     if (!response.ok) {
       throw new Error('Export failed')
     }
-    
+
     return response.blob()
   }
 
@@ -316,14 +321,14 @@ class PVFRSApiService {
   async downloadTaskResults(taskId: string, reportId?: string) {
     // 如果提供了 reportId，直接使用；否则尝试通过任务ID获取报告
     let finalReportId = reportId
-    
+
     if (!finalReportId) {
       try {
         // 尝试通过任务ID获取报告
         const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${taskId}`, {
           headers: this.getAuthHeaders(),
         })
-        
+
         if (response.ok) {
           const reportData = await response.json()
           if (reportData && reportData.data && reportData.data.report_id) {
@@ -336,20 +341,20 @@ class PVFRSApiService {
         console.error('获取报告ID失败:', error)
       }
     }
-    
+
     if (!finalReportId) {
       throw new Error('任务没有关联的报告ID')
     }
-    
+
     // 使用报告下载端点
     const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${finalReportId}/download`, {
       headers: this.getAuthHeaders(),
     })
-    
+
     if (!response.ok) {
       throw new Error('Download failed')
     }
-    
+
     return response.blob()
   }
 }

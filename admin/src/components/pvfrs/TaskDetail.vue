@@ -197,6 +197,53 @@
         </el-button>
       </div>
     </el-card>
+
+    <!-- 交易记录 -->
+    <el-card v-if="task.status === 'completed'" class="trades-card" header="交易记录">
+      <div v-if="tradesLoading" style="text-align: center; padding: 20px;">
+        <el-loading :loading="tradesLoading" />
+        <span style="margin-left: 10px;">加载交易记录中...</span>
+      </div>
+      <div v-else-if="taskTrades && taskTrades.length > 0">
+        <el-table :data="taskTrades" style="width: 100%" stripe border height="400">
+          <el-table-column prop="stock_code" label="股票代码" width="100" sortable />
+          <el-table-column prop="entry_date" label="买入日期" width="110" sortable />
+          <el-table-column prop="entry_price" label="买入价格" width="100">
+            <template #default="scope">
+              ¥{{ Number(scope.row.entry_price).toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="exit_time" label="卖出日期" width="110">
+            <template #default="scope">
+              {{ scope.row.exit_time ? formatDateOnly(scope.row.exit_time) : '持仓中' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="exit_price" label="卖出价格" width="100">
+            <template #default="scope">
+              {{ scope.row.exit_price ? '¥' + Number(scope.row.exit_price).toFixed(2) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="quantity" label="数量" width="80" />
+          <el-table-column prop="pnl" label="盈亏" width="110">
+            <template #default="scope">
+              <span :class="scope.row.pnl >= 0 ? 'text-green-600' : 'text-red-600'">
+                ¥{{ Number(scope.row.pnl).toFixed(2) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="pnl_percent" label="盈亏比" width="100">
+            <template #default="scope">
+              {{ scope.row.pnl_percent !== undefined ? (Number(scope.row.pnl_percent) * 100).toFixed(2) + '%' : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="holding_period" label="持有(天)" width="90" />
+          <el-table-column prop="exit_reason" label="退出原因" min-width="120" />
+        </el-table>
+      </div>
+      <div v-else style="text-align: center; color: #999; padding: 20px;">
+        暂无交易记录
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -231,8 +278,10 @@ const getAuthHeaders = () => {
 // 响应式数据
 const activeConfigTab = ref('basic')
 const logsLoading = ref(false)
+const tradesLoading = ref(false)
 const logLevel = ref('')
 const logs = ref([])
+const taskTrades = ref([])
 const logsContainer = ref()
 
 // 发射事件
@@ -265,6 +314,24 @@ const refreshLogs = async () => {
     console.error('获取任务日志失败:', error)
   } finally {
     logsLoading.value = false
+  }
+}
+
+const refreshTrades = async () => {
+  if (props.task.status !== 'completed') return
+  
+  try {
+    tradesLoading.value = true
+    const result = await pvfrsApi.getBacktestTrades(props.task.id)
+    if (result.success) {
+      taskTrades.value = result.data || result.trades || []
+    } else {
+      taskTrades.value = result || []
+    }
+  } catch (error) {
+    console.error('获取交易记录失败:', error)
+  } finally {
+    tradesLoading.value = false
   }
 }
 
@@ -456,6 +523,20 @@ const formatDateTime = (dateTime: string) => {
   }
 }
 
+const formatDateOnly = (dateString: string) => {
+  if (!dateString) return '-'
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    })
+  } catch (e) {
+    return dateString
+  }
+}
+
 const formatDuration = (duration: number) => {
   if (!duration || duration === 0 || isNaN(duration)) return '-'
   const hours = Math.floor(duration / 3600)
@@ -480,6 +561,9 @@ const formatPercent = (value: number) => {
 // 生命周期
 onMounted(() => {
   refreshLogs()
+  if (props.task.status === 'completed') {
+    refreshTrades()
+  }
 })
 </script>
 

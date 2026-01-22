@@ -36,6 +36,7 @@ class StrategyConfigUpdate(BaseModel):
 
 class BacktestConfigCreate(BaseModel):
     strategy_name: str = Field(..., description="策略名称")
+    name: Optional[str] = Field(None, description="任务自定义名称")
     stock_pool: List[str] = Field(..., description="股票池")
     start_date: str = Field(..., description="开始日期 (YYYY-MM-DD)")
     end_date: str = Field(..., description="结束日期 (YYYY-MM-DD)")
@@ -200,6 +201,7 @@ async def create_backtest(
     try:
         backtest_config = BacktestConfig(
             strategy_name=config.strategy_name,
+            name=config.name,
             stock_pool=config.stock_pool,
             start_date=config.start_date,
             end_date=config.end_date,

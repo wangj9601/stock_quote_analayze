@@ -480,6 +480,7 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': row['date'].strftime('%Y-%m-%d'),
+                    'market_type': 'CN',  # A股市场
                     'ma5': row.get('ma5'),
                     'ma10': row.get('ma10'),
                     'ma20': row.get('ma20'),
@@ -492,9 +493,9 @@ class AkshareDataCollector:
                 # 插入或更新MA指标数据
                 self.session.execute(text("""
                     INSERT INTO ma_indicators
-                    (code, date, ma5, ma10, ma20, ma30, ma60, ma120, ma200)
-                    VALUES (:code, :date, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200)
-                    ON CONFLICT (code, date) DO UPDATE SET
+                    (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200)
+                    VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
                         ma5 = EXCLUDED.ma5,
                         ma10 = EXCLUDED.ma10,
                         ma20 = EXCLUDED.ma20,
@@ -525,6 +526,7 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': row['date'].strftime('%Y-%m-%d'),
+                    'market_type': 'CN',  # A股市场
                     'mavol5': row.get('mavol5'),
                     'mavol10': row.get('mavol10'),
                     'mavol20': row.get('mavol20'),
@@ -537,9 +539,9 @@ class AkshareDataCollector:
                 # 插入或更新MAVOL指标数据
                 self.session.execute(text("""
                     INSERT INTO mavol_indicators
-                    (code, date, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200)
-                    VALUES (:code, :date, :mavol5, :mavol10, :mavol20, :mavol30, :mavol60, :mavol120, :mavol200)
-                    ON CONFLICT (code, date) DO UPDATE SET
+                    (code, date, market_type, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200)
+                    VALUES (:code, :date, :market_type, :mavol5, :mavol10, :mavol20, :mavol30, :mavol60, :mavol120, :mavol200)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
                         mavol5 = EXCLUDED.mavol5,
                         mavol10 = EXCLUDED.mavol10,
                         mavol20 = EXCLUDED.mavol20,
@@ -575,6 +577,7 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': row['date'].strftime('%Y-%m-%d'),
+                    'market_type': 'CN',  # A股市场
                     'k': kdj.get('k'),
                     'd': kdj.get('d'),
                     'j': kdj.get('j'),
@@ -584,9 +587,9 @@ class AkshareDataCollector:
                 # 插入或更新KDJ指标数据
                 self.session.execute(text("""
                     INSERT INTO kdj_indicators
-                    (code, date, k, d, j, rsv)
-                    VALUES (:code, :date, :k, :d, :j, :rsv)
-                    ON CONFLICT (code, date) DO UPDATE SET
+                    (code, date, market_type, k, d, j, rsv)
+                    VALUES (:code, :date, :market_type, :k, :d, :j, :rsv)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
                         k = EXCLUDED.k,
                         d = EXCLUDED.d,
                         j = EXCLUDED.j,
@@ -615,6 +618,7 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': row['date'].strftime('%Y-%m-%d'),
+                    'market_type': 'CN',  # A股市场
                     'rsi6': rsi.get('rsi6'),
                     'rsi12': rsi.get('rsi12'),
                     'rsi24': rsi.get('rsi24')
@@ -623,9 +627,9 @@ class AkshareDataCollector:
                 # 插入或更新RSI指标数据
                 self.session.execute(text("""
                     INSERT INTO rsi_indicators
-                    (code, date, rsi6, rsi12, rsi24)
-                    VALUES (:code, :date, :rsi6, :rsi12, :rsi24)
-                    ON CONFLICT (code, date) DO UPDATE SET
+                    (code, date, market_type, rsi6, rsi12, rsi24)
+                    VALUES (:code, :date, :market_type, :rsi6, :rsi12, :rsi24)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
                         rsi6 = EXCLUDED.rsi6,
                         rsi12 = EXCLUDED.rsi12,
                         rsi24 = EXCLUDED.rsi24
@@ -653,20 +657,21 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': row['date'].strftime('%Y-%m-%d'),
-                    'boll_mid': boll.get('mid'),
-                    'boll_upper': boll.get('upper'),
-                    'boll_lower': boll.get('lower')
+                    'market_type': 'CN',  # A股市场
+                    'mid': boll.get('mid'),
+                    'upper': boll.get('upper'),
+                    'lower': boll.get('lower')
                 }
                 
                 # 插入或更新BOLL指标数据
                 self.session.execute(text("""
                     INSERT INTO boll_indicators
-                    (code, date, boll_mid, boll_upper, boll_lower)
-                    VALUES (:code, :date, :boll_mid, :boll_upper, :boll_lower)
-                    ON CONFLICT (code, date) DO UPDATE SET
-                        boll_mid = EXCLUDED.boll_mid,
-                        boll_upper = EXCLUDED.boll_upper,
-                        boll_lower = EXCLUDED.boll_lower
+                    (code, date, market_type, mid, upper, lower)
+                    VALUES (:code, :date, :market_type, :mid, :upper, :lower)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
+                        mid = EXCLUDED.mid,
+                        upper = EXCLUDED.upper,
+                        lower = EXCLUDED.lower
                 """), data)
             
             self.session.commit()
@@ -1161,7 +1166,8 @@ async def start_historical_collection(
             request.test_mode,
             request.full_collection_mode,
             request.market,
-            request.force_update
+            request.force_update,
+            request.indicators
         )
         
         logger.info(f"启动历史数据采集任务: {task_id}")
@@ -1190,7 +1196,8 @@ def run_historical_collection_task(
     test_mode: bool = False,
     full_collection_mode: bool = False,
     market: str = 'CN',
-    force_update: bool = False
+    force_update: bool = False,
+    indicators: Optional[List[str]] = None
 ):
     """运行历史数据采集任务（后台任务）"""
     global current_task_id

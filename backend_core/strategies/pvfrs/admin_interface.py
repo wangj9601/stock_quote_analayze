@@ -246,6 +246,7 @@ class AdminInterface(IAdminInterface):
                     if sa_task:
                         return {
                             "task_id": task_id,
+                            "name": sa_task.task_name,
                             "status": sa_task.status,
                             "progress": sa_task.progress,
                             "current_step": sa_task.current_step,
@@ -261,6 +262,7 @@ class AdminInterface(IAdminInterface):
             # 4. 返回内存中的任务信息
             progress_info = {
                 "task_id": task_id,
+                "name": task.name,
                 "status": task.status,
                 "progress": task.progress,
                 "current_step": task.current_step,

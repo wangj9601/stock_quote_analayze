@@ -104,6 +104,47 @@
               <el-table-column prop="reason" label="推荐理由" />
             </el-table>
           </div>
+
+          <!-- 如果有交易记录 -->
+          <div class="report-trades" v-if="reportTrades && reportTrades.length > 0">
+            <h3>详细交易记录</h3>
+            <el-table :data="reportTrades" style="width: 100%" stripe border>
+              <el-table-column prop="stock_code" label="股票代码" width="100" sortable />
+              <el-table-column prop="entry_date" label="买入日期" width="110" sortable />
+              <el-table-column prop="entry_price" label="买入价格" width="100">
+                <template #default="scope">
+                  ¥{{ Number(scope.row.entry_price).toFixed(2) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="exit_time" label="卖出日期" width="110">
+                <template #default="scope">
+                  {{ scope.row.exit_time ? formatDateOnly(scope.row.exit_time) : '持仓中' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="exit_price" label="卖出价格" width="100">
+                <template #default="scope">
+                  {{ scope.row.exit_price ? '¥' + Number(scope.row.exit_price).toFixed(2) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="quantity" label="数量" width="80" />
+              <el-table-column prop="pnl" label="盈亏" width="110">
+                <template #default="scope">
+                  <span :class="scope.row.pnl >= 0 ? 'text-green-600' : 'text-red-600'">
+                    ¥{{ Number(scope.row.pnl).toFixed(2) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="pnl_percent" label="盈亏比" width="100">
+                <template #default="scope">
+                  <span :class="scope.row.pnl_percent >= 0 ? 'text-green-600' : 'text-red-600'">
+                    {{ (Number(scope.row.pnl_percent) * 100).toFixed(2) }}%
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="holding_period" label="持有(天)" width="90" />
+              <el-table-column prop="exit_reason" label="退出原因" min-width="120" />
+            </el-table>
+          </div>
         </el-card>
       </div>
     </div>
@@ -149,6 +190,12 @@ const report = ref(null)
 const reportStocks = computed(() => {
   if (!report.value || !report.value.stocks) return []
   return Array.isArray(report.value.stocks) ? report.value.stocks : []
+})
+
+// 确保 trades 始终是数组
+const reportTrades = computed(() => {
+  if (!report.value || !report.value.trades) return []
+  return Array.isArray(report.value.trades) ? report.value.trades : []
 })
 
 // 加载报告详情
@@ -280,6 +327,7 @@ const loadReport = async () => {
         details: actualData.details || generateDetailsFromReport(actualData),
         charts: actualData.charts || actualData.visualization_data || [],
         stocks: actualData.stocks || actualData.stock_list || [],
+        trades: actualData.trades || [],
         // 保留原始数据以便调试
         _rawData: actualData
       }
@@ -431,6 +479,17 @@ const formatDate = (dateString) => {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
+  })
+}
+
+// 格式化日期（仅日期部分）
+const formatDateOnly = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
   })
 }
 

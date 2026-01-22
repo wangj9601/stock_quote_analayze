@@ -150,7 +150,8 @@ class PVFRSAdminService:
     def create_backtest_task(self, strategy_config_id: int, mode: str, 
                           stock_codes: List[str], market: str,
                           start_date: date, end_date: date,
-                          initial_capital: float, priority: int = 5) -> str:
+                          initial_capital: float, task_name: Optional[str] = None,
+                          priority: int = 5) -> str:
         """创建回测任务
         
         Args:
@@ -161,6 +162,7 @@ class PVFRSAdminService:
             start_date: 开始日期
             end_date: 结束日期
             initial_capital: 初始资金
+            task_name: 任务名称
             priority: 优先级
             
         Returns:
@@ -172,6 +174,7 @@ class PVFRSAdminService:
             task = PVFRSBacktestTaskEnhanced(
                 task_id=task_id,
                 strategy_config_id=strategy_config_id,
+                task_name=task_name or f"回测任务-{task_id[:8]}",
                 mode=mode,
                 stock_codes=stock_codes,
                 market=market,
@@ -361,13 +364,98 @@ class PVFRSAdminService:
                         trade_data: Dict) -> int:
         """创建交易记录"""
         try:
+            # 处理 entry_time：从 entry_date 或 entry_time 获取
+            entry_time = None
+            if 'entry_time' in trade_data and trade_data['entry_time']:
+                if isinstance(trade_data['entry_time'], str):
+                    try:
+                        entry_time = datetime.fromisoformat(trade_data['entry_time'].replace('Z', '+00:00'))
+                    except (ValueError, AttributeError):
+                        try:
+                            entry_time = datetime.strptime(trade_data['entry_time'], '%Y-%m-%d')
+                        except ValueError:
+                            entry_time = None
+                elif isinstance(trade_data['entry_time'], datetime):
+                    entry_time = trade_data['entry_time']
+            elif 'entry_date' in trade_data and trade_data['entry_date']:
+                try:
+                    if isinstance(trade_data['entry_date'], str):
+                        entry_time = datetime.strptime(trade_data['entry_date'], '%Y-%m-%d')
+                    elif isinstance(trade_data['entry_date'], date):
+                        entry_time = datetime.combine(trade_data['entry_date'], datetime.min.time())
+                except (ValueError, TypeError):
+                    entry_time = None
+            
+            # 处理 exit_time：从 exit_date 或 exit_time 获取
+            # 如果交易已完成（有 exit_reason 或 exit_price > 0），应该有 exit_time
+            exit_time = None
+            exit_date_str = trade_data.get('exit_date')
+            exit_reason = trade_data.get('exit_reason')
+            exit_price = trade_data.get('exit_price', 0)
+            
+            # 判断交易是否已完成：有退出原因或退出价格大于0
+            is_completed = bool(exit_reason) or (exit_price and float(exit_price) > 0)
+            
+            # 如果 exit_time 为空但交易已完成，尝试从 exit_date 获取
+            if is_completed and not exit_time:
+                if exit_date_str:
+                    try:
+                        if isinstance(exit_date_str, str):
+                            exit_dt = datetime.strptime(exit_date_str, '%Y-%m-%d')
+                        elif isinstance(exit_date_str, date):
+                            exit_dt = datetime.combine(exit_date_str, datetime.min.time())
+                        else:
+                            exit_dt = None
+                        if exit_dt:
+                            exit_time = exit_dt.isoformat()
+                    except (ValueError, TypeError, AttributeError):
+                        logger.warning(f"无法从 exit_date 转换 exit_time: {exit_date_str}")
+                        pass
+            
+            # 处理 entry_date
+            entry_date = None
+            if entry_time:
+                entry_date = entry_time.date()
+            elif 'entry_date' in trade_data and trade_data['entry_date']:
+                if isinstance(trade_data['entry_date'], str):
+                    try:
+                        entry_date = datetime.strptime(trade_data['entry_date'], '%Y-%m-%d').date()
+                    except ValueError:
+                        entry_date = None
+                elif isinstance(trade_data['entry_date'], date):
+                    entry_date = trade_data['entry_date']
+            
+            # 处理 trade_date（使用 exit_time 或 entry_date）
+            trade_date = None
+            if exit_time:
+                trade_date = exit_time.date()
+            elif exit_date_str:
+                try:
+                    if isinstance(exit_date_str, str):
+                        trade_date = datetime.strptime(exit_date_str, '%Y-%m-%d').date()
+                    elif isinstance(exit_date_str, date):
+                        trade_date = exit_date_str
+                except (ValueError, TypeError):
+                    trade_date = entry_date.date() if entry_date else None
+            else:
+                # 如果 exit_time 和 exit_date 都没有，使用 entry_date
+                trade_date = entry_date.date() if entry_date else datetime.now().date()
+            
+            # 确保 trade_date 不为空（数据库约束）
+            if trade_date is None:
+                trade_date = entry_date.date() if entry_date else datetime.now().date()
+            
+            # 确保 stock_code 字段正确（可能使用 symbol 字段）
+            final_stock_code = stock_code or trade_data.get('stock_code') or trade_data.get('symbol', 'UNKNOWN')
+            
             trade = PVFRSTradeRecordEnhanced(
                 result_id=result_id,
-                stock_code=stock_code,
+                stock_code=final_stock_code,
                 market=trade_data.get('market', 'CN'),
-                trade_date=trade_data.get('trade_date', datetime.now().date()),
-                entry_time=trade_data.get('entry_time', datetime.now()),
-                exit_time=trade_data.get('exit_time', datetime.now()),
+                trade_date=trade_date,
+                entry_date=entry_date,
+                entry_time=entry_time,
+                exit_time=exit_time,  # 已完成交易有值，未完成交易为 None
                 entry_price=trade_data.get('entry_price', 0),
                 exit_price=trade_data.get('exit_price', 0),
                 quantity=trade_data.get('quantity', 0),
@@ -377,7 +465,7 @@ class PVFRSAdminService:
                 slippage=trade_data.get('slippage', 0),
                 exit_reason=trade_data.get('exit_reason', ''),
                 trade_type=trade_data.get('trade_type', 'long'),
-                holding_period=trade_data.get('holding_period', 0)
+                holding_period=trade_data.get('holding_period') or trade_data.get('holding_days', 0)
             )
             
             self.db.add(trade)
@@ -404,7 +492,7 @@ class PVFRSAdminService:
             if stock_code:
                 query = query.filter(PVFRSTradeRecordEnhanced.stock_code == stock_code)
             
-            return query.order_by(desc(PVFRSTradeRecordEnhanced.trade_date)).offset(offset).limit(limit).all()
+            return query.order_by(PVFRSTradeRecordEnhanced.trade_date.desc().nulls_last()).offset(offset).limit(limit).all()
         except Exception as e:
             logger.error(f"获取交易记录失败: {str(e)}")
             return []
