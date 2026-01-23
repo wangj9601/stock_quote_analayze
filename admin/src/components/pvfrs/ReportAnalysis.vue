@@ -72,6 +72,9 @@
             <el-icon><DataLine /></el-icon>
             对比分析
           </el-button>
+          <el-button type="danger" plain @click="deleteAllReports">
+            清空报告
+          </el-button>
         </div>
         <div class="header-filters">
           <el-date-picker
@@ -143,6 +146,9 @@
             </el-button>
             <el-button size="small" type="success" @click="downloadReport(scope.row)">
               下载
+            </el-button>
+            <el-button size="small" type="success" plain @click="exportReportPdf(scope.row)">
+              PDF
             </el-button>
             <el-button size="small" type="danger" @click="deleteReport(scope.row)">
               删除
@@ -290,7 +296,8 @@ const refreshReports = async () => {
       endDate: dateRange.value?.[1]
     })
     
-    reports.value = result.reports || []
+    // 后端返回的数据在 result.data 中，不在 result.reports 中
+    reports.value = result.data || result.reports || []
     totalReports.value = result.total || 0
     
     // 更新概览数据
@@ -307,7 +314,19 @@ const refreshReports = async () => {
 const refreshOverview = async () => {
   try {
     const result = await pvfrsApi.getReportOverview()
-    Object.assign(overview, result)
+    // 后端返回的数据在 result.data 中
+    if (result.data) {
+      overview.totalReports = result.data.totalReports || 0
+      overview.avgReturn = result.data.avgReturn || 0
+      overview.winRate = result.data.winRate || 0
+      overview.maxDrawdown = result.data.maxDrawdown || 0
+    } else {
+      // 兼容旧格式
+      overview.totalReports = result.totalReports || 0
+      overview.avgReturn = result.avgReturn || 0
+      overview.winRate = result.winRate || 0
+      overview.maxDrawdown = result.maxDrawdown || 0
+    }
   } catch (error) {
     console.error('获取概览数据失败:', error)
   }
@@ -330,7 +349,8 @@ const downloadReport = async (report: any) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `${report.title}_${report.id}.pdf`
+    // 后端下载端点返回的是 HTML 报告，不能用 .pdf 否则会提示格式错误
+    link.download = `${report.title}_${report.id}.html`
     link.click()
     
     window.URL.revokeObjectURL(url)
@@ -339,6 +359,22 @@ const downloadReport = async (report: any) => {
   } catch (error) {
     ElMessage.error('报告下载失败')
     console.error('下载报告失败:', error)
+  }
+}
+
+const exportReportPdf = async (report: any) => {
+  try {
+    const blob = await pvfrsApi.downloadReportPdf(report.id)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${report.title}_${report.id}.pdf`
+    link.click()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('PDF导出成功')
+  } catch (error) {
+    ElMessage.error('PDF导出失败')
+    console.error('导出PDF失败:', error)
   }
 }
 
@@ -355,6 +391,23 @@ const deleteReport = async (report: any) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('报告删除失败')
+    }
+  }
+}
+
+const deleteAllReports = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要清空全部报告吗？\n该操作会删除所有报告对应的回测结果/交易记录/收益曲线数据，且不可恢复。',
+      '危险操作确认',
+      { type: 'warning' }
+    )
+    await pvfrsApi.deleteAllReports()
+    ElMessage.success('全部报告已清空')
+    await refreshReports()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('清空报告失败')
     }
   }
 }
@@ -450,7 +503,13 @@ const getReturnClass = (returnValue: number) => {
 
 const formatPercent = (value: number) => {
   if (value === null || value === undefined) return '-'
-  return `${(value * 100).toFixed(2)}%`
+  // 后端返回的百分比数据已经乘以100，所以直接使用
+  // 如果值小于1，说明是小数形式，需要乘以100；否则已经是百分比形式
+  if (Math.abs(value) < 1) {
+    return `${(value * 100).toFixed(2)}%`
+  } else {
+    return `${value.toFixed(2)}%`
+  }
 }
 
 const formatNumber = (value: number, digits = 2) => {

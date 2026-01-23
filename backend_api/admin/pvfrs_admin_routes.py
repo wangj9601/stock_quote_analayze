@@ -22,6 +22,7 @@ from backend_core.strategies.pvfrs.admin_interface_enhanced import (
 )
 from backend_core.strategies.pvfrs.models import PVFRSException
 from backend_core.strategies.pvfrs.serialization import get_formatter, validate_data
+from backend_core.strategies.pvfrs.backtest_storage import BacktestStorage
 
 logger = logging.getLogger(__name__)
 
@@ -412,14 +413,101 @@ async def get_backtest_report(
     try:
         logger.info(f"获取PVFRS回测报告: {task_id}")
         
-        # 获取管理端接口实例
-        admin_interface = get_admin_interface()
+        report_data = None
         
-        # 获取回测报告
-        report = admin_interface.get_backtest_report(task_id)
+        # 方法1: 尝试从内存中获取（如果报告还在内存中）
+        try:
+            admin_interface = get_admin_interface()
+            report = admin_interface.get_backtest_report(task_id)
+            report_data = report.to_dict()
+            logger.info(f"从内存获取回测报告成功: {task_id}")
+        except (PVFRSException, Exception) as e:
+            logger.debug(f"从内存获取回测报告失败: {str(e)}，尝试从数据库查询")
         
-        # 转换为API响应格式
-        report_data = report.to_dict()
+        # 方法2: 如果内存中没有，从数据库查询
+        if not report_data:
+            try:
+                from backend_api.models.pvfrs_enhanced import PVFRSBacktestResultEnhanced
+                from sqlalchemy.orm import joinedload
+                
+                # 从数据库查询报告
+                result = db.query(PVFRSBacktestResultEnhanced).filter(
+                    PVFRSBacktestResultEnhanced.task_id == task_id
+                ).first()
+                
+                if result:
+                    # 安全地获取值，处理 Decimal 和 None
+                    def safe_float(value, default=0.0):
+                        if value is None:
+                            return default
+                        return float(value)
+                    
+                    def safe_percent(value, default=0.0):
+                        if value is None:
+                            return default
+                        return float(value) * 100
+                    
+                    # 构建报告数据
+                    report_data = {
+                        "report_id": result.report_id or f"result_{result.id}",
+                        "task_id": result.task_id,
+                        "stock_code": result.stock_code,
+                        "title": f"{result.stock_code} 回测报告",
+                        "type": "single",
+                        "total_return": safe_percent(result.total_return),
+                        "annual_return": safe_percent(result.annual_return),
+                        "max_drawdown": safe_percent(result.max_drawdown),
+                        "sharpe_ratio": safe_float(result.sharpe_ratio),
+                        "win_rate": safe_percent(result.win_rate),
+                        "total_trades": result.total_trades or 0,
+                        "winning_trades": result.winning_trades or 0,
+                        "profit_factor": safe_float(result.profit_factor),
+                        "volatility": safe_percent(result.volatility),
+                        "avg_holding_period": safe_float(result.avg_holding_period),
+                        "initial_capital": safe_float(result.initial_capital),
+                        "final_capital": safe_float(result.final_capital),
+                        "created_at": result.created_at.isoformat() if result.created_at else datetime.now().isoformat(),
+                        "config": result.config_snapshot or {},
+                        "summary_data": result.summary_data or {},
+                        "start_date": result.start_date.isoformat() if result.start_date else None,
+                        "end_date": result.end_date.isoformat() if result.end_date else None,
+                        "backtest_date": result.backtest_date.isoformat() if result.backtest_date else None,
+                    }
+                    
+                    # 获取交易记录（如果有关联）
+                    if hasattr(result, 'trades') and result.trades:
+                        report_data["trades"] = [
+                            {
+                                "id": trade.id,
+                                "stock_code": trade.stock_code,
+                                "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
+                                # 模型里是 exit_time（datetime），前端也用 exit_time
+                                "exit_time": trade.exit_time.isoformat() if trade.exit_time else None,
+                                "entry_price": float(trade.entry_price) if trade.entry_price else 0,
+                                "exit_price": float(trade.exit_price) if trade.exit_price else 0,
+                                "quantity": trade.quantity or 0,
+                                "pnl": float(trade.pnl) if trade.pnl else 0,
+                                # 统一：pnl_percent 使用小数比例（前端再 *100 显示）
+                                "pnl_percent": float(trade.pnl_percent) if trade.pnl_percent is not None else 0,
+                                "holding_period": trade.holding_period or 0,
+                                "exit_reason": trade.exit_reason or ""
+                            }
+                            for trade in result.trades
+                        ]
+                    
+                    logger.info(f"从数据库获取回测报告成功: {task_id}")
+                else:
+                    logger.warning(f"数据库中未找到任务 {task_id} 的回测报告")
+                    
+            except Exception as db_error:
+                logger.error(f"从数据库查询回测报告失败: {str(db_error)}")
+                logger.error(traceback.format_exc())
+        
+        if not report_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"获取回测报告失败: 任务 {task_id} 的回测报告不存在"
+            )
         
         logger.info(f"PVFRS回测报告获取成功: {task_id}")
         
@@ -429,12 +517,8 @@ async def get_backtest_report(
         
         return JSONResponse(response_data)
         
-    except PVFRSException as e:
-        logger.error(f"获取PVFRS回测报告失败: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"获取回测报告失败: {str(e)}"
-        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取PVFRS回测报告时发生未知错误: {str(e)}")
         logger.error(traceback.format_exc())
@@ -625,20 +709,20 @@ async def delete_all_results(
     """
     try:
         logger.info("删除所有PVFRS回测结果")
-        
-        # 获取管理端接口实例
+
+        # 通过存储层清理（仅清理结果/交易/曲线，不清理任务）
         admin_interface = get_admin_interface()
-        
-        # 这里应该实现删除所有结果的逻辑
-        # 暂时返回成功响应
-        
-        logger.info("所有PVFRS回测结果删除成功")
-        
-        return JSONResponse({
-            "success": True,
-            "message": "所有回测结果已清空",
-            "deleted_at": datetime.now().isoformat()
-        })
+        storage: BacktestStorage = admin_interface.storage
+        stats = storage.delete_all_results(db=db)
+
+        logger.info(f"所有PVFRS回测结果删除成功: {stats}")
+
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            stats,
+            message="所有回测结果已清空"
+        )
+        return JSONResponse(response_data)
         
     except Exception as e:
         logger.error(f"删除所有PVFRS回测结果时发生错误: {str(e)}")
@@ -675,51 +759,79 @@ async def list_reports(
     try:
         logger.info(f"获取PVFRS报告列表 - 页码: {page}, 每页: {pageSize}, 类型: {type}")
         
-        # 获取管理端接口实例
-        admin_interface = get_admin_interface()
+        # 直接从数据库查询报告数据
+        from backend_api.models.pvfrs_enhanced import PVFRSBacktestResultEnhanced
         
-        # 计算偏移量
-        offset = (page - 1) * pageSize
+        # 构建查询
+        query = db.query(PVFRSBacktestResultEnhanced)
         
-        # 获取历史报告（这里使用现有的方法，实际应该支持分页和过滤）
-        all_reports = admin_interface.list_historical_reports(limit=1000)  # 先获取更多数据
-        
-        # 应用过滤器
-        filtered_reports = all_reports
-        if type and type != "":
-            filtered_reports = [r for r in filtered_reports if r.report_type == type]
-        
+        # 应用日期过滤
         if startDate and startDate != "undefined":
             try:
                 start_dt = datetime.strptime(startDate, "%Y-%m-%d")
-                filtered_reports = [r for r in filtered_reports if r.created_at >= start_dt]
+                query = query.filter(PVFRSBacktestResultEnhanced.created_at >= start_dt)
             except ValueError:
-                pass  # 忽略无效日期
+                pass
         
         if endDate and endDate != "undefined":
             try:
                 end_dt = datetime.strptime(endDate, "%Y-%m-%d")
-                filtered_reports = [r for r in filtered_reports if r.created_at <= end_dt]
+                # 结束日期应该包含当天的所有时间
+                from datetime import timedelta
+                end_dt = end_dt + timedelta(days=1)
+                query = query.filter(PVFRSBacktestResultEnhanced.created_at < end_dt)
             except ValueError:
-                pass  # 忽略无效日期
+                pass
         
-        # 分页
-        total = len(filtered_reports)
-        paginated_reports = filtered_reports[offset:offset + pageSize]
+        # 按创建时间倒序排列
+        query = query.order_by(PVFRSBacktestResultEnhanced.created_at.desc())
+        
+        # 获取总数
+        total = query.count()
+        
+        # 应用分页
+        offset = (page - 1) * pageSize
+        results = query.offset(offset).limit(pageSize).all()
+        
+        logger.info(f"从数据库查询到 {len(results)} 条报告记录，总计 {total} 条")
         
         # 转换为API响应格式
         reports_data = []
-        for report in paginated_reports:
-            if hasattr(report, 'to_dict'):
-                reports_data.append(report.to_dict())
-            else:
-                # 如果没有to_dict方法，创建基本的字典结构
+        for result in results:
+            try:
+                # 安全地获取值，处理 Decimal 和 None
+                def safe_float(value, default=0.0):
+                    if value is None:
+                        return default
+                    return float(value)
+                
+                def safe_percent(value, default=0.0):
+                    if value is None:
+                        return default
+                    return float(value) * 100
+                
+                # 格式化创建时间
+                created_at = result.created_at.isoformat() if result.created_at else datetime.now().isoformat()
+                
                 reports_data.append({
-                    "id": f"report_{len(reports_data)+1}",
-                    "name": f"报告_{len(reports_data)+1}",
-                    "created_at": datetime.now().isoformat(),
-                    "status": "completed"
+                    "id": result.report_id or f"result_{result.id}",
+                    "title": f"{result.stock_code} 回测报告",
+                    "type": "single",  # 默认类型
+                    "totalReturn": safe_percent(result.total_return),
+                    "annualReturn": safe_percent(result.annual_return),
+                    "maxDrawdown": safe_percent(result.max_drawdown),
+                    "sharpeRatio": safe_float(result.sharpe_ratio),
+                    "winRate": safe_percent(result.win_rate),
+                    "totalTrades": result.total_trades or 0,
+                    "createdAt": created_at,
+                    "stockCode": result.stock_code,
+                    "taskId": result.task_id
                 })
+            except Exception as item_error:
+                logger.warning(f"转换报告数据时出错: {str(item_error)}, 跳过该记录")
+                continue
+        
+        logger.info(f"成功转换 {len(reports_data)} 条报告数据")
         
         # 使用格式化器生成响应
         formatter = get_formatter()
@@ -903,20 +1015,31 @@ async def delete_report(
     """
     try:
         logger.info(f"删除PVFRS报告: {report_id}")
-        
-        # 获取管理端接口实例
+
         admin_interface = get_admin_interface()
-        
-        # 这里应该实现报告删除逻辑
-        # 暂时返回成功响应
-        
+        success = False
+        try:
+            # 同时清理内存缓存 + DB
+            success = admin_interface.delete_historical_report(report_id)
+        except Exception:
+            # 兜底：直接用存储层删除
+            storage: BacktestStorage = admin_interface.storage
+            success = storage.delete_report(report_id, db=db)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"报告不存在: {report_id}"
+            )
+
         logger.info(f"PVFRS报告删除成功: {report_id}")
-        
-        return JSONResponse({
-            "success": True,
-            "message": "报告删除成功",
-            "deleted_at": datetime.now().isoformat()
-        })
+
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            {"report_id": report_id, "deleted_at": datetime.now().isoformat()},
+            message="报告删除成功"
+        )
+        return JSONResponse(response_data)
         
     except Exception as e:
         logger.error(f"删除PVFRS报告时发生错误: {str(e)}")
@@ -924,6 +1047,143 @@ async def delete_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"删除报告失败: {str(e)}"
+        )
+
+
+@router.delete("/reports")
+async def delete_all_reports(
+    confirm: bool = Query(False, description="危险操作确认：必须传 confirm=true 才会执行"),
+    db: Session = Depends(get_db)
+):
+    """删除所有报告（实质是清空 results_enhanced + trades + equity，不删除任务表）"""
+    if not confirm:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请传 confirm=true 以确认危险操作")
+    try:
+        logger.info("删除所有PVFRS报告（清空结果表及关联明细）")
+        admin_interface = get_admin_interface()
+        storage: BacktestStorage = admin_interface.storage
+        stats = storage.delete_all_results(db=db)
+
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            stats,
+            message="所有报告已清空"
+        )
+        return JSONResponse(response_data)
+    except Exception as e:
+        logger.error(f"删除所有PVFRS报告时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除所有报告失败: {str(e)}"
+        )
+
+
+@router.delete("/backtest/tasks/completed")
+async def delete_completed_backtest_tasks(
+    db: Session = Depends(get_db)
+):
+    """清理所有已完成任务及其关联数据（结果/交易/曲线）"""
+    try:
+        logger.info("清理所有已完成PVFRS回测任务及关联数据")
+        admin_interface = get_admin_interface()
+        storage: BacktestStorage = admin_interface.storage
+        stats = storage.delete_tasks(status="completed", db=db)
+
+        # 同时尽量清理内存缓存（不强依赖）
+        try:
+            admin_interface.completed_tasks.clear()
+        except Exception:
+            pass
+
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            stats,
+            message="已完成任务已清理"
+        )
+        return JSONResponse(response_data)
+    except Exception as e:
+        logger.error(f"清理已完成PVFRS回测任务时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"清理已完成任务失败: {str(e)}"
+        )
+
+
+@router.delete("/backtest/tasks/{task_id}")
+async def delete_backtest_task(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    """删除单个任务及其关联数据（结果/交易/曲线）"""
+    try:
+        logger.info(f"删除PVFRS回测任务及关联数据: {task_id}")
+        admin_interface = get_admin_interface()
+        storage: BacktestStorage = admin_interface.storage
+        stats = storage.delete_task(task_id, db=db)
+
+        if stats.get("deleted_tasks", 0) == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"任务不存在: {task_id}")
+
+        # 清理内存缓存（尽力而为）
+        try:
+            admin_interface.active_tasks.pop(task_id, None)
+            admin_interface.completed_tasks.pop(task_id, None)
+        except Exception:
+            pass
+
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            stats,
+            message="任务及关联数据删除成功"
+        )
+        return JSONResponse(response_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除PVFRS回测任务时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除任务失败: {str(e)}"
+        )
+
+
+@router.delete("/backtest/tasks")
+async def delete_all_backtest_tasks(
+    confirm: bool = Query(False, description="危险操作确认：必须传 confirm=true 才会执行"),
+    db: Session = Depends(get_db)
+):
+    """删除所有任务及其关联数据（等同于清库：任务/结果/交易/收益曲线）"""
+    if not confirm:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请传 confirm=true 以确认危险操作")
+    try:
+        logger.info("删除所有PVFRS回测任务及关联数据（清库）")
+        admin_interface = get_admin_interface()
+        storage: BacktestStorage = admin_interface.storage
+        stats = storage.delete_tasks(status=None, db=db)
+
+        # 清理内存缓存（尽力而为）
+        try:
+            admin_interface.active_tasks.clear()
+            admin_interface.completed_tasks.clear()
+            admin_interface.reports.clear()
+        except Exception:
+            pass
+
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            stats,
+            message="所有任务/报告等相关数据已删除"
+        )
+        return JSONResponse(response_data)
+    except Exception as e:
+        logger.error(f"删除所有PVFRS回测任务时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除所有任务失败: {str(e)}"
         )
 
 
@@ -947,28 +1207,40 @@ async def download_report(
         
         # 获取管理端接口实例
         admin_interface = get_admin_interface()
+
+        # 预加载：若报告已入库但不在内存缓存，先尝试从持久化存储加载到内存
+        try:
+            if hasattr(admin_interface, "get_historical_report"):
+                admin_interface.get_historical_report(report_id)
+        except Exception:
+            pass
         
         # 生成HTML报告
         try:
             html_content = admin_interface.generate_report_html(report_id)
         except PVFRSException as e:
-            # 如果通过report_id找不到，尝试通过task_id查找
-            # report_id 可能就是 task_id
+            # 如果通过report_id找不到，尝试通过task_id查找/重建缓存
             try:
-                report = admin_interface.get_backtest_report(report_id)
-                # 如果找到了报告，使用实际的report_id
-                actual_report_id = report.report_id if hasattr(report, 'report_id') else report_id
-                html_content = admin_interface.generate_report_html(actual_report_id)
+                # 1) 尝试从持久化存储加载（get_report 支持 report_id/task_id）
+                if hasattr(admin_interface, "get_historical_report"):
+                    admin_interface.get_historical_report(report_id)
+                html_content = admin_interface.generate_report_html(report_id)
             except Exception:
                 raise e
         
         # 返回HTML文件
         from fastapi.responses import Response
+        from urllib.parse import quote
+
+        # Starlette/ASGI headers 需要 latin-1，可用 RFC5987 的 filename* 兼容中文
+        ascii_filename = f"PVFRS_report_{report_id}.html"
+        utf8_filename = quote(f"PVFRS_回测报告_{report_id}.html")
+
         return Response(
             content=html_content.encode('utf-8'),
             media_type='text/html',
             headers={
-                'Content-Disposition': f'attachment; filename="PVFRS_回测报告_{report_id}.html"'
+                'Content-Disposition': f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{utf8_filename}'
             }
         )
         
@@ -986,6 +1258,92 @@ async def download_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"下载报告失败: {str(e)}"
+        )
+
+
+@router.get("/reports/{report_id}/download/pdf")
+async def download_report_pdf(
+    report_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    导出报告为PDF（服务端生成）
+
+    说明：
+    - 先生成HTML报告，再转换为PDF
+    - 转换依赖 xhtml2pdf（建议 pip install xhtml2pdf）
+    """
+    try:
+        logger.info(f"导出PVFRS报告PDF: {report_id}")
+
+        admin_interface = get_admin_interface()
+
+        # 预加载：若报告已入库但不在内存缓存，先尝试从持久化存储加载到内存
+        try:
+            if hasattr(admin_interface, "get_historical_report"):
+                admin_interface.get_historical_report(report_id)
+        except Exception:
+            pass
+
+        # 生成HTML（复用同一套报告渲染逻辑）
+        try:
+            html_content = admin_interface.generate_report_html(report_id)
+        except PVFRSException as e:
+            try:
+                if hasattr(admin_interface, "get_historical_report"):
+                    admin_interface.get_historical_report(report_id)
+                html_content = admin_interface.generate_report_html(report_id)
+            except Exception:
+                raise e
+
+        # HTML -> PDF
+        try:
+            import io
+            from xhtml2pdf import pisa
+
+            output = io.BytesIO()
+            # xhtml2pdf 需要字符串输入；encoding 指定 utf-8
+            status_obj = pisa.CreatePDF(html_content, dest=output, encoding="utf-8")
+            if status_obj.err:
+                raise PVFRSException("xhtml2pdf 生成PDF失败（HTML解析错误）")
+
+            pdf_bytes = output.getvalue()
+            if not pdf_bytes.startswith(b"%PDF"):
+                raise PVFRSException("生成的内容不是有效PDF")
+        except ImportError:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="服务端PDF导出依赖未安装：请安装 xhtml2pdf（pip install xhtml2pdf）"
+            )
+
+        from fastapi.responses import Response
+        from urllib.parse import quote
+
+        ascii_filename = f"PVFRS_report_{report_id}.pdf"
+        utf8_filename = quote(f"PVFRS_回测报告_{report_id}.pdf")
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{utf8_filename}'
+            }
+        )
+
+    except PVFRSException as e:
+        logger.error(f"导出PVFRS报告PDF失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"导出PDF失败: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"导出PVFRS报告PDF时发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"导出PDF失败: {str(e)}"
         )
 
 
@@ -1055,26 +1413,52 @@ async def get_reports_overview(
     try:
         logger.info("获取PVFRS报告概览")
         
-        # 获取管理端接口实例
-        admin_interface = get_admin_interface()
+        # 直接从数据库查询报告数据并计算统计信息
+        from backend_api.models.pvfrs_enhanced import PVFRSBacktestResultEnhanced
+        from sqlalchemy import func
         
-        # 模拟概览数据
+        # 获取所有报告
+        all_reports = db.query(PVFRSBacktestResultEnhanced).all()
+        
+        # 计算统计数据
+        total_reports = len(all_reports)
+        
+        if total_reports > 0:
+            # 计算平均收益率（转换为百分比）
+            avg_return = db.query(func.avg(PVFRSBacktestResultEnhanced.total_return)).scalar()
+            avg_return = float(avg_return * 100) if avg_return is not None else 0.0
+            
+            # 计算平均胜率（转换为百分比）
+            avg_win_rate = db.query(func.avg(PVFRSBacktestResultEnhanced.win_rate)).scalar()
+            avg_win_rate = float(avg_win_rate * 100) if avg_win_rate is not None else 0.0
+            
+            # 计算平均最大回撤（转换为百分比）
+            avg_max_drawdown = db.query(func.avg(PVFRSBacktestResultEnhanced.max_drawdown)).scalar()
+            avg_max_drawdown = float(avg_max_drawdown * 100) if avg_max_drawdown is not None else 0.0
+        else:
+            avg_return = 0.0
+            avg_win_rate = 0.0
+            avg_max_drawdown = 0.0
+        
+        # 构建概览数据（使用前端期望的字段名）
         overview_data = {
-            "total_reports": 25,
-            "recent_reports": 5,
-            "success_rate": 85.2,
-            "avg_return": 12.5,
-            "best_strategy": "PVFRS-v2.1",
+            "totalReports": total_reports,
+            "avgReturn": round(avg_return, 2),
+            "winRate": round(avg_win_rate, 2),
+            "maxDrawdown": round(avg_max_drawdown, 2),
             "last_updated": datetime.now().isoformat()
         }
         
-        logger.info("PVFRS报告概览获取成功")
+        logger.info(f"PVFRS报告概览获取成功: 总报告数={total_reports}, 平均收益率={avg_return}%")
         
-        return JSONResponse({
-            "success": True,
-            "data": overview_data,
-            "query_time": datetime.now().isoformat()
-        })
+        # 使用格式化器生成响应
+        formatter = get_formatter()
+        response_data = formatter.format_success_response(
+            overview_data,
+            message="报告概览获取成功"
+        )
+        
+        return JSONResponse(response_data)
         
     except Exception as e:
         logger.error(f"获取PVFRS报告概览时发生错误: {str(e)}")

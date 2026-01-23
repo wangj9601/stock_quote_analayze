@@ -95,6 +95,19 @@ class PVFRSApiService {
     })
   }
 
+  async deleteBacktestTask(taskId: string) {
+    return this.request(`/api/admin/pvfrs/backtest/tasks/${taskId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async deleteAllBacktestTasks() {
+    // 危险操作：后端要求 confirm=true
+    return this.request('/api/admin/pvfrs/backtest/tasks?confirm=true', {
+      method: 'DELETE',
+    })
+  }
+
   // 报告管理
   async getReports(params: any = {}) {
     const queryString = new URLSearchParams(params).toString()
@@ -124,8 +137,28 @@ class PVFRSApiService {
     return response.blob()
   }
 
+  async downloadReportPdf(reportId: string) {
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${reportId}/download/pdf`, {
+      headers: this.getAuthHeaders(),
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(text || 'Download failed')
+    }
+
+    return response.blob()
+  }
+
   async deleteReport(reportId: string) {
     return this.request(`/api/admin/pvfrs/reports/${reportId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async deleteAllReports() {
+    // 危险操作：后端要求 confirm=true
+    return this.request('/api/admin/pvfrs/reports?confirm=true', {
       method: 'DELETE',
     })
   }

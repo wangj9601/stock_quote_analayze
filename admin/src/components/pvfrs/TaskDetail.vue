@@ -195,6 +195,10 @@
           <el-icon><Download /></el-icon>
           下载结果
         </el-button>
+        <el-button type="success" plain @click="exportPdf">
+          <el-icon><Download /></el-icon>
+          导出PDF
+        </el-button>
       </div>
     </el-card>
 
@@ -233,7 +237,7 @@
           </el-table-column>
           <el-table-column prop="pnl_percent" label="盈亏比" width="100">
             <template #default="scope">
-              {{ scope.row.pnl_percent !== undefined ? (Number(scope.row.pnl_percent) * 100).toFixed(2) + '%' : '-' }}
+              {{ formatPnlPercent(scope.row) }}
             </template>
           </el-table-column>
           <el-table-column prop="holding_period" label="持有(天)" width="90" />
@@ -267,10 +271,10 @@ const props = defineProps<{
 const router = useRouter()
 
 // 注入服务
-const pvfrsApi = inject('pvfrsApi')
+const pvfrsApi = inject<any>('pvfrsApi')
 
 // 获取认证头部的辅助函数
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('admin_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
@@ -280,9 +284,9 @@ const activeConfigTab = ref('basic')
 const logsLoading = ref(false)
 const tradesLoading = ref(false)
 const logLevel = ref('')
-const logs = ref([])
-const taskTrades = ref([])
-const logsContainer = ref()
+const logs = ref<any[]>([])
+const taskTrades = ref<any[]>([])
+const logsContainer = ref<any>()
 
 // 发射事件
 const emit = defineEmits(['task-updated'])
@@ -429,7 +433,8 @@ const downloadResults = async () => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `task_${props.task.id}_results.pdf`
+    // 后端下载端点返回的是 HTML 报告，不能用 .pdf 否则会提示格式错误
+    link.download = `task_${props.task.id}_report.html`
     link.click()
     
     window.URL.revokeObjectURL(url)
@@ -441,9 +446,67 @@ const downloadResults = async () => {
   }
 }
 
+const exportPdf = async () => {
+  try {
+    // 直接从任务对象获取 reportId（任务列表API已经包含了这个字段）
+    let reportId = props.task.reportId || props.task.report_id
+
+    // 如果没有 reportId，尝试通过任务ID获取报告
+    if (!reportId && props.task.status === 'completed') {
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${props.task.id}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        })
+
+        if (response.ok) {
+          const reportData = await response.json()
+          if (reportData && reportData.data && reportData.data.report_id) {
+            reportId = reportData.data.report_id
+          } else if (reportData && reportData.report_id) {
+            reportId = reportData.report_id
+          }
+        }
+      } catch (error) {
+        console.error('获取报告ID失败:', error)
+      }
+    }
+
+    if (!reportId) {
+      ElMessage.warning('该任务还没有生成报告，无法导出PDF')
+      return
+    }
+
+    // 调用服务端PDF导出端点
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${reportId}/download/pdf`, {
+      headers: getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(text || '导出PDF失败')
+    }
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `task_${props.task.id}_report.pdf`
+    link.click()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('PDF导出成功')
+
+  } catch (error: any) {
+    ElMessage.error('PDF导出失败')
+    console.error('导出PDF失败:', error)
+  }
+}
+
 // 辅助方法
 const getModeTagType = (mode: string) => {
-  const types = {
+  const types: Record<string, string> = {
     single: '',
     batch: 'success',
     optimize: 'warning',
@@ -453,7 +516,7 @@ const getModeTagType = (mode: string) => {
 }
 
 const getModeLabel = (mode: string) => {
-  const labels = {
+  const labels: Record<string, string> = {
     single: '单股回测',
     batch: '批量回测',
     optimize: '参数优化',
@@ -463,7 +526,7 @@ const getModeLabel = (mode: string) => {
 }
 
 const getStatusTagType = (status: string) => {
-  const types = {
+  const types: Record<string, string> = {
     pending: 'info',
     running: 'warning',
     completed: 'success',
@@ -474,7 +537,7 @@ const getStatusTagType = (status: string) => {
 }
 
 const getStatusLabel = (status: string) => {
-  const labels = {
+  const labels: Record<string, string> = {
     pending: '等待中',
     running: '运行中',
     completed: '已完成',
@@ -491,7 +554,7 @@ const getProgressStatus = (status: string) => {
 }
 
 const getMarketLabel = (market: string) => {
-  const labels = {
+  const labels: Record<string, string> = {
     CN: 'A股市场',
     HK: '港股市场',
     US: '美股市场'
@@ -500,7 +563,7 @@ const getMarketLabel = (market: string) => {
 }
 
 const getLogLevelClass = (level: string) => {
-  const classes = {
+  const classes: Record<string, string> = {
     INFO: 'log-info',
     WARNING: 'log-warning',
     ERROR: 'log-error'
@@ -556,6 +619,26 @@ const formatNumber = (value: number, digits = 0) => {
 const formatPercent = (value: number) => {
   if (value === null || value === undefined) return '-'
   return `${(value * 100).toFixed(2)}%`
+}
+
+// 盈亏比显示：优先用后端提供的 pnl_percent（小数比例），若历史数据为0则尝试用买卖价兜底计算
+const formatPnlPercent = (row: any) => {
+  if (!row) return '-'
+  const raw = row.pnl_percent
+  const pnl = Number(row.pnl)
+  const entry = Number(row.entry_price)
+  const exit = Number(row.exit_price)
+
+  let ratio = Number(raw)
+  if (Number.isNaN(ratio)) ratio = 0
+
+  // 若 pnl 非0但 ratio=0，且有买卖价，则用价格计算兜底（兼容历史数据入库缺字段）
+  if ((raw === null || raw === undefined || ratio === 0) && pnl !== 0 && entry > 0 && exit > 0) {
+    ratio = (exit - entry) / entry
+  }
+
+  if (Number.isNaN(ratio)) return '-'
+  return `${(ratio * 100).toFixed(2)}%`
 }
 
 // 生命周期

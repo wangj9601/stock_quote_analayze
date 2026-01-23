@@ -137,7 +137,7 @@
               <el-table-column prop="pnl_percent" label="盈亏比" width="100">
                 <template #default="scope">
                   <span :class="scope.row.pnl_percent >= 0 ? 'text-green-600' : 'text-red-600'">
-                    {{ (Number(scope.row.pnl_percent) * 100).toFixed(2) }}%
+                    {{ formatPnlPercent(scope.row) }}
                   </span>
                 </template>
               </el-table-column>
@@ -165,13 +165,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, inject, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { API_BASE } from '@/config/api'
 
 const route = useRoute()
 const router = useRouter()
+
+// 定义 props
+const props = defineProps({
+  report: {
+    type: Object,
+    default: null
+  }
+})
 
 // 注入服务
 const pvfrsApi = inject('pvfrsApi')
@@ -204,51 +212,116 @@ const loadReport = async () => {
     loading.value = true
     error.value = ''
     
-    const reportId = route.params.id
-    console.log('开始加载报告详情，reportId:', reportId)
+    // 优先使用 prop 中的 report，如果没有则从路由参数获取
+    let reportId = null
+    let taskId = null
+    
+    if (props.report) {
+      // 如果通过 prop 传递了报告数据，优先使用
+      reportId = props.report.id || props.report.report_id
+      taskId = props.report.taskId || props.report.task_id
+      console.log('使用 prop 中的报告数据，reportId:', reportId, 'taskId:', taskId)
+      
+      // 如果 prop 中已经有完整的报告数据，可以直接使用
+      if (props.report._rawData || props.report.totalReturn !== undefined) {
+        console.log('prop 中包含完整报告数据，直接使用')
+        report.value = props.report
+        loading.value = false
+        return
+      }
+    }
+    
+    // 如果没有 prop，尝试从路由参数获取
+    if (!reportId) {
+      reportId = route.params.id
+      console.log('从路由参数获取 reportId:', reportId)
+    }
+    
+    // 如果仍然没有 reportId，报错
+    if (!reportId) {
+      error.value = '无法获取报告ID，请提供有效的报告ID'
+      loading.value = false
+      return
+    }
     
     // 尝试通过报告ID获取报告详情
     let reportData = null
     let lastError = null
     
-    // 方法1: 尝试通过任务ID获取报告（report_id 可能就是 task_id）
-    try {
-      console.log('尝试方法1: 通过任务ID获取报告')
-      const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${reportId}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        }
-      })
-      
-      console.log('方法1响应状态:', response.status, response.statusText)
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log('方法1返回数据:', data)
-        // 格式化器可能返回不同的结构
-        if (data.data) {
-          reportData = data.data
-        } else if (data.report_id || data.total_return !== undefined) {
-          reportData = data
+    // 方法1: 尝试通过任务ID获取报告（如果有 taskId）
+    if (taskId) {
+      try {
+        console.log('尝试方法1: 通过任务ID获取报告，taskId:', taskId)
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${taskId}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        })
+        
+        console.log('方法1响应状态:', response.status, response.statusText)
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log('方法1返回数据:', data)
+          // 格式化器可能返回不同的结构
+          if (data.data) {
+            reportData = data.data
+          } else if (data.report_id || data.total_return !== undefined) {
+            reportData = data
+          } else {
+            // 可能是格式化后的数据，直接使用
+            reportData = data
+          }
         } else {
-          // 可能是格式化后的数据，直接使用
-          reportData = data
+          const errorText = await response.text()
+          console.warn('方法1失败:', response.status, errorText)
+          lastError = `HTTP ${response.status}: ${errorText}`
         }
-      } else {
-        const errorText = await response.text()
-        console.warn('方法1失败:', response.status, errorText)
-        lastError = `HTTP ${response.status}: ${errorText}`
+      } catch (e) {
+        console.warn('方法1异常:', e)
+        lastError = e.message
       }
-    } catch (e) {
-      console.warn('方法1异常:', e)
-      lastError = e.message
+    } else if (reportId) {
+      // 如果没有 taskId，尝试使用 reportId 作为 taskId（仅在 reportId 有效时）
+      try {
+        console.log('尝试方法1: 通过 reportId 作为 taskId 获取报告，reportId:', reportId)
+        const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/report/${reportId}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        })
+        
+        console.log('方法1响应状态:', response.status, response.statusText)
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log('方法1返回数据:', data)
+          // 格式化器可能返回不同的结构
+          if (data.data) {
+            reportData = data.data
+          } else if (data.report_id || data.total_return !== undefined) {
+            reportData = data
+          } else {
+            // 可能是格式化后的数据，直接使用
+            reportData = data
+          }
+        } else {
+          const errorText = await response.text()
+          console.warn('方法1失败:', response.status, errorText)
+          lastError = `HTTP ${response.status}: ${errorText}`
+        }
+      } catch (e) {
+        console.warn('方法1异常:', e)
+        lastError = e.message
+      }
     }
     
-    // 方法2: 如果方法1失败，尝试直接获取报告详情
-    if (!reportData) {
+    // 方法2: 如果方法1失败，尝试直接获取报告详情（仅在 reportId 有效时）
+    if (!reportData && reportId) {
       try {
-        console.log('尝试方法2: 直接获取报告详情')
+        console.log('尝试方法2: 直接获取报告详情，reportId:', reportId)
         const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports/${reportId}`, {
           headers: {
             'Content-Type': 'application/json',
@@ -277,10 +350,10 @@ const loadReport = async () => {
       }
     }
     
-    // 方法3: 尝试使用 pvfrsApi.getReport
-    if (!reportData && pvfrsApi && pvfrsApi.getReport) {
+    // 方法3: 尝试使用 pvfrsApi.getReport（仅在 reportId 有效时）
+    if (!reportData && reportId && pvfrsApi && pvfrsApi.getReport) {
       try {
-        console.log('尝试方法3: 使用 pvfrsApi.getReport')
+        console.log('尝试方法3: 使用 pvfrsApi.getReport，reportId:', reportId)
         const response = await pvfrsApi.getReport(reportId)
         console.log('方法3返回数据:', response)
         reportData = response.data || response
@@ -500,8 +573,44 @@ const getSignalType = (strength) => {
   return 'info'
 }
 
+// 盈亏比显示：优先用后端提供的 pnl_percent（小数比例），若历史数据为0则尝试用买卖价兜底计算
+const formatPnlPercent = (row) => {
+  if (!row) return '-'
+  const raw = row.pnl_percent
+  const pnl = Number(row.pnl)
+  const entry = Number(row.entry_price)
+  const exit = Number(row.exit_price)
+
+  let ratio = Number(raw)
+  if (Number.isNaN(ratio)) ratio = 0
+
+  // 若 pnl 非0但 ratio=0，且有买卖价，则用价格计算兜底（兼容历史数据入库缺字段）
+  if ((raw === null || raw === undefined || ratio === 0) && pnl !== 0 && entry > 0 && exit > 0) {
+    ratio = (exit - entry) / entry
+  }
+
+  if (Number.isNaN(ratio)) return '-'
+  return `${(ratio * 100).toFixed(2)}%`
+}
+
+// 监听 prop 变化
+watch(() => props.report, (newReport) => {
+  if (newReport) {
+    console.log('report prop 变化，重新加载报告')
+    loadReport()
+  }
+}, { immediate: false })
+
 onMounted(() => {
-  loadReport()
+  // 如果已经有 prop 中的报告数据，直接使用
+  if (props.report && (props.report._rawData || props.report.totalReturn !== undefined)) {
+    console.log('onMounted: 使用 prop 中的报告数据')
+    report.value = props.report
+    loading.value = false
+  } else {
+    // 否则加载报告
+    loadReport()
+  }
 })
 </script>
 

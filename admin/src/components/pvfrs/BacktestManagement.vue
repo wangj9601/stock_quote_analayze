@@ -151,6 +151,10 @@
             <el-icon><Delete /></el-icon>
             清理已完成
           </el-button>
+          <el-button type="danger" plain @click="deleteAllTasksAndReports">
+            <el-icon><Delete /></el-icon>
+            删除全部数据
+          </el-button>
         </div>
         <div class="list-filters">
           <el-select v-model="statusFilter" placeholder="状态筛选" clearable>
@@ -242,6 +246,15 @@
               :disabled="!canCancelTask(scope.row.status)"
             >
               取消
+            </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              @click="deleteTask(scope.row)"
+              :disabled="scope.row.status === 'running'"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -491,6 +504,40 @@ const clearCompletedTasks = async () => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('清理任务失败')
+    }
+  }
+}
+
+const deleteTask = async (task: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除任务“${task.name}”吗？\n该操作会同时删除该任务的所有回测结果/报告/交易记录/收益曲线，且不可恢复。`,
+      '确认删除',
+      { type: 'warning' }
+    )
+    await pvfrsApi.deleteBacktestTask(task.id)
+    ElMessage.success('任务及关联数据已删除')
+    await refreshTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除任务失败')
+    }
+  }
+}
+
+const deleteAllTasksAndReports = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除全部任务、报告及所有相关数据吗？\n该操作会清空任务/回测结果/交易记录/收益曲线，且不可恢复。',
+      '危险操作确认',
+      { type: 'warning' }
+    )
+    await pvfrsApi.deleteAllBacktestTasks()
+    ElMessage.success('全部任务/报告等相关数据已删除')
+    await refreshTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除全部数据失败')
     }
   }
 }

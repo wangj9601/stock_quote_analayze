@@ -67,6 +67,7 @@ class BacktestReport:
     """回测报告数据结构"""
     report_id: str            # 报告ID
     task_id: str              # 关联的任务ID
+    stock_code: str           # 股票代码
     config: BacktestConfig    # 回测配置
     total_return: float       # 总收益率
     annual_return: float      # 年化收益率
@@ -603,6 +604,7 @@ class AdminInterface(IAdminInterface):
                     report = BacktestReport(
                         report_id=report_dict.get('report_id', ''),
                         task_id=report_dict.get('task_id', ''),
+                        stock_code=report_dict.get('stock_code', ''),
                         config=config,
                         total_return=report_dict.get('total_return', 0.0),
                         annual_return=report_dict.get('annual_return', 0.0),
@@ -661,9 +663,20 @@ class AdminInterface(IAdminInterface):
                     risk_params=config_dict.get('risk_params', {})
                 )
                 
+                # 兼容旧存储：可能缺少 stock_code
+                stock_code = report_dict.get('stock_code')
+                if not stock_code:
+                    if config.stock_pool and len(config.stock_pool) == 1:
+                        stock_code = config.stock_pool[0]
+                    elif config.stock_pool and len(config.stock_pool) > 1:
+                        stock_code = "MULTI"
+                    else:
+                        stock_code = ""
+                
                 report = BacktestReport(
                     report_id=report_dict.get('report_id', ''),
                     task_id=report_dict.get('task_id', ''),
+                    stock_code=stock_code,
                     config=config,
                     total_return=report_dict.get('total_return', 0.0),
                     annual_return=report_dict.get('annual_return', 0.0),
@@ -1116,23 +1129,38 @@ class AdminInterface(IAdminInterface):
                 return_rate = (trade.exit_price - trade.entry_price) / trade.entry_price
             
             trade_dict = {
+                # 兼容前端/存储层字段名
                 'symbol': trade.symbol,
+                'stock_code': trade.symbol,
                 'entry_date': trade.entry_date,
                 'entry_price': trade.entry_price,
                 'exit_date': trade.exit_date,
+                'exit_time': trade.exit_date,  # 前端表格使用 exit_time
                 'exit_price': trade.exit_price,
                 'quantity': trade.quantity,
                 'pnl': trade.pnl,
-                'return_rate': return_rate,
+                # 注意：pnl_percent 在系统内统一用“小数比例”（例如 0.052 表示 5.2%）
+                'pnl_percent': return_rate,
+                'return_rate': return_rate,  # 保留旧字段
                 'holding_days': holding_days,
+                'holding_period': holding_days,
                 'exit_reason': trade.exit_reason
             }
             trades_dict.append(trade_dict)
         
+        # 该字段为 BacktestReport 的必填项：优先单股，否则标记为 MULTI
+        if config.stock_pool and len(config.stock_pool) == 1:
+            stock_code = config.stock_pool[0]
+        elif config.stock_pool and len(config.stock_pool) > 1:
+            stock_code = "MULTI"
+        else:
+            stock_code = ""
+
         # 创建报告对象
         report = BacktestReport(
             report_id=report_id,
             task_id=task_id,
+            stock_code=stock_code,
             config=config,
             total_return=backtest_result.total_return,
             annual_return=backtest_result.annual_return,

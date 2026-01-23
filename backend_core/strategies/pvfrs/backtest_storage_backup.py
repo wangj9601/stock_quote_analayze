@@ -24,6 +24,7 @@ from backend_api.models import (
 )
 from backend_api.models.pvfrs_enhanced import (
     PVFRSBacktestResultEnhanced,
+    PVFRSStrategyConfigEnhanced,
     PVFRSBacktestTaskEnhanced,
     PVFRSTradeRecordEnhanced,
     PVFRSEquityCurveEnhanced
@@ -187,45 +188,21 @@ class BacktestStorage:
             # 先清理原有交易记录（如果是在更新）
             _db.query(PVFRSTradeRecord).filter_by(result_id=result.id).delete()
             for t_data in report_data.get('trades', []):
-                # 兼容字段：pnl_percent 可能在 return_rate 字段中
-                pnl_percent = t_data.get('pnl_percent')
-                if pnl_percent is None:
-                    pnl_percent = t_data.get('return_rate')
-                if pnl_percent is None:
-                    pnl_percent = t_data.get('returnRate')
-
-                # 若仍缺失且存在买卖价，可兜底计算（小数比例）
-                try:
-                    entry_p = float(t_data.get('entry_price') or 0.0)
-                    exit_p = float(t_data.get('exit_price') or 0.0)
-                    if (pnl_percent is None or pnl_percent == 0) and entry_p > 0 and exit_p > 0:
-                        pnl_percent = (exit_p - entry_p) / entry_p
-                except Exception:
-                    pass
-                if pnl_percent is None:
-                    pnl_percent = 0.0
-
-                # 日期字段兼容：可能使用 exit_time/entry_time（取前10位日期）
-                entry_date_str = t_data.get('entry_date') or (t_data.get('entry_time') or '')
-                exit_date_str = t_data.get('exit_date') or (t_data.get('exit_time') or '')
-                entry_date_str = str(entry_date_str)[:10] if entry_date_str else None
-                exit_date_str = str(exit_date_str)[:10] if exit_date_str else None
-
                 trade = PVFRSTradeRecord(
                     result_id=result.id,
                     stock_code=t_data.get('stock_code', result.stock_code),
                     market=result.market,
-                    trade_date=datetime.strptime(exit_date_str, '%Y-%m-%d').date() if exit_date_str else None,
-                    entry_date=datetime.strptime(entry_date_str, '%Y-%m-%d').date() if entry_date_str else None,
-                    entry_time=datetime.strptime(entry_date_str, '%Y-%m-%d') if entry_date_str else None,
-                    exit_time=datetime.strptime(exit_date_str, '%Y-%m-%d') if exit_date_str else None,
+                    trade_date=datetime.strptime(t_data.get('exit_date'), '%Y-%m-%d').date() if t_data.get('exit_date') else None,
+                    entry_date=datetime.strptime(t_data.get('entry_date'), '%Y-%m-%d').date() if t_data.get('entry_date') else None,
+                    entry_time=datetime.strptime(t_data.get('entry_date'), '%Y-%m-%d') if t_data.get('entry_date') else None,
+                    exit_time=datetime.strptime(t_data.get('exit_date'), '%Y-%m-%d') if t_data.get('exit_date') else None,
                     entry_price=t_data.get('entry_price') or 0.0,
                     exit_price=t_data.get('exit_price') or 0.0,
                     quantity=t_data.get('quantity') or 0,
                     pnl=t_data.get('pnl') or 0.0,
-                    pnl_percent=pnl_percent,
+                    pnl_percent=t_data.get('pnl_percent') or 0.0,
                     exit_reason=t_data.get('exit_reason', ''),
-                    holding_period=t_data.get('holding_period') or t_data.get('holding_days') or 0
+                    holding_period=t_data.get('holding_days') or 0
                 )
                 _db.add(trade)
 
@@ -331,9 +308,8 @@ class BacktestStorage:
             filter_obj = filter_obj or QueryFilter()
             query = _db.query(PVFRSBacktestResultEnhanced)
             
-            # 暂时移除策略名称过滤，因为没有对应的增强版表
-            # if filter_obj.strategy_name:
-            #     query = query.join(PVFRSStrategyConfig).filter(PVFRSStrategyConfig.name.like(f"%{filter_obj.strategy_name}%"))
+            if filter_obj.strategy_name:
+                query = query.join(PVFRSStrategyConfigEnhanced).filter(PVFRSStrategyConfigEnhanced.name.like(f"%{filter_obj.strategy_name}%"))
             
             if filter_obj.min_return is not None:
                 query = query.filter(PVFRSBacktestResultEnhanced.total_return >= filter_obj.min_return)
@@ -369,160 +345,76 @@ class BacktestStorage:
                     'created_at': r.created_at.isoformat()
                 }
                 output.append(summary)
-            return output
-        finally:
-            if not db:
-                _db.close()
 
-    def delete_report(self, report_id: str, db: Optional[Session] = None) -> bool:
-        """从数据库删除报告及其关联数据"""
-        _db = db or self._get_db()
-        try:
-            result = _db.query(PVFRSBacktestResultEnhanced).filter_by(report_id=report_id).first()
-            if result:
-                # 级联删除由于关系设置可能由ORM处理，但手动清理明细表更安全
-                _db.query(PVFRSTradeRecordEnhanced).filter_by(result_id=result.id).delete()
-                _db.query(PVFRSEquityCurveEnhanced).filter_by(result_id=result.id).delete()
-                _db.delete(result)
-                _db.commit()
-                return True
-            return False
-        except Exception as e:
-            _db.rollback()
-            logger.error(f"删除回测记录失败: {str(e)}")
-            return False
-        finally:
-            if not db:
-                _db.close()
+if filter_obj.order_desc:
+query = query.order_by(desc(getattr(PVFRSBacktestResultEnhanced, filter_obj.order_by)))
+else:
+query = query.order_by(getattr(PVFRSBacktestResultEnhanced, filter_obj.order_by))
+    
+results = query.offset(filter_obj.offset).limit(filter_obj.limit).all()
+    
+output = []
+for r in results:
+summary = {
+'report_id': r.report_id,
+'task_id': r.task_id,
+'stock_code': r.stock_code,
+'total_return': float(r.total_return),
+'annual_return': float(r.annual_return),
+'max_drawdown': float(r.max_drawdown),
+'sharpe_ratio': float(r.sharpe_ratio or 0),
+'win_rate': float(r.win_rate),
+'total_trades': r.total_trades,
+'created_at': r.created_at.isoformat()
+}
+output.append(summary)
+return output
+finally:
+if not db:
+_db.close()
 
-    def delete_all_results(self, db: Optional[Session] = None) -> Dict[str, int]:
-        """删除所有回测结果（含交易记录与收益曲线），不删除任务表。
+def delete_report(self, report_id: str, db: Optional[Session] = None) -> bool:
+"""从数据库删除报告及其关联数据"""
+_db = db or self._get_db()
+try:
+result = _db.query(PVFRSBacktestResultEnhanced).filter_by(report_id=report_id).first()
+if result:
+# 级联删除由于关系设置可能由ORM处理，但手动清理明细表更安全
+_db.query(PVFRSTradeRecordEnhanced).filter_by(result_id=result.id).delete()
+_db.query(PVFRSEquityCurveEnhanced).filter_by(result_id=result.id).delete()
+_db.delete(result)
+_db.commit()
+return True
+return False
+except Exception as e:
+_db.rollback()
+logger.error(f"删除回测记录失败: {str(e)}")
+return False
+finally:
+if not db:
+_db.close()
 
-        Returns:
-            Dict[str, int]: 删除数量统计
-        """
-        _db = db or self._get_db()
-        try:
-            # 先取所有 result_id，便于删除明细表
-            result_ids = [rid for (rid,) in _db.query(PVFRSBacktestResultEnhanced.id).all()]
-            deleted_trades = 0
-            deleted_equity = 0
-            deleted_results = 0
-
-            if result_ids:
-                deleted_trades = _db.query(PVFRSTradeRecordEnhanced).filter(
-                    PVFRSTradeRecordEnhanced.result_id.in_(result_ids)
-                ).delete(synchronize_session=False)
-                deleted_equity = _db.query(PVFRSEquityCurveEnhanced).filter(
-                    PVFRSEquityCurveEnhanced.result_id.in_(result_ids)
-                ).delete(synchronize_session=False)
-                deleted_results = _db.query(PVFRSBacktestResultEnhanced).filter(
-                    PVFRSBacktestResultEnhanced.id.in_(result_ids)
-                ).delete(synchronize_session=False)
-
-            _db.commit()
-            return {
-                "deleted_results": int(deleted_results or 0),
-                "deleted_trades": int(deleted_trades or 0),
-                "deleted_equity_curves": int(deleted_equity or 0),
-            }
-        except Exception as e:
-            _db.rollback()
-            logger.error(f"删除所有回测结果失败: {str(e)}")
-            raise PVFRSException(f"删除所有回测结果失败: {str(e)}")
-        finally:
-            if not db:
-                _db.close()
-
-    def delete_tasks(
-        self,
-        task_ids: Optional[List[str]] = None,
-        status: Optional[str] = None,
-        db: Optional[Session] = None
-    ) -> Dict[str, int]:
-        """删除任务及其关联数据（结果/交易/收益曲线）。
-
-        Args:
-            task_ids: 指定要删除的任务ID列表；为空则按 status 或全部删除
-            status: 按任务状态过滤删除（如 completed/failed/cancelled）
-            db: 可选的外部会话
-
-        Returns:
-            Dict[str, int]: 删除数量统计
-        """
-        _db = db or self._get_db()
-        try:
-            # 1) 确定要删除的任务ID集合
-            if not task_ids:
-                q = _db.query(PVFRSBacktestTaskEnhanced.task_id)
-                if status:
-                    q = q.filter(PVFRSBacktestTaskEnhanced.status == status)
-                task_ids = [tid for (tid,) in q.all()]
-            else:
-                # 去重
-                task_ids = list({t for t in task_ids if t})
-
-            if not task_ids:
-                return {
-                    "deleted_tasks": 0,
-                    "deleted_results": 0,
-                    "deleted_trades": 0,
-                    "deleted_equity_curves": 0,
-                }
-
-            # 2) 先删结果相关的明细表
-            result_ids = [
-                rid for (rid,) in _db.query(PVFRSBacktestResultEnhanced.id)
-                .filter(PVFRSBacktestResultEnhanced.task_id.in_(task_ids))
-                .all()
-            ]
-
-            deleted_trades = 0
-            deleted_equity = 0
-            deleted_results = 0
-
-            if result_ids:
-                deleted_trades = _db.query(PVFRSTradeRecordEnhanced).filter(
-                    PVFRSTradeRecordEnhanced.result_id.in_(result_ids)
-                ).delete(synchronize_session=False)
-                deleted_equity = _db.query(PVFRSEquityCurveEnhanced).filter(
-                    PVFRSEquityCurveEnhanced.result_id.in_(result_ids)
-                ).delete(synchronize_session=False)
-                deleted_results = _db.query(PVFRSBacktestResultEnhanced).filter(
-                    PVFRSBacktestResultEnhanced.id.in_(result_ids)
-                ).delete(synchronize_session=False)
-
-            # 3) 再删任务表
-            deleted_tasks = _db.query(PVFRSBacktestTaskEnhanced).filter(
-                PVFRSBacktestTaskEnhanced.task_id.in_(task_ids)
-            ).delete(synchronize_session=False)
-
-            _db.commit()
-            return {
-                "deleted_tasks": int(deleted_tasks or 0),
-                "deleted_results": int(deleted_results or 0),
-                "deleted_trades": int(deleted_trades or 0),
-                "deleted_equity_curves": int(deleted_equity or 0),
-            }
-        except Exception as e:
-            _db.rollback()
-            logger.error(f"删除任务数据失败: {str(e)}")
-            raise PVFRSException(f"删除任务数据失败: {str(e)}")
-        finally:
-            if not db:
-                _db.close()
-
-    def delete_task(self, task_id: str, db: Optional[Session] = None) -> Dict[str, int]:
-        """删除单个任务及其关联数据"""
-        return self.delete_tasks(task_ids=[task_id], db=db)
-
-    def get_statistics(self, db: Optional[Session] = None) -> Dict:
-        """获取全库回测统计信息"""
-        _db = db or self._get_db()
-        try:
-            total_count = _db.query(PVFRSBacktestResultEnhanced).count()
-            avg_return = _db.query(func.avg(PVFRSBacktestResultEnhanced.total_return)).scalar() or 0
-            max_return = _db.query(func.max(PVFRSBacktestResultEnhanced.total_return)).scalar() or 0
+def get_statistics(self, db: Optional[Session] = None) -> Dict:
+"""获取全库回测统计信息"""
+_db = db or self._get_db()
+try:
+total_count = _db.query(PVFRSBacktestResult).count()
+avg_return = _db.query(func.avg(PVFRSBacktestResult.total_return)).scalar() or 0
+max_return = _db.query(func.max(PVFRSBacktestResult.total_return)).scalar() or 0
+    
+return {
+'total_reports': total_count,
+'performance_statistics': {
+'average_return': float(avg_return),
+'max_return': float(max_return)
+}
+}
+finally:
+if not db:
+_db.close()
+            total_count = _db.query(PVFRSBacktestResult).count()
+            avg_return = _db.query(func.avg(PVFRSBacktestResult.total_return)).scalar() or 0
+            max_return = _db.query(func.max(PVFRSBacktestResult.total_return)).scalar() or 0
             
             return {
                 'total_reports': total_count,

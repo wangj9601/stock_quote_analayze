@@ -492,7 +492,7 @@ class PVFRSAdminService:
             if stock_code:
                 query = query.filter(PVFRSTradeRecordEnhanced.stock_code == stock_code)
             
-            return query.order_by(PVFRSTradeRecordEnhanced.trade_date.desc().nulls_last()).offset(offset).limit(limit).all()
+            return query.order_by(PVFRSTradeRecordEnhanced.id.asc()).offset(offset).limit(limit).all()
         except Exception as e:
             logger.error(f"获取交易记录失败: {str(e)}")
             return []
