@@ -578,6 +578,9 @@ class MeanFrequencyResonanceIndicators(Base):
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     
     macro_displacement_delta = Column(Float)  # 宏观位移 Delta (d20 - d1)
+    amplitude = Column(Float, nullable=True)  # 行情振幅 |Δ|
+    ratio_d20 = Column(Float, nullable=True)  # 幅度比例 Δ/d₂₀
+    ratio_d1 = Column(Float, nullable=True)   # 幅度比例 Δ/d₁
     instant_deviation = Column(Float)         # 即时偏离度 (d20 - d) (Close - MA20)
     rising_days_z = Column(Integer)           # 上涨的天数 (Z)
     falling_days_f = Column(Integer)          # 下跌的天数 (F)

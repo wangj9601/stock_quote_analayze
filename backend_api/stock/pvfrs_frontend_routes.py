@@ -326,7 +326,7 @@ async def get_selection_summary(
             "success": True,
             "data": summary_data,
             "query_time": datetime.now().isoformat(),
-            "strategy_name": "PVFRS量价频三维共振演化策略"
+            "strategy_name": "PVFARS量价频幅度共振策略"
         })
         
     except Exception as e:
@@ -338,7 +338,7 @@ async def get_selection_summary(
             "success": False,
             "error": f"获取PVFRS选股汇总信息失败: {str(e)}",
             "query_time": datetime.now().isoformat(),
-            "strategy_name": "PVFRS量价频三维共振演化策略"
+            "strategy_name": "PVFARS量价频幅度共振策略"
         })
 
 

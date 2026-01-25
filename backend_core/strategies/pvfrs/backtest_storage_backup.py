@@ -85,7 +85,7 @@ class BacktestStorage:
             
             if not task:
                 # 获取或创建策略配置
-                strategy_name = task_data.get('config', {}).get('strategy_name', 'PVFRS')
+                strategy_name = task_data.get('config', {}).get('strategy_name', 'PVFARS')
                 strategy_config = _db.query(PVFRSStrategyConfig).filter_by(name=strategy_name).first()
                 if not strategy_config:
                     strategy_config = PVFRSStrategyConfig(

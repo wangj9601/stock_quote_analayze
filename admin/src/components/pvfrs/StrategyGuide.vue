@@ -4,10 +4,10 @@
       <!-- 策略概述 -->
       <el-tab-pane label="策略概述" name="overview">
         <div class="guide-section">
-          <h2 class="section-title">PVFRS（量价频三维共振）策略</h2>
+          <h2 class="section-title">PVFARS（量价频幅度共振）策略</h2>
           <div class="section-content">
             <p class="intro-text">
-              PVFRS策略基于量价频三维共振演化理论，将"高效率上涨"定义为市场在价格方向、微观共识与资金动力三个维度达成向上共振的状态。
+              PVFARS策略基于量价频幅度共振理论，将"高效率上涨"定义为市场在价格方向、微观共识与资金动力三个维度达成向上共振的状态，并结合幅度分析、横盘识别与风险预警。
             </p>
             
             <div class="dimensions-grid">
@@ -354,9 +354,9 @@ const riskParameters = [
 // FAQ数据
 const faqList = [
   {
-    question: 'PVFRS策略适用于哪些市场环境？',
+    question: 'PVFARS策略适用于哪些市场环境？',
     answer: `
-      <p>PVFRS策略在以下市场环境中表现较好：</p>
+      <p>PVFARS策略在以下市场环境中表现较好：</p>
       <ul>
         <li><strong>震荡上涨市场：</strong>策略能够捕捉到价格的波动性上涨机会</li>
         <li><strong>趋势性牛市：</strong>三维共振信号在趋势市场中更加可靠</li>
@@ -385,7 +385,7 @@ const faqList = [
   {
     question: '策略的预期收益和风险如何？',
     answer: `
-      <p>根据历史回测数据，PVFRS策略的典型表现：</p>
+      <p>根据历史回测数据，PVFARS策略的典型表现：</p>
       <ul>
         <li><strong>年化收益率：</strong>10%-25%（取决于市场环境和参数设置）</li>
         <li><strong>胜率：</strong>60%-75%</li>

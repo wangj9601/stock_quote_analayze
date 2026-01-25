@@ -125,6 +125,127 @@
           </div>
         </el-form-item>
 
+        <!-- 参数优化模式配置 -->
+        <el-card v-if="taskForm.mode === 'optimize'" class="optimize-config-card" header="参数优化配置">
+          <el-form-item label="优化股票代码" prop="optimizeStockCode">
+            <el-input 
+              v-model="taskForm.optimizeStockCode" 
+              placeholder="例如：000001（参数优化需要指定单只股票）"
+              clearable
+            />
+          </el-form-item>
+
+          <el-divider content-position="left">参数网格配置</el-divider>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="买入乖离率最小值" prop="paramGridBuyBiasMin">
+                <el-input
+                  v-model="taskForm.paramGridBuyBiasMin"
+                  placeholder="例如：0.01,0.02,0.03"
+                  clearable
+                />
+                <div class="form-help">逗号分隔的多个值，例如：0.01,0.02,0.03</div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="卖出乖离率最大值" prop="paramGridSellBiasMax">
+                <el-input
+                  v-model="taskForm.paramGridSellBiasMax"
+                  placeholder="例如：0.10,0.15,0.20"
+                  clearable
+                />
+                <div class="form-help">逗号分隔的多个值，例如：0.10,0.15,0.20</div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="止损比例" prop="paramGridStopLoss">
+                <el-input
+                  v-model="taskForm.paramGridStopLoss"
+                  placeholder="例如：-0.06,-0.08,-0.10"
+                  clearable
+                />
+                <div class="form-help">逗号分隔的多个值，例如：-0.06,-0.08,-0.10</div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="止盈比例" prop="paramGridTakeProfit">
+                <el-input
+                  v-model="taskForm.paramGridTakeProfit"
+                  placeholder="例如：0.15,0.20,0.25"
+                  clearable
+                />
+                <div class="form-help">逗号分隔的多个值，例如：0.15,0.20,0.25</div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="最大持有天数" prop="paramGridMaxHoldingDays">
+                <el-input
+                  v-model="taskForm.paramGridMaxHoldingDays"
+                  placeholder="例如：30,45,60"
+                  clearable
+                />
+                <div class="form-help">逗号分隔的多个值，例如：30,45,60</div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="优化目标" prop="optimizationObjective">
+                <el-select v-model="taskForm.optimizationObjective" placeholder="选择优化目标" class="w-full" multiple>
+                  <el-option label="总收益率" value="total_return" />
+                  <el-option label="夏普比率" value="sharpe_ratio" />
+                  <el-option label="最大回撤" value="max_drawdown" />
+                  <el-option label="胜率" value="win_rate" />
+                  <el-option label="综合评分" value="composite_score" />
+                </el-select>
+                <div class="form-help">可选择多个优化目标，系统将综合评分</div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-alert
+            v-if="calculateParamCombinations() > 100"
+            type="warning"
+            :closable="false"
+            style="margin-top: 10px;"
+          >
+            参数组合数: {{ calculateParamCombinations() }}，优化可能需要较长时间，建议减少参数值数量
+          </el-alert>
+        </el-card>
+
+        <!-- 策略对比模式配置 -->
+        <el-card v-if="taskForm.mode === 'comparison'" class="comparison-config-card" header="策略对比配置">
+          <el-form-item label="对比策略配置">
+            <el-button type="primary" @click="addComparisonConfig">添加策略配置</el-button>
+            <div class="form-help">可以添加多个策略配置进行对比回测</div>
+          </el-form-item>
+
+          <el-table :data="taskForm.comparisonConfigs" border style="margin-top: 10px;">
+            <el-table-column prop="name" label="配置名称" width="150">
+              <template #default="scope">
+                <el-input v-model="scope.row.name" placeholder="配置名称" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="description" label="描述" min-width="200">
+              <template #default="scope">
+                <el-input v-model="scope.row.description" placeholder="配置描述" />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="100">
+              <template #default="scope">
+                <el-button size="small" type="danger" @click="removeComparisonConfig(scope.$index)">
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+
         <el-form-item>
           <el-button 
             type="primary" 
@@ -322,7 +443,17 @@ const taskForm = reactive({
   initialCapital: 100000,
   market: 'CN',
   stockCode: '',
-  stockList: ''
+  stockList: '',
+  // 参数优化模式配置
+  optimizeStockCode: '',
+  paramGridBuyBiasMin: '0.01,0.02,0.03',
+  paramGridSellBiasMax: '0.10,0.15,0.20',
+  paramGridStopLoss: '-0.06,-0.08,-0.10',
+  paramGridTakeProfit: '0.15,0.20,0.25',
+  paramGridMaxHoldingDays: '30,45,60',
+  optimizationObjective: ['composite_score'],
+  // 策略对比模式配置
+  comparisonConfigs: []
 })
 
 // 表单验证规则
@@ -371,6 +502,14 @@ const canCreateTask = computed(() => {
     return false
   }
   
+  if (taskForm.mode === 'optimize' && !taskForm.optimizeStockCode) {
+    return false
+  }
+  
+  if (taskForm.mode === 'comparison' && (!taskForm.comparisonConfigs || taskForm.comparisonConfigs.length === 0)) {
+    return false
+  }
+  
   return true
 })
 
@@ -395,7 +534,16 @@ const createTask = async () => {
     
     const taskData = {
       ...taskForm,
-      stockList: taskForm.mode === 'batch' ? parseStockList(taskForm.stockList) : undefined
+      stockList: taskForm.mode === 'batch' ? parseStockList(taskForm.stockList) : undefined,
+      stockCode: taskForm.mode === 'optimize' ? taskForm.optimizeStockCode : taskForm.stockCode,
+      paramGrid: taskForm.mode === 'optimize' ? {
+        buy_bias_min: parseParamGrid(taskForm.paramGridBuyBiasMin),
+        sell_bias_max: parseParamGrid(taskForm.paramGridSellBiasMax),
+        stop_loss: parseParamGrid(taskForm.paramGridStopLoss),
+        take_profit: parseParamGrid(taskForm.paramGridTakeProfit),
+        max_holding_days: parseParamGrid(taskForm.paramGridMaxHoldingDays, true)
+      } : undefined,
+      optimizationObjective: taskForm.mode === 'optimize' ? taskForm.optimizationObjective : undefined
     }
     
     const result = await pvfrsApi.createBacktestTask(taskData)
@@ -424,7 +572,15 @@ const resetForm = () => {
     initialCapital: 100000,
     market: 'CN',
     stockCode: '',
-    stockList: ''
+    stockList: '',
+    optimizeStockCode: '',
+    paramGridBuyBiasMin: '0.01,0.02,0.03',
+    paramGridSellBiasMax: '0.10,0.15,0.20',
+    paramGridStopLoss: '-0.06,-0.08,-0.10',
+    paramGridTakeProfit: '0.15,0.20,0.25',
+    paramGridMaxHoldingDays: '30,45,60',
+    optimizationObjective: ['composite_score'],
+    comparisonConfigs: []
   })
 }
 
@@ -573,6 +729,43 @@ const parseStockList = (text: string): string[] => {
     .filter(line => line && /^\d{6}$/.test(line))
 }
 
+const parseParamGrid = (valueStr: string, isInt: boolean = false): any[] => {
+  if (!valueStr) return []
+  return valueStr.split(',')
+    .map(v => v.trim())
+    .filter(v => v.length > 0)
+    .map(v => isInt ? parseInt(v) : parseFloat(v))
+}
+
+const calculateParamCombinations = (): number => {
+  if (taskForm.mode !== 'optimize') return 0
+  
+  const buyBiasCount = parseParamGrid(taskForm.paramGridBuyBiasMin).length || 1
+  const sellBiasCount = parseParamGrid(taskForm.paramGridSellBiasMax).length || 1
+  const stopLossCount = parseParamGrid(taskForm.paramGridStopLoss).length || 1
+  const takeProfitCount = parseParamGrid(taskForm.paramGridTakeProfit).length || 1
+  const maxHoldingCount = parseParamGrid(taskForm.paramGridMaxHoldingDays, true).length || 1
+  
+  return buyBiasCount * sellBiasCount * stopLossCount * takeProfitCount * maxHoldingCount
+}
+
+const addComparisonConfig = () => {
+  if (!taskForm.comparisonConfigs) {
+    taskForm.comparisonConfigs = []
+  }
+  taskForm.comparisonConfigs.push({
+    name: `配置${taskForm.comparisonConfigs.length + 1}`,
+    description: '',
+    config: {}
+  })
+}
+
+const removeComparisonConfig = (index: number) => {
+  if (taskForm.comparisonConfigs && taskForm.comparisonConfigs.length > index) {
+    taskForm.comparisonConfigs.splice(index, 1)
+  }
+}
+
 const handleSizeChange = (size: number) => {
   pageSize.value = size
   refreshTasks()
@@ -684,6 +877,15 @@ onMounted(() => {
 
 .task-form {
   @apply max-w-none;
+}
+
+.form-help {
+  @apply text-xs text-gray-500 mt-1;
+}
+
+.optimize-config-card,
+.comparison-config-card {
+  @apply mt-4 shadow-sm;
 }
 
 .stock-input-area {

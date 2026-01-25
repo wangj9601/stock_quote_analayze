@@ -328,7 +328,7 @@
             <el-col :span="12">
               <el-card header="任务状态">
                 <div v-if="currentTask" class="task-status">
-                  <el-steps :active="currentTask.step" align-center>
+                  <el-steps :active="currentTask.step || 0" align-center>
                     <el-step title="数据准备" />
                     <el-step title="信号生成" />
                     <el-step title="回测执行" />
@@ -337,10 +337,10 @@
                   
                   <div class="task-progress">
                     <el-progress 
-                      :percentage="currentTask?.progress ?? 0" 
+                      :percentage="currentTask?.progress_percentage || currentTask?.progress || 0" 
                       :status="progressStatus"
                     />
-                    <p class="task-message">{{ currentTask.message }}</p>
+                    <p class="task-message">{{ currentTask.current_step || currentTask.message }}</p>
                   </div>
                   
                   <div v-if="currentTask.log" class="task-log">
@@ -524,7 +524,7 @@
     <!-- 帮助对话框 -->
     <el-dialog
       v-model="showHelpDialog"
-      title="PVFRS策略说明"
+      title="PVFARS策略说明"
       width="80%"
       :before-close="handleHelpClose"
     >
@@ -532,9 +532,9 @@
         <el-tabs>
           <el-tab-pane label="策略概述" name="overview">
             <div class="help-section">
-              <h3>PVFRS（量价频三维共振）策略</h3>
+              <h3>PVFARS（量价频幅度共振）策略</h3>
               <p>
-                PVFRS策略基于量价频三维共振演化理论，将"高效率上涨"定义为市场在价格方向、微观共识与资金动力三个维度达成向上共振的状态。
+                PVFARS策略基于量价频幅度共振理论，将"高效率上涨"定义为市场在价格方向、微观共识与资金动力三个维度达成向上共振的状态，并结合幅度分析、横盘识别与风险预警。
               </p>
               
               <h4>三个维度</h4>
@@ -955,7 +955,7 @@ const startBacktest = async () => {
         const result = await response.json()
         if (response.ok) {
           ElMessage.success('回测任务提交成功')
-          currentTask.value = result
+          currentTask.value = result.data || result
           pollTaskStatus()
         } else {
           ElMessage.error(result.detail || '回测任务提交失败')
@@ -983,7 +983,7 @@ const startBacktest = async () => {
     const result = await response.json()
     if (response.ok) {
       ElMessage.success('回测任务提交成功')
-      currentTask.value = result
+      currentTask.value = result.data || result
       pollTaskStatus()
     } else {
       ElMessage.error(result.detail || '回测任务提交失败')
@@ -999,20 +999,28 @@ const startBacktest = async () => {
 const pollTaskStatus = async () => {
   if (!currentTask.value) return
   
+  const taskId = currentTask.value.task_id || currentTask.value.id
+  if (!taskId) {
+    console.error('无法获取任务ID:', currentTask.value)
+    return
+  }
+  
   try {
-    const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/progress/${currentTask.value.id}`, {
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/progress/${taskId}`, {
       headers: {
         ...getAuthHeaders()
       }
     })
     const task = await response.json()
     
-    currentTask.value = task
+    // 更新当前任务状态，使用data字段中的实际任务数据
+    currentTask.value = task.data || task
     
-    if (task.status === 'completed') {
+    const taskData = task.data || task
+    if (taskData.status === 'completed') {
       ElMessage.success('回测完成')
       loadResults()
-    } else if (task.status === 'failed') {
+    } else if (taskData.status === 'failed') {
       ElMessage.error('回测失败')
     } else {
       // 继续轮询
@@ -1043,23 +1051,52 @@ const resetBacktestForm = () => {
 
 const loadResults = async () => {
   try {
-    const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`, {
+    const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports`, {
       headers: {
         ...getAuthHeaders()
       }
     })
-    const results = await response.json()
-    backtestResults.value = Array.isArray(results)
-      ? results.map(normalizeBacktestResult)
-      : []
+    const result = await response.json()
+    
+    // 处理增强版API的响应格式
+    if (result.success && result.data) {
+      backtestResults.value = Array.isArray(result.data)
+        ? result.data.map(normalizeBacktestResult)
+        : []
+    } else {
+      backtestResults.value = []
+    }
   } catch (error) {
     ElMessage.error('获取回测结果失败')
+    console.error('获取回测结果失败:', error)
   }
 }
 
-const selectResult = (result: any) => {
+const selectResult = async (result: any) => {
   selectedResult.value = result
-  selectedResultTrades.value = result.trades || []
+  selectedResultTrades.value = [] // 先清空
+  
+  // 获取交易明细
+  if (result.taskId) {
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/pvfrs/backtest/trades/${result.taskId}`, {
+        headers: {
+          ...getAuthHeaders()
+        }
+      })
+      
+      if (response.ok) {
+        const tradesData = await response.json()
+        if (tradesData.success && tradesData.data) {
+          selectedResultTrades.value = Array.isArray(tradesData.data) ? tradesData.data : []
+        }
+      } else {
+        console.warn('获取交易明细失败:', response.status)
+      }
+    } catch (error) {
+      console.error('获取交易明细异常:', error)
+    }
+  }
 }
 
 const clearResults = async () => {
@@ -1067,7 +1104,7 @@ const clearResults = async () => {
     type: 'warning'
   }).then(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/admin/pvfrs/results`, {
+      const response = await fetch(`${API_BASE}/api/admin/pvfrs/reports?confirm=true`, {
         method: 'DELETE',
         headers: {
           ...getAuthHeaders()
@@ -1082,6 +1119,7 @@ const clearResults = async () => {
       }
     } catch (error) {
       ElMessage.error('清空失败')
+      console.error('清空失败:', error)
     }
   })
 }
@@ -1143,13 +1181,13 @@ const exportReport = () => {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `PVFRS回测报告_${selectedResult.value.code}_${new Date().toISOString().split('T')[0]}.md`
+  link.download = `PVFARS回测报告_${selectedResult.value.code}_${new Date().toISOString().split('T')[0]}.md`
   link.click()
   URL.revokeObjectURL(url)
 }
 
 const generateReport = (result: any) => {
-  return `# PVFRS策略回测报告
+  return `# PVFARS策略回测报告
 
 ## 基本信息
 - 股票代码: ${result.code}

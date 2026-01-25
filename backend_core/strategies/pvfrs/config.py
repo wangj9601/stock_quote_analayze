@@ -15,7 +15,7 @@ from .models import ConfigurationException
 class PVFRSConfigManager(IConfigManager):
     """PVFRS配置管理器"""
     
-    def __init__(self, config_file: str = "pvfrs_config.json"):
+    def __init__(self, config_file: str = "pvfars_config.json"):
         self.config_file = config_file
         self.default_config_path = os.path.join(
             os.path.dirname(__file__), 
@@ -72,6 +72,9 @@ class PVFRSConfigManager(IConfigManager):
             'min_data_points': 25,                # 最少数据点数
             'price_change_threshold': 0.001,      # 价格变化阈值
             'volume_change_threshold': 0.1,       # 成交量变化阈值
+            
+            # === 幅度指标（图片对齐） ===
+            'amplitude_flat_threshold': 1e-6,     # |Δ| < ε 判为横盘
         }
     
     def load_config(self, config_path: Optional[str] = None) -> Dict:

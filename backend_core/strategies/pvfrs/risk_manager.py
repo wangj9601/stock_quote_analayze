@@ -40,7 +40,7 @@ class RiskManager(IRiskManager):
         # 趋势反转检测参数
         self.reversal_conditions_low_profit = self.config.get('sell_reversal_conditions_low_profit', 3)
         self.reversal_conditions_high_profit = self.config.get('sell_reversal_conditions_high_profit', 2)
-        self.max_bias = self.config.get('sell_bias_max', 0.15)  # 最大偏离度15%
+        self.max_bias = self.config.get('sell_bias_max', 0.15)  # 最大偏离度15%（默认值，会动态调整）
         self.max_instant_deviation = self.config.get('sell_instant_deviation_max', 0.10)  # 最大即时强度10%
         
         # 内部状态
@@ -385,6 +385,53 @@ class RiskManager(IRiskManager):
             
             # 检查趋势反转
             if len(data_history) >= 20:
+                # 计算持仓天数
+                holding_days = self._calculate_holding_days(entry_date, current_date)
+                
+                # 获取bias趋势（如果可用）
+                bias_trend = None
+                try:
+                    from .analyzers import PriceDimensionAnalyzer
+                    price_analyzer = PriceDimensionAnalyzer()
+                    price_indicators = price_analyzer.analyze(data_history)
+                    bias_trend = price_indicators.get('bias_trend', None)
+                except Exception:
+                    pass
+                
+                # 动态计算卖出bias阈值
+                dynamic_sell_bias_max = self.calculate_dynamic_sell_bias_threshold(
+                    current_profit_pct, holding_days, bias_trend
+                )
+                
+                # 计算反转指标（包含bias）
+                reversal_indicators = self._calculate_reversal_indicators(data_history)
+                
+                # 临时更新max_bias用于检查
+                original_max_bias = self.max_bias
+                self.max_bias = dynamic_sell_bias_max
+                
+                # 检查反转条件（使用动态阈值）
+                reversal_conditions = self._check_reversal_conditions(reversal_indicators)
+                
+                # 恢复原始阈值
+                self.max_bias = original_max_bias
+                
+                # 检查是否触发超买（使用动态阈值）
+                if reversal_conditions.get('overbought', False):
+                    reason = (f"动态超买退出: bias={reversal_indicators['bias']:.2%} > "
+                            f"动态阈值{dynamic_sell_bias_max:.2%} "
+                            f"(盈利{current_profit_pct:.2%}, 持仓{holding_days}天)")
+                    return Signal(
+                        symbol=symbol,
+                        date=current_date,
+                        signal_type=SignalType.SELL,
+                        price=current_price,
+                        strength=0.8,
+                        reason=reason,
+                        conditions_met={'overbought': True, 'dynamic_bias_threshold': dynamic_sell_bias_max}
+                    )
+                
+                # 检查趋势反转
                 is_reversal, reversal_details = self.detect_trend_reversal_with_profit(
                     data_history, current_profit_pct
                 )
@@ -468,8 +515,62 @@ class RiskManager(IRiskManager):
             'current_price': current_price
         }
     
+    def calculate_dynamic_sell_bias_threshold(self, current_profit_pct: float, 
+                                            holding_days: int, bias_trend: Dict = None) -> float:
+        """动态计算卖出乖离率阈值（增强版）
+        
+        根据盈利情况和持仓时间动态调整sell_bias_max
+        
+        Args:
+            current_profit_pct: 当前盈利百分比
+            holding_days: 持仓天数
+            bias_trend: 乖离率趋势分析结果（可选）
+            
+        Returns:
+            float: 动态调整后的卖出乖离率阈值
+        """
+        try:
+            base_threshold = 0.15  # 基础阈值15%
+            
+            # 1. 根据盈利情况调整
+            if current_profit_pct > 0.20:  # 高盈利（>20%）
+                profit_adjustment = 0.05  # +5%，允许更高偏离
+            elif current_profit_pct > 0.10:  # 中等盈利（10%-20%）
+                profit_adjustment = 0.0  # 不变
+            else:  # 低盈利（<10%）
+                profit_adjustment = -0.05  # -5%，及时止盈
+            
+            # 2. 根据持仓时间调整
+            if holding_days < 10:  # 短期持仓（<10天）
+                time_adjustment = -0.02  # -2%
+            elif holding_days > 30:  # 长期持仓（>30天）
+                time_adjustment = 0.02  # +2%
+            else:
+                time_adjustment = 0.0
+            
+            # 3. 根据bias趋势调整（如果bias连续3天扩大且超过阈值，触发卖出）
+            bias_trend_adjustment = 0.0
+            if bias_trend:
+                trend_5d = bias_trend.get('trend_5d', 'stable')
+                is_expanding = bias_trend.get('is_expanding', False)
+                current_bias = bias_trend.get('current_bias', 0.0)
+                
+                # 如果bias连续扩大且超过基础阈值，降低阈值以提前卖出
+                if is_expanding and current_bias > base_threshold:
+                    bias_trend_adjustment = -0.03  # -3%
+            
+            # 计算最终阈值
+            dynamic_threshold = base_threshold + profit_adjustment + time_adjustment + bias_trend_adjustment
+            
+            # 确保阈值在合理范围内（8%-25%）
+            return max(0.08, min(0.25, dynamic_threshold))
+            
+        except Exception as e:
+            # 如果计算失败，返回默认值
+            return self.max_bias
+    
     def _check_reversal_conditions(self, indicators: Dict) -> Dict[str, bool]:
-        """检查反转条件
+        """检查反转条件（增强版：使用动态bias阈值）
         
         Args:
             indicators: 反转指标字典
@@ -489,8 +590,13 @@ class RiskManager(IRiskManager):
         # 3. 成交量维度反转
         conditions['volume_reversal'] = indicators['efficiency'] < 0
         
-        # 4. 超买检查
-        conditions['overbought'] = indicators['bias'] > self.max_bias
+        # 4. 超买检查（使用动态阈值，如果有盈利信息）
+        # 注意：这里需要从外部传入盈利信息，暂时使用默认阈值
+        current_bias = indicators['bias']
+        conditions['overbought'] = current_bias > self.max_bias
+        
+        # 5. 检查bias趋势（如果bias连续3天扩大且超过阈值）
+        # 这个检查需要在调用时传入bias_trend信息
         conditions['overextended'] = indicators['instant_deviation'] > (
             indicators['avg_price_20d'] * self.max_instant_deviation
         )

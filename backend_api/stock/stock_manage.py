@@ -1567,3 +1567,162 @@ def clean_nan(obj):
     if isinstance(obj, list):
         return [clean_nan(v) for v in obj]
     return obj
+
+
+@router.post("/quote")
+async def get_batch_quotes(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    批量获取股票报价数据
+    前端自选股页面使用，支持A股和港股
+    
+    Args:
+        request: 包含codes数组的请求体
+        db: 数据库会话
+        
+    Returns:
+        包含股票报价数据的数组
+    """
+    try:
+        # 解析请求体
+        import json
+        body = await request.body()
+        data = json.loads(body.decode('utf-8'))
+        codes = data.get('codes', [])
+        
+        if not codes:
+            return JSONResponse({
+                'success': False,
+                'message': '缺少股票代码列表'
+            }, status_code=400)
+        
+        print(f"[batch_quotes] 收到请求: codes={codes}")
+        
+        # 获取最新交易日期
+        latest_date_result = pd.read_sql_query("""
+            SELECT MAX(trade_date) AS latest_date 
+            FROM stock_realtime_quote 
+            WHERE change_percent IS NOT NULL
+        """, db.bind)
+        
+        latest_trade_date = None
+        if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
+            latest_trade_date = latest_date_result.iloc[0]['latest_date']
+        
+        # 获取港股最新交易日期
+        latest_hk_date_result = pd.read_sql_query("""
+            SELECT MAX(trade_date) AS latest_date 
+            FROM stock_realtime_quote_hk 
+            WHERE change_percent IS NOT NULL
+        """, db.bind)
+        
+        latest_hk_trade_date = None
+        if not latest_hk_date_result.empty and latest_hk_date_result.iloc[0]['latest_date'] is not None:
+            latest_hk_trade_date = latest_hk_date_result.iloc[0]['latest_date']
+        
+        result = []
+        
+        for code in codes:
+            try:
+                # 判断是否为港股
+                is_hk = is_hk_stock(code, db)
+                
+                if is_hk and latest_hk_trade_date:
+                    # 港股数据
+                    quote_data = db.query(StockRealtimeQuoteHK).filter(
+                        StockRealtimeQuoteHK.code == code,
+                        StockRealtimeQuoteHK.trade_date == latest_hk_trade_date
+                    ).first()
+                    
+                    if quote_data:
+                        stock_info = {
+                            'code': quote_data.code,
+                            'name': quote_data.name or '',
+                            'current_price': quote_data.current_price,
+                            'change_amount': None,  # StockRealtimeQuote没有change_amount字段
+                            'change_percent': quote_data.change_percent,
+                            'open': quote_data.open,
+                            'pre_close': quote_data.pre_close,
+                            'high': quote_data.high,
+                            'low': quote_data.low,
+                            'volume': quote_data.volume,
+                            'turnover': quote_data.amount  # 使用amount而不是turnover
+                        }
+                        result.append(clean_nan(stock_info))
+                        continue
+                
+                elif latest_trade_date:
+                    # A股数据
+                    quote_data = db.query(StockRealtimeQuote).filter(
+                        StockRealtimeQuote.code == code,
+                        StockRealtimeQuote.trade_date == latest_trade_date
+                    ).first()
+                    
+                    if quote_data:
+                        stock_info = {
+                            'code': quote_data.code,
+                            'name': quote_data.name or '',
+                            'current_price': quote_data.current_price,
+                            'change_amount': None,  # StockRealtimeQuote没有change_amount字段
+                            'change_percent': quote_data.change_percent,
+                            'open': quote_data.open,
+                            'pre_close': quote_data.pre_close,
+                            'high': quote_data.high,
+                            'low': quote_data.low,
+                            'volume': quote_data.volume,
+                            'turnover': quote_data.amount  # 使用amount而不是turnover
+                        }
+                        result.append(clean_nan(stock_info))
+                        continue
+                
+                # 如果没有找到数据，返回基本信息
+                print(f"[batch_quotes] 未找到股票 {code} 的行情数据")
+                result.append({
+                    'code': code,
+                    'name': '',
+                    'current_price': None,
+                    'change_amount': None,
+                    'change_percent': None,
+                    'open': None,
+                    'pre_close': None,
+                    'high': None,
+                    'low': None,
+                    'volume': None,
+                    'turnover': None
+                })
+                
+            except Exception as e:
+                print(f"[batch_quotes] 处理股票 {code} 时出错: {e}")
+                result.append({
+                    'code': code,
+                    'name': '',
+                    'current_price': None,
+                    'change_amount': None,
+                    'change_percent': None,
+                    'open': None,
+                    'pre_close': None,
+                    'high': None,
+                    'low': None,
+                    'volume': None,
+                    'turnover': None
+                })
+        
+        print(f"[batch_quotes] 返回数据: {len(result)} 条记录")
+        
+        return JSONResponse({
+            'success': True,
+            'data': result
+        })
+        
+    except Exception as e:
+        print(f"[batch_quotes] 错误: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        return JSONResponse({
+            'success': False,
+            'message': f'获取股票报价失败: {str(e)}',
+            'error': str(e),
+            'traceback': tb
+        }, status_code=500)

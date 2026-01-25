@@ -95,7 +95,12 @@ class StrategyEngine(IStrategyEngine):
                     price_indicators['macro_displacement'],
                     price_indicators['avg_price_20d']
                 ),
-                resonance_strength=resonance_result['resonance_strength']
+                resonance_strength=resonance_result['resonance_strength'],
+                # 幅度指标
+                amplitude=price_indicators.get('amplitude'),
+                ratio_d20=price_indicators.get('ratio_d20'),
+                ratio_d1=price_indicators.get('ratio_d1'),
+                is_sideways=price_indicators.get('is_sideways')
             )
             
             return pvfrs_indicators
@@ -253,7 +258,11 @@ class StrategyEngine(IStrategyEngine):
                         price_indicators['macro_displacement'],
                         price_indicators['avg_price_20d']
                     ),
-                    resonance_strength=resonance_result['resonance_strength']
+                    resonance_strength=resonance_result['resonance_strength'],
+                    amplitude=price_indicators.get('amplitude'),
+                    ratio_d20=price_indicators.get('ratio_d20'),
+                    ratio_d1=price_indicators.get('ratio_d1'),
+                    is_sideways=price_indicators.get('is_sideways')
                 )
                 
                 # 5. 生成买入信号
@@ -338,7 +347,11 @@ class StrategyEngine(IStrategyEngine):
                         price_indicators['macro_displacement'],
                         price_indicators['avg_price_20d']
                     ),
-                    resonance_strength=resonance_result['resonance_strength']
+                    resonance_strength=resonance_result['resonance_strength'],
+                    amplitude=price_indicators.get('amplitude'),
+                    ratio_d20=price_indicators.get('ratio_d20'),
+                    ratio_d1=price_indicators.get('ratio_d1'),
+                    is_sideways=price_indicators.get('is_sideways')
                 )
                 
                 entry_timing_analysis = self.signal_generator.get_entry_timing_analysis(

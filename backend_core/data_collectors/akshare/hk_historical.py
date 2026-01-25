@@ -163,6 +163,8 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     date VARCHAR(20) NOT NULL,
                     market_type VARCHAR(10) NOT NULL,
                     macro_displacement_delta REAL,
+                    ratio_d20 REAL,
+                    ratio_d1 REAL,
                     instant_deviation REAL,
                     rising_days_z INTEGER,
                     falling_days_f INTEGER,
@@ -1224,10 +1226,12 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                         try:
                             session.execute(text("""
                                 INSERT INTO mean_frequency_resonance_indicators
-                                (code, date, market_type, macro_displacement_delta, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
-                                VALUES (:code, :date, :market_type, :delta, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
+                                (code, date, market_type, macro_displacement_delta, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
+                                VALUES (:code, :date, :market_type, :delta, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
                                 ON CONFLICT (code, date, market_type) DO UPDATE SET
                                     macro_displacement_delta = EXCLUDED.macro_displacement_delta,
+                                    ratio_d20 = EXCLUDED.ratio_d20,
+                                    ratio_d1 = EXCLUDED.ratio_d1,
                                     instant_deviation = EXCLUDED.instant_deviation,
                                     rising_days_z = EXCLUDED.rising_days_z,
                                     falling_days_f = EXCLUDED.falling_days_f,
@@ -1241,6 +1245,8 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                                 'date': date_str,
                                 'market_type': 'HK',
                                 'delta': res['macro_displacement_delta'],
+                                'ratio_d20': res.get('ratio_d20'),
+                                'ratio_d1': res.get('ratio_d1'),
                                 'instant_deviation': res['instant_deviation'],
                                 'z': res['rising_days_z'],
                                 'f': res['falling_days_f'],

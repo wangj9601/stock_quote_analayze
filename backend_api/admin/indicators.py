@@ -343,7 +343,6 @@ async def get_indicator_history(
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
     market_type: str = Query("CN", description="CN 或 HK"),
-    current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """查询指定股票和日期范围的所有指标数据"""
@@ -461,6 +460,318 @@ async def get_indicator_history(
         "data": result_list,
         "total": len(result_list)
     }
+
+@router.post("/generate-batch-watchlist")
+async def generate_batch_watchlist_indicators(
+    request: Dict[str, Any],
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """批量生成自选股的指标数据"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[批量生成指标] 收到请求，用户: {current_user.username if hasattr(current_user, 'username') else 'unknown'}")
+    indicators = request.get("indicators", [])
+    logger.info(f"[批量生成指标] 请求的指标类型: {indicators}")
+    
+    if not indicators:
+        logger.warning("[批量生成指标] 未选择指标类型")
+        return {
+            "success": False,
+            "message": "请选择要生成的指标类型"
+        }
+    
+    try:
+        # 导入自选股模型
+        from backend_api.models import Watchlist
+        
+        # 获取所有自选股
+        watchlist_stocks = db.query(Watchlist).all()
+        logger.info(f"[批量生成指标] 找到 {len(watchlist_stocks)} 只自选股")
+        
+        if not watchlist_stocks:
+            logger.warning("[批量生成指标] 自选股表中没有股票数据")
+            return {
+                "success": False,
+                "message": "自选股表中没有股票数据"
+            }
+        
+        # 导入指标计算器和pandas
+        import pandas as pd
+        from backend_core.utils.ma_calculator import MACalculator
+        from backend_core.utils.mavol_calculator import MAVOLCalculator
+        from backend_core.utils.macd_calculator import MACDCalculator
+        from backend_core.utils.kdj_calculator import KDJCalculator
+        from backend_core.utils.rsi_calculator import RSICalculator
+        from backend_core.utils.boll_calculator import BOLLCalculator
+        from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
+        
+        results = {
+            "total_stocks": len(watchlist_stocks),
+            "processed_stocks": 0,
+            "success_stocks": 0,
+            "failed_stocks": 0,
+            "indicator_results": {},
+            "failed_stocks_detail": []
+        }
+        
+        # 为每个指标初始化统计
+        for indicator in indicators:
+            results["indicator_results"][indicator] = {
+                "success_count": 0,
+                "failed_count": 0
+            }
+        
+        # 逐个处理自选股
+        logger.info(f"[批量生成指标] 开始处理 {len(watchlist_stocks)} 只股票")
+        for idx, stock in enumerate(watchlist_stocks, 1):
+            if idx % 10 == 0:
+                logger.info(f"[批量生成指标] 已处理 {idx}/{len(watchlist_stocks)} 只股票")
+            stock_code = stock.stock_code
+            results["processed_stocks"] += 1
+            
+            try:
+                # 判断股票市场类型
+                market_type = "CN" if len(stock_code) == 6 else "HK"
+                
+                # 从数据库获取历史数据
+                if market_type == "CN":
+                    # A股历史数据
+                    historical_data = db.query(HistoricalQuotes).filter(
+                        HistoricalQuotes.code == stock_code
+                    ).order_by(HistoricalQuotes.date).all()
+                else:  # HK
+                    # 港股历史数据
+                    historical_data = db.query(HistoricalQuotesHK).filter(
+                        HistoricalQuotesHK.code == stock_code
+                    ).order_by(HistoricalQuotesHK.date).all()
+                
+                # 转换为DataFrame
+                historical_df = pd.DataFrame([{
+                    'date': item.date,
+                    'open': item.open,
+                    'high': item.high,
+                    'low': item.low,
+                    'close': item.close,
+                    'volume': item.volume
+                } for item in historical_data])
+                
+                if historical_df.empty:
+                    results["failed_stocks"] += 1
+                    results["failed_stocks_detail"].append({
+                        "stock_code": stock_code,
+                        "stock_name": stock.stock_name,
+                        "error": "数据库中没有历史数据"
+                    })
+                    continue
+                
+                # 生成各个指标
+                stock_success = True
+                for indicator in indicators:
+                    try:
+                        if indicator == "ma":
+                            ma_data = MACalculator.calculate_ma_for_dataframe(historical_df)
+                            # 保存到数据库
+                            for _, row in ma_data.iterrows():
+                                db_ma = MAIndicators(
+                                    code=stock_code,
+                                    date=row['date'],
+                                    market_type=market_type,
+                                    ma5=row['ma5'],
+                                    ma10=row['ma10'],
+                                    ma20=row['ma20'],
+                                    ma30=row['ma30'],
+                                    ma60=row['ma60'],
+                                    ma120=row['ma120'],
+                                    ma200=row['ma200']
+                                )
+                                db.merge(db_ma)
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                        elif indicator == "mavol":
+                            calculator = MAVOLCalculator()
+                            mavol_data = calculator.calculate_mavol_for_dataframe(historical_df)
+                            # 保存到数据库
+                            for _, row in mavol_data.iterrows():
+                                db_mavol = MAVOLIndicators(
+                                    code=stock_code,
+                                    date=row['date'],
+                                    market_type=market_type,
+                                    mavol5=row['mavol5'],
+                                    mavol10=row['mavol10'],
+                                    mavol20=row['mavol20'],
+                                    mavol30=row['mavol30'],
+                                    mavol60=row['mavol60'],
+                                    mavol120=row['mavol120'],
+                                    mavol200=row['mavol200']
+                                )
+                                db.merge(db_mavol)
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                        elif indicator == "macd":
+                            calculator = MACDCalculator()
+                            macd_data = calculator.calculate_macd_batch(historical_df['close'].tolist())
+                            # 保存到数据库
+                            for i, row_data in enumerate(macd_data):
+                                if i < len(historical_df):
+                                    db_macd = MACDIndicators(
+                                        code=stock_code,
+                                        date=historical_df.iloc[i]['date'],
+                                        market_type=market_type,
+                                        dif=row_data.get('dif'),
+                                        dea=row_data.get('dea'),
+                                        macd=row_data.get('macd')
+                                    )
+                                    db.merge(db_macd)
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                        elif indicator == "kdj":
+                            calculator = KDJCalculator()
+                            kdj_data = calculator.calculate_kdj_batch(
+                                historical_df['close'].tolist(),
+                                historical_df['high'].tolist(),
+                                historical_df['low'].tolist()
+                            )
+                            # 保存到数据库
+                            for i, row_data in enumerate(kdj_data):
+                                if i < len(historical_df):
+                                    db_kdj = KDJIndicators(
+                                        code=stock_code,
+                                        date=historical_df.iloc[i]['date'],
+                                        market_type=market_type,
+                                        k=row_data.get('k'),
+                                        d=row_data.get('d'),
+                                        j=row_data.get('j')
+                                    )
+                                    db.merge(db_kdj)
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                        elif indicator == "rsi":
+                            calculator = RSICalculator()
+                            rsi_data = calculator.calculate_rsi_batch(historical_df['close'].tolist())
+                            # 保存到数据库
+                            for i, row_data in enumerate(rsi_data):
+                                if i < len(historical_df):
+                                    db_rsi = RSIIndicators(
+                                        code=stock_code,
+                                        date=historical_df.iloc[i]['date'],
+                                        market_type=market_type,
+                                        rsi6=row_data.get('rsi6'),
+                                        rsi12=row_data.get('rsi12'),
+                                        rsi24=row_data.get('rsi24')
+                                    )
+                                    db.merge(db_rsi)
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                        elif indicator == "boll":
+                            calculator = BOLLCalculator()
+                            boll_data = calculator.calculate_boll_batch(historical_df['close'].tolist())
+                            # 保存到数据库
+                            for i, row_data in enumerate(boll_data):
+                                if i < len(historical_df):
+                                    db_boll = BOLLIndicators(
+                                        code=stock_code,
+                                        date=historical_df.iloc[i]['date'],
+                                        market_type=market_type,
+                                        upper=row_data.get('upper'),
+                                        mid=row_data.get('mid'),  # 使用正确的字段名
+                                        lower=row_data.get('lower')
+                                    )
+                                    db.merge(db_boll)
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                        elif indicator == "pvfrs":
+                            calculator = MeanFrequencyResonanceCalculator()
+                            # 创建简单的类来模拟ORM对象
+                            class HistoryRow:
+                                def __init__(self, date, close, volume):
+                                    self.date = date
+                                    self.close = close
+                                    self.volume = volume
+                            
+                            # 转换数据为ORM对象格式
+                            history_rows = []
+                            for _, row in historical_df.iterrows():
+                                history_rows.append(HistoryRow(row['date'], row['close'], row['volume']))
+                            
+                            pvfrs_data = calculator.calculate_for_dataframe(history_rows)
+                            # 保存到数据库
+                            if pvfrs_data.empty:
+                                print(f"[PVFRS] 股票 {stock_code} 计算结果为空，跳过")
+                                continue
+                            
+                            for _, row in pvfrs_data.iterrows():
+                                try:
+                                    db_pvfrs = MeanFrequencyResonanceIndicators(
+                                        code=stock_code,
+                                        date=row['date'],
+                                        market_type=market_type,
+                                        macro_displacement_delta=row.get('macro_displacement_delta'),
+                                        ratio_d20=row.get('ratio_d20'),
+                                        ratio_d1=row.get('ratio_d1'),
+                                        instant_deviation=row.get('instant_deviation'),
+                                        rising_days_z=row.get('rising_days_z'),
+                                        falling_days_f=row.get('falling_days_f'),
+                                        efficiency_m20_minus_m=row.get('efficiency_m20_minus_m'),
+                                        ma20_d=row.get('ma20_d'),
+                                        mavol20_m=row.get('mavol20_m'),
+                                        bias=row.get('bias')
+                                    )
+                                    db.merge(db_pvfrs)
+                                except Exception as e:
+                                    print(f"[PVFRS] 保存股票 {stock_code} 数据时出错: {e}")
+                                    continue
+                            db.commit()
+                            results["indicator_results"][indicator]["success_count"] += 1
+                            
+                    except Exception as e:
+                        print(f"Error generating {indicator} for {stock_code}: {str(e)}")
+                        results["indicator_results"][indicator]["failed_count"] += 1
+                        stock_success = False
+                
+                if stock_success:
+                    results["success_stocks"] += 1
+                else:
+                    results["failed_stocks"] += 1
+                    results["failed_stocks_detail"].append({
+                        "stock_code": stock_code,
+                        "stock_name": stock.stock_name,
+                        "error": "部分指标生成失败"
+                    })
+                    
+            except Exception as e:
+                print(f"Error processing stock {stock_code}: {str(e)}")
+                results["failed_stocks"] += 1
+                results["failed_stocks_detail"].append({
+                    "stock_code": stock_code,
+                    "stock_name": stock.stock_name,
+                    "error": str(e)
+                })
+        
+        logger.info(f"[批量生成指标] 处理完成: 成功 {results['success_stocks']} 只，失败 {results['failed_stocks']} 只")
+        return {
+            "success": True,
+            "message": f"成功处理 {results['success_stocks']} 只股票，失败 {results['failed_stocks']} 只",
+            "data": results
+        }
+        
+    except Exception as e:
+        logger.error(f"[批量生成指标] 发生异常: {str(e)}")
+        logger.error(traceback.format_exc())
+        print(f"Error in generate_batch_watchlist_indicators: {str(e)}")
+        print(traceback.format_exc())
+        return {
+            "success": False,
+            "message": f"批量生成失败: {str(e)}"
+        }
+
 
 @router.post("/generate")
 async def generate_indicators(
@@ -662,6 +973,8 @@ async def generate_indicators(
                                 ma20_d=pvfrs_item.get('ma20_d'),
                                 mavol20_m=pvfrs_item.get('mavol20_m'),
                                 macro_displacement_delta=pvfrs_item.get('macro_displacement_delta'),
+                                ratio_d20=pvfrs_item.get('ratio_d20'),
+                                ratio_d1=pvfrs_item.get('ratio_d1'),
                                 instant_deviation=pvfrs_item.get('instant_deviation'),
                                 efficiency_m20_minus_m=pvfrs_item.get('efficiency_m20_minus_m'),
                                 rising_days_z=pvfrs_item.get('rising_days_z'),

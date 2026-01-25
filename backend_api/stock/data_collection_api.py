@@ -1471,14 +1471,57 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
             trade_date = datetime.now().strftime('%Y-%m-%d')
 
             if market == 'HK':
-                try:
-                    df = ak.stock_hk_spot_em()
-                except Exception as e:
-                    logger.warning(f"港股实时接口 stock_hk_spot_em 调用失败，尝试 stock_hk_spot: {e}")
-                    df = ak.stock_hk_spot()
+                df = None
+                max_retries = 3
+                retry_delay = 2
+                
+                # 尝试多个港股数据源，带重试机制
+                for attempt in range(max_retries):
+                    try:
+                        logger.info(f"港股数据采集尝试 {attempt + 1}/{max_retries}")
+                        
+                        # 尝试第一个接口
+                        try:
+                            df = ak.stock_hk_spot_em()
+                            logger.info(f"使用 stock_hk_spot_em 接口获取数据")
+                            if df is not None and not df.empty:
+                                break
+                        except Exception as e:
+                            logger.warning(f"港股实时接口 stock_hk_spot_em 调用失败: {e}")
+                        
+                        # 如果第一个接口失败，尝试第二个接口
+                        if df is None or df.empty:
+                            try:
+                                df = ak.stock_hk_spot()
+                                logger.info(f"使用 stock_hk_spot 接口获取数据")
+                                if df is not None and not df.empty:
+                                    break
+                            except Exception as e:
+                                logger.warning(f"港股实时接口 stock_hk_spot 调用失败: {e}")
+                        
+                        # 如果获取到数据，跳出重试循环
+                        if df is not None and not df.empty:
+                            break
+                            
+                        # 如果是最后一次尝试，不需要等待
+                        if attempt < max_retries - 1:
+                            logger.info(f"等待 {retry_delay} 秒后重试...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # 指数退避
+                            
+                    except Exception as e:
+                        logger.error(f"港股数据采集第 {attempt + 1} 次尝试失败: {e}")
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
 
+                # 检查最终是否获取到数据
                 if df is None or df.empty:
-                    raise RuntimeError('港股实时行情数据为空')
+                    error_msg = f'港股实时行情数据为空（已重试 {max_retries} 次）'
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+
+                logger.info(f"成功获取港股数据，共 {len(df)} 条记录")
 
                 if stock_code and str(stock_code).strip():
                     code = str(stock_code).strip()
@@ -1606,16 +1649,60 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             collection_tasks[task_id]['progress'] = min(100, int((processed / total_stocks) * 100))
 
             else:
-                try:
-                    df = ak.stock_zh_a_spot_em()
-                    data_source = 'em'
-                except Exception as e:
-                    logger.warning(f"A股实时接口 stock_zh_a_spot_em 调用失败，尝试 stock_zh_a_spot: {e}")
-                    df = ak.stock_zh_a_spot()
-                    data_source = 'sina'
+                df = None
+                data_source = None
+                max_retries = 3
+                retry_delay = 2
+                
+                # 尝试多个A股数据源，带重试机制
+                for attempt in range(max_retries):
+                    try:
+                        logger.info(f"A股数据采集尝试 {attempt + 1}/{max_retries}")
+                        
+                        # 尝试第一个接口
+                        try:
+                            df = ak.stock_zh_a_spot_em()
+                            data_source = 'em'
+                            logger.info(f"使用 stock_zh_a_spot_em 接口获取数据")
+                            if df is not None and not df.empty:
+                                break
+                        except Exception as e:
+                            logger.warning(f"A股实时接口 stock_zh_a_spot_em 调用失败: {e}")
+                        
+                        # 如果第一个接口失败，尝试第二个接口
+                        if df is None or df.empty:
+                            try:
+                                df = ak.stock_zh_a_spot()
+                                data_source = 'sina'
+                                logger.info(f"使用 stock_zh_a_spot 接口获取数据")
+                                if df is not None and not df.empty:
+                                    break
+                            except Exception as e:
+                                logger.warning(f"A股实时接口 stock_zh_a_spot 调用失败: {e}")
+                        
+                        # 如果获取到数据，跳出重试循环
+                        if df is not None and not df.empty:
+                            break
+                            
+                        # 如果是最后一次尝试，不需要等待
+                        if attempt < max_retries - 1:
+                            logger.info(f"等待 {retry_delay} 秒后重试...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # 指数退避
+                            
+                    except Exception as e:
+                        logger.error(f"A股数据采集第 {attempt + 1} 次尝试失败: {e}")
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
 
+                # 检查最终是否获取到数据
                 if df is None or df.empty:
-                    raise RuntimeError('A股实时行情数据为空')
+                    error_msg = f'A股实时行情数据为空（已重试 {max_retries} 次）'
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+
+                logger.info(f"成功获取A股数据，共 {len(df)} 条记录，数据源: {data_source}")
 
                 if stock_code and str(stock_code).strip():
                     code = str(stock_code).strip()

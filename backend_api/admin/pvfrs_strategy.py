@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/admin/pvfrs", tags=["PVFRS策略管理"])
 # 配置文件路径
 CONFIG_FILE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-    "backend_core/strategies/pvfrs/pvfrs_config.json"
+    "backend_core/strategies/pvfrs/pvfars_config.json"
 )
 
 # 全局任务存储（生产环境建议使用数据库或Redis）
@@ -319,6 +319,8 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
                             date=row['date'],
                             market_type=market_type,
                             macro_displacement_delta=row['macro_displacement_delta'],
+                            ratio_d20=row.get('ratio_d20'),
+                            ratio_d1=row.get('ratio_d1'),
                             instant_deviation=row['instant_deviation'],
                             rising_days_z=row['rising_days_z'],
                             falling_days_f=row['falling_days_f'],

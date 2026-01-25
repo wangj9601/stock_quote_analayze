@@ -2,6 +2,7 @@
 const API_BASE_URL = Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000';
 
 // 全局带token的fetch，自动处理登录失效
+// 全局带token的fetch，自动处理登录失效
 async function authFetch(url, options = {}) {
     const token = localStorage.getItem('access_token');
     options.headers = options.headers || {};
@@ -13,6 +14,11 @@ async function authFetch(url, options = {}) {
 
     // 检查401错误，自动处理token失效
     if (response.status === 401) {
+        // 如果 options 中指定了 skipRedirect，则不跳转
+        if (options.skipRedirect) {
+            return response;
+        }
+
         console.log('Token已失效，清除本地存储并跳转到登录页');
         localStorage.removeItem('access_token');
         localStorage.removeItem('userInfo');
@@ -62,18 +68,17 @@ const CommonUtils = {
         // 检查登录状态
         async checkLogin() {
             try {
-                const response = await authFetch(`${API_BASE_URL}/api/auth/status`);
+                const response = await authFetch(`${API_BASE_URL}/api/auth/status`, { skipRedirect: true });
+                // 如果是 401，说明 token 无效，直接返回 null
+                if (response.status === 401) {
+                    return null;
+                }
                 const result = await response.json();
 
                 if (result.success && result.logged_in) {
                     return result.user;
                 } else {
-                    // 如果不在登录页面且未登录，跳转到登录页
-                    if (!window.location.pathname.includes('login.html') &&
-                        !window.location.pathname.includes('test-login.html')) {
-                        window.location.href = 'login.html';
-                        return false;
-                    }
+                    // 不再强制跳转，只返回 null 表示未登录
                     return null;
                 }
             } catch (error) {

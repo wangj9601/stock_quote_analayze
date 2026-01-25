@@ -379,7 +379,7 @@ class TestPVFRSScreeningAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["strategy_name"] == "PVFRS量价频三维共振演化策略"
+        assert data["strategy_name"] == "PVFARS量价频幅度共振策略"
         assert len(data["data"]) == 1
         assert data["data"][0]["symbol"] == "000001"
     

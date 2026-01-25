@@ -5,11 +5,12 @@ class MeanFrequencyResonanceCalculator:
     """
     均值频率共振量化交易指标计算器
     指标包括：
-    1. 宏观位移 Delta (d20 - d1)
-    2. 即时偏离度 (d20 - d) (Close - MA20)
-    3. 上涨的天数 (Z)
-    4. 下跌的天数 (F)
-    5. 进出效率指标 (m20 - m) (Volume - MAVOL20)
+    1. 宏观位移 Delta (d20 - d1)，利旧
+    2. 幅度比例 ratio_d20 = Δ/d₂₀、ratio_d1 = Δ/d₁
+    3. 即时偏离度 (d20 - d) (Close - MA20)
+    4. 上涨的天数 (Z)
+    5. 下跌的天数 (F)
+    6. 进出效率指标 (m20 - m) (Volume - MAVOL20)
     
     其中：
     d = MA20 (20日移动平均线)
@@ -66,15 +67,30 @@ class MeanFrequencyResonanceCalculator:
         df['z'] = df['is_rising'].rolling(window=window).sum()
         df['f'] = df['is_falling'].rolling(window=window).sum()
         
+        # d1 = 窗口起始价 (shift window-1)
+        df['d1'] = df['close'].shift(window - 1)
+
         results = []
         for i in range(len(df)):
             if pd.isna(df['ma20'].iloc[i]):
                 results.append(None)
             else:
+                delta = float(df['delta'].iloc[i]) if not pd.isna(df['delta'].iloc[i]) else 0.0
+                d20 = df['close'].iloc[i]
+                d1 = df['d1'].iloc[i]
+                ratio_d20 = None
+                ratio_d1 = None
+                if d20 != 0 and not pd.isna(d20):
+                    ratio_d20 = float(delta / d20)
+                if d1 != 0 and not pd.isna(d1):
+                    ratio_d1 = float(delta / d1)
                 results.append({
                     'ma20_d': float(df['ma20'].iloc[i]),
                     'mavol20_m': float(df['mavol20'].iloc[i]),
-                    'macro_displacement_delta': float(df['delta'].iloc[i]) if not pd.isna(df['delta'].iloc[i]) else 0.0,
+                    'macro_displacement_delta': delta,
+                    'amplitude': abs(delta),
+                    'ratio_d20': ratio_d20,
+                    'ratio_d1': ratio_d1,
                     'instant_deviation': float(df['instant_deviation'].iloc[i]),
                     'efficiency_m20_minus_m': float(df['efficiency'].iloc[i]),
                     'rising_days_z': int(df['z'].iloc[i]),
@@ -120,6 +136,9 @@ class MeanFrequencyResonanceCalculator:
                     'ma20_d': result['ma20_d'],
                     'mavol20_m': result['mavol20_m'],
                     'macro_displacement_delta': result['macro_displacement_delta'],
+                    'amplitude': result.get('amplitude'),
+                    'ratio_d20': result.get('ratio_d20'),
+                    'ratio_d1': result.get('ratio_d1'),
                     'instant_deviation': result['instant_deviation'],
                     'efficiency_m20_minus_m': result['efficiency_m20_minus_m'],
                     'rising_days_z': result['rising_days_z'],

@@ -571,7 +571,11 @@ class FrontendInterface:
                 current_volume=indicators_dict.get('current_volume', 0.0),
                 efficiency_ratio=indicators_dict.get('efficiency_ratio', 0.0),
                 amplitude_ratio=indicators_dict.get('amplitude_ratio', 0.0),
-                resonance_strength=indicators_dict.get('resonance_strength', 0.0)
+                resonance_strength=indicators_dict.get('resonance_strength', 0.0),
+                amplitude=indicators_dict.get('amplitude'),
+                ratio_d20=indicators_dict.get('ratio_d20'),
+                ratio_d1=indicators_dict.get('ratio_d1'),
+                is_sideways=indicators_dict.get('is_sideways')
             )
         except Exception as e:
             logger.warning(f"转换指标字典失败: {str(e)}")

@@ -314,6 +314,631 @@
           <div class="form-help">根据市场环境自动调整参数</div>
         </el-form-item>
 
+        <!-- 乖离率动态调整配置 -->
+        <el-divider content-position="left">
+          <el-icon><TrendCharts /></el-icon>
+          乖离率动态调整配置
+        </el-divider>
+
+        <el-form-item label="启用动态乖离率调整" prop="enableDynamicBiasAdjustment">
+          <el-switch v-model="configForm.enableDynamicBiasAdjustment" />
+          <div class="form-help">根据市场波动率和股票特性动态调整乖离率阈值</div>
+        </el-form-item>
+
+        <el-collapse v-model="biasConfigCollapse" v-if="configForm.enableDynamicBiasAdjustment">
+          <el-collapse-item title="市场波动率阈值配置" name="volatility">
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <el-form-item label="高波动阈值" prop="biasVolatilityHigh">
+                  <el-input-number 
+                    v-model="configForm.biasVolatilityHigh" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.1"
+                    placeholder="20%"
+                    class="w-full"
+                  />
+                  <div class="form-help">波动率 > 此值时，buy_bias_min = 3%</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="中波动阈值" prop="biasVolatilityMedium">
+                  <el-input-number 
+                    v-model="configForm.biasVolatilityMedium" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.05"
+                    placeholder="10%"
+                    class="w-full"
+                  />
+                  <div class="form-help">10% < 波动率 <= 20%，buy_bias_min = 2%</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="低波动阈值" prop="biasVolatilityLow">
+                  <el-input-number 
+                    v-model="configForm.biasVolatilityLow" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.01"
+                    placeholder="10%"
+                    class="w-full"
+                  />
+                  <div class="form-help">波动率 <= 10%，buy_bias_min = 1%</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-collapse-item>
+
+          <el-collapse-item title="价格区间调整规则" name="priceRange">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="低价股阈值" prop="biasLowPriceThreshold">
+                  <el-input-number 
+                    v-model="configForm.biasLowPriceThreshold" 
+                    :step="1" 
+                    :precision="0"
+                    :min="1"
+                    placeholder="10元"
+                    class="w-full"
+                  />
+                  <div class="form-help">价格 < 此值时，buy_bias_min 放宽 +0.5%</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="高价股阈值" prop="biasHighPriceThreshold">
+                  <el-input-number 
+                    v-model="configForm.biasHighPriceThreshold" 
+                    :step="1" 
+                    :precision="0"
+                    :min="10"
+                    placeholder="50元"
+                    class="w-full"
+                  />
+                  <div class="form-help">价格 > 此值时，buy_bias_min 收紧 -0.5%</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="低价股调整幅度" prop="biasLowPriceAdjustment">
+                  <el-input-number 
+                    v-model="configForm.biasLowPriceAdjustment" 
+                    :step="0.001" 
+                    :precision="3"
+                    :min="0"
+                    placeholder="0.005"
+                    class="w-full"
+                  />
+                  <div class="form-help">低价股buy_bias_min调整幅度（+）</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="高价股调整幅度" prop="biasHighPriceAdjustment">
+                  <el-input-number 
+                    v-model="configForm.biasHighPriceAdjustment" 
+                    :step="0.001" 
+                    :precision="3"
+                    :min="0"
+                    placeholder="0.005"
+                    class="w-full"
+                  />
+                  <div class="form-help">高价股buy_bias_min调整幅度（-）</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-collapse-item>
+
+          <el-collapse-item title="Bias历史分布配置" name="biasDistribution">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="历史分位数下限" prop="biasPercentileLower">
+                  <el-input-number 
+                    v-model="configForm.biasPercentileLower" 
+                    :step="1" 
+                    :precision="0"
+                    :min="0"
+                    :max="100"
+                    placeholder="20"
+                    class="w-full"
+                  />
+                  <div class="form-help">当前bias处于历史分位数下限（%）</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="历史分位数上限" prop="biasPercentileUpper">
+                  <el-input-number 
+                    v-model="configForm.biasPercentileUpper" 
+                    :step="1" 
+                    :precision="0"
+                    :min="0"
+                    :max="100"
+                    placeholder="80"
+                    class="w-full"
+                  />
+                  <div class="form-help">当前bias处于历史分位数上限（%）</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <div class="form-help">bias在[下限, 上限]区间内视为合理</div>
+          </el-collapse-item>
+
+          <el-collapse-item title="卖出Bias动态调整" name="sellBiasDynamic">
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <el-form-item label="高盈利阈值" prop="biasHighProfitThreshold">
+                  <el-input-number 
+                    v-model="configForm.biasHighProfitThreshold" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.1"
+                    placeholder="0.20"
+                    class="w-full"
+                  />
+                  <div class="form-help">盈利 > 20%时，sell_bias_max = 20%</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="中盈利阈值" prop="biasMediumProfitThreshold">
+                  <el-input-number 
+                    v-model="configForm.biasMediumProfitThreshold" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.05"
+                    placeholder="0.10"
+                    class="w-full"
+                  />
+                  <div class="form-help">10% < 盈利 <= 20%，sell_bias_max = 15%</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="低盈利阈值" prop="biasLowProfitThreshold">
+                  <el-input-number 
+                    v-model="configForm.biasLowProfitThreshold" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0"
+                    placeholder="0.10"
+                    class="w-full"
+                  />
+                  <div class="form-help">盈利 < 10%时，sell_bias_max = 10%</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="短期持仓阈值" prop="biasShortHoldingDays">
+                  <el-input-number 
+                    v-model="configForm.biasShortHoldingDays" 
+                    :step="1" 
+                    :precision="0"
+                    :min="1"
+                    placeholder="10天"
+                    class="w-full"
+                  />
+                  <div class="form-help">持仓 < 此天数时，sell_bias_max 收紧 -2%</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="长期持仓阈值" prop="biasLongHoldingDays">
+                  <el-input-number 
+                    v-model="configForm.biasLongHoldingDays" 
+                    :step="1" 
+                    :precision="0"
+                    :min="10"
+                    placeholder="30天"
+                    class="w-full"
+                  />
+                  <div class="form-help">持仓 > 此天数时，sell_bias_max 放宽 +2%</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item label="Bias趋势判断天数" prop="biasTrendDays">
+              <el-input-number 
+                v-model="configForm.biasTrendDays" 
+                :step="1" 
+                :precision="0"
+                :min="1"
+                :max="10"
+                placeholder="3天"
+                class="w-full"
+              />
+              <div class="form-help">bias连续N天扩大且超过阈值时触发卖出</div>
+            </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
+
+        <!-- 价格维度增强配置 -->
+        <el-divider content-position="left">
+          <el-icon><TrendCharts /></el-icon>
+          价格维度增强配置
+        </el-divider>
+
+        <el-form-item label="启用价格趋势持续性验证" prop="enablePriceTrendPersistence">
+          <el-switch v-model="configForm.enablePriceTrendPersistence" />
+          <div class="form-help">验证价格是否持续向上（最近5天、10天趋势斜率）</div>
+        </el-form-item>
+
+        <el-collapse v-model="priceConfigCollapse" v-if="configForm.enablePriceTrendPersistence">
+          <el-collapse-item title="趋势持续性参数" name="trendParams">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="短期趋势天数" prop="priceTrendShortDays">
+                  <el-input-number 
+                    v-model="configForm.priceTrendShortDays" 
+                    :step="1" 
+                    :precision="0"
+                    :min="3"
+                    :max="10"
+                    placeholder="5天"
+                    class="w-full"
+                  />
+                  <div class="form-help">计算短期趋势斜率的天数</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="长期趋势天数" prop="priceTrendLongDays">
+                  <el-input-number 
+                    v-model="configForm.priceTrendLongDays" 
+                    :step="1" 
+                    :precision="0"
+                    :min="5"
+                    :max="20"
+                    placeholder="10天"
+                    class="w-full"
+                  />
+                  <div class="form-help">计算长期趋势斜率的天数</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item label="最大回撤阈值" prop="priceMaxDrawdownThreshold">
+              <el-input-number 
+                v-model="configForm.priceMaxDrawdownThreshold" 
+                :step="0.01" 
+                :precision="2"
+                :min="0.05"
+                :max="0.30"
+                placeholder="0.10"
+                class="w-full"
+              />
+              <div class="form-help">价格回撤幅度 < 此值时通过验证（10%）</div>
+            </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="价格波动率阈值" prop="priceVolatilityThreshold">
+              <el-input-number 
+                v-model="configForm.priceVolatilityThreshold" 
+                :step="0.01" 
+                :precision="2"
+                :min="0.05"
+                :max="0.30"
+                placeholder="0.15"
+                class="w-full"
+              />
+              <div class="form-help">20天标准差/均值，波动率 < 15% 排除异常波动</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="幅度系数下限" prop="amplitudeRatioMin">
+              <el-input-number 
+                v-model="configForm.amplitudeRatioMin" 
+                :step="0.001" 
+                :precision="3"
+                :min="0.005"
+                :max="0.05"
+                placeholder="0.01"
+                class="w-full"
+              />
+              <div class="form-help">幅度系数范围下限（1%）</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="幅度系数上限" prop="amplitudeRatioMax">
+          <el-input-number 
+            v-model="configForm.amplitudeRatioMax" 
+            :step="0.01" 
+            :precision="2"
+            :min="0.10"
+            :max="0.50"
+            placeholder="0.30"
+            class="w-full"
+          />
+          <div class="form-help">幅度系数范围上限（30%）</div>
+        </el-form-item>
+
+        <!-- 频率维度增强配置 -->
+        <el-divider content-position="left">
+          <el-icon><DataAnalysis /></el-icon>
+          频率维度增强配置
+        </el-divider>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="最低上涨天数" prop="frequencyMinRisingDays">
+              <el-input-number 
+                v-model="configForm.frequencyMinRisingDays" 
+                :step="1" 
+                :precision="0"
+                :min="8"
+                :max="15"
+                placeholder="10天"
+                class="w-full"
+              />
+              <div class="form-help">Z >= 10（20天中占50%）</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="上涨天数优势" prop="frequencyRisingDaysAdvantage">
+              <el-input-number 
+                v-model="configForm.frequencyRisingDaysAdvantage" 
+                :step="1" 
+                :precision="0"
+                :min="1"
+                :max="10"
+                placeholder="3天"
+                class="w-full"
+              />
+              <div class="form-help">Z > F + N（默认N=3）</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="启用上涨集中度分析" prop="enableRisingConcentration">
+              <el-switch v-model="configForm.enableRisingConcentration" />
+              <div class="form-help">分析上涨天数是否集中在后期</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="启用虚假繁荣检测增强" prop="enableFalseProsperityEnhancement">
+              <el-switch v-model="configForm.enableFalseProsperityEnhancement" />
+              <div class="form-help">检查连续2-3天的异常涨幅</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-collapse v-model="frequencyConfigCollapse" v-if="configForm.enableFalseProsperityEnhancement">
+          <el-collapse-item title="虚假繁荣检测参数" name="falseProsperity">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="连续异常涨幅阈值" prop="falseProsperityConsecutiveThreshold">
+                  <el-input-number 
+                    v-model="configForm.falseProsperityConsecutiveThreshold" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.02"
+                    :max="0.10"
+                    placeholder="0.03"
+                    class="w-full"
+                  />
+                  <div class="form-help">连续涨幅 > 3% 视为异常</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="异常涨幅天数" prop="falseProsperityDays">
+                  <el-input-number 
+                    v-model="configForm.falseProsperityDays" 
+                    :step="1" 
+                    :precision="0"
+                    :min="2"
+                    :max="5"
+                    placeholder="3天"
+                    class="w-full"
+                  />
+                  <div class="form-help">检查连续N天的异常涨幅</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-collapse-item>
+        </el-collapse>
+
+        <el-form-item label="上涨持续性验证天数" prop="frequencyPersistenceDays">
+          <el-input-number 
+            v-model="configForm.frequencyPersistenceDays" 
+            :step="1" 
+            :precision="0"
+            :min="5"
+            :max="15"
+            placeholder="10天"
+            class="w-full"
+          />
+          <div class="form-help">最近N天中上涨天数 >= 6</div>
+        </el-form-item>
+
+        <!-- 成交量维度增强配置 -->
+        <el-divider content-position="left">
+          <el-icon><TrendCharts /></el-icon>
+          成交量维度增强配置
+        </el-divider>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="连续放量天数要求" prop="volumeConsecutiveDays">
+              <el-input-number 
+                v-model="configForm.volumeConsecutiveDays" 
+                :step="1" 
+                :precision="0"
+                :min="1"
+                :max="5"
+                placeholder="3天"
+                class="w-full"
+              />
+              <div class="form-help">要求连续N天成交量放大</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="启用成交量趋势持续性验证" prop="enableVolumeTrendPersistence">
+              <el-switch v-model="configForm.enableVolumeTrendPersistence" />
+              <div class="form-help">验证成交量放大趋势的持续性</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-collapse v-model="volumeConfigCollapse" v-if="configForm.enableVolumeTrendPersistence">
+          <el-collapse-item title="成交量趋势持续性参数" name="volumePersistence">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="验证天数" prop="volumePersistenceDays">
+                  <el-input-number 
+                    v-model="configForm.volumePersistenceDays" 
+                    :step="1" 
+                    :precision="0"
+                    :min="3"
+                    :max="10"
+                    placeholder="5天"
+                    class="w-full"
+                  />
+                  <div class="form-help">最近N天中至少有N/2天成交量>20日均量</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="放大天数占比阈值" prop="volumeIncreaseRatioThreshold">
+                  <el-input-number 
+                    v-model="configForm.volumeIncreaseRatioThreshold" 
+                    :step="0.01" 
+                    :precision="2"
+                    :min="0.50"
+                    :max="1.0"
+                    placeholder="0.60"
+                    class="w-full"
+                  />
+                  <div class="form-help">成交量放大天数占比 >= 60%</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-collapse-item>
+        </el-collapse>
+
+        <el-form-item label="量价相关系数阈值" prop="volumePriceCorrelationThreshold">
+          <el-input-number 
+            v-model="configForm.volumePriceCorrelationThreshold" 
+            :step="0.1" 
+            :precision="1"
+            :min="0.3"
+            :max="0.9"
+            placeholder="0.5"
+            class="w-full"
+          />
+          <div class="form-help">价格变化与成交量变化的相关系数 > 0.5</div>
+        </el-form-item>
+
+        <!-- 信号质量分级配置 -->
+        <el-divider content-position="left">
+          <el-icon><DataAnalysis /></el-icon>
+          信号质量分级配置
+        </el-divider>
+
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="高质量信号阈值" prop="signalQualityHighThreshold">
+              <el-input-number 
+                v-model="configForm.signalQualityHighThreshold" 
+                :step="0.05" 
+                :precision="2"
+                :min="0.7"
+                :max="1.0"
+                placeholder="0.85"
+                class="w-full"
+              />
+              <div class="form-help">所有维度得分 > 0.8，共振强度 > 0.85</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="中等质量信号阈值" prop="signalQualityMediumThreshold">
+              <el-input-number 
+                v-model="configForm.signalQualityMediumThreshold" 
+                :step="0.05" 
+                :precision="2"
+                :min="0.5"
+                :max="0.9"
+                placeholder="0.70"
+                class="w-full"
+              />
+              <div class="form-help">所有维度得分 > 0.6，共振强度 > 0.7</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="维度得分下限" prop="signalQualityDimensionMin">
+              <el-input-number 
+                v-model="configForm.signalQualityDimensionMin" 
+                :step="0.05" 
+                :precision="2"
+                :min="0.5"
+                :max="0.9"
+                placeholder="0.60"
+                class="w-full"
+              />
+              <div class="form-help">中等质量信号要求的最低维度得分</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">信号强度权重配置</el-divider>
+
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-form-item label="Bias权重" prop="signalWeightBias">
+              <el-input-number 
+                v-model="configForm.signalWeightBias" 
+                :step="0.01" 
+                :precision="2"
+                :min="0"
+                :max="1"
+                placeholder="0.10"
+                class="w-full"
+              />
+              <div class="form-help">乖离率得分权重（10%）</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="价格权重" prop="signalWeightPrice">
+              <el-input-number 
+                v-model="configForm.signalWeightPrice" 
+                :step="0.01" 
+                :precision="2"
+                :min="0"
+                :max="1"
+                placeholder="0.30"
+                class="w-full"
+              />
+              <div class="form-help">价格维度权重</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="频率权重" prop="signalWeightFrequency">
+              <el-input-number 
+                v-model="configForm.signalWeightFrequency" 
+                :step="0.01" 
+                :precision="2"
+                :min="0"
+                :max="1"
+                placeholder="0.30"
+                class="w-full"
+              />
+              <div class="form-help">频率维度权重</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="成交量权重" prop="signalWeightVolume">
+              <el-input-number 
+                v-model="configForm.signalWeightVolume" 
+                :step="0.01" 
+                :precision="2"
+                :min="0"
+                :max="1"
+                placeholder="0.30"
+                class="w-full"
+              />
+              <div class="form-help">成交量维度权重</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
         <!-- 操作按钮 -->
         <el-form-item>
           <div class="form-actions">
@@ -437,8 +1062,61 @@ const configForm = reactive({
   maxHoldingDays: 30,
   signalStrengthThreshold: 0.7,
   riskLevel: 'balanced',
-  enableDynamicAdjustment: false
+  enableDynamicAdjustment: false,
+  // 乖离率动态调整配置
+  enableDynamicBiasAdjustment: false,
+  biasVolatilityHigh: 0.20,
+  biasVolatilityMedium: 0.10,
+  biasVolatilityLow: 0.10,
+  biasLowPriceThreshold: 10,
+  biasHighPriceThreshold: 50,
+  biasLowPriceAdjustment: 0.005,
+  biasHighPriceAdjustment: 0.005,
+  biasPercentileLower: 20,
+  biasPercentileUpper: 80,
+  biasHighProfitThreshold: 0.20,
+  biasMediumProfitThreshold: 0.10,
+  biasLowProfitThreshold: 0.10,
+  biasShortHoldingDays: 10,
+  biasLongHoldingDays: 30,
+  biasTrendDays: 3,
+  // 价格维度增强配置
+  enablePriceTrendPersistence: false,
+  priceTrendShortDays: 5,
+  priceTrendLongDays: 10,
+  priceMaxDrawdownThreshold: 0.10,
+  priceVolatilityThreshold: 0.15,
+  amplitudeRatioMin: 0.01,
+  amplitudeRatioMax: 0.30,
+  // 频率维度增强配置
+  frequencyMinRisingDays: 10,
+  frequencyRisingDaysAdvantage: 3,
+  enableRisingConcentration: false,
+  enableFalseProsperityEnhancement: false,
+  falseProsperityConsecutiveThreshold: 0.03,
+  falseProsperityDays: 3,
+  frequencyPersistenceDays: 10,
+  // 成交量维度增强配置
+  volumeConsecutiveDays: 3,
+  enableVolumeTrendPersistence: false,
+  volumePersistenceDays: 5,
+  volumeIncreaseRatioThreshold: 0.60,
+  volumePriceCorrelationThreshold: 0.5,
+  // 信号质量分级配置
+  signalQualityHighThreshold: 0.85,
+  signalQualityMediumThreshold: 0.70,
+  signalQualityDimensionMin: 0.60,
+  signalWeightBias: 0.10,
+  signalWeightPrice: 0.30,
+  signalWeightFrequency: 0.30,
+  signalWeightVolume: 0.30
 })
+
+// 配置折叠面板状态
+const biasConfigCollapse = ref(['volatility', 'priceRange', 'biasDistribution', 'sellBiasDynamic'])
+const priceConfigCollapse = ref(['trendParams'])
+const frequencyConfigCollapse = ref(['falseProsperity'])
+const volumeConfigCollapse = ref(['volumePersistence'])
 
 // 表单验证规则
 const configRules = {
@@ -539,7 +1217,54 @@ const resetConfig = async () => {
       maxHoldingDays: 30,
       signalStrengthThreshold: 0.7,
       riskLevel: 'balanced',
-      enableDynamicAdjustment: false
+      enableDynamicAdjustment: false,
+      // 乖离率动态调整配置
+      enableDynamicBiasAdjustment: false,
+      biasVolatilityHigh: 0.20,
+      biasVolatilityMedium: 0.10,
+      biasVolatilityLow: 0.10,
+      biasLowPriceThreshold: 10,
+      biasHighPriceThreshold: 50,
+      biasLowPriceAdjustment: 0.005,
+      biasHighPriceAdjustment: 0.005,
+      biasPercentileLower: 20,
+      biasPercentileUpper: 80,
+      biasHighProfitThreshold: 0.20,
+      biasMediumProfitThreshold: 0.10,
+      biasLowProfitThreshold: 0.10,
+      biasShortHoldingDays: 10,
+      biasLongHoldingDays: 30,
+      biasTrendDays: 3,
+      // 价格维度增强配置
+      enablePriceTrendPersistence: false,
+      priceTrendShortDays: 5,
+      priceTrendLongDays: 10,
+      priceMaxDrawdownThreshold: 0.10,
+      priceVolatilityThreshold: 0.15,
+      amplitudeRatioMin: 0.01,
+      amplitudeRatioMax: 0.30,
+      // 频率维度增强配置
+      frequencyMinRisingDays: 10,
+      frequencyRisingDaysAdvantage: 3,
+      enableRisingConcentration: false,
+      enableFalseProsperityEnhancement: false,
+      falseProsperityConsecutiveThreshold: 0.03,
+      falseProsperityDays: 3,
+      frequencyPersistenceDays: 10,
+      // 成交量维度增强配置
+      volumeConsecutiveDays: 3,
+      enableVolumeTrendPersistence: false,
+      volumePersistenceDays: 5,
+      volumeIncreaseRatioThreshold: 0.60,
+      volumePriceCorrelationThreshold: 0.5,
+      // 信号质量分级配置
+      signalQualityHighThreshold: 0.85,
+      signalQualityMediumThreshold: 0.70,
+      signalQualityDimensionMin: 0.60,
+      signalWeightBias: 0.10,
+      signalWeightPrice: 0.30,
+      signalWeightFrequency: 0.30,
+      signalWeightVolume: 0.30
     })
     
     ElMessage.success('已重置为默认配置')

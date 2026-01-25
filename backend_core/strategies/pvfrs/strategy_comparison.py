@@ -222,7 +222,7 @@ class StrategyComparator:
             report_lines = []
             
             # 标题
-            report_lines.append("PVFRS策略对比分析报告")
+            report_lines.append("PVFARS策略对比分析报告")
             report_lines.append("=" * 50)
             report_lines.append(f"生成时间: {comparison_result['created_at']}")
             report_lines.append(f"对比策略数量: {comparison_result['report_count']}")
@@ -916,7 +916,7 @@ class StrategyComparator:
         
         # 使用报告ID作为默认名称
         report_id = report.get('report_id', 'unknown')
-        return f"PVFRS策略_{report_id[-8:]}"
+        return f"PVFARS策略_{report_id[-8:]}"
 
 
 # 便捷函数

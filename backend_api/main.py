@@ -116,6 +116,30 @@ except ImportError as e:
     print(f"❌ data_collection_router 导入失败: {e}")
     data_collection_router = None
 
+# 尝试导入股票分析路由
+try:
+    from .stock.stock_analysis_routes import router as stock_analysis_router
+    print("✅ stock_analysis_router 导入成功")
+except ImportError as e:
+    print(f"❌ stock_analysis_router 导入失败: {e}")
+    stock_analysis_router = None
+
+# 尝试导入港股路由
+try:
+    from .stock.hk_stock_manage import router_old as hk_stock_router
+    print("✅ hk_stock_router 导入成功")
+except ImportError as e:
+    print(f"❌ hk_stock_router 导入失败: {e}")
+    hk_stock_router = None
+
+# 尝试导入quotes路由
+try:
+    from .quotes_routes import router as quotes_router
+    print("✅ quotes_router 导入成功")
+except ImportError as e:
+    print(f"❌ quotes_router 导入失败: {e}")
+    quotes_router = None
+
 # 创建FastAPI应用
 app = FastAPI(
     title="股票分析系统API",
@@ -226,6 +250,27 @@ if data_collection_router is not None:
 else:
     print("❌ 数据采集路由未注册")
 
+# 注册股票分析路由
+if stock_analysis_router is not None:
+    app.include_router(stock_analysis_router)
+    print("✅ 股票分析路由注册成功")
+else:
+    print("❌ 股票分析路由未注册")
+
+# 注册港股路由
+if hk_stock_router is not None:
+    app.include_router(hk_stock_router)
+    print("✅ 港股路由注册成功")
+else:
+    print("❌ 港股路由未注册")
+
+# 注册quotes路由
+if quotes_router is not None:
+    app.include_router(quotes_router)
+    print("✅ quotes路由注册成功")
+else:
+    print("❌ quotes路由未注册")
+
 # 尝试导入admin路由
 try:
     from .admin.auth import router as admin_auth_router
@@ -242,7 +287,7 @@ except ImportError as e:
     admin_dashboard_router = None
 
 try:
-    from .admin.indicators import router as admin_indicators_router
+    from admin.indicators import router as admin_indicators_router
     print("✅ admin_indicators_router 导入成功")
     # 打印路由信息用于调试
     if admin_indicators_router:
@@ -307,6 +352,13 @@ if pvfrs_admin_router is not None:
     print("✅ PVFRS admin路由注册成功")
 else:
     print("❌ PVFRS admin路由未注册（导入失败）")
+
+# 注册PVFRS管理路由
+if pvfrs_admin_router is not None:
+    app.include_router(pvfrs_admin_router)
+    print("✅ PVFRS管理路由注册成功")
+else:
+    print("❌ PVFRS管理路由未注册")
 
 # 注册PVFRS前端路由
 if pvfrs_frontend_router is not None:

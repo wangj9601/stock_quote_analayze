@@ -5,14 +5,14 @@
 
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import JSONResponse
-from database import get_db
+from backend_api.database import get_db
 from sqlalchemy.orm import Session
 import traceback
 import numpy as np
 import pandas as pd
 import akshare as ak
 from sqlalchemy import text, create_engine, func
-from models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
+from backend_api.models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口

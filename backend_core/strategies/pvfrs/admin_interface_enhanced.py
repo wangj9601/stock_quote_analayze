@@ -77,7 +77,7 @@ class AdminInterfaceEnhanced:
                 # 创建新的策略配置
                 config_id = self.service.create_strategy_config(
                     name=config.strategy_name,
-                    description=f"PVFRS策略: {config.strategy_name}",
+                    description=f"PVFARS策略: {config.strategy_name}",
                     config_params={
                         'strategy_params': config.strategy_params,
                         'risk_params': config.risk_params
@@ -362,7 +362,68 @@ class AdminInterfaceEnhanced:
                 
                 return trade_dict
             
-            return [sa_to_dict(trade) for trade in trades]
+            # 为每个交易记录应用字段映射
+            mapped_trades = []
+            for trade in trades:
+                # 先获取原始字典
+                trade_dict = sa_to_dict(trade)
+                
+                # 转换为前端期望的驼峰命名格式
+                frontend_trade_dict = {}
+                
+                # 字段映射：下划线 -> 驼峰
+                field_mapping = {
+                    'id': 'id',
+                    'result_id': 'resultId',
+                    'stock_code': 'stockCode',
+                    'market': 'market',
+                    'trade_date': 'tradeDate',
+                    'entry_date': 'entryDate',
+                    'entry_time': 'entryTime',
+                    'exit_time': 'exitDate',
+                    'entry_price': 'entryPrice',
+                    'exit_price': 'exitPrice',
+                    'quantity': 'quantity',
+                    'pnl': 'pnl',
+                    'pnl_percent': 'pnlPercent',
+                    'commission': 'commission',
+                    'slippage': 'slippage',
+                    'exit_reason': 'exitReason',
+                    'trade_type': 'tradeType',
+                    'holding_period': 'holdingDays',
+                    'created_at': 'createdAt'
+                }
+                
+                for db_field, frontend_field in field_mapping.items():
+                    if db_field in trade_dict:
+                        frontend_trade_dict[frontend_field] = trade_dict[db_field]
+                
+                # 特殊处理：exitDate 格式化
+                if frontend_trade_dict.get('exitDate'):
+                    try:
+                        if isinstance(frontend_trade_dict['exitDate'], str):
+                            # 如果是ISO格式字符串，提取日期部分
+                            if 'T' in frontend_trade_dict['exitDate']:
+                                frontend_trade_dict['exitDate'] = frontend_trade_dict['exitDate'].split('T')[0]
+                        else:
+                            # 如果是datetime对象，转换为字符串
+                            frontend_trade_dict['exitDate'] = str(frontend_trade_dict['exitDate']).split('T')[0] if frontend_trade_dict['exitDate'] else None
+                    except:
+                        frontend_trade_dict['exitDate'] = frontend_trade_dict['exitDate']
+                else:
+                    frontend_trade_dict['exitDate'] = None
+                
+                # 特殊处理：entryDate 格式化
+                if frontend_trade_dict.get('entryDate'):
+                    try:
+                        if isinstance(frontend_trade_dict['entryDate'], str) and 'T' in frontend_trade_dict['entryDate']:
+                            frontend_trade_dict['entryDate'] = frontend_trade_dict['entryDate'].split('T')[0]
+                    except:
+                        pass
+                
+                mapped_trades.append(frontend_trade_dict)
+            
+            return mapped_trades
         except Exception as e:
             logger.error(f"获取交易记录失败: {str(e)}")
             return []

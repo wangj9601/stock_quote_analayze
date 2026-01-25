@@ -119,10 +119,10 @@ class StockHistoryPage {
     }
 
     async searchHistory() {
-        // 检查用户登录状态
-        if (!CommonUtils.checkLoginAndHandleExpiry()) {
-            return;
-        }
+        // 移除强制登录检查，支持未登录查询
+        // if (!CommonUtils.checkLoginAndHandleExpiry()) {
+        //     return;
+        // }
 
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
@@ -267,14 +267,14 @@ class StockHistoryPage {
     }
 
     async exportHistory() {
-        // 检查用户登录状态
-        const userInfo = CommonUtils.auth.getUserInfo();
-        if (!userInfo || !userInfo.id) {
-            CommonUtils.showToast('请先登录后再导出数据', 'warning');
-            // 跳转到登录页面
-            window.location.href = 'login.html';
-            return;
-        }
+        // 移除强制登录检查
+        // const userInfo = CommonUtils.auth.getUserInfo();
+        // if (!userInfo || !userInfo.id) {
+        //     CommonUtils.showToast('请先登录后再导出数据', 'warning');
+        //     // 跳转到登录页面
+        //     window.location.href = 'login.html';
+        //     return;
+        // }
 
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
@@ -321,14 +321,14 @@ class StockHistoryPage {
     }
 
     async calculateFiveDayChange() {
-        // 检查用户登录状态
-        const userInfo = CommonUtils.auth.getUserInfo();
-        if (!userInfo || !userInfo.id) {
-            CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
-            // 跳转到登录页面
-            window.location.href = 'login.html';
-            return;
-        }
+        // 移除强制登录检查
+        // const userInfo = CommonUtils.auth.getUserInfo();
+        // if (!userInfo || !userInfo.id) {
+        //     CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
+        //     // 跳转到登录页面
+        //     window.location.href = 'login.html';
+        //     return;
+        // }
 
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
@@ -388,14 +388,14 @@ class StockHistoryPage {
     }
 
     async calculateTenDayChange() {
-        // 检查用户登录状态
-        const userInfo = CommonUtils.auth.getUserInfo();
-        if (!userInfo || !userInfo.id) {
-            CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
-            // 跳转到登录页面
-            window.location.href = 'login.html';
-            return;
-        }
+        // 移除强制登录检查
+        // const userInfo = CommonUtils.auth.getUserInfo();
+        // if (!userInfo || !userInfo.id) {
+        //     CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
+        //     // 跳转到登录页面
+        //     window.location.href = 'login.html';
+        //     return;
+        // }
 
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
@@ -455,13 +455,13 @@ class StockHistoryPage {
     }
 
     async calculateThirtyDayChange() {
-        // 检查用户登录状态
-        const userInfo = CommonUtils.auth.getUserInfo();
-        if (!userInfo || !userInfo.id) {
-            CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
-            window.location.href = 'login.html';
-            return;
-        }
+        // 移除强制登录检查
+        // const userInfo = CommonUtils.auth.getUserInfo();
+        // if (!userInfo || !userInfo.id) {
+        //     CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
+        //     window.location.href = 'login.html';
+        //     return;
+        // }
 
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
@@ -517,14 +517,14 @@ class StockHistoryPage {
     }
 
     async calculateSixtyDayChange() {
-        // 检查用户登录状态
-        const userInfo = CommonUtils.auth.getUserInfo();
-        if (!userInfo || !userInfo.id) {
-            CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
-            // 跳转到登录页面
-            window.location.href = 'login.html';
-            return;
-        }
+        // 移除强制登录检查
+        // const userInfo = CommonUtils.auth.getUserInfo();
+        // if (!userInfo || !userInfo.id) {
+        //     CommonUtils.showToast('请先登录后再计算涨跌幅', 'warning');
+        //     // 跳转到登录页面
+        //     window.location.href = 'login.html';
+        //     return;
+        // }
 
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;

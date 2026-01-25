@@ -58,9 +58,9 @@ async def get_pvfrs_strategy(
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db)
 ):
-    """PVFRS量价频三维共振演化策略选股"""
+    """PVFARS量价频幅度共振策略选股"""
     print(f"🔧 DEBUG: PVFRS路由被调用 - 日期: {date}, 限制: {limit}, 最低强度: {min_strength}")
-    logger.info(f"开始执行PVFRS策略选股 - 日期: {date or '当前'}, 限制: {limit}, 最低强度: {min_strength}")
+    logger.info(f"开始执行PVFARS策略选股 - 日期: {date or '当前'}, 限制: {limit}, 最低强度: {min_strength}")
     
     # 检查PVFRS是否可用
     if not PVFRS_AVAILABLE:
@@ -69,8 +69,8 @@ async def get_pvfrs_strategy(
             status_code=503,
             content={
                 "success": False,
-                "message": "PVFRS策略暂时不可用，请稍后重试",
-                "error": "PVFRS frontend interface not available",
+                "message": "PVFARS策略暂时不可用，请稍后重试",
+                "error": "PVFARS frontend interface not available",
                 "data": []
             }
         )
@@ -132,7 +132,7 @@ async def get_pvfrs_strategy(
                         "data": [],
                         "total": 0,
                         "search_date": date or datetime.now().strftime("%Y-%m-%d"),
-                        "strategy_name": "PVFRS量价频三维共振演化策略",
+                        "strategy_name": "PVFARS量价频幅度共振策略",
                         "scope": "watchlist",
                         "message": "您的自选股列表为空"
                     })
@@ -197,9 +197,11 @@ async def get_pvfrs_strategy(
             for indicator in pvfrs_indicators:
                 pvfrs_indicators_map[indicator.code] = {
                     'macro_displacement_delta': indicator.macro_displacement_delta,
+                    'ratio_d20': getattr(indicator, 'ratio_d20', None),
+                    'ratio_d1': getattr(indicator, 'ratio_d1', None),
                     'rising_days_z': indicator.rising_days_z,
                     'falling_days_f': indicator.falling_days_f,
-                    'market_type': indicator.market_type  # 保留市场类型信息，但不作为查询条件
+                    'market_type': indicator.market_type
                 }
             
             logger.info(f"[DEBUG] 从PVFRS指标表查询数据: 目标日期='{target_date_clean}', 查询到{len(pvfrs_indicators)}条记录, "
@@ -335,17 +337,38 @@ async def get_pvfrs_strategy(
             stock_code = result.symbol
             pvfrs_data = pvfrs_indicators_map.get(stock_code)
             
-            # 价格维度状态 - 从PVFRS指标表获取
+            # 价格维度状态 - 宏观位移 + 幅度数据（|Δ|、Δ/d₂₀、Δ/d₁、横盘）
+            parts = []
+            macro_displacement = None
             if pvfrs_data and pvfrs_data.get('macro_displacement_delta') is not None:
                 macro_displacement = pvfrs_data.get('macro_displacement_delta', 0) or 0
-                price_dimension_status = f"宏观位移: {macro_displacement:.2f}"
-            else:
-                # 如果PVFRS表中没有数据，尝试从策略分析结果中获取（向后兼容）
-                if price_indicators and isinstance(price_indicators, dict) and price_indicators:
-                    macro_displacement = price_indicators.get('macro_displacement', 0) or 0
-                    price_dimension_status = f"宏观位移: {macro_displacement:.2f}"
-                else:
-                    price_dimension_status = "--"
+            elif price_indicators and isinstance(price_indicators, dict):
+                macro_displacement = price_indicators.get('macro_displacement')
+                if macro_displacement is None:
+                    macro_displacement = price_indicators.get('macro_displacement_delta')
+            if macro_displacement is not None:
+                parts.append(f"宏观位移: {float(macro_displacement):.2f}")
+            ampl = price_indicators.get('amplitude') if price_indicators and isinstance(price_indicators, dict) else None
+            if ampl is not None:
+                parts.append(f"幅度: {float(ampl):.2f}")
+            rd20 = None
+            if price_indicators and isinstance(price_indicators, dict) and price_indicators.get('ratio_d20') is not None:
+                rd20 = price_indicators['ratio_d20']
+            elif pvfrs_data and pvfrs_data.get('ratio_d20') is not None:
+                rd20 = pvfrs_data['ratio_d20']
+            if rd20 is not None:
+                parts.append(f"Δ/d₂₀: {float(rd20) * 100:.2f}%")
+            rd1 = None
+            if price_indicators and isinstance(price_indicators, dict) and price_indicators.get('ratio_d1') is not None:
+                rd1 = price_indicators['ratio_d1']
+            elif pvfrs_data and pvfrs_data.get('ratio_d1') is not None:
+                rd1 = pvfrs_data['ratio_d1']
+            if rd1 is not None:
+                parts.append(f"Δ/d₁: {float(rd1) * 100:.2f}%")
+            sideways = price_indicators.get('is_sideways') if price_indicators and isinstance(price_indicators, dict) else None
+            if sideways is not None:
+                parts.append(f"横盘: {'是' if sideways else '否'}")
+            price_dimension_status = " | ".join(parts) if parts else "--"
             
             # 频率维度状态 - 从PVFRS指标表获取（优先使用数据库数据）
             if pvfrs_data:
@@ -470,7 +493,7 @@ async def get_pvfrs_strategy(
             
             # 添加选股策略特有的字段
             result_dict.update({
-                "strategy_type": "PVFRS",
+                "strategy_type": "PVFARS",
                 "signal_date": date or datetime.now().strftime("%Y-%m-%d"),
                 # 添加前端期望的字段
                 "current_price": current_price,  # 使用从实时行情表获取的价格
@@ -491,14 +514,14 @@ async def get_pvfrs_strategy(
             })
             results_data.append(result_dict)
         
-        logger.info(f"PVFRS策略选股执行完成，找到 {len(results_data)} 只符合条件的股票")
+        logger.info(f"PVFARS策略选股执行完成，找到 {len(results_data)} 只符合条件的股票")
         
         return JSONResponse({
             "success": True,
             "data": results_data,
             "total": len(results_data),
             "search_date": date or datetime.now().strftime("%Y-%m-%d"),
-            "strategy_name": "PVFRS量价频三维共振演化策略",
+            "strategy_name": "PVFARS量价频幅度共振策略",
             "parameters": {
                 "limit": limit or "无限制",
                 "min_strength": min_strength,
@@ -510,12 +533,12 @@ async def get_pvfrs_strategy(
         # 重新抛出HTTP异常
         raise
     except Exception as e:
-        logger.error(f"执行PVFRS策略选股失败: {str(e)}")
+        logger.error(f"执行PVFARS策略选股失败: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"PVFRS策略选股执行失败: {str(e)}"
+            detail=f"PVFARS策略选股执行失败: {str(e)}"
         )
 print("[DEBUG] /pvfrs-strategy 路由定义完成")
 

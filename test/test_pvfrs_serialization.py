@@ -222,7 +222,7 @@ class TestAPIResponseFormatter:
         assert response["success"] is True
         assert response["data"] == selection_results
         assert response["total"] == 2
-        assert response["strategy_name"] == "PVFRS量价频三维共振演化策略"
+        assert response["strategy_name"] == "PVFARS量价频幅度共振策略"
     
     def test_format_stock_detail(self):
         """测试股票详情格式化"""
@@ -236,7 +236,7 @@ class TestAPIResponseFormatter:
         
         assert response["success"] is True
         assert response["data"] == stock_detail
-        assert response["strategy_name"] == "PVFRS量价频三维共振演化策略"
+        assert response["strategy_name"] == "PVFARS量价频幅度共振策略"
     
     def test_format_backtest_report(self):
         """测试回测报告格式化"""
@@ -250,7 +250,7 @@ class TestAPIResponseFormatter:
         
         assert response["success"] is True
         assert response["data"] == backtest_report
-        assert response["report_type"] == "PVFRS回测报告"
+        assert response["report_type"] == "PVFARS回测报告"
     
     def test_format_task_progress(self):
         """测试任务进度格式化"""

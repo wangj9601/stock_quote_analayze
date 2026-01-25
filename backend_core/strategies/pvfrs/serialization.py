@@ -369,7 +369,7 @@ class APIResponseFormatter:
             "success": True,
             "data": selection_results,
             "total": len(selection_results),
-            "strategy_name": "PVFRS量价频三维共振演化策略",
+            "strategy_name": "PVFARS量价频幅度共振策略",
             "timestamp": datetime.now().isoformat(),
             **kwargs
         }
@@ -389,7 +389,7 @@ class APIResponseFormatter:
         response = {
             "success": True,
             "data": stock_detail,
-            "strategy_name": "PVFRS量价频三维共振演化策略",
+            "strategy_name": "PVFARS量价频幅度共振策略",
             "timestamp": datetime.now().isoformat(),
             **kwargs
         }
@@ -409,7 +409,7 @@ class APIResponseFormatter:
         response = {
             "success": True,
             "data": backtest_report,
-            "report_type": "PVFRS回测报告",
+            "report_type": "PVFARS回测报告",
             "timestamp": datetime.now().isoformat(),
             **kwargs
         }

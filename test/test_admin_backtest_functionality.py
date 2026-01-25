@@ -337,13 +337,13 @@ def test_query_filter_creation():
     custom_filter = create_query_filter(
         start_date="2023-01-01",
         end_date="2023-12-31",
-        strategy_name="PVFRS",
+        strategy_name="PVFARS",
         limit=100
     )
     
     assert custom_filter.start_date == "2023-01-01"
     assert custom_filter.end_date == "2023-12-31"
-    assert custom_filter.strategy_name == "PVFRS"
+    assert custom_filter.strategy_name == "PVFARS"
     assert custom_filter.limit == 100
 
 

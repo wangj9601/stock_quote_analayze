@@ -86,11 +86,40 @@ async def save_strategy_config(
     config_data: Dict = Body(...),
     db: Session = Depends(get_db)
 ):
-    """保存策略配置"""
+    """保存策略配置（支持动态参数）"""
     try:
         admin_interface = get_admin_interface()
-        config_id = admin_interface.save_strategy_config(config_data)
+        
+        # 提取参数
+        parameters = config_data.get('parameters', config_data)
+        description = config_data.get('description', '')
+        
+        # 验证并保存动态参数配置
+        config_to_save = {
+            'parameters': parameters,
+            'description': description,
+            'version': config_data.get('version', '1.0.0'),
+            'created_at': datetime.now().isoformat()
+        }
+        
+        # 如果包含动态调整参数，进行验证
+        if parameters.get('enableDynamicBiasAdjustment'):
+            # 验证动态bias参数
+            required_bias_params = [
+                'biasVolatilityHigh', 'biasVolatilityMedium', 'biasVolatilityLow',
+                'biasLowPriceThreshold', 'biasHighPriceThreshold'
+            ]
+            for param in required_bias_params:
+                if param not in parameters:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"启用动态bias调整时，缺少必需参数: {param}"
+                    )
+        
+        config_id = admin_interface.save_strategy_config(config_to_save)
         return {"success": True, "data": {"id": config_id}, "message": "策略配置保存成功"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"保存策略配置失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -167,7 +196,22 @@ async def _create_backtest_task_impl(
         
         # 提取股票池
         stock_pool = []
-        if 'stock_pool' in config_data:
+        mode = config_data.get('mode', 'single')
+        
+        if mode == 'optimize':
+            # 参数优化模式：需要单只股票
+            if 'optimizeStockCode' in config_data:
+                stock_pool = [config_data['optimizeStockCode']]
+            elif 'stockCode' in config_data:
+                stock_pool = [config_data['stockCode']]
+            elif 'code' in config_data:
+                stock_pool = [config_data['code']]
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="参数优化模式需要指定单只股票代码（optimizeStockCode或stockCode）"
+                )
+        elif 'stock_pool' in config_data:
             # 如果已经提供了 stock_pool
             stock_pool = config_data['stock_pool'] if isinstance(config_data['stock_pool'], list) else [config_data['stock_pool']]
         elif 'code' in config_data:
@@ -218,6 +262,73 @@ async def _create_backtest_task_impl(
             name=config_data.get('name') or config_data.get('taskName') or config_data.get('task_name')
         )
         
+        # 处理参数优化模式
+        if mode == 'optimize' and 'paramGrid' in config_data:
+            param_grid = config_data['paramGrid']
+            optimization_objective = config_data.get('optimizationObjective', ['composite_score'])
+            
+            # 调用参数优化接口
+            admin_interface = get_admin_interface_enhanced()
+            task_id = admin_interface.create_param_optimization_task(
+                backtest_config=backtest_config,
+                param_grid=param_grid,
+                optimization_objective=optimization_objective
+            )
+            
+            logger.info(f"参数优化任务已创建: {task_id}")
+            
+            # 开始执行优化任务
+            execution_started = admin_interface.start_backtest_execution(task_id)
+            
+            formatter = get_formatter()
+            response_data = formatter.format_success_response(
+                {
+                    "task_id": task_id,
+                    "execution_started": execution_started,
+                    "mode": "optimize",
+                    "param_combinations": _calculate_param_combinations(param_grid),
+                    "created_at": datetime.now().isoformat()
+                },
+                message="参数优化任务创建成功"
+            )
+            
+            return JSONResponse(response_data)
+        
+        # 处理策略对比模式
+        if mode == 'comparison' and 'comparisonConfigs' in config_data:
+            comparison_configs = config_data['comparisonConfigs']
+            
+            admin_interface = get_admin_interface_enhanced()
+            task_ids = []
+            
+            for comp_config in comparison_configs:
+                comp_backtest_config = BacktestConfig(
+                    start_date=config_data['start_date'],
+                    end_date=config_data['end_date'],
+                    stock_pool=stock_pool,
+                    initial_capital=float(config_data['initial_capital']),
+                    strategy_params=comp_config.get('config', {}).get('strategy_params', {}),
+                    risk_params=comp_config.get('config', {}).get('risk_params', {}),
+                    name=comp_config.get('name', f"对比配置-{len(task_ids) + 1}")
+                )
+                
+                task_id = admin_interface.create_backtest(comp_backtest_config)
+                admin_interface.start_backtest_execution(task_id)
+                task_ids.append(task_id)
+            
+            formatter = get_formatter()
+            response_data = formatter.format_success_response(
+                {
+                    "task_ids": task_ids,
+                    "mode": "comparison",
+                    "config_count": len(comparison_configs),
+                    "created_at": datetime.now().isoformat()
+                },
+                message="策略对比任务创建成功"
+            )
+            
+            return JSONResponse(response_data)
+        
         logger.info(f"构建的回测配置: 开始日期={backtest_config.start_date}, 结束日期={backtest_config.end_date}, 股票数量={len(stock_pool)}, 初始资金={backtest_config.initial_capital}")
         
         # 获取管理端接口实例
@@ -265,6 +376,17 @@ async def _create_backtest_task_impl(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"创建回测任务时发生未知错误: {str(e)}"
         )
+
+
+def _calculate_param_combinations(param_grid: Dict) -> int:
+    """计算参数组合数量"""
+    total = 1
+    for key, values in param_grid.items():
+        if isinstance(values, list):
+            total *= len(values)
+        else:
+            total *= 1
+    return total
 
 
 @router.get("/backtest/progress/{task_id}")
@@ -430,8 +552,10 @@ async def get_backtest_report(
                 from backend_api.models.pvfrs_enhanced import PVFRSBacktestResultEnhanced
                 from sqlalchemy.orm import joinedload
                 
-                # 从数据库查询报告
-                result = db.query(PVFRSBacktestResultEnhanced).filter(
+                # 从数据库查询报告（包含交易记录）
+                result = db.query(PVFRSBacktestResultEnhanced).options(
+                    joinedload(PVFRSBacktestResultEnhanced.trades)
+                ).filter(
                     PVFRSBacktestResultEnhanced.task_id == task_id
                 ).first()
                 
@@ -479,18 +603,16 @@ async def get_backtest_report(
                         report_data["trades"] = [
                             {
                                 "id": trade.id,
-                                "stock_code": trade.stock_code,
-                                "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
-                                # 模型里是 exit_time（datetime），前端也用 exit_time
-                                "exit_time": trade.exit_time.isoformat() if trade.exit_time else None,
-                                "entry_price": float(trade.entry_price) if trade.entry_price else 0,
-                                "exit_price": float(trade.exit_price) if trade.exit_price else 0,
+                                "stockCode": trade.stock_code,
+                                "entryDate": trade.entry_date.isoformat() if trade.entry_date else None,
+                                "exitDate": trade.exit_time.isoformat() if trade.exit_time else None,
+                                "entryPrice": float(trade.entry_price) if trade.entry_price else 0,
+                                "exitPrice": float(trade.exit_price) if trade.exit_price else 0,
                                 "quantity": trade.quantity or 0,
                                 "pnl": float(trade.pnl) if trade.pnl else 0,
-                                # 统一：pnl_percent 使用小数比例（前端再 *100 显示）
-                                "pnl_percent": float(trade.pnl_percent) if trade.pnl_percent is not None else 0,
-                                "holding_period": trade.holding_period or 0,
-                                "exit_reason": trade.exit_reason or ""
+                                "pnlPercent": float(trade.pnl_percent) if trade.pnl_percent is not None else 0,
+                                "holdingDays": trade.holding_period or 0,
+                                "exitReason": trade.exit_reason or ""
                             }
                             for trade in result.trades
                         ]

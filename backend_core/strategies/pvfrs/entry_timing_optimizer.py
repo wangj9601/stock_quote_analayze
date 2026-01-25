@@ -900,17 +900,26 @@ class EntryTimingOptimizer:
             # 价格穿越监控
             price_analysis = self.monitor_price_breakthrough(data, indicators.avg_price_20d)
             
+            # 增强：价格位置评分
+            price_position_score = self._calculate_price_position_score(data, indicators.avg_price_20d)
+            price_analysis['position_score'] = price_position_score
+            
             # 成交量突破确认
             volume_analysis = self.confirm_volume_breakthrough(data[-1], indicators.avg_volume_20d)
+            
+            # 增强：成交量突破强度分析（检查最近3天）
+            volume_breakthrough_strength = self._analyze_volume_breakthrough_strength(data, indicators.avg_volume_20d)
+            volume_analysis['breakthrough_strength'] = volume_breakthrough_strength
             
             # 幅度校验系数计算
             amplitude_analysis = self.calculate_amplitude_coefficient(
                 indicators.macro_displacement, indicators.avg_price_20d
             )
             
-            # 综合评估
-            comprehensive_score = self._calculate_comprehensive_score(
-                price_analysis, volume_analysis, amplitude_analysis
+            # 综合评估（优化权重：价格位置40% + 成交量突破40% + 幅度系数20%）
+            comprehensive_score = self._calculate_comprehensive_score_enhanced(
+                price_analysis, volume_analysis, amplitude_analysis, 
+                price_position_score, volume_breakthrough_strength
             )
             
             # 生成综合建议
@@ -922,6 +931,8 @@ class EntryTimingOptimizer:
                 'price_analysis': price_analysis,
                 'volume_analysis': volume_analysis,
                 'amplitude_analysis': amplitude_analysis,
+                'price_position_score': price_position_score,
+                'volume_breakthrough_strength': volume_breakthrough_strength,
                 'comprehensive_score': comprehensive_score,
                 'optimal_entry_timing': comprehensive_score > 0.7,
                 'good_entry_timing': comprehensive_score > 0.5,
@@ -934,34 +945,141 @@ class EntryTimingOptimizer:
         except Exception as e:
             raise CalculationException(f"综合入场时机优化失败: {str(e)}")
     
-    def _calculate_comprehensive_score(self, price_analysis: Dict, volume_analysis: Dict, 
-                                     amplitude_analysis: Dict) -> float:
-        """计算综合评分
+    def _calculate_price_position_score(self, data: List[MarketData], avg_price_20d: float) -> float:
+        """计算价格位置评分（增强版）
+        
+        当前价格在20天价格区间中的位置评分
+        评分标准：
+        - 价格在区间上半部分（50%-100%）：高分
+        - 价格在区间下半部分（0%-50%）：低分
+        
+        Args:
+            data: 市场数据列表
+            avg_price_20d: 20日平均价格
+            
+        Returns:
+            float: 价格位置评分 (0-1)
+        """
+        try:
+            if len(data) < 20:
+                return 0.5  # 数据不足，返回中等评分
+            
+            recent_data = data[-20:]
+            prices = [day.close for day in recent_data]
+            
+            min_price = min(prices)
+            max_price = max(prices)
+            current_price = prices[-1]
+            
+            if max_price == min_price:
+                return 0.5  # 价格无波动，返回中等评分
+            
+            # 计算当前价格在区间中的位置（0-1）
+            position_ratio = (current_price - min_price) / (max_price - min_price)
+            
+            # 计算相对于平均价格的位置
+            if avg_price_20d > 0:
+                relative_to_avg = (current_price - avg_price_20d) / avg_price_20d
+            else:
+                relative_to_avg = 0.0
+            
+            # 综合评分：位置占比60% + 相对平均价格40%
+            position_score = position_ratio * 0.6 + max(0, min(1, (relative_to_avg + 0.1) * 5)) * 0.4
+            
+            return max(0.0, min(1.0, position_score))
+            
+        except Exception as e:
+            raise CalculationException(f"价格位置评分计算失败: {str(e)}")
+    
+    def _analyze_volume_breakthrough_strength(self, data: List[MarketData], avg_volume_20d: float) -> Dict:
+        """分析成交量突破强度（增强版：检查最近3天）
+        
+        分析突破幅度和持续性
+        
+        Args:
+            data: 市场数据列表
+            avg_volume_20d: 20日平均成交量
+            
+        Returns:
+            Dict: 突破强度分析结果
+        """
+        try:
+            if len(data) < 3:
+                return {
+                    'strength': 0.0,
+                    'breakthrough_magnitude': 0.0,
+                    'persistence_days': 0,
+                    'is_strong': False
+                }
+            
+            recent_data = data[-3:]
+            volumes = [day.volume for day in recent_data]
+            
+            # 计算突破幅度（最近3天平均成交量/20日均量）
+            avg_recent_volume = sum(volumes) / len(volumes)
+            breakthrough_magnitude = avg_recent_volume / avg_volume_20d if avg_volume_20d > 0 else 0.0
+            
+            # 计算持续性（连续放量天数）
+            persistence_days = sum(1 for vol in volumes if vol > avg_volume_20d)
+            
+            # 计算强度评分
+            strength = 0.0
+            if breakthrough_magnitude >= 2.0:
+                strength += 0.5  # 突破幅度大
+            elif breakthrough_magnitude >= 1.5:
+                strength += 0.3
+            elif breakthrough_magnitude >= 1.2:
+                strength += 0.1
+            
+            if persistence_days >= 3:
+                strength += 0.5  # 持续性强
+            elif persistence_days >= 2:
+                strength += 0.3
+            elif persistence_days >= 1:
+                strength += 0.1
+            
+            is_strong = strength >= 0.7
+            
+            return {
+                'strength': min(1.0, strength),
+                'breakthrough_magnitude': breakthrough_magnitude,
+                'persistence_days': persistence_days,
+                'is_strong': is_strong
+            }
+            
+        except Exception as e:
+            raise CalculationException(f"成交量突破强度分析失败: {str(e)}")
+    
+    def _calculate_comprehensive_score_enhanced(self, price_analysis: Dict, volume_analysis: Dict, 
+                                               amplitude_analysis: Dict, price_position_score: float,
+                                               volume_breakthrough_strength: Dict) -> float:
+        """计算综合评分（增强版：价格位置40% + 成交量突破40% + 幅度系数20%）
         
         Args:
             price_analysis: 价格分析结果
             volume_analysis: 成交量分析结果
             amplitude_analysis: 幅度分析结果
+            price_position_score: 价格位置评分
+            volume_breakthrough_strength: 成交量突破强度
             
         Returns:
             float: 综合评分 (0-1)
         """
         score = 0.0
         
-        # 价格穿越贡献 (30%)
-        if price_analysis['has_breakthrough']:
-            score += 0.15
-        score += price_analysis['breakthrough_strength'] * 0.15
+        # 价格位置贡献 (40%)
+        score += price_position_score * 0.4
         
-        # 成交量突破贡献 (35%)
-        if volume_analysis['has_breakthrough']:
-            score += 0.15
-        score += volume_analysis['entry_timing_score'] * 0.20
+        # 成交量突破贡献 (40%)
+        volume_strength = volume_breakthrough_strength.get('strength', 0.0)
+        if volume_analysis.get('has_breakthrough', False):
+            volume_strength = max(volume_strength, 0.5)  # 至少0.5分
+        score += volume_strength * 0.4
         
-        # 幅度系数贡献 (35%)
-        if amplitude_analysis['is_valid']:
-            score += 0.15
-        score += amplitude_analysis['entry_readiness']['readiness_score'] * 0.20
+        # 幅度系数贡献 (20%)
+        if amplitude_analysis.get('is_valid', False):
+            readiness_score = amplitude_analysis.get('entry_readiness', {}).get('readiness_score', 0.0)
+            score += readiness_score * 0.20
         
         return min(1.0, score)
     

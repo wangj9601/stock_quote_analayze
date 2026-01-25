@@ -130,7 +130,7 @@ const ScreeningPage = {
             });
         });
 
-        // 绑定PVFRS策略范围切换事件
+        // 绑定PVFARS策略范围切换事件
         document.querySelectorAll('input[name="pvfrsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.loadScreeningResults('pvfrs');
@@ -610,7 +610,7 @@ const ScreeningPage = {
                     </tr>
                 `;
             } else if (strategy === 'pvfrs') {
-                // PVFRS三维共振策略表格
+                // PVFARS量价频幅度共振策略表格
                 // 信号强度颜色标识
                 let strengthClass = '';
                 const signalStrength = stock.signal_strength || 0;
@@ -624,7 +624,7 @@ const ScreeningPage = {
 
                 // 调试日志：检查股票名称
                 if (index < 3) { // 只打印前3条数据
-                    console.log(`[DEBUG] PVFRS股票 ${index}: code=${stock.symbol || stock.code}, name=${stock.name}, symbol=${stock.symbol}`);
+                    console.log(`[DEBUG] PVFARS股票 ${index}: code=${stock.symbol || stock.code}, name=${stock.name}, symbol=${stock.symbol}`);
                 }
 
                 // 共振状态显示
@@ -827,7 +827,7 @@ const ScreeningPage = {
                 stock.investment_advice || '',
                 stock.current_change_percent ? stock.current_change_percent.toFixed(2) + '%' : '0%'
             ]);
-            filename = `PVFRS三维共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+            filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'long-lower-shadow') {
             headers = [
                 '股票代码', '股票名称', '形态日期', '形态收盘价',

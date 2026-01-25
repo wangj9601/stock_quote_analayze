@@ -622,10 +622,10 @@ class BacktestEngine(IBacktestEngine):
                 # 如果重新计算失败，使用原始数据
                 recalculated_trades.append(trade)
         
-        # 基础统计
+        # 基础统计（盈亏平衡算入 losing，以满足 winning + losing == total_trades）
         total_pnl = sum([t.pnl for t in recalculated_trades if t.pnl is not None])
-        winning_trades = [t for t in recalculated_trades if t.pnl and t.pnl > 0]
-        losing_trades = [t for t in recalculated_trades if t.pnl and t.pnl < 0]
+        winning_trades = [t for t in recalculated_trades if t.pnl is not None and t.pnl > 0]
+        losing_trades = [t for t in recalculated_trades if t.pnl is not None and t.pnl <= 0]
         
         # 计算各项指标
         win_rate = len(winning_trades) / len(recalculated_trades) if recalculated_trades else 0.0
@@ -1186,7 +1186,7 @@ class BacktestEngine(IBacktestEngine):
                     self.current_backtest_result,
                     additional_data={
                         'config': self.config,
-                        'strategy_name': 'PVFRS Strategy',
+                        'strategy_name': 'PVFARS Strategy',
                         'backtest_engine_version': '1.0.0'
                     }
                 )

@@ -60,6 +60,12 @@ class PVFRSIndicators:
     amplitude_ratio: float      # 幅度系数 Δ₂₀ / d
     resonance_strength: float   # 共振强度 (0-1)
     
+    # 图片中幅度指标（可选）
+    amplitude: Optional[float] = None       # 幅度 = |Δ|
+    ratio_d20: Optional[float] = None      # Δ / d₂₀
+    ratio_d1: Optional[float] = None       # Δ / d₁
+    is_sideways: Optional[bool] = None     # Δ ≈ 0 横盘
+    
     def __post_init__(self):
         """指标验证"""
         if self.avg_price_20d <= 0:

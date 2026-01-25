@@ -97,22 +97,22 @@ class ResonanceDetector(IResonanceDetector):
             CalculationException: 计算异常时抛出
         """
         try:
-            # 定义各条件的权重
+            # 定义各条件的权重（优化版：提高量价共振和频率优势权重）
             condition_weights = {
                 # 价格维度条件
-                'macro_displacement_positive': 0.15,  # 宏观位移为正
-                'instant_strength_positive': 0.15,   # 即时强度为正
+                'macro_displacement_positive': 0.14,  # 宏观位移为正（从0.15降低）
+                'instant_strength_positive': 0.14,   # 即时强度为正（从0.15降低）
                 'price_above_average': 0.10,         # 价格高于平均
                 
                 # 频率维度条件
-                'frequency_advantage': 0.12,         # 频率优势
+                'frequency_advantage': 0.15,         # 频率优势（从0.12提高到0.15）
                 'continuous_buying_support': 0.10,   # 持续买盘支撑
                 'no_false_prosperity': 0.08,         # 无虚假繁荣
                 
                 # 成交量维度条件
                 'volume_efficiency': 0.10,           # 成交量效率
-                'volume_price_resonance': 0.12,      # 量价共振
-                'strong_fund_support': 0.08          # 强劲资金支撑
+                'volume_price_resonance': 0.15,      # 量价共振（从0.12提高到0.15）
+                'strong_fund_support': 0.04          # 强劲资金支撑（从0.08降低，因为已有连续放量验证）
             }
             
             # 计算加权得分
@@ -178,6 +178,19 @@ class ResonanceDetector(IResonanceDetector):
         conditions_met['volume_price_resonance'] = volume_indicators.get('volume_price_resonance', False)
         conditions_met['strong_fund_support'] = volume_indicators.get('strong_fund_support', False)
         
+        # 乖离率条件（新增）
+        bias = price_indicators.get('bias', 0.0)
+        bias_trend = price_indicators.get('bias_trend', {})
+        conditions_met['bias'] = bias  # 保存bias值供后续使用
+        conditions_met['bias_reasonable'] = 0.005 <= bias <= 0.08  # bias在合理范围（0.5%-8%）
+        if isinstance(bias_trend, dict):
+            conditions_met['bias_trend_favorable'] = (
+                bias_trend.get('trend_5d', 'stable') in ['expanding', 'stable'] and
+                not bias_trend.get('is_converging', False)
+            )
+        else:
+            conditions_met['bias_trend_favorable'] = True
+        
         return conditions_met
     
     def _confirm_high_efficiency_trajectory(self, three_dimension_resonance: bool, 
@@ -211,12 +224,85 @@ class ResonanceDetector(IResonanceDetector):
         critical_conditions = [
             'macro_displacement_positive',  # 价格整体上涨
             'frequency_advantage',          # 频率优势
-            'volume_efficiency'             # 成交量效率
+            'volume_efficiency',            # 成交量效率
+            'volume_price_resonance'        # 量价共振（新增）
         ]
         
         for condition in critical_conditions:
             if not conditions_met.get(condition, False):
                 return False
+        
+        # 维度均衡性检查（新增）
+        dimension_scores = self._calculate_dimension_scores_from_conditions(conditions_met)
+        if not self._check_dimension_balance(dimension_scores):
+            return False
+        
+        return True
+    
+    def _calculate_dimension_scores_from_conditions(self, conditions_met: Dict[str, bool]) -> Dict[str, float]:
+        """从条件计算各维度得分
+        
+        Args:
+            conditions_met: 满足的条件
+            
+        Returns:
+            Dict: 各维度得分
+        """
+        price_score = 0.0
+        if conditions_met.get('macro_displacement_positive', False):
+            price_score += 0.5
+        if conditions_met.get('instant_strength_positive', False):
+            price_score += 0.5
+        
+        frequency_score = 0.0
+        if conditions_met.get('frequency_advantage', False):
+            frequency_score += 0.4
+        if conditions_met.get('continuous_buying_support', False):
+            frequency_score += 0.3
+        if conditions_met.get('no_false_prosperity', False):
+            frequency_score += 0.3
+        
+        volume_score = 0.0
+        if conditions_met.get('volume_efficiency', False):
+            volume_score += 0.3
+        if conditions_met.get('volume_price_resonance', False):
+            volume_score += 0.4
+        if conditions_met.get('strong_fund_support', False):
+            volume_score += 0.3
+        
+        return {
+            'price': price_score,
+            'frequency': frequency_score,
+            'volume': volume_score
+        }
+    
+    def _check_dimension_balance(self, dimension_scores: Dict[str, float]) -> bool:
+        """检查维度均衡性
+        
+        验证内容：
+        1. 各维度得分差异<0.3（避免单一维度过高）
+        2. 最低维度得分>0.5（确保各维度都达标）
+        
+        Args:
+            dimension_scores: 各维度得分
+            
+        Returns:
+            bool: 是否均衡
+        """
+        scores = list(dimension_scores.values())
+        if len(scores) < 3:
+            return True
+        
+        min_score = min(scores)
+        max_score = max(scores)
+        
+        # 最低维度得分>0.5
+        if min_score < 0.5:
+            return False
+        
+        # 各维度得分差异<0.3
+        if max_score - min_score > 0.3:
+            return False
         
         return True
     

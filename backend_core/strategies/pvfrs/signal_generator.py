@@ -25,6 +25,7 @@ class SignalGenerator(ISignalGenerator):
         self.min_signal_strength = 0.6  # 最小信号强度阈值
         self.high_quality_threshold = 0.8  # 高质量信号阈值
         self.entry_timing_optimizer = EntryTimingOptimizer()  # 入场时机优化器
+        self.default_buy_bias_min = 0.02  # 默认买入乖离率阈值2%
     
     def generate_buy_signal(self, symbol: str, date: str, price: float, 
                            indicators: PVFRSIndicators, conditions_met: Dict[str, bool]) -> Signal:
@@ -49,8 +50,31 @@ class SignalGenerator(ISignalGenerator):
             # 计算信号强度
             signal_strength = self._calculate_buy_signal_strength(indicators, conditions_met)
             
+            # 确定信号质量等级
+            quality_level = self._determine_signal_quality(signal_strength, indicators, conditions_met)
+            
+            # 计算乖离率质量得分（新增）
+            # 从价格维度指标中获取bias
+            price_indicators_dict = {}
+            if hasattr(indicators, 'avg_price_20d') and indicators.avg_price_20d > 0:
+                # 计算bias = (当前价格 - 20日均价) / 20日均价
+                # 当前价格可以通过 instant_deviation + avg_price_20d 计算
+                current_price_estimate = indicators.instant_deviation + indicators.avg_price_20d
+                price_indicators_dict['bias'] = (current_price_estimate - indicators.avg_price_20d) / indicators.avg_price_20d
+            else:
+                price_indicators_dict['bias'] = 0.0
+            
+            # 从conditions_met中获取bias（如果已计算）
+            if 'bias' in conditions_met:
+                price_indicators_dict['bias'] = conditions_met['bias']
+            
+            bias_score = self._calculate_bias_quality_score_from_dict(price_indicators_dict, conditions_met)
+            
+            # 根据质量等级调整信号强度
+            adjusted_strength = self._adjust_strength_by_quality(signal_strength, quality_level, bias_score)
+            
             # 生成信号原因描述
-            reason = self._generate_buy_signal_reason(conditions_met, signal_strength)
+            reason = self._generate_buy_signal_reason(conditions_met, adjusted_strength, quality_level)
             
             # 创建买入信号
             buy_signal = Signal(
@@ -58,11 +82,16 @@ class SignalGenerator(ISignalGenerator):
                 date=date,
                 signal_type=SignalType.BUY,
                 price=price,
-                strength=signal_strength,
+                strength=adjusted_strength,
                 reason=reason,
                 indicators=indicators,
                 conditions_met=conditions_met.copy()
             )
+            
+            # 添加质量等级信息
+            buy_signal.conditions_met['quality_level'] = quality_level
+            buy_signal.conditions_met['original_strength'] = signal_strength
+            buy_signal.conditions_met['bias_score'] = bias_score
             
             return buy_signal
             
@@ -337,8 +366,144 @@ class SignalGenerator(ISignalGenerator):
         # 确保在0-1范围内
         return max(0.0, min(1.0, final_strength))
     
+    def _determine_signal_quality(self, signal_strength: float, indicators: PVFRSIndicators, 
+                                  conditions_met: Dict[str, bool]) -> str:
+        """确定信号质量等级
+        
+        Args:
+            signal_strength: 信号强度
+            indicators: PVFRS指标
+            conditions_met: 满足的条件
+            
+        Returns:
+            str: 质量等级 ('high', 'medium', 'low')
+        """
+        # 高质量信号标准：
+        # 1. 共振强度 > 0.85
+        # 2. 所有关键条件都满足
+        if signal_strength >= 0.85:
+            critical_conditions = [
+                'macro_displacement_positive',
+                'frequency_advantage',
+                'volume_price_resonance',
+                'strong_fund_support',
+                'continuous_buying_support'
+            ]
+            critical_met = sum(1 for cond in critical_conditions if conditions_met.get(cond, False))
+            if critical_met >= 4:  # 至少满足4个关键条件
+                return 'high'
+        
+        # 中等质量信号标准：
+        # 1. 共振强度 >= 0.7
+        # 2. 至少满足基本条件
+        if signal_strength >= 0.7:
+            basic_conditions = [
+                'macro_displacement_positive',
+                'frequency_advantage',
+                'volume_efficiency'
+            ]
+            basic_met = sum(1 for cond in basic_conditions if conditions_met.get(cond, False))
+            if basic_met >= 2:  # 至少满足2个基本条件
+                return 'medium'
+        
+        # 其他情况为低质量
+        return 'low'
+    
+    def _calculate_bias_quality_score_from_dict(self, price_indicators: Dict, conditions_met: Dict[str, bool]) -> float:
+        """计算乖离率质量得分（从字典获取）
+        
+        Args:
+            price_indicators: 价格维度指标字典
+            conditions_met: 满足的条件
+            
+        Returns:
+            float: 乖离率质量得分 (0-1)
+        """
+        try:
+            bias = price_indicators.get('bias', 0.0)
+            
+            # 计算bias质量得分
+            if 0.01 <= bias <= 0.05:  # 1%-5%：合理区间
+                return 1.0
+            elif bias < 0.01:  # <1%：偏低，可能还未启动
+                return 0.7
+            elif bias > 0.05:  # >5%：偏高，可能已过热
+                return 0.8
+            else:
+                return 0.7
+                
+        except Exception:
+            return 0.7
+    
+    def _calculate_bias_quality_score(self, indicators: PVFRSIndicators, conditions_met: Dict[str, bool]) -> float:
+        """计算乖离率质量得分
+        
+        bias处于合理区间（1%-5%）：得分1.0
+        bias偏低（<1%）：得分0.7（可能还未启动）
+        bias偏高（>5%）：得分0.8（可能已过热）
+        
+        Args:
+            indicators: PVFRS指标
+            conditions_met: 满足的条件
+            
+        Returns:
+            float: 乖离率质量得分 (0-1)
+        """
+        try:
+            # 从价格维度指标中获取bias
+            # 注意：bias需要从价格维度分析结果中获取
+            # 这里假设bias已经包含在indicators中，或者需要从conditions_met中获取
+            
+            # 如果没有bias信息，返回中等得分
+            bias = conditions_met.get('bias', None)
+            if bias is None:
+                # 尝试从indicators计算
+                if indicators.avg_price_20d > 0:
+                    bias = (indicators.macro_displacement + indicators.avg_price_20d - indicators.avg_price_20d) / indicators.avg_price_20d
+                else:
+                    return 0.7
+            
+            # 计算bias质量得分
+            if 0.01 <= bias <= 0.05:  # 1%-5%：合理区间
+                return 1.0
+            elif bias < 0.01:  # <1%：偏低，可能还未启动
+                return 0.7
+            elif bias > 0.05:  # >5%：偏高，可能已过热
+                return 0.8
+            else:
+                return 0.7
+                
+        except Exception:
+            return 0.7
+    
+    def _adjust_strength_by_quality(self, signal_strength: float, quality_level: str, bias_score: float = 0.7) -> float:
+        """根据质量等级调整信号强度（增强版：包含bias得分）
+        
+        Args:
+            signal_strength: 原始信号强度
+            quality_level: 质量等级
+            bias_score: 乖离率质量得分（新增）
+            
+        Returns:
+            float: 调整后的信号强度
+        """
+        if quality_level == 'high':
+            # 高质量信号：轻微提升（最多到1.0）
+            base_adjustment = signal_strength * 1.05
+        elif quality_level == 'medium':
+            # 中等质量信号：保持原样
+            base_adjustment = signal_strength
+        else:
+            # 低质量信号：降低强度
+            base_adjustment = signal_strength * 0.9
+        
+        # 根据bias得分进一步调整（权重10%）
+        bias_adjustment = base_adjustment * 0.9 + base_adjustment * bias_score * 0.1
+        
+        return max(0.0, min(1.0, bias_adjustment))
+    
     def _generate_buy_signal_reason(self, conditions_met: Dict[str, bool], 
-                                  signal_strength: float) -> str:
+                                  signal_strength: float, quality_level: str = None) -> str:
         """生成买入信号原因描述
         
         Args:
@@ -371,9 +536,18 @@ class SignalGenerator(ISignalGenerator):
             reasons.append("量价共振")
         if conditions_met.get('strong_fund_support', False):
             reasons.append("强劲资金支撑")
+        if conditions_met.get('continuous_volume_increase', False):
+            reasons.append("连续放量")
         
         # 生成描述
-        if signal_strength >= self.high_quality_threshold:
+        if quality_level:
+            quality_desc_map = {
+                'high': '高质量',
+                'medium': '中等质量',
+                'low': '低质量'
+            }
+            quality_desc = quality_desc_map.get(quality_level, '中等质量')
+        elif signal_strength >= self.high_quality_threshold:
             quality_desc = "高质量"
         elif signal_strength >= self.min_signal_strength:
             quality_desc = "中等质量"
@@ -546,11 +720,55 @@ class SignalGenerator(ISignalGenerator):
         
         return True
     
+    def calculate_dynamic_buy_bias_threshold(self, price_indicators: Dict, current_price: float) -> float:
+        """动态计算买入乖离率阈值
+        
+        根据市场波动率和股票价格区间动态调整buy_bias_min
+        
+        Args:
+            price_indicators: 价格维度指标
+            current_price: 当前价格
+            
+        Returns:
+            float: 动态调整后的买入乖离率阈值
+        """
+        try:
+            base_threshold = self.default_buy_bias_min  # 基础阈值2%
+            
+            # 1. 根据市场波动率调整
+            price_volatility = price_indicators.get('price_volatility', 0.15)
+            
+            if price_volatility > 0.20:  # 高波动市场（波动率>20%）
+                volatility_adjustment = 0.01  # +1%
+            elif price_volatility > 0.10:  # 中等波动市场（10%<波动率<=20%）
+                volatility_adjustment = 0.0  # 不变
+            else:  # 低波动市场（波动率<=10%）
+                volatility_adjustment = -0.01  # -1%
+            
+            # 2. 根据股票价格区间调整
+            if current_price < 10:  # 低价股（<10元）
+                price_adjustment = 0.005  # +0.5%
+            elif current_price > 50:  # 高价股（>50元）
+                price_adjustment = -0.005  # -0.5%
+            else:
+                price_adjustment = 0.0
+            
+            # 计算最终阈值
+            dynamic_threshold = base_threshold + volatility_adjustment + price_adjustment
+            
+            # 确保阈值在合理范围内（0.5%-5%）
+            return max(0.005, min(0.05, dynamic_threshold))
+            
+        except Exception as e:
+            # 如果计算失败，返回默认值
+            return self.default_buy_bias_min
+    
     def filter_signals(self, price_indicators: Dict, frequency_indicators: Dict, 
                       volume_indicators: Dict) -> bool:
-        """信号过滤逻辑
+        """信号过滤逻辑（增强版：包含乖离率协同验证）
         
         确保任一维度条件不满足时不生成信号，实现严格的条件验证。
+        新增：乖离率与其他指标的协同验证
         
         Args:
             price_indicators: 价格维度分析结果
@@ -565,12 +783,68 @@ class SignalGenerator(ISignalGenerator):
         """
         try:
             # 严格的三维条件验证
-            return self._strict_dimension_validation(
+            basic_validation = self._strict_dimension_validation(
                 price_indicators, frequency_indicators, volume_indicators
             )
             
+            if not basic_validation:
+                return False
+            
+            # 新增：乖离率协同验证
+            bias_validation = self._validate_bias_synergy(
+                price_indicators, volume_indicators
+            )
+            
+            return bias_validation
+            
         except Exception as e:
             raise CalculationException(f"信号过滤失败: {str(e)}")
+    
+    def _validate_bias_synergy(self, price_indicators: Dict, volume_indicators: Dict) -> bool:
+        """验证乖离率与其他指标的协同
+        
+        bias与价格位置的协同：
+        - 价格在20天区间低位（<30%）+ bias适中（1%-3%）：买入信号增强
+        - 价格在20天区间高位（>70%）+ bias偏高（>5%）：卖出信号增强
+        
+        bias与成交量的协同：
+        - bias扩大 + 成交量放大：买入信号增强
+        - bias扩大 + 成交量萎缩：卖出信号（背离）
+        
+        Args:
+            price_indicators: 价格维度指标
+            volume_indicators: 成交量维度指标
+            
+        Returns:
+            bool: 是否通过协同验证
+        """
+        try:
+            bias = price_indicators.get('bias', 0.0)
+            bias_trend = price_indicators.get('bias_trend', {})
+            
+            # 获取价格位置信息（如果有）
+            # 这里需要从entry_timing_optimizer获取价格位置，暂时使用bias作为代理
+            
+            # 基础验证：bias必须在合理范围内（0.5%-8%）
+            if bias < 0.005 or bias > 0.08:
+                return False
+            
+            # 验证bias趋势：买入时bias应该向上或稳定
+            if isinstance(bias_trend, dict):
+                trend_5d = bias_trend.get('trend_5d', 'stable')
+                # 如果bias在收敛且bias<1%，可能还未启动，允许通过
+                if trend_5d == 'converging' and bias < 0.01:
+                    return True
+                # 如果bias在扩大，需要配合成交量放大
+                if trend_5d == 'expanding':
+                    volume_increasing = volume_indicators.get('volume_increasing', False)
+                    if not volume_increasing:
+                        return False  # bias扩大但成交量未放大，可能是背离
+            
+            return True
+            
+        except Exception:
+            return True  # 如果验证失败，默认通过
     
     def _strict_dimension_validation(self, price_indicators: Dict, 
                                    frequency_indicators: Dict, 
@@ -637,9 +911,20 @@ class SignalGenerator(ISignalGenerator):
         if avg_price_20d <= 0:
             return False
         
-        # 条件4: 幅度系数验证
+        # 条件4: 幅度系数验证（优化：范围从0.5%-50%调整为1%-30%）
         amplitude_ratio = macro_displacement / avg_price_20d
-        if amplitude_ratio < 0.005 or amplitude_ratio > 0.5:  # 0.5%-50%范围
+        if amplitude_ratio < 0.01 or amplitude_ratio > 0.30:  # 1%-30%范围
+            return False
+        
+        # 条件5: 价格趋势持续性验证（新增）
+        trend_persistence = price_indicators.get('trend_persistence', {})
+        if isinstance(trend_persistence, dict):
+            if not trend_persistence.get('is_persistent', False):
+                return False
+        
+        # 条件6: 价格波动率验证（新增：波动率<15%）
+        price_volatility = price_indicators.get('price_volatility', 1.0)
+        if price_volatility >= 0.15:
             return False
         
         return True
@@ -669,12 +954,17 @@ class SignalGenerator(ISignalGenerator):
         if not frequency_advantage:
             return False
         
-        # 条件2: 上涨天数必须明显多于下跌天数（至少多2天）
-        if rising_days <= falling_days + 1:
+        # 条件2: 上涨天数必须明显多于下跌天数（至少多3天，即 Z > F+3）
+        if rising_days <= falling_days + 2:  # Z > F+3 等价于 Z > F+2（因为整数）
             return False
         
-        # 条件3: 上涨天数必须达到最低要求（20天中至少8天）
-        if rising_days < 8:
+        # 条件3: 上涨天数必须达到最低要求（20天中至少10天，占50%）
+        if rising_days < 10:
+            return False
+        
+        # 条件6: 最近10天中上涨天数>=6（上涨持续性验证）
+        recent_rising_persistence = frequency_indicators.get('recent_rising_persistence', 0)
+        if recent_rising_persistence < 6:
             return False
         
         # 条件4: 不能有虚假繁荣
@@ -726,11 +1016,19 @@ class SignalGenerator(ISignalGenerator):
         if not volume_price_resonance:
             return False
         
-        # 条件5: 必须有强劲资金支撑
-        if not strong_fund_support:
+        # 条件5: 必须有强劲资金支撑（包括连续放量）
+        strong_fund_support = volume_indicators.get('strong_fund_support', False)
+        continuous_volume_increase = volume_indicators.get('continuous_volume_increase', False)
+        if not (strong_fund_support and continuous_volume_increase):
             return False
         
-        # 条件6: 成交量增幅验证（至少增加20%）
+        # 条件6: 成交量趋势持续性
+        volume_trend_persistence = volume_indicators.get('volume_trend_persistence', {})
+        if isinstance(volume_trend_persistence, dict):
+            if not volume_trend_persistence.get('is_persistent', False):
+                return False
+        
+        # 条件7: 成交量增幅验证（至少增加20%）
         volume_increase_ratio = (current_volume - avg_volume_20d) / avg_volume_20d
         if volume_increase_ratio < 0.2:
             return False

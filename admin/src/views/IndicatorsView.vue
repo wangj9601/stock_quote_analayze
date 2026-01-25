@@ -464,6 +464,25 @@
                 </el-col>
               </el-row>
 
+              <el-divider content-position="left">批量生成选项</el-divider>
+              
+              <el-row :gutter="16" class="mb-4">
+                <el-col :span="24">
+                  <el-button 
+                    type="success" 
+                    @click="generateAllWatchlistIndicators" 
+                    :loading="batchGenerating"
+                    :disabled="batchGenerating"
+                  >
+                    <el-icon><Collection /></el-icon>
+                    为全部自选股生成指标
+                  </el-button>
+                  <el-text type="info" class="ml-2">
+                    将为自选股表中的所有股票批量生成选中的指标数据
+                  </el-text>
+                </el-col>
+              </el-row>
+
               <el-divider content-position="left">选择要生成的指标</el-divider>
               
               <div class="mb-3">
@@ -541,12 +560,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Refresh, Search, Setting } from '@element-plus/icons-vue'
+import { Refresh, Search, Setting, Collection } from '@element-plus/icons-vue'
 import { apiService } from '@/services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
 const generating = ref(false)
+const batchGenerating = ref(false)
 const activeMainTab = ref('query')
 const activeIndicator = ref('ma')
 const tableData = ref([])
@@ -601,6 +621,7 @@ const fetchData = async () => {
       page_size: pageSize.value,
       ...filters
     }
+    console.log('🔗 请求完整URL:', `/indicators/${activeIndicator.value}`, 'params:', params)
     const response: any = await apiService.get(`/indicators/${activeIndicator.value}`, { params })
     if (response.success) {
       // 确保 data 始终是数组
@@ -669,7 +690,7 @@ const getIndicatorLabel = (key: string) => {
     kdj: 'KDJ',
     rsi: 'RSI',
     boll: 'BOLL (布林带)',
-    pvfrs: 'PVFRS'
+    pvfrs: 'PVFARS'
   }
   return labels[key] || key
 }
@@ -722,6 +743,76 @@ const generateIndicators = async () => {
     ElMessage.error('网络请求失败')
   } finally {
     generating.value = false
+  }
+}
+
+const generateAllWatchlistIndicators = async () => {
+  if (generationForm.indicators.length === 0) {
+    ElMessage.warning('请至少选择一个指标类型')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要为全部自选股生成选中的指标数据吗？这可能需要较长时间，请耐心等待。`,
+      '确认批量生成',
+      {
+        confirmButtonText: '确定生成',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  batchGenerating.value = true
+  generationResult.value = null
+  
+  const indicatorsList = [...generationForm.indicators]
+  console.log('[批量生成指标] 开始请求，指标类型:', indicatorsList)
+  ElMessage.info({ message: '正在批量生成指标，请耐心等待（可能需数分钟）…', duration: 0, showClose: true })
+  
+  try {
+    const response: any = await apiService.post('/indicators/generate-batch-watchlist', {
+      indicators: indicatorsList
+    }, {
+      timeout: 300000 // 5分钟超时，批量生成可能需要较长时间
+    })
+  
+    ElMessage.closeAll()
+    console.log('[批量生成指标] 收到响应:', response)
+    
+    if (response.success) {
+      generationResult.value = {
+        success: true,
+        message: `成功为自选股批量生成指标数据`,
+        details: response.data
+      }
+      ElMessage.success('自选股指标数据批量生成成功')
+    } else {
+      generationResult.value = {
+        success: false,
+        message: response.message || '批量生成失败'
+      }
+      ElMessage.error('自选股指标数据批量生成失败')
+    }
+  } catch (error: any) {
+    ElMessage.closeAll()
+    console.error('[批量生成指标] 请求失败:', error)
+    console.error('[批量生成指标] 错误详情:', {
+      message: error?.message,
+      response: error?.response?.data,
+      status: error?.response?.status
+    })
+    const errorMessage = error?.response?.data?.message || error?.message || '网络请求失败'
+    generationResult.value = {
+      success: false,
+      message: errorMessage
+    }
+    ElMessage.error(`批量生成失败: ${errorMessage}`)
+  } finally {
+    batchGenerating.value = false
   }
 }
 

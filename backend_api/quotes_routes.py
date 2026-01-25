@@ -3,11 +3,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func, or_
 from typing import List, Optional
 from datetime import datetime
-from backend_api.database import get_db
-from backend_api.models import (
+import sys
+import os
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+sys.path.insert(0, current_dir)
+from database import get_db
+from models import (
     StockRealtimeQuote, IndexRealtimeQuotes, IndustryBoardRealtimeQuotes,
     HistoricalQuotes, StockRealtimeQuoteHK, HKIndexRealtimeQuotes,
-    HKIndexHistoricalQuotes, HistoricalQuotesHK
+    HistoricalQuotesHK
 )
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])

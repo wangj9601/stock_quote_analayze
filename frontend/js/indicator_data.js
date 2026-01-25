@@ -48,7 +48,7 @@ function initTabs() {
 async function loadIndicatorHistory(code, startDate, endDate, market) {
     try {
         const url = `${API_BASE_URL}/api/admin/indicators/history?code=${code}&start_date=${startDate}&end_date=${endDate}&market_type=${market}`;
-        const response = await authFetch(url);
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);

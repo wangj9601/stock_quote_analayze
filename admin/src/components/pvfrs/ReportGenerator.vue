@@ -338,11 +338,11 @@ const reportRules = {
 
 // 可用策略列表
 const availableStrategies = ref([
-  { id: 'pvfrs_v1', name: 'PVFRS策略 v1.0' },
-  { id: 'pvfrs_v2', name: 'PVFRS策略 v2.0' },
-  { id: 'pvfrs_optimized', name: 'PVFRS优化版' },
-  { id: 'pvfrs_conservative', name: 'PVFRS保守版' },
-  { id: 'pvfrs_aggressive', name: 'PVFRS激进版' }
+  { id: 'pvfrs_v1', name: 'PVFARS策略 v1.0' },
+  { id: 'pvfrs_v2', name: 'PVFARS策略 v2.0' },
+  { id: 'pvfrs_optimized', name: 'PVFARS优化版' },
+  { id: 'pvfrs_conservative', name: 'PVFARS保守版' },
+  { id: 'pvfrs_aggressive', name: 'PVFARS激进版' }
 ])
 
 // 报告模板

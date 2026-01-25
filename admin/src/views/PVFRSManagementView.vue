@@ -3,8 +3,8 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-content">
-        <h1 class="page-title">PVFRS策略管理中心</h1>
-        <p class="page-subtitle">量价频三维共振演化策略 - 专业管理界面</p>
+        <h1 class="page-title">PVFARS策略管理中心</h1>
+        <p class="page-subtitle">量价频幅度共振策略 - 专业管理界面</p>
       </div>
       <div class="header-actions">
         <el-button type="primary" @click="showStrategyGuide = true">
@@ -115,7 +115,7 @@
     <!-- 策略指南对话框 -->
     <el-dialog
       v-model="showStrategyGuide"
-      title="PVFRS策略指南"
+      title="PVFARS策略指南"
       width="80%"
       :before-close="handleGuideClose"
     >
