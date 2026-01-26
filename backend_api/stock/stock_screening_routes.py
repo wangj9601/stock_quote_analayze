@@ -337,20 +337,11 @@ async def get_pvfrs_strategy(
             stock_code = result.symbol
             pvfrs_data = pvfrs_indicators_map.get(stock_code)
             
-            # 价格维度状态 - 宏观位移 + 幅度数据（|Δ|、Δ/d₂₀、Δ/d₁、横盘）
+            # 价格维度状态 - 位移幅度数据（|Δ|、Δ/d₂₀、Δ/d₁、横盘）
             parts = []
-            macro_displacement = None
-            if pvfrs_data and pvfrs_data.get('macro_displacement_delta') is not None:
-                macro_displacement = pvfrs_data.get('macro_displacement_delta', 0) or 0
-            elif price_indicators and isinstance(price_indicators, dict):
-                macro_displacement = price_indicators.get('macro_displacement')
-                if macro_displacement is None:
-                    macro_displacement = price_indicators.get('macro_displacement_delta')
-            if macro_displacement is not None:
-                parts.append(f"宏观位移: {float(macro_displacement):.2f}")
             ampl = price_indicators.get('amplitude') if price_indicators and isinstance(price_indicators, dict) else None
             if ampl is not None:
-                parts.append(f"幅度: {float(ampl):.2f}")
+                parts.append(f"位移幅度: {float(ampl):.2f}")
             rd20 = None
             if price_indicators and isinstance(price_indicators, dict) and price_indicators.get('ratio_d20') is not None:
                 rd20 = price_indicators['ratio_d20']

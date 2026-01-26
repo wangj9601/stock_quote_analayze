@@ -90,7 +90,12 @@ async def get_selection_results(
             # 价格维度状态
             price_dim = indicators.get('price_dimension', {})
             if price_dim.get('price_dimension_valid', False):
-                price_status = f"宏观位移: {price_dim.get('macro_displacement', 0):.2f}"
+                # 优先显示位移幅度，如果没有则显示未满足条件
+                amplitude = price_dim.get('amplitude')
+                if amplitude is not None:
+                    price_status = f"位移幅度: {float(amplitude):.2f}"
+                else:
+                    price_status = "未满足条件"
             else:
                 price_status = "未满足条件"
             

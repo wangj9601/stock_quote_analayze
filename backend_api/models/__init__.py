@@ -73,6 +73,13 @@ try:
         RealtimeCollectionRequest = getattr(models_module, 'RealtimeCollectionRequest', None)
         RealtimeCollectionResponse = getattr(models_module, 'RealtimeCollectionResponse', None)
         Base = getattr(models_module, 'Base', None)
+        
+        # 导入系统监控模型
+        SystemMonitorMetric = getattr(models_module, 'SystemMonitorMetric', None)
+        SystemAlert = getattr(models_module, 'SystemAlert', None)
+        SystemServiceStatus = getattr(models_module, 'SystemServiceStatus', None)
+        SystemAlertRule = getattr(models_module, 'SystemAlertRule', None)
+        SystemPerformanceReport = getattr(models_module, 'SystemPerformanceReport', None)
     else:
         raise ImportError(f"找不到 models.py 文件: {models_py_path}")
     
@@ -119,6 +126,13 @@ except Exception as e:
     RealtimeCollectionRequest = None
     RealtimeCollectionResponse = None
     Base = None
+    
+    # 系统监控模型占位符
+    SystemMonitorMetric = None
+    SystemAlert = None
+    SystemServiceStatus = None
+    SystemAlertRule = None
+    SystemPerformanceReport = None
 
 __all__ = [
     'PVFRSStrategyConfig',
@@ -169,5 +183,10 @@ __all__ = [
     'TushareHistoricalCollectionRequest',
     'RealtimeCollectionRequest',
     'RealtimeCollectionResponse',
-    'Base'
+    'SystemMonitorMetric',
+    'SystemAlert',
+    'SystemServiceStatus',
+    'SystemAlertRule',
+    'SystemPerformanceReport',
+    'User',
 ]

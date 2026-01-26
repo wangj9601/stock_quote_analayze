@@ -299,13 +299,15 @@ try:
                 print(f"   - 路由路径: {route.path}")
 except ImportError as e:
     print(f"❌ admin_indicators_router 导入失败: {e}")
-    import traceback
-    traceback.print_exc()
     admin_indicators_router = None
-except Exception as e:
-    print(f"❌ admin_indicators_router 导入时发生其他错误: {e}")
-    import traceback
-    traceback.print_exc()
+
+# 导入系统监控路由
+try:
+    from .admin.system_monitoring import router as system_monitoring_router
+    print("✅ system_monitoring_router 导入成功")
+except ImportError as e:
+    print(f"❌ system_monitoring_router 导入失败: {e}")
+    system_monitoring_router = None
     admin_indicators_router = None
 
 # 注册admin路由
@@ -322,6 +324,13 @@ if admin_indicators_router is not None:
     print("✅ admin indicators路由注册成功")
 else:
     print("❌ admin indicators路由未注册")
+
+# 注册系统监控路由
+if system_monitoring_router is not None:
+    app.include_router(system_monitoring_router)
+    print("✅ system monitoring路由注册成功")
+else:
+    print("❌ system monitoring路由未注册")
 
 # 尝试导入PVFRS admin路由
 try:
@@ -400,6 +409,14 @@ async def startup_event():
             logger.info("✅ PVFRS 后台监控已启动")
         except Exception as e:
             logger.warning(f"⚠️ PVFRS 后台监控启动失败: {e}")
+        
+        # 启动系统监控后台线程
+        try:
+            from backend_core.monitoring import system_monitor
+            system_monitor.start_background_monitoring()
+            logger.info("✅ 系统监控后台线程已启动")
+        except Exception as e:
+            logger.warning(f"⚠️ 系统监控后台线程启动失败: {e}")
             
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")

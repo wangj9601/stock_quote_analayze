@@ -2,6 +2,7 @@
 管理员认证相关的路由
 """
 
+import logging
 from datetime import timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Form
@@ -17,6 +18,8 @@ from backend_api.auth import (
     get_current_admin,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+
+logger = logging.getLogger(__name__)
 
 class LoginRequest(BaseModel):
     username: str
@@ -41,8 +44,12 @@ async def login_for_access_token(
         )
     
     # 更新最后登录时间
-    admin.last_login = datetime.now()
-    db.commit()
+    try:
+        admin.last_login = datetime.now()
+        db.commit()
+    except Exception as e:
+        logger.error(f"更新管理员最后登录时间失败: {e}")
+        # 不影响登录流程，继续执行
     
     # 创建访问令牌
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

@@ -880,20 +880,17 @@ class HKHistoricalQuoteCollector(AKShareCollector):
         try:
             for stock_code in stock_codes:
                 try:
-                    # 查询该股票最近至少200天的收盘价数据（用于计算MA200）
-                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=250)).strftime('%Y-%m-%d')
-                    
+                    # 查询该股票所有历史收盘价数据（不限制日期范围，确保有足够数据计算MA200）
+                    # 注意：MA200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
                     result = session.execute(text("""
                         SELECT date, close
                         FROM historical_quotes_hk 
                         WHERE code = :stock_code 
-                        AND date >= :query_start_date 
                         AND date <= :target_date
                         AND close IS NOT NULL
                         ORDER BY date ASC
                     """), {
                         'stock_code': stock_code,
-                        'query_start_date': query_start_date,
                         'target_date': target_date
                     })
                     
@@ -1075,20 +1072,17 @@ class HKHistoricalQuoteCollector(AKShareCollector):
         try:
             for stock_code in stock_codes:
                 try:
-                    # 查询该股票的历史成交量数据
-                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=250)).strftime('%Y-%m-%d')
-                    
+                    # 查询该股票所有历史成交量数据（不限制日期范围，确保有足够数据计算MAVOL200）
+                    # 注意：MAVOL200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
                     result = session.execute(text("""
                         SELECT date, volume
                         FROM historical_quotes_hk
                         WHERE code = :stock_code
-                        AND date >= :query_start_date
                         AND date <= :target_date
                         AND volume IS NOT NULL
                         ORDER BY date ASC
                     """), {
                         'stock_code': stock_code,
-                        'query_start_date': query_start_date,
                         'target_date': target_date
                     })
                     

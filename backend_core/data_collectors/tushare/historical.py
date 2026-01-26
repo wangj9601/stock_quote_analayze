@@ -401,23 +401,21 @@ class HistoricalQuoteCollector(TushareCollector):
             failed_count = 0
             failed_details = []
             
-            # 查询开始日期（需要至少200天历史数据用于MA200）
-            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=250)).strftime('%Y-%m-%d')
+            # 查询所有历史数据（不限制日期范围，确保有足够数据计算MA200）
+            # 注意：MA200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
             
             for stock_code in stock_codes:
                 try:
-                    # 查询该股票最近至少200天的收盘价数据
+                    # 查询该股票所有历史收盘价数据（不限制日期范围）
                     result = session.execute(text("""
                         SELECT date, close 
                         FROM historical_quotes 
                         WHERE code = :stock_code 
-                        AND date >= :query_start_date 
                         AND date <= :target_date
                         AND close IS NOT NULL
                         ORDER BY date ASC
                     """), {
                         'stock_code': stock_code,
-                        'query_start_date': query_start_date,
                         'target_date': target_date
                     })
                     
@@ -935,15 +933,16 @@ class HistoricalQuoteCollector(TushareCollector):
             skipped_count = 0
             failed_count = 0
             failed_details = []
-            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=300)).strftime('%Y-%m-%d')
+            # 查询所有历史数据（不限制日期范围，确保有足够数据计算MAVOL200）
+            # 注意：MAVOL200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
             calculator = MAVOLCalculator()
             for stock_code in stock_codes:
                 try:
                     result = session.execute(text("""
                         SELECT date, volume FROM historical_quotes 
-                        WHERE code = :stock_code AND date >= :query_start_date AND date <= :target_date
+                        WHERE code = :stock_code AND date <= :target_date
                         AND volume IS NOT NULL ORDER BY date ASC
-                    """), {'stock_code': stock_code, 'query_start_date': query_start_date, 'target_date': target_date})
+                    """), {'stock_code': stock_code, 'target_date': target_date})
                     rows = result.fetchall()
                     if len(rows) < 5:
                         skipped_count += 1

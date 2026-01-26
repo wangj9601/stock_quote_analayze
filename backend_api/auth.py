@@ -203,12 +203,30 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
 
 def authenticate_admin(db: Session, username: str, password: str) -> Optional[Admin]:
     """验证管理员"""
-    admin = db.query(Admin).filter(Admin.username == username).first()
-    if not admin:
+    try:
+        # 检查数据库连接
+        if db is None:
+            logger.error("数据库连接为空")
+            return None
+            
+        # 查询管理员
+        admin = db.query(Admin).filter(Admin.username == username).first()
+        
+        if admin is None:
+            logger.warning(f"管理员用户 {username} 不存在")
+            return None
+            
+        # 验证密码
+        if not verify_password(password, admin.password_hash):
+            logger.warning(f"管理员 {username} 密码验证失败")
+            return None
+            
+        logger.info(f"管理员 {username} 认证成功")
+        return admin
+        
+    except Exception as e:
+        logger.error(f"管理员认证过程中发生错误: {e}")
         return None
-    if not verify_password(password, admin.password_hash):
-        return None
-    return admin
 
 async def get_current_admin_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     """获取当前管理员用户
