@@ -293,7 +293,7 @@ def collect_hk_index_historical():
         logging.error(f"[定时任务] 港股指数历史行情采集异常: {e}")
 
 # 定时任务配置
-scheduler.add_job(collect_akshare_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute='39', id='akshare_realtime')
+scheduler.add_job(collect_akshare_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute='31', id='akshare_realtime')
 scheduler.add_job(collect_tushare_historical, 'cron', hour='16', minute='22', id='tushare_historical')
 scheduler.add_job(collect_akshare_index_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute='59', id='akshare_index_realtime')
 scheduler.add_job(collect_akshare_industry_board_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute=3, id='akshare_industry_board_realtime')
@@ -303,8 +303,8 @@ scheduler.add_job(collect_akshare_turnover_rate, 'cron', day_of_week='mon-fri', 
 scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
 scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
 scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
-scheduler.add_job(collect_hk_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='49', id='hk_realtime')
-scheduler.add_job(collect_hk_historical, 'cron', day_of_week='mon-fri', hour=21, minute=22, id='hk_historical')
+scheduler.add_job(collect_hk_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='39', id='hk_realtime')
+scheduler.add_job(collect_hk_historical, 'cron', day_of_week='mon-fri', hour=16, minute=43, id='hk_historical')
 scheduler.add_job(generate_weekly_data, 'cron', day_of_week='mon-fri', hour=16, minute=25, id='generate_weekly')
 scheduler.add_job(generate_hk_weekly_data, 'cron', day_of_week='mon-fri', hour=16, minute=53, id='generate_hk_weekly')
 scheduler.add_job(generate_monthly_data, 'cron', day_of_week='mon-fri', hour=16, minute=30, id='generate_monthly')
