@@ -47,6 +47,8 @@ try:
         Token = getattr(models_module, 'Token', None)
         TokenData = getattr(models_module, 'TokenData', None)
         UserInDB = getattr(models_module, 'UserInDB', None)
+        UserCreate = getattr(models_module, 'UserCreate', None)
+        UserUpdate = getattr(models_module, 'UserUpdate', None)
         MeanFrequencyResonanceIndicators = getattr(models_module, 'MeanFrequencyResonanceIndicators', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
@@ -100,6 +102,8 @@ except Exception as e:
     Token = None
     TokenData = None
     UserInDB = None
+    UserCreate = None
+    UserUpdate = None
     MeanFrequencyResonanceIndicators = None
     StockBasicInfo = None
     StockBasicInfoHK = None
@@ -158,6 +162,8 @@ __all__ = [
     'Token',
     'TokenData',
     'UserInDB',
+    'UserCreate',
+    'UserUpdate',
     'MeanFrequencyResonanceIndicators',
     'StockBasicInfo',
     'StockBasicInfoHK',

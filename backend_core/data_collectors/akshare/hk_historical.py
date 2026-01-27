@@ -1192,7 +1192,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     })
                     
                     rows = result.fetchall()
-                    if len(rows) < 20:
+                    if len(rows) < 21:
                         continue
                     
                     # 提取数据列表

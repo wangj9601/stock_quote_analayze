@@ -9,7 +9,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any, Callable
-from sqlalchemy import func, desc, and_
+from sqlalchemy import func, desc, and_, text
 from dataclasses import dataclass
 from enum import Enum
 
@@ -277,7 +277,7 @@ class SystemMonitor:
         """检查数据库状态"""
         try:
             with SessionLocal() as db:
-                db.execute("SELECT 1")
+                db.execute(text("SELECT 1"))
                 return ServiceStatus.HEALTHY
         except Exception as e:
             logger.error(f"数据库连接检查失败: {e}")

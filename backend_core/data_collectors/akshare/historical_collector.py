@@ -130,8 +130,8 @@ class AkshareHistoricalCollector:
             })
             
             rows = result.fetchall()
-            if len(rows) < 20: 
-                logger.debug(f"股票 {stock_code} 历史数据不足20天，跳过均值频率共振计算")
+            if len(rows) < 21: 
+                logger.debug(f"股票 {stock_code} 历史数据不足21天，跳过均值频率共振计算")
                 return
             
             # 提取数据列表

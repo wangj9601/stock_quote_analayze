@@ -1014,7 +1014,7 @@ class HistoricalQuoteCollector(TushareCollector):
                         AND close IS NOT NULL AND volume IS NOT NULL ORDER BY date ASC
                     """), {'stock_code': stock_code, 'query_start_date': query_start_date, 'target_date': target_date})
                     rows = result.fetchall()
-                    if len(rows) < 20:
+                    if len(rows) < 21:
                         skipped_count += 1
                         continue
                     dates = [str(row[0]) for row in rows]

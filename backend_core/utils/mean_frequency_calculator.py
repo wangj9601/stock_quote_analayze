@@ -32,7 +32,9 @@ class MeanFrequencyResonanceCalculator:
         Returns:
             List[Dict]: 指标结果列表
         """
-        if len(closes) < window or len(volumes) < window:
+        # PVFRS 指标计算通常需要 window + 1 的数据来计算上涨/下跌天数
+        # 因为计算上涨/下跌需要比较 T 和 T-1 的价格
+        if len(closes) < window + 1 or len(volumes) < window + 1:
             return []
             
         df = pd.DataFrame({
@@ -60,10 +62,13 @@ class MeanFrequencyResonanceCalculator:
         
         # 6. 计算 Z (上涨天数) 和 F (下跌天数)
         # 定义上涨为 Close > Prev Close
-        df['is_rising'] = (df['close'] > df['close'].shift(1)).astype(int)
-        df['is_falling'] = (df['close'] < df['close'].shift(1)).astype(int)
+        # 注意：这里需要 T 和 T-1，所以第一个 is_rising 是从索引 1 开始的
+        df['is_rising'] = (df['close'] > df['close'].shift(1)).astype(float)
+        df['is_falling'] = (df['close'] < df['close'].shift(1)).astype(float)
         
         # 滚动求和
+        # 如果 window=20，第 20 个点 (index 19) 的 z 将是 NaN，因为 is_rising[0] 是 NaN
+        # 第 21 个点 (index 20) 的 z 才是有效的（涵盖了 20 个完整的变动判断）
         df['z'] = df['is_rising'].rolling(window=window).sum()
         df['f'] = df['is_falling'].rolling(window=window).sum()
         
@@ -72,7 +77,8 @@ class MeanFrequencyResonanceCalculator:
 
         results = []
         for i in range(len(df)):
-            if pd.isna(df['ma20'].iloc[i]):
+            # 只有当 ma20, z, f 都不为 NaN 时，才返回结果
+            if pd.isna(df['ma20'].iloc[i]) or pd.isna(df['z'].iloc[i]):
                 results.append(None)
             else:
                 delta = float(df['delta'].iloc[i]) if not pd.isna(df['delta'].iloc[i]) else 0.0
@@ -84,6 +90,7 @@ class MeanFrequencyResonanceCalculator:
                     ratio_d20 = float(delta / d20)
                 if d1 != 0 and not pd.isna(d1):
                     ratio_d1 = float(delta / d1)
+                
                 results.append({
                     'ma20_d': float(df['ma20'].iloc[i]),
                     'mavol20_m': float(df['mavol20'].iloc[i]),
@@ -111,7 +118,7 @@ class MeanFrequencyResonanceCalculator:
         Returns:
             pd.DataFrame: 包含日期和所有指标的 DataFrame
         """
-        if len(history_rows) < window:
+        if len(history_rows) < window + 1:
             return pd.DataFrame()
         
         # 从 ORM 对象提取数据

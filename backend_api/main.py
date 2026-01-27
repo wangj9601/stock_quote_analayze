@@ -310,6 +310,38 @@ except ImportError as e:
     system_monitoring_router = None
     admin_indicators_router = None
 
+# 尝试导入用户管理路由
+try:
+    from .admin.users import router as admin_users_router
+    print("✅ admin_users_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_users_router 导入失败: {e}")
+    admin_users_router = None
+
+# 尝试导入日志查询路由
+try:
+    from .admin.logs import router as admin_logs_router
+    print("✅ admin_logs_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_logs_router 导入失败: {e}")
+    admin_logs_router = None
+
+# 尝试导入操作日志路由
+try:
+    from .admin.operation_logs import router as admin_operation_logs_router
+    print("✅ admin_operation_logs_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_operation_logs_router 导入失败: {e}")
+    admin_operation_logs_router = None
+
+# 尝试导入行情管理路由
+try:
+    from .admin.quotes import router as admin_quotes_router
+    print("✅ admin_quotes_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_quotes_router 导入失败: {e}")
+    admin_quotes_router = None
+
 # 注册admin路由
 if admin_auth_router is not None:
     app.include_router(admin_auth_router)
@@ -331,6 +363,28 @@ if system_monitoring_router is not None:
     print("✅ system monitoring路由注册成功")
 else:
     print("❌ system monitoring路由未注册")
+
+# 注册用户管理路由
+if admin_users_router is not None:
+    app.include_router(admin_users_router)
+    print("✅ admin users路由注册成功")
+else:
+    print("❌ admin users路由未注册")
+
+# 注册日志查询路由
+if admin_logs_router is not None:
+    app.include_router(admin_logs_router)
+    print("✅ admin logs路由注册成功")
+
+# 注册操作日志路由
+if admin_operation_logs_router is not None:
+    app.include_router(admin_operation_logs_router)
+    print("✅ admin operation logs路由注册成功")
+
+# 注册行情管理路由
+if admin_quotes_router is not None:
+    app.include_router(admin_quotes_router)
+    print("✅ admin quotes路由注册成功")
 
 # 尝试导入PVFRS admin路由
 try:

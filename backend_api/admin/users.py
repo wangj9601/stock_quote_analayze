@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_
 from pydantic import BaseModel
 
-from models import UserCreate, UserUpdate, UserInDB
-from database import get_db
-from auth import get_password_hash
-from auth import get_current_admin
-from models import User
+from backend_api.models import UserCreate, UserUpdate, UserInDB
+from backend_api.database import get_db
+from backend_api.auth import get_password_hash
+from backend_api.auth import get_current_admin
+from backend_api.models import User
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin"])
 

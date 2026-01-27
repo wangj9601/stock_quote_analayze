@@ -16,12 +16,12 @@ import pandas as pd
 from pathlib import Path
 from pydantic import BaseModel
 
-from models import (
+from backend_api.models import (
     QuoteData, QuoteDataCreate, QuoteDataInDB,
     User, QuoteSyncTask, QuoteSyncTaskCreate
 )
-from database import get_db
-from auth import get_current_user, get_current_admin
+from backend_api.database import get_db
+from backend_api.auth import get_current_user, get_current_admin
 
 # 定义分页响应模型
 class PaginatedResponse(BaseModel):
