@@ -240,13 +240,8 @@ const ScreeningPage = {
                 url = `${apiBaseUrl}/api/screening/one-yang-three-lines?${queryString}`;
             } else if (strategy === 'pvfrs') {
                 // 读取股票范围参数
-                const scopeAll = document.getElementById('scopeAll');
-                const scopeWatchlist = document.getElementById('scopeWatchlist');
-                let scope = 'all';
-
-                if (scopeWatchlist && scopeWatchlist.checked) {
-                    scope = 'watchlist';
-                }
+                const scopeElement = document.querySelector('input[name="pvfrsScope"]:checked');
+                let scope = scopeElement ? scopeElement.value : 'all';
 
                 url = `${apiBaseUrl}/api/screening/pvfrs-strategy?scope=${scope}`;
             } else {
@@ -715,14 +710,18 @@ const ScreeningPage = {
             cb.checked = true; // 默认全选
         });
 
-        this.showMessage('参数已重置为默认值', 'success');
+        if (window.CommonUtils) {
+            CommonUtils.showToast('参数已重置为默认值', 'success');
+        }
     },
 
     // 保存一阳穿三线策略参数到本地存储
     saveOneYangThreeLinesParams() {
         const params = this.getOneYangThreeLinesParams();
         localStorage.setItem('oneYangThreeLinesParams', JSON.stringify(params));
-        this.showMessage('参数已保存', 'success');
+        if (window.CommonUtils) {
+            CommonUtils.showToast('参数已保存', 'success');
+        }
     },
 
     // 从本地存储加载一阳穿三线策略参数

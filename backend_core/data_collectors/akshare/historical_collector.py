@@ -78,6 +78,7 @@ class AkshareHistoricalCollector:
                     date VARCHAR(20) NOT NULL,
                     market_type VARCHAR(10) NOT NULL,
                     macro_displacement_delta REAL,
+                    amplitude REAL,
                     ratio_d20 REAL,
                     ratio_d1 REAL,
                     instant_deviation REAL,
@@ -91,6 +92,15 @@ class AkshareHistoricalCollector:
                     PRIMARY KEY (code, date, market_type)
                 )
             '''))
+            
+            # 确保列存在（迁移逻辑）
+            try:
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS amplitude REAL"))
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS ratio_d20 REAL"))
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS ratio_d1 REAL"))
+            except Exception as e:
+                logger.debug(f"通过ALTER TABLE添加列失败（可能列已存在）: {e}")
+                
             self.session.commit()
             logger.debug("均值频率共振指标表初始化完成")
         except Exception as e:
@@ -166,10 +176,11 @@ class AkshareHistoricalCollector:
                 try:
                     self.session.execute(text("""
                         INSERT INTO mean_frequency_resonance_indicators
-                        (code, date, market_type, macro_displacement_delta, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
-                        VALUES (:code, :date, :market_type, :delta, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
+                        (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
+                        VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
                         ON CONFLICT (code, date, market_type) DO UPDATE SET
                             macro_displacement_delta = EXCLUDED.macro_displacement_delta,
+                            amplitude = EXCLUDED.amplitude,
                             ratio_d20 = EXCLUDED.ratio_d20,
                             ratio_d1 = EXCLUDED.ratio_d1,
                             instant_deviation = EXCLUDED.instant_deviation,
@@ -185,6 +196,7 @@ class AkshareHistoricalCollector:
                         'date': date_str,
                         'market_type': 'CN',
                         'delta': res['macro_displacement_delta'],
+                        'amplitude': res.get('amplitude'),
                         'ratio_d20': res.get('ratio_d20'),
                         'ratio_d1': res.get('ratio_d1'),
                         'instant_deviation': res['instant_deviation'],

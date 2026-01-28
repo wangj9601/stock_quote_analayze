@@ -48,12 +48,13 @@ class FrontendInterface:
         
         logger.info("PVFRS前端接口初始化完成")
     
-    def get_selection_results(self, date: Optional[str] = None, stock_pool: Optional[List[str]] = None) -> List[StockSelectionResult]:
+    def get_selection_results(self, date: Optional[str] = None, stock_pool: Optional[List[str]] = None, market: str = 'all') -> List[StockSelectionResult]:
         """获取选股结果
         
         Args:
             date: 查询日期，格式为YYYY-MM-DD，默认为当前日期
             stock_pool: 可选，指定股票代码列表。如果提供，将只从这些股票中筛选。
+            market: 股票市场，可选 'cn' (A股), 'hk' (港股), 'all' (两者)
             
         Returns:
             List[StockSelectionResult]: 选股结果列表
@@ -64,15 +65,18 @@ class FrontendInterface:
             
             # 检查缓存 (注意：如果指定了stock_pool，则不使用常规缓存，或者需要通过stock_pool生成特定的cache_key)
             # 为简单起见，如果指定了stock_pool，暂时跳过缓存读取，以免返回全部股票的缓存结果
-            cache_key = f"selection_{date}"
+            cache_key = f"selection_{date}_{market}"
             if stock_pool is None and self.cache_enabled and self._is_cache_valid(cache_key):
                 logger.info(f"从缓存获取选股结果: {date}")
                 return self._selection_cache[cache_key]['data']
             
             # 获取股票池
-            # 如果未提供stock_pool，则获取默认全量股票池
+            # 如果未提供stock_pool，则根据market参数获取对应市场的股票池
             if stock_pool is None:
-                stock_pool = self._get_stock_pool()
+                stock_pool = self._get_stock_pool(market=market)
+            else:
+                # 如果提供了 stock_pool（如自选股），也要确保唯一性
+                stock_pool = list(dict.fromkeys(stock_pool))
                 
             logger.info(f"开始选股分析，股票池大小: {len(stock_pool)}")
             
@@ -400,11 +404,14 @@ class FrontendInterface:
             'pvfrs_system_status': self.pvfrs_system.get_system_status()['system_ready']
         }
 
-    def _get_stock_pool(self) -> List[str]:
+    def _get_stock_pool(self, market: str = 'all') -> List[str]:
         """获取股票池
         
-        从数据库获取全部A股股票代码
+        从数据库获取指定市场的股票代码
         
+        Args:
+            market: 市场类型，'cn' (A股), 'hk' (港股), 'all' (两者)
+            
         Returns:
             List[str]: 股票代码列表
         """
@@ -417,17 +424,49 @@ class FrontendInterface:
             sys.path.insert(0, project_root)
             
             from backend_api.database import get_db
-            from backend_api.models import StockBasicInfo
+            from backend_api.models import StockBasicInfo, StockBasicInfoHK
             
             # 获取数据库会话
             db = next(get_db())
             
             try:
-                # 查询所有股票（全部都是A股）
-                stocks = db.query(StockBasicInfo).all()
-                stock_symbols = [str(stock.code) for stock in stocks]
+                symbols_set = set()
                 
-                logger.info(f"从数据库获取到 {len(stock_symbols)} 只A股股票")
+                # 获取A股
+                if market in ['cn', 'all']:
+                    stocks_cn = db.query(StockBasicInfo).all()
+                    for stock in stocks_cn:
+                        symbols_set.add(str(stock.code))
+                    logger.info(f"从数据库获取到 {len(stocks_cn)} 只A股股票")
+                
+                # 获取港股
+                if market in ['hk', 'all']:
+                    stocks_hk = db.query(StockBasicInfoHK).all()
+                    # 确保港股代码格式正确 (港股恒指/主板代码为5位)
+                    count_hk = 0
+                    for stock in stocks_hk:
+                        raw_code = str(stock.code).strip()
+                        # 如果已经是6位且像是A股代码，且当前是仅筛选港股模式，则跳过
+                        if len(raw_code) == 6 and market == 'hk':
+                            continue
+                            
+                        # 处理港股代码补齐（通常补齐到5位）
+                        # 只有当原始代码是纯数字且长度小于等于5时才补齐
+                        if raw_code.isdigit() and len(raw_code) <= 5:
+                            code = raw_code.zfill(5)
+                        else:
+                            code = raw_code
+                            
+                        # 如果补齐后长度仍然不是5位且当前是筛选港股模式，跳过
+                        if market == 'hk' and len(code) != 5:
+                            continue
+                            
+                        symbols_set.add(code)
+                        count_hk += 1
+                    logger.info(f"从数据库获取到 {count_hk} 只港股股票 (去重前)")
+                
+                stock_symbols = list(symbols_set)
+                logger.info(f"股票池获取完成，去重后共 {len(stock_symbols)} 只股票 (市场: {market})")
                 return stock_symbols
             
             except Exception as db_error:
@@ -472,8 +511,15 @@ class FrontendInterface:
             db = next(get_db())
             
             try:
-                # 判断是A股还是港股（简单判断：6开头或0开头或3开头是A股，其他可能是港股）
-                is_hk = not (symbol.startswith('6') or symbol.startswith('0') or symbol.startswith('3'))
+                # 判断是A股还是港股（A股通常为6位，港股通常为5位或更短）
+                is_hk = (len(symbol) <= 5 and symbol.isdigit()) or not (symbol.startswith('6') or symbol.startswith('0') or symbol.startswith('3'))
+                # 特殊情况：如果以0开头且长度为5，肯定是港股，不应被 startswith('0') 误判为A股
+                if symbol.startswith('0') and len(symbol) == 5:
+                    is_hk = True
+                # A股确定的前缀
+                if symbol.startswith(('60', '68', '00', '30', '43', '83', '87')):
+                    if len(symbol) == 6:
+                        is_hk = False
                 
                 market_data_list = []
                 

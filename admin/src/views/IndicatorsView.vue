@@ -382,11 +382,16 @@
             <el-table :data="tableData" v-loading="loading" stripe style="width: 100%">
               <el-table-column prop="code" label="代码" width="100" />
               <el-table-column prop="date" label="日期" width="120" />
-              <el-table-column prop="macro_displacement_delta" label="宏观位移Δ" width="120">
+              <el-table-column prop="macro_displacement_delta" label="宏观位移Δ" width="100">
                 <template #default="scope">
                   <span :style="{ color: scope.row.macro_displacement_delta > 0 ? '#f56c6c' : '#67c23a' }">
                     {{ scope.row.macro_displacement_delta?.toFixed(3) || '-' }}
                   </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="amplitude" label="强度(|Δ|)" width="100">
+                <template #default="scope">
+                  {{ scope.row.amplitude?.toFixed(3) || '-' }}
                 </template>
               </el-table-column>
               <el-table-column prop="instant_deviation" label="即时偏离度" width="120">
@@ -400,6 +405,20 @@
                 <template #default="scope">
                   <span :style="{ color: scope.row.bias > 0 ? '#f56c6c' : '#67c23a' }">
                     {{ scope.row.bias ? (scope.row.bias * 100).toFixed(2) + '%' : '-' }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="ratio_d20" label="Δ/d₂₀" width="120">
+                <template #default="scope">
+                  <span :style="{ color: (scope.row.ratio_d20 || 0) > 0 ? '#f56c6c' : '#67c23a' }">
+                    {{ scope.row.ratio_d20 ? (scope.row.ratio_d20 * 100).toFixed(2) + '%' : '-' }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="ratio_d1" label="Δ/d₁" width="120">
+                <template #default="scope">
+                  <span :style="{ color: (scope.row.ratio_d1 || 0) > 0 ? '#f56c6c' : '#67c23a' }">
+                    {{ scope.row.ratio_d1 ? (scope.row.ratio_d1 * 100).toFixed(2) + '%' : '-' }}
                   </span>
                 </template>
               </el-table-column>

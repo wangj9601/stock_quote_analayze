@@ -597,10 +597,11 @@
             <div class="strategy-info-card">
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
-                    <li><strong>股票范围:</strong>全部A股（排除ST股票）</li>
+                    <li><strong>股票范围:</strong>全部A股或港股（排除ST股票）</li>
                     <li><strong>时间范围:</strong>最近20个交易日</li>
                     <li><strong>选股条件:</strong></li>
-                    <li class="condition-item">1. <strong>价格维度:</strong> 宏观位移为正(Δ>0) 且 即时强度为正(d₂₀>d)；幅度 |Δ|、Δ/d₂₀、Δ/d₁、横盘判断</li>
+                    <li class="condition-item">1. <strong>价格维度:</strong> 宏观位移为正(Δ>0) 且 即时强度为正(d₂₀>d)；幅度
+                        |Δ|、Δ/d₂₀、Δ/d₁、横盘判断</li>
                     <li class="condition-item">2. <strong>频率维度:</strong> 上涨频率优势(Z>F) 且 无虚假繁荣</li>
                     <li class="condition-item">3. <strong>成交量维度:</strong> 进出效率提升(m₂₀>m) 且 量价共振</li>
                     <li class="condition-item">4. <strong>三维共振:</strong> 价格、频率、成交量三个维度同时满足条件</li>
@@ -614,9 +615,13 @@
                 <h3>🔍 数据来源</h3>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
                     <div class="param-item" style="display: flex; align-items: center;">
-                        <input type="radio" id="scopeAll" name="pvfrsScope" value="all" checked
+                        <input type="radio" id="scopeCN" name="pvfrsScope" value="cn" checked
                             style="margin-right: 5px;">
-                        <label for="scopeAll" style="cursor: pointer;">全部A股</label>
+                        <label for="scopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="scopeHK" name="pvfrsScope" value="hk" style="margin-right: 5px;">
+                        <label for="scopeHK" style="cursor: pointer;">全部港股</label>
                     </div>
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="scopeWatchlist" name="pvfrsScope" value="watchlist"

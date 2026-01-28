@@ -32,7 +32,7 @@ class PriceDimensionAnalyzer(IPriceDimensionAnalyzer):
             avg_price_20d = self.calculate_avg_price_20d(data)
             instant_deviation = self.calculate_instant_deviation(data)
             
-            # 图片中幅度指标：d₁、d₂₀、幅度、Δ/d₂₀、Δ/d₁、Δ=0→横盘
+            # 幅度指标：d₁、d₂₀、幅度、Δ/d₂₀、Δ/d₁、Δ=0→横盘
             recent_data = data[-self.observation_period:]
             d1 = recent_data[0].close
             d20 = recent_data[-1].close

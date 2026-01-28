@@ -99,8 +99,9 @@ async def get_pvfrs_strategy(
         
         # 获取选股结果
         stock_pool = None
+        market = 'all'  # 默认为全部（A股+港股）
         
-        # 处理自选股筛选
+        # 处理不同的 scope
         if scope == 'watchlist':
             if not token:
                 raise HTTPException(
@@ -116,8 +117,7 @@ async def get_pvfrs_strategy(
                 if username is None:
                     raise HTTPException(status_code=401, detail="无效的认证凭据")
                 
-                # 获取用户信息 (可选，如果只需user_id也可以从payload获取如果存了的话，TokenData定义了username)
-                # 这里暂时通过username查询用户ID
+                # 获取用户信息
                 from backend_api.models import User
                 user = db.query(User).filter(User.username == username).first()
                 if not user:
@@ -142,9 +142,17 @@ async def get_pvfrs_strategy(
                 
             except JWTError:
                 raise HTTPException(status_code=401, detail="无效的认证凭据")
+        elif scope in ['cn', 'hk', 'all']:
+            # 设置市场范围
+            market = scope
+            logger.info(f"请求筛选市场: {market}")
+        else:
+            # 兼容旧版本，如果传入的是其他值，默认也作为 'all' 处理
+            market = 'all'
+            logger.info(f"未知 scope '{scope}'，默认使用 'all'")
         
-        # 获取选股结果 (传入 stock_pool)
-        selection_results = frontend_interface.get_selection_results(date, stock_pool=stock_pool)
+        # 获取选股结果 (传入 stock_pool 和 market)
+        selection_results = frontend_interface.get_selection_results(date, stock_pool=stock_pool, market=market)
         
         # 批量获取实时行情数据（用于获取当前价格和涨跌幅）
         from backend_api.models import StockRealtimeQuote, StockRealtimeQuoteHK, HistoricalQuotes
@@ -240,7 +248,7 @@ async def get_pvfrs_strategy(
                 realtime_quotes_a = {q.code: q for q in quotes_a}
             
             # 批量查询实时行情（港股）
-            hk_codes = [code for code in stock_codes if not (code.startswith('6') or code.startswith('0') or code.startswith('3'))]
+            hk_codes = [code for code in stock_codes if (len(code) <= 5 and code.isdigit()) or (code.startswith('0') and len(code) == 5)]
             realtime_quotes_hk = {}
             if hk_codes and latest_trade_date:
                 quotes_hk = db.query(StockRealtimeQuoteHK).filter(
