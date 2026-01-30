@@ -88,6 +88,10 @@ class PVFRSStrategy:
             'buy_price_above_ma5': False,
             'buy_ma5_above_ma20': False,
             
+            # 买点条件（与两图及详细说明一致）
+            'buy_ratio_d20_max': 0.5,                    # Δ/d₂₀ 上限，0 表示不启用
+            'buy_exclude_sideways': True,                 # 横盘(Δ≈0)不参与买点
+            
             # 卖出条件 - 简单有效
             'sell_below_ma20': True,                      # 收盘价跌破20日均线卖出
             'stop_loss': -0.06,                           # 止损-6%
@@ -142,10 +146,10 @@ class PVFRSSignalDetector:
             conditions_met['macro_displacement_positive'] = macro_displacement > self.params.get('buy_macro_displacement_min', 0)
             conditions_met['instant_deviation_sufficient'] = instant_deviation > self.params.get('buy_instant_deviation_min', 0)
             
-            # 2. 频率维度条件
+            # 2. 频率维度条件（买点权重 F > Z）
             rising_days = current_row['rising_days_z']
             falling_days = current_row['falling_days_f']
-            conditions_met['rising_days_advantage'] = rising_days > falling_days
+            conditions_met['rising_days_advantage'] = falling_days > rising_days
             
             # 3. 成交量维度条件
             efficiency = current_row['efficiency_m20_minus_m']
@@ -210,7 +214,7 @@ class PVFRSSignalDetector:
             signal_strength = min(1.0, signal_strength + 0.2)
             
             # 生成买入信号
-            reason = f"高质量上涨: Δ={macro_displacement:.4f}, 偏离={instant_deviation:.4f}, Z>F({rising_days}>{falling_days}), 效率={efficiency:.4f}, bias={bias:.2%}"
+            reason = f"高质量上涨: Δ={macro_displacement:.4f}, 偏离={instant_deviation:.4f}, F>Z({falling_days}>{rising_days}), 效率={efficiency:.4f}, bias={bias:.2%}"
             
             signal = Signal(
                 date=date,

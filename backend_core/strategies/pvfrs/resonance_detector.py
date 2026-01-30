@@ -17,13 +17,20 @@ class ResonanceDetector(IResonanceDetector):
     - 计算共振强度
     """
     
-    def __init__(self):
-        """初始化三维共振检测器"""
+    def __init__(self, buy_ratio_d20_max: float = 0.5, buy_exclude_sideways: bool = True):
+        """初始化三维共振检测器
+        
+        Args:
+            buy_ratio_d20_max: Δ/d₂₀ 上限，0 表示不启用
+            buy_exclude_sideways: 横盘(Δ≈0)是否排除买点
+        """
         self.dimension_weights = {
             'price': 0.4,      # 价格维度权重
             'frequency': 0.3,  # 频率维度权重
             'volume': 0.3      # 成交量维度权重
         }
+        self.buy_ratio_d20_max = buy_ratio_d20_max
+        self.buy_exclude_sideways = buy_exclude_sideways
     
     def detect_resonance(self, price_indicators: Dict, frequency_indicators: Dict, 
                         volume_indicators: Dict) -> Dict:
@@ -55,6 +62,14 @@ class ResonanceDetector(IResonanceDetector):
             
             # 三维共振判定：所有维度条件都必须满足
             three_dimension_resonance = price_valid and frequency_valid and volume_valid
+            
+            # 买点排除：F≥Z 且 Δ<0（则位以重来关注）、横盘、Δ/d₂₀ 超上限
+            if conditions_met.get('buy_excluded_fz_delta', False):
+                three_dimension_resonance = False
+            if conditions_met.get('buy_excluded_sideways', False):
+                three_dimension_resonance = False
+            if not conditions_met.get('ratio_d20_ok', True):
+                three_dimension_resonance = False
             
             # 计算共振强度
             resonance_strength = self.calculate_resonance_strength(conditions_met)
@@ -154,9 +169,8 @@ class ResonanceDetector(IResonanceDetector):
         conditions_met = {}
         
         # 价格维度条件
-        conditions_met['macro_displacement_positive'] = (
-            price_indicators.get('macro_displacement', 0) > 0
-        )
+        macro_displacement = price_indicators.get('macro_displacement', 0)
+        conditions_met['macro_displacement_positive'] = macro_displacement > 0
         conditions_met['instant_strength_positive'] = (
             price_indicators.get('instant_deviation', 0) > 0
         )
@@ -164,12 +178,27 @@ class ResonanceDetector(IResonanceDetector):
             price_indicators.get('instant_deviation', 0) > 0
         )
         
-        # 频率维度条件
+        # 买点排除：F≥Z 且 Δ<0（图1「则位以重来关注」）
         rising_days = frequency_indicators.get('rising_days', 0)
         falling_days = frequency_indicators.get('falling_days', 0)
-        conditions_met['frequency_advantage'] = rising_days > falling_days
+        conditions_met['buy_excluded_fz_delta'] = (falling_days >= rising_days and macro_displacement < 0)
+        
+        # Δ/d₂₀ 越小越好 → 作为买点上限（图2）；0 表示不启用
+        ratio_d20 = price_indicators.get('ratio_d20')
+        if self.buy_ratio_d20_max <= 0:
+            conditions_met['ratio_d20_ok'] = True
+        else:
+            conditions_met['ratio_d20_ok'] = (ratio_d20 is None or ratio_d20 < self.buy_ratio_d20_max)
+        
+        # 横盘(Δ≈0)不参与买点
+        is_sideways = price_indicators.get('is_sideways', False)
+        conditions_met['buy_excluded_sideways'] = bool(self.buy_exclude_sideways and is_sideways)
+        
+        # 频率维度条件（本次修改：买点权重改为 F > Z，即下跌天数大于上涨天数）
+        conditions_met['frequency_advantage'] = falling_days > rising_days
         conditions_met['continuous_buying_support'] = rising_days >= 10  # 20天中至少10天上涨
-        conditions_met['no_false_prosperity'] = not frequency_indicators.get('has_false_prosperity', True)
+        # 本次修改：注释掉虚假繁荣判断，使该条件不参与买点（恒为 True）
+        conditions_met['no_false_prosperity'] = True  # 原: not frequency_indicators.get('has_false_prosperity', True)
         
         # 成交量维度条件
         current_volume = volume_indicators.get('current_volume', 0)
@@ -342,24 +371,22 @@ class ResonanceDetector(IResonanceDetector):
         return score
     
     def _calculate_frequency_dimension_score(self, indicators: Dict) -> float:
-        """计算频率维度得分"""
+        """计算频率维度得分（买点权重：F > Z）"""
         score = 0.0
         
         rising_days = indicators.get('rising_days', 0)
         falling_days = indicators.get('falling_days', 0)
-        has_false_prosperity = indicators.get('has_false_prosperity', True)
         
-        # 频率优势得分
-        if rising_days > falling_days:
+        # 频率权重得分：下跌天数大于上涨天数（F > Z）
+        if falling_days > rising_days:
             score += 0.4
         
         # 持续买盘支撑得分
         if rising_days >= 10:  # 20天中至少10天上涨
             score += 0.3
         
-        # 无虚假繁荣得分
-        if not has_false_prosperity:
-            score += 0.3
+        # 无虚假繁荣得分（本次已注释掉判断，恒为 True 故恒加分）
+        score += 0.3
         
         return score
     

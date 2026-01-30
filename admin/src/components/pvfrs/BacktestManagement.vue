@@ -91,160 +91,21 @@
         </el-form-item>
 
         <el-form-item v-if="taskForm.mode === 'batch'" label="股票列表" prop="stockList">
-          <div class="stock-input-area">
-            <el-tabs v-model="stockInputMode" type="border-card">
-              <el-tab-pane label="文件上传" name="upload">
-                <el-upload
-                  class="upload-demo"
-                  drag
-                  :auto-upload="false"
-                  :on-change="handleStockFileChange"
-                  accept=".txt,.csv"
-                >
-                  <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-                  <div class="el-upload__text">
-                    将股票列表文件拖到此处，或<em>点击上传</em>
-                  </div>
-                  <template #tip>
-                    <div class="el-upload__tip">
-                      支持 txt/csv 文件，每行一个股票代码
-                    </div>
-                  </template>
-                </el-upload>
-              </el-tab-pane>
-              
-              <el-tab-pane label="手动输入" name="manual">
-                <el-input
-                  v-model="taskForm.stockList"
-                  type="textarea"
-                  :rows="6"
-                  placeholder="请输入股票代码，每行一个，例如：&#10;000001&#10;000002&#10;600519"
-                />
-              </el-tab-pane>
-            </el-tabs>
-          </div>
+          <el-input
+            v-model="taskForm.stockList"
+            type="textarea"
+            :rows="5"
+            placeholder="请输入股票代码，每行一个"
+          />
         </el-form-item>
 
-        <!-- 参数优化模式配置 -->
-        <el-card v-if="taskForm.mode === 'optimize'" class="optimize-config-card" header="参数优化配置">
-          <el-form-item label="优化股票代码" prop="optimizeStockCode">
-            <el-input 
-              v-model="taskForm.optimizeStockCode" 
-              placeholder="例如：000001（参数优化需要指定单只股票）"
-              clearable
-            />
-          </el-form-item>
-
-          <el-divider content-position="left">参数网格配置</el-divider>
-
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="买入乖离率最小值" prop="paramGridBuyBiasMin">
-                <el-input
-                  v-model="taskForm.paramGridBuyBiasMin"
-                  placeholder="例如：0.01,0.02,0.03"
-                  clearable
-                />
-                <div class="form-help">逗号分隔的多个值，例如：0.01,0.02,0.03</div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="卖出乖离率最大值" prop="paramGridSellBiasMax">
-                <el-input
-                  v-model="taskForm.paramGridSellBiasMax"
-                  placeholder="例如：0.10,0.15,0.20"
-                  clearable
-                />
-                <div class="form-help">逗号分隔的多个值，例如：0.10,0.15,0.20</div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="止损比例" prop="paramGridStopLoss">
-                <el-input
-                  v-model="taskForm.paramGridStopLoss"
-                  placeholder="例如：-0.06,-0.08,-0.10"
-                  clearable
-                />
-                <div class="form-help">逗号分隔的多个值，例如：-0.06,-0.08,-0.10</div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="止盈比例" prop="paramGridTakeProfit">
-                <el-input
-                  v-model="taskForm.paramGridTakeProfit"
-                  placeholder="例如：0.15,0.20,0.25"
-                  clearable
-                />
-                <div class="form-help">逗号分隔的多个值，例如：0.15,0.20,0.25</div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="最大持有天数" prop="paramGridMaxHoldingDays">
-                <el-input
-                  v-model="taskForm.paramGridMaxHoldingDays"
-                  placeholder="例如：30,45,60"
-                  clearable
-                />
-                <div class="form-help">逗号分隔的多个值，例如：30,45,60</div>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="优化目标" prop="optimizationObjective">
-                <el-select v-model="taskForm.optimizationObjective" placeholder="选择优化目标" class="w-full" multiple>
-                  <el-option label="总收益率" value="total_return" />
-                  <el-option label="夏普比率" value="sharpe_ratio" />
-                  <el-option label="最大回撤" value="max_drawdown" />
-                  <el-option label="胜率" value="win_rate" />
-                  <el-option label="综合评分" value="composite_score" />
-                </el-select>
-                <div class="form-help">可选择多个优化目标，系统将综合评分</div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-alert
-            v-if="calculateParamCombinations() > 100"
-            type="warning"
-            :closable="false"
-            style="margin-top: 10px;"
-          >
-            参数组合数: {{ calculateParamCombinations() }}，优化可能需要较长时间，建议减少参数值数量
-          </el-alert>
-        </el-card>
-
-        <!-- 策略对比模式配置 -->
-        <el-card v-if="taskForm.mode === 'comparison'" class="comparison-config-card" header="策略对比配置">
-          <el-form-item label="对比策略配置">
-            <el-button type="primary" @click="addComparisonConfig">添加策略配置</el-button>
-            <div class="form-help">可以添加多个策略配置进行对比回测</div>
-          </el-form-item>
-
-          <el-table :data="taskForm.comparisonConfigs" border style="margin-top: 10px;">
-            <el-table-column prop="name" label="配置名称" width="150">
-              <template #default="scope">
-                <el-input v-model="scope.row.name" placeholder="配置名称" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="description" label="描述" min-width="200">
-              <template #default="scope">
-                <el-input v-model="scope.row.description" placeholder="配置描述" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="100">
-              <template #default="scope">
-                <el-button size="small" type="danger" @click="removeComparisonConfig(scope.$index)">
-                  删除
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
+        <el-form-item v-if="taskForm.mode === 'optimize'" label="优化股票代码" prop="optimizeStockCode">
+          <el-input 
+            v-model="taskForm.optimizeStockCode" 
+            placeholder="例如：000001"
+            clearable
+          />
+        </el-form-item>
 
         <el-form-item>
           <el-button 
@@ -271,10 +132,6 @@
           <el-button type="danger" @click="clearCompletedTasks">
             <el-icon><Delete /></el-icon>
             清理已完成
-          </el-button>
-          <el-button type="danger" plain @click="deleteAllTasksAndReports">
-            <el-icon><Delete /></el-icon>
-            删除全部数据
           </el-button>
         </div>
         <div class="list-filters">
@@ -306,41 +163,14 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="150">
           <template #default="scope">
-            <div class="status-cell">
-              <el-tag :type="getStatusTagType(scope.row.status)">
-                {{ getStatusLabel(scope.row.status) }}
-              </el-tag>
-              <el-tooltip 
-                v-if="scope.row.status === 'failed' && scope.row.error_message" 
-                :content="scope.row.error_message" 
-                placement="top" 
-                effect="dark"
-                :show-after="200"
-              >
-                <el-icon class="error-icon" style="margin-left: 8px; color: #f56c6c; cursor: pointer;">
-                  <Warning />
-                </el-icon>
-              </el-tooltip>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="progress" label="进度" width="120">
-          <template #default="scope">
-            <el-progress 
-              :percentage="scope.row.progress || 0" 
-              :status="getProgressStatus(scope.row.status)"
-              :stroke-width="8"
-            />
+            <el-tag :type="getStatusTagType(scope.row.status)">
+              {{ getStatusLabel(scope.row.status) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="160">
           <template #default="scope">
             {{ formatDateTime(scope.row.createdAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="duration" label="耗时" width="100">
-          <template #default="scope">
-            {{ formatDuration(scope.row.duration) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
@@ -380,34 +210,7 @@
           </template>
         </el-table-column>
       </el-table>
-
-      <!-- 分页 -->
-      <div class="pagination-wrapper">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="totalTasks"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
     </el-card>
-
-    <!-- 任务详情对话框 -->
-    <el-dialog
-      v-model="showTaskDetail"
-      title="任务详情"
-      width="80%"
-      :before-close="handleDetailClose"
-    >
-      <TaskDetail 
-        v-if="selectedTask"
-        :task="selectedTask"
-        @task-updated="handleTaskUpdated"
-      />
-    </el-dialog>
   </div>
 </template>
 
@@ -416,23 +219,50 @@ import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Refresh, 
-  Delete, 
-  UploadFilled,
-  Warning
+  Delete
 } from '@element-plus/icons-vue'
-import TaskDetail from './TaskDetail.vue'
+
+// 类型定义
+interface BacktestTask {
+  id: string
+  name: string
+  mode: string
+  status: string
+  startDate: string
+  endDate: string
+  initialCapital: number
+  market: string
+  stockCode?: string
+  stockList?: string[]
+  createdAt: string
+  updatedAt?: string
+}
+
+interface ComparisonConfig {
+  name: string
+  description: string
+  config: any
+}
+
+interface PVRFSApi {
+  createBacktestTask(taskData: any): Promise<any>
+  getBacktestTasks(params: any): Promise<any>
+  pauseBacktestTask(taskId: string): Promise<void>
+  cancelBacktestTask(taskId: string): Promise<void>
+  clearCompletedTasks(): Promise<void>
+  deleteBacktestTask(taskId: string): Promise<void>
+  deleteAllBacktestTasks(): Promise<void>
+}
 
 // 注入服务
-const pvfrsApi = inject('pvfrsApi')
-const authStore = inject('authStore')
+const pvfrsApi = inject('pvfrsApi') as PVRFSApi
 
 // 响应式数据
 const taskFormRef = ref()
 const loading = ref(false)
 const creating = ref(false)
 const showTaskDetail = ref(false)
-const selectedTask = ref(null)
-const stockInputMode = ref('manual')
+const selectedTask = ref<BacktestTask | null>(null)
 
 // 表单数据
 const taskForm = reactive({
@@ -444,7 +274,6 @@ const taskForm = reactive({
   market: 'CN',
   stockCode: '',
   stockList: '',
-  // 参数优化模式配置
   optimizeStockCode: '',
   paramGridBuyBiasMin: '0.01,0.02,0.03',
   paramGridSellBiasMax: '0.10,0.15,0.20',
@@ -452,8 +281,7 @@ const taskForm = reactive({
   paramGridTakeProfit: '0.15,0.20,0.25',
   paramGridMaxHoldingDays: '30,45,60',
   optimizationObjective: ['composite_score'],
-  // 策略对比模式配置
-  comparisonConfigs: []
+  comparisonConfigs: [] as ComparisonConfig[]
 })
 
 // 表单验证规则
@@ -482,7 +310,7 @@ const taskRules = {
 }
 
 // 任务列表
-const tasks = ref([])
+const tasks = ref<BacktestTask[]>([])
 const statusFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -506,14 +334,9 @@ const canCreateTask = computed(() => {
     return false
   }
   
-  if (taskForm.mode === 'comparison' && (!taskForm.comparisonConfigs || taskForm.comparisonConfigs.length === 0)) {
-    return false
-  }
-  
   return true
 })
 
-// 确保表格数据始终是数组
 const filteredTasks = computed(() => {
   const taskList = Array.isArray(tasks.value) ? tasks.value : []
   if (!statusFilter.value) {
@@ -521,9 +344,6 @@ const filteredTasks = computed(() => {
   }
   return taskList.filter(task => task.status === statusFilter.value)
 })
-
-// 发射事件
-const emit = defineEmits(['task-created', 'task-updated'])
 
 // 方法
 const createTask = async () => {
@@ -534,23 +354,13 @@ const createTask = async () => {
     
     const taskData = {
       ...taskForm,
-      stockList: taskForm.mode === 'batch' ? parseStockList(taskForm.stockList) : undefined,
-      stockCode: taskForm.mode === 'optimize' ? taskForm.optimizeStockCode : taskForm.stockCode,
-      paramGrid: taskForm.mode === 'optimize' ? {
-        buy_bias_min: parseParamGrid(taskForm.paramGridBuyBiasMin),
-        sell_bias_max: parseParamGrid(taskForm.paramGridSellBiasMax),
-        stop_loss: parseParamGrid(taskForm.paramGridStopLoss),
-        take_profit: parseParamGrid(taskForm.paramGridTakeProfit),
-        max_holding_days: parseParamGrid(taskForm.paramGridMaxHoldingDays, true)
-      } : undefined,
-      optimizationObjective: taskForm.mode === 'optimize' ? taskForm.optimizationObjective : undefined
+      stockList: taskForm.mode === 'batch' ? taskForm.stockList.split('\n').filter(s => s.trim()) : undefined,
+      stockCode: taskForm.mode === 'optimize' ? taskForm.optimizeStockCode : taskForm.stockCode
     }
     
-    const result = await pvfrsApi.createBacktestTask(taskData)
+    await pvfrsApi.createBacktestTask(taskData)
     
     ElMessage.success('任务创建成功')
-    emit('task-created', result)
-    
     resetForm()
     await refreshTasks()
     
@@ -574,12 +384,6 @@ const resetForm = () => {
     stockCode: '',
     stockList: '',
     optimizeStockCode: '',
-    paramGridBuyBiasMin: '0.01,0.02,0.03',
-    paramGridSellBiasMax: '0.10,0.15,0.20',
-    paramGridStopLoss: '-0.06,-0.08,-0.10',
-    paramGridTakeProfit: '0.15,0.20,0.25',
-    paramGridMaxHoldingDays: '30,45,60',
-    optimizationObjective: ['composite_score'],
     comparisonConfigs: []
   })
 }
@@ -593,8 +397,6 @@ const refreshTasks = async () => {
       status: statusFilter.value
     })
     
-    // 后端返回的格式是 { success: true, data: [...], total: ... }
-    // 确保 data 始终是数组
     if (result && typeof result === 'object') {
       const taskData = result.data || result.tasks || []
       tasks.value = Array.isArray(taskData) ? taskData : []
@@ -607,7 +409,6 @@ const refreshTasks = async () => {
   } catch (error) {
     ElMessage.error('获取任务列表失败')
     console.error('获取任务列表失败:', error)
-    // 确保即使出错，tasks 也是数组
     tasks.value = []
     totalTasks.value = 0
   } finally {
@@ -615,12 +416,12 @@ const refreshTasks = async () => {
   }
 }
 
-const viewTask = (task: any) => {
+const viewTask = (task: BacktestTask) => {
   selectedTask.value = task
   showTaskDetail.value = true
 }
 
-const pauseTask = async (task: any) => {
+const pauseTask = async (task: BacktestTask) => {
   try {
     await pvfrsApi.pauseBacktestTask(task.id)
     ElMessage.success('任务已暂停')
@@ -630,7 +431,7 @@ const pauseTask = async (task: any) => {
   }
 }
 
-const cancelTask = async (task: any) => {
+const cancelTask = async (task: BacktestTask) => {
   try {
     await ElMessageBox.confirm('确定要取消这个任务吗？', '确认取消', {
       type: 'warning'
@@ -664,15 +465,15 @@ const clearCompletedTasks = async () => {
   }
 }
 
-const deleteTask = async (task: any) => {
+const deleteTask = async (task: BacktestTask) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除任务“${task.name}”吗？\n该操作会同时删除该任务的所有回测结果/报告/交易记录/收益曲线，且不可恢复。`,
+      `确定要删除任务"${task.name}"吗？该操作不可恢复。`,
       '确认删除',
       { type: 'warning' }
     )
     await pvfrsApi.deleteBacktestTask(task.id)
-    ElMessage.success('任务及关联数据已删除')
+    ElMessage.success('任务已删除')
     await refreshTasks()
   } catch (error) {
     if (error !== 'cancel') {
@@ -681,124 +482,20 @@ const deleteTask = async (task: any) => {
   }
 }
 
-const deleteAllTasksAndReports = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '确定要删除全部任务、报告及所有相关数据吗？\n该操作会清空任务/回测结果/交易记录/收益曲线，且不可恢复。',
-      '危险操作确认',
-      { type: 'warning' }
-    )
-    await pvfrsApi.deleteAllBacktestTasks()
-    ElMessage.success('全部任务/报告等相关数据已删除')
-    await refreshTasks()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除全部数据失败')
-    }
-  }
-}
-
-const handleStockFileChange = async (file: any) => {
-  try {
-    const text = await readFileContent(file.raw)
-    taskForm.stockList = text
-    ElMessage.success('文件上传成功')
-  } catch (error) {
-    ElMessage.error('文件读取失败')
-  }
-}
-
-const readFileContent = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        resolve(e.target.result as string)
-      } else {
-        reject(new Error('文件读取失败'))
-      }
-    }
-    reader.onerror = () => reject(new Error('文件读取错误'))
-    reader.readAsText(file, 'utf-8')
-  })
-}
-
-const parseStockList = (text: string): string[] => {
-  return text.split('\n')
-    .map(line => line.trim())
-    .filter(line => line && /^\d{6}$/.test(line))
-}
-
-const parseParamGrid = (valueStr: string, isInt: boolean = false): any[] => {
-  if (!valueStr) return []
-  return valueStr.split(',')
-    .map(v => v.trim())
-    .filter(v => v.length > 0)
-    .map(v => isInt ? parseInt(v) : parseFloat(v))
-}
-
-const calculateParamCombinations = (): number => {
-  if (taskForm.mode !== 'optimize') return 0
-  
-  const buyBiasCount = parseParamGrid(taskForm.paramGridBuyBiasMin).length || 1
-  const sellBiasCount = parseParamGrid(taskForm.paramGridSellBiasMax).length || 1
-  const stopLossCount = parseParamGrid(taskForm.paramGridStopLoss).length || 1
-  const takeProfitCount = parseParamGrid(taskForm.paramGridTakeProfit).length || 1
-  const maxHoldingCount = parseParamGrid(taskForm.paramGridMaxHoldingDays, true).length || 1
-  
-  return buyBiasCount * sellBiasCount * stopLossCount * takeProfitCount * maxHoldingCount
-}
-
-const addComparisonConfig = () => {
-  if (!taskForm.comparisonConfigs) {
-    taskForm.comparisonConfigs = []
-  }
-  taskForm.comparisonConfigs.push({
-    name: `配置${taskForm.comparisonConfigs.length + 1}`,
-    description: '',
-    config: {}
-  })
-}
-
-const removeComparisonConfig = (index: number) => {
-  if (taskForm.comparisonConfigs && taskForm.comparisonConfigs.length > index) {
-    taskForm.comparisonConfigs.splice(index, 1)
-  }
-}
-
-const handleSizeChange = (size: number) => {
-  pageSize.value = size
-  refreshTasks()
-}
-
-const handleCurrentChange = (page: number) => {
-  currentPage.value = page
-  refreshTasks()
-}
-
-const handleTaskUpdated = (task: any) => {
-  emit('task-updated', task)
-  refreshTasks()
-}
-
-const handleDetailClose = () => {
-  showTaskDetail.value = false
-  selectedTask.value = null
-}
-
-// 辅助方法
-const getModeTagType = (mode: string) => {
-  const types = {
-    single: '',
+// 工具函数 - el-tag type 仅支持以下字面量
+type ElTagType = 'info' | 'primary' | 'success' | 'warning' | 'danger'
+const getModeTagType = (mode: string): ElTagType => {
+  const types: Record<string, ElTagType> = {
+    single: 'primary',
     batch: 'success',
     optimize: 'warning',
     portfolio: 'info'
   }
-  return types[mode] || ''
+  return (types[mode] || 'info') as ElTagType
 }
 
-const getModeLabel = (mode: string) => {
-  const labels = {
+const getModeLabel = (mode: string): string => {
+  const labels: Record<string, string> = {
     single: '单股',
     batch: '批量',
     optimize: '优化',
@@ -807,19 +504,19 @@ const getModeLabel = (mode: string) => {
   return labels[mode] || mode
 }
 
-const getStatusTagType = (status: string) => {
-  const types = {
+const getStatusTagType = (status: string): ElTagType => {
+  const types: Record<string, ElTagType> = {
     pending: 'info',
-    running: 'warning',
+    running: 'primary',
     completed: 'success',
     failed: 'danger',
-    cancelled: 'info'
+    cancelled: 'warning'
   }
-  return types[status] || ''
+  return (types[status] || 'info') as ElTagType
 }
 
-const getStatusLabel = (status: string) => {
-  const labels = {
+const getStatusLabel = (status: string): string => {
+  const labels: Record<string, string> = {
     pending: '等待中',
     running: '运行中',
     completed: '已完成',
@@ -829,36 +526,18 @@ const getStatusLabel = (status: string) => {
   return labels[status] || status
 }
 
-const getProgressStatus = (status: string) => {
-  if (status === 'completed') return 'success'
-  if (status === 'failed') return 'exception'
-  return ''
+const formatDateTime = (dateStr: string): string => {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const canPauseTask = (status: string) => {
+const canPauseTask = (status: string): boolean => {
   return status === 'running'
 }
 
-const canCancelTask = (status: string) => {
+const canCancelTask = (status: string): boolean => {
   return ['pending', 'running'].includes(status)
 }
-
-const formatDateTime = (dateTime: string) => {
-  if (!dateTime) return '-'
-  return new Date(dateTime).toLocaleString()
-}
-
-const formatDuration = (duration: number) => {
-  if (!duration) return '-'
-  const minutes = Math.floor(duration / 60)
-  const seconds = duration % 60
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
-}
-
-// 暴露方法给父组件
-defineExpose({
-  refresh: refreshTasks
-})
 
 // 生命周期
 onMounted(() => {
@@ -866,106 +545,41 @@ onMounted(() => {
 })
 </script>
 
-<style scoped lang="postcss">
+<style scoped>
 .backtest-management {
-  @apply space-y-6;
+  padding: 20px;
 }
 
 .create-task-card {
-  @apply shadow-sm;
+  margin-bottom: 20px;
 }
 
 .task-form {
-  @apply max-w-none;
-}
-
-.form-help {
-  @apply text-xs text-gray-500 mt-1;
-}
-
-.optimize-config-card,
-.comparison-config-card {
-  @apply mt-4 shadow-sm;
-}
-
-.stock-input-area {
-  @apply w-full;
-}
-
-.upload-demo {
-  @apply w-full;
-}
-
-:deep(.el-upload-dragger) {
-  @apply w-full h-32;
+  max-width: 800px;
 }
 
 .task-list-card {
-  @apply shadow-sm;
+  margin-bottom: 20px;
 }
 
 .task-list-header {
-  @apply flex justify-between items-center mb-4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
 .list-actions {
-  @apply flex gap-2;
+  display: flex;
+  gap: 10px;
 }
 
 .list-filters {
-  @apply flex gap-2;
+  display: flex;
+  gap: 10px;
 }
 
 .task-table {
-  @apply w-full;
-}
-
-.status-cell {
-  @apply flex items-center;
-}
-
-.error-icon {
-  @apply cursor-pointer;
-}
-
-.pagination-wrapper {
-  @apply flex justify-center mt-6;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .task-list-header {
-    @apply flex-col gap-4 items-stretch;
-  }
-  
-  .list-actions,
-  .list-filters {
-    @apply justify-center;
-  }
-  
-  :deep(.el-table) {
-    font-size: 12px;
-  }
-  
-  :deep(.el-button--small) {
-    @apply px-2 py-1 text-xs;
-  }
-}
-
-/* 动画效果 */
-.create-task-card,
-.task-list-card {
-  animation: slideInUp 0.6s ease-out;
-}
-
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  margin-top: 20px;
 }
 </style>

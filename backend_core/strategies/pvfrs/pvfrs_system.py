@@ -41,18 +41,20 @@ class PVFRSSystem:
         """初始化PVFRS策略系统
         
         Args:
-            config: 可选的配置字典，如果不提供则使用默认配置
+            config: 可选的配置字典，与文件配置合并后传给策略引擎（买点参数等）
         """
-        # 初始化配置管理器
+        # 初始化配置管理器并加载当前配置
         self.config_manager = PVFRSConfigManager()
+        self.config_manager.load_config()
+        current_config = self.config_manager.get_current_config()
         if config:
-            self.config_manager.update_config(config)
+            current_config = {**current_config, **config}
         
         # 初始化数据接口
         self.data_interface = PVFRSDataInterface()
         
-        # 初始化核心组件
-        self.strategy_engine = StrategyEngine()
+        # 核心组件：策略引擎使用当前配置（共振买点参数等）
+        self.strategy_engine = StrategyEngine(config=current_config)
         self.backtest_engine = BacktestEngine()
         self.risk_manager = RiskManager()
         self.resonance_engine = ThreeDimensionResonanceEngine()

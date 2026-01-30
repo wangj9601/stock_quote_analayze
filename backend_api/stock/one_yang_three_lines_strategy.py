@@ -22,11 +22,58 @@ from datetime import datetime, timedelta, date
 from typing import Dict, List, Tuple, Optional
 import logging
 import json
+import os
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-logger = logging.getLogger(__name__)
+# 配置日志输出到文件
+def setup_strategy_logger():
+    """配置策略日志输出到文件"""
+    # 创建日志目录
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # 生成日志文件名（按日期）
+    log_filename = f"one_yang_three_lines_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_filepath = os.path.join(log_dir, log_filename)
+    
+    # 配置logger
+    logger = logging.getLogger('one_yang_three_lines_strategy')
+    logger.setLevel(logging.INFO)
+    
+    # 清除已有的handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # 创建文件handler
+    file_handler = logging.FileHandler(log_filepath, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    
+    # 创建控制台handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # 创建formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # 设置formatter
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # 添加handlers
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    logger.info(f"日志文件路径: {log_filepath}")
+    return logger
+
+# 初始化logger
+logger = setup_strategy_logger()
 
 
 class OneYangThreeLinesStrategy:
@@ -627,6 +674,7 @@ class OneYangThreeLinesStrategy:
         min_volume_ratio: float = 2.0,
         min_turnover_rate: float = 3.0,
         max_turnover_rate: float = 10.0,
+        recent_days: int = 1,
         ma_periods: List[int] = None
     ) -> List[Dict]:
         """
@@ -634,15 +682,10 @@ class OneYangThreeLinesStrategy:
         
         执行流程:
         1. 获取A股股票列表(排除ST)
-        2. 获取最近20个交易日的历史数据
+        2. 获取历史数据
         3. 计算指定周期的移动平均线
-        4. 检查最新K线是否为长阳线（使用参数化条件）
-        5. 检查是否穿越至少指定数量的均线
-        6. 验证成交量放大（使用参数化条件）
-        7. 判断位置类型
-        8. 计算乖离率
-        9. 计算信号质量评分
-        10. 返回符合条件的股票列表
+        4. 循环检查最近N个交易日
+        5. 对符合条件的股票计算评分并保存
         
         Args:
             db: 数据库会话
@@ -653,6 +696,7 @@ class OneYangThreeLinesStrategy:
             min_volume_ratio: 最小成交量倍数（默认2.0）
             min_turnover_rate: 最小换手率（默认3.0）
             max_turnover_rate: 最大换手率（默认10.0）
+            recent_days: 检查最近N个交易日（默认1）
             ma_periods: 均线周期列表（默认[5,10,20,30,60,120]）
             
         Returns:
@@ -665,17 +709,19 @@ class OneYangThreeLinesStrategy:
             ma_periods = [5, 10, 20, 30, 60, 120]
         
         try:
-            logger.info("=" * 60)
-            logger.info("开始执行一阳穿三线选股策略")
-            logger.info("=" * 60)
-            logger.info(f"策略参数:")
-            logger.info(f"  - 最小涨幅: {min_increase_percent}%")
-            logger.info(f"  - 最小实体占比: {min_body_ratio}")
-            logger.info(f"  - 最小穿越均线数量: {min_cross_lines}")
-            logger.info(f"  - 最小成交量倍数: {min_volume_ratio}")
-            logger.info(f"  - 换手率范围: {min_turnover_rate}% - {max_turnover_rate}%")
-            logger.info(f"  - 均线周期: {ma_periods}")
-            logger.info("=" * 60)
+            logger.info("=" * 80)
+            logger.info("🚀 开始执行一阳穿三线选股策略")
+            logger.info("=" * 80)
+            logger.info(f"📊 策略参数配置:")
+            logger.info(f"  • 最小涨幅: {min_increase_percent}%")
+            logger.info(f"  • 最小实体占比: {min_body_ratio}")
+            logger.info(f"  • 最小穿越均线数量: {min_cross_lines}")
+            logger.info(f"  • 最小成交量倍数: {min_volume_ratio}")
+            logger.info(f"  • 换手率范围: {min_turnover_rate}% - {max_turnover_rate}%")
+            logger.info(f"  • 检查最近天数: {recent_days}")
+            logger.info(f"  • 均线周期: {ma_periods}")
+            logger.info(f"⏰ 执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info("=" * 80)
             
             # 1. 获取A股股票列表（排除ST股票）
             stocks_query = db.execute(text("""
@@ -692,22 +738,24 @@ class OneYangThreeLinesStrategy:
             # 如果设置了limit，只处理前N只股票
             if limit:
                 stocks = stocks[:limit]
-                logger.info(f"测试模式：只处理前 {limit} 只股票（总共 {total_stocks} 只）")
+                logger.info(f"🧪 测试模式：只处理前 {limit} 只股票（总共 {total_stocks} 只）")
             else:
-                logger.info(f"生产模式：处理所有 {total_stocks} 只A股股票")
+                logger.info(f"🏭 生产模式：处理所有 {total_stocks} 只A股股票")
             
-            logger.info(f"找到 {len(stocks)} 只A股股票（已排除ST股票）")
+            logger.info(f"📈 找到 {len(stocks)} 只A股股票（已排除ST股票）")
             
             # 2. 计算查询日期范围（需要至少最大均线周期的数据）
             max_ma_period = max(ma_periods)
             end_date = datetime.now().date()
-            start_date = end_date - timedelta(days=max_ma_period * 2)  # 往前推足够天数以确保有足够数据
+            # 增加recent_days以确保循环检查时 ma 计算有足够数据
+            start_date = end_date - timedelta(days=(max_ma_period + recent_days) * 2)
             
             start_date_str = start_date.strftime('%Y-%m-%d')
             end_date_str = end_date.strftime('%Y-%m-%d')
             
-            logger.info(f"查询日期范围: {start_date_str} 至 {end_date_str}")
-            logger.info("-" * 60)
+            logger.info(f"📅 查询日期范围: {start_date_str} 至 {end_date_str}")
+            logger.info(f"📊 需要历史数据: {max_ma_period} + 检查天数: {recent_days}")
+            logger.info("-" * 80)
             
             # 3. 对每只股票执行策略检查
             processed_count = 0
@@ -717,10 +765,12 @@ class OneYangThreeLinesStrategy:
                 # 每处理100只股票输出一次进度
                 if idx % 100 == 0:
                     progress = (idx / len(stocks)) * 100
-                    logger.info(f"处理进度: {idx}/{len(stocks)} ({progress:.1f}%) - "
-                              f"找到: {len(results)} 只, 错误: {error_count} 只")
+                    logger.info(f"⏳ 处理进度: {idx}/{len(stocks)} ({progress:.1f}%) - "
+                              f"✅ 找到: {len(results)} 只, ❌ 错误: {error_count} 只")
                 
                 try:
+                    logger.debug(f"🔍 正在分析股票: {code} {name}")
+                    
                     # 获取该股票的历史数据（倒序，最新在前）
                     history_query = db.execute(text("""
                         SELECT code, name, date, open, close, high, low, 
@@ -740,7 +790,7 @@ class OneYangThreeLinesStrategy:
                     
                     # 至少需要最大均线周期的数据
                     if len(history_rows) < max_ma_period:
-                        logger.warning(f"股票 {code} 数据不足，跳过（需要{max_ma_period}个交易日，实际{len(history_rows)}个）")
+                        logger.debug(f"⚠️ 股票 {code} 数据不足，跳过（需要{max_ma_period}个交易日，实际{len(history_rows)}个）")
                         continue
                     
                     # 转换为字典列表
@@ -766,170 +816,93 @@ class OneYangThreeLinesStrategy:
                             'turnover_rate': float(row[10]) if row[10] else 0.0
                         })
                     
-                    # 获取当前K线数据（最新的一天）
-                    current_candle = historical_data[0]
+                    # 循环检查最近 recent_days 个交易日
+                    found_signal_in_recent = False
                     
-                    # 4. 检查最新K线是否为长阳线
-                    is_long_yang, candle_info = OneYangThreeLinesStrategy.check_long_yang_candle(
-                        current_candle, min_increase_percent, min_body_ratio
-                    )
-                    
-                    if not is_long_yang:
+                    # 限制检查范围，确保有足够数据计算均线
+                    check_range = min(recent_days, len(historical_data) - max_ma_period + 1)
+                    if check_range <= 0:
                         continue
-                    
-                    # 5. 计算移动平均线
-                    ma_values = OneYangThreeLinesStrategy.calculate_moving_averages(
-                        historical_data, current_index=0, periods=ma_periods
-                    )
-                    
-                    # 检查是否所有均线都计算成功
-                    if any(v is None for v in ma_values.values()):
-                        logger.warning(f"股票 {code} 均线计算失败，跳过")
-                        continue
-                    
-                    # 6. 检查是否穿越至少指定数量的均线
-                    is_cross, crossed_lines, crossed_count = OneYangThreeLinesStrategy.check_cross_three_lines(
-                        current_candle, ma_values, min_cross_lines
-                    )
-                    
-                    if not is_cross:
-                        continue
-                    
-                    # 7. 验证成交量放大
-                    is_volume_increase, volume_ratio, turnover_rate = OneYangThreeLinesStrategy.check_volume_increase(
-                        historical_data, current_index=0, days_before=5, 
-                        min_volume_ratio=min_volume_ratio, 
-                        min_turnover_rate=min_turnover_rate, 
-                        max_turnover_rate=max_turnover_rate
-                    )
-                    
-                    if not is_volume_increase:
-                        continue
-                    
-                    # 8. 检查换手率是否在指定范围内
-                    if turnover_rate < min_turnover_rate or turnover_rate > max_turnover_rate:
-                        continue
-                    
-                    # 8. 判断位置类型
-                    position_type, retracement = OneYangThreeLinesStrategy.check_position_type(
-                        historical_data, current_index=0
-                    )
-                    
-                    # 9. 计算乖离率
-                    current_price = float(current_candle.get('close', 0))
-                    bias_values = OneYangThreeLinesStrategy.calculate_bias(current_price, ma_values)
-                    
-                    # 10. 计算信号质量评分
-                    signal_score = OneYangThreeLinesStrategy.calculate_signal_score(
-                        crossed_count,
-                        volume_ratio,
-                        turnover_rate,
-                        position_type,
-                        bias_values.get('bias30')
-                    )
-                    
-                    # 11. 生成风险提示
-                    risk_warnings = []
-                    
-                    # 换手率警告（使用参数化范围）
-                    if turnover_rate < min_turnover_rate:
-                        risk_warnings.append("动能不足")
-                    elif turnover_rate > max_turnover_rate:
-                        risk_warnings.append("可能存在对倒")
-                    
-                    # 高位突破警告
-                    if position_type == "高位":
-                        risk_warnings.append("警惕诱多")
-                    
-                    # 高乖离率警告
-                    if bias_values.get('bias30') and bias_values.get('bias30') > 10.0:
-                        risk_warnings.append("乖离过大，注意回调风险")
-                    
-                    # 12. 构建结果项
-                    result_item = {
-                        'code': str(code),
-                        'name': name,
-                        'signal_date': current_candle.get('date'),
-                        'current_price': round(current_price, 2),
-                        'crossed_lines': '+'.join([ma.upper() for ma in crossed_lines]),
-                        'crossed_count': crossed_count,
-                        'volume_ratio': round(volume_ratio, 2),
-                        'turnover_rate': round(turnover_rate, 2),
-                        'position_type': position_type,
-                        'retracement': round(retracement, 2),
-                        'bias5': round(bias_values.get('bias5', 0), 2) if bias_values.get('bias5') is not None else None,
-                        'bias10': round(bias_values.get('bias10', 0), 2) if bias_values.get('bias10') is not None else None,
-                        'bias30': round(bias_values.get('bias30', 0), 2) if bias_values.get('bias30') is not None else None,
-                        'signal_score': signal_score,
-                        'risk_warnings': risk_warnings
-                    }
-                    
-                    # 添加动态均线字段
-                    for period in ma_periods:
-                        ma_key = f'ma{period}'
-                        result_item[ma_key] = round(ma_values.get(ma_key, 0), 2)
-                    
-                    # 13. 保存信号到数据库（可选）
-                    try:
-                        # 将signal_date转换为date对象
-                        signal_date_str = current_candle.get('date')
-                        if isinstance(signal_date_str, str):
-                            signal_date_obj = datetime.strptime(signal_date_str, '%Y-%m-%d').date()
-                        elif isinstance(signal_date_str, date):
-                            signal_date_obj = signal_date_str
-                        elif isinstance(signal_date_str, datetime):
-                            signal_date_obj = signal_date_str.date()
-                        else:
-                            signal_date_obj = datetime.now().date()
                         
-                        # 将风险提示列表转换为JSON字符串
-                        risk_warnings_json = json.dumps(risk_warnings, ensure_ascii=False)
+                    for day_idx in range(check_range):
+                        # 获取待检查的K线数据
+                        current_candle = historical_data[day_idx]
                         
-                        # 使用INSERT ... ON CONFLICT DO UPDATE实现去重和更新
-                        # PostgreSQL语法
-                        insert_sql = text("""
-                            INSERT INTO one_yang_three_lines_signals 
-                            (code, name, signal_date, current_price, ma5, ma10, ma20, ma30, ma60, ma120,
-                             crossed_lines, crossed_count, volume_ratio, turnover_rate, position_type, 
-                             retracement, bias5, bias10, bias30, signal_score, risk_warnings, created_at)
-                            VALUES 
-                            (:code, :name, :signal_date, :current_price, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120,
-                             :crossed_lines, :crossed_count, :volume_ratio, :turnover_rate, :position_type,
-                             :retracement, :bias5, :bias10, :bias30, :signal_score, :risk_warnings, :created_at)
-                            ON CONFLICT (code, signal_date) 
-                            DO UPDATE SET
-                                name = EXCLUDED.name,
-                                current_price = EXCLUDED.current_price,
-                                ma5 = EXCLUDED.ma5,
-                                ma10 = EXCLUDED.ma10,
-                                ma20 = EXCLUDED.ma20,
-                                ma30 = EXCLUDED.ma30,
-                                ma60 = EXCLUDED.ma60,
-                                ma120 = EXCLUDED.ma120,
-                                crossed_lines = EXCLUDED.crossed_lines,
-                                crossed_count = EXCLUDED.crossed_count,
-                                volume_ratio = EXCLUDED.volume_ratio,
-                                turnover_rate = EXCLUDED.turnover_rate,
-                                position_type = EXCLUDED.position_type,
-                                retracement = EXCLUDED.retracement,
-                                bias5 = EXCLUDED.bias5,
-                                bias10 = EXCLUDED.bias10,
-                                bias30 = EXCLUDED.bias30,
-                                signal_score = EXCLUDED.signal_score,
-                                risk_warnings = EXCLUDED.risk_warnings
-                        """)
+                        # 4. 检查K线是否为长阳线
+                        is_long_yang, candle_info = OneYangThreeLinesStrategy.check_long_yang_candle(
+                            current_candle, min_increase_percent, min_body_ratio
+                        )
                         
-                        db.execute(insert_sql, {
+                        if not is_long_yang:
+                            continue
+                        
+                        # 5. 计算移动平均线 (使用当前的 day_idx 为基点)
+                        ma_values = OneYangThreeLinesStrategy.calculate_moving_averages(
+                            historical_data, current_index=day_idx, periods=ma_periods
+                        )
+                        
+                        # 检查是否所有均线都计算成功
+                        if any(v is None for v in ma_values.values()):
+                            continue
+                        
+                        # 6. 检查是否穿越至少指定数量的均线
+                        is_cross, crossed_lines, crossed_count = OneYangThreeLinesStrategy.check_cross_three_lines(
+                            current_candle, ma_values, min_cross_lines
+                        )
+                        
+                        if not is_cross:
+                            continue
+                        
+                        # 7. 验证成交量放大 (使用当前的 day_idx 为基点)
+                        is_volume_increase, volume_ratio, turnover_rate = OneYangThreeLinesStrategy.check_volume_increase(
+                            historical_data, current_index=day_idx, days_before=5, 
+                            min_volume_ratio=min_volume_ratio, 
+                            min_turnover_rate=min_turnover_rate, 
+                            max_turnover_rate=max_turnover_rate
+                        )
+                        
+                        if not is_volume_increase:
+                            continue
+                        
+                        # 8. 检查换手率是否在指定范围内
+                        if turnover_rate < min_turnover_rate or turnover_rate > max_turnover_rate:
+                            continue
+                        
+                        # 9. 判断位置类型 (使用当前的 day_idx 为基点)
+                        position_type, retracement = OneYangThreeLinesStrategy.check_position_type(
+                            historical_data, current_index=day_idx
+                        )
+                        
+                        # 10. 计算乖离率
+                        current_price = float(current_candle.get('close', 0))
+                        bias_values = OneYangThreeLinesStrategy.calculate_bias(current_price, ma_values)
+                        
+                        # 11. 计算信号质量评分
+                        signal_score = OneYangThreeLinesStrategy.calculate_signal_score(
+                            crossed_count,
+                            volume_ratio,
+                            turnover_rate,
+                            position_type,
+                            bias_values.get('bias30')
+                        )
+                        
+                        # 12. 生成风险提示
+                        risk_warnings = []
+                        if turnover_rate < min_turnover_rate:
+                            risk_warnings.append("动能不足")
+                        elif turnover_rate > max_turnover_rate:
+                            risk_warnings.append("可能存在对倒")
+                        if position_type == "高位":
+                            risk_warnings.append("警惕诱多")
+                        if bias_values.get('bias30') and bias_values.get('bias30') > 10.0:
+                            risk_warnings.append("乖离过大，注意回调风险")
+                        
+                        # 13. 构建结果项
+                        result_item = {
                             'code': str(code),
                             'name': name,
-                            'signal_date': signal_date_obj,
+                            'signal_date': current_candle.get('date'),
                             'current_price': round(current_price, 2),
-                            'ma5': round(ma_values.get('ma5', 0), 2),
-                            'ma10': round(ma_values.get('ma10', 0), 2),
-                            'ma20': round(ma_values.get('ma20', 0), 2),
-                            'ma30': round(ma_values.get('ma30', 0), 2),
-                            'ma60': round(ma_values.get('ma60', 0), 2),
-                            'ma120': round(ma_values.get('ma120', 0), 2),
                             'crossed_lines': '+'.join([ma.upper() for ma in crossed_lines]),
                             'crossed_count': crossed_count,
                             'volume_ratio': round(volume_ratio, 2),
@@ -940,48 +913,104 @@ class OneYangThreeLinesStrategy:
                             'bias10': round(bias_values.get('bias10', 0), 2) if bias_values.get('bias10') is not None else None,
                             'bias30': round(bias_values.get('bias30', 0), 2) if bias_values.get('bias30') is not None else None,
                             'signal_score': signal_score,
-                            'risk_warnings': risk_warnings_json,
-                            'created_at': datetime.now()
-                        })
+                            'risk_warnings': risk_warnings
+                        }
                         
-                        db.commit()
-                        logger.debug(f"信号已保存到数据库: {code} {name} {signal_date_str}")
+                        # 添加动态均线字段
+                        for period in ma_periods:
+                            ma_key = f'ma{period}'
+                            result_item[ma_key] = round(ma_values.get(ma_key, 0), 2)
                         
-                    except IntegrityError as ie:
-                        # 唯一约束冲突，说明该信号已存在
-                        db.rollback()
-                        logger.debug(f"信号已存在，跳过保存: {code} {signal_date_str}")
-                    except Exception as save_error:
-                        # 保存失败不影响策略执行，记录错误日志并继续
-                        db.rollback()
-                        logger.error(f"保存信号到数据库失败: {code} {name} - {str(save_error)}")
-                    
-                    results.append(result_item)
-                    logger.info(f"✓ 找到符合条件的股票: {code} {name} (评分: {signal_score}, 穿越: {crossed_count}条均线)")
-                    
-                    processed_count += 1
-                    
+                        # 保存到数据库
+                        try:
+                            signal_date_str = current_candle.get('date')
+                            signal_date_obj = datetime.strptime(signal_date_str, '%Y-%m-%d').date()
+                            risk_warnings_json = json.dumps(risk_warnings, ensure_ascii=False)
+                            
+                            insert_sql = text("""
+                                INSERT INTO one_yang_three_lines_signals 
+                                (code, name, signal_date, current_price, ma5, ma10, ma20, ma30, ma60, ma120,
+                                 crossed_lines, crossed_count, volume_ratio, turnover_rate, position_type, 
+                                 retracement, bias5, bias10, bias30, signal_score, risk_warnings, created_at)
+                                VALUES 
+                                (:code, :name, :signal_date, :current_price, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120,
+                                 :crossed_lines, :crossed_count, :volume_ratio, :turnover_rate, :position_type,
+                                 :retracement, :bias5, :bias10, :bias30, :signal_score, :risk_warnings, :created_at)
+                                ON CONFLICT (code, signal_date) 
+                                DO UPDATE SET
+                                    name = EXCLUDED.name,
+                                    current_price = EXCLUDED.current_price,
+                                    signal_score = EXCLUDED.signal_score,
+                                    risk_warnings = EXCLUDED.risk_warnings
+                            """)
+                            
+                            db.execute(insert_sql, {
+                                'code': str(code),
+                                'name': name,
+                                'signal_date': signal_date_obj,
+                                'current_price': round(current_price, 2),
+                                'ma5': round(ma_values.get('ma5', 0), 2),
+                                'ma10': round(ma_values.get('ma10', 0), 2),
+                                'ma20': round(ma_values.get('ma20', 0), 2),
+                                'ma30': round(ma_values.get('ma30', 0), 2),
+                                'ma60': round(ma_values.get('ma60', 0), 2),
+                                'ma120': round(ma_values.get('ma120', 0), 2),
+                                'crossed_lines': '+'.join([ma.upper() for ma in crossed_lines]),
+                                'crossed_count': crossed_count,
+                                'volume_ratio': round(volume_ratio, 2),
+                                'turnover_rate': round(turnover_rate, 2),
+                                'position_type': position_type,
+                                'retracement': round(retracement, 2),
+                                'bias5': round(bias_values.get('bias5', 0), 2) if bias_values.get('bias5') is not None else None,
+                                'bias10': round(bias_values.get('bias10', 0), 2) if bias_values.get('bias10') is not None else None,
+                                'bias30': round(bias_values.get('bias30', 0), 2) if bias_values.get('bias30') is not None else None,
+                                'signal_score': signal_score,
+                                'risk_warnings': risk_warnings_json,
+                                'created_at': datetime.now()
+                            })
+                            db.commit()
+                        except Exception as save_err:
+                            db.rollback()
+                            logger.error(f"保存信号到数据库失败: {code} - {save_err}")
+                            
+                        results.append(result_item)
+                        found_signal_in_recent = True
+                        logger.info(f"🎯 找到符合条件的股票: {code} {name} (日期: {current_candle.get('date')}, 评分: {signal_score})")
+                        break # 已找到最近的信号，停止检查该股票后续日期
+                        
+                    if found_signal_in_recent:
+                        processed_count += 1
+                        
                 except Exception as e:
                     error_count += 1
-                    logger.error(f"✗ 处理股票 {code} 时出错: {str(e)}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-                    try:
-                        db.rollback()
-                    except Exception as rollback_error:
-                        logger.warning(f"回滚事务时出错: {str(rollback_error)}")
+                    logger.error(f"💥 处理股票 {code} 时出错: {str(e)}")
+                    # db.rollback() 已经在内部 try-except 处理
                     continue
             
-            # 13. 按评分降序排列结果
+            # 14. 按评分降序排列结果
             results.sort(key=lambda x: x['signal_score'], reverse=True)
             
-            logger.info("=" * 60)
-            logger.info(f"一阳穿三线策略执行完成!")
-            logger.info(f"处理股票数: {processed_count}/{len(stocks)}")
-            logger.info(f"找到符合条件: {len(results)} 只")
-            logger.info(f"信号已保存到数据库: one_yang_three_lines_signals表")
-            logger.info(f"处理错误: {error_count} 只")
-            logger.info("=" * 60)
+            logger.info("=" * 80)
+            logger.info("🎉 一阳穿三线策略执行完成!")
+            logger.info("=" * 80)
+            logger.info(f"📊 执行统计:")
+            logger.info(f"  • 处理股票数: {processed_count}/{len(stocks)} ({processed_count/len(stocks)*100:.1f}%)")
+            logger.info(f"  • 找到符合条件: {len(results)} 只")
+            logger.info(f"  • 处理错误: {error_count} 只")
+            logger.info(f"  • 成功率: {((processed_count-error_count)/processed_count*100 if processed_count>0 else 0):.1f}%")
+            logger.info(f"💾 信号已保存到数据库: one_yang_three_lines_signals表")
+            
+            # 输出前10名结果
+            if results:
+                logger.info("🏆 前10名信号:")
+                for i, stock in enumerate(results[:10], 1):
+                    logger.info(f"  {i:2d}. {stock['code']} {stock['name']} - 评分:{stock['signal_score']} "
+                              f"价格:{stock['current_price']} 穿越:{stock['crossed_count']}条 "
+                              f"位置:{stock['position_type']} 成交量:{stock['volume_ratio']}倍")
+            
+            logger.info("=" * 80)
+            logger.info(f"⏰ 完成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info("=" * 80)
             
         except Exception as e:
             logger.error(f"一阳穿三线策略执行失败: {str(e)}")

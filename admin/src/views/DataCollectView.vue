@@ -684,8 +684,9 @@ const isAllSelected = computed(() => {
   return safeIndicators.value.length === allIndicators.length
 })
 
-const handleSelectAllIndicators = (checked: boolean) => {
-  if (checked) {
+const handleSelectAllIndicators = (checked: boolean | string | number | boolean[] | undefined) => {
+  const isChecked = typeof checked === 'boolean' ? checked : Boolean(checked)
+  if (isChecked) {
     safeIndicators.value = [...allIndicators]
   } else {
     safeIndicators.value = []

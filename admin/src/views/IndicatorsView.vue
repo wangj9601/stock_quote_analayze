@@ -560,7 +560,7 @@
                     <el-descriptions-item 
                       v-for="(value, key) in generationResult.details" 
                       :key="key"
-                      :label="getIndicatorLabel(key)"
+                      :label="getIndicatorLabel(String(key))"
                     >
                       <el-tag :type="value.success ? 'success' : 'danger'">
                         {{ value.success ? '成功' : '失败' }}: {{ value.message || value.count || '-' }}
@@ -579,7 +579,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Refresh, Search, Setting, Collection } from '@element-plus/icons-vue'
+import { Refresh, Setting, Collection } from '@element-plus/icons-vue'
 import { apiService } from '@/services/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -592,7 +592,14 @@ const tableData = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
-const generationResult = ref(null)
+// 类型定义
+interface GenerationResult {
+  success: boolean
+  message: string
+  details?: any
+}
+
+const generationResult = ref<GenerationResult | null>(null)
 
 const filters = reactive({
   code: '',
@@ -601,7 +608,7 @@ const filters = reactive({
   end_date: ''
 })
 
-const generationForm = reactive({
+const generationForm = reactive<{ code: string; market_type: string; indicators: string[] }>({
   code: '',
   market_type: '',
   indicators: []
@@ -693,16 +700,17 @@ const handleMainTabChange = () => {
   generationResult.value = null
 }
 
-const handleSelectAllIndicators = (checked: boolean) => {
-  if (checked) {
+const handleSelectAllIndicators = (checked: boolean | string | number | boolean[] | undefined) => {
+  const isChecked = typeof checked === 'boolean' ? checked : Boolean(checked)
+  if (isChecked) {
     generationForm.indicators = [...allIndicatorTypes]
   } else {
     generationForm.indicators = []
   }
 }
 
-const getIndicatorLabel = (key: string) => {
-  const labels = {
+const getIndicatorLabel = (key: string): string => {
+  const labels: Record<string, string> = {
     ma: 'MA (移动平均线)',
     mavol: 'MAVOL (成交量移动平均)',
     macd: 'MACD',
@@ -711,7 +719,7 @@ const getIndicatorLabel = (key: string) => {
     boll: 'BOLL (布林带)',
     pvfrs: 'PVFARS'
   }
-  return labels[key] || key
+  return labels[key as keyof typeof labels] || key
 }
 
 const generateIndicators = async () => {

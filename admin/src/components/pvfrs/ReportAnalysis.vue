@@ -226,21 +226,44 @@ import {
   DataLine
 } from '@element-plus/icons-vue'
 
+// 类型定义
+interface Report {
+  id: string
+  name: string
+  type: string
+  createdAt: string
+  status: string
+  return?: number
+  winRate?: number
+  maxDrawdown?: number
+  description?: string
+}
+
+interface PVRFSApi {
+  getReports(params: any): Promise<any>
+  getReportOverview(): Promise<any>
+  downloadReport(reportId: string): Promise<Blob>
+  downloadReportPdf(reportId: string): Promise<Blob>
+  deleteReport(reportId: string): Promise<void>
+  deleteAllReports(): Promise<void>
+  compareReports(reportIds: string[]): Promise<any>
+}
+
 // 导入子组件
-import ReportDetail from './ReportDetail.vue'
-import ReportComparison from './ReportComparison.vue'
-import ReportGenerator from './ReportGenerator.vue'
+// import ReportDetail from './ReportDetail.vue'
+// import ReportComparison from './ReportComparison.vue'
+// import ReportGenerator from './ReportGenerator.vue'
 
 // 注入服务
-const pvfrsApi = inject('pvfrsApi')
+const pvfrsApi = inject('pvfrsApi') as PVRFSApi
 
 // 响应式数据
 const loading = ref(false)
 const showReportDetail = ref(false)
 const showCompareDialog = ref(false)
 const showGenerateDialog = ref(false)
-const selectedReport = ref(null)
-const selectedReports = ref([])
+const selectedReport = ref<Report | null>(null)
+const selectedReports = ref<Report[]>([])
 const compareReportsData = ref([])
 
 // 概览数据
@@ -252,8 +275,8 @@ const overview = reactive({
 })
 
 // 报告列表
-const reports = ref([])
-const dateRange = ref([])
+const reports = ref<Report[]>([])
+const dateRange = ref<[string, string] | []>([])
 const typeFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -336,12 +359,12 @@ const generateReport = () => {
   showGenerateDialog.value = true
 }
 
-const viewReport = (report: any) => {
+const viewReport = (report: Report) => {
   selectedReport.value = report
   showReportDetail.value = true
 }
 
-const downloadReport = async (report: any) => {
+const downloadReport = async (report: Report) => {
   try {
     const blob = await pvfrsApi.downloadReport(report.id)
     
@@ -350,7 +373,7 @@ const downloadReport = async (report: any) => {
     const link = document.createElement('a')
     link.href = url
     // 后端下载端点返回的是 HTML 报告，不能用 .pdf 否则会提示格式错误
-    link.download = `${report.title}_${report.id}.html`
+    link.download = `${report.name}_${report.id}.html`
     link.click()
     
     window.URL.revokeObjectURL(url)
@@ -362,13 +385,13 @@ const downloadReport = async (report: any) => {
   }
 }
 
-const exportReportPdf = async (report: any) => {
+const exportReportPdf = async (report: Report) => {
   try {
     const blob = await pvfrsApi.downloadReportPdf(report.id)
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `${report.title}_${report.id}.pdf`
+    link.download = `${report.name}_${report.id}.pdf`
     link.click()
     window.URL.revokeObjectURL(url)
     ElMessage.success('PDF导出成功')
@@ -378,9 +401,9 @@ const exportReportPdf = async (report: any) => {
   }
 }
 
-const deleteReport = async (report: any) => {
+const deleteReport = async (report: Report) => {
   try {
-    await ElMessageBox.confirm(`确定要删除报告"${report.title}"吗？`, '确认删除', {
+    await ElMessageBox.confirm(`确定要删除报告"${report.name}"吗？`, '确认删除', {
       type: 'warning'
     })
     
@@ -431,7 +454,7 @@ const compareReports = async () => {
   }
 }
 
-const handleSelectionChange = (selection: any[]) => {
+const handleSelectionChange = (selection: Report[]) => {
   selectedReports.value = selection
 }
 
@@ -474,25 +497,26 @@ const handleGenerateClose = () => {
   showGenerateDialog.value = false
 }
 
-// 辅助方法
-const getTypeTagType = (type: string) => {
-  const types = {
-    single: '',
+// 辅助方法 - el-tag type 仅支持以下字面量，空用 info
+type ElTagType = 'info' | 'primary' | 'success' | 'warning' | 'danger'
+const getTypeTagType = (type: string): ElTagType => {
+  const types: Record<string, ElTagType> = {
+    single: 'info',
     batch: 'success',
     optimize: 'warning',
     portfolio: 'info'
   }
-  return types[type] || ''
+  return (types[type] || 'info') as ElTagType
 }
 
-const getTypeLabel = (type: string) => {
-  const labels = {
+const getTypeLabel = (type: string): string => {
+  const labels: Record<string, string> = {
     single: '单股回测',
     batch: '批量回测',
     optimize: '参数优化',
     portfolio: '组合分析'
   }
-  return labels[type] || type
+  return labels[type as keyof typeof labels] || type
 }
 
 const getReturnClass = (returnValue: number) => {

@@ -87,7 +87,7 @@ class SelectionDisplayFormatter:
             'high_efficiency_trajectory': '高效率轨道',
             'macro_displacement_positive': '宏观位移向上',
             'instant_deviation_positive': '即时强度向上',
-            'frequency_advantage': '频率优势',
+            'frequency_advantage': '频率权重(F>Z)',
             'volume_efficiency': '成交量效率',
             'volume_price_resonance': '量价共振',
             'amplitude_ratio_valid': '幅度系数有效'

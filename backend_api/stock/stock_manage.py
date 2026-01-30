@@ -754,6 +754,11 @@ async def get_kline_hist(
             ).first()
             
             if today_realtime:
+                # 实时行情的成交量通常是股，而历史行情是手(100股)，所以需要转换
+                real_volume = today_realtime.volume
+                if real_volume is not None and real_volume > 0:
+                    real_volume = int(real_volume / 100)
+                
                 result.append({
                     "date": today,
                     "code": code,
@@ -761,7 +766,7 @@ async def get_kline_hist(
                     "close": fmt(today_realtime.current_price),  # 实时行情中current_price相当于收盘价
                     "high": fmt(today_realtime.high),
                     "low": fmt(today_realtime.low),
-                    "volume": int(today_realtime.volume) if today_realtime.volume is not None else None,
+                    "volume": real_volume,
                     "amount": fmt(today_realtime.amount),
                     "amplitude": None,  # 实时数据可能没有振幅
                     "pct_chg": fmt(today_realtime.change_percent),
@@ -1011,13 +1016,18 @@ async def get_kline_hist(
                 })
             
             if today_realtime:
+                # 实时行情的成交量通常是股，而历史行情是手(100股)，所以需要转换
+                real_volume = today_realtime.volume or 0
+                if real_volume > 0:
+                    real_volume = real_volume / 100
+                    
                 daily_data.append({
                     'date': today,
                     'open': today_realtime.open or 0,
                     'close': today_realtime.current_price or 0,
                     'high': today_realtime.high or 0,
                     'low': today_realtime.low or 0,
-                    'volume': today_realtime.volume or 0,
+                    'volume': real_volume,
                     'amount': today_realtime.amount or 0,
                 })
             

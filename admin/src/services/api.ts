@@ -35,10 +35,10 @@ class ApiService {
           if (token) {
             config.headers.Authorization = `Bearer ${token}`
             console.log('🔐 添加认证token到请求:', config.url)
-            console.log('🌐 完整请求URL:', this.api.defaults.baseURL + config.url)
+            console.log('🌐 完整请求URL:', (this.api.defaults.baseURL ?? '') + (config.url ?? ''))
           } else {
             console.warn('⚠️ 未找到认证token，请求:', config.url)
-            console.log('🌐 完整请求URL:', this.api.defaults.baseURL + config.url)
+            console.log('🌐 完整请求URL:', (this.api.defaults.baseURL ?? '') + (config.url ?? ''))
           }
         } catch (error) {
           console.error('❌ 获取认证token失败:', error)

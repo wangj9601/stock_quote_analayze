@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\strategies\pvfrs\data_interface.py
+# hypothesis_version: 6.150.2
+
+[0.0, 0.005, 0.01, 0.02, 0.1, 0.2, 10.0, 100, 10000, '%Y-%m-%d', '0', '000001', '000002', '000858', '00700', '00941', '01299', '02318', '03690', '600000', '600036', 'AAPL', 'AMZN', 'CN', 'D', 'GOOGL', 'HK', 'MSFT', 'TSLA', 'US', 'amount', 'close', 'close_price', 'closing_price', 'date', 'dt', 'get_stock_data', 'get_stock_list', 'get_trading_calendar', 'high', 'high_price', 'highest_price', 'hk', 'low', 'low_price', 'lowest_price', 'open', 'open_price', 'opening_price', 'query', 'trade_date', 'trading_amount', 'trading_date', 'trading_volume', 'turnover', 'vol', 'volume']

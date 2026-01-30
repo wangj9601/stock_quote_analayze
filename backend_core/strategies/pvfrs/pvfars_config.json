@@ -24,10 +24,13 @@
   "commission_rate": 0.0003,
   "slippage_rate": 0.001,
   "market_type": "CN",
-  "observation_period": 25,
+  "observation_period": 20,
   "min_data_points": 25,
   "price_change_threshold": 0.001,
   "volume_change_threshold": 0.1,
+  "amplitude_flat_threshold": 1e-06,
+  "buy_ratio_d20_max": 0.2,
+  "buy_exclude_sideways": true,
   "strategy_params": {
     "buy_macro_displacement_min": 0,
     "buy_instant_deviation_min": 0,
@@ -82,7 +85,7 @@
     "include_monthly_analysis": true
   },
   "_metadata": {
-    "saved_at": "2026-01-17T18:48:18.262830",
+    "saved_at": "2026-01-30T16:50:35.188574",
     "version": "1.0"
   }
 }

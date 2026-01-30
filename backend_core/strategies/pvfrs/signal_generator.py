@@ -521,9 +521,9 @@ class SignalGenerator(ISignalGenerator):
         if conditions_met.get('instant_strength_positive', False):
             reasons.append("即时强度为正")
         
-        # 频率维度原因
+        # 频率维度原因（买点权重 F > Z）
         if conditions_met.get('frequency_advantage', False):
-            reasons.append("上涨频率优势")
+            reasons.append("下跌频率权重(F>Z)")
         if conditions_met.get('continuous_buying_support', False):
             reasons.append("持续买盘支撑")
         if conditions_met.get('no_false_prosperity', False):
@@ -930,7 +930,7 @@ class SignalGenerator(ISignalGenerator):
         return True
     
     def _validate_frequency_dimension_strict(self, frequency_indicators: Dict) -> bool:
-        """频率维度严格验证
+        """频率维度严格验证（买点权重：F > Z）
         
         Args:
             frequency_indicators: 频率维度指标
@@ -948,14 +948,13 @@ class SignalGenerator(ISignalGenerator):
         rising_days = frequency_indicators.get('rising_days', 0)
         falling_days = frequency_indicators.get('falling_days', 0)
         frequency_advantage = frequency_indicators.get('frequency_advantage', False)
-        has_false_prosperity = frequency_indicators.get('has_false_prosperity', True)
         
-        # 条件1: 必须有频率优势
+        # 条件1: 必须有频率权重（F > Z）
         if not frequency_advantage:
             return False
         
-        # 条件2: 上涨天数必须明显多于下跌天数（至少多3天，即 Z > F+3）
-        if rising_days <= falling_days + 2:  # Z > F+3 等价于 Z > F+2（因为整数）
+        # 条件2: 下跌天数必须大于上涨天数（F > Z；20天内 F>Z+3 与 Z>=10 难以同时满足，故仅要求 F>Z）
+        if falling_days <= rising_days:
             return False
         
         # 条件3: 上涨天数必须达到最低要求（20天中至少10天，占50%）
@@ -967,9 +966,9 @@ class SignalGenerator(ISignalGenerator):
         if recent_rising_persistence < 6:
             return False
         
-        # 条件4: 不能有虚假繁荣
-        if has_false_prosperity:
-            return False
+        # 条件4: 不能有虚假繁荣（本次已注释掉，该条件不参与）
+        # if frequency_indicators.get('has_false_prosperity', True):
+        #     return False
         
         # 条件5: 总的交易天数验证（上涨+下跌天数应该合理）
         total_trend_days = rising_days + falling_days

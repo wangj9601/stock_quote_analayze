@@ -275,7 +275,7 @@ const monitoringStatus = reactive({
   stopEventSet: false
 })
 
-const alerts = ref([])
+const alerts = ref<any[]>([])
 const alertFilter = reactive({
   level: '',
   acknowledged: undefined
@@ -287,8 +287,8 @@ const alertPagination = reactive({
   total: 0
 })
 
-let metricsChart = null
-let refreshTimer = null
+let metricsChart: echarts.ECharts | null = null
+let refreshTimer: NodeJS.Timeout | null = null
 
 // 方法
 const getProgressStatus = (percentage: number) => {
@@ -306,24 +306,24 @@ const getServiceDisplayName = (service: string) => {
   return serviceNames[service] || service
 }
 
-const getServiceStatusType = (status: string) => {
-  const statusTypes: Record<string, string> = {
+const getServiceStatusType = (status: string): "primary" | "success" | "warning" | "info" | "danger" => {
+  const statusTypes: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
     'healthy': 'success',
     'degraded': 'warning',
     'unhealthy': 'danger',
     'unknown': 'info'
   }
-  return statusTypes[status] || 'info'
+  return statusTypes[status as keyof typeof statusTypes] || 'info'
 }
 
-const getAlertLevelType = (level: string) => {
-  const levelTypes: Record<string, string> = {
+const getAlertLevelType = (level: string): "primary" | "success" | "warning" | "info" | "danger" => {
+  const levelTypes: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
     'CRITICAL': 'danger',
     'HIGH': 'warning',
     'MEDIUM': 'info',
     'LOW': 'success'
   }
-  return levelTypes[level] || 'info'
+  return levelTypes[level as keyof typeof levelTypes] || 'info'
 }
 
 const formatDateTime = (timestamp: string) => {
@@ -341,8 +341,8 @@ const refreshData = async () => {
 
 const refreshOverview = async () => {
   try {
-    const response = await systemMonitoringApi.getOverview()
-    Object.assign(overviewData, response.data)
+    const response = await systemMonitoringApi.getOverview() as { data?: Record<string, unknown> }
+    Object.assign(overviewData, response.data ?? {})
   } catch (error) {
     ElMessage.error('获取监控概览失败')
   }
@@ -350,8 +350,8 @@ const refreshOverview = async () => {
 
 const refreshSystemHealth = async () => {
   try {
-    const response = await systemMonitoringApi.getSystemHealth()
-    Object.assign(systemHealth, response.data)
+    const response = await systemMonitoringApi.getSystemHealth() as { data?: Record<string, unknown> }
+    Object.assign(systemHealth, response.data ?? {})
   } catch (error) {
     ElMessage.error('获取系统健康状态失败')
   }
@@ -359,7 +359,7 @@ const refreshSystemHealth = async () => {
 
 const refreshMetrics = async () => {
   try {
-    const response = await systemMonitoringApi.getMetrics(metricsTimeRange.value)
+    const response = await systemMonitoringApi.getMetrics(metricsTimeRange.value) as { data?: unknown }
     updateMetricsChart(response.data)
   } catch (error) {
     ElMessage.error('获取性能指标失败')
@@ -373,9 +373,10 @@ const refreshAlerts = async () => {
       limit: alertPagination.pageSize,
       level: alertFilter.level || undefined,
       acknowledged: alertFilter.acknowledged
-    })
-    alerts.value = response.data
-    alertPagination.total = response.data.length
+    }) as { data?: unknown[] }
+    const list = Array.isArray(response.data) ? response.data : []
+    alerts.value = list
+    alertPagination.total = list.length
   } catch (error) {
     ElMessage.error('获取告警列表失败')
   } finally {
@@ -385,8 +386,8 @@ const refreshAlerts = async () => {
 
 const refreshMonitoringStatus = async () => {
   try {
-    const response = await systemMonitoringApi.getMonitoringStatus()
-    Object.assign(monitoringStatus, response.data)
+    const response = await systemMonitoringApi.getMonitoringStatus() as { data?: Record<string, unknown> }
+    Object.assign(monitoringStatus, response.data ?? {})
   } catch (error) {
     ElMessage.error('获取监控状态失败')
   }
@@ -483,7 +484,7 @@ const updateMetricsChart = (data: any) => {
 }
 
 const initMetricsChart = () => {
-  const chartDom = document.querySelector('.metrics-chart')
+  const chartDom = document.querySelector('.metrics-chart') as HTMLElement
   if (chartDom) {
     metricsChart = echarts.init(chartDom)
   }

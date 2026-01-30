@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\strategies\pvfrs\resonance_detector.py
+# hypothesis_version: 6.150.2
+
+[0.0, 0.005, 0.04, 0.08, 0.1, 0.14, 0.15, 0.3, 0.4, 0.5, 0.7, 1.0, 'avg_price_20d', 'avg_volume_20d', 'bias', 'bias_reasonable', 'bias_trend', 'bias_trend_favorable', 'conditions_met', 'current_volume', 'dimension_scores', 'efficiency_ratio', 'expanding', 'falling_days', 'frequency', 'frequency_advantage', 'frequency_score', 'instant_deviation', 'is_converging', 'is_sideways', 'macro_displacement', 'no_false_prosperity', 'price', 'price_above_average', 'price_score', 'ratio_d20', 'ratio_d20_ok', 'resonance_strength', 'rising_days', 'stable', 'strong_fund_support', 'trend_5d', 'volume', 'volume_efficiency', 'volume_score']

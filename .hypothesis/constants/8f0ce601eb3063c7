@@ -1,0 +1,4 @@
+# file: E:\wangxw\股票分析软件\编码\stock_quote_analayze\backend_core\strategies\pvfrs\config.py
+# hypothesis_version: 6.150.2
+
+[-0.06, 1e-06, 0.0003, 0.001, 0.01, 0.02, 0.05, 0.1, 0.15, 0.25, 0.5, 100000, '%Y%m%d_%H%M%S', '.tmp', '1.0', 'CN', '_metadata', 'buy_bias_min', 'buy_consecutive_days', 'buy_efficiency_min', 'buy_exclude_sideways', 'buy_ma5_above_ma20', 'buy_price_above_ma5', 'buy_ratio_d20_max', 'commission_rate', 'initial_capital', 'market_type', 'max_holding_days', 'max_position_size', 'min_data_points', 'observation_period', 'profit_stage1', 'pvfars_config.json', 'r', 'saved_at', 'sell_below_ma20', 'sell_bias_max', 'sell_divergence_days', 'slippage_rate', 'stop_loss', 'take_profit', 'utf-8', 'version', 'w', '手续费率必须在0-1%之间', '最大仓位必须在0-100%之间', '最大持有天数必须大于0', '最小偏离度不能为负', '最小相对位移不能为负', '止损幅度不应大于等于止盈幅度', '止损比例必须在-100%到0%之间', '止盈比例必须大于0', '滑点率必须在0-1%之间', '观察周期必须至少5天', '连续确认天数必须至少1天', '配置参数无效', '配置已重置为默认值']

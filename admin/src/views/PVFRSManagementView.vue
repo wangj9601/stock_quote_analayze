@@ -209,7 +209,7 @@ const refreshSystemStatus = async () => {
   }
 }
 
-const handleTabChange = (tabName: string) => {
+const handleTabChange = (tabName: string | number) => {
   console.log('切换到标签页:', tabName)
   
   // 根据标签页执行相应的初始化操作
@@ -248,7 +248,7 @@ const handleReportGenerated = (report: any) => {
   refreshSystemStatus()
 }
 
-const handleConfigSaved = (config: any) => {
+const handleConfigSaved = (_config: any) => {
   showNotification('success', '配置保存', '策略配置已成功保存')
 }
 

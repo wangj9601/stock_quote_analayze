@@ -56,6 +56,11 @@ const ScreeningPage = {
         if (targetContent) {
             targetContent.classList.add('active');
         }
+
+        // 切换到 PVFARS 时加载策略参数
+        if (strategy === 'pvfrs') {
+            this.loadPvfrsParams();
+        }
     },
 
     // 加载头部导航
@@ -136,6 +141,29 @@ const ScreeningPage = {
                 this.loadScreeningResults('pvfrs');
             });
         });
+
+        // PVFARS 策略参数：保存按钮
+        const pvfrsParamsSaveBtn = document.getElementById('pvfrsParamsSaveBtn');
+        if (pvfrsParamsSaveBtn) {
+            pvfrsParamsSaveBtn.addEventListener('click', () => this.savePvfrsParams());
+        }
+
+        // PVFARS 得分明细：点击「得分明细」展开/收起（事件委托，绑定在结果容器上）
+        const pvfrsContainer = document.getElementById('resultsContainer-pvfrs');
+        if (pvfrsContainer) {
+            pvfrsContainer.addEventListener('click', (e) => {
+                const btn = e.target.closest('.pvfrs-score-detail-toggle');
+                if (!btn) return;
+                e.preventDefault();
+                const rowIndex = btn.getAttribute('data-row');
+                const tbody = document.getElementById('resultsTableBody-pvfrs');
+                if (!tbody) return;
+                const detailRow = tbody.querySelector(`tr.pvfrs-score-detail-row[data-detail-for="${rowIndex}"]`);
+                if (detailRow) {
+                    detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+                }
+            });
+        }
     },
 
     // 加载选股结果
@@ -261,7 +289,35 @@ const ScreeningPage = {
                 };
 
             const response = await fetchFn(url);
-            const result = await response.json();
+            const contentType = response.headers.get('Content-Type') || '';
+            let result;
+            try {
+                const text = await response.text();
+                if (contentType.includes('application/json') && text && text.trim().startsWith('{')) {
+                    result = JSON.parse(text);
+                } else if (!response.ok) {
+                    if (response.status === 504) {
+                        throw new Error('请求超时(504)，选股计算耗时较长，请稍后重试');
+                    }
+                    if (response.status === 502 || response.status === 503) {
+                        throw new Error('服务暂时不可用，请稍后重试');
+                    }
+                    throw new Error(text && text.length < 200 ? text : `请求失败(${response.status})`);
+                } else {
+                    throw new Error('服务器返回了非 JSON 数据，请稍后重试');
+                }
+            } catch (parseError) {
+                if (parseError instanceof SyntaxError || (parseError.message && parseError.message.includes('JSON'))) {
+                    if (response.status === 504) {
+                        throw new Error('请求超时(504)，选股计算耗时较长，请稍后重试');
+                    }
+                    if (response.status === 502 || response.status === 503) {
+                        throw new Error('服务暂时不可用，请稍后重试');
+                    }
+                    throw new Error('服务返回异常，请稍后重试');
+                }
+                throw parseError;
+            }
 
             if (!response.ok) {
                 throw new Error(result.detail || result.message || '请求失败');
@@ -345,6 +401,78 @@ const ScreeningPage = {
             if (refreshBtn) {
                 refreshBtn.disabled = false;
             }
+        }
+    },
+
+    // 加载 PVFARS 策略参数到表单
+    async loadPvfrsParams() {
+        const apiBaseUrl = this.API_BASE_URL;
+        const statusEl = document.getElementById('pvfrsParamsSaveStatus');
+        try {
+            const res = await fetch(`${apiBaseUrl}/api/screening/pvfrs-params`);
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json.success) {
+                if (statusEl) statusEl.textContent = json.message || '加载参数失败';
+                return;
+            }
+            const data = json.data || {};
+            const set = (id, value) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (el.type === 'checkbox') el.checked = !!value;
+                else if (el.tagName === 'SELECT') el.value = String(value === true || value === 'true');
+                else el.value = value != null ? value : '';
+            };
+            set('pvfrs-observation_period', data.observation_period);
+            set('pvfrs-buy_ratio_d20_max', data.buy_ratio_d20_max);
+            set('pvfrs-buy_exclude_sideways', data.buy_exclude_sideways);
+            set('pvfrs-buy_macro_displacement_min', data.buy_macro_displacement_min);
+            set('pvfrs-buy_instant_deviation_min', data.buy_instant_deviation_min);
+            set('pvfrs-buy_bias_min', data.buy_bias_min);
+            set('pvfrs-buy_relative_displacement_min', data.buy_relative_displacement_min);
+            if (statusEl) statusEl.textContent = '';
+        } catch (e) {
+            console.error('loadPvfrsParams:', e);
+            if (statusEl) statusEl.textContent = '加载失败';
+        }
+    },
+
+    // 保存 PVFARS 策略参数
+    async savePvfrsParams() {
+        const apiBaseUrl = this.API_BASE_URL;
+        const statusEl = document.getElementById('pvfrsParamsSaveStatus');
+        const get = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return undefined;
+            if (el.type === 'number') return el.value === '' ? undefined : parseFloat(el.value);
+            if (el.tagName === 'SELECT') return el.value === 'true';
+            return el.value;
+        };
+        const body = {
+            observation_period: get('pvfrs-observation_period'),
+            buy_ratio_d20_max: get('pvfrs-buy_ratio_d20_max'),
+            buy_exclude_sideways: get('pvfrs-buy_exclude_sideways'),
+            buy_macro_displacement_min: get('pvfrs-buy_macro_displacement_min'),
+            buy_instant_deviation_min: get('pvfrs-buy_instant_deviation_min'),
+            buy_bias_min: get('pvfrs-buy_bias_min'),
+            buy_relative_displacement_min: get('pvfrs-buy_relative_displacement_min')
+        };
+        try {
+            if (statusEl) statusEl.textContent = '保存中…';
+            const res = await fetch(`${apiBaseUrl}/api/screening/pvfrs-params`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.success) {
+                if (statusEl) statusEl.textContent = '已保存';
+            } else {
+                if (statusEl) statusEl.textContent = json.message || '保存失败';
+            }
+        } catch (e) {
+            console.error('savePvfrsParams:', e);
+            if (statusEl) statusEl.textContent = '保存失败';
         }
     },
 
@@ -644,8 +772,20 @@ const ScreeningPage = {
                     adviceClass = 'advice-wait';
                 }
 
+                // 得分明细（共振强度、各维度得分）
+                const sd = stock.score_detail || stock.indicators?.score_detail || {};
+                const fmt = (v) => (v != null && typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '--';
+                const scoreDetailHtml = `
+                    <div class="pvfrs-score-detail-inner">
+                        <span><strong>共振强度:</strong> ${fmt(sd.resonance_strength)}</span>
+                        <span><strong>价格维度得分:</strong> ${fmt(sd.price_score)}</span>
+                        <span><strong>频率维度得分:</strong> ${fmt(sd.frequency_score)}</span>
+                        <span><strong>成交量维度得分:</strong> ${fmt(sd.volume_score)}</span>
+                    </div>
+                `;
+
                 html += `
-                    <tr>
+                    <tr data-pvfrs-row="${index}">
                         <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
                         <td><span class="stock-name">${stock.name || '--'}</span></td>
                         <td><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
@@ -661,8 +801,12 @@ const ScreeningPage = {
                             <div class="action-links">
                                 <a href="stock_history.html?code=${stock.symbol || stock.code}" class="action-link" target="_blank">历史</a>
                                 <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
+                                <button type="button" class="action-link pvfrs-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
                             </div>
                         </td>
+                    </tr>
+                    <tr class="pvfrs-score-detail-row" data-detail-for="${index}" style="display:none;">
+                        <td colspan="12" class="pvfrs-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
@@ -679,6 +823,7 @@ const ScreeningPage = {
         const minVolumeRatio = document.getElementById('minVolumeRatio').value;
         const minTurnoverRate = document.getElementById('minTurnoverRate').value;
         const maxTurnoverRate = document.getElementById('maxTurnoverRate').value;
+        const recentDays = document.getElementById('recentDays-one-yang').value;
 
         // 获取选中的均线周期
         const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]:checked');
@@ -691,6 +836,7 @@ const ScreeningPage = {
             min_volume_ratio: parseFloat(minVolumeRatio),
             min_turnover_rate: parseFloat(minTurnoverRate),
             max_turnover_rate: parseFloat(maxTurnoverRate),
+            recent_days: parseInt(recentDays),
             ma_periods: maPeriods.join(',')
         };
     },
@@ -703,6 +849,7 @@ const ScreeningPage = {
         document.getElementById('minVolumeRatio').value = '2.0';
         document.getElementById('minTurnoverRate').value = '3.0';
         document.getElementById('maxTurnoverRate').value = '10.0';
+        document.getElementById('recentDays-one-yang').value = '1';
 
         // 重置均线周期选择
         const maPeriodsCheckboxes = document.querySelectorAll('input[name="maPeriods"]');
@@ -736,6 +883,7 @@ const ScreeningPage = {
                 document.getElementById('minVolumeRatio').value = params.min_volume_ratio || '2.0';
                 document.getElementById('minTurnoverRate').value = params.min_turnover_rate || '3.0';
                 document.getElementById('maxTurnoverRate').value = params.max_turnover_rate || '10.0';
+                document.getElementById('recentDays-one-yang').value = params.recent_days || '1';
 
                 // 恢复均线周期选择
                 if (params.ma_periods) {

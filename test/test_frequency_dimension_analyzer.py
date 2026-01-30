@@ -62,17 +62,17 @@ class TestFrequencyDimensionAnalyzer:
             self.analyzer.count_falling_days(data)
     
     def test_check_frequency_advantage_true(self):
-        """测试频率优势为真的情况"""
-        result = self.analyzer.check_frequency_advantage(12, 7)
+        """测试频率权重 F>Z 为真的情况（下跌天数大于上涨天数）"""
+        result = self.analyzer.check_frequency_advantage(7, 12)  # F=12 > Z=7
         assert result is True
     
     def test_check_frequency_advantage_false(self):
-        """测试频率优势为假的情况"""
-        result = self.analyzer.check_frequency_advantage(7, 12)
+        """测试频率权重 F>Z 为假的情况"""
+        result = self.analyzer.check_frequency_advantage(12, 7)  # F=7 不大于 Z=12
         assert result is False
     
     def test_check_frequency_advantage_equal(self):
-        """测试上涨下跌天数相等的情况"""
+        """测试上涨下跌天数相等的情况（F>Z 为假）"""
         result = self.analyzer.check_frequency_advantage(10, 10)
         assert result is False  # 必须严格大于
     
@@ -103,8 +103,8 @@ class TestFrequencyDimensionAnalyzer:
         assert has_false_prosperity is True
     
     def test_analyze_complete_valid_case(self):
-        """测试完整分析 - 有效情况"""
-        # 创建符合条件的价格序列：稳定上涨，无暴涨
+        """测试完整分析 - 稳定上涨情况（买点权重 F>Z：稳定上涨时 F<Z，故 frequency_advantage 为 False）"""
+        # 创建稳定上涨的价格序列：19天上涨，0天下跌
         prices = [100 + i * 0.3 for i in range(20)]  # 稳定上涨
         data = self.create_test_data(prices)
         
@@ -116,12 +116,12 @@ class TestFrequencyDimensionAnalyzer:
         assert 'has_false_prosperity' in result
         assert 'frequency_dimension_valid' in result
         
-        # 应该有19天上涨，0天下跌
+        # 19天上涨，0天下跌；买点权重 F>Z 时，F=0 不大于 Z=19，故 frequency_advantage 为 False
         assert result['rising_days'] == 19
         assert result['falling_days'] == 0
-        assert result['frequency_advantage'] is True
+        assert result['frequency_advantage'] is False  # F>Z 语义：下跌天数不大于上涨天数
         assert result['has_false_prosperity'] is False
-        assert result['frequency_dimension_valid'] is True
+        assert result['frequency_dimension_valid'] is False  # 因 F>Z 不满足
     
     def test_analyze_complete_invalid_case(self):
         """测试完整分析 - 无效情况（虚假繁荣）"""
@@ -135,26 +135,27 @@ class TestFrequencyDimensionAnalyzer:
         assert result['frequency_dimension_valid'] is False  # 因为有虚假繁荣
     
     def test_validate_conditions_all_met(self):
-        """测试所有条件都满足的情况"""
+        """测试所有条件都满足的情况（买点权重 F>Z：下跌天数>上涨天数，且 Z>=10）"""
         indicators = {
-            'rising_days': 15,
-            'falling_days': 4,
-            'has_false_prosperity': False
+            'rising_days': 10,
+            'falling_days': 11,
+            'recent_rising_persistence': 6
         }
         
         result = self.analyzer.validate_conditions(indicators)
         assert result is True
     
     def test_validate_conditions_false_prosperity(self):
-        """测试存在虚假繁荣的情况"""
+        """测试虚假繁荣：本次已注释掉判断，该条件恒通过，故仅看其他条件"""
         indicators = {
-            'rising_days': 15,
-            'falling_days': 4,
-            'has_false_prosperity': True
+            'rising_days': 10,
+            'falling_days': 11,
+            'has_false_prosperity': True,  # 已注释不参与
+            'recent_rising_persistence': 6
         }
         
         result = self.analyzer.validate_conditions(indicators)
-        assert result is False
+        assert result is True  # 虚假繁荣不再参与，其他条件满足则通过
     
     def test_validate_conditions_insufficient_rising_days(self):
         """测试上涨天数不足的情况"""

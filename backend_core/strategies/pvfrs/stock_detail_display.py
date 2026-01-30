@@ -309,9 +309,9 @@ class StockDetailFormatter:
         risk_factors = []
         
         if frequency_advantage:
-            key_points.append(f"上涨天数优势明显 (上涨{rising_days}天 vs 下跌{falling_days}天)")
+            key_points.append(f"下跌天数权重(F>Z) (上涨{rising_days}天 vs 下跌{falling_days}天)")
         else:
-            risk_factors.append(f"上涨天数不足 (上涨{rising_days}天 vs 下跌{falling_days}天)")
+            risk_factors.append(f"下跌天数不足(F<=Z) (上涨{rising_days}天 vs 下跌{falling_days}天)")
         
         if not has_false_prosperity:
             key_points.append("无虚假繁荣现象，趋势稳定")

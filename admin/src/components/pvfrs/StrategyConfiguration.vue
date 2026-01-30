@@ -982,7 +982,7 @@
         </el-table-column>
         <el-table-column prop="isActive" label="状态" width="100">
           <template #default="scope">
-            <el-tag :type="scope.row.isActive ? 'success' : ''">
+            <el-tag :type="scope.row.isActive ? 'success' : 'info'">
               {{ scope.row.isActive ? '当前' : '历史' }}
             </el-tag>
           </template>
@@ -1023,8 +1023,17 @@ import {
   Tools 
 } from '@element-plus/icons-vue'
 
+// 类型定义
+interface PVRFSApi {
+  getStrategyConfig(): Promise<any>
+  saveStrategyConfig(config: any): Promise<any>
+  testStrategyConfig(config: any): Promise<any>
+  getConfigHistory(): Promise<any>
+  deleteConfigHistory(configId: string): Promise<void>
+}
+
 // 注入服务
-const pvfrsApi = inject('pvfrsApi')
+const pvfrsApi = inject('pvfrsApi') as PVRFSApi
 
 // 响应式数据
 const configFormRef = ref()
@@ -1341,22 +1350,22 @@ const deleteHistoryConfig = async (historyConfig: any) => {
 }
 
 // 辅助方法
-const getRiskLevelType = (level: string) => {
-  const types = {
+const getRiskLevelType = (level: string): "primary" | "success" | "warning" | "info" | "danger" => {
+  const types: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
     conservative: 'success',
     balanced: 'warning',
     aggressive: 'danger'
   }
-  return types[level] || 'info'
+  return types[level as keyof typeof types] || 'info'
 }
 
-const getRiskLevelLabel = (level: string) => {
-  const labels = {
+const getRiskLevelLabel = (level: string): string => {
+  const labels: Record<string, string> = {
     conservative: '保守',
     balanced: '平衡',
     aggressive: '激进'
   }
-  return labels[level] || level
+  return labels[level as keyof typeof labels] || level
 }
 
 const formatDateTime = (dateTime: string) => {

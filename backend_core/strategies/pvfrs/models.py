@@ -49,7 +49,7 @@ class PVFRSIndicators:
     # 频率维度指标
     rising_days: int            # 上涨天数 Z
     falling_days: int           # 下跌天数 F
-    frequency_advantage: bool   # 频率优势 Z > F
+    frequency_advantage: bool   # 频率权重 F > Z（买点侧）
     
     # 成交量维度指标
     avg_volume_20d: float       # 20日平均成交量 m

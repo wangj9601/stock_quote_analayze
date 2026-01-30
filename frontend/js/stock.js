@@ -412,11 +412,11 @@ const StockPage = {
         console.log('[initKlineChart] 找到klineChart元素，开始初始化ECharts');
         this.klineChart = echarts.init(chartDom);
         const option = {
-            backgroundColor: '#0f172a',
+            backgroundColor: '#ffffff',
             grid: [
-                { left: '8%', right: '6%', top: '5%', height: '55%' },  // K线图区域
-                { left: '8%', right: '6%', top: '63%', height: '18%' },  // 成交量区域
-                { left: '8%', right: '6%', top: '74%', height: '22%' }  // MACD区域（增加高度）
+                { left: '8%', right: '6%', top: '5%', height: '62%' },  // K线图区域
+                { left: '8%', right: '6%', top: '72%', height: '15%' },  // 成交量区域
+                { left: '8%', right: '6%', top: '72%', height: '15%' }   // 指标区域（MACD/KDJ/RSI）
             ],
             xAxis: [
                 {
@@ -453,7 +453,24 @@ const StockPage = {
             ],
             yAxis: [
                 { scale: true, splitArea: { show: true } },
-                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                {
+                    scale: true,
+                    gridIndex: 1,
+                    splitNumber: 2,
+                    axisLabel: {
+                        show: true,
+                        color: '#999',
+                        fontSize: 10,
+                        formatter: function (value) {
+                            if (value >= 100000000) return (value / 100000000).toFixed(1) + '亿';
+                            if (value >= 10000) return (value / 10000).toFixed(1) + '万';
+                            return value;
+                        }
+                    },
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false }
+                },
                 {
                     scale: true,  // 默认自动缩放，各指标函数会覆盖此设置
                     gridIndex: 2,
@@ -471,7 +488,7 @@ const StockPage = {
                         show: true,
                         lineStyle: {
                             type: 'dashed',
-                            color: '#444',
+                            color: '#e8e8e8',
                             width: 1
                         }
                     }
@@ -498,7 +515,7 @@ const StockPage = {
                         color: '#1890ff'
                     },
                     textStyle: {
-                        color: '#333'
+                        color: '#666'
                     }
                 }
             ],
@@ -541,13 +558,10 @@ const StockPage = {
                     barMaxWidth: '90%',
                     itemStyle: {
                         color: function (params) {
-                            return params.dataIndex % 2 === 0 ? '#dc2626' : '#16a34a';
+                            // 这里会在loadKlineData中动态设置特定颜色
+                            return params.value >= 0 ? '#dc2626' : '#16a34a';
                         },
-                        borderRadius: [3, 3, 0, 0],
-                        borderWidth: 0.5,
-                        borderColor: function (params) {
-                            return params.dataIndex % 2 === 0 ? '#b91c1c' : '#15803d';
-                        }
+                        borderRadius: [2, 2, 0, 0]
                     },
                     emphasis: {
                         itemStyle: {
@@ -564,7 +578,7 @@ const StockPage = {
                     yAxisIndex: 2,
                     data: [],
                     smooth: true,
-                    lineStyle: { width: 2, color: '#ffffff' },
+                    lineStyle: { width: 2, color: '#3b82f6' },
                     showSymbol: false,
                     z: 2
                 },
@@ -601,7 +615,7 @@ const StockPage = {
                     yAxisIndex: 2,
                     data: [],
                     smooth: true,
-                    lineStyle: { width: 1.5, color: '#ffffff' }, // 白色
+                    lineStyle: { width: 1.5, color: '#3b82f6' }, // 蓝色
                     showSymbol: false,
                     z: 2,
                     show: false
@@ -637,7 +651,7 @@ const StockPage = {
                     yAxisIndex: 2,
                     data: [],
                     smooth: true,
-                    lineStyle: { width: 1.5, color: '#ffffff' },
+                    lineStyle: { width: 1.5, color: '#3b82f6' },
                     showSymbol: false,
                     z: 2
                 },
@@ -707,7 +721,11 @@ const StockPage = {
                         params.forEach((item) => {
                             if (item.seriesName === '成交量') {
                                 result += '<br/>成交量<br/>';
-                                result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
+                                let val = item.data;
+                                if (val && typeof val === 'object' && 'value' in val) {
+                                    val = val.value;
+                                }
+                                result += item.marker + ' ' + item.seriesName + ': ' + (val !== null && val !== undefined ? val : '-') + '<br/>';
                             } else if (item.seriesName === 'MAVOL20') {
                                 result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
                             }
@@ -783,7 +801,7 @@ const StockPage = {
                 data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', '成交量', 'MAVOL20', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24', '布林带中线', '布林带上轨', '布林带下轨'],
                 top: '1%',
                 textStyle: {
-                    color: '#999'
+                    color: '#666'
                 }
             }
         };
@@ -813,7 +831,7 @@ const StockPage = {
         this.minuteChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#0f172a',
+            backgroundColor: '#ffffff',
             grid: {
                 left: '8%',
                 right: '6%',
@@ -872,11 +890,11 @@ const StockPage = {
                         买卖盘性质：${data.trade_type || '-'}
                     `;
                 },
-                backgroundColor: 'rgba(245, 245, 245, 0.8)',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
                 borderWidth: 1,
                 borderColor: '#ccc',
                 textStyle: {
-                    color: '#000'
+                    color: '#333'
                 }
             }
         };
@@ -892,7 +910,7 @@ const StockPage = {
         this.profitChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#0f172a',
+            backgroundColor: '#ffffff',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -950,7 +968,7 @@ const StockPage = {
         this.flowChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#0f172a',
+            backgroundColor: '#ffffff',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -1041,7 +1059,7 @@ const StockPage = {
             console.log('[loadStockData] 返回数据:', data);
             if (data.success) {
                 const d = data.data;
-                this.currentPrice = d.current_price;
+                this.currentPrice = parseFloat(d.current_price) || 0;
                 this.priceChange = d.change_amount;
                 this.priceChangePercent = d.change_percent;
                 this.stockName = d.name || this.stockName;
@@ -1432,12 +1450,14 @@ const StockPage = {
             levels.resistance_levels.forEach((level, index) => {
                 if (resistanceElements[index]) {
                     // 验证阻力位数据：阻力位必须严格大于当前价格
-                    if (level <= this.currentPrice) {
-                        console.warn(`[关键价位] 阻力位${index + 1}数据无效: ${level.toFixed(2)} <= 当前价格 ${this.currentPrice.toFixed(2)}`);
+                    const curPrice = Number(this.currentPrice);
+                    const lvlValue = Number(level);
+                    if (lvlValue <= curPrice) {
+                        console.warn(`[关键价位] 阻力位${index + 1}数据无效: ${lvlValue.toFixed(2)} <= 当前价格 ${curPrice.toFixed(2)}`);
                         return; // 跳过无效数据
                     }
-                    console.log(`[关键价位] 更新阻力位${index + 1}: ${level.toFixed(2)}`);
-                    resistanceElements[index].textContent = level.toFixed(2);
+                    console.log(`[关键价位] 更新阻力位${index + 1}: ${lvlValue.toFixed(2)}`);
+                    resistanceElements[index].textContent = lvlValue.toFixed(2);
                 }
             });
         }
@@ -1449,12 +1469,14 @@ const StockPage = {
             levels.support_levels.forEach((level, index) => {
                 if (supportElements[index]) {
                     // 验证支撑位数据：支撑位必须严格小于当前价格
-                    if (level >= this.currentPrice) {
-                        console.warn(`[关键价位] 支撑位${index + 1}数据无效: ${level.toFixed(2)} >= 当前价格 ${this.currentPrice.toFixed(2)}`);
+                    const curPrice = Number(this.currentPrice);
+                    const lvlValue = Number(level);
+                    if (lvlValue >= curPrice) {
+                        console.warn(`[关键价位] 支撑位${index + 1}数据无效: ${lvlValue.toFixed(2)} >= 当前价格 ${curPrice.toFixed(2)}`);
                         return; // 跳过无效数据
                     }
-                    console.log(`[关键价位] 更新支撑位${index + 1}: ${level.toFixed(2)}`);
-                    supportElements[index].textContent = level.toFixed(2);
+                    console.log(`[关键价位] 更新支撑位${index + 1}: ${lvlValue.toFixed(2)}`);
+                    supportElements[index].textContent = lvlValue.toFixed(2);
                 }
             });
         }
@@ -2404,20 +2426,14 @@ const StockPage = {
     showVolumeChart(option) {
         console.log('[showVolumeChart] 开始显示成交量图表');
 
-        // 显示成交量区域（grid[1]），隐藏MACD区域（grid[2]）
+        // 显示成交量区域（grid[1]），隐藏指标区域（grid[2]）
         if (option.grid && option.grid[1]) {
-            option.grid[1].height = '12%';
-            option.grid[1].top = '63%';
-            option.grid[1].show = true; // 明确显示成交量区域
-            option.grid[1].left = option.grid[0] ? option.grid[0].left : '8%';
-            option.grid[1].right = option.grid[0] ? option.grid[0].right : '6%';
-            option.grid[1].bottom = '2%';
-            option.grid[1].containLabel = true;
+            option.grid[1].height = '15%';
+            option.grid[1].top = '72%';
+            option.grid[1].show = true;
         }
         if (option.grid && option.grid[2]) {
-            option.grid[2].height = '0%';
-            option.grid[2].top = '100%';
-            option.grid[2].show = false; // 明确隐藏MACD区域
+            option.grid[2].show = false;
         }
 
         // 调整K线图区域高度
@@ -3525,7 +3541,8 @@ const StockPage = {
         try {
             const today = new Date();
             let endDate = today.toISOString().split('T')[0];
-            let startDate = (new Date(today.getFullYear() - 5, today.getMonth(), today.getDate())).toISOString().split('T')[0];
+            // 修改为全周期：从1990年开始获取
+            let startDate = '1990-01-01';
             let period = 'daily';
             let url = '';
 
@@ -3699,11 +3716,35 @@ const StockPage = {
                     }
                 }
 
-                // 成交量
-                const volume = list.map(item => item.volume);
+                // 成交量数据处理：设置颜色与K线一致
+                const volume = list.map((item, index) => {
+                    const open = parseFloat(item.open);
+                    const close = parseFloat(item.close);
+                    const volValue = parseFloat(item.volume) || 0;
+                    return {
+                        value: volValue,
+                        itemStyle: {
+                            color: close >= open ? '#dc2626' : '#16a34a'
+                        }
+                    };
+                });
 
                 // 更新option - 根据数据量调整显示效果
                 const option = this.klineChart.getOption();
+
+                // 设置初始缩放范围：显示最近一年（约250根K线）
+                if (dates && dates.length > 0) {
+                    const totalPoints = dates.length;
+                    const showPoints = Math.min(totalPoints, 250);
+                    const startPercent = Math.max(0, 100 * (1 - showPoints / totalPoints));
+
+                    if (option.dataZoom) {
+                        option.dataZoom.forEach(zoom => {
+                            zoom.start = startPercent;
+                            zoom.end = 100;
+                        });
+                    }
+                }
                 option.xAxis[0].data = dates;
                 option.xAxis[1].data = dates;
                 option.xAxis[2].data = dates;

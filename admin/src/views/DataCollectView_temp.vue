@@ -72,7 +72,7 @@
                   <el-form-item v-if="form.collection_type === 'single'" label="鑲＄エ浠ｇ爜" required>
                     <el-input
                       v-model="form.single_stock_code"
-                      placeholder="璇疯緭鍏ヨ偂绁ㄤ唬鐮侊紝渚嬪锛?00001"
+                      placeholder="请输入股票代码，例如：000001"
                       clearable
                     />
                     <div class="text-sm text-gray-500 mt-1">鏀寔杈撳叆鍗曚釜鑲＄エ浠ｇ爜杩涜閲囬泦</div>
@@ -84,7 +84,7 @@
                       v-model="form.stock_codes_text"
                       type="textarea"
                       :rows="5"
-                      placeholder="璇疯緭鍏ヨ偂绁ㄤ唬鐮侊紝姣忚涓€涓紝渚嬪锛?#10;000001&#10;000002&#10;000858"
+                      placeholder="请输入股票代码，每行一个，例如：&#10;000001&#10;000002&#10;000858"
                     />
                     <div class="text-sm text-gray-500 mt-1">鏀寔杈撳叆澶氫釜鑲＄エ浠ｇ爜锛屾瘡琛屼竴涓?/div>
                   </el-form-item>
@@ -510,27 +510,27 @@ const startCollection = async () => {
     
     // 楠岃瘉琛ㄥ崟
     if (!form.value.start_date || !form.value.end_date) {
-      ElMessage.error('璇烽€夋嫨寮€濮嬫棩鏈熷拰缁撴潫鏃ユ湡')
+      ElMessage.error('请选择开始日期和结束日期')
       return
     }
     
     // 妫€鏌ュ綋鍓嶄换鍔＄姸鎬?
     if (currentTask.value) {
-      ElMessage.error('宸叉湁閲囬泦浠诲姟姝ｅ湪杩愯锛岃绛夊緟瀹屾垚鍚庡啀鍚姩鏂颁换鍔?)
+      ElMessage.error('已有数据收集任务正在运行，请等待完成后再启动新任务')
       return
     }
     
-    // 鍑嗗璇锋眰鏁版嵁
+    // 准备请求数据
     const requestData: RequestData = {
       start_date: form.value.start_date,
       end_date: form.value.end_date,
       test_mode: form.value.test_mode
     }
 
-    // 鏍规嵁閲囬泦绫诲瀷璁剧疆鑲＄エ浠ｇ爜
+    // 根据收集类型设置股票代码
     if (form.value.collection_type === 'single') {
       if (!form.value.single_stock_code.trim()) {
-        ElMessage.error('璇疯緭鍏ヨ偂绁ㄤ唬鐮?)
+        ElMessage.error('请输入股票代码')
         return
       }
       requestData.stock_codes = [form.value.single_stock_code.trim()]
@@ -541,7 +541,7 @@ const startCollection = async () => {
         .filter(code => code.length > 0)
       
       if (stockCodes.length === 0) {
-        ElMessage.error('璇疯緭鍏ヨ嚦灏戜竴涓偂绁ㄤ唬鐮?)
+        ElMessage.error('请输入至少一个股票代码')
         return
       }
       
@@ -555,7 +555,7 @@ const startCollection = async () => {
     const response = await axios.post(`${API_BASE}/api/data-collection/historical`, requestData)
     
     if (response.data.status === 'started') {
-      ElMessage.success('閲囬泦浠诲姟宸插惎鍔?)
+      ElMessage.success('收集任务已启动')
       loadTasks()
       loadCurrentTask()
     }
@@ -569,7 +569,7 @@ const startCollection = async () => {
       errorMsg = error.response.data?.detail || `鏈嶅姟鍣ㄩ敊璇?(${error.response.status})`
     } else if (error.request) {
       // 璇锋眰宸插彂鍑轰絾娌℃湁鏀跺埌鍝嶅簲
-      errorMsg = '鏃犳硶杩炴帴鍒版湇鍔″櫒锛岃妫€鏌ョ綉缁滆繛鎺?
+      errorMsg = '无法连接到服务器，请检查网络连接'
     } else {
       // 鍏朵粬閿欒
       errorMsg = error.message || '鏈煡閿欒'
@@ -587,18 +587,18 @@ const startHKCollection = async () => {
     
     // 楠岃瘉琛ㄥ崟
     if (!hkForm.value.start_date || !hkForm.value.end_date) {
-      ElMessage.error('璇烽€夋嫨寮€濮嬫棩鏈熷拰缁撴潫鏃ユ湡')
+      ElMessage.error('请选择开始日期和结束日期')
       return
     }
 
     if (hkForm.value.collection_type === 'specified' && !hkForm.value.stock_codes_text.trim()) {
-      ElMessage.error('璇疯緭鍏ユ腐鑲′唬鐮?)
+      ElMessage.error('请输入港股代码')
       return
     }
     
     // 妫€鏌ュ綋鍓嶄换鍔＄姸鎬?
     if (currentTask.value) {
-      ElMessage.error('宸叉湁閲囬泦浠诲姟姝ｅ湪杩愯锛岃绛夊緟瀹屾垚鍚庡啀鍚姩鏂颁换鍔?)
+      ElMessage.error('已有数据收集任务正在运行，请等待完成后再启动新任务')
       return
     }
     
@@ -625,7 +625,7 @@ const startHKCollection = async () => {
     const response = await axios.post(`${API_BASE}/api/data-collection/historical`, requestData)
     
     if (response.data.status === 'started') {
-      ElMessage.success('娓偂閲囬泦浠诲姟宸插惎鍔?)
+      ElMessage.success('港股收集任务已启动')
       loadTasks()
       loadCurrentTask()
     }
@@ -637,7 +637,7 @@ const startHKCollection = async () => {
     if (error.response) {
       errorMsg = error.response.data?.detail || `鏈嶅姟鍣ㄩ敊璇?(${error.response.status})`
     } else if (error.request) {
-      errorMsg = '鏃犳硶杩炴帴鍒版湇鍔″櫒锛岃妫€鏌ョ綉缁滆繛鎺?
+      errorMsg = '无法连接到服务器，请检查网络连接'
     } else {
       errorMsg = error.message || '鏈煡閿欒'
     }
@@ -668,14 +668,14 @@ const loadCurrentTask = async () => {
 
 const cancelTask = async (taskId: string) => {
   try {
-    await ElMessageBox.confirm('纭畾瑕佸彇娑堣繖涓换鍔″悧锛?, '纭鍙栨秷', {
-      confirmButtonText: '纭畾',
-      cancelButtonText: '鍙栨秷',
+    await ElMessageBox.confirm('确定要取消这个任务吗？', '确认取消', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
       type: 'warning'
     })
 
     await axios.delete(`${API_BASE}/api/data-collection/tasks/${taskId}`)
-    ElMessage.success('浠诲姟宸插彇娑?)
+    ElMessage.success('任务已取消')
     loadTasks()
     loadCurrentTask()
     
@@ -722,13 +722,13 @@ const startTushareCollection = async () => {
     
     // 楠岃瘉琛ㄥ崟
     if (!tushareForm.value.start_date || !tushareForm.value.end_date) {
-      ElMessage.error('璇烽€夋嫨寮€濮嬫棩鏈熷拰缁撴潫鏃ユ湡')
+      ElMessage.error('请选择开始日期和结束日期')
       return
     }
     
     // 妫€鏌ュ綋鍓嶄换鍔＄姸鎬?
     if (currentTask.value) {
-      ElMessage.error('宸叉湁閲囬泦浠诲姟姝ｅ湪杩愯锛岃绛夊緟瀹屾垚鍚庡啀鍚姩鏂颁换鍔?)
+      ElMessage.error('已有数据收集任务正在运行，请等待完成后再启动新任务')
       return
     }
 
@@ -740,7 +740,7 @@ const startTushareCollection = async () => {
     })
     
     if (response.data.status === 'started') {
-      ElMessage.success('TuShare閲囬泦浠诲姟宸插惎鍔?)
+      ElMessage.success('TuShare收集任务已启动')
       loadTasks()
       loadCurrentTask()
     }
@@ -752,7 +752,7 @@ const startTushareCollection = async () => {
     if (error.response) {
       errorMsg = error.response.data?.detail || `鏈嶅姟鍣ㄩ敊璇?(${error.response.status})`
     } else if (error.request) {
-      errorMsg = '鏃犳硶杩炴帴鍒版湇鍔″櫒锛岃妫€鏌ョ綉缁滆繛鎺?
+      errorMsg = '无法连接到服务器，请检查网络连接'
     } else {
       errorMsg = error.message || '鏈煡閿欒'
     }
@@ -765,10 +765,10 @@ const startTushareCollection = async () => {
 
 const getStatusText = (status: string): string => {
   const statusMap: Record<string, string> = {
-    'running': '杩愯涓?,
-    'completed': '宸插畬鎴?,
-    'failed': '澶辫触',
-    'cancelled': '宸插彇娑?
+    'running': '运行中',
+    'completed': '已完成',
+    'failed': '失败',
+    'cancelled': '已取消'
   }
   return statusMap[status] || status
 }

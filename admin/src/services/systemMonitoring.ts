@@ -2,22 +2,22 @@
  * 系统监控API服务
  */
 
-import { request } from '@/utils/request'
+import { apiService } from './api'
 
 export const systemMonitoringApi = {
   // 获取监控概览
   getOverview() {
-    return request.get('/system/monitoring/overview')
+    return apiService.get('/system/monitoring/overview')
   },
 
   // 获取系统健康状态
   getSystemHealth() {
-    return request.get('/system/monitoring/system-health')
+    return apiService.get('/system/monitoring/system-health')
   },
 
   // 获取性能指标
   getMetrics(timeRange: string = '1h', interval: string = '1m') {
-    return request.get('/system/monitoring/metrics', {
+    return apiService.get('/system/monitoring/metrics', {
       params: { time_range: timeRange, interval }
     })
   },
@@ -31,7 +31,7 @@ export const systemMonitoringApi = {
     start_time?: string
     end_time?: string
   } = {}) {
-    return request.get('/system/monitoring/alerts', { params })
+    return apiService.get('/system/monitoring/alerts', { params })
   },
 
   // 创建告警
@@ -43,34 +43,34 @@ export const systemMonitoringApi = {
     source?: string
     metadata?: Record<string, any>
   }) {
-    return request.post('/system/monitoring/alerts', data)
+    return apiService.post('/system/monitoring/alerts', data)
   },
 
   // 确认告警
   acknowledgeAlert(alertId: number, data: { acknowledged_by?: string }) {
-    return request.post(`/system/monitoring/alerts/${alertId}/acknowledge`, data)
+    return apiService.post(`/system/monitoring/alerts/${alertId}/acknowledge`, data)
   },
 
   // 解决告警
   resolveAlert(alertId: number, resolvedBy: string = 'admin') {
-    return request.post(`/system/monitoring/alerts/${alertId}/resolve`, { resolved_by: resolvedBy })
+    return apiService.post(`/system/monitoring/alerts/${alertId}/resolve`, { resolved_by: resolvedBy })
   },
 
   // 获取告警统计
   getAlertStatistics(days: number = 7) {
-    return request.get('/system/monitoring/alerts/statistics', {
+    return apiService.get('/system/monitoring/alerts/statistics', {
       params: { days }
     })
   },
 
   // 获取服务状态
   getServices() {
-    return request.get('/system/monitoring/services')
+    return apiService.get('/system/monitoring/services')
   },
 
   // 获取告警规则
   getAlertRules() {
-    return request.get('/system/monitoring/rules')
+    return apiService.get('/system/monitoring/rules')
   },
 
   // 创建告警规则
@@ -85,17 +85,17 @@ export const systemMonitoringApi = {
     enabled?: boolean
     description?: string
   }) {
-    return request.post('/system/monitoring/rules', data)
+    return apiService.post('/system/monitoring/rules', data)
   },
 
   // 删除告警规则
   deleteAlertRule(ruleName: string) {
-    return request.delete(`/system/monitoring/rules/${ruleName}`)
+    return apiService.delete(`/system/monitoring/rules/${ruleName}`)
   },
 
   // 获取通知配置
   getNotificationConfigs() {
-    return request.get('/system/monitoring/notifications/configs')
+    return apiService.get('/system/monitoring/notifications/configs')
   },
 
   // 创建通知配置
@@ -106,33 +106,33 @@ export const systemMonitoringApi = {
     config: Record<string, any>
     filters?: Record<string, any>
   }) {
-    return request.post('/system/monitoring/notifications/configs', data)
+    return apiService.post('/system/monitoring/notifications/configs', data)
   },
 
   // 删除通知配置
   deleteNotificationConfig(configName: string) {
-    return request.delete(`/system/monitoring/notifications/configs/${configName}`)
+    return apiService.delete(`/system/monitoring/notifications/configs/${configName}`)
   },
 
   // 清理旧告警
   cleanupOldAlerts(days: number = 30) {
-    return request.post('/system/monitoring/maintenance/cleanup-alerts', null, {
+    return apiService.post('/system/monitoring/maintenance/cleanup-alerts', null, {
       params: { days }
     })
   },
 
   // 启动监控
   startMonitoring() {
-    return request.post('/system/monitoring/monitoring/start')
+    return apiService.post('/system/monitoring/monitoring/start')
   },
 
   // 停止监控
   stopMonitoring() {
-    return request.post('/system/monitoring/monitoring/stop')
+    return apiService.post('/system/monitoring/monitoring/stop')
   },
 
   // 获取监控状态
   getMonitoringStatus() {
-    return request.get('/system/monitoring/monitoring/status')
+    return apiService.get('/system/monitoring/monitoring/status')
   }
 }

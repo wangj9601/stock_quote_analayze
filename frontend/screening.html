@@ -514,7 +514,7 @@
                     </div>
                     <div class="parameter-group">
                         <label for="minVolumeRatio">最小成交量倍数:</label>
-                        <input type="number" id="minVolumeRatio" value="2.0" min="1.0" max="10.0" step="0.1"
+                        <input type="number" id="minVolumeRatio" value="2.0" min="0.1" max="10.0" step="0.1"
                             class="param-input">
                     </div>
                     <div class="parameter-group">
@@ -525,6 +525,11 @@
                     <div class="parameter-group">
                         <label for="maxTurnoverRate">最大换手率 (%):</label>
                         <input type="number" id="maxTurnoverRate" value="10.0" min="0" max="100" step="0.1"
+                            class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="recentDays-one-yang">检查最近N个交易日:</label>
+                        <input type="number" id="recentDays-one-yang" value="1" min="1" max="10" step="1"
                             class="param-input">
                     </div>
                     <div class="parameter-group">
@@ -628,6 +633,55 @@
                             style="margin-right: 5px;">
                         <label for="scopeWatchlist" style="cursor: pointer;">我的自选</label>
                     </div>
+                </div>
+            </div>
+
+            <!-- PVFARS 策略参数（可编辑） -->
+            <div class="strategy-params-card" id="pvfrsStrategyParamsCard">
+                <h3>⚙️ PVFARS 策略参数</h3>
+                <div class="params-grid pvfrs-params-grid">
+                    <div class="parameter-group">
+                        <label for="pvfrs-observation_period">观察周期（天）</label>
+                        <input type="number" id="pvfrs-observation_period" class="param-input" min="5" max="60" step="1">
+                        <span class="param-rule">计算规则：取最近 N 个交易日，用于计算 d₁、d₂₀、Z/F 等；d₁=第1日收盘价，d₂₀=第N日收盘价。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_ratio_d20_max">Δ/d₂₀ 上限（0=不启用）</label>
+                        <input type="number" id="pvfrs-buy_ratio_d20_max" class="param-input" min="0" max="1" step="0.05">
+                        <span class="param-rule">计算规则：Δ/d₂₀ = (d₂₀−d₁)/d₂₀，即 20 日涨幅占当前价比例；买点要求该值 &lt; 此上限，越小越不易追高。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_exclude_sideways">横盘不参与买点</label>
+                        <select id="pvfrs-buy_exclude_sideways" class="param-select">
+                            <option value="true">是</option>
+                            <option value="false">否</option>
+                        </select>
+                        <span class="param-rule">计算规则：当 |Δ| &lt; ε（幅度近似为 0）时判为横盘；选「是」则横盘时不发出买点。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_macro_displacement_min">宏观位移最小值</label>
+                        <input type="number" id="pvfrs-buy_macro_displacement_min" class="param-input" step="0.001">
+                        <span class="param-rule">计算规则：Δ = d₂₀ − d₁（期末价减期初价）；买点要求 Δ ≥ 此值，通常设为 0 表示仅做多上涨。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_instant_deviation_min">即时强度最小值</label>
+                        <input type="number" id="pvfrs-buy_instant_deviation_min" class="param-input" step="0.001">
+                        <span class="param-rule">计算规则：即时强度 = d₂₀ − d，其中 d = 20 日均价；买点要求该值 ≥ 此值，表示当前价高于均线。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_bias_min">最小偏离度（如 0.02=2%）</label>
+                        <input type="number" id="pvfrs-buy_bias_min" class="param-input" min="0" max="0.5" step="0.01">
+                        <span class="param-rule">计算规则：乖离率 = (当前价−均线)/均线；买点要求乖离率 ≥ 此值，如 0.02 表示至少 2% 偏离。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_relative_displacement_min">最小相对位移（如 0.05=5%）</label>
+                        <input type="number" id="pvfrs-buy_relative_displacement_min" class="param-input" min="0" max="1" step="0.01">
+                        <span class="param-rule">计算规则：相对位移 = Δ / 20日均价，即宏观位移占均价比率；买点要求 ≥ 此值，如 0.05 表示 5%。</span>
+                    </div>
+                </div>
+                <div class="parameter-actions" style="margin-top: 12px;">
+                    <button type="button" id="pvfrsParamsSaveBtn" class="refresh-btn">保存参数</button>
+                    <span id="pvfrsParamsSaveStatus" class="search-date" style="margin-left: 8px;"></span>
                 </div>
             </div>
 

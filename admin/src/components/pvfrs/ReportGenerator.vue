@@ -294,7 +294,7 @@ const reportForm = reactive({
   name: '',
   type: 'single',
   dataSource: 'backtest',
-  timeRange: [],
+  timeRange: [] as string[],
   selectedStrategy: '',
   selectedStrategies: [],
   includeContent: ['performance', 'risk', 'charts'],
@@ -324,7 +324,7 @@ const reportRules = {
   ],
   selectedStrategies: [
     { 
-      validator: (rule: any, value: any, callback: any) => {
+      validator: (_rule: any, value: any, callback: any) => {
         if (reportForm.type === 'comparison' && (!value || value.length < 2)) {
           callback(new Error('对比分析至少需要选择2个策略'))
         } else {
@@ -506,7 +506,7 @@ const applyTemplate = (template: any) => {
   }
 }
 
-const editTemplate = (template: any) => {
+const editTemplate = (_template: any) => {
   ElMessage.info('编辑模板功能开发中...')
 }
 
@@ -526,23 +526,24 @@ const deleteTemplate = async (template: any) => {
     if (error !== 'cancel') {
       ElMessage.error('删除模板失败')
     }
+    console.error('删除模板失败:', error)
   }
 }
 
 // 辅助方法
-const getTypeLabel = (type: string) => {
-  const labels = {
+const getTypeLabel = (type: string): string => {
+  const labels: Record<string, string> = {
     single: '单策略分析',
     comparison: '多策略对比',
     optimization: '参数优化',
     risk: '风险分析',
     comprehensive: '综合评估'
   }
-  return labels[type] || type
+  return labels[type as keyof typeof labels] || type
 }
 
-const getContentLabel = (content: string) => {
-  const labels = {
+const getContentLabel = (content: string): string => {
+  const labels: Record<string, string> = {
     performance: '绩效分析',
     risk: '风险分析',
     trades: '交易明细',
@@ -550,7 +551,7 @@ const getContentLabel = (content: string) => {
     statistics: '统计数据',
     recommendations: '投资建议'
   }
-  return labels[content] || content
+  return labels[content as keyof typeof labels] || content
 }
 
 const formatDateTime = (dateTime: string) => {

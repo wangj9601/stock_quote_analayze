@@ -3,12 +3,16 @@
 提供创业板中线选股策略接口
 """
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status, Body
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
-from typing import Optional
+import asyncio
+from typing import Optional, Dict, Any
+
+# PVFRS 选股为 CPU 密集型，允许较长超时（秒）；Nginx 的 proxy_read_timeout 需 >= 此值
+PVFRS_SCREENING_TIMEOUT = 300
 
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -36,9 +40,11 @@ oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_er
 logger.info("stock_screening_routes.py 模块加载完成，开始注册路由...")
 print("[DEBUG] stock_screening_routes.py 模块加载完成")
 
-# 尝试导入PVFRS前端接口
+# 尝试导入PVFRS前端接口与配置
 try:
     from backend_core.strategies.pvfrs.frontend_interface import create_frontend_interface
+    from backend_core.strategies.pvfrs.config import PVFRSConfigManager
+    from backend_core.strategies.pvfrs.pvfrs_system import PVFRSSystem
     print(" DEBUG: PVFRS前端接口导入成功")
     logger.info("PVFRS前端接口导入成功")
     PVFRS_AVAILABLE = True
@@ -46,6 +52,71 @@ except Exception as e:
     print(f"🔧 DEBUG: PVFRS前端接口导入失败: {e}")
     logger.error(f"PVFRS前端接口导入失败: {e}")
     PVFRS_AVAILABLE = False
+
+# PVFRS 策略参数（供选股界面显示与编辑）
+PVFRS_PARAM_KEYS = [
+    "observation_period", "buy_ratio_d20_max", "buy_exclude_sideways",
+    "amplitude_flat_threshold", "buy_macro_displacement_min", "buy_instant_deviation_min",
+    "buy_bias_min", "buy_relative_displacement_min",
+]
+
+
+@router.get("/pvfrs-params")
+async def get_pvfrs_params():
+    """获取 PVFARS 选股策略参数（供前端显示与编辑）"""
+    if not PVFRS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "PVFARS 暂不可用", "data": {}}
+        )
+    try:
+        config_manager = PVFRSConfigManager()
+        config_manager.load_config()
+        config = config_manager.get_current_config()
+        params = {k: config.get(k) for k in PVFRS_PARAM_KEYS if k in config}
+        params.setdefault("observation_period", 20)
+        params.setdefault("buy_ratio_d20_max", 0.5)
+        params.setdefault("buy_exclude_sideways", True)
+        params.setdefault("amplitude_flat_threshold", 1e-6)
+        params.setdefault("buy_macro_displacement_min", 0)
+        params.setdefault("buy_instant_deviation_min", 0)
+        params.setdefault("buy_bias_min", 0.02)
+        params.setdefault("buy_relative_displacement_min", 0.05)
+        return JSONResponse({"success": True, "data": params})
+    except Exception as e:
+        logger.exception("获取 PVFRS 参数失败")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e), "data": {}}
+        )
+
+
+@router.post("/pvfrs-params")
+async def save_pvfrs_params(body: Dict[str, Any] = Body(...)):
+    """保存 PVFARS 选股策略参数"""
+    if not PVFRS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "PVFARS 暂不可用"}
+        )
+    try:
+        config_manager = PVFRSConfigManager()
+        config_manager.load_config()
+        updates = {k: v for k, v in body.items() if k in PVFRS_PARAM_KEYS}
+        if not updates:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "无有效参数"}
+            )
+        config_manager.update_config(updates)
+        return JSONResponse({"success": True, "message": "参数已保存"})
+    except Exception as e:
+        logger.exception("保存 PVFRS 参数失败")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e)}
+        )
+
 
 # PVFRS 路由定义
 print("[DEBUG] 即将定义 /pvfrs-strategy 路由")
@@ -87,15 +158,19 @@ async def get_pvfrs_strategy(
                     detail="日期格式错误，应为 YYYY-MM-DD"
                 )
         
-        # 创建前端接口实例
-        frontend_interface = create_frontend_interface()
+        # 加载策略配置并创建前端接口（使选股使用当前保存的 PVFRS 参数）
+        config_manager = PVFRSConfigManager()
+        config_manager.load_config()
+        config = config_manager.get_current_config()
+        pvfrs_system = PVFRSSystem(config)
+        frontend_interface = create_frontend_interface(pvfrs_system=pvfrs_system)
         
-        # 设置选股配置
+        # 设置选股配置：【我的自选】时返回全部筛选结果（含信号强度30%以下），其他范围使用传入的最低强度
+        effective_min_strength = 0.0 if scope == 'watchlist' else min_strength
         if limit is not None:
-            frontend_interface.set_selection_config(max_results=limit, min_strength=min_strength)
+            frontend_interface.set_selection_config(max_results=limit, min_strength=effective_min_strength)
         else:
-            # 不限制结果数量，设置一个很大的值
-            frontend_interface.set_selection_config(max_results=10000, min_strength=min_strength)
+            frontend_interface.set_selection_config(max_results=10000, min_strength=effective_min_strength)
         
         # 获取选股结果
         stock_pool = None
@@ -151,8 +226,25 @@ async def get_pvfrs_strategy(
             market = 'all'
             logger.info(f"未知 scope '{scope}'，默认使用 'all'")
         
-        # 获取选股结果 (传入 stock_pool 和 market)
-        selection_results = frontend_interface.get_selection_results(date, stock_pool=stock_pool, market=market)
+        # 选股为 CPU 密集型同步调用，放入线程池执行并设置超时，避免阻塞事件循环与网关超时
+        loop = asyncio.get_event_loop()
+        def _run_screening():
+            return frontend_interface.get_selection_results(date, stock_pool=stock_pool, market=market)
+        try:
+            selection_results = await asyncio.wait_for(
+                loop.run_in_executor(None, _run_screening),
+                timeout=PVFRS_SCREENING_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"PVFARS选股超时({PVFRS_SCREENING_TIMEOUT}s)，scope={scope}")
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "success": False,
+                    "message": f"选股计算超时（超过{PVFRS_SCREENING_TIMEOUT}秒），请缩小范围（如先选 A股 或 港股）或稍后重试",
+                    "data": []
+                }
+            )
         
         # 批量获取实时行情数据（用于获取当前价格和涨跌幅）
         from backend_api.models import StockRealtimeQuote, StockRealtimeQuoteHK, HistoricalQuotes
@@ -490,6 +582,19 @@ async def get_pvfrs_strategy(
             else:
                 investment_advice = "--"
             
+            # 得分明细（供前端展示：共振强度、各维度得分）
+            score_detail = indicators.get("score_detail", {})
+            if not score_detail and resonance_analysis:
+                resonance_details = resonance_analysis.get("details", {})
+                dim_scores = resonance_details.get("dimension_scores", resonance_details.get("dimension_scores") or {})
+                if isinstance(dim_scores, dict):
+                    score_detail = {
+                        "resonance_strength": resonance_analysis.get("resonance_strength") or resonance_details.get("resonance_strength"),
+                        "price_score": dim_scores.get("price_score"),
+                        "frequency_score": dim_scores.get("frequency_score"),
+                        "volume_score": dim_scores.get("volume_score"),
+                    }
+            
             # 添加选股策略特有的字段
             result_dict.update({
                 "strategy_type": "PVFARS",
@@ -503,6 +608,7 @@ async def get_pvfrs_strategy(
                 "entry_timing_status": entry_timing_status,
                 "investment_advice": investment_advice,
                 "current_change_percent": change_percent if change_percent is not None else 0.0,  # 添加当前涨跌幅（前端期望的字段名）
+                "score_detail": score_detail,  # 得分明细：共振强度、价格/频率/成交量维度得分
                 # 保留原有的 analysis_dimensions 字段
                 "analysis_dimensions": {
                     "price_dimension": conditions_met.get("price_dimension_met", False),
@@ -924,9 +1030,10 @@ async def get_one_yang_three_lines_strategy(
     min_increase_percent: float = Query(3.0, ge=0, le=50, description="最小涨幅百分比（默认3%）"),
     min_body_ratio: float = Query(0.7, ge=0.1, le=1.0, description="最小实体占比（默认0.7）"),
     min_cross_lines: int = Query(3, ge=2, le=6, description="最小穿越均线数量（默认3）"),
-    min_volume_ratio: float = Query(2.0, ge=1.0, le=10.0, description="最小成交量倍数（默认2.0）"),
+    min_volume_ratio: float = Query(2.0, ge=0.1, le=10.0, description="最小成交量倍数（默认2.0）"),
     min_turnover_rate: float = Query(3.0, ge=0, le=50, description="最小换手率（默认3%）"),
     max_turnover_rate: float = Query(10.0, ge=0, le=100, description="最大换手率（默认10%）"),
+    recent_days: int = Query(1, ge=1, le=10, description="检查最近N个交易日（默认1天）"),
     ma_periods: str = Query("5,10,20,30,60,120", description="均线周期，逗号分隔（默认5,10,20,30,60,120）"),
     db: Session = Depends(get_db)
 ):
@@ -941,6 +1048,7 @@ async def get_one_yang_three_lines_strategy(
     5. 位置判别：根据60日最高价回撤幅度判断低位/中位/高位
     6. 乖离率计算：BIAS5/10/30，BIAS30>10%时风险提示
     7. 信号质量评分：综合穿线数量、成交量、换手率、位置、乖离率
+    8. 检查天数：最近N个交易日内出现符合上述条件的形态
     
     股票范围:
     - 全部A股
@@ -957,6 +1065,7 @@ async def get_one_yang_three_lines_strategy(
         min_volume_ratio: 最小成交量倍数（默认2.0）
         min_turnover_rate: 最小换手率（默认3%）
         max_turnover_rate: 最大换手率（默认10%）
+        recent_days: 检查最近N个交易日（默认1天）
         ma_periods: 均线周期，逗号分隔（默认5,10,20,30,60,120）
         db: 数据库会话
     
@@ -964,7 +1073,7 @@ async def get_one_yang_three_lines_strategy(
         符合条件的股票列表，按信号质量评分降序排列
     """
     try:
-        logger.info(f"开始执行一阳穿三线选股策略 - 页码: {page}, 每页: {page_size}")
+        logger.info(f"开始执行一阳穿三线选股策略 - 页码: {page}, 每页: {page_size}, 检查最近 {recent_days} 天")
         if start_date:
             logger.info(f"日期范围: {start_date} 至 {end_date or '今天'}")
         
@@ -1012,6 +1121,7 @@ async def get_one_yang_three_lines_strategy(
             'min_volume_ratio': min_volume_ratio,
             'min_turnover_rate': min_turnover_rate,
             'max_turnover_rate': max_turnover_rate,
+            'recent_days': recent_days,
             'ma_periods': ma_periods_list
         }
         

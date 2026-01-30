@@ -125,8 +125,26 @@ import {
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
+// 类型定义
+interface MonitoringAlert {
+  id: string
+  level: string
+  message: string
+  timestamp: string
+  acknowledged: boolean
+  source?: string
+  details?: any
+}
+
+interface PVRFSApi {
+  getMonitoringData(): Promise<any>
+  getMonitoringAlerts(): Promise<any>
+  acknowledgeAlert(alertId: string): Promise<void>
+  getPerformanceMetrics(params: any): Promise<any>
+}
+
 // 注入服务
-const pvfrsApi = inject('pvfrsApi')
+const pvfrsApi = inject('pvfrsApi') as PVRFSApi
 
 // 响应式数据
 const loading = ref(false)
@@ -148,7 +166,7 @@ const monitorData = reactive({
 })
 
 // 告警列表
-const alerts = ref([])
+const alerts = ref<MonitoringAlert[]>([])
 
 // 发射事件
 const emit = defineEmits(['alert-triggered'])
@@ -215,7 +233,7 @@ const refreshAlerts = async () => {
     }
     
     // 映射后端字段到前端期望的字段
-    alerts.value = alertsData.map(alert => ({
+    alerts.value = alertsData.map((alert: { severity?: string; type?: string; id?: string; acknowledged?: boolean; [key: string]: unknown }) => ({
       ...alert,
       level: alert.severity?.toUpperCase() || 'LOW', // severity -> level
       source: alert.type || 'system' // type -> source
@@ -255,7 +273,7 @@ const refreshAlerts = async () => {
   }
 }
 
-const acknowledgeAlert = async (alert: any) => {
+const acknowledgeAlert = async (alert: MonitoringAlert) => {
   try {
     await pvfrsApi.acknowledgeAlert(alert.id)
     alert.acknowledged = true
@@ -374,24 +392,25 @@ const updateChart = async () => {
 }
 
 // 辅助方法
-const getAlertLevelType = (level: string) => {
-  const types = {
+type ElTagType = 'info' | 'primary' | 'success' | 'warning' | 'danger'
+const getAlertLevelType = (level: string): ElTagType => {
+  const types: Record<string, ElTagType> = {
     LOW: 'info',
     MEDIUM: 'warning',
     HIGH: 'danger',
     CRITICAL: 'danger'
   }
-  return types[level] || 'info'
+  return (types[level] || 'info') as ElTagType
 }
 
-const getAlertLevelLabel = (level: string) => {
-  const labels = {
+const getAlertLevelLabel = (level: string): string => {
+  const labels: Record<string, string> = {
     LOW: '低',
     MEDIUM: '中',
     HIGH: '高',
     CRITICAL: '严重'
   }
-  return labels[level] || level
+  return labels[level as keyof typeof labels] || level
 }
 
 const formatDateTime = (timestamp: string) => {

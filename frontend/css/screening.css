@@ -41,6 +41,18 @@
     font-size: 14px;
 }
 
+/* PVFARS 参数计算规则提示 */
+.param-rule {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #666;
+    line-height: 1.4;
+}
+.pvfrs-params-grid .parameter-group .param-rule {
+    max-width: 100%;
+}
+
 .param-input, .param-select {
     padding: 8px 12px;
     border: 1px solid #ddd;
@@ -653,5 +665,33 @@
     font-weight: 500;
     background: #f5f5f5;
     padding: 2px 8px;
+}
+
+/* PVFARS 得分明细行 */
+.pvfrs-score-detail-row {
+    background: #f8f9fa;
+}
+.pvfrs-score-detail-cell {
+    padding: 10px 16px;
+    border-left: 3px solid #1976d2;
+    font-size: 13px;
+}
+.pvfrs-score-detail-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+}
+.pvfrs-score-detail-inner span {
+    white-space: nowrap;
+}
+.pvfrs-score-detail-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #1976d2;
+    text-decoration: underline;
+    font-size: inherit;
+    padding: 0;
+    margin-left: 4px;
     border-radius: 4px;
 }

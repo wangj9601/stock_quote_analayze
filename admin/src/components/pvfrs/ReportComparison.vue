@@ -558,11 +558,11 @@ const getReturnClass = (returnValue: number) => {
   return 'text-gray-600'
 }
 
-const getRankTagType = (rank: number) => {
+const getRankTagType = (rank: number): "primary" | "success" | "warning" | "info" | "danger" => {
   if (rank === 1) return 'success'
   if (rank === 2) return 'warning'
   if (rank === 3) return 'info'
-  return ''
+  return 'primary'
 }
 
 const getScoreClass = (score: number) => {

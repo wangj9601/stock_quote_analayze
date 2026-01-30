@@ -75,7 +75,7 @@ class IFrequencyDimensionAnalyzer(IDimensionAnalyzer):
     
     @abstractmethod
     def check_frequency_advantage(self, rising_days: int, falling_days: int) -> bool:
-        """检查频率优势 Z > F"""
+        """检查频率权重 F > Z（买点侧：下跌天数大于上涨天数）"""
         pass
 
 

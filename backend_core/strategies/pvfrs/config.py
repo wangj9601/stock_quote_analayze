@@ -75,6 +75,9 @@ class PVFRSConfigManager(IConfigManager):
             
             # === 幅度指标（图片对齐） ===
             'amplitude_flat_threshold': 1e-6,     # |Δ| < ε 判为横盘
+            # === 买点条件（与两图及详细说明一致） ===
+            'buy_ratio_d20_max': 0.5,             # Δ/d₂₀ 上限，0 表示不启用
+            'buy_exclude_sideways': True,         # 横盘(Δ≈0)不参与买点
         }
     
     def load_config(self, config_path: Optional[str] = None) -> Dict:

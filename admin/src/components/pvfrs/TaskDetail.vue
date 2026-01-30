@@ -505,38 +505,38 @@ const exportPdf = async () => {
 }
 
 // 辅助方法
-const getModeTagType = (mode: string) => {
-  const types: Record<string, string> = {
-    single: '',
+const getModeTagType = (mode: string): "primary" | "success" | "warning" | "info" | "danger" => {
+  const types: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
+    single: 'primary',
     batch: 'success',
     optimize: 'warning',
     portfolio: 'info'
   }
-  return types[mode] || ''
+  return types[mode as keyof typeof types] || 'primary'
 }
 
-const getModeLabel = (mode: string) => {
+const getModeLabel = (mode: string): string => {
   const labels: Record<string, string> = {
     single: '单股回测',
     batch: '批量回测',
     optimize: '参数优化',
     portfolio: '组合回测'
   }
-  return labels[mode] || mode
+  return labels[mode as keyof typeof labels] || mode
 }
 
-const getStatusTagType = (status: string) => {
-  const types: Record<string, string> = {
+const getStatusTagType = (status: string): "primary" | "success" | "warning" | "info" | "danger" => {
+  const types: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
     pending: 'info',
     running: 'warning',
     completed: 'success',
     failed: 'danger',
     cancelled: 'info'
   }
-  return types[status] || ''
+  return types[status as keyof typeof types] || 'info'
 }
 
-const getStatusLabel = (status: string) => {
+const getStatusLabel = (status: string): string => {
   const labels: Record<string, string> = {
     pending: '等待中',
     running: '运行中',
@@ -544,7 +544,7 @@ const getStatusLabel = (status: string) => {
     failed: '已失败',
     cancelled: '已取消'
   }
-  return labels[status] || status
+  return labels[status as keyof typeof labels] || status
 }
 
 const getProgressStatus = (status: string) => {

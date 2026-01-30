@@ -21,19 +21,31 @@ class StrategyEngine(IStrategyEngine):
     - 提供完整的策略执行流程
     """
     
-    def __init__(self):
-        """初始化策略引擎"""
+    def __init__(self, config: Optional[Dict] = None):
+        """初始化策略引擎
+        
+        Args:
+            config: 可选配置字典，用于共振检测器等（如 buy_ratio_d20_max, buy_exclude_sideways）
+        """
         # 初始化各个维度分析器
         self.price_analyzer = PriceDimensionAnalyzer()
         self.frequency_analyzer = FrequencyDimensionAnalyzer()
         self.volume_analyzer = VolumeDimensionAnalyzer()
         
-        # 初始化共振检测器和信号生成器
-        self.resonance_detector = ResonanceDetector()
+        # 共振检测器：若提供配置则使用买点参数
+        if config:
+            buy_ratio_d20_max = config.get('buy_ratio_d20_max', 0.5)
+            buy_exclude_sideways = config.get('buy_exclude_sideways', True)
+            self.resonance_detector = ResonanceDetector(
+                buy_ratio_d20_max=float(buy_ratio_d20_max),
+                buy_exclude_sideways=bool(buy_exclude_sideways)
+            )
+        else:
+            self.resonance_detector = ResonanceDetector()
         self.signal_generator = SignalGenerator()
         
         # 策略配置
-        self.min_data_length = 20  # 最少需要20天数据
+        self.min_data_length = int(config.get('observation_period', 20)) if config else 20
         self.enable_entry_timing_optimization = True  # 是否启用入场时机优化
     
     def analyze_stock(self, symbol: str, data: List[MarketData]) -> PVFRSIndicators:

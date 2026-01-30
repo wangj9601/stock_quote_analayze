@@ -465,8 +465,8 @@ class FrequencyDimensionAnalyzer(IFrequencyDimensionAnalyzer):
     
     负责计算频率维度的各项指标：
     - 上涨天数 Z
-    - 下跌天数 F  
-    - 频率优势判定 Z > F
+    - 下跌天数 F
+    - 买点权重判定 F > Z（下跌天数大于上涨天数）
     """
     
     def __init__(self):
@@ -582,14 +582,14 @@ class FrequencyDimensionAnalyzer(IFrequencyDimensionAnalyzer):
             raise CalculationException(f"下跌天数统计失败: {str(e)}")
     
     def check_frequency_advantage(self, rising_days: int, falling_days: int) -> bool:
-        """检查频率优势 Z > F
+        """检查频率权重 F > Z（买点侧：下跌天数大于上涨天数作为权重）
         
         Args:
             rising_days: 上涨天数 Z
             falling_days: 下跌天数 F
             
         Returns:
-            bool: 是否具有频率优势（上涨天数严格多于下跌天数）
+            bool: 是否满足频率权重（下跌天数严格多于上涨天数）
             
         Raises:
             CalculationException: 计算异常时抛出
@@ -599,13 +599,13 @@ class FrequencyDimensionAnalyzer(IFrequencyDimensionAnalyzer):
             if rising_days < 0 or falling_days < 0:
                 raise CalculationException("上涨天数和下跌天数不能为负数")
             
-            # 频率优势条件：上涨天数严格多于下跌天数
-            frequency_advantage = rising_days > falling_days
+            # 频率权重条件：下跌天数严格多于上涨天数（F > Z）
+            frequency_advantage = falling_days > rising_days
             
             return frequency_advantage
             
         except Exception as e:
-            raise CalculationException(f"频率优势判定失败: {str(e)}")
+            raise CalculationException(f"频率权重判定失败: {str(e)}")
     
     def detect_false_prosperity(self, data: List[MarketData]) -> bool:
         """检测虚假繁荣（单日暴涨或连续异常涨幅）情况
@@ -759,13 +759,13 @@ class FrequencyDimensionAnalyzer(IFrequencyDimensionAnalyzer):
             raise CalculationException(f"最近上涨持续性计算失败: {str(e)}")
     
     def validate_conditions(self, indicators: Dict) -> bool:
-        """验证频率维度条件是否满足
+        """验证频率维度条件是否满足（买点权重：F > Z）
         
         频率维度条件：
-        1. 上涨天数严格多于下跌天数 (Z > F)
+        1. 下跌天数严格多于上涨天数 (F > Z)
         2. 确认趋势由持续买盘推动（Z >= 10）
-        3. 排除虚假繁荣（单日暴涨）情况
-        4. 上涨天数至少比下跌天数多3天（Z > F+3）
+        3. 排除虚假繁荣（本次已注释，恒通过）
+        4. 下跌天数至少比上涨天数多3天（F > Z+3）
         5. 最近10天中上涨天数>=6（上涨持续性）
         
         Args:
@@ -780,20 +780,19 @@ class FrequencyDimensionAnalyzer(IFrequencyDimensionAnalyzer):
         try:
             rising_days = indicators.get('rising_days', 0)
             falling_days = indicators.get('falling_days', 0)
-            has_false_prosperity = indicators.get('has_false_prosperity', False)
             recent_rising_persistence = indicators.get('recent_rising_persistence', 0)
             
-            # 条件1: 频率优势 - 上涨天数严格多于下跌天数
+            # 条件1: 频率权重 - 下跌天数严格多于上涨天数（F > Z）
             frequency_advantage = self.check_frequency_advantage(rising_days, falling_days)
             
             # 条件2: 持续买盘推动确认 - 上涨天数至少10天（20天中占50%）
             continuous_buying_support = rising_days >= 10
             
-            # 条件3: 排除虚假繁荣 - 不能存在单日暴涨情况
-            no_false_prosperity = not has_false_prosperity
+            # 条件3: 排除虚假繁荣（本次已注释掉判断，恒为 True）
+            no_false_prosperity = True  # 原: not has_false_prosperity
             
-            # 条件4: 上涨天数至少比下跌天数多3天（更严格的要求）
-            sufficient_advantage = rising_days > falling_days + 2  # Z > F+3 等价于 Z > F+2（因为整数）
+            # 条件4: 下跌天数大于上涨天数（F > Z；与条件1一致，20天内 F>Z+3 与 Z>=10 难以同时满足，故仅要求 F>Z）
+            sufficient_advantage = falling_days > rising_days
             
             # 条件5: 最近10天中上涨天数>=6（上涨持续性验证）
             recent_persistence = recent_rising_persistence >= 6

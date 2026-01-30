@@ -192,12 +192,11 @@ class TestPVFRSIndicatorsProperties:
         属性: 对于任何PVFRSIndicators，频率优势标志应该与天数统计一致
         验证需求: 需求 9.1 - 数据逻辑一致性
         """
-        # 如果明确设置了频率优势，应该与天数统计一致
+        # 频率权重 F>Z：frequency_advantage 表示下跌天数是否大于上涨天数
         if indicators.rising_days != indicators.falling_days:
-            expected_advantage = indicators.rising_days > indicators.falling_days
-            # 注意：这里不强制要求一致，因为可能有其他因素影响频率优势判定
-            # 但我们可以检查数据的合理性
-            assert isinstance(indicators.frequency_advantage, bool), "频率优势必须是布尔值"
+            expected_advantage = indicators.falling_days > indicators.rising_days  # F > Z
+            # 注意：这里不强制要求一致，因为可能有其他因素影响频率权重判定
+            assert isinstance(indicators.frequency_advantage, bool), "频率权重必须是布尔值"
 
 
 class TestSignalProperties:

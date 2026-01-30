@@ -378,7 +378,7 @@
                       <span class="result-code">{{ result.code }}</span>
                       <span class="result-date">{{ result.date }}</span>
                       <el-tag 
-                        :type="result.totalReturn > 0 ? 'success' : 'danger'"
+                        :type="(result.totalReturn ?? 0) > 0 ? 'success' : 'danger'"
                         size="small"
                       >
                         {{ formatPercent(result.totalReturn, 2) }}
@@ -427,12 +427,12 @@
                       ¥{{ selectedResult.finalCapital?.toLocaleString() }}
                     </el-descriptions-item>
                     <el-descriptions-item label="总收益率">
-                      <span :class="selectedResult.totalReturn > 0 ? 'text-success' : 'text-danger'">
+                      <span :class="(selectedResult.totalReturn ?? 0) > 0 ? 'text-success' : 'text-danger'">
                         {{ formatPercent(selectedResult.totalReturn, 2) }}
                       </span>
                     </el-descriptions-item>
                     <el-descriptions-item label="年化收益率">
-                      <span :class="selectedResult.annualReturn > 0 ? 'text-success' : 'text-danger'">
+                      <span :class="(selectedResult.annualReturn ?? 0) > 0 ? 'text-success' : 'text-danger'">
                         {{ formatPercent(selectedResult.annualReturn, 2) }}
                       </span>
                     </el-descriptions-item>
@@ -641,9 +641,9 @@ const getAuthToken = () => {
   return authStore.token || localStorage.getItem('admin_token')
 }
 
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
   const t = getAuthToken()
-  return t ? { Authorization: `Bearer ${t}` } : {}
+  return (t ? { Authorization: `Bearer ${t}` } : {}) as Record<string, string>
 }
 
 const toNumberOrNull = (v: any): number | null => {
@@ -690,6 +690,41 @@ const normalizeBacktestResult = (raw: any) => {
   }
 }
 
+// 任务与结果类型（与后端字段兼容）
+interface BacktestTask {
+  id?: string | number
+  task_id?: string | number
+  status?: string
+  step?: number
+  progress?: number
+  progress_percentage?: number
+  current_step?: string
+  message?: string
+  log?: string
+  [key: string]: unknown
+}
+
+interface BacktestResult {
+  id?: string | number
+  code?: string
+  market?: string
+  startDate?: string
+  endDate?: string
+  initialCapital?: number | null
+  finalCapital?: number | null
+  totalReturn?: number
+  annualReturn?: number | null
+  maxDrawdown?: number | null
+  sharpeRatio?: number | null
+  winRate?: number | null
+  profitFactor?: number | null
+  totalTrades?: number
+  avgHoldingPeriod?: number | null
+  equityCurve?: Array<{ date: string; equity: number }>
+  taskId?: string | number
+  [key: string]: unknown
+}
+
 // 响应式数据
 const activeTab = ref('config')
 const showHelpDialog = ref(false)
@@ -734,12 +769,12 @@ const parsedStocks = ref<string[]>([])
 const batchStockCodes = ref('')
 
 // 当前任务
-const currentTask = ref(null)
+const currentTask = ref<BacktestTask | null>(null)
 
 // 回测结果
-const backtestResults = ref([])
-const selectedResult = ref(null)
-const selectedResultTrades = ref([])
+const backtestResults = ref<BacktestResult[]>([])
+const selectedResult = ref<BacktestResult | null>(null)
+const selectedResultTrades = ref<any[]>([])
 
 // 计算属性
 const canStartBacktest = computed(() => {
@@ -918,7 +953,7 @@ const startBacktest = async () => {
       return
     }
     
-    let requestData = {
+    const requestData: Record<string, unknown> = {
       mode: backtestForm.mode,
       market: backtestForm.market,
       start_date: backtestForm.startDate,
@@ -940,7 +975,7 @@ const startBacktest = async () => {
         // 文件上传方式
         const formData = new FormData()
         Object.keys(requestData).forEach(key => {
-          formData.append(key, requestData[key])
+          formData.append(key, String(requestData[key] ?? ''))
         })
         formData.append('stock_file', backtestForm.stockFile)
         

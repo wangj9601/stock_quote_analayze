@@ -133,6 +133,16 @@ class FrontendInterface:
                         if 'efficiency_ratio' in volume_dim:
                             indicators['efficiency_ratio'] = volume_dim.get('efficiency_ratio', 0.0)
                         
+                        # 得分明细（共振强度与各维度得分，供前端展示）
+                        resonance_detection = strategy_analysis.get('resonance_detection', {})
+                        dimension_scores = resonance_detection.get('dimension_scores', {})
+                        indicators['score_detail'] = {
+                            'resonance_strength': resonance_detection.get('resonance_strength'),
+                            'price_score': dimension_scores.get('price_score'),
+                            'frequency_score': dimension_scores.get('frequency_score'),
+                            'volume_score': dimension_scores.get('volume_score'),
+                        }
+                        
                         # 创建选股结果
                         result = StockSelectionResult(
                             symbol=symbol,

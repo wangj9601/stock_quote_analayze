@@ -55,7 +55,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
   DataBoard,
@@ -73,7 +73,6 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
-const route = useRoute()
 const authStore = useAuthStore()
 
 // 菜单项配置
@@ -96,11 +95,6 @@ const menuItems = [
 
 // 计算属性
 const user = computed(() => authStore.user)
-
-const currentPageTitle = computed(() => {
-  const currentItem = menuItems.find(item => item.path === route.path)
-  return currentItem?.name || '页面'
-})
 
 // 生命周期钩子
 onMounted(() => {
