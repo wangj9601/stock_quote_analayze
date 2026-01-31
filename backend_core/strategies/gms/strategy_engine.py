@@ -127,6 +127,8 @@ class GMSStrategyEngine:
                         # GMSIndicators 指标细项（供前端得分明细展示）
                         "delta": ind.delta,                    # Δ (d₂₀ - d₁)
                         "d": ind.d,                            # d 20日均价
+                        "d20": ind.d + ind.instant_deviation,   # d₂₀ 末日收盘价 = d + (d₂₀-d)
+                        "d1": ind.d + ind.instant_deviation - ind.delta,  # d₁ 首日收盘价 = d₂₀ - Δ
                         "ratio_d20": ind.ratio_d20,            # 偏离率 Δ/d₂₀
                         "ratio_d1": ind.ratio_d1,              # 突变率 Δ/d₁
                         "ratio_d": ind.ratio_d,                # Δ/d 相对位移
