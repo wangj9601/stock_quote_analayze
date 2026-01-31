@@ -491,13 +491,27 @@
                     type="success" 
                     @click="generateAllWatchlistIndicators" 
                     :loading="batchGenerating"
-                    :disabled="batchGenerating"
+                    :disabled="batchGenerating || batchAllASharesGenerating"
                   >
                     <el-icon><Collection /></el-icon>
                     为全部自选股生成指标
                   </el-button>
                   <el-text type="info" class="ml-2">
                     将为自选股表中的所有股票批量生成选中的指标数据
+                  </el-text>
+                </el-col>
+                <el-col :span="24" class="mt-2">
+                  <el-button 
+                    type="warning" 
+                    @click="generateAllASharesIndicators" 
+                    :loading="batchAllASharesGenerating"
+                    :disabled="batchGenerating || batchAllASharesGenerating"
+                  >
+                    <el-icon><Setting /></el-icon>
+                    为全部A股生成指标
+                  </el-button>
+                  <el-text type="info" class="ml-2">
+                    将为 stock_basic_info 表中的全部A股批量生成选中的指标数据（耗时长，请耐心等待）
                   </el-text>
                 </el-col>
               </el-row>
@@ -586,6 +600,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const loading = ref(false)
 const generating = ref(false)
 const batchGenerating = ref(false)
+const batchAllASharesGenerating = ref(false)
 const activeMainTab = ref('query')
 const activeIndicator = ref('ma')
 const tableData = ref([])
@@ -840,6 +855,69 @@ const generateAllWatchlistIndicators = async () => {
     ElMessage.error(`批量生成失败: ${errorMessage}`)
   } finally {
     batchGenerating.value = false
+  }
+}
+
+const generateAllASharesIndicators = async () => {
+  if (generationForm.indicators.length === 0) {
+    ElMessage.warning('请至少选择一个指标类型')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要为全部A股生成选中的指标数据吗？股票数量较多，耗时会很长（可能需数十分钟），请耐心等待。`,
+      '确认批量生成',
+      {
+        confirmButtonText: '确定生成',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  batchAllASharesGenerating.value = true
+  generationResult.value = null
+
+  const indicatorsList = [...generationForm.indicators]
+  ElMessage.info({ message: '正在为全部A股批量生成指标，请耐心等待（可能需数十分钟）…', duration: 0, showClose: true })
+
+  try {
+    const response: any = await apiService.post('/indicators/generate-batch-all-a-shares', {
+      indicators: indicatorsList
+    }, {
+      timeout: 600000 // 10分钟超时
+    })
+
+    ElMessage.closeAll()
+
+    if (response.success) {
+      generationResult.value = {
+        success: true,
+        message: `成功为全部A股批量生成指标数据`,
+        details: response.data
+      }
+      ElMessage.success('全部A股指标数据批量生成成功')
+    } else {
+      generationResult.value = {
+        success: false,
+        message: response.message || '批量生成失败'
+      }
+      ElMessage.error('全部A股指标数据批量生成失败')
+    }
+  } catch (error: any) {
+    ElMessage.closeAll()
+    console.error('[批量生成指标-全部A股] 请求失败:', error)
+    const errorMessage = error?.response?.data?.message || error?.message || '网络请求失败'
+    generationResult.value = {
+      success: false,
+      message: errorMessage
+    }
+    ElMessage.error(`全部A股批量生成失败: ${errorMessage}`)
+  } finally {
+    batchAllASharesGenerating.value = false
   }
 }
 

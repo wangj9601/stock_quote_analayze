@@ -466,6 +466,34 @@ class AkshareDataCollector:
         except Exception as e:
             logger.error(f"为股票 {stock_code} 生成指标失败: {e}")
     
+    def generate_indicators_for_date_range(self, start_date: str, end_date: str, indicators: List[str]) -> Dict[str, Any]:
+        """为指定日期范围内有历史数据的股票批量生成技术指标"""
+        if not indicators:
+            return {'total': 0, 'success': 0, 'failed': 0}
+        try:
+            result = self.session.execute(text("""
+                SELECT DISTINCT code FROM historical_quotes 
+                WHERE date >= :start_date AND date <= :end_date
+                ORDER BY code
+            """), {'start_date': start_date, 'end_date': end_date})
+            codes = [row[0] for row in result.fetchall()]
+            success = 0
+            failed = 0
+            for idx, code in enumerate(codes):
+                if (idx + 1) % 100 == 0:
+                    logger.info(f"指标生成进度: {idx + 1}/{len(codes)}")
+                try:
+                    self._generate_indicators(str(code), start_date, end_date, indicators)
+                    success += 1
+                except Exception as e:
+                    logger.error(f"为股票 {code} 生成指标失败: {e}")
+                    failed += 1
+            logger.info(f"指标生成完成: 总数={len(codes)}, 成功={success}, 失败={failed}")
+            return {'total': len(codes), 'success': success, 'failed': failed}
+        except Exception as e:
+            logger.error(f"批量生成指标失败: {e}")
+            return {'total': 0, 'success': 0, 'failed': 0}
+    
     def _generate_ma_indicators(self, stock_code: str, df: pd.DataFrame):
         """生成MA指标"""
         try:
@@ -2137,7 +2165,8 @@ async def start_tushare_historical_collection(
             task_id,
             request.start_date,
             request.end_date,
-            request.force_update
+            request.force_update,
+            request.indicators
         )
         
         logger.info(f"启动Tushare历史数据采集任务: {task_id}")
@@ -2161,7 +2190,8 @@ def run_tushare_historical_collection_task(
     task_id: str,
     start_date: str,
     end_date: str,
-    force_update: bool
+    force_update: bool,
+    indicators: Optional[List[str]] = None
 ):
     """运行Tushare历史数据采集任务（后台任务）"""
     global current_task_id
@@ -2182,6 +2212,15 @@ def run_tushare_historical_collection_task(
                 end_date, 
                 force_update
             )
+            
+            # 采集完成后，如指定了指标则批量生成
+            if indicators and len(indicators) > 0:
+                logger.info(f"开始为采集日期范围内股票生成指标: {indicators}")
+                akshare_collector = AkshareDataCollector(db)
+                indicator_result = akshare_collector.generate_indicators_for_date_range(
+                    start_date, end_date, indicators
+                )
+                logger.info(f"TuShare采集后指标生成完成: {indicator_result}")
             
             # 更新任务状态
             with task_lock:

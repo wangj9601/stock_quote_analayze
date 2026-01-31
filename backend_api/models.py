@@ -773,6 +773,7 @@ class TushareHistoricalCollectionRequest(BaseModel):
     start_date: str
     end_date: str
     force_update: bool = False  # 强制更新：如果已存在数据，先删除后插入
+    indicators: Optional[List[str]] = None  # 需要生成的技术指标列表（参考AkShare）
 
 # PVFRS回测相关模型
 class PVFRSBacktestTask(Base):

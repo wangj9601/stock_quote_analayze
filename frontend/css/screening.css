@@ -380,21 +380,31 @@
 .action-links {
     display: flex;
     gap: 12px;
+    align-items: center;
+}
+
+/* 历史、详情：链接形式，与得分明细一致 */
+.action-links a.action-link {
+    color: #1976d2;
+    text-decoration: underline;
+    font-size: 12px;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: 0;
+    transition: color 0.2s;
+}
+
+.action-links a.action-link:hover {
+    color: #1565c0;
+    background: none;
 }
 
 .action-link {
     color: #1976d2;
-    text-decoration: none;
     font-size: 12px;
-    padding: 4px 8px;
-    border: 1px solid #1976d2;
-    border-radius: 4px;
-    transition: all 0.3s;
-}
-
-.action-link:hover {
-    background: #1976d2;
-    color: white;
+    cursor: pointer;
+    transition: color 0.2s;
 }
 
 /* 响应式设计 */
@@ -694,4 +704,110 @@
     padding: 0;
     margin-left: 4px;
     border-radius: 4px;
+}
+/* 得分明细页：各项权重得分表格 */
+.pvfrs-score-detail-section {
+    margin-bottom: 12px;
+}
+.pvfrs-score-detail-section:last-child {
+    margin-bottom: 0;
+}
+.pvfrs-weight-table {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 6px;
+}
+.pvfrs-weight-table th,
+.pvfrs-weight-table td {
+    border: 1px solid #e0e0e0;
+    padding: 6px 12px;
+    text-align: left;
+}
+.pvfrs-weight-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+.pvfrs-signal-process-table {
+    margin-top: 6px;
+}
+.pvfrs-signal-process-table td:first-child {
+    min-width: 220px;
+}
+
+/* GMS 均值引力动量策略 */
+.gms-params-grid .parameter-group .param-rule {
+    max-width: 100%;
+}
+.gms-score-detail-row {
+    background: #f8f9fa;
+}
+.gms-score-detail-cell {
+    padding: 10px 16px;
+    border-left: 3px solid #2e7d32;
+    font-size: 13px;
+}
+.gms-score-detail-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+}
+.gms-score-detail-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #2e7d32;
+    text-decoration: underline;
+    font-size: inherit;
+    padding: 0;
+    margin-left: 4px;
+    border-radius: 4px;
+}
+/* GMS 操作列：历史、详情链接颜色与得分明细一致 */
+#resultsContainer-gms .action-links a.action-link {
+    color: #2e7d32;
+}
+#resultsContainer-gms .action-links a.action-link:hover {
+    color: #1b5e20;
+}
+.gms-score-detail-section {
+    margin-bottom: 12px;
+}
+.gms-score-detail-section:last-child {
+    margin-bottom: 0;
+}
+.gms-indicators-section {
+    padding-left: 16px;
+    border-left: 1px solid #e0e0e0;
+}
+.gms-indicators-table {
+    max-width: 360px;
+}
+.gms-weight-table {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 6px;
+}
+.gms-weight-table th,
+.gms-weight-table td {
+    border: 1px solid #e0e0e0;
+    padding: 6px 12px;
+    text-align: left;
+}
+.gms-weight-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+.gms-score-total {
+    font-weight: 600;
+    color: #333;
+}
+.gms-left {
+    color: #1565c0;
+    font-weight: 500;
+}
+.gms-right {
+    color: #2e7d32;
+    font-weight: 500;
 }

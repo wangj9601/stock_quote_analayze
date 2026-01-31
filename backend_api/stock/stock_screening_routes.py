@@ -53,6 +53,16 @@ except Exception as e:
     logger.error(f"PVFRS前端接口导入失败: {e}")
     PVFRS_AVAILABLE = False
 
+# 尝试导入 GMS 前端接口
+try:
+    from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
+    from backend_core.strategies.gms.config import GMSConfigManager as GMSConfigManagerCls
+    GMS_AVAILABLE = True
+except Exception as e:
+    print(f"GMS 前端接口导入失败: {e}")
+    logger.warning(f"GMS 前端接口导入失败: {e}")
+    GMS_AVAILABLE = False
+
 # PVFRS 策略参数（供选股界面显示与编辑）
 PVFRS_PARAM_KEYS = [
     "observation_period", "buy_ratio_d20_max", "buy_exclude_sideways",
@@ -656,6 +666,255 @@ async def test_pvfrs():
         "message": "PVFRS测试路由工作正常",
         "pvfrs_available": PVFRS_AVAILABLE
     })
+
+
+# GMS 策略选股路由（以前端页面参数为准，与前端共用同一套参数）
+@router.get("/gms-strategy")
+async def get_gms_strategy(
+    date: str = Query(None, description="目标日期 YYYY-MM-DD"),
+    limit: int = Query(None, ge=1, description="最大返回数量"),
+    min_score: float = Query(0, ge=0, le=100, description="最低总分阈值"),
+    scope: str = Query("all", description="股票范围: all/cn/hk/watchlist"),
+    # 前端传入的策略参数（覆盖 gms_config.json 默认值）
+    accumulation_fz_min: Optional[float] = Query(None, description="蓄势 F/Z 下限"),
+    balance_ratio_max: Optional[float] = Query(None, description="平衡 |Δ/d₂₀| 上限"),
+    volume_ratio_min: Optional[float] = Query(None, description="动量量比下限"),
+    ratio_d20_max: Optional[float] = Query(None, description="左侧买点 Δ/d₂₀ 上限"),
+    volume_ratio_max: Optional[float] = Query(None, description="左侧买点地量 m₂₀/m 上限"),
+    watch_threshold: Optional[float] = Query(None, description="重点关注分数"),
+    alert_threshold: Optional[float] = Query(None, description="动量突变预警分数"),
+    overbought_ratio: Optional[float] = Query(None, description="乖离过大退出阈值"),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """GMS 均值引力与动量突变策略选股"""
+    if not GMS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "GMS策略暂不可用", "data": []},
+        )
+
+    try:
+        # 未传日期时，从 mean_frequency_resonance_indicators 或历史行情获取最新可用日期
+        if date:
+            try:
+                datetime.strptime(str(date).strip()[:10], "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+            target_date = str(date).strip()[:10]
+        else:
+            try:
+                from backend_api.models import MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK
+                from sqlalchemy import func
+                candidates = []
+                latest_hq_a = db.query(func.max(HistoricalQuotes.date)).scalar()
+                if latest_hq_a:
+                    d = latest_hq_a.strftime("%Y-%m-%d") if hasattr(latest_hq_a, "strftime") else str(latest_hq_a).strip()[:10]
+                    candidates.append(d)
+                latest_hq_hk = db.query(func.max(HistoricalQuotesHK.date)).scalar()
+                if latest_hq_hk:
+                    d = str(latest_hq_hk).strip()[:10]
+                    candidates.append(d)
+                if candidates:
+                    target_date = max(candidates)
+                    logger.info(f"GMS 使用历史行情表最近日期: {target_date}")
+                else:
+                    latest_ind = db.query(func.max(MeanFrequencyResonanceIndicators.date)).scalar()
+                    if latest_ind:
+                        target_date = str(latest_ind).strip()[:10]
+                        logger.info(f"GMS 使用指标表最新日期: {target_date}")
+                    else:
+                        target_date = datetime.now().strftime("%Y-%m-%d")
+                        logger.warning(f"GMS 无可用日期，使用当天: {target_date}")
+            except Exception as e:
+                target_date = datetime.now().strftime("%Y-%m-%d")
+                logger.warning(f"GMS 获取最新日期失败: {e}，使用当天: {target_date}")
+
+        stock_pool = None
+        market = "all"
+        if scope == "watchlist":
+            if not token:
+                raise HTTPException(status_code=401, detail="查看自选股需要登录")
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                username = payload.get("sub")
+                if not username:
+                    raise HTTPException(status_code=401, detail="无效的认证凭据")
+                from backend_api.models import User
+                user = db.query(User).filter(User.username == username).first()
+                if not user:
+                    raise HTTPException(status_code=401, detail="用户不存在")
+                watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+                if not watchlist_items:
+                    return JSONResponse({
+                        "success": True, "data": [], "total": 0,
+                        "search_date": target_date, "strategy_name": "GMS均值引力动量策略",
+                        "scope": "watchlist", "message": "您的自选股列表为空",
+                    })
+                stock_pool = [item.stock_code for item in watchlist_items]
+                market = "all"
+            except JWTError:
+                raise HTTPException(status_code=401, detail="无效的认证凭据")
+        elif scope == "cn":
+            market = "cn"
+        elif scope == "hk":
+            market = "hk"
+        else:
+            market = "all"
+
+        config = GMSConfigManagerCls().get_config() if GMS_AVAILABLE else {}
+        # 以前端传入参数覆盖 config（前后端共用同一套参数）
+        if accumulation_fz_min is not None:
+            config.setdefault("scoring", {})["accumulation_fz_min"] = accumulation_fz_min
+        if balance_ratio_max is not None:
+            config.setdefault("scoring", {})["balance_ratio_max"] = balance_ratio_max
+        if volume_ratio_min is not None:
+            config.setdefault("scoring", {})["momentum_volume_ratio_min"] = volume_ratio_min
+        if watch_threshold is not None:
+            config.setdefault("scoring", {})["watch_threshold"] = watch_threshold
+        if alert_threshold is not None:
+            config.setdefault("scoring", {})["alert_threshold"] = alert_threshold
+        if ratio_d20_max is not None:
+            config.setdefault("left_buy", {})["ratio_d20_abs_max"] = ratio_d20_max
+        if volume_ratio_max is not None:
+            config.setdefault("left_buy", {})["volume_ratio_max"] = volume_ratio_max
+        if overbought_ratio is not None:
+            config.setdefault("exit", {})["overbought_ratio"] = overbought_ratio
+        if volume_ratio_min is not None:
+            config.setdefault("right_buy", {})["volume_ratio_min"] = volume_ratio_min
+        gms_if = GMSFrontendInterface(db, config)
+        gms_if.set_selection_config(min_score=min_score, max_results=limit or 10000)
+
+        loop = asyncio.get_event_loop()
+        def _run():
+            return gms_if.get_selection_results(target_date, stock_pool, market)
+
+        selection_results = await asyncio.wait_for(
+            loop.run_in_executor(None, _run),
+            timeout=PVFRS_SCREENING_TIMEOUT,
+        )
+
+        # 当指定日期无数据时，回退到指标表最新可用日期
+        user_specified_date = bool(date)
+        fallback_used = False
+        if not selection_results and user_specified_date and stock_pool:
+            try:
+                from backend_api.models import MeanFrequencyResonanceIndicators
+                from sqlalchemy import func
+                fallback_date = db.query(func.max(MeanFrequencyResonanceIndicators.date)).scalar()
+                if fallback_date:
+                    fallback_date_str = str(fallback_date).strip()[:10]
+                    if fallback_date_str != target_date:
+                        logger.info(f"GMS 所选日期 {target_date} 无数据，回退到指标表最新日期 {fallback_date_str}")
+                        def _run_fallback():
+                            return gms_if.get_selection_results(fallback_date_str, stock_pool, market)
+                        selection_results = await asyncio.wait_for(
+                            loop.run_in_executor(None, _run_fallback),
+                            timeout=PVFRS_SCREENING_TIMEOUT,
+                        )
+                        target_date = fallback_date_str
+                        fallback_used = bool(selection_results)
+            except Exception as e:
+                logger.warning(f"GMS 回退日期失败: {e}")
+
+        if not selection_results:
+            msg = f"所选日期 {target_date} 暂无指标数据" if user_specified_date else ""
+            return JSONResponse({
+                "success": True, "data": [], "total": 0,
+                "search_date": target_date, "strategy_name": "GMS均值引力动量策略",
+                "message": msg,
+            })
+
+        from backend_api.models import StockBasicInfo, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK
+        from sqlalchemy import func
+
+        stock_codes = [r["symbol"] for r in selection_results]
+        cn_codes = [c for c in stock_codes if (c.startswith("6") or c.startswith("0") or c.startswith("3")) and len(c) >= 6]
+        hk_codes = [c for c in stock_codes if c not in cn_codes]
+
+        # 从历史行情表获取最近交易日收盘价（A股、港股分别查）
+        hist_quotes_a = {}
+        hist_quotes_hk = {}
+        if cn_codes:
+            latest_date_a = db.query(func.max(HistoricalQuotes.date)).scalar()
+            if latest_date_a:
+                quotes_a = db.query(HistoricalQuotes).filter(
+                    HistoricalQuotes.code.in_(cn_codes),
+                    HistoricalQuotes.date == latest_date_a,
+                ).all()
+                hist_quotes_a = {q.code: q for q in quotes_a}
+        if hk_codes:
+            latest_date_hk_row = db.query(func.max(HistoricalQuotesHK.date)).scalar()
+            latest_date_hk = str(latest_date_hk_row).strip()[:10] if latest_date_hk_row else None
+            if latest_date_hk:
+                quotes_hk = db.query(HistoricalQuotesHK).filter(
+                    HistoricalQuotesHK.code.in_(hk_codes),
+                    HistoricalQuotesHK.date == latest_date_hk,
+                ).all()
+                hist_quotes_hk = {q.code: q for q in quotes_hk}
+
+        results_data = []
+        for r in selection_results:
+            code = r["symbol"]
+            name = ""
+            is_hk = code in hk_codes
+            if is_hk:
+                info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
+                if info and info.name:
+                    name = info.name
+            else:
+                info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code).first()
+                if not info and code.startswith("SZ"):
+                    info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
+                if not info and code.startswith("SH"):
+                    info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
+                if info and info.name:
+                    name = info.name
+            if not name:
+                name = f"股票{code}"
+
+            current_price = r.get("d") or 0
+            change_percent = None
+            quote = hist_quotes_a.get(code) or hist_quotes_hk.get(code)
+            if quote and hasattr(quote, "close") and quote.close is not None:
+                current_price = float(quote.close)
+            if quote and hasattr(quote, "change_percent") and quote.change_percent is not None:
+                change_percent = float(quote.change_percent)
+
+            results_data.append({
+                "symbol": code,
+                "code": code,
+                "name": name,
+                "score_total": r["score_total"],
+                "buy_type": r["buy_type"],
+                "current_price": current_price,
+                "ratio_d20": r.get("ratio_d20"),
+                "ratio_d1": r.get("ratio_d1"),
+                "fz_ratio": r.get("fz_ratio"),
+                "current_change_percent": change_percent if change_percent is not None else 0.0,
+                "score_detail": r.get("score_detail", {}),
+                "left_buy_signal": r.get("left_buy_signal", False),
+                "right_buy_signal": r.get("right_buy_signal", False),
+                "sell_signal": r.get("sell_signal", False),
+            })
+
+        resp = {
+            "success": True,
+            "data": results_data,
+            "total": len(results_data),
+            "search_date": target_date,
+            "strategy_name": "GMS均值引力动量策略",
+            "parameters": {"limit": limit or "无限制", "min_score": min_score, "scope": scope},
+        }
+        if fallback_used and user_specified_date:
+            resp["message"] = f"所选日期无指标数据，已使用最新可用日期 {target_date}"
+        return JSONResponse(resp)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"GMS 策略选股失败: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"GMS策略选股失败: {str(e)}")
+
 
 # 调试：打印路由对象中的所有路由
 print(f"[DEBUG] router.routes count: {len(router.routes)}")

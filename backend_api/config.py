@@ -18,7 +18,7 @@ import os
 
 # 数据库配置
 DATABASE_CONFIG = {
-    "url": "postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis",
+    "url": "postgresql+psycopg2://postgres:qidianspacetime@localhost:5432/stock_analysis",
     "pool_size": 5,
     "max_overflow": 10,
     "echo": False

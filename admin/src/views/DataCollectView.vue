@@ -196,6 +196,28 @@
                     </div>
                   </el-form-item>
 
+                  <!-- 指标数据生成选项 -->
+                  <el-form-item label="指标数据生成">
+                    <div class="flex items-center mb-2">
+                      <el-checkbox 
+                        v-model="isAllTushareIndicatorsSelected" 
+                        :indeterminate="isTushareIndicatorsIndeterminate"
+                        @change="handleSelectAllTushareIndicators"
+                      >
+                        全选
+                      </el-checkbox>
+                    </div>
+                    <el-checkbox-group v-model="safeTushareIndicators">
+                      <el-checkbox value="ma">MA移动平均线</el-checkbox>
+                      <el-checkbox value="mavol">MAVOL成交量移动平均线</el-checkbox>
+                      <el-checkbox value="kdj">KDJ随机指标</el-checkbox>
+                      <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
+                      <el-checkbox value="boll">BOLL布林带</el-checkbox>
+                      <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                    </el-checkbox-group>
+                    <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
+                  </el-form-item>
+
                   <!-- 操作按钮 -->
                   <el-form-item>
                     <el-button
@@ -636,12 +658,14 @@ interface TushareFormData {
   start_date: string
   end_date: string
   force_update: boolean
+  indicators: string[]
 }
 
 const tushareForm = ref<TushareFormData>({
   start_date: '',
   end_date: '',
-  force_update: false
+  force_update: false,
+  indicators: []
 })
 
 // 状态数据
@@ -690,6 +714,38 @@ const handleSelectAllIndicators = (checked: boolean | string | number | boolean[
     safeIndicators.value = [...allIndicators]
   } else {
     safeIndicators.value = []
+  }
+}
+
+// TuShare 指标选择
+const safeTushareIndicators = computed({
+  get: () => {
+    const indicators = tushareForm.value.indicators
+    return Array.isArray(indicators) ? indicators : []
+  },
+  set: (val) => {
+    tushareForm.value.indicators = Array.isArray(val) ? val : []
+  }
+})
+
+const isTushareIndicatorsIndeterminate = computed(() => {
+  const indicators = safeTushareIndicators.value
+  const selectedCount = indicators.length
+  if (selectedCount === 0) return false
+  if (selectedCount === allIndicators.length) return false
+  return true
+})
+
+const isAllTushareIndicatorsSelected = computed(() => {
+  return safeTushareIndicators.value.length === allIndicators.length
+})
+
+const handleSelectAllTushareIndicators = (checked: boolean | string | number | boolean[] | undefined) => {
+  const isChecked = typeof checked === 'boolean' ? checked : Boolean(checked)
+  if (isChecked) {
+    safeTushareIndicators.value = [...allIndicators]
+  } else {
+    safeTushareIndicators.value = []
   }
 }
 
@@ -936,7 +992,8 @@ const resetTushareForm = () => {
   tushareForm.value = {
     start_date: '',
     end_date: '',
-    force_update: false
+    force_update: false,
+    indicators: []
   }
 }
 
@@ -960,7 +1017,8 @@ const startTushareCollection = async () => {
     const response = await axios.post(`${API_BASE}/api/data-collection/tushare-historical`, {
       start_date: tushareForm.value.start_date,
       end_date: tushareForm.value.end_date,
-      force_update: tushareForm.value.force_update
+      force_update: tushareForm.value.force_update,
+      indicators: safeTushareIndicators.value
     })
     
     if (response.data.status === 'started') {

@@ -29,6 +29,7 @@
             <button class="strategy-tab" data-strategy="low-nine" id="lowNineTab">低九策略</button>
             <button class="strategy-tab" data-strategy="one-yang-three-lines" id="oneYangThreeLinesTab">一阳穿三线</button>
             <button class="strategy-tab" data-strategy="pvfrs" id="pvfrsTab">PVFARS量价频幅度共振</button>
+            <button class="strategy-tab" data-strategy="gms" id="gmsTab">GMS均值引力动量</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -723,6 +724,144 @@
                         <tbody id="resultsTableBody-pvfrs">
                             <tr>
                                 <td colspan="12" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- GMS均值引力动量策略标签页内容 -->
+        <div id="gms-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围：</strong>全部A股或港股（排除ST）</li>
+                    <li><strong>时间范围：</strong>最近 20 个交易日</li>
+                    <li><strong>选股条件：</strong></li>
+                    <li class="condition-item">1. <strong>左侧买点（均值吸附）</strong>：F&gt;Z 且 d₂₀&lt;d₁；Δ/d₂₀&lt;1.5%；地量洗盘 m₂₀&lt;0.8m</li>
+                    <li class="condition-item">2. <strong>右侧买点（动量引爆）</strong>：d₂₀&gt;d 且 Δ&gt;0；m₂₀&gt;1.5m；Δ/d₁ 突破 0 轴</li>
+                    <li class="condition-item">3. <strong>评分</strong>：蓄势 30 + 平衡 40 + 动量 30；总分&gt;60 重点关注，&gt;90 动量突变预警</li>
+                    <li class="condition-item">4. <strong>退出</strong>：趋势破坏（d₂₀ 跌破 d 三日）或乖离过大（Δ/d₂₀&gt;15%）</li>
+                </ul>
+            </div>
+
+            <!-- 数据来源选择 -->
+            <div class="strategy-params-card">
+                <h3>🔍 数据来源</h3>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeCN" name="gmsScope" value="cn" checked style="margin-right: 5px;">
+                        <label for="gmsScopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeHK" name="gmsScope" value="hk" style="margin-right: 5px;">
+                        <label for="gmsScopeHK" style="cursor: pointer;">全部港股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeWatchlist" name="gmsScope" value="watchlist" style="margin-right: 5px;">
+                        <label for="gmsScopeWatchlist" style="cursor: pointer;">我的自选</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GMS 策略参数（可配置） -->
+            <div class="strategy-params-card" id="gmsStrategyParamsCard">
+                <h3>⚙️ GMS 策略参数</h3>
+                <div class="params-grid gms-params-grid">
+                    <div class="parameter-group">
+                        <label for="gms-start_date">策略起始交易日期</label>
+                        <input type="date" id="gms-start_date" class="param-input">
+                        <span class="param-rule">留空则取历史行情表最近一日，格式 YYYY-MM-DD</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-observation_period">观察周期（天）</label>
+                        <input type="number" id="gms-observation_period" class="param-input" min="10" max="60" step="1">
+                        <span class="param-rule">默认 20 天</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-ratio_d20_max">左侧买点 Δ/d₂₀ 上限</label>
+                        <input type="number" id="gms-ratio_d20_max" class="param-input" min="0" max="0.1" step="0.005">
+                        <span class="param-rule">如 0.015 表示 1.5%</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-volume_ratio_max">左侧买点 量比上限</label>
+                        <input type="number" id="gms-volume_ratio_max" class="param-input" min="0.1" max="2" step="0.1">
+                        <span class="param-rule">地量 m₂₀/m &lt; 此值，默认 0.8</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-volume_ratio_min">右侧买点 量比下限</label>
+                        <input type="number" id="gms-volume_ratio_min" class="param-input" min="0.5" max="5" step="0.1">
+                        <span class="param-rule">放量 m₂₀/m &gt; 此值，默认 1.5</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-accumulation_fz_min">蓄势 F/Z 下限</label>
+                        <input type="number" id="gms-accumulation_fz_min" class="param-input" min="0.5" max="5" step="0.1">
+                        <span class="param-rule">F/Z &gt; 此值得 30 分，默认 1.5</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-balance_ratio_max">平衡 |Δ/d₂₀| 上限</label>
+                        <input type="number" id="gms-balance_ratio_max" class="param-input" min="0" max="0.1" step="0.005">
+                        <span class="param-rule">|Δ/d₂₀| &lt; 此值得 40 分，默认 0.01</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-watch_threshold">重点关注分数</label>
+                        <input type="number" id="gms-watch_threshold" class="param-input" min="0" max="100" step="1">
+                        <span class="param-rule">总分 &gt; 此值重点关注，默认 60</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-alert_threshold">动量突变预警分数</label>
+                        <input type="number" id="gms-alert_threshold" class="param-input" min="0" max="100" step="1">
+                        <span class="param-rule">总分 &gt; 此值预警，默认 90</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-overbought_ratio">乖离过大阈值</label>
+                        <input type="number" id="gms-overbought_ratio" class="param-input" min="0" max="0.5" step="0.01">
+                        <span class="param-rule">Δ/d₂₀ &gt; 此值退出，默认 0.15</span>
+                    </div>
+                </div>
+                <div class="parameter-actions" style="margin-top: 12px;">
+                    <button type="button" id="gmsParamsSaveBtn" class="refresh-btn">保存参数</button>
+                    <span id="gmsParamsSaveStatus" class="search-date" style="margin-left: 8px;"></span>
+                </div>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-gms" class="refresh-btn" data-strategy="gms">刷新筛选</button>
+                <button id="exportBtn-gms" class="export-btn" style="display:none;">导出CSV</button>
+                <span id="searchDate-gms" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-gms" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-gms" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-gms" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-gms" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-gms" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>总分</th>
+                                <th>买点类型</th>
+                                <th>当前价格</th>
+                                <th>Δ/d₂₀</th>
+                                <th>Δ/d₁</th>
+                                <th>F/Z</th>
+                                <th>当前涨跌幅</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-gms">
+                            <tr>
+                                <td colspan="10" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
                             </tr>
                         </tbody>
                     </table>

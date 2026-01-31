@@ -12,6 +12,47 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 sys.path.insert(0, current_dir)
 
+# 在导入任何路由之前：猴子补丁 JSONResponse.render，将 nan/inf 转为 null，避免 ValueError: Out of range float values are not JSON compliant
+# 直接补丁原始类的方法，这样无论 FastAPI/Starlette 用哪份 JSONResponse 引用都会生效
+import json
+import math
+
+def _sanitize_for_json(obj):
+    """递归将 nan/inf 及 numpy 标量转为 JSON 可序列化值。"""
+    if obj is None or isinstance(obj, (bool, str)):
+        return obj
+    if isinstance(obj, int) and not isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if hasattr(obj, 'item'):  # numpy 标量
+        try:
+            return _sanitize_for_json(obj.item())
+        except (ValueError, AttributeError, TypeError):
+            return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
+import starlette.responses
+_original_json_render = starlette.responses.JSONResponse.render
+
+def _patched_json_render(self, content):
+    content = _sanitize_for_json(content)
+    return _original_json_render(self, content)
+
+starlette.responses.JSONResponse.render = _patched_json_render
+# FastAPI 的 JSONResponse 即 starlette 的，补丁一次即可
+try:
+    import fastapi.responses
+    fastapi.responses.JSONResponse.render = _patched_json_render
+except Exception:
+    pass
+
 # 导入中间件
 try:
     from middleware import RequestLoggingMiddleware
@@ -287,7 +328,7 @@ except ImportError as e:
     admin_dashboard_router = None
 
 try:
-    from admin.indicators import router as admin_indicators_router
+    from .admin.indicators import router as admin_indicators_router
     print("✅ admin_indicators_router 导入成功")
     # 打印路由信息用于调试
     if admin_indicators_router:

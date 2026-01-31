@@ -61,6 +61,10 @@ const ScreeningPage = {
         if (strategy === 'pvfrs') {
             this.loadPvfrsParams();
         }
+        // 切换到 GMS 时加载策略参数
+        if (strategy === 'gms') {
+            this.loadGmsParams();
+        }
     },
 
     // 加载头部导航
@@ -142,6 +146,36 @@ const ScreeningPage = {
             });
         });
 
+        // 绑定 GMS 策略范围切换事件
+        document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                this.loadScreeningResults('gms');
+            });
+        });
+
+        // GMS 策略参数：保存按钮
+        const gmsParamsSaveBtn = document.getElementById('gmsParamsSaveBtn');
+        if (gmsParamsSaveBtn) {
+            gmsParamsSaveBtn.addEventListener('click', () => this.saveGmsParams());
+        }
+
+        // GMS 得分明细：点击「得分明细」展开/收起（事件委托）
+        const gmsContainer = document.getElementById('resultsContainer-gms');
+        if (gmsContainer) {
+            gmsContainer.addEventListener('click', (e) => {
+                const btn = e.target.closest('.gms-score-detail-toggle');
+                if (!btn) return;
+                e.preventDefault();
+                const rowIndex = btn.getAttribute('data-row');
+                const tbody = document.getElementById('resultsTableBody-gms');
+                if (!tbody) return;
+                const detailRow = tbody.querySelector(`tr.gms-score-detail-row[data-detail-for="${rowIndex}"]`);
+                if (detailRow) {
+                    detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+                }
+            });
+        }
+
         // PVFARS 策略参数：保存按钮
         const pvfrsParamsSaveBtn = document.getElementById('pvfrsParamsSaveBtn');
         if (pvfrsParamsSaveBtn) {
@@ -191,6 +225,8 @@ const ScreeningPage = {
             suffix = 'one-yang-three-lines';
         } else if (strategy === 'pvfrs') {
             suffix = 'pvfrs';
+        } else if (strategy === 'gms') {
+            suffix = 'gms';
         } else {
             suffix = 'cyb';
         }
@@ -272,6 +308,23 @@ const ScreeningPage = {
                 let scope = scopeElement ? scopeElement.value : 'all';
 
                 url = `${apiBaseUrl}/api/screening/pvfrs-strategy?scope=${scope}`;
+            } else if (strategy === 'gms') {
+                const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
+                let scope = scopeElement ? scopeElement.value : 'all';
+                const gmsParams = this.getGmsParams();
+                const q = new URLSearchParams();
+                q.set('scope', scope);
+                if (gmsParams.start_date) q.set('date', gmsParams.start_date);
+                // 策略参数：以前端页面设置为准，传给后端
+                if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
+                if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);
+                if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
+                if (gmsParams.ratio_d20_max != null) q.set('ratio_d20_max', gmsParams.ratio_d20_max);
+                if (gmsParams.volume_ratio_max != null) q.set('volume_ratio_max', gmsParams.volume_ratio_max);
+                if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
+                if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
+                if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
+                url = `${apiBaseUrl}/api/screening/gms-strategy?${q.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -325,9 +378,12 @@ const ScreeningPage = {
 
             if (result.success && result.data) {
                 this.lastResults[strategy] = result.data;
-                this.renderResults(result.data, result.search_date, strategy);
+                const emptyMsg = (result.data.length === 0 && result.message) ? result.message : null;
+                this.renderResults(result.data, result.search_date, strategy, emptyMsg);
                 if (searchDate) {
-                    searchDate.textContent = `筛选时间: ${result.search_date}`;
+                    let dateText = `筛选时间: ${result.search_date}`;
+                    if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;
+                    searchDate.textContent = dateText;
                 }
                 // 显示导出按钮
                 if (exportBtn && result.data.length > 0) {
@@ -384,6 +440,8 @@ const ScreeningPage = {
                 colSpan = 13;
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
+            } else if (strategy === 'gms') {
+                colSpan = 10;
             } else {
                 colSpan = 12;
             }
@@ -476,8 +534,87 @@ const ScreeningPage = {
         }
     },
 
+    // 加载 GMS 策略参数到表单（localStorage）
+    loadGmsParams() {
+        const statusEl = document.getElementById('gmsParamsSaveStatus');
+        try {
+            const saved = localStorage.getItem('gmsParams');
+            const defaults = {
+                start_date: '',
+                observation_period: 20,
+                ratio_d20_max: 0.015,
+                volume_ratio_max: 0.8,
+                volume_ratio_min: 1.5,
+                accumulation_fz_min: 1.5,
+                balance_ratio_max: 0.01,
+                watch_threshold: 60,
+                alert_threshold: 90,
+                overbought_ratio: 0.15
+            };
+            const data = saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+            const set = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) el.value = value != null ? value : '';
+            };
+            set('gms-start_date', data.start_date || '');
+            set('gms-observation_period', data.observation_period);
+            set('gms-ratio_d20_max', data.ratio_d20_max);
+            set('gms-volume_ratio_max', data.volume_ratio_max);
+            set('gms-volume_ratio_min', data.volume_ratio_min);
+            set('gms-accumulation_fz_min', data.accumulation_fz_min);
+            set('gms-balance_ratio_max', data.balance_ratio_max);
+            set('gms-watch_threshold', data.watch_threshold);
+            set('gms-alert_threshold', data.alert_threshold);
+            set('gms-overbought_ratio', data.overbought_ratio);
+            if (statusEl) statusEl.textContent = '';
+        } catch (e) {
+            console.error('loadGmsParams:', e);
+            if (statusEl) statusEl.textContent = '加载失败';
+        }
+    },
+
+    // 获取当前 GMS 策略参数（从表单读取，用于 API 请求和保存）
+    getGmsParams() {
+        const get = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return undefined;
+            const v = el.value;
+            return v === '' ? undefined : (el.type === 'number' ? parseFloat(v) : v);
+        };
+        const getStr = (id) => {
+            const el = document.getElementById(id);
+            return el ? (el.value || '').trim() : '';
+        };
+        return {
+            start_date: getStr('gms-start_date'),
+            observation_period: get('gms-observation_period'),
+            ratio_d20_max: get('gms-ratio_d20_max'),
+            volume_ratio_max: get('gms-volume_ratio_max'),
+            volume_ratio_min: get('gms-volume_ratio_min'),
+            accumulation_fz_min: get('gms-accumulation_fz_min'),
+            balance_ratio_max: get('gms-balance_ratio_max'),
+            watch_threshold: get('gms-watch_threshold'),
+            alert_threshold: get('gms-alert_threshold'),
+            overbought_ratio: get('gms-overbought_ratio')
+        };
+    },
+
+    // 保存 GMS 策略参数（localStorage）
+    saveGmsParams() {
+        const statusEl = document.getElementById('gmsParamsSaveStatus');
+        const body = this.getGmsParams();
+        try {
+            localStorage.setItem('gmsParams', JSON.stringify(body));
+            if (statusEl) statusEl.textContent = '已保存';
+            if (window.CommonUtils) CommonUtils.showToast('GMS 参数已保存', 'success');
+        } catch (e) {
+            console.error('saveGmsParams:', e);
+            if (statusEl) statusEl.textContent = '保存失败';
+        }
+    },
+
     // 渲染结果
-    renderResults(data, searchDate, strategy = 'cyb-midline') {
+    renderResults(data, searchDate, strategy = 'cyb-midline', emptyMessage = null) {
         let suffix;
         if (strategy === 'cyb-midline') {
             suffix = 'cyb';
@@ -497,6 +634,8 @@ const ScreeningPage = {
             suffix = 'one-yang-three-lines';
         } else if (strategy === 'pvfrs') {
             suffix = 'pvfrs';
+        } else if (strategy === 'gms') {
+            suffix = 'gms';
         } else {
             suffix = 'cyb';
         }
@@ -527,10 +666,13 @@ const ScreeningPage = {
                 colSpan = 13;
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
+            } else if (strategy === 'gms') {
+                colSpan = 10;
             } else {
                 colSpan = 12;
             }
-            resultsTableBody.innerHTML = `<tr><td colspan="${colSpan}" class="empty-state">未找到符合条件的股票</td></tr>`;
+            const emptyText = emptyMessage ? `未找到符合条件的股票。${emptyMessage}` : '未找到符合条件的股票';
+            resultsTableBody.innerHTML = `<tr><td colspan="${colSpan}" class="empty-state">${emptyText}</td></tr>`;
             if (resultsCount) {
                 resultsCount.textContent = '共找到 0 只符合条件的股票';
             }
@@ -772,15 +914,70 @@ const ScreeningPage = {
                     adviceClass = 'advice-wait';
                 }
 
-                // 得分明细（共振强度、各维度得分）
+                // 得分明细：在【得分明细】展开区显示各项权重得分 + 信号强度计算过程
                 const sd = stock.score_detail || stock.indicators?.score_detail || {};
+                const cm = stock.conditions_met || {};
                 const fmt = (v) => (v != null && typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '--';
+                const weightItems = [
+                    { label: '共振强度', value: sd.resonance_strength, weight: '基础（满足条件权重和/总权重）' },
+                    { label: '价格维度得分', value: sd.price_score, weight: '宏观位移、即时强度、价格高于均线等' },
+                    { label: '频率维度得分', value: sd.frequency_score, weight: '频率优势、持续买盘、无虚假繁荣等' },
+                    { label: '成交量维度得分', value: sd.volume_score, weight: '量价共振、成交量效率、资金支撑等' }
+                ];
+                const weightRows = weightItems.map(w => `<tr><td>${w.label}</td><td>${fmt(w.value)}</td><td>${w.weight}</td></tr>`).join('');
+
+                // 信号强度计算过程（与后端 signal_generator._calculate_buy_signal_strength 一致）
+                const baseStr = (sd.resonance_strength != null && typeof sd.resonance_strength === 'number') ? (sd.resonance_strength * 100).toFixed(1) : '--';
+                const condAddends = [
+                    { key: 'macro_displacement_positive', name: '宏观位移为正', add: 0.05 },
+                    { key: 'instant_strength_positive', name: '即时强度为正', add: 0.05 },
+                    { key: 'frequency_advantage', name: '频率优势', add: 0.05 },
+                    { key: 'no_false_prosperity', name: '无虚假繁荣', add: 0.03 },
+                    { key: 'volume_price_resonance', name: '量价共振', add: 0.07 },
+                    { key: 'strong_fund_support', name: '资金支撑强', add: 0.05 }
+                ];
+                let addendRows = '';
+                let totalAdd = 0;
+                condAddends.forEach(c => {
+                    const met = cm[c.key] === true || cm[c.key] === 'true';
+                    if (met) totalAdd += c.add;
+                    addendRows += `<tr><td>${c.name}</td><td>${met ? '+' + c.add : '—'}</td><td>${met ? '满足' : '—'}</td></tr>`;
+                });
+                const originalVal = cm.original_strength != null && typeof cm.original_strength === 'number'
+                    ? (cm.original_strength * 100).toFixed(1) : (sd.resonance_strength != null && typeof sd.resonance_strength === 'number'
+                        ? (Math.min(1, Math.max(0, sd.resonance_strength + totalAdd)) * 100).toFixed(1) : '--');
+                const qualityLevel = cm.quality_level || '—';
+                const biasScore = (cm.bias_score != null && typeof cm.bias_score === 'number') ? (cm.bias_score * 100).toFixed(1) + '%' : '—';
+                const finalStr = (signalStrength * 100).toFixed(1);
+
+                const signalProcessHtml = `
+                    <div class="pvfrs-score-detail-section">
+                        <strong>信号强度计算过程</strong>
+                        <table class="pvfrs-weight-table pvfrs-signal-process-table">
+                            <tbody>
+                                <tr><td>① 基础（共振强度）</td><td colspan="2">= ${baseStr}%</td></tr>
+                                <tr><td>② 条件加分</td><td>加分</td><td>是否满足</td></tr>
+                                ${addendRows}
+                                <tr><td>② 加分合计</td><td colspan="2">+ ${(totalAdd * 100).toFixed(0)}%</td></tr>
+                                <tr><td>③ 原始强度（基础+加分，截断到0～1）</td><td colspan="2">= ${originalVal}%</td></tr>
+                                <tr><td>④ 质量等级</td><td colspan="2">${qualityLevel}</td></tr>
+                                <tr><td>⑤ 乖离率得分（参与质量调整）</td><td colspan="2">${biasScore}</td></tr>
+                                <tr><td>⑥ 最终信号强度（经质量与乖离率调整）</td><td colspan="2"><strong>= ${finalStr}%</strong></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
                 const scoreDetailHtml = `
                     <div class="pvfrs-score-detail-inner">
-                        <span><strong>共振强度:</strong> ${fmt(sd.resonance_strength)}</span>
-                        <span><strong>价格维度得分:</strong> ${fmt(sd.price_score)}</span>
-                        <span><strong>频率维度得分:</strong> ${fmt(sd.frequency_score)}</span>
-                        <span><strong>成交量维度得分:</strong> ${fmt(sd.volume_score)}</span>
+                        <div class="pvfrs-score-detail-section">
+                            <strong>各项权重得分</strong>
+                            <table class="pvfrs-weight-table">
+                                <thead><tr><th>项目</th><th>得分</th><th>权重说明</th></tr></thead>
+                                <tbody>${weightRows}</tbody>
+                            </table>
+                        </div>
+                        ${signalProcessHtml}
                     </div>
                 `;
 
@@ -807,6 +1004,90 @@ const ScreeningPage = {
                     </tr>
                     <tr class="pvfrs-score-detail-row" data-detail-for="${index}" style="display:none;">
                         <td colspan="12" class="pvfrs-score-detail-cell">${scoreDetailHtml}</td>
+                    </tr>
+                `;
+            } else if (strategy === 'gms') {
+                // GMS 均值引力动量策略表格
+                const sd = stock.score_detail || {};
+                const fmtPct = (v) => (v != null && typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '--';
+                const gmsParam = (id, def) => {
+                    const el = document.getElementById(id);
+                    if (!el) return def;
+                    const v = parseFloat(el.value);
+                    return isNaN(v) ? def : v;
+                };
+                // 使用后端返回的实际阈值（避免页面参数与后端配置不一致导致混淆）
+                const accFz = (sd.accumulation_fz_min != null && !isNaN(sd.accumulation_fz_min)) ? sd.accumulation_fz_min : gmsParam('gms-accumulation_fz_min', 1.5);
+                const balRatio = (sd.balance_ratio_max != null && !isNaN(sd.balance_ratio_max)) ? sd.balance_ratio_max : gmsParam('gms-balance_ratio_max', 0.01);
+                const volMin = (sd.momentum_volume_ratio_min != null && !isNaN(sd.momentum_volume_ratio_min)) ? sd.momentum_volume_ratio_min : gmsParam('gms-volume_ratio_min', 1.5);
+                const balPct = (balRatio * 100).toFixed(1);
+                const gmsFmt = (v, type) => {
+                    if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
+                    if (type === 'pct') return (v * 100).toFixed(2) + '%';
+                    if (type === 'int') return String(Math.round(v));
+                    if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万' : Number(v).toFixed(0));
+                    if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
+                    if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
+                    if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);
+                    return String(v);
+                };
+                const scoreDetailHtml = `
+                    <div class="gms-score-detail-inner">
+                        <div class="gms-score-detail-section">
+                            <strong>得分明细</strong>
+                            <table class="gms-weight-table">
+                                <tbody>
+                                    <tr><td>蓄势得分</td><td>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</td><td>F/Z ≥ ${accFz} 得 30 分</td></tr>
+                                    <tr><td>平衡得分</td><td>${sd.score_balance != null ? sd.score_balance.toFixed(1) : '--'}</td><td>|Δ/d₂₀| &lt; ${balPct}% 得 40 分</td></tr>
+                                    <tr><td>动量得分</td><td>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</td><td>Δ&gt;0 且量比≥${volMin} 得 30 分</td></tr>
+                                    <tr><td>总分</td><td><strong>${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}</strong></td><td></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="gms-score-detail-section gms-indicators-section">
+                            <strong>计算指标细项</strong>
+                            <table class="gms-weight-table gms-indicators-table">
+                                <tbody>
+                                    <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
+                                    <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
+                                    <tr><td>偏离率 (Δ/d₂₀)</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>现价相对周期末价张力</td></tr>
+                                    <tr><td>突变率 (Δ/d₁)</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
+                                    <tr><td>Δ/d (相对位移)</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>幅度系数</td></tr>
+                                    <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
+                                    <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
+                                    <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>
+                                    <tr><td>m₂₀ (当日成交量)</td><td>${gmsFmt(sd.current_volume, 'vol')}</td><td>当日成交量</td></tr>
+                                    <tr><td>量比 (m₂₀/m)</td><td>${gmsFmt(sd.volume_ratio, 'ratio')}</td><td>放量/地量判断</td></tr>
+                                    <tr><td>F/Z (数方比)</td><td>${gmsFmt(sd.fz_ratio, 'ratio')}</td><td>蓄势判断</td></tr>
+                                    <tr><td>d₂₀ - d (价格vs均线)</td><td>${gmsFmt(sd.instant_deviation, 'num')}</td><td>价格相对均线偏离</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                const buyType = stock.buy_type || '—';
+                const buyTypeClass = stock.left_buy_signal ? 'gms-left' : (stock.right_buy_signal ? 'gms-right' : '');
+                html += `
+                    <tr data-gms-row="${index}">
+                        <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name || '--'}</span></td>
+                        <td><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
+                        <td><span class="${buyTypeClass}">${buyType}</span></td>
+                        <td>${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td>${stock.ratio_d20 != null ? fmtPct(stock.ratio_d20) : '--'}</td>
+                        <td>${stock.ratio_d1 != null ? fmtPct(stock.ratio_d1) : '--'}</td>
+                        <td>${stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '--'}</td>
+                        <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_history.html?code=${stock.symbol || stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
+                                <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
+                        <td colspan="10" class="gms-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
@@ -975,6 +1256,23 @@ const ScreeningPage = {
                 stock.current_change_percent ? stock.current_change_percent.toFixed(2) + '%' : '0%'
             ]);
             filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'gms') {
+            headers = [
+                '股票代码', '股票名称', '总分', '买点类型', '当前价格',
+                'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅'
+            ];
+            rows = data.map(stock => [
+                `'${stock.symbol || stock.code}`,
+                stock.name || '',
+                stock.score_total != null ? stock.score_total.toFixed(1) : '',
+                stock.buy_type || '',
+                stock.current_price != null ? stock.current_price.toFixed(2) : '',
+                stock.ratio_d20 != null ? (stock.ratio_d20 * 100).toFixed(2) + '%' : '',
+                stock.ratio_d1 != null ? (stock.ratio_d1 * 100).toFixed(2) + '%' : '',
+                stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '',
+                stock.current_change_percent != null ? stock.current_change_percent.toFixed(2) + '%' : '0%'
+            ]);
+            filename = `GMS均值引力动量筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'long-lower-shadow') {
             headers = [
                 '股票代码', '股票名称', '形态日期', '形态收盘价',
