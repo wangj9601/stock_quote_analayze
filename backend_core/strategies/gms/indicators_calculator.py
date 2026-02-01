@@ -1,6 +1,6 @@
 """
 GMS 指标计算器
-从 data_loader 输出的行数据计算 GMSIndicators，双模块阶梯式评分（吸附态 / 突变态）
+从 data_loader 输出的行数据计算 GMSIndicators，双模块阶梯式评分（均值收敛态 / 动量溢出态）
 """
 
 import logging
@@ -100,7 +100,7 @@ class GMSIndicatorsCalculator:
             # 注意：ratio_d(bias) = Δ₂₀/d = (d₂₀-d)/d，与 Δ/d 不同，不可混用
             abs_ratio_d = abs(delta / d) if d and d > 0 else None
 
-            # === 吸附态阶梯评分（满分 100）===
+            # === 均值收敛态阶梯评分（满分 100）===
             score_acc_fz = self._score_accumulation_fz(fz_ratio)
             score_acc_balance = self._score_accumulation_balance(abs_ratio_d)
             score_acc_volume = self._score_accumulation_volume(volume_ratio)
@@ -116,7 +116,7 @@ class GMSIndicatorsCalculator:
             elif score_accumulation >= self.acc_a_threshold:
                 accumulation_grade = "A"
 
-            # === 突变态阶梯评分（满分 100，可含负分）===
+            # === 动量溢出态阶梯评分（满分 100，可含负分）===
             score_mom_ratio_d1 = self._score_momentum_ratio_d1(ratio_d1)
             score_mom_deviation, mom_deviation_judge = self._score_momentum_deviation_with_judge(
                 instant_deviation, instant_deviation_series
@@ -177,7 +177,7 @@ class GMSIndicatorsCalculator:
             return None
 
     def _score_accumulation_fz(self, fz_ratio: Optional[float]) -> float:
-        """吸附态-时间耗散 F/Z：≥t1→权重, [t2,t1)→2/3权重, <t2→0"""
+        """均值收敛态-时间耗散 F/Z：≥t1→权重, [t2,t1)→2/3权重, <t2→0"""
         if fz_ratio is None or self.weight_acc_fz <= 0:
             return 0.0
         t1, t2 = (self.acc_fz_tiers[0], self.acc_fz_tiers[1]) if len(self.acc_fz_tiers) >= 2 else (2.5, 1.5)
@@ -188,7 +188,7 @@ class GMSIndicatorsCalculator:
         return 0.0
 
     def _score_accumulation_balance(self, abs_ratio_d: Optional[float]) -> float:
-        """吸附态-引力粘合 |Δ/d|：≤t1→权重, ≤t2→1/2权重, >t2→0"""
+        """均值收敛态-引力粘合 |Δ/d|：≤t1→权重, ≤t2→1/2权重, >t2→0"""
         if abs_ratio_d is None or self.weight_acc_balance <= 0:
             return 0.0
         t1, t2 = (self.balance_tiers[0], self.balance_tiers[1]) if len(self.balance_tiers) >= 2 else (0.01, 0.015)
@@ -199,7 +199,7 @@ class GMSIndicatorsCalculator:
         return 0.0
 
     def _score_accumulation_volume(self, volume_ratio: Optional[float]) -> float:
-        """吸附态-成交量缩 m₂₀/m：≤t1→权重, (t1,t2]→1/2权重, >t2→0"""
+        """均值收敛态-成交量缩 m₂₀/m：≤t1→权重, (t1,t2]→1/2权重, >t2→0"""
         if volume_ratio is None or self.weight_acc_volume <= 0:
             return 0.0
         t1, t2 = (self.vol_shrink_tiers[0], self.vol_shrink_tiers[1]) if len(self.vol_shrink_tiers) >= 2 else (0.6, 0.8)
@@ -210,7 +210,7 @@ class GMSIndicatorsCalculator:
         return 0.0
 
     def _score_momentum_ratio_d1(self, ratio_d1: Optional[float]) -> float:
-        """突变态-盈亏反转 Δ/d₁：手册规定 (0%,3%] 为最佳买点（刚突破），>3% 已涨太多非买点
+        """动量溢出态-盈亏反转 Δ/d₁：手册规定 (0%,3%] 为最佳买点（刚突破），>3% 已涨太多非买点
         (0, 0.001] 刚过0轴→1/2权重; (0.001, 0.03] 刚突破→满分; >0.03→0分（追高/应止盈）"""
         if ratio_d1 is None or self.weight_mom_ratio_d1 <= 0:
             return 0.0
@@ -228,7 +228,7 @@ class GMSIndicatorsCalculator:
         instant_deviation: float,
         series: Optional[List[float]],
     ) -> float:
-        """突变态-推力支撑 d₂₀-d：站稳3日→权重, 仅当日→1/2权重, <0→-10（固定）"""
+        """动量溢出态-推力支撑 d₂₀-d：站稳3日→权重, 仅当日→1/2权重, <0→-10（固定）"""
         score, _ = self._score_momentum_deviation_with_judge(instant_deviation, series)
         return score
 
@@ -237,7 +237,7 @@ class GMSIndicatorsCalculator:
         instant_deviation: float,
         series: Optional[List[float]],
     ) -> tuple:
-        """突变态-推力支撑 d₂₀-d：返回 (score, judge)"""
+        """动量溢出态-推力支撑 d₂₀-d：返回 (score, judge)"""
         if instant_deviation <= 0:
             return -10.0, "不合格(d₂₀-d<0)"
         if self.weight_mom_deviation <= 0:
@@ -250,7 +250,7 @@ class GMSIndicatorsCalculator:
         return self.weight_mom_deviation * 0.5, "达标(仅当日)"
 
     def _judge_accumulation_fz(self, fz_ratio: Optional[float]) -> str:
-        """吸附态 F/Z 判定"""
+        """均值收敛态 F/Z 判定"""
         if fz_ratio is None:
             return "未达标(无数据)"
         t1, t2 = (self.acc_fz_tiers[0], self.acc_fz_tiers[1]) if len(self.acc_fz_tiers) >= 2 else (2.5, 1.5)
@@ -261,7 +261,7 @@ class GMSIndicatorsCalculator:
         return "未达标"
 
     def _judge_accumulation_balance(self, abs_ratio_d: Optional[float]) -> str:
-        """吸附态 |Δ/d| 判定"""
+        """均值收敛态 |Δ/d| 判定"""
         if abs_ratio_d is None:
             return "未达标(无数据)"
         t1, t2 = (self.balance_tiers[0], self.balance_tiers[1]) if len(self.balance_tiers) >= 2 else (0.01, 0.015)
@@ -272,7 +272,7 @@ class GMSIndicatorsCalculator:
         return "未达标"
 
     def _judge_accumulation_volume(self, volume_ratio: Optional[float]) -> str:
-        """吸附态 成交量缩 判定"""
+        """均值收敛态 成交量缩 判定"""
         if volume_ratio is None:
             return "未达标(无数据)"
         t1, t2 = (self.vol_shrink_tiers[0], self.vol_shrink_tiers[1]) if len(self.vol_shrink_tiers) >= 2 else (0.6, 0.8)
@@ -283,7 +283,7 @@ class GMSIndicatorsCalculator:
         return "未达标"
 
     def _judge_momentum_ratio_d1(self, ratio_d1: Optional[float]) -> str:
-        """突变态 Δ/d₁ 判定"""
+        """动量溢出态 Δ/d₁ 判定"""
         if ratio_d1 is None:
             return "未达标(无数据)"
         low, high = (self.ratio_d1_tiers[0], self.ratio_d1_tiers[1]) if len(self.ratio_d1_tiers) >= 2 else (0.001, 0.03)
@@ -296,7 +296,7 @@ class GMSIndicatorsCalculator:
         return "达标(1/2)"
 
     def _judge_momentum_volume(self, volume_ratio: Optional[float]) -> str:
-        """突变态 攻击强度 判定"""
+        """动量溢出态 攻击强度 判定"""
         if volume_ratio is None:
             return "未达标(无数据)"
         t1, t2 = (self.vol_attack_tiers[0], self.vol_attack_tiers[1]) if len(self.vol_attack_tiers) >= 2 else (2.0, 1.5)
@@ -307,7 +307,7 @@ class GMSIndicatorsCalculator:
         return "未达标"
 
     def _score_momentum_volume(self, volume_ratio: Optional[float]) -> float:
-        """突变态-攻击强度 m₂₀/m：≥t1→权重, [t2,t1)→2/3权重, <t2→0"""
+        """动量溢出态-攻击强度 m₂₀/m：≥t1→权重, [t2,t1)→2/3权重, <t2→0"""
         if volume_ratio is None or self.weight_mom_volume <= 0:
             return 0.0
         t1, t2 = (self.vol_attack_tiers[0], self.vol_attack_tiers[1]) if len(self.vol_attack_tiers) >= 2 else (2.0, 1.5)

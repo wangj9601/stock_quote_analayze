@@ -1088,26 +1088,26 @@ const ScreeningPage = {
                 const scoreDetailHtml = `
                     <div class="gms-score-detail-inner">
                         <div class="gms-score-detail-section">
-                            <strong>【吸附态】得分明细</strong>
+                            <strong>【均值收敛态】得分明细</strong>
                             <table class="gms-weight-table">
                                 <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
                                 <tbody>
                                     <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
                                     <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0]*100).toFixed(1)}%→满分; ≤${(balTiers[1]*100).toFixed(1)}%→1/2</td></tr>
                                     <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
-                                    <tr><td>吸附态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
+                                    <tr><td>均值收敛态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
                                 </tbody>
                             </table>
                         </div>
                         <div class="gms-score-detail-section">
-                            <strong>【突变态】得分明细</strong>
+                            <strong>【动量溢出态】得分明细</strong>
                             <table class="gms-weight-table">
                                 <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
                                 <tbody>
                                     <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1]*100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
                                     <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
                                     <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
-                                    <tr><td>突变态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
+                                    <tr><td>动量溢出态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1336,7 +1336,7 @@ const ScreeningPage = {
             filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'gms') {
             headers = [
-                '股票代码', '股票名称', '总分', '信号强度', '吸附态得分', '吸附态等级', '突变态得分', '突变态等级', '买点类型', '当前价格',
+                '股票代码', '股票名称', '总分', '信号强度', '均值收敛态得分', '均值收敛态等级', '动量溢出态得分', '动量溢出态等级', '买点类型', '当前价格',
                 'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅'
             ];
             rows = data.map(stock => {

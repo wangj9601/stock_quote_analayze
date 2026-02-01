@@ -29,7 +29,7 @@ class GMSSignalDetector(ISignalDetector):
     def detect_left_buy(self, indicators: GMSIndicators) -> bool:
         """
         左侧买点（均值吸附）：
-        - 优先用吸附态等级 S/A 判断
+        - 优先用均值收敛态等级 S/A 判断
         - 前置：F > Z 且 d₂₀ < d₁（即 delta < 0）
         - 极度粘合：|Δ/d₂₀| < 1.5%
         - 地量洗盘：m₂₀ < 0.8m
@@ -61,7 +61,7 @@ class GMSSignalDetector(ISignalDetector):
     def detect_right_buy(self, indicators: GMSIndicators) -> bool:
         """
         右侧买点（动量引爆）：
-        - 优先用突变态等级 全速切入/分批买入 判断
+        - 优先用动量溢出态等级 全速切入/分批买入 判断
         - 前置：d₂₀ > d 且 Δ > 0
         - 位移放量：m₂₀ > 1.5m
         """

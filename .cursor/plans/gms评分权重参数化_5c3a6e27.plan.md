@@ -1,6 +1,6 @@
 ---
 name: GMS评分权重参数化
-overview: 在 GMS 选股策略前端新增评分规则权重参数（吸附态、突变态各维度），支持修改与保存，后端在选股时采用前端传入的权重进行评分计算。
+overview: 在 GMS 选股策略前端新增评分规则权重参数（均值收敛态、动量溢出态各维度），支持修改与保存，后端在选股时采用前端传入的权重进行评分计算。
 todos: []
 isProject: false
 ---
@@ -14,12 +14,12 @@ isProject: false
 
 | 模块  | 维度         | 默认权重 | 参数名                  |
 | --- | ---------- | ---- | -------------------- |
-| 吸附态 | 时间耗散 F/Z   | 30   | weight_acc_fz        |
-| 吸附态 | 引力粘合       | Δ/d  |                      |
-| 吸附态 | 成交量缩 m₂₀/m | 30   | weight_acc_volume    |
-| 突变态 | 盈亏反转 Δ/d₁  | 40   | weight_mom_ratio_d1  |
-| 突变态 | 推力支撑 d₂₀-d | 30   | weight_mom_deviation |
-| 突变态 | 攻击强度 m₂₀/m | 30   | weight_mom_volume    |
+| 均值收敛态 | 时间耗散 F/Z   | 30   | weight_acc_fz        |
+| 均值收敛态 | 引力粘合       | Δ/d  |                      |
+| 均值收敛态 | 成交量缩 m₂₀/m | 30   | weight_acc_volume    |
+| 动量溢出态 | 盈亏反转 Δ/d₁  | 40   | weight_mom_ratio_d1  |
+| 动量溢出态 | 推力支撑 d₂₀-d | 30   | weight_mom_deviation |
+| 动量溢出态 | 攻击强度 m₂₀/m | 30   | weight_mom_volume    |
 
 
 每模块三项权重默认合计 100 分，用户可自定义（后端按比例参与总分计算）。
@@ -33,12 +33,12 @@ isProject: false
 在现有 GMS 策略参数卡片中，新增「评分权重」分组：
 
 ```
-【吸附态权重】(合计建议 100)
+【均值收敛态权重】(合计建议 100)
 - 时间耗散 F/Z 权重: [输入框] 默认 30
 - 引力粘合 |Δ/d| 权重: [输入框] 默认 40  
 - 成交量缩 权重: [输入框] 默认 30
 
-【突变态权重】(合计建议 100)
+【动量溢出态权重】(合计建议 100)
 - 盈亏反转 Δ/d₁ 权重: [输入框] 默认 40
 - 推力支撑 d₂₀-d 权重: [输入框] 默认 30
 - 攻击强度 权重: [输入框] 默认 30
@@ -82,8 +82,8 @@ if weight_acc_fz is not None: config["scoring"]["weight_acc_fz"] = weight_acc_fz
 - 将原先写死的 30、40、30 替换为对应权重变量，例如：
   - `score_acc` 满足条件时给 `weight_acc_fz` 分
   - `score_bal` 满足条件时给 `weight_acc_balance` 分
-  - `score_mom` 满足条件时给 `weight_mom_volume` 分（突变态量比维度）
-- 总分 `score_total` = 吸附态三档得分之和 + 突变态三档得分之和（与当前结构保持一致，仅数值由权重决定）。
+  - `score_mom` 满足条件时给 `weight_mom_volume` 分（动量溢出态量比维度）
+- 总分 `score_total` = 均值收敛态三档得分之和 + 动量溢出态三档得分之和（与当前结构保持一致，仅数值由权重决定）。
 
 ### 3.4 score_detail 回传
 
