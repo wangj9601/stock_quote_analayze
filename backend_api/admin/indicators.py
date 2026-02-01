@@ -1004,9 +1004,11 @@ async def generate_batch_all_a_shares_indicators(
                             
                             for _, row in pvfrs_data.iterrows():
                                 try:
+                                    date_val = row['date']
+                                    date_str = date_val.strftime('%Y-%m-%d') if hasattr(date_val, 'strftime') else str(date_val)[:10]
                                     db_pvfrs = MeanFrequencyResonanceIndicators(
                                         code=stock_code,
-                                        date=row['date'],
+                                        date=date_str,
                                         market_type=market_type,
                                         macro_displacement_delta=row.get('macro_displacement_delta'),
                                         amplitude=row.get('amplitude'),
@@ -1018,7 +1020,11 @@ async def generate_batch_all_a_shares_indicators(
                                         efficiency_m20_minus_m=row.get('efficiency_m20_minus_m'),
                                         ma20_d=row.get('ma20_d'),
                                         mavol20_m=row.get('mavol20_m'),
-                                        bias=row.get('bias')
+                                        bias=row.get('bias'),
+                                        d1=row.get('d1'),
+                                        d1_date=row.get('d1_date'),
+                                        d20=row.get('d20'),
+                                        d20_date=row.get('d20_date')
                                     )
                                     db.merge(db_pvfrs)
                                 except Exception as e:
@@ -1251,17 +1257,21 @@ async def generate_indicators(
                     
                 elif indicator == "pvfrs":
                     calculator = MeanFrequencyResonanceCalculator()
+                    dates_list = historical_data['date'].tolist()
                     pvfrs_data = calculator.calculate(
                         historical_data['close'].tolist(),
-                        historical_data['volume'].tolist()
+                        historical_data['volume'].tolist(),
+                        dates=dates_list
                     )
                     # 保存到数据库
                     for i, row in enumerate(historical_data.itertuples()):
                         if i < len(pvfrs_data) and pvfrs_data[i] is not None:
                             pvfrs_item = pvfrs_data[i]
+                            date_val = row.date
+                            date_str = date_val.strftime('%Y-%m-%d') if hasattr(date_val, 'strftime') else str(date_val)[:10]
                             db_pvfrs = MeanFrequencyResonanceIndicators(
                                 code=code,
-                                date=row.date,
+                                date=date_str,
                                 market_type=market_type,
                                 ma20_d=pvfrs_item.get('ma20_d'),
                                 mavol20_m=pvfrs_item.get('mavol20_m'),
@@ -1273,7 +1283,11 @@ async def generate_indicators(
                                 efficiency_m20_minus_m=pvfrs_item.get('efficiency_m20_minus_m'),
                                 rising_days_z=pvfrs_item.get('rising_days_z'),
                                 falling_days_f=pvfrs_item.get('falling_days_f'),
-                                bias=pvfrs_item.get('bias')
+                                bias=pvfrs_item.get('bias'),
+                                d1=pvfrs_item.get('d1'),
+                                d1_date=pvfrs_item.get('d1_date'),
+                                d20=pvfrs_item.get('d20'),
+                                d20_date=pvfrs_item.get('d20_date')
                             )
                             db.merge(db_pvfrs)
                     db.commit()

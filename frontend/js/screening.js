@@ -324,6 +324,17 @@ const ScreeningPage = {
                 if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
                 if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
                 if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
+                if (gmsParams.accumulation_s_threshold != null) q.set('accumulation_s_threshold', gmsParams.accumulation_s_threshold);
+                if (gmsParams.accumulation_a_threshold != null) q.set('accumulation_a_threshold', gmsParams.accumulation_a_threshold);
+                if (gmsParams.momentum_full_threshold != null) q.set('momentum_full_threshold', gmsParams.momentum_full_threshold);
+                if (gmsParams.momentum_batch_threshold != null) q.set('momentum_batch_threshold', gmsParams.momentum_batch_threshold);
+                if (gmsParams.instant_deviation_stable_days != null) q.set('instant_deviation_stable_days', gmsParams.instant_deviation_stable_days);
+                if (gmsParams.weight_acc_fz != null) q.set('weight_acc_fz', gmsParams.weight_acc_fz);
+                if (gmsParams.weight_acc_balance != null) q.set('weight_acc_balance', gmsParams.weight_acc_balance);
+                if (gmsParams.weight_acc_volume != null) q.set('weight_acc_volume', gmsParams.weight_acc_volume);
+                if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
+                if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
+                if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
                 url = `${apiBaseUrl}/api/screening/gms-strategy?${q.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
@@ -441,7 +452,7 @@ const ScreeningPage = {
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
             } else if (strategy === 'gms') {
-                colSpan = 10;
+                colSpan = 11;
             } else {
                 colSpan = 12;
             }
@@ -549,7 +560,18 @@ const ScreeningPage = {
                 balance_ratio_max: 0.01,
                 watch_threshold: 60,
                 alert_threshold: 90,
-                overbought_ratio: 0.15
+                overbought_ratio: 0.15,
+                accumulation_s_threshold: 85,
+                accumulation_a_threshold: 70,
+                momentum_full_threshold: 90,
+                momentum_batch_threshold: 80,
+                instant_deviation_stable_days: 3,
+                weight_acc_fz: 30,
+                weight_acc_balance: 40,
+                weight_acc_volume: 30,
+                weight_mom_ratio_d1: 40,
+                weight_mom_deviation: 30,
+                weight_mom_volume: 30
             };
             const data = saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
             const set = (id, value) => {
@@ -566,6 +588,17 @@ const ScreeningPage = {
             set('gms-watch_threshold', data.watch_threshold);
             set('gms-alert_threshold', data.alert_threshold);
             set('gms-overbought_ratio', data.overbought_ratio);
+            set('gms-accumulation_s_threshold', data.accumulation_s_threshold);
+            set('gms-accumulation_a_threshold', data.accumulation_a_threshold);
+            set('gms-momentum_full_threshold', data.momentum_full_threshold);
+            set('gms-momentum_batch_threshold', data.momentum_batch_threshold);
+            set('gms-instant_deviation_stable_days', data.instant_deviation_stable_days);
+            set('gms-weight_acc_fz', data.weight_acc_fz);
+            set('gms-weight_acc_balance', data.weight_acc_balance);
+            set('gms-weight_acc_volume', data.weight_acc_volume);
+            set('gms-weight_mom_ratio_d1', data.weight_mom_ratio_d1);
+            set('gms-weight_mom_deviation', data.weight_mom_deviation);
+            set('gms-weight_mom_volume', data.weight_mom_volume);
             if (statusEl) statusEl.textContent = '';
         } catch (e) {
             console.error('loadGmsParams:', e);
@@ -595,7 +628,18 @@ const ScreeningPage = {
             balance_ratio_max: get('gms-balance_ratio_max'),
             watch_threshold: get('gms-watch_threshold'),
             alert_threshold: get('gms-alert_threshold'),
-            overbought_ratio: get('gms-overbought_ratio')
+            overbought_ratio: get('gms-overbought_ratio'),
+            accumulation_s_threshold: get('gms-accumulation_s_threshold'),
+            accumulation_a_threshold: get('gms-accumulation_a_threshold'),
+            momentum_full_threshold: get('gms-momentum_full_threshold'),
+            momentum_batch_threshold: get('gms-momentum_batch_threshold'),
+            instant_deviation_stable_days: get('gms-instant_deviation_stable_days'),
+            weight_acc_fz: get('gms-weight_acc_fz'),
+            weight_acc_balance: get('gms-weight_acc_balance'),
+            weight_acc_volume: get('gms-weight_acc_volume'),
+            weight_mom_ratio_d1: get('gms-weight_mom_ratio_d1'),
+            weight_mom_deviation: get('gms-weight_mom_deviation'),
+            weight_mom_volume: get('gms-weight_mom_volume')
         };
     },
 
@@ -667,7 +711,7 @@ const ScreeningPage = {
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
             } else if (strategy === 'gms') {
-                colSpan = 10;
+                colSpan = 11;
             } else {
                 colSpan = 12;
             }
@@ -1016,11 +1060,6 @@ const ScreeningPage = {
                     const v = parseFloat(el.value);
                     return isNaN(v) ? def : v;
                 };
-                // 使用后端返回的实际阈值（避免页面参数与后端配置不一致导致混淆）
-                const accFz = (sd.accumulation_fz_min != null && !isNaN(sd.accumulation_fz_min)) ? sd.accumulation_fz_min : gmsParam('gms-accumulation_fz_min', 1.5);
-                const balRatio = (sd.balance_ratio_max != null && !isNaN(sd.balance_ratio_max)) ? sd.balance_ratio_max : gmsParam('gms-balance_ratio_max', 0.01);
-                const volMin = (sd.momentum_volume_ratio_min != null && !isNaN(sd.momentum_volume_ratio_min)) ? sd.momentum_volume_ratio_min : gmsParam('gms-volume_ratio_min', 1.5);
-                const balPct = (balRatio * 100).toFixed(1);
                 const gmsFmt = (v, type) => {
                     if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
                     if (type === 'pct') return (v * 100).toFixed(2) + '%';
@@ -1031,30 +1070,62 @@ const ScreeningPage = {
                     if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);
                     return String(v);
                 };
+                const accS = (sd.accumulation_s_threshold != null && !isNaN(sd.accumulation_s_threshold)) ? sd.accumulation_s_threshold : 85;
+                const accA = (sd.accumulation_a_threshold != null && !isNaN(sd.accumulation_a_threshold)) ? sd.accumulation_a_threshold : 70;
+                const momFull = (sd.momentum_full_threshold != null && !isNaN(sd.momentum_full_threshold)) ? sd.momentum_full_threshold : 90;
+                const momBatch = (sd.momentum_batch_threshold != null && !isNaN(sd.momentum_batch_threshold)) ? sd.momentum_batch_threshold : 80;
+                const fzTiers = sd.acc_fz_tiers || [2.5, 1.5];
+                const balTiers = sd.balance_tiers || [0.01, 0.015];
+                const volShrink = sd.vol_shrink_tiers || [0.6, 0.8];
+                const ratioD1Tiers = sd.ratio_d1_tiers || [0.001, 0.03];
+                const volAttack = sd.vol_attack_tiers || [2.0, 1.5];
+                const wAccFz = (sd.weight_acc_fz != null && !isNaN(sd.weight_acc_fz)) ? sd.weight_acc_fz : 30;
+                const wAccBal = (sd.weight_acc_balance != null && !isNaN(sd.weight_acc_balance)) ? sd.weight_acc_balance : 40;
+                const wAccVol = (sd.weight_acc_volume != null && !isNaN(sd.weight_acc_volume)) ? sd.weight_acc_volume : 30;
+                const wMomD1 = (sd.weight_mom_ratio_d1 != null && !isNaN(sd.weight_mom_ratio_d1)) ? sd.weight_mom_ratio_d1 : 40;
+                const wMomDev = (sd.weight_mom_deviation != null && !isNaN(sd.weight_mom_deviation)) ? sd.weight_mom_deviation : 30;
+                const wMomVol = (sd.weight_mom_volume != null && !isNaN(sd.weight_mom_volume)) ? sd.weight_mom_volume : 30;
                 const scoreDetailHtml = `
                     <div class="gms-score-detail-inner">
                         <div class="gms-score-detail-section">
-                            <strong>得分明细</strong>
+                            <strong>【吸附态】得分明细</strong>
                             <table class="gms-weight-table">
+                                <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
                                 <tbody>
-                                    <tr><td>蓄势得分</td><td>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</td><td>F/Z ≥ ${accFz} 得 30 分</td></tr>
-                                    <tr><td>平衡得分</td><td>${sd.score_balance != null ? sd.score_balance.toFixed(1) : '--'}</td><td>|Δ/d₂₀| &lt; ${balPct}% 得 40 分</td></tr>
-                                    <tr><td>动量得分</td><td>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</td><td>Δ&gt;0 且量比≥${volMin} 得 30 分</td></tr>
-                                    <tr><td>总分</td><td><strong>${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}</strong></td><td></td></tr>
+                                    <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
+                                    <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0]*100).toFixed(1)}%→满分; ≤${(balTiers[1]*100).toFixed(1)}%→1/2</td></tr>
+                                    <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
+                                    <tr><td>吸附态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="gms-score-detail-section">
+                            <strong>【突变态】得分明细</strong>
+                            <table class="gms-weight-table">
+                                <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
+                                <tbody>
+                                    <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1]*100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
+                                    <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
+                                    <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
+                                    <tr><td>突变态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="gms-score-detail-section">
+                            <strong>综合</strong> 总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}；信号强度=总分/100
                         </div>
                         <div class="gms-score-detail-section gms-indicators-section">
                             <strong>计算指标细项</strong>
                             <table class="gms-weight-table gms-indicators-table">
                                 <tbody>
-                                    <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格</td></tr>
-                                    <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格</td></tr>
+                                    <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格${sd.d1_date ? '，交易日期 ' + sd.d1_date : ''}</td></tr>
+                                    <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格${sd.d20_date ? '，交易日期 ' + sd.d20_date : ''}</td></tr>
                                     <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
                                     <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
+                                    <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
                                     <tr><td>偏离率 (Δ/d₂₀)</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>现价相对周期末价张力</td></tr>
                                     <tr><td>突变率 (Δ/d₁)</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
-                                    <tr><td>Δ/d (相对位移)</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>幅度系数</td></tr>
+                                    <tr><td>Δ₂₀/d</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>Δ₂₀ = d₂₀ - d（价格相对均线偏离率）</td></tr>
                                     <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
                                     <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
                                     <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>
@@ -1069,11 +1140,16 @@ const ScreeningPage = {
                 `;
                 const buyType = stock.buy_type || '—';
                 const buyTypeClass = stock.left_buy_signal ? 'gms-left' : (stock.right_buy_signal ? 'gms-right' : '');
+                const signalStrength = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+                let strengthClass = 'strength-low';
+                if (signalStrength >= 0.8) strengthClass = 'strength-high';
+                else if (signalStrength >= 0.6) strengthClass = 'strength-mid';
                 html += `
                     <tr data-gms-row="${index}">
                         <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
                         <td><span class="stock-name">${stock.name || '--'}</span></td>
                         <td><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
+                        <td><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td><span class="${buyTypeClass}">${buyType}</span></td>
                         <td>${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
                         <td>${stock.ratio_d20 != null ? fmtPct(stock.ratio_d20) : '--'}</td>
@@ -1089,7 +1165,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="10" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                        <td colspan="11" class="gms-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
@@ -1260,20 +1336,28 @@ const ScreeningPage = {
             filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'gms') {
             headers = [
-                '股票代码', '股票名称', '总分', '买点类型', '当前价格',
+                '股票代码', '股票名称', '总分', '信号强度', '吸附态得分', '吸附态等级', '突变态得分', '突变态等级', '买点类型', '当前价格',
                 'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅'
             ];
-            rows = data.map(stock => [
-                `'${stock.symbol || stock.code}`,
-                stock.name || '',
-                stock.score_total != null ? stock.score_total.toFixed(1) : '',
-                stock.buy_type || '',
-                stock.current_price != null ? stock.current_price.toFixed(2) : '',
-                stock.ratio_d20 != null ? (stock.ratio_d20 * 100).toFixed(2) + '%' : '',
-                stock.ratio_d1 != null ? (stock.ratio_d1 * 100).toFixed(2) + '%' : '',
-                stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '',
-                stock.current_change_percent != null ? stock.current_change_percent.toFixed(2) + '%' : '0%'
-            ]);
+            rows = data.map(stock => {
+                const sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+                return [
+                    `'${stock.symbol || stock.code}`,
+                    stock.name || '',
+                    stock.score_total != null ? stock.score_total.toFixed(1) : '',
+                    (sig * 100).toFixed(1) + '%',
+                    stock.score_accumulation != null ? stock.score_accumulation.toFixed(1) : '',
+                    stock.accumulation_grade || '',
+                    stock.score_momentum != null ? stock.score_momentum.toFixed(1) : '',
+                    stock.momentum_grade || '',
+                    stock.buy_type || '',
+                    stock.current_price != null ? stock.current_price.toFixed(2) : '',
+                    stock.ratio_d20 != null ? (stock.ratio_d20 * 100).toFixed(2) + '%' : '',
+                    stock.ratio_d1 != null ? (stock.ratio_d1 * 100).toFixed(2) + '%' : '',
+                    stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '',
+                    stock.current_change_percent != null ? stock.current_change_percent.toFixed(2) + '%' : '0%'
+                ];
+            });
             filename = `GMS均值引力动量筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'long-lower-shadow') {
             headers = [

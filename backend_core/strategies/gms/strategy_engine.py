@@ -6,6 +6,7 @@ GMS 策略引擎
 import logging
 from typing import List, Dict, Optional
 from datetime import datetime
+from collections import defaultdict
 
 from .data_loader import GMSDataLoader
 from .indicators_calculator import GMSIndicatorsCalculator
@@ -30,6 +31,7 @@ class GMSStrategyEngine:
         self.detector = GMSSignalDetector(cfg)
         self.watch_threshold = float(cfg.get("scoring", {}).get("watch_threshold", 60))
         self.alert_threshold = float(cfg.get("scoring", {}).get("alert_threshold", 90))
+        self.stable_days = int(cfg.get("scoring", {}).get("instant_deviation_stable_days", 3))
 
     def screen(
         self,
@@ -52,7 +54,7 @@ class GMSStrategyEngine:
             max_results: 最大返回数量
 
         Returns:
-            选股结果列表，每项包含 symbol, name, price, score_total, buy_type, ratio_d20, ratio_d1, fz_ratio 等
+            选股结果列表，每项包含 symbol, score_total, buy_type, signal_strength 等
         """
         results = []
 
@@ -70,9 +72,27 @@ class GMSStrategyEngine:
         for mt, codes_sub in code_sets:
             if not codes_sub:
                 continue
+
             rows = self.data_loader.load_indicators(codes_sub, date, mt)
+            dev_series_by_code: Dict[str, List[float]] = {}
+            if self.stable_days > 1:
+                multi_rows = self.data_loader.load_indicators_multi_day(
+                    codes_sub, date, mt, days=self.stable_days
+                )
+                by_code = defaultdict(list)
+                for r in multi_rows:
+                    by_code[r["code"]].append(r)
+                for code, code_rows in by_code.items():
+                    code_rows.sort(key=lambda x: x["date"])
+                    recent = code_rows[-self.stable_days:]
+                    dev_series_by_code[code] = [
+                        float(r.get("instant_deviation", 0) or 0) for r in recent
+                    ]
+
             for row in rows:
-                ind = self.calculator.calculate(row)
+                code = row.get("code", "")
+                dev_series = dev_series_by_code.get(code) if dev_series_by_code else None
+                ind = self.calculator.calculate(row, instant_deviation_series=dev_series)
                 if ind is None:
                     continue
                 if ind.score_total < min_score:
@@ -92,6 +112,64 @@ class GMSStrategyEngine:
                 elif right:
                     buy_type = "右侧"
 
+                st = ind.score_total
+                signal_strength = st / 100.0 if st is not None and st > 0 else 0.0
+
+                score_detail = {
+                    "score_accumulation": ind.score_accumulation,
+                    "score_balance": ind.score_balance,
+                    "score_momentum": ind.score_momentum,
+                    "score_total": ind.score_total,
+                    "accumulation_grade": getattr(ind, "accumulation_grade", ""),
+                    "momentum_grade": getattr(ind, "momentum_grade", ""),
+                    "accumulation_fz_min": self.calculator.accumulation_fz_min,
+                    "balance_ratio_max": self.calculator.balance_ratio_max,
+                    "momentum_volume_ratio_min": self.calculator.momentum_volume_ratio_min,
+                    "accumulation_s_threshold": self.calculator.acc_s_threshold,
+                    "accumulation_a_threshold": self.calculator.acc_a_threshold,
+                    "momentum_full_threshold": self.calculator.mom_full_threshold,
+                    "momentum_batch_threshold": self.calculator.mom_batch_threshold,
+                    "score_acc_fz": getattr(ind, "score_acc_fz", 0),
+                    "score_acc_balance": getattr(ind, "score_acc_balance", 0),
+                    "score_acc_volume": getattr(ind, "score_acc_volume", 0),
+                    "score_mom_ratio_d1": getattr(ind, "score_mom_ratio_d1", 0),
+                    "score_mom_deviation": getattr(ind, "score_mom_deviation", 0),
+                    "score_mom_volume": getattr(ind, "score_mom_volume", 0),
+                    "acc_fz_tiers": self.calculator.acc_fz_tiers,
+                    "balance_tiers": self.calculator.balance_tiers,
+                    "vol_shrink_tiers": self.calculator.vol_shrink_tiers,
+                    "ratio_d1_tiers": self.calculator.ratio_d1_tiers,
+                    "vol_attack_tiers": self.calculator.vol_attack_tiers,
+                    "weight_acc_fz": self.calculator.weight_acc_fz,
+                    "weight_acc_balance": self.calculator.weight_acc_balance,
+                    "weight_acc_volume": self.calculator.weight_acc_volume,
+                    "weight_mom_ratio_d1": self.calculator.weight_mom_ratio_d1,
+                    "weight_mom_deviation": self.calculator.weight_mom_deviation,
+                    "weight_mom_volume": self.calculator.weight_mom_volume,
+                    "acc_fz_judge": getattr(ind, "acc_fz_judge", ""),
+                    "acc_balance_judge": getattr(ind, "acc_balance_judge", ""),
+                    "acc_volume_judge": getattr(ind, "acc_volume_judge", ""),
+                    "mom_ratio_d1_judge": getattr(ind, "mom_ratio_d1_judge", ""),
+                    "mom_deviation_judge": getattr(ind, "mom_deviation_judge", ""),
+                    "mom_volume_judge": getattr(ind, "mom_volume_judge", ""),
+                    "delta": ind.delta,
+                    "d": ind.d,
+                    "d20": ind.d + ind.instant_deviation,
+                    "d1": ind.d + ind.instant_deviation - ind.delta,
+                    "d1_date": (ind.raw_row.get("d1_date") if ind.raw_row else None) or None,
+                    "d20_date": (ind.raw_row.get("d20_date") if ind.raw_row else None) or ind.date,
+                    "ratio_d20": ind.ratio_d20,
+                    "ratio_d1": ind.ratio_d1,
+                    "ratio_d": ind.ratio_d,
+                    "rising_days": ind.rising_days,
+                    "falling_days": ind.falling_days,
+                    "avg_volume_20d": ind.avg_volume_20d,
+                    "current_volume": ind.current_volume,
+                    "volume_ratio": ind.volume_ratio,
+                    "fz_ratio": ind.fz_ratio,
+                    "instant_deviation": ind.instant_deviation,
+                }
+
                 results.append({
                     "symbol": ind.code,
                     "code": ind.code,
@@ -101,6 +179,9 @@ class GMSStrategyEngine:
                     "score_accumulation": ind.score_accumulation,
                     "score_balance": ind.score_balance,
                     "score_momentum": ind.score_momentum,
+                    "accumulation_grade": getattr(ind, "accumulation_grade", ""),
+                    "momentum_grade": getattr(ind, "momentum_grade", ""),
+                    "signal_strength": signal_strength,
                     "buy_type": buy_type,
                     "left_buy_signal": left,
                     "right_buy_signal": right,
@@ -115,31 +196,7 @@ class GMSStrategyEngine:
                     "instant_deviation": ind.instant_deviation,
                     "rising_days": ind.rising_days,
                     "falling_days": ind.falling_days,
-                    "score_detail": {
-                        "score_accumulation": ind.score_accumulation,
-                        "score_balance": ind.score_balance,
-                        "score_momentum": ind.score_momentum,
-                        "score_total": ind.score_total,
-                        # 实际使用的评分阈值（后端配置，供前端展示避免与页面参数混淆）
-                        "accumulation_fz_min": self.calculator.accumulation_fz_min,
-                        "balance_ratio_max": self.calculator.balance_ratio_max,
-                        "momentum_volume_ratio_min": self.calculator.momentum_volume_ratio_min,
-                        # GMSIndicators 指标细项（供前端得分明细展示）
-                        "delta": ind.delta,                    # Δ (d₂₀ - d₁)
-                        "d": ind.d,                            # d 20日均价
-                        "d20": ind.d + ind.instant_deviation,   # d₂₀ 末日收盘价 = d + (d₂₀-d)
-                        "d1": ind.d + ind.instant_deviation - ind.delta,  # d₁ 首日收盘价 = d₂₀ - Δ
-                        "ratio_d20": ind.ratio_d20,            # 偏离率 Δ/d₂₀
-                        "ratio_d1": ind.ratio_d1,              # 突变率 Δ/d₁
-                        "ratio_d": ind.ratio_d,                # Δ/d 相对位移
-                        "rising_days": ind.rising_days,        # Z 上涨天数
-                        "falling_days": ind.falling_days,      # F 下跌天数
-                        "avg_volume_20d": ind.avg_volume_20d,  # m 20日平均成交量
-                        "current_volume": ind.current_volume,  # m₂₀ 当日成交量
-                        "volume_ratio": ind.volume_ratio,      # 量比 m₂₀/m
-                        "fz_ratio": ind.fz_ratio,              # F/Z 数方比
-                        "instant_deviation": ind.instant_deviation,  # d₂₀ - d
-                    },
+                    "score_detail": score_detail,
                 })
 
         results.sort(key=lambda x: x["score_total"], reverse=True)

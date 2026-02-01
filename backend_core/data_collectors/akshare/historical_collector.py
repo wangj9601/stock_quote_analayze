@@ -149,9 +149,9 @@ class AkshareHistoricalCollector:
             closes = [float(row[1]) for row in rows]
             volumes = [float(row[2]) for row in rows]
             
-            # 计算
+            # 计算（传入 dates 以输出 d1_date、d20_date）
             calculator = MeanFrequencyResonanceCalculator()
-            results = calculator.calculate(closes, volumes)
+            results = calculator.calculate(closes, volumes, dates=dates)
             
             if not results:
                 return
@@ -176,8 +176,8 @@ class AkshareHistoricalCollector:
                 try:
                     self.session.execute(text("""
                         INSERT INTO mean_frequency_resonance_indicators
-                        (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
-                        VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
+                        (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, d1, d1_date, d20, d20_date, created_at)
+                        VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :d1, :d1_date, :d20, :d20_date, :created_at)
                         ON CONFLICT (code, date, market_type) DO UPDATE SET
                             macro_displacement_delta = EXCLUDED.macro_displacement_delta,
                             amplitude = EXCLUDED.amplitude,
@@ -190,6 +190,10 @@ class AkshareHistoricalCollector:
                             ma20_d = EXCLUDED.ma20_d,
                             mavol20_m = EXCLUDED.mavol20_m,
                             bias = EXCLUDED.bias,
+                            d1 = EXCLUDED.d1,
+                            d1_date = EXCLUDED.d1_date,
+                            d20 = EXCLUDED.d20,
+                            d20_date = EXCLUDED.d20_date,
                             created_at = EXCLUDED.created_at
                     """), {
                         'code': stock_code,
@@ -206,6 +210,10 @@ class AkshareHistoricalCollector:
                         'ma20': res['ma20_d'],
                         'mavol20': res['mavol20_m'],
                         'bias': res['bias'],
+                        'd1': res.get('d1'),
+                        'd1_date': res.get('d1_date'),
+                        'd20': res.get('d20'),
+                        'd20_date': res.get('d20_date'),
                         'created_at': datetime.now()
                     })
                     saved_count += 1

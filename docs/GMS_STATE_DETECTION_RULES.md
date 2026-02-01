@@ -1,0 +1,625 @@
+# GSM 选股策略状态判定规则明细
+
+## 目录
+- [1. 概述](#1-概述)
+- [2. 吸附态判定规则](#2-吸附态判定规则)
+- [3. 突变态判定规则](#3-突变态判定规则)
+- [4. 信号检测逻辑](#4-信号检测逻辑)
+- [5. 配置参数说明](#5-配置参数说明)
+- [6. 判定流程图](#6-判定流程图)
+- [7. 实际应用示例](#7-实际应用示例)
+
+---
+
+## 1. 概述
+
+GMS（均值引力与动量突变策略）采用**双模块阶梯式评分**系统，将股票状态分为两种核心形态：
+
+### 1.1 吸附态（左侧买点）
+- **定义**：价格极度接近均线，成交量萎缩，处于均值吸附状态
+- **特征**：F > Z（下跌天数 > 上涨天数），Δ < 0，价格粘合均线，地量洗盘
+- **等级**：S级（优秀）、A级（良好）、无等级
+
+### 1.2 突变态（右侧买点）
+- **定义**：价格突破均线，成交量放大，处于动量引爆状态
+- **特征**：d₂₀ > d，Δ > 0，放量确认，攻击强度高
+- **等级**：全速切入、分批买入、无等级
+
+### 1.3 评分体系
+- **吸附态总分**：0-100分（时间耗散 + 引力粘合 + 成交量缩）
+- **突变态总分**：0-100分（盈亏反转 + 推力支撑 + 攻击强度，可含负分）
+- **综合总分**：取两模块较高者，用于排序
+
+---
+
+## 2. 吸附态判定规则
+
+### 2.1 吸附态等级判定
+
+#### S级（优秀）判定
+```python
+if score_accumulation >= 85:
+    accumulation_grade = "S"
+```
+
+#### A级（良好）判定
+```python
+elif score_accumulation >= 70:
+    accumulation_grade = "A"
+```
+
+#### 无等级判定
+```python
+else:
+    accumulation_grade = ""
+```
+
+### 2.2 吸附态评分构成（满分100分）
+
+#### 2.2.1 时间耗散维度（权重30分）
+**指标**：F/Z 数方比（下跌天数/上涨天数）
+
+**评分规则**：
+```python
+def _score_accumulation_fz(fz_ratio):
+    """F/Z ≥ 2.5 → 30分（满分）
+       1.5 ≤ F/Z < 2.5 → 20分（2/3权重）
+       F/Z < 1.5 → 0分
+    """
+    if fz_ratio >= 2.5:
+        return 30.0
+    elif fz_ratio >= 1.5:
+        return 20.0
+    else:
+        return 0.0
+```
+
+**配置参数**：
+- `accumulation_fz_tiers`: [2.5, 1.5] - F/Z 分级阈值
+- `weight_acc_fz`: 30 - 时间耗散权重
+
+#### 2.2.2 引力粘合维度（权重40分）
+**指标**：|Δ/d| 相对偏离率
+
+**评分规则**：
+```python
+def _score_accumulation_balance(abs_ratio_d):
+    """|Δ/d| ≤ 0.01 → 40分（满分）
+       0.01 < |Δ/d| ≤ 0.015 → 20分（1/2权重）
+       |Δ/d| > 0.015 → 0分
+    """
+    if abs_ratio_d <= 0.01:
+        return 40.0
+    elif abs_ratio_d <= 0.015:
+        return 20.0
+    else:
+        return 0.0
+```
+
+**配置参数**：
+- `balance_ratio_d_tiers`: [0.01, 0.015] - 引力粘合分级阈值
+- `weight_acc_balance`: 40 - 引力粘合权重
+
+#### 2.2.3 成交量缩维度（权重30分）
+**指标**：m₂₀/m 量比（当日成交量/20日平均成交量）
+
+**评分规则**：
+```python
+def _score_accumulation_volume(volume_ratio):
+    """m₂₀/m ≤ 0.6 → 30分（满分）
+       0.6 < m₂₀/m ≤ 0.8 → 15分（1/2权重）
+       m₂₀/m > 0.8 → 0分
+    """
+    if volume_ratio <= 0.6:
+        return 30.0
+    elif volume_ratio <= 0.8:
+        return 15.0
+    else:
+        return 0.0
+```
+
+**配置参数**：
+- `volume_ratio_shrink_tiers`: [0.6, 0.8] - 成交量缩分级阈值
+- `weight_acc_volume`: 30 - 成交量缩权重
+
+### 2.3 吸附态前置条件
+
+#### 传统判定条件（无等级时使用）
+```python
+# 1. 必须有上涨天数
+if indicators.rising_days <= 0:
+    return False
+
+# 2. 下跌天数 > 上涨天数（充分蓄势）
+if indicators.falling_days <= indicators.rising_days:
+    return False
+
+# 3. 宏观位移为负（d20 < d1）
+if indicators.delta >= 0:
+    return False
+```
+
+#### 等级优先判定
+```python
+# 如果已有S/A等级，跳过前置条件检查
+if getattr(indicators, "accumulation_grade", None) in ("S", "A"):
+    pass  # 直接进入后续判定
+```
+
+---
+
+## 3. 突变态判定规则
+
+### 3.1 突变态等级判定
+
+#### 全速切入判定
+```python
+if score_momentum >= 90:
+    momentum_grade = "全速切入"
+```
+
+#### 分批买入判定
+```python
+elif score_momentum >= 80:
+    momentum_grade = "分批买入"
+```
+
+#### 无等级判定
+```python
+else:
+    momentum_grade = ""
+```
+
+### 3.2 突变态评分构成（满分100分，可含负分）
+
+#### 3.2.1 盈亏反转维度（权重40分）
+**指标**：Δ/d₁ 突变率
+
+**评分规则**：
+```python
+def _score_momentum_ratio_d1(ratio_d1):
+    """0 < Δ/d₁ ≤ 0.001 → 20分（1/2权重，刚过0轴）
+       0.001 < Δ/d₁ ≤ 0.03 → 40分（满分，刚突破）
+       Δ/d₁ > 0.03 → 0分（已涨太多，非买点）
+       Δ/d₁ ≤ 0 → 0分（未突破）
+    """
+    if 0 < ratio_d1 <= 0.001:
+        return 20.0
+    elif 0.001 < ratio_d1 <= 0.03:
+        return 40.0
+    else:
+        return 0.0
+```
+
+**配置参数**：
+- `ratio_d1_tiers`: [0.001, 0.03] - 盈亏反转分级阈值
+- `weight_mom_ratio_d1`: 40 - 盈亏反转权重
+
+#### 3.2.2 推力支撑维度（权重30分）
+**指标**：d₂₀ - d 瞬时偏离
+
+**评分规则**：
+```python
+def _score_momentum_deviation(instant_deviation, series):
+    """d₂₀ - d ≤ 0 → -10分（固定负分，未突破均线）
+       d₂₀ - d > 0 且站稳3日 → 30分（满分）
+       d₂₀ - d > 0 且仅当日 → 15分（1/2权重）
+    """
+    if instant_deviation <= 0:
+        return -10.0  # 未突破均线，固定负分
+    
+    # 检查是否站稳3日
+    if series and len(series) >= 3 and all(x > 0 for x in series[-3:]):
+        return 30.0
+    else:
+        return 15.0  # 仅当日突破
+```
+
+**配置参数**：
+- `instant_deviation_stable_days`: 3 - 站稳天数要求
+- `weight_mom_deviation`: 30 - 推力支撑权重
+
+#### 3.2.3 攻击强度维度（权重30分）
+**指标**：m₂₀/m 量比
+
+**评分规则**：
+```python
+def _score_momentum_volume(volume_ratio):
+    """m₂₀/m ≥ 2.0 → 30分（满分）
+       1.5 ≤ m₂₀/m < 2.0 → 20分（2/3权重）
+       m₂₀/m < 1.5 → 0分
+    """
+    if volume_ratio >= 2.0:
+        return 30.0
+    elif volume_ratio >= 1.5:
+        return 20.0
+    else:
+        return 0.0
+```
+
+**配置参数**：
+- `volume_ratio_attack_tiers`: [2.0, 1.5] - 攻击强度分级阈值
+- `weight_mom_volume`: 30 - 攻击强度权重
+
+### 3.3 突变态前置条件
+
+#### 传统判定条件（无等级时使用）
+```python
+# 1. 价格突破均线
+if indicators.instant_deviation <= 0:  # d20 > d
+    return False
+
+# 2. 宏观位移为正（上涨趋势）
+if indicators.delta <= 0:  # Δ > 0
+    return False
+```
+
+#### 等级优先判定
+```python
+# 如果已有全速切入/分批买入等级，跳过前置条件检查
+if getattr(indicators, "momentum_grade", None) in ("全速切入", "分批买入"):
+    pass  # 直接进入后续判定
+```
+
+---
+
+## 4. 信号检测逻辑
+
+### 4.1 左侧买点（均值吸附）检测
+
+#### 完整判定逻辑
+```python
+def detect_left_buy(self, indicators):
+    """左侧买点检测"""
+    
+    # 1. 等级优先：S/A级直接通过前置条件
+    if getattr(indicators, "accumulation_grade", None) in ("S", "A"):
+        pass
+    else:
+        # 前置条件检查
+        if indicators.rising_days <= 0:
+            return False
+        if indicators.falling_days <= indicators.rising_days:  # F > Z
+            return False
+        if indicators.delta >= 0:  # Δ < 0
+            return False
+    
+    # 2. 引力粘合检查：|Δ/d₂₀| < 1.5%
+    if indicators.ratio_d20 is None or abs(indicators.ratio_d20) >= 0.015:
+        return False
+    
+    # 3. 地量洗盘检查：m₂₀ < 0.8m
+    if indicators.volume_ratio is None or indicators.volume_ratio >= 0.8:
+        return False
+    
+    return True
+```
+
+#### 配置参数
+- `ratio_d20_abs_max`: 0.015 - 最大偏离率
+- `volume_ratio_max`: 0.8 - 最大量比
+
+### 4.2 右侧买点（动量引爆）检测
+
+#### 完整判定逻辑
+```python
+def detect_right_buy(self, indicators):
+    """右侧买点检测"""
+    
+    # 1. 等级优先：全速切入/分批买入直接通过前置条件
+    if getattr(indicators, "momentum_grade", None) in ("全速切入", "分批买入"):
+        pass
+    else:
+        # 前置条件检查
+        if indicators.instant_deviation <= 0:  # d20 > d
+            return False
+        if indicators.delta <= 0:  # Δ > 0
+            return False
+    
+    # 2. 放量确认：m₂₀ > 1.5m
+    if indicators.volume_ratio is None or indicators.volume_ratio < 1.5:
+        return False
+    
+    return True
+```
+
+#### 配置参数
+- `volume_ratio_min`: 1.5 - 最小量比
+
+### 4.3 卖点检测
+
+#### 判定逻辑
+```python
+def detect_sell(self, indicators):
+    """卖点检测：乖离过大"""
+    
+    # 优先使用Δ/d指标
+    if self.use_ratio_d_for_exit and indicators.ratio_d is not None:
+        if indicators.ratio_d > 0.15:  # Δ/d > 15%
+            return True
+    
+    # 使用Δ/d₂₀指标
+    if indicators.ratio_d20 is not None:
+        if indicators.ratio_d20 > 0.15:  # Δ/d₂₀ > 15%
+            return True
+    
+    return False
+```
+
+#### 配置参数
+- `overbought_ratio`: 0.15 - 超买阈值
+- `use_ratio_d_for_exit`: False - 是否使用Δ/d作为退出条件
+
+---
+
+## 5. 配置参数说明
+
+### 5.1 吸附态配置参数
+
+```json
+{
+  "scoring": {
+    // 吸附态评分阈值
+    "accumulation_s_threshold": 85,    // S级阈值
+    "accumulation_a_threshold": 70,    // A级阈值
+    
+    // 吸附态分级阈值
+    "accumulation_fz_tiers": [2.5, 1.5],        // F/Z 分级：[满分阈值, 2/3分阈值]
+    "balance_ratio_d_tiers": [0.01, 0.015],     // |Δ/d| 分级：[满分阈值, 1/2分阈值]
+    "volume_ratio_shrink_tiers": [0.6, 0.8],    // m₂₀/m 分级：[满分阈值, 1/2分阈值]
+    
+    // 吸附态权重分配
+    "weight_acc_fz": 30,          // 时间耗散权重
+    "weight_acc_balance": 40,     // 引力粘合权重
+    "weight_acc_volume": 30       // 成交量缩权重
+  }
+}
+```
+
+### 5.2 突变态配置参数
+
+```json
+{
+  "scoring": {
+    // 突变态评分阈值
+    "momentum_full_threshold": 90,    // 全速切入阈值
+    "momentum_batch_threshold": 80,   // 分批买入阈值
+    
+    // 突变态分级阈值
+    "ratio_d1_tiers": [0.001, 0.03],          // Δ/d₁ 分级：[1/2分阈值, 满分阈值]
+    "volume_ratio_attack_tiers": [2.0, 1.5], // m₂₀/m 分级：[满分阈值, 2/3分阈值]
+    "instant_deviation_stable_days": 3,       // 站稳天数要求
+    
+    // 突变态权重分配
+    "weight_mom_ratio_d1": 40,     // 盈亏反转权重
+    "weight_mom_deviation": 30,    // 推力支撑权重
+    "weight_mom_volume": 30        // 攻击强度权重
+  }
+}
+```
+
+### 5.3 信号检测配置参数
+
+```json
+{
+  "left_buy": {
+    "ratio_d20_abs_max": 0.015,    // |Δ/d₂₀| < 1.5%
+    "volume_ratio_max": 0.8        // m₂₀ < 0.8m
+  },
+  "right_buy": {
+    "volume_ratio_min": 1.5        // m₂₀ > 1.5m
+  },
+  "exit": {
+    "overbought_ratio": 0.15,      // Δ/d₂₀ > 15%
+    "trend_break_days": 3          // 趋势破坏天数
+  },
+  "ratio_indicators": {
+    "use_ratio_d": true,           // 是否使用Δ/d指标
+    "use_ratio_d_for_exit": false  // 是否使用Δ/d作为退出条件
+  }
+}
+```
+
+---
+
+## 6. 判定流程图
+
+### 6.1 吸附态判定流程
+
+```
+开始
+  ↓
+计算F/Z数方比
+  ↓
+F/Z ≥ 2.5? ──否──→ F/Z ≥ 1.5? ──否──→ 时间耗散0分
+  │是                    │是
+  ↓                      ↓
+时间耗散30分          时间耗散20分
+  ↓                      ↓
+计算|Δ/d|偏离率        计算|Δ/d|偏离率
+  ↓                      ↓
+|Δ/d| ≤ 0.01? ──否──→ |Δ/d| ≤ 0.015? ──否──→ 引力粘合0分
+  │是                    │是
+  ↓                      ↓
+引力粘合40分          引力粘合20分
+  ↓                      ↓
+计算m₂₀/m量比          计算m₂₀/m量比
+  ↓                      ↓
+m₂₀/m ≤ 0.6? ──否──→ m₂₀/m ≤ 0.8? ──否──→ 成交量缩0分
+  │是                    │是
+  ↓                      ↓
+成交量缩30分          成交量缩15分
+  ↓                      ↓
+总分 = 三项得分之和    总分 = 三项得分之和
+  ↓                      ↓
+总分 ≥ 85? ──否──→ 总分 ≥ 70? ──否──→ 无等级
+  │是                    │是
+  ↓                      ↓
+S级吸附态              A级吸附态
+```
+
+### 6.2 突变态判定流程
+
+```
+开始
+  ↓
+计算Δ/d₁突变率
+  ↓
+Δ/d₁ ≤ 0? ──是──→ 盈亏反转0分
+  │否
+  ↓
+Δ/d₁ ≤ 0.001? ──否──→ Δ/d₁ ≤ 0.03? ──否──→ 盈亏反转0分
+  │是                    │是
+  ↓                      ↓
+盈亏反转20分          盈亏反转40分
+  ↓                      ↓
+计算d₂₀-d偏离          计算d₂₀-d偏离
+  ↓                      ↓
+d₂₀-d ≤ 0? ──是──→ 推力支撑-10分
+  │否
+  ↓
+站稳3日? ──否──→ 推力支撑15分
+  │是
+  ↓
+推力支撑30分
+  ↓
+计算m₂₀/m量比
+  ↓
+m₂₀/m < 1.5? ──是──→ 攻击强度0分
+  │否
+  ↓
+m₂₀/m < 2.0? ──是──→ 攻击强度20分
+  │否
+  ↓
+攻击强度30分
+  ↓
+总分 = 三项得分之和
+  ↓
+总分 ≥ 90? ──否──→ 总分 ≥ 80? ──否──→ 无等级
+  │是                    │是
+  ↓                      ↓
+全速切入              分批买入
+```
+
+---
+
+## 7. 实际应用示例
+
+### 7.1 吸附态S级判定示例
+
+**股票数据**：
+- F/Z = 3.2（下跌8天，上涨2.5天）
+- |Δ/d| = 0.008（偏离率0.8%）
+- m₂₀/m = 0.5（量比0.5倍）
+
+**评分计算**：
+```
+时间耗散：F/Z = 3.2 ≥ 2.5 → 30分
+引力粘合：|Δ/d| = 0.008 ≤ 0.01 → 40分
+成交量缩：m₂₀/m = 0.5 ≤ 0.6 → 30分
+总分：30 + 40 + 30 = 100分
+```
+
+**等级判定**：
+```
+100分 ≥ 85分 → S级吸附态
+```
+
+**信号检测**：
+```
+前置条件：F > Z ✓, Δ < 0 ✓
+引力粘合：|Δ/d₂₀| = 0.008 < 0.015 ✓
+地量洗盘：m₂₀/m = 0.5 < 0.8 ✓
+→ 左侧买点触发 ✓
+```
+
+### 7.2 突变态全速切入判定示例
+
+**股票数据**：
+- Δ/d₁ = 0.02（突变率2%）
+- d₂₀-d = 0.12（站稳3日）
+- m₂₀/m = 2.5（量比2.5倍）
+
+**评分计算**：
+```
+盈亏反转：Δ/d₁ = 0.02 ∈ (0.001, 0.03] → 40分
+推力支撑：d₂₀-d = 0.12 > 0 且站稳3日 → 30分
+攻击强度：m₂₀/m = 2.5 ≥ 2.0 → 30分
+总分：40 + 30 + 30 = 100分
+```
+
+**等级判定**：
+```
+100分 ≥ 90分 → 全速切入
+```
+
+**信号检测**：
+```
+前置条件：d₂₀ > d ✓, Δ > 0 ✓
+放量确认：m₂₀/m = 2.5 > 1.5 ✓
+→ 右侧买点触发 ✓
+```
+
+### 7.3 边界情况示例
+
+#### 吸附态A级边界
+**股票数据**：
+- F/Z = 2.0（刚好在1.5-2.5区间）
+- |Δ/d| = 0.012（刚好在0.01-0.015区间）
+- m₂₀/m = 0.7（刚好在0.6-0.8区间）
+
+**评分计算**：
+```
+时间耗散：F/Z = 2.0 → 20分
+引力粘合：|Δ/d| = 0.012 → 20分
+成交量缩：m₂₀/m = 0.7 → 15分
+总分：20 + 20 + 15 = 55分
+```
+
+**等级判定**：
+```
+55分 < 70分 → 无等级（需要前置条件检查）
+```
+
+#### 突变态分批买入边界
+**股票数据**：
+- Δ/d₁ = 0.005（刚好在0.001-0.03区间）
+- d₂₀-d = 0.08（仅当日突破）
+- m₂₀/m = 1.8（刚好在1.5-2.0区间）
+
+**评分计算**：
+```
+盈亏反转：Δ/d₁ = 0.005 → 40分
+推力支撑：d₂₀-d = 0.08 > 0 但仅当日 → 15分
+攻击强度：m₂₀/m = 1.8 → 20分
+总分：40 + 15 + 20 = 75分
+```
+
+**等级判定**：
+```
+75分 < 80分 → 无等级（需要前置条件检查）
+```
+
+---
+
+## 总结
+
+GMS策略的状态判定系统通过**双模块阶梯式评分**实现了对股票状态的精确刻画：
+
+### 核心特点
+1. **双重评分体系**：吸附态和突变态独立评分，互不干扰
+2. **等级优先机制**：S/A级和全速切入/分批买入等级可跳过前置条件
+3. **阶梯式评分**：每个维度采用多级阈值，评分更精细
+4. **灵活配置**：所有阈值和权重均可配置
+
+### 判定逻辑
+- **吸附态**：关注时间耗散、引力粘合、成交量缩三个维度
+- **突变态**：关注盈亏反转、推力支撑、攻击强度三个维度
+- **信号检测**：结合等级和具体指标进行最终判定
+
+### 应用价值
+- **左侧买点**：识别极度粘合、地量洗盘的吸筹机会
+- **右侧买点**：捕捉突破均线、放量确认的起涨机会
+- **风险控制**：通过乖离过大检测及时止盈
+
+该判定规则为量化选股提供了系统化、可操作的决策依据。

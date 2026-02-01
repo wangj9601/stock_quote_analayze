@@ -99,6 +99,18 @@ class GMSFrontendInterface:
                     else:
                         codes.append(c)
                 logger.info(f"GMS 股票池(全部港股): {len(codes)} 只")
+            elif market == "all":
+                cn_rows = self.db.query(StockBasicInfo.code).all()
+                cn_codes = [str(r[0]).zfill(6) if isinstance(r[0], int) else str(r[0]) for r in cn_rows if r[0] is not None]
+                hk_rows = self.db.query(StockBasicInfoHK.code).all()
+                hk_codes = []
+                for r in hk_rows:
+                    if r[0] is None:
+                        continue
+                    c = str(r[0]).strip()
+                    hk_codes.append(c.zfill(5) if c.isdigit() else c)
+                codes = cn_codes + hk_codes
+                logger.info(f"GMS 股票池(全部A+港股): {len(codes)} 只")
             else:
                 return []
 

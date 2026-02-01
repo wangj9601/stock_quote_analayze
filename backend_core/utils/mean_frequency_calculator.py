@@ -1,6 +1,17 @@
 import pandas as pd
 import numpy as np
 
+
+def _fmt_date(d):
+    """将日期转为 YYYY-MM-DD 字符串"""
+    if d is None:
+        return None
+    if hasattr(d, 'strftime'):
+        return d.strftime('%Y-%m-%d')
+    s = str(d)
+    return s[:10] if len(s) >= 10 else s
+
+
 class MeanFrequencyResonanceCalculator:
     """
     均值频率共振量化交易指标计算器
@@ -20,23 +31,26 @@ class MeanFrequencyResonanceCalculator:
     m20 = 当前成交量
     """
     
-    def calculate(self, closes, volumes, window=20):
+    def calculate(self, closes, volumes, dates=None, window=20):
         """
         计算均值频率共振指标
-        
+
         Args:
             closes: 收盘价列表或数组
             volumes: 成交量列表或数组
+            dates: 可选，与 closes 一一对应的交易日期列表（用于输出 d1_date、d20_date）
             window: 计算窗口，默认为20
-            
+
         Returns:
-            List[Dict]: 指标结果列表
+            List[Dict]: 指标结果列表，每项含 d1、d1_date、d20、d20_date（当 dates 传入时）
         """
         # PVFRS 指标计算通常需要 window + 1 的数据来计算上涨/下跌天数
         # 因为计算上涨/下跌需要比较 T 和 T-1 的价格
         if len(closes) < window + 1 or len(volumes) < window + 1:
             return []
-            
+        if dates is not None and len(dates) != len(closes):
+            dates = None
+
         df = pd.DataFrame({
             'close': closes,
             'volume': volumes
@@ -91,7 +105,7 @@ class MeanFrequencyResonanceCalculator:
                 if d1 != 0 and not pd.isna(d1):
                     ratio_d1 = float(delta / d1)
                 
-                results.append({
+                item = {
                     'ma20_d': float(df['ma20'].iloc[i]),
                     'mavol20_m': float(df['mavol20'].iloc[i]),
                     'macro_displacement_delta': delta,
@@ -103,7 +117,17 @@ class MeanFrequencyResonanceCalculator:
                     'rising_days_z': int(df['z'].iloc[i]),
                     'falling_days_f': int(df['f'].iloc[i]),
                     'bias': float((df['close'].iloc[i] - df['ma20'].iloc[i]) / df['ma20'].iloc[i]) if df['ma20'].iloc[i] != 0 else 0.0
-                })
+                }
+                item['d20'] = float(d20)
+                item['d1'] = float(d1) if d1 is not None and not pd.isna(d1) else None
+                if dates is not None:
+                    item['d20_date'] = _fmt_date(dates[i])
+                    d1_idx = i - (window - 1)
+                    item['d1_date'] = _fmt_date(dates[d1_idx]) if d1_idx >= 0 else None
+                else:
+                    item['d20_date'] = None
+                    item['d1_date'] = None
+                results.append(item)
                 
         return results
     
@@ -131,14 +155,14 @@ class MeanFrequencyResonanceCalculator:
             closes.append(float(row.close))
             volumes.append(float(row.volume))
         
-        # 使用现有的 calculate 方法计算指标
-        results = self.calculate(closes, volumes, window)
-        
+        # 使用现有的 calculate 方法计算指标（传入 dates 以输出 d1_date、d20_date）
+        results = self.calculate(closes, volumes, dates=dates, window=window)
+
         # 构建 DataFrame
         data = []
         for i, result in enumerate(results):
             if result is not None:
-                data.append({
+                row = {
                     'date': dates[i],
                     'ma20_d': result['ma20_d'],
                     'mavol20_m': result['mavol20_m'],
@@ -151,6 +175,10 @@ class MeanFrequencyResonanceCalculator:
                     'rising_days_z': result['rising_days_z'],
                     'falling_days_f': result['falling_days_f'],
                     'bias': result['bias']
-                })
+                }
+                for k in ('d1', 'd1_date', 'd20', 'd20_date'):
+                    if k in result:
+                        row[k] = result[k]
+                data.append(row)
         
         return pd.DataFrame(data)

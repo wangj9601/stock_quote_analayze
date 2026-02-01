@@ -684,6 +684,19 @@ async def get_gms_strategy(
     watch_threshold: Optional[float] = Query(None, description="重点关注分数"),
     alert_threshold: Optional[float] = Query(None, description="动量突变预警分数"),
     overbought_ratio: Optional[float] = Query(None, description="乖离过大退出阈值"),
+    # 双模块阶梯与执行标准（精细化评分）
+    accumulation_s_threshold: Optional[float] = Query(None, description="吸附态 S 级阈值"),
+    accumulation_a_threshold: Optional[float] = Query(None, description="吸附态 A 级阈值"),
+    momentum_full_threshold: Optional[float] = Query(None, description="突变态全速切入阈值"),
+    momentum_batch_threshold: Optional[float] = Query(None, description="突变态分批买入阈值"),
+    instant_deviation_stable_days: Optional[int] = Query(None, description="推力支撑站稳天数"),
+    # 评分权重（可配置）
+    weight_acc_fz: Optional[float] = Query(None, description="吸附态 时间耗散 F/Z 权重"),
+    weight_acc_balance: Optional[float] = Query(None, description="吸附态 引力粘合 |Δ/d| 权重"),
+    weight_acc_volume: Optional[float] = Query(None, description="吸附态 成交量缩 权重"),
+    weight_mom_ratio_d1: Optional[float] = Query(None, description="突变态 盈亏反转 Δ/d₁ 权重"),
+    weight_mom_deviation: Optional[float] = Query(None, description="突变态 推力支撑 d₂₀-d 权重"),
+    weight_mom_volume: Optional[float] = Query(None, description="突变态 攻击强度 m₂₀/m 权重"),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
@@ -782,6 +795,28 @@ async def get_gms_strategy(
             config.setdefault("exit", {})["overbought_ratio"] = overbought_ratio
         if volume_ratio_min is not None:
             config.setdefault("right_buy", {})["volume_ratio_min"] = volume_ratio_min
+        if accumulation_s_threshold is not None:
+            config.setdefault("scoring", {})["accumulation_s_threshold"] = accumulation_s_threshold
+        if accumulation_a_threshold is not None:
+            config.setdefault("scoring", {})["accumulation_a_threshold"] = accumulation_a_threshold
+        if momentum_full_threshold is not None:
+            config.setdefault("scoring", {})["momentum_full_threshold"] = momentum_full_threshold
+        if momentum_batch_threshold is not None:
+            config.setdefault("scoring", {})["momentum_batch_threshold"] = momentum_batch_threshold
+        if instant_deviation_stable_days is not None:
+            config.setdefault("scoring", {})["instant_deviation_stable_days"] = instant_deviation_stable_days
+        if weight_acc_fz is not None:
+            config.setdefault("scoring", {})["weight_acc_fz"] = weight_acc_fz
+        if weight_acc_balance is not None:
+            config.setdefault("scoring", {})["weight_acc_balance"] = weight_acc_balance
+        if weight_acc_volume is not None:
+            config.setdefault("scoring", {})["weight_acc_volume"] = weight_acc_volume
+        if weight_mom_ratio_d1 is not None:
+            config.setdefault("scoring", {})["weight_mom_ratio_d1"] = weight_mom_ratio_d1
+        if weight_mom_deviation is not None:
+            config.setdefault("scoring", {})["weight_mom_deviation"] = weight_mom_deviation
+        if weight_mom_volume is not None:
+            config.setdefault("scoring", {})["weight_mom_volume"] = weight_mom_volume
         gms_if = GMSFrontendInterface(db, config)
         gms_if.set_selection_config(min_score=min_score, max_results=limit or 10000)
 
@@ -881,11 +916,18 @@ async def get_gms_strategy(
             if quote and hasattr(quote, "change_percent") and quote.change_percent is not None:
                 change_percent = float(quote.change_percent)
 
+            st = r.get("score_total")
+            signal_strength = (float(st) / 100.0) if st is not None and st > 0 else (r.get("signal_strength") or 0.0)
             results_data.append({
                 "symbol": code,
                 "code": code,
                 "name": name,
                 "score_total": r["score_total"],
+                "score_accumulation": r.get("score_accumulation"),
+                "score_momentum": r.get("score_momentum"),
+                "accumulation_grade": r.get("accumulation_grade", ""),
+                "momentum_grade": r.get("momentum_grade", ""),
+                "signal_strength": signal_strength,
                 "buy_type": r["buy_type"],
                 "current_price": current_price,
                 "ratio_d20": r.get("ratio_d20"),

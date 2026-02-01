@@ -795,6 +795,10 @@
     padding: 6px 12px;
     text-align: left;
 }
+.gms-weight-table .gms-judge {
+    color: #1565c0;
+    font-weight: 500;
+}
 .gms-weight-table th {
     background: #f5f5f5;
     font-weight: 600;

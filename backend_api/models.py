@@ -589,7 +589,12 @@ class MeanFrequencyResonanceIndicators(Base):
     ma20_d = Column(Float)                    # 移动平均线 MA20 (d)
     mavol20_m = Column(Float)                 # 移动平均成交量 MAVOL20 (m)
     bias = Column(Float)                      # 乖离率 (Bias) = (Pt - d) / d
-    
+
+    d1 = Column(Float, nullable=True)         # 周期起点收盘价 d₁
+    d1_date = Column(String, nullable=True)   # d₁ 对应的交易日期 YYYY-MM-DD
+    d20 = Column(Float, nullable=True)        # 周期末/当日收盘价 d₂₀
+    d20_date = Column(String, nullable=True)  # d₂₀ 对应的交易日期 YYYY-MM-DD
+
     created_at = Column(DateTime, default=datetime.now)
 
 
