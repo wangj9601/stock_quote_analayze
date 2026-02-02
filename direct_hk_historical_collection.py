@@ -74,22 +74,74 @@ def fetch_stock_data_from_akshare(stock_code: str, start_date: str, end_date: st
         DataFrame 或 None
     """
     try:
-        # 尝试使用东方财富数据源
-        logger.debug(f"正在从东方财富获取 {stock_code} 的数据...")
-        df = ak.stock_hk_hist_em(
-            symbol=stock_code,
-            period="daily",
-            start_date=start_date,
-            end_date=end_date,
-            adjust=""
-        )
+        logger.debug(f"正在从AKShare获取 {stock_code} 的数据...")
         
-        if df is not None and not df.empty:
-            logger.debug(f"成功从东方财富获取 {stock_code} 的 {len(df)} 条数据")
-            return df
-        else:
-            logger.warning(f"东方财富未返回 {stock_code} 的数据")
-            return None
+        # 方法1: 优先使用 stock_hk_hist（已验证可用）
+        try:
+            df = ak.stock_hk_hist(
+                symbol=stock_code,
+                period="daily",
+                start_date=start_date,
+                end_date=end_date,
+                adjust=""
+            )
+            if df is not None and not df.empty:
+                logger.debug(f"成功从 stock_hk_hist 获取 {stock_code} 的 {len(df)} 条数据")
+                return df
+            else:
+                logger.warning(f"stock_hk_hist 返回空数据")
+        except Exception as e:
+            logger.warning(f"stock_hk_hist 接口失败: {e}")
+        
+        # 方法2: 尝试使用 stock_hk_hist_sina（新浪数据源）
+        try:
+            df = ak.stock_hk_hist_sina(
+                symbol=stock_code,
+                start_date=start_date,
+                end_date=end_date
+            )
+            if df is not None and not df.empty:
+                logger.debug(f"成功从 stock_hk_hist_sina 获取 {stock_code} 的 {len(df)} 条数据")
+                return df
+            else:
+                logger.warning(f"stock_hk_hist_sina 返回空数据")
+        except Exception as e:
+            logger.warning(f"stock_hk_hist_sina 接口失败: {e}")
+        
+        # 方法3: 尝试使用 stock_hk_hist_min_em（分钟级数据，取日线）
+        try:
+            df = ak.stock_hk_hist_min_em(
+                symbol=stock_code,
+                period="1",
+                start_date=start_date,
+                end_date=end_date
+            )
+            if df is not None and not df.empty:
+                logger.debug(f"成功从 stock_hk_hist_min_em 获取 {stock_code} 的 {len(df)} 条数据")
+                return df
+            else:
+                logger.warning(f"stock_hk_hist_min_em 返回空数据")
+        except Exception as e:
+            logger.warning(f"stock_hk_hist_min_em 接口失败: {e}")
+        
+        # 方法4: 尝试使用 stock_hk_spot（实时数据，作为备选）
+        try:
+            df = ak.stock_hk_spot()
+            if df is not None and not df.empty:
+                # 筛选指定股票
+                stock_data = df[df['代码'] == stock_code]
+                if not stock_data.empty:
+                    logger.debug(f"成功从 stock_hk_spot 获取 {stock_code} 的实时数据")
+                    return stock_data
+                else:
+                    logger.warning(f"stock_hk_spot 中未找到股票 {stock_code}")
+            else:
+                logger.warning(f"stock_hk_spot 返回空数据")
+        except Exception as e:
+            logger.warning(f"stock_hk_spot 接口失败: {e}")
+        
+        logger.warning(f"所有接口都无法获取 {stock_code} 的数据")
+        return None
             
     except Exception as e:
         logger.error(f"从AKShare获取 {stock_code} 数据失败: {e}")
@@ -425,9 +477,9 @@ if __name__ == '__main__':
 """)
     
     # ========== 配置采集参数 ==========
-    START_DATE = '2024-01-01'
-    END_DATE = '2024-01-31'
-    COLLECTION_MODE = 'specified'  # 'specified' 或 'all'
+    START_DATE = '2025-12-01'
+    END_DATE = '2026-02-01'
+    COLLECTION_MODE = 'all'  # 'specified' 或 'all'
     CALCULATE_INDICATORS = True    # 是否计算技术指标
     
     STOCK_CODES = [
