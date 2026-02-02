@@ -1242,3 +1242,197 @@ mark {
 .error-close:hover {
     color: #533f03;
 }
+
+/* =========================================
+   GMS 指标样式
+   ========================================= */
+.gms-indicators {
+    padding: 1rem 0;
+}
+
+.gms-overview {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.gms-score-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 0.75rem 1.5rem;
+    min-width: 80px;
+}
+
+.gms-score-box.score-high {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    color: #059669;
+}
+
+.gms-score-box.score-medium {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    color: #d97706;
+}
+
+.gms-score-box.score-low {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    color: #dc2626;
+}
+
+.gms-score-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.gms-score-label {
+    font-size: 0.75rem;
+    color: inherit;
+    opacity: 0.9;
+}
+
+.gms-main-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gms-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.gms-info-row .label {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.gms-info-row .value {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 1rem;
+}
+
+.gms-info-row .value.highlight {
+    color: #2563eb;
+}
+
+.gms-details-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.gms-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.gms-detail-item .label {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.gms-detail-item .value {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.95rem;
+}
+
+/* GMS 详情展开样式 */
+.gms-details-toggle-container {
+    margin-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 0.5rem;
+}
+
+.gms-details-summary {
+    cursor: pointer;
+    color: #2563eb;
+    font-size: 0.875rem;
+    font-weight: 500;
+    user-select: none;
+    outline: none;
+}
+
+.gms-details-summary:hover {
+    text-decoration: underline;
+}
+
+.gms-details-content {
+    margin-top: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+}
+
+/* 复用自 screening.css 的表格样式 */
+.gms-score-detail-section {
+    margin-bottom: 12px;
+}
+
+.gms-score-detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.gms-score-detail-section strong {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.gms-weight-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+}
+
+.gms-weight-table th,
+.gms-weight-table td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 12px;
+    text-align: left;
+}
+
+.gms-weight-table th {
+    background: #f1f5f9;
+    font-weight: 600;
+    color: #475569;
+}
+
+.gms-weight-table .gms-judge {
+    color: #2563eb;
+    font-weight: 500;
+}
+
+.gms-indicators-section {
+    padding-left: 16px;
+    border-left: 2px solid #e2e8f0;
+    margin-top: 1rem;
+}
+
+
+/* 调整详情内的表格在小屏幕下的显示 */
+@media (max-width: 640px) {
+    .gms-weight-table {
+        font-size: 12px;
+    }
+
+    .gms-weight-table th,
+    .gms-weight-table td {
+        padding: 4px 8px;
+    }
+}

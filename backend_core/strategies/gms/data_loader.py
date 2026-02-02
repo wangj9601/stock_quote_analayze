@@ -21,14 +21,17 @@ class GMSDataLoader:
         codes: List[str],
         date: str,
         market_type: str = "CN",
+        use_latest_per_stock: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        批量加载指定日期、市场的指标数据
+        批量加载指定日期、市场的指标数据。
 
         Args:
             codes: 股票代码列表
-            date: 日期 (YYYY-MM-DD)
+            date: 目标日期 (YYYY-MM-DD)
             market_type: CN 或 HK
+            use_latest_per_stock: 若为 True，当某股票在目标日无数据时，使用该股票
+                date <= date 的最近一天的数据（历史行情表中无当天数据时以最近一天为筛选条件）
 
         Returns:
             每只股票的指标字典列表，包含表字段及衍生的 ratio_d、volume_ratio
@@ -37,13 +40,40 @@ class GMSDataLoader:
             return []
 
         try:
+            from sqlalchemy import desc
             from backend_api.models import MeanFrequencyResonanceIndicators
 
-            query = self.db.query(MeanFrequencyResonanceIndicators).filter(
-                MeanFrequencyResonanceIndicators.code.in_(codes),
-                MeanFrequencyResonanceIndicators.date == str(date).strip()[:10],
-            )
-            rows = query.all()
+            date_str = str(date).strip()[:10]
+            if use_latest_per_stock:
+                # 每只股票取 date <= date_str 的最近一条记录（无当天数据则用最近可用日）
+                query = (
+                    self.db.query(MeanFrequencyResonanceIndicators)
+                    .filter(
+                        MeanFrequencyResonanceIndicators.code.in_(codes),
+                        MeanFrequencyResonanceIndicators.date <= date_str,
+                        MeanFrequencyResonanceIndicators.market_type == market_type,
+                    )
+                    .order_by(
+                        MeanFrequencyResonanceIndicators.code,
+                        desc(MeanFrequencyResonanceIndicators.date),
+                    )
+                )
+                rows = query.all()
+                # 按 code 去重，保留每个 code 的第一条（即最近日期）
+                seen = set()
+                unique_rows = []
+                for item in rows:
+                    if item.code not in seen:
+                        seen.add(item.code)
+                        unique_rows.append(item)
+                rows = unique_rows
+            else:
+                query = self.db.query(MeanFrequencyResonanceIndicators).filter(
+                    MeanFrequencyResonanceIndicators.code.in_(codes),
+                    MeanFrequencyResonanceIndicators.date == date_str,
+                    MeanFrequencyResonanceIndicators.market_type == market_type,
+                )
+                rows = query.all()
 
             result = []
             for item in rows:
@@ -84,7 +114,10 @@ class GMSDataLoader:
                 }
                 result.append(row_dict)
 
-            logger.info(f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}")
+            logger.info(
+                f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}"
+                + (", 无当日数据时已用最近可用日" if use_latest_per_stock else "")
+            )
             return result
 
         except Exception as e:
@@ -141,6 +174,7 @@ class GMSDataLoader:
                 .filter(
                     MeanFrequencyResonanceIndicators.code.in_(codes),
                     MeanFrequencyResonanceIndicators.date <= end_dt,
+                    MeanFrequencyResonanceIndicators.market_type == market_type,
                 )
                 .order_by(
                     MeanFrequencyResonanceIndicators.code,

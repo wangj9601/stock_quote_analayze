@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators
+from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
@@ -923,6 +923,32 @@ async def get_kline_hist(
                         item.update(ma_dict[item['date']])
             except Exception as e:
                 print(f"[kline_hist] MA数据查询失败: {e}")
+            
+            # 查询MAVOL数据
+            try:
+                mavol_query = db.query(MAVOLIndicators).filter(
+                    MAVOLIndicators.code == code,
+                    MAVOLIndicators.market_type.in_(['CN', 'A股']),
+                    MAVOLIndicators.date >= start_date,
+                    MAVOLIndicators.date <= end_date
+                ).order_by(MAVOLIndicators.date.asc())
+                
+                mavol_records = mavol_query.all()
+                mavol_dict = {}
+                for record in mavol_records:
+                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                    mavol_dict[date_str] = {
+                        "mavol5": round(float(record.mavol5), 2) if record.mavol5 is not None else None,
+                        "mavol10": round(float(record.mavol10), 2) if record.mavol10 is not None else None,
+                        "mavol20": round(float(record.mavol20), 2) if record.mavol20 is not None else None
+                    }
+                
+                # 将MAVOL数据合并到K线数据中
+                for item in result:
+                    if item['date'] in mavol_dict:
+                        item.update(mavol_dict[item['date']])
+            except Exception as e:
+                print(f"[kline_hist] MAVOL数据查询失败: {e}")
             
             # 如果没有指定indicator或indicator为vol，只返回基础K线数据和成交量（已经在result中）
             

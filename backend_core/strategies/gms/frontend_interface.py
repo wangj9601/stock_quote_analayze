@@ -76,8 +76,9 @@ class GMSFrontendInterface:
     def _get_stock_pool(self, date: str, market: str) -> List[str]:
         """
         按数据来源获取股票池：
-        - cn（全部A股）：stock_basic_info 表
-        - hk（全部港股）：stock_basic_info_hk 表
+        - cn（全部A股）：A 股基本信息表 stock_basic_info 全部代码
+        - hk（全部港股）：港股基本信息表 stock_basic_info_hk 全部代码
+        - all：上述两表合并（本接口由 API 在 scope=cn/hk 时分别传 market，此处 all 仅作备用）
         """
         try:
             from backend_api.models import StockBasicInfo, StockBasicInfoHK

@@ -91,16 +91,25 @@
                             <button class="period-btn" data-period="1Y">年K</button>
                         </div>
                         <div class="chart-indicators">
-                            <select class="indicator-select">
-                                <option value="ma">MA均线</option>
-                                <option value="ema">EMA均线</option>
-                                <option value="boll">布林带</option>
+                            <select class="indicator-select" title="主图指标">
+                                <option value="ma">主图: MA</option>
+                                <option value="ema">主图: EMA</option>
+                                <option value="boll">主图: BOLL</option>
                             </select>
-                            <select class="sub-indicator-select">
-                                <option value="vol">成交量</option>
-                                <option value="macd">MACD</option>
-                                <option value="kdj">KDJ</option>
-                                <option value="rsi">RSI</option>
+                            <select class="sub-indicator-select-1" title="副图1指标">
+                                <option value="vol">副图1: 成交量</option>
+                                <option value="macd">副图1: MACD</option>
+                                <option value="kdj">副图1: KDJ</option>
+                                <option value="rsi">副图1: RSI</option>
+                                <option value="boll">副图1: BOLL</option>
+                            </select>
+                            <select class="sub-indicator-select-2" title="副图2指标">
+                                <option value="none">副图2: 关闭</option>
+                                <option value="vol">副图2: 成交量</option>
+                                <option value="macd" selected>副图2: MACD</option>
+                                <option value="kdj">副图2: KDJ</option>
+                                <option value="rsi">副图2: RSI</option>
+                                <option value="boll">副图2: BOLL</option>
                             </select>
                         </div>
                     </div>
@@ -127,7 +136,7 @@
                     <!-- 智能分析 -->
                     <div class="tab-panel active" id="analysis">
                         <div class="analysis-grid">
-                            <div class="analysis-card">
+                            <div class="analysis-card" style="display: none;">
                                 <h3>🎯 价格预测</h3>
                                 <div class="prediction-result">
                                     <div class="prediction-price">
@@ -141,6 +150,13 @@
                                         <span>置信度：75%</span>
                                         <span>预测周期：30天</span>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div class="analysis-card" id="gmsCard">
+                                <h3>🧬 GMS指标</h3>
+                                <div class="gms-indicators" id="gmsDataContainer">
+                                    <div class="loading-spinner">数据加载中...</div>
                                 </div>
                             </div>
 
@@ -162,7 +178,7 @@
                             </div>
 
                             <div class="analysis-card">
-                                <h3>📈 技术指标</h3>
+                                <h3>📈 其他指标</h3>
                                 <div class="technical-indicators">
                                     <div class="indicator-row">
                                         <span class="indicator-name">RSI(14)</span>

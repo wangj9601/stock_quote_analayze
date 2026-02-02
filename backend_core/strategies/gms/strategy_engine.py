@@ -60,7 +60,8 @@ class GMSStrategyEngine:
 
         def _is_a_share(c: str) -> bool:
             s = str(c).strip()
-            return len(s) >= 6 and s.isdigit() and s[0] in "603"
+            # 6 位数字：6/0/3 为 A 股，9 为沪市 B 股（指标表按 CN 存储），均按 CN 查指标
+            return len(s) >= 6 and s.isdigit() and s[0] in "6039"
 
         if market == "all":
             cn_codes = [c for c in codes if _is_a_share(c)]
@@ -73,7 +74,10 @@ class GMSStrategyEngine:
             if not codes_sub:
                 continue
 
-            rows = self.data_loader.load_indicators(codes_sub, date, mt)
+            # 无目标日行情时使用该股票最近可用日数据作为筛选条件
+            rows = self.data_loader.load_indicators(
+                codes_sub, date, mt, use_latest_per_stock=True
+            )
             dev_series_by_code: Dict[str, List[float]] = {}
             if self.stable_days > 1:
                 multi_rows = self.data_loader.load_indicators_multi_day(

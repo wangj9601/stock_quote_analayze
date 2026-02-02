@@ -841,12 +841,13 @@ class StockAnalysisService:
             # 关键价位
             key_levels = KeyLevels.calculate_key_levels(historical_data, current_price)
             
-            # AI 深度分析 (Gemini) - 使用超时保护，失败不影响其他结果
-            try:
-                ai_insight = self._get_gemini_analysis(stock_code, historical_data, technical_indicators)
-            except Exception as e:
-                logger.warning(f"AI分析失败，使用默认值: {str(e)}")
-                ai_insight = "AI 分析服务暂不可用"
+            # AI 深度分析 (Gemini) - 已屏蔽，避免配额超限
+            # try:
+            #     ai_insight = self._get_gemini_analysis(stock_code, historical_data, technical_indicators)
+            # except Exception as e:
+            #     logger.warning(f"AI分析失败，使用默认值: {str(e)}")
+            #     ai_insight = "AI 分析服务暂不可用"
+            ai_insight = ""  # 暂时屏蔽 Gemini 分析，避免配额超限
             
             return {
                 "success": True,

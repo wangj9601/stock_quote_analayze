@@ -55,7 +55,8 @@ const StockPage = {
     currentPeriod: '1d',
     analysisDataLoaded: false, // 添加标志跟踪智能分析数据是否已加载
     isInWatchlist: false, // 跟踪股票是否已在自选股中
-    currentSubIndicator: 'vol', // 当前选中的副图指标
+    subIndicator1: 'vol', // 副图1选中的指标
+    subIndicator2: 'macd', // 副图2选中的指标
     currentMainIndicator: 'ma', // 当前选中的主图指标
     //API_BASE_URL: 'http://192.168.31.237:5000',
 
@@ -143,8 +144,12 @@ const StockPage = {
             this.updateMainIndicator(e.target.value);
         });
 
-        document.querySelector('.sub-indicator-select').addEventListener('change', (e) => {
-            this.updateSubIndicator(e.target.value);
+        document.querySelector('.sub-indicator-select-1').addEventListener('change', (e) => {
+            this.updateSubIndicator(1, e.target.value);
+        });
+
+        document.querySelector('.sub-indicator-select-2').addEventListener('change', (e) => {
+            this.updateSubIndicator(2, e.target.value);
         });
 
         // 搜索功能
@@ -413,10 +418,14 @@ const StockPage = {
         const option = {
             backgroundColor: '#ffffff',
             grid: [
-                { left: '8%', right: '6%', top: '5%', height: '62%' },  // K线图区域
-                { left: '8%', right: '6%', top: '72%', height: '15%' },  // 成交量区域
-                { left: '8%', right: '6%', top: '72%', height: '15%' }   // 指标区域
+                { left: '8%', right: '6%', top: '5%', height: '50%' },
+                { left: '8%', right: '6%', top: '60%', height: '16%' },
+                { left: '8%', right: '6%', top: '80%', height: '16%' }
             ],
+            axisPointer: {
+                link: { xAxisIndex: 'all' },
+                label: { backgroundColor: '#777' }
+            },
             xAxis: [
                 {
                     type: 'category',
@@ -682,6 +691,28 @@ const StockPage = {
                     z: 2
                 },
                 {
+                    name: 'MAVOL5',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: [],
+                    smooth: true,
+                    lineStyle: { width: 1.5, color: '#fbbf24' },
+                    showSymbol: false,
+                    z: 2
+                },
+                {
+                    name: 'MAVOL10',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: [],
+                    smooth: true,
+                    lineStyle: { width: 1.5, color: '#3b82f6' },
+                    showSymbol: false,
+                    z: 2
+                },
+                {
                     name: 'MAVOL20',
                     type: 'line',
                     xAxisIndex: 1,
@@ -704,98 +735,96 @@ const StockPage = {
                     let result = params[0].name + '<br/>';
                     let macdInfo = '';
                     let kdjInfo = '';
-                    let rsiInfo = '';
-                    let bollInfo = '';
+                    // let macdInfo = ''; // Original declarations, now handled by new logic
+                    // let kdjInfo = ''; // Original declarations, now handled by new logic
+                    // let rsiInfo = ''; // Original declarations, now handled by new logic
+                    // let bollInfo = ''; // Original declarations, now handled by new logic
 
                     params.forEach(function (item) {
                         if (item.seriesName === 'K线') {
                             result += item.marker + ' ' + item.seriesName + ': ';
                             result += '开盘:' + item.data[1] + ' 收盘:' + item.data[2] + '<br/>';
                             result += '最低:' + item.data[3] + ' 最高:' + item.data[4] + '<br/>';
-                        } else if (item.seriesName === 'DIF') {
-                            macdInfo += item.marker + ' DIF: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === 'DEA') {
-                            macdInfo += item.marker + ' DEA: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === 'MACD') {
-                            macdInfo += item.marker + ' MACD: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
-                        } else if (item.seriesName === 'K') {
-                            kdjInfo += item.marker + ' K: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === 'D') {
-                            kdjInfo += item.marker + ' D: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === 'J') {
-                            kdjInfo += item.marker + ' J: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
-                        } else if (item.seriesName === 'RSI6') {
-                            rsiInfo += item.marker + ' RSI6: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === 'RSI12') {
-                            rsiInfo += item.marker + ' RSI12: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === 'RSI24') {
-                            rsiInfo += item.marker + ' RSI24: ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
-                        } else if (item.seriesName === '布林带上轨') {
-                            bollInfo += '上轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === '布林带中线') {
-                            bollInfo += '中轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
-                        } else if (item.seriesName === '布林带下轨') {
-                            bollInfo += '下轨:' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-');
-                        } else if (item.seriesName === 'MAVOL20') {
-                            // 成交量均线信息
                         } else if (item.seriesName.includes('MA') || item.seriesName.includes('EMA')) {
-                            result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-') + '<br/>';
-                        }
-                    });
-
-                    // 专门处理成交量和MAVOL
-                    let volInfo = '';
-                    params.forEach(function (item) {
-                        if (item.seriesName === '成交量') {
-                            let val = item.data;
-                            if (val && typeof val === 'object' && 'value' in val) {
-                                val = val.value;
+                            // MA/EMA for K-line are always shown
+                            if (item.axisIndex === 0) {
+                                result += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? Number(item.data).toFixed(2) : '-') + '<br/>';
                             }
-                            volInfo += '<br/>成交量<br/>' + item.marker + ' ' + item.seriesName + ': ' + (val !== null && val !== undefined ? val : '-') + ' ';
-                        } else if (item.seriesName === 'MAVOL20') {
-                            volInfo += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data : '-');
                         }
                     });
-                    if (volInfo) result += volInfo + '<br/>';
 
-                    if (bollInfo) {
-                        result += '<br/>BOLL(20,2)<br/>' + bollInfo + '<br/>';
-                    }
-                    if (macdInfo) {
-                        result += '<br/>MACD(12,26,9)<br/>' + macdInfo;
-                    }
-                    if (kdjInfo) {
-                        result += '<br/>KDJ(9,3,3)<br/>' + kdjInfo;
-                    }
-                    if (rsiInfo) {
-                        result += '<br/>RSI(6,12,24)<br/>' + rsiInfo;
+                    const getIndicatorLabel = (ind) => {
+                        const labels = { 'macd': 'MACD(12,26,9)', 'kdj': 'KDJ(9,3,3)', 'rsi': 'RSI(6,12,24)', 'boll': 'BOLL(20,2)', 'vol': '成交量' };
+                        return labels[ind] || ind;
+                    };
+
+                    const showIndicatorInfo = (indicator, axisIdx) => {
+                        if (!indicator || indicator === 'none') return '';
+                        let info = '';
+                        let inner = '';
+
+                        params.forEach((item) => {
+                            if (item.axisIndex !== axisIdx) return;
+
+                            if (indicator === 'vol') {
+                                if (item.seriesName === '成交量') {
+                                    inner += item.marker + ' 成交量: ' + (item.data !== null && item.data !== undefined ? (typeof item.data === 'object' ? item.data.value : item.data) : '-') + ' ';
+                                } else if (['MAVOL5', 'MAVOL10', 'MAVOL20'].includes(item.seriesName)) {
+                                    inner += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? Number(item.data).toFixed(2) : '-') + ' ';
+                                }
+                            } else if (indicator === 'macd') {
+                                if (['DIF', 'DEA', 'MACD'].includes(item.seriesName)) {
+                                    inner += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                                }
+                            } else if (indicator === 'kdj') {
+                                if (['K', 'D', 'J'].includes(item.seriesName)) {
+                                    inner += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                                }
+                            } else if (indicator === 'rsi') {
+                                if (['RSI6', 'RSI12', 'RSI24'].includes(item.seriesName)) {
+                                    inner += item.marker + ' ' + item.seriesName + ': ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                                }
+                            } else if (indicator === 'boll') {
+                                if (['布林带上轨', '布林带中线', '布林带下轨'].includes(item.seriesName)) {
+                                    const label = item.seriesName.replace('布林带', '');
+                                    inner += item.marker + ' ' + label + ': ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                                }
+                            }
+                        });
+
+                        if (inner) info = '<br/>' + getIndicatorLabel(indicator) + '<br/>' + inner;
+                        return info;
+                    };
+
+                    result += showIndicatorInfo(this.subIndicator1, 1);
+                    result += showIndicatorInfo(this.subIndicator2, 2);
+
+                    // 主图指标额外显示（如果是BOLL且当前不在副图显示）
+                    if (this.currentMainIndicator === 'boll') {
+                        let bollMainInfo = '';
+                        params.forEach((item) => {
+                            if (item.axisIndex === 0 && ['布林带上轨', '布林带中线', '布林带下轨'].includes(item.seriesName)) {
+                                const label = item.seriesName.replace('布林带', '');
+                                bollMainInfo += item.marker + ' ' + label + ': ' + (item.data !== null && item.data !== undefined ? item.data.toFixed(2) : '-') + ' ';
+                            }
+                        });
+                        if (bollMainInfo) result += '<br/>BOLL(20,2)<br/>' + bollMainInfo;
                     }
 
                     return result;
                 }
             },
             legend: {
-                data: ['K线', 'MA5', 'MA10', '成交量', 'MAVOL20', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24', '布林带中线', '布林带上轨', '布林带下轨'],
-                top: '1%',
-                textStyle: {
-                    color: '#666'
-                }
+                show: false,
+                data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', '成交量', 'MAVOL5', 'MAVOL10', 'MAVOL20', 'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24', '布林带中线', '布林带上轨', '布林带下轨'],
+                selected: {}
             }
         };
         this.klineChart.setOption(option);
 
-        // 初始化时默认显示成交量，隐藏MACD
+        // 初始化时根据当前设置刷新副图
         const initOption = this.klineChart.getOption();
-        this.showVolumeChart(initOption);
-        this.hideMACDChart(initOption);
-        this.hideKDJChart(initOption);
-        this.hideRSIChart(initOption);
-        // 显示MAVOL20
-        if (initOption.legend && initOption.legend[0]) {
-            initOption.legend[0].selected = initOption.legend[0].selected || {};
-            initOption.legend[0].selected['MAVOL20'] = true;
-        }
-        this.klineChart.setOption(initOption);
+        this.refreshSubCharts(initOption);
     },
 
     // 初始化分时图
@@ -1224,6 +1253,9 @@ const StockPage = {
             // 更新关键价位
             this.updateKeyLevels(data.key_levels);
 
+            // 加载GMS指标
+            this.loadGmsData();
+
             // 隐藏加载状态
             this.hideAnalysisLoading();
 
@@ -1403,6 +1435,184 @@ const StockPage = {
                 }
             }
         });
+    },
+
+    // 加载GMS指标数据
+    async loadGmsData() {
+        const gmsContainer = document.getElementById('gmsDataContainer');
+        if (!gmsContainer) return;
+
+        try {
+            console.log('[GMS] 开始加载GMS指标数据...');
+            gmsContainer.innerHTML = '<div class="loading-spinner">数据加载中...</div>';
+
+            // 调用GMS策略API，传入code参数
+            const response = await authFetch(`${API_BASE_URL}/api/screening/gms-strategy?code=${this.stockCode}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || '获取GMS数据失败');
+            }
+
+            // GMS接口返回的是列表，取第一个
+            const gmsData = result.data && result.data.length > 0 ? result.data[0] : null;
+
+            if (gmsData) {
+                this.updateGmsCard(gmsData);
+            } else {
+                gmsContainer.innerHTML = '<div class="no-data">暂无GMS分析数据</div>';
+            }
+        } catch (error) {
+            console.error('[GMS] 加载GMS数据失败:', error);
+            gmsContainer.innerHTML = `<div class="error-message">加载失败: ${error.message}</div>`;
+        }
+    },
+
+    // 更新GMS指标卡片
+    updateGmsCard(data) {
+        const container = document.getElementById('gmsDataContainer');
+        if (!container) return;
+
+        // 格式化数据
+        const score = data.score_total != null ? data.score_total.toFixed(0) : '--';
+        const signalStrength = data.signal_strength != null ? (data.signal_strength * 100).toFixed(0) + '%' : '--';
+        const buyType = data.buy_type || '--';
+
+        const fz = data.fz_ratio != null ? data.fz_ratio.toFixed(2) : '--';
+        const d20 = data.ratio_d20 != null ? (data.ratio_d20 * 100).toFixed(2) + '%' : '--';
+        const d1 = data.ratio_d1 != null ? (data.ratio_d1 * 100).toFixed(2) + '%' : '--';
+
+        // 样式类
+        const scoreClass = data.score_total >= 90 ? 'score-high' : (data.score_total >= 60 ? 'score-medium' : 'score-low');
+
+        // GMS 得分明细逻辑
+        const sd = data.score_detail || {};
+        const gmsFmt = (v, type) => {
+            if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
+            if (type === 'pct') return (v * 100).toFixed(2) + '%';
+            if (type === 'int') return String(Math.round(v));
+            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万' : Number(v).toFixed(0));
+            if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
+            if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
+            if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);
+            return String(v);
+        };
+        const accS = (sd.accumulation_s_threshold != null && !isNaN(sd.accumulation_s_threshold)) ? sd.accumulation_s_threshold : 85;
+        const accA = (sd.accumulation_a_threshold != null && !isNaN(sd.accumulation_a_threshold)) ? sd.accumulation_a_threshold : 70;
+        const momFull = (sd.momentum_full_threshold != null && !isNaN(sd.momentum_full_threshold)) ? sd.momentum_full_threshold : 90;
+        const momBatch = (sd.momentum_batch_threshold != null && !isNaN(sd.momentum_batch_threshold)) ? sd.momentum_batch_threshold : 80;
+        const fzTiers = sd.acc_fz_tiers || [2.5, 1.5];
+        const balTiers = sd.balance_tiers || [0.01, 0.015];
+        const volShrink = sd.vol_shrink_tiers || [0.6, 0.8];
+        const ratioD1Tiers = sd.ratio_d1_tiers || [0.001, 0.03];
+        const volAttack = sd.vol_attack_tiers || [2.0, 1.5];
+        const wAccFz = (sd.weight_acc_fz != null && !isNaN(sd.weight_acc_fz)) ? sd.weight_acc_fz : 30;
+        const wAccBal = (sd.weight_acc_balance != null && !isNaN(sd.weight_acc_balance)) ? sd.weight_acc_balance : 40;
+        const wAccVol = (sd.weight_acc_volume != null && !isNaN(sd.weight_acc_volume)) ? sd.weight_acc_volume : 30;
+        const wMomD1 = (sd.weight_mom_ratio_d1 != null && !isNaN(sd.weight_mom_ratio_d1)) ? sd.weight_mom_ratio_d1 : 40;
+        const wMomDev = (sd.weight_mom_deviation != null && !isNaN(sd.weight_mom_deviation)) ? sd.weight_mom_deviation : 30;
+        const wMomVol = (sd.weight_mom_volume != null && !isNaN(sd.weight_mom_volume)) ? sd.weight_mom_volume : 30;
+
+        const scoreDetailHtml = `
+            <div class="gms-score-detail-inner">
+                <div class="gms-score-detail-section">
+                    <strong>【均值收敛态】得分明细</strong>
+                    <table class="gms-weight-table">
+                        <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
+                        <tbody>
+                            <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
+                            <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0] * 100).toFixed(1)}%→满分; ≤${(balTiers[1] * 100).toFixed(1)}%→1/2</td></tr>
+                            <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
+                            <tr><td>均值收敛态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="gms-score-detail-section">
+                    <strong>【动量溢出态】得分明细</strong>
+                    <table class="gms-weight-table">
+                        <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
+                        <tbody>
+                            <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1] * 100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
+                            <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
+                            <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
+                            <tr><td>动量溢出态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="gms-score-detail-section">
+                    <strong>综合</strong> 总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}；信号强度=总分/100
+                </div>
+                <div class="gms-score-detail-section gms-indicators-section">
+                    <strong>计算指标细项</strong>
+                    <table class="gms-weight-table gms-indicators-table">
+                        <tbody>
+                            <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格${sd.d1_date ? '，交易日期 ' + sd.d1_date : ''}</td></tr>
+                            <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格${sd.d20_date ? '，交易日期 ' + sd.d20_date : ''}</td></tr>
+                            <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
+                            <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
+                            <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
+                            <tr><td>偏离率 (Δ/d₂₀)</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>现价相对周期末价张力</td></tr>
+                            <tr><td>突变率 (Δ/d₁)</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
+                            <tr><td>Δ₂₀/d</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>Δ₂₀ = d₂₀ - d（价格相对均线偏离率）</td></td></tr>
+                            <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
+                            <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
+                            <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>
+                            <tr><td>m₂₀ (当日成交量)</td><td>${gmsFmt(sd.current_volume, 'vol')}</td><td>当日成交量</td></tr>
+                            <tr><td>量比 (m₂₀/m)</td><td>${gmsFmt(sd.volume_ratio, 'ratio')}</td><td>放量/地量判断</td></tr>
+                            <tr><td>F/Z (数方比)</td><td>${gmsFmt(sd.fz_ratio, 'ratio')}</td><td>蓄势判断</td></tr>
+                            <tr><td>d₂₀ - d (价格vs均线)</td><td>${gmsFmt(sd.instant_deviation, 'num')}</td><td>价格相对均线偏离</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // 构建HTML
+        const html = `
+            <div class="gms-overview">
+                <div class="gms-score-box ${scoreClass}">
+                    <div class="gms-score-value">${score}</div>
+                    <div class="gms-score-label">总分</div>
+                </div>
+                <div class="gms-main-info">
+                    <div class="gms-info-row">
+                        <span class="label">信号强度:</span>
+                        <span class="value highlight">${signalStrength}</span>
+                    </div>
+                    <div class="gms-info-row">
+                        <span class="label">买点类型:</span>
+                        <span class="value">${buyType}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="gms-details-grid">
+                <div class="gms-detail-item">
+                    <span class="label">F/Z (频率):</span>
+                    <span class="value">${fz}</span>
+                </div>
+                <div class="gms-detail-item">
+                    <span class="label">Δ/d₂₀ (价格):</span>
+                    <span class="value">${d20}</span>
+                </div>
+                <div class="gms-detail-item">
+                    <span class="label">Δ/d₁ (价格):</span>
+                    <span class="value">${d1}</span>
+                </div>
+            </div>
+            <div class="gms-details-toggle-container">
+                <details>
+                    <summary class="gms-details-summary">查看得分明细</summary>
+                    <div class="gms-details-content">
+                        ${scoreDetailHtml}
+                    </div>
+                </details>
+            </div>
+        `;
+
+        container.innerHTML = html;
     },
 
     // 更新关键价位
@@ -2187,538 +2397,110 @@ const StockPage = {
     },
 
     // 更新副图指标
-    updateSubIndicator(indicator) {
-        console.log(`[副图指标] 切换到${indicator}指标`);
+    updateSubIndicator(slot, indicator) {
+        if (slot === 1) this.subIndicator1 = indicator;
+        if (slot === 2) this.subIndicator2 = indicator;
 
-        if (!this.klineChart) {
-            console.error('[副图指标] K线图表未初始化');
-            return;
-        }
+        CommonUtils.showToast(`副图${slot}已切换到${this.getSubIndicatorName(indicator)}`, 'success');
 
-        const option = this.klineChart.getOption();
-
-        // 根据选择的指标显示/隐藏对应的图表区域和系列
-        switch (indicator) {
-            case 'vol':
-                // 显示成交量，隐藏MACD
-                this.showVolumeChart(option);
-                this.hideMACDChart(option);
-                this.hideKDJChart(option);
-                this.hideRSIChart(option);
-                break;
-            case 'macd':
-                // 显示MACD，隐藏成交量
-                this.hideVolumeChart(option);
-                this.showMACDChart(option);
-                this.hideKDJChart(option);
-                this.hideRSIChart(option);
-                break;
-            case 'kdj':
-                this.hideVolumeChart(option);
-                this.hideMACDChart(option);
-                this.showKDJChart(option);
-                this.hideRSIChart(option);
-                break;
-            case 'rsi':
-                this.hideVolumeChart(option);
-                this.hideMACDChart(option);
-                this.hideKDJChart(option);
-                this.showRSIChart(option);
-                break;
-            default:
-                console.warn(`[副图指标] 未知指标类型: ${indicator}`);
-                return;
-        }
-
-        // 应用配置到图表，使用notMerge确保所有配置生效
-        this.klineChart.setOption(option, { notMerge: false });
-        console.log(`[updateSubIndicator] 已切换到${indicator}指标，配置已应用`);
-        CommonUtils.showToast(`已切换到${this.getSubIndicatorName(indicator)}`, 'success');
+        // 重新加载数据并将刷新图表
+        this.loadKlineData();
     },
 
-    showVolumeChart(option) {
-        // 显示成交量区域（grid[1]），隐藏指标区域（grid[2]）
-        if (option.grid && option.grid[1]) {
-            option.grid[1].height = '15%';
-            option.grid[1].top = '72%';
-            option.grid[1].show = true;
-        }
-        if (option.grid && option.grid[2]) {
-            option.grid[2].show = false;
+    // 刷新副图表显示状态
+    refreshSubCharts(option, shouldSetOption = true) {
+        if (!option) option = this.klineChart.getOption();
+
+        // 定义指标对应的系列名称
+        const getSeriesNamesForIndicator = (ind) => {
+            switch (ind) {
+                case 'vol': return ['成交量', 'MAVOL5', 'MAVOL10', 'MAVOL20'];
+                case 'macd': return ['DIF', 'DEA', 'MACD'];
+                case 'kdj': return ['K', 'D', 'J'];
+                case 'rsi': return ['RSI6', 'RSI12', 'RSI24'];
+                case 'boll': return ['布林带中线', '布林带上轨', '布林带下轨', '布林带区域', '布林带区域填充'];
+                default: return [];
+            }
+        };
+
+        // 1. 定义需要控制的所有动态系列
+        const mainSeries = ['MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200'];
+        const bollSeries = ['布林带中线', '布林带上轨', '布林带下轨', '布林带区域', '布林带区域填充'];
+        const subSeries = [
+            '成交量', 'MAVOL5', 'MAVOL10', 'MAVOL20',
+            'DIF', 'DEA', 'MACD', 'K', 'D', 'J', 'RSI6', 'RSI12', 'RSI24'
+        ];
+
+        // 2. 确定哪些系列应该显示
+        let activeNames = ['K线'];
+        if (this.currentMainIndicator === 'boll') {
+            activeNames.push(...bollSeries);
+        } else {
+            activeNames.push(...mainSeries);
         }
 
-        // 调整K线图区域高度
-        if (option.grid && option.grid[0]) {
-            option.grid[0].height = '62%';
-        }
+        const sub1Names = getSeriesNamesForIndicator(this.subIndicator1);
+        const sub2Names = getSeriesNamesForIndicator(this.subIndicator2);
+        activeNames.push(...sub1Names, ...sub2Names);
 
-        // 显示成交量系列，隐藏MACD系列
+        // 3. 遍历并设置系列状态
         if (option.series) {
-            if (option.series[3]) {
-                option.series[3].show = true;
-                option.series[3].xAxisIndex = 1;
-                option.series[3].yAxisIndex = 1;
-            }
-            // 显示MAVOL20系列
-            if (option.series[13]) {
-                option.series[13].show = true;
-                option.series[13].xAxisIndex = 1;
-                option.series[13].yAxisIndex = 1;
-            }
-            if (option.series[4]) option.series[4].show = false; // DIF
-            if (option.series[5]) option.series[5].show = false; // DEA
-            if (option.series[6]) option.series[6].show = false; // MACD
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
-        }
+            option.series.forEach(s => {
+                const isActive = activeNames.includes(s.name);
+                s.show = isActive;
 
-        // 更新dataZoom的xAxisIndex
-        if (option.dataZoom) {
-            option.dataZoom.forEach(zoom => {
-                if (zoom.xAxisIndex) {
-                    zoom.xAxisIndex = [0, 1];
+                // 如果是副图系列，设置其坐标轴
+                if (subSeries.includes(s.name) || bollSeries.includes(s.name)) {
+                    if (sub1Names.includes(s.name)) {
+                        s.xAxisIndex = 1;
+                        s.yAxisIndex = 1;
+                    } else if (sub2Names.includes(s.name)) {
+                        s.xAxisIndex = 2;
+                        s.yAxisIndex = 2;
+                    } else if (this.currentMainIndicator === 'boll' && bollSeries.includes(s.name)) {
+                        // 主图的BOLL
+                        s.xAxisIndex = 0;
+                        s.yAxisIndex = 0;
+                    }
                 }
             });
         }
-    },
 
-    hideVolumeChart(option) {
-        // 隐藏成交量区域（grid[1]）
-        if (option.grid && option.grid[1]) {
-            option.grid[1].height = '0%';
-            option.grid[1].top = '100%';
+        // 4. 更新坐标轴可见性
+        if (option.xAxis) {
+            if (option.xAxis[1]) option.xAxis[1].show = (this.subIndicator1 !== 'none');
+            if (option.xAxis[2]) option.xAxis[2].show = (this.subIndicator2 !== 'none');
         }
-
-        // 隐藏成交量系列
-        if (option.series && option.series[3]) {
-            option.series[3].show = false;
-        }
-        if (option.series && option.series[13]) {
-            option.series[13].show = false;
-        }
-    },
-
-    showMACDChart(option) {
-        console.log('[showMACDChart] 开始显示MACD图表');
-
-        // 显示MACD区域（grid[2]），隐藏成交量区域（grid[1]）
-        if (option.grid && option.grid[1]) {
-            option.grid[1].height = '0%';
-            option.grid[1].top = '100%';
-            option.grid[1].show = false; // 明确隐藏成交量区域
-        }
-        if (option.grid && option.grid[2]) {
-            option.grid[2].height = '18%';
-            option.grid[2].top = '78%';
-            option.grid[2].show = true; // 明确显示MACD区域
-            option.grid[2].left = option.grid[0] ? option.grid[0].left : '8%';
-            option.grid[2].right = option.grid[0] ? option.grid[0].right : '6%';
-        }
-
-        // 调整K线图区域高度
-        if (option.grid && option.grid[0]) {
-            option.grid[0].height = '60%';
-        }
-
-        // 确保xAxis[2]的data与xAxis[0]同步
-        if (option.xAxis && option.xAxis[0] && option.xAxis[2]) {
-            option.xAxis[2].data = option.xAxis[0].data;
-            option.xAxis[2].show = true; // 明确显示xAxis
-            option.xAxis[2].type = 'category';
-            option.xAxis[2].boundaryGap = option.xAxis[0].boundaryGap !== undefined ? option.xAxis[0].boundaryGap : false;
-
-            // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
-            if (!option.xAxis[2].axisLabel) {
-                option.xAxis[2].axisLabel = {};
-            }
-            option.xAxis[2].axisLabel.show = true;
-            option.xAxis[2].axisLabel.color = '#dc2626';
-            option.xAxis[2].axisLabel.formatter = function (value, index) {
-                // 格式化日期显示月份，例如：2023-08-10 -> 08
-                if (value && typeof value === 'string' && value.length >= 7) {
-                    const month = value.substring(5, 7);
-                    return month;
-                }
-                return value;
-            };
-
-            // 设置xAxis[2]的axisLine和axisTick
-            option.xAxis[2].axisLine = { show: false };
-            option.xAxis[2].axisTick = { show: false };
-            option.xAxis[2].splitLine = { show: false };
-        }
-
-        // 确保yAxis[2]的零线显示（红色虚线）
-        if (option.yAxis && option.yAxis[2]) {
-            option.yAxis[2].show = true; // 明确显示yAxis
-            option.yAxis[2].type = 'value';
-            option.yAxis[2].scale = true; // 确保包含零值
-
-            // 确保splitLine显示零线
-            if (!option.yAxis[2].splitLine) {
-                option.yAxis[2].splitLine = {};
-            }
-            option.yAxis[2].splitLine.show = true;
-            option.yAxis[2].splitLine.lineStyle = {
-                type: 'dashed',
-                color: '#dc2626',
-                width: 1
-            };
-
-            // 设置yAxis[2]的其他属性
-            option.yAxis[2].axisLine = { show: false };
-            option.yAxis[2].axisTick = { show: false };
-        }
-
-        // 显示MACD系列，隐藏成交量系列
-        if (option.series) {
-            if (option.series[3]) {
-                option.series[3].show = false; // 隐藏成交量
-            }
-            if (option.series[13]) {
-                option.series[13].show = false; // 隐藏MAVOL20
-            }
-            if (option.series[4]) {
-                option.series[4].show = true; // DIF
-                option.series[4].xAxisIndex = 2;
-                option.series[4].yAxisIndex = 2;
-                console.log('[showMACDChart] DIF系列已显示，数据长度:', option.series[4].data ? option.series[4].data.length : 0);
-            }
-            if (option.series[5]) {
-                option.series[5].show = true; // DEA
-                option.series[5].xAxisIndex = 2;
-                option.series[5].yAxisIndex = 2;
-                console.log('[showMACDChart] DEA系列已显示，数据长度:', option.series[5].data ? option.series[5].data.length : 0);
-            }
-            if (option.series[6]) {
-                option.series[6].show = true; // MACD
-                option.series[6].xAxisIndex = 2;
-                option.series[6].yAxisIndex = 2;
-                // 确保MACD柱状图的itemStyle正确
-                if (!option.series[6].itemStyle) {
-                    option.series[6].itemStyle = {};
-                }
-                if (typeof option.series[6].itemStyle.color === 'function') {
-                    // 保持原有的颜色函数
-                } else {
-                    option.series[6].itemStyle.color = function (params) {
-                        return params.value >= 0 ? '#dc2626' : '#16a34a';
+        if (option.yAxis) {
+            if (option.yAxis[1]) {
+                option.yAxis[1].show = (this.subIndicator1 !== 'none');
+                // 自动格式化成交量或其它指标
+                if (this.subIndicator1 === 'vol') {
+                    option.yAxis[1].axisLabel = {
+                        formatter: (val) => val >= 1000000 ? (val / 1000000).toFixed(1) + 'M' : (val >= 1000 ? (val / 1000).toFixed(1) + 'K' : val)
                     };
+                } else {
+                    option.yAxis[1].axisLabel = { formatter: null };
                 }
-                console.log('[showMACDChart] MACD系列已显示，数据长度:', option.series[6].data ? option.series[6].data.length : 0);
             }
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
-        }
-
-        // 更新dataZoom的xAxisIndex
-        if (option.dataZoom) {
-            option.dataZoom.forEach(zoom => {
-                if (zoom.xAxisIndex) {
-                    zoom.xAxisIndex = [0, 2];
+            if (option.yAxis[2]) {
+                option.yAxis[2].show = (this.subIndicator2 !== 'none');
+                if (this.subIndicator2 === 'vol') {
+                    option.yAxis[2].axisLabel = {
+                        formatter: (val) => val >= 1000000 ? (val / 1000000).toFixed(1) + 'M' : (val >= 1000 ? (val / 1000).toFixed(1) + 'K' : val)
+                    };
+                } else {
+                    option.yAxis[2].axisLabel = { formatter: null };
                 }
-            });
-        }
-
-        console.log('[showMACDChart] MACD图表配置完成，grid[2].show:', option.grid && option.grid[2] ? option.grid[2].show : 'N/A');
-    },
-
-    hideMACDChart(option) {
-        console.log('[hideMACDChart] 开始隐藏MACD图表');
-
-        // 隐藏MACD区域（grid[2]）
-        if (option.grid && option.grid[2]) {
-            option.grid[2].height = '0%';
-            option.grid[2].top = '100%';
-            option.grid[2].show = false; // 明确设置show为false
-        }
-
-        // 隐藏xAxis[2]
-        if (option.xAxis && option.xAxis[2]) {
-            if (option.xAxis[2].axisLabel) {
-                option.xAxis[2].axisLabel.show = false;
-            }
-            option.xAxis[2].show = false; // 明确设置show为false
-        }
-
-        // 隐藏yAxis[2]
-        if (option.yAxis && option.yAxis[2]) {
-            option.yAxis[2].show = false; // 明确设置show为false
-        }
-
-        // 隐藏MACD系列
-        if (option.series) {
-            if (option.series[4]) {
-                option.series[4].show = false; // DIF
-            }
-            if (option.series[5]) {
-                option.series[5].show = false; // DEA
-            }
-            if (option.series[6]) {
-                option.series[6].show = false; // MACD
             }
         }
 
-        console.log('[hideMACDChart] MACD图表已隐藏');
-    },
+        // 5. 更新图例
+        this.updateLegendForIndicator(option);
 
-    showKDJChart(option) {
-        // 显示KDJ区域（grid[2]），隐藏成交量区域（grid[1]）
-        if (option.grid && option.grid[1]) {
-            option.grid[1].height = '0%';
-            option.grid[1].top = '100%';
-        }
-        if (option.grid && option.grid[2]) {
-            option.grid[2].height = '18%';
-            option.grid[2].top = '78%';
-        }
-
-        // 调整K线图区域高度
-        if (option.grid && option.grid[0]) {
-            option.grid[0].height = '60%';
-        }
-
-        // 确保xAxis[2]的data与xAxis[0]同步
-        if (option.xAxis && option.xAxis[0] && option.xAxis[2]) {
-            option.xAxis[2].data = option.xAxis[0].data;
-            // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
-            if (option.xAxis[2].axisLabel) {
-                option.xAxis[2].axisLabel.show = true;
-                option.xAxis[2].axisLabel.color = '#dc2626';
-                option.xAxis[2].axisLabel.formatter = function (value, index) {
-                    // 格式化日期显示月份，例如：2023-08-10 -> 08
-                    if (value && typeof value === 'string' && value.length >= 7) {
-                        const month = value.substring(5, 7);
-                        return month;
-                    }
-                    return value;
-                };
-            }
-            // 显示xAxis[2]的axisLine和axisTick
-            if (option.xAxis[2]) {
-                option.xAxis[2].axisLine = { show: false };
-                option.xAxis[2].axisTick = { show: false };
-                option.xAxis[2].splitLine = { show: false };
-            }
-        }
-
-        // 确保yAxis[2]的零线显示（红色虚线）
-        if (option.yAxis && option.yAxis[2]) {
-            // 确保splitLine显示零线
-            if (!option.yAxis[2].splitLine) {
-                option.yAxis[2].splitLine = {};
-            }
-            option.yAxis[2].splitLine.show = true;
-            option.yAxis[2].splitLine.lineStyle = {
-                type: 'dashed',
-                color: '#dc2626',
-                width: 1
-            };
-            // 确保包含零值
-            option.yAxis[2].scale = true;
-        }
-
-        // 显示KDJ系列，隐藏成交量和MACD系列
-        if (option.series) {
-            if (option.series[3]) option.series[3].show = false; // 隐藏成交量
-            if (option.series[13]) option.series[13].show = false; // 隐藏MAVOL20
-            if (option.series[4]) option.series[4].show = false; // DIF
-            if (option.series[5]) option.series[5].show = false; // DEA
-            if (option.series[6]) option.series[6].show = false; // MACD
-
-            // 清除RSI数据，避免显示残留数据
-            if (option.series[10]) {
-                option.series[10].show = false; // RSI6
-                option.series[10].data = [];
-            }
-            if (option.series[11]) {
-                option.series[11].show = false; // RSI12
-                option.series[11].data = [];
-            }
-            if (option.series[12]) {
-                option.series[12].show = false; // RSI24
-                option.series[12].data = [];
-            }
-
-            if (option.series[7]) {
-                option.series[7].show = true; // K
-                option.series[7].xAxisIndex = 2;
-                option.series[7].yAxisIndex = 2;
-            }
-            if (option.series[8]) {
-                option.series[8].show = true; // D
-                option.series[8].xAxisIndex = 2;
-                option.series[8].yAxisIndex = 2;
-            }
-            if (option.series[9]) {
-                option.series[9].show = true; // J
-                option.series[9].xAxisIndex = 2;
-                option.series[9].yAxisIndex = 2;
-            }
-        }
-
-        // 更新dataZoom的xAxisIndex
-        if (option.dataZoom) {
-            option.dataZoom.forEach(zoom => {
-                if (zoom.xAxisIndex) {
-                    zoom.xAxisIndex = [0, 2];
-                }
-            });
-        }
-    },
-
-    hideKDJChart(option) {
-        // 隐藏KDJ区域（grid[2]）
-        if (option.grid && option.grid[2]) {
-            option.grid[2].height = '0%';
-            option.grid[2].top = '100%';
-        }
-
-        // 隐藏xAxis[2]的axisLabel
-        if (option.xAxis && option.xAxis[2] && option.xAxis[2].axisLabel) {
-            option.xAxis[2].axisLabel.show = false;
-        }
-
-        // 隐藏KDJ系列
-        if (option.series) {
-            if (option.series[3]) option.series[3].show = false; // Assuming this is for MAVOL20 or another series
-            if (option.series[13]) option.series[13].show = false; // Assuming this is for MAVOL20 or another series
-            if (option.series[7]) option.series[7].show = false; // K
-            if (option.series[8]) option.series[8].show = false; // D
-            if (option.series[9]) option.series[9].show = false; // J
-        }
-    },
-
-    showRSIChart(option) {
-        // 显示RSI区域（grid[2]），隐藏成交量区域（grid[1]）
-        if (option.grid && option.grid[1]) {
-            option.grid[1].height = '0%';
-            option.grid[1].top = '100%';
-        }
-        if (option.grid && option.grid[2]) {
-            option.grid[2].height = '18%';
-            option.grid[2].top = '78%';
-        }
-
-        // 调整K线图区域高度
-        if (option.grid && option.grid[0]) {
-            option.grid[0].height = '60%';
-        }
-
-        // 确保xAxis[2]的data与xAxis[0]同步
-        if (option.xAxis && option.xAxis[0] && option.xAxis[2]) {
-            option.xAxis[2].data = option.xAxis[0].data;
-            // 显示xAxis[2]的axisLabel以便显示日期，并格式化显示月份
-            if (option.xAxis[2].axisLabel) {
-                option.xAxis[2].axisLabel.show = true;
-                option.xAxis[2].axisLabel.color = '#dc2626';
-                option.xAxis[2].axisLabel.formatter = function (value, index) {
-                    // 格式化日期显示月份，例如：2023-08-10 -> 08
-                    if (value && typeof value === 'string' && value.length >= 7) {
-                        const month = value.substring(5, 7);
-                        return month;
-                    }
-                    return value;
-                };
-            }
-            // 显示xAxis[2]的axisLine和axisTick
-            if (option.xAxis[2]) {
-                option.xAxis[2].axisLine = { show: false };
-                option.xAxis[2].axisTick = { show: false };
-                option.xAxis[2].splitLine = { show: false };
-            }
-        }
-
-        // 确保yAxis[2]的零线显示（红色虚线）
-        if (option.yAxis && option.yAxis[2]) {
-            // 确保splitLine显示零线
-            if (!option.yAxis[2].splitLine) {
-                option.yAxis[2].splitLine = {};
-            }
-            option.yAxis[2].splitLine.show = true;
-            option.yAxis[2].splitLine.lineStyle = {
-                type: 'dashed',
-                color: '#dc2626',
-                width: 1
-            };
-            // 确保包含零值
-            option.yAxis[2].scale = true;
-        }
-
-        // 显示RSI系列，隐藏成交量、MACD、KDJ系列
-        if (option.series) {
-            if (option.series[3]) option.series[3].show = false; // 隐藏成交量
-            if (option.series[13]) option.series[13].show = false; // 隐藏MAVOL20
-            if (option.series[4]) option.series[4].show = false; // DIF
-            if (option.series[5]) option.series[5].show = false; // DEA
-            if (option.series[6]) option.series[6].show = false; // MACD
-
-            // 清除KDJ数据，避免显示残留数据
-            if (option.series[7]) {
-                option.series[7].show = false; // K
-                option.series[7].data = [];
-            }
-            if (option.series[8]) {
-                option.series[8].show = false; // D
-                option.series[8].data = [];
-            }
-            if (option.series[9]) {
-                option.series[9].show = false; // J
-                option.series[9].data = [];
-            }
-
-            if (option.series[10]) {
-                option.series[10].show = true; // RSI6
-                option.series[10].xAxisIndex = 2;
-                option.series[10].yAxisIndex = 2;
-            }
-            if (option.series[11]) {
-                option.series[11].show = true; // RSI12
-                option.series[11].xAxisIndex = 2;
-                option.series[11].yAxisIndex = 2;
-            }
-            if (option.series[12]) {
-                option.series[12].show = true; // RSI24
-                option.series[12].xAxisIndex = 2;
-                option.series[12].yAxisIndex = 2;
-            }
-        }
-
-        // 更新dataZoom的xAxisIndex
-        if (option.dataZoom) {
-            option.dataZoom.forEach(zoom => {
-                if (zoom.xAxisIndex) {
-                    zoom.xAxisIndex = [0, 2];
-                }
-            });
-        }
-    },
-
-    hideRSIChart(option) {
-        // 隐藏RSI区域（grid[2]）
-        if (option.grid && option.grid[2]) {
-            option.grid[2].height = '0%';
-            option.grid[2].top = '100%';
-        }
-
-        // 隐藏xAxis[2]的axisLabel
-        if (option.xAxis && option.xAxis[2] && option.xAxis[2].axisLabel) {
-            option.xAxis[2].axisLabel.show = false;
-        }
-
-        // 隐藏RSI系列
-        if (option.series) {
-            if (option.series[10]) option.series[10].show = false; // RSI6
-            if (option.series[11]) option.series[11].show = false; // RSI12
-            if (option.series[12]) option.series[12].show = false; // RSI24
+        // 应用
+        if (shouldSetOption) {
+            this.klineChart.setOption(option, { notMerge: true });
         }
     },
 
@@ -2727,10 +2509,48 @@ const StockPage = {
             'vol': '成交量',
             'macd': 'MACD',
             'kdj': 'KDJ',
-            'rsi': 'RSI'
+            'rsi': 'RSI',
+            'boll': '布林带',
+            'none': '关闭'
         };
         return names[indicator] || indicator;
     },
+
+    updateLegendForIndicator(option) {
+        let legend = option.legend;
+        if (Array.isArray(legend)) legend = legend[0];
+        if (!legend) return;
+
+        const getSeriesNames = (ind) => {
+            switch (ind) {
+                case 'vol': return ['成交量', 'MAVOL5', 'MAVOL10', 'MAVOL20'];
+                case 'macd': return ['DIF', 'DEA', 'MACD'];
+                case 'kdj': return ['K', 'D', 'J'];
+                case 'rsi': return ['RSI6', 'RSI12', 'RSI24'];
+                case 'boll': return ['布林带中线', '布林带上轨', '布林带下轨'];
+                default: return [];
+            }
+        };
+
+        let activeNames = ['K线', 'MA5', 'MA10']; // 基础
+        if (this.currentMainIndicator === 'boll') {
+            activeNames = ['K线', '布林带中线', '布林带上轨', '布林带下轨'];
+        }
+
+        activeNames.push(...getSeriesNames(this.subIndicator1));
+        activeNames.push(...getSeriesNames(this.subIndicator2));
+
+        if (legend.data) {
+            if (!legend.selected) legend.selected = {};
+            legend.data.forEach(name => {
+                // 如果是复合对象
+                const seriesName = typeof name === 'string' ? name : name.name;
+                legend.selected[seriesName] = activeNames.includes(seriesName);
+            });
+        }
+    },
+
+
 
     // 开始数据更新
     startDataUpdate() {
@@ -2831,7 +2651,6 @@ const StockPage = {
             let url = '';
 
             // 确定要加载的指标类型
-            const targetSubIndicator = indicator || this.currentSubIndicator || 'vol';
             const targetMainIndicator = this.currentMainIndicator || 'ma';
             if (this.currentPeriod === '1w') {
                 period = 'weekly';
@@ -2855,15 +2674,13 @@ const StockPage = {
 
             // 构建请求指标列表
             let indicatorsToFetch = [];
-            if (targetSubIndicator === 'macd') {
-                indicatorsToFetch.push('macd');
-            } else if (targetSubIndicator === 'kdj') {
-                indicatorsToFetch.push('kdj');
-            } else if (targetSubIndicator === 'rsi') {
-                indicatorsToFetch.push('rsi');
-            }
+            const sub1 = this.subIndicator1;
+            const sub2 = this.subIndicator2;
 
-            if (targetMainIndicator === 'boll') {
+            if (sub1 && sub1 !== 'vol' && sub1 !== 'none') indicatorsToFetch.push(sub1);
+            if (sub2 && sub2 !== 'vol' && sub2 !== 'none' && !indicatorsToFetch.includes(sub2)) indicatorsToFetch.push(sub2);
+
+            if (this.currentMainIndicator === 'boll') {
                 indicatorsToFetch.push('boll');
             }
 
@@ -2872,8 +2689,9 @@ const StockPage = {
             }
 
             console.log('[loadKlineData] 请求URL:', url);
-            console.log('[loadKlineData] 目标子图指标:', targetSubIndicator);
-            console.log('[loadKlineData] 目标主图指标:', targetMainIndicator);
+            console.log('[loadKlineData] 副图1指标:', sub1);
+            console.log('[loadKlineData] 副图2指标:', sub2);
+            console.log('[loadKlineData] 主图指标:', this.currentMainIndicator);
             const resp = await fetch(url);
             const data = await resp.json();
             console.log('[loadKlineData] API响应:', data);
@@ -2962,13 +2780,16 @@ const StockPage = {
                     }
                 }
 
-                option.series[3].data = volumes;
+                // 设置副图系列数据
+                const sVol = option.series.find(s => s.name === '成交量');
+                const sMAVol5 = option.series.find(s => s.name === 'MAVOL5');
+                const sMAVol10 = option.series.find(s => s.name === 'MAVOL10');
+                const sMAVol20 = option.series.find(s => s.name === 'MAVOL20');
 
-                // 设置MAVOL20数据
-                const mavol20 = list.map(item => item.mavol20 !== null && item.mavol20 !== undefined ? parseFloat(item.mavol20) : null);
-                if (option.series[13]) {
-                    option.series[13].data = mavol20;
-                }
+                if (sVol) sVol.data = volumes;
+                if (sMAVol5) sMAVol5.data = mavol5;
+                if (sMAVol10) sMAVol10.data = mavol10;
+                if (sMAVol20) sMAVol20.data = mavol20;
 
                 // 处理子图指标数据
                 console.log('[loadKlineData] 处理指标数据');
@@ -2979,9 +2800,12 @@ const StockPage = {
                     const dea = list.map(item => item.dea !== null && item.dea !== undefined ? parseFloat(item.dea) : null);
                     const macd = list.map(item => item.macd !== null && item.macd !== undefined ? parseFloat(item.macd) : null);
 
-                    if (option.series[4]) option.series[4].data = dif;
-                    if (option.series[5]) option.series[5].data = dea;
-                    if (option.series[6]) option.series[6].data = macd;
+                    const sDIF = option.series.find(s => s.name === 'DIF');
+                    const sDEA = option.series.find(s => s.name === 'DEA');
+                    const sMACD = option.series.find(s => s.name === 'MACD');
+                    if (sDIF) sDIF.data = dif;
+                    if (sDEA) sDEA.data = dea;
+                    if (sMACD) sMACD.data = macd;
                 }
 
                 // KDJ数据
@@ -2990,9 +2814,12 @@ const StockPage = {
                     const d = list.map(item => item.d !== null && item.d !== undefined ? parseFloat(item.d) : null);
                     const j = list.map(item => item.j !== null && item.j !== undefined ? parseFloat(item.j) : null);
 
-                    if (option.series[7]) option.series[7].data = k;
-                    if (option.series[8]) option.series[8].data = d;
-                    if (option.series[9]) option.series[9].data = j;
+                    const sK = option.series.find(s => s.name === 'K');
+                    const sD = option.series.find(s => s.name === 'D');
+                    const sJ = option.series.find(s => s.name === 'J');
+                    if (sK) sK.data = k;
+                    if (sD) sD.data = d;
+                    if (sJ) sJ.data = j;
                 }
 
                 // RSI数据
@@ -3001,9 +2828,12 @@ const StockPage = {
                     const rsi12 = list.map(item => item.rsi12 !== null && item.rsi12 !== undefined ? parseFloat(item.rsi12) : null);
                     const rsi24 = list.map(item => item.rsi24 !== null && item.rsi24 !== undefined ? parseFloat(item.rsi24) : null);
 
-                    if (option.series[10]) option.series[10].data = rsi6;
-                    if (option.series[11]) option.series[11].data = rsi12;
-                    if (option.series[12]) option.series[12].data = rsi24;
+                    const sRSI6 = option.series.find(s => s.name === 'RSI6');
+                    const sRSI12 = option.series.find(s => s.name === 'RSI12');
+                    const sRSI24 = option.series.find(s => s.name === 'RSI24');
+                    if (sRSI6) sRSI6.data = rsi6;
+                    if (sRSI12) sRSI12.data = rsi12;
+                    if (sRSI24) sRSI24.data = rsi24;
                 }
 
                 // BOLL数据
@@ -3018,112 +2848,90 @@ const StockPage = {
                     this.bollData = null;
                 }
 
-                // 清除其他指标的数据，避免残留
-                if (!list[0] || !('macd' in list[0])) {
-                    if (option.series[4]) option.series[4].data = [];
-                    if (option.series[5]) option.series[5].data = [];
-                    if (option.series[6]) option.series[6].data = [];
-                }
-                if (!list[0] || !('k' in list[0])) {
-                    if (option.series[7]) option.series[7].data = [];
-                    if (option.series[8]) option.series[8].data = [];
-                    if (option.series[9]) option.series[9].data = [];
-                }
-                if (!list[0] || !('rsi6' in list[0])) {
-                    if (option.series[10]) option.series[10].data = [];
-                    if (option.series[11]) option.series[11].data = [];
-                    if (option.series[12]) option.series[12].data = [];
-                }
-
-                // 更新状态标志
-                this.currentSubIndicator = targetSubIndicator;
-
-                // 更新主图技术指标
+                // 清除之前的技术指标线并根据当前主图设置应用新指标
                 this.clearTechnicalIndicators(option);
-                if (targetMainIndicator === 'ma') {
+                if (this.currentMainIndicator === 'ma') {
                     this.addMAIndicators(option);
-                } else if (targetMainIndicator === 'ema') {
+                } else if (this.currentMainIndicator === 'ema') {
                     this.addEMAIndicators(option);
-                } else if (targetMainIndicator === 'boll') {
+                }
+
+                // 如果主图或任何副图选择了BOLL，则添加BOLL系列
+                if (this.currentMainIndicator === 'boll' || this.subIndicator1 === 'boll' || this.subIndicator2 === 'boll') {
                     this.addBollingerBands(option);
                 }
 
-                // 更新副图显示状态
-                if (targetSubIndicator === 'macd') {
-                    this.showMACDChart(option);
-                    this.hideVolumeChart(option);
-                    this.hideKDJChart(option);
-                    this.hideRSIChart(option);
-                } else if (targetSubIndicator === 'kdj') {
-                    this.showKDJChart(option);
-                    this.hideVolumeChart(option);
-                    this.hideMACDChart(option);
-                    this.hideRSIChart(option);
-                } else if (targetSubIndicator === 'rsi') {
-                    this.showRSIChart(option);
-                    this.hideVolumeChart(option);
-                    this.hideMACDChart(option);
-                    this.hideKDJChart(option);
-                } else {
-                    this.showVolumeChart(option);
-                    this.hideMACDChart(option);
-                    this.hideKDJChart(option);
-                    this.hideRSIChart(option);
-                }
+                // 更新副图和图例
+                this.refreshSubCharts(option, false);
 
                 // 当数据量较少时，优化显示效果
                 const dataCount = kline.length;
                 if (dataCount <= 30) {
                     // 数据很少时，显示全部数据，K线更宽更显眼
-                    option.dataZoom[0].start = 0;
-                    option.dataZoom[0].end = 100;
+                    if (option.dataZoom) {
+                        option.dataZoom.forEach(zoom => {
+                            zoom.start = 0;
+                            zoom.end = 100;
+                        });
+                    }
 
-                    // 调整K线柱子宽度，让它们更显眼
-                    option.series[0].barWidth = Math.max(8, Math.min(20, 400 / dataCount));
-                    // 同时调整成交量柱子宽度
-                    option.series[3].barWidth = Math.max(8, Math.min(20, 400 / dataCount));
+                    // 调整K线柱子宽度
+                    const klineBarWidth = Math.max(8, Math.min(20, 400 / dataCount));
+                    if (option.series[0]) option.series[0].barWidth = klineBarWidth;
+
+                    const sVolFinal = option.series.find(s => s.name === '成交量');
+                    if (sVolFinal) sVolFinal.barWidth = klineBarWidth;
 
                     // 优化X轴显示
-                    option.xAxis[0].boundaryGap = true; // 让K线不贴边显示
-                    option.xAxis[1].boundaryGap = true;
+                    if (option.xAxis) {
+                        option.xAxis.forEach(axis => axis.boundaryGap = true);
+                    }
                 } else if (dataCount <= 80) {
                     // 数据少时，显示全部数据，不进行缩放
-                    option.dataZoom[0].start = 0;
-                    option.dataZoom[0].end = 100;
+                    if (option.dataZoom) {
+                        option.dataZoom.forEach(zoom => {
+                            zoom.start = 0;
+                            zoom.end = 100;
+                        });
+                    }
 
                     // 调整K线柱子宽度，让它们更显眼
-                    option.series[0].barWidth = Math.max(6, Math.min(15, 350 / dataCount));
-                    // 同时调整成交量柱子宽度
-                    option.series[3].barWidth = Math.max(6, Math.min(15, 350 / dataCount));
+                    const klineBarWidth = Math.max(6, Math.min(15, 350 / dataCount));
+                    if (option.series[0]) option.series[0].barWidth = klineBarWidth;
 
-                    // 优化X轴显示
-                    option.xAxis[0].boundaryGap = true; // 让K线不贴边显示
-                    option.xAxis[1].boundaryGap = true;
+                    const sVolFinal = option.series.find(s => s.name === '成交量');
+                    if (sVolFinal) sVolFinal.barWidth = klineBarWidth;
+
+                    if (option.xAxis) {
+                        option.xAxis.forEach(axis => axis.boundaryGap = true);
+                    }
                 } else if (dataCount <= 200) {
                     // 中等数据量时，调整显示范围
-                    option.dataZoom[0].start = Math.max(0, 100 - (100 * 100 / dataCount));
-                    option.dataZoom[0].end = 100;
+                    if (option.dataZoom) {
+                        option.dataZoom.forEach(zoom => {
+                            zoom.start = Math.max(0, 100 - (100 * 100 / dataCount));
+                            zoom.end = 100;
+                        });
+                    }
 
                     // 适中的柱子宽度
-                    option.series[0].barWidth = Math.max(4, Math.min(12, 250 / dataCount));
-                    option.series[3].barWidth = Math.max(4, Math.min(12, 250 / dataCount));
+                    const klineBarWidth = Math.max(4, Math.min(12, 250 / dataCount));
+                    if (option.series[0]) option.series[0].barWidth = klineBarWidth;
 
-                    option.xAxis[0].boundaryGap = true;
-                    option.xAxis[1].boundaryGap = true;
-                } else {
-                    // 数据量充足时，保持原有的显示方式，但使用更宽的默认宽度
-                    option.dataZoom[0].start = 50;
-                    option.dataZoom[0].end = 100;
+                    const sVolFinal = option.series.find(s => s.name === '成交量');
+                    if (sVolFinal) sVolFinal.barWidth = klineBarWidth;
 
-                    // 使用更宽的默认设置
-                    option.series[0].barWidth = '85%';
-                    option.series[3].barWidth = '85%';
-                    option.xAxis[0].boundaryGap = false;
-                    option.xAxis[1].boundaryGap = false;
+                    if (option.xAxis) {
+                        option.xAxis.forEach(axis => axis.boundaryGap = true);
+                    }
                 }
 
                 // 应用配置到图表
-                this.klineChart.setOption(option, { notMerge: false });
+                // 强制重新渲染以确保所有配置（尤其是多轴同步）生效
+                this.klineChart.setOption(option, { notMerge: true, lazyUpdate: false });
+                setTimeout(() => {
+                    if (this.klineChart) this.klineChart.resize();
+                }, 100);
             } else {
                 CommonUtils.showToast('K线数据获取失败: ' + data.message, 'error');
             }

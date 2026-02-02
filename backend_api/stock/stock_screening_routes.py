@@ -697,10 +697,14 @@ async def get_gms_strategy(
     weight_mom_ratio_d1: Optional[float] = Query(None, description="动量溢出态 盈亏反转 Δ/d₁ 权重"),
     weight_mom_deviation: Optional[float] = Query(None, description="动量溢出态 推力支撑 d₂₀-d 权重"),
     weight_mom_volume: Optional[float] = Query(None, description="动量溢出态 攻击强度 m₂₀/m 权重"),
+    code: Optional[str] = Query(None, description="单个股票代码（如果提供，则忽略 scope）"),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
-    """GMS 均值引力与动量突变策略选股"""
+    """
+    GMS 均值引力与动量突变策略选股。
+    数据来源由 scope 决定：watchlist=当前用户自选股，cn=A 股基本信息表全部 A 股，hk=港股基本信息表全部港股。
+    """
     if not GMS_AVAILABLE:
         return JSONResponse(
             status_code=503,
@@ -745,7 +749,11 @@ async def get_gms_strategy(
 
         stock_pool = None
         market = "all"
-        if scope == "watchlist":
+        if code:
+            stock_pool = [str(code).strip()]
+            logger.info(f"GMS 单个股票查询: {code}")
+            market = "all"
+        elif scope == "watchlist":
             if not token:
                 raise HTTPException(status_code=401, detail="查看自选股需要登录")
             try:
@@ -764,7 +772,21 @@ async def get_gms_strategy(
                         "search_date": target_date, "strategy_name": "GMS均值引力动量策略",
                         "scope": "watchlist", "message": "您的自选股列表为空",
                     })
-                stock_pool = [item.stock_code for item in watchlist_items]
+                # 自选股代码归一化：与指标表一致（A 股 6 位、港股 5 位），便于匹配 mean_frequency_resonance_indicators
+                def _normalize_code_for_gms(c: str) -> str:
+                    s = str(c).strip()
+                    if not s:
+                        return s
+                    if s.isdigit():
+                        if len(s) == 6 and s[0] in "603":
+                            return s.zfill(6)
+                        if len(s) <= 5:
+                            return s.zfill(5)
+                        return s.zfill(6)
+                    return s
+                stock_pool = list(dict.fromkeys(_normalize_code_for_gms(item.stock_code) for item in watchlist_items))
+                stock_pool = [c for c in stock_pool if c]
+                logger.info(f"GMS 数据来源=我的自选, 股票数={len(stock_pool)}")
                 market = "all"
             except JWTError:
                 raise HTTPException(status_code=401, detail="无效的认证凭据")
@@ -864,7 +886,8 @@ async def get_gms_strategy(
         from sqlalchemy import func
 
         stock_codes = [r["symbol"] for r in selection_results]
-        cn_codes = [c for c in stock_codes if (c.startswith("6") or c.startswith("0") or c.startswith("3")) and len(c) >= 6]
+        # 6 位：6/0/3 为 A 股，9 为沪市 B 股，均从 A 股行情/基本信息表取数
+        cn_codes = [c for c in stock_codes if len(c) >= 6 and c.isdigit() and c[0] in "6039"]
         hk_codes = [c for c in stock_codes if c not in cn_codes]
 
         # 从历史行情表获取最近交易日收盘价（A股、港股分别查）
