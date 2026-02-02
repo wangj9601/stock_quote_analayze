@@ -88,6 +88,10 @@ class AkshareHistoricalCollector:
                     ma20_d REAL,
                     mavol20_m REAL,
                     bias REAL,
+                    d1 REAL,
+                    d1_date VARCHAR(20),
+                    d20 REAL,
+                    d20_date VARCHAR(20),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (code, date, market_type)
                 )
@@ -98,6 +102,10 @@ class AkshareHistoricalCollector:
                 self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS amplitude REAL"))
                 self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS ratio_d20 REAL"))
                 self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS ratio_d1 REAL"))
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS d1 REAL"))
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS d1_date VARCHAR(20)"))
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS d20 REAL"))
+                self.session.execute(text("ALTER TABLE mean_frequency_resonance_indicators ADD COLUMN IF NOT EXISTS d20_date VARCHAR(20)"))
             except Exception as e:
                 logger.debug(f"通过ALTER TABLE添加列失败（可能列已存在）: {e}")
                 
