@@ -643,13 +643,16 @@
                 <div class="params-grid pvfrs-params-grid">
                     <div class="parameter-group">
                         <label for="pvfrs-observation_period">观察周期（天）</label>
-                        <input type="number" id="pvfrs-observation_period" class="param-input" min="5" max="60" step="1">
+                        <input type="number" id="pvfrs-observation_period" class="param-input" min="5" max="60"
+                            step="1">
                         <span class="param-rule">计算规则：取最近 N 个交易日，用于计算 d₁、d₂₀、Z/F 等；d₁=第1日收盘价，d₂₀=第N日收盘价。</span>
                     </div>
                     <div class="parameter-group">
                         <label for="pvfrs-buy_ratio_d20_max">Δ/d₂₀ 上限（0=不启用）</label>
-                        <input type="number" id="pvfrs-buy_ratio_d20_max" class="param-input" min="0" max="1" step="0.05">
-                        <span class="param-rule">计算规则：Δ/d₂₀ = (d₂₀−d₁)/d₂₀，即 20 日涨幅占当前价比例；买点要求该值 &lt; 此上限，越小越不易追高。</span>
+                        <input type="number" id="pvfrs-buy_ratio_d20_max" class="param-input" min="0" max="1"
+                            step="0.05">
+                        <span class="param-rule">计算规则：Δ/d₂₀ = (d₂₀−d₁)/d₂₀，即 20 日涨幅占当前价比例；买点要求该值 &lt;
+                            此上限，越小越不易追高。</span>
                     </div>
                     <div class="parameter-group">
                         <label for="pvfrs-buy_exclude_sideways">横盘不参与买点</label>
@@ -676,7 +679,8 @@
                     </div>
                     <div class="parameter-group">
                         <label for="pvfrs-buy_relative_displacement_min">最小相对位移（如 0.05=5%）</label>
-                        <input type="number" id="pvfrs-buy_relative_displacement_min" class="param-input" min="0" max="1" step="0.01">
+                        <input type="number" id="pvfrs-buy_relative_displacement_min" class="param-input" min="0"
+                            max="1" step="0.01">
                         <span class="param-rule">计算规则：相对位移 = Δ / 20日均价，即宏观位移占均价比率；买点要求 ≥ 此值，如 0.05 表示 5%。</span>
                     </div>
                 </div>
@@ -736,12 +740,18 @@
             <div class="strategy-info-card">
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
-                    <li><strong>数据来源：</strong>【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A 股基本信息表中全部 A 股的 GMS 指标列表。</li>
+                    <li><strong>数据来源：</strong>【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
+                        股基本信息表中全部 A 股的 GMS 指标列表。</li>
                     <li><strong>时间范围：</strong>最近 20 个交易日</li>
                     <li><strong>双模块阶梯式评分：</strong></li>
-                    <li class="condition-item"><strong>【均值收敛态】</strong> F/Z(≥2.5→30;[1.5,2.5)→20)、|Δ/d|(≤1%→40;≤1.5%→20)、m₂₀/m(≤0.6→30;(0.6,0.8]→15)。总分≥85 S级，[70,85) A级</li>
-                    <li class="condition-item"><strong>【动量溢出态】</strong> Δ/d₁(0~3%→40;刚过0→20)、d₂₀-d(站稳3日→30;仅当日→15;&lt;0→-10)、m₂₀/m(≥2.0→30;[1.5,2.0)→20)。总分≥90 全速切入，[80,90) 分批买入</li>
-                    <li class="condition-item">5. <strong>左侧买点</strong>：均值收敛态 S/A 级 + 粘合 + 地量；<strong>右侧买点</strong>：动量溢出态全速/分批 + 放量</li>
+                    <li class="condition-item"><strong>【均值收敛态】</strong>
+                        F/Z(≥2.5→30;[1.5,2.5)→20)、|Δ/d|(≤1%→40;≤1.5%→20)、m₂₀/m(≤0.6→30;(0.6,0.8]→15)。总分≥85 S级，[70,85) A级
+                    </li>
+                    <li class="condition-item"><strong>【动量溢出态】</strong>
+                        Δ/d₁(0~3%→40;刚过0→20)、d₂₀-d(站稳3日→30;仅当日→15;&lt;0→-10)、m₂₀/m(≥2.0→30;[1.5,2.0)→20)。总分≥90
+                        全速切入，[80,90) 分批买入</li>
+                    <li class="condition-item">5. <strong>左侧买点</strong>：均值收敛态 S/A 级 + 粘合 +
+                        地量；<strong>右侧买点</strong>：动量溢出态全速/分批 + 放量</li>
                     <li class="condition-item">6. <strong>退出</strong>：d₂₀ 跌破 d 或乖离过大（Δ/d₂₀&gt;15%）</li>
                 </ul>
             </div>
@@ -751,7 +761,8 @@
                 <h3>🔍 数据来源</h3>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
                     <div class="param-item" style="display: flex; align-items: center;">
-                        <input type="radio" id="gmsScopeCN" name="gmsScope" value="cn" checked style="margin-right: 5px;">
+                        <input type="radio" id="gmsScopeCN" name="gmsScope" value="cn" checked
+                            style="margin-right: 5px;">
                         <label for="gmsScopeCN" style="cursor: pointer;">全部A股</label>
                     </div>
                     <div class="param-item" style="display: flex; align-items: center;">
@@ -759,7 +770,8 @@
                         <label for="gmsScopeHK" style="cursor: pointer;">全部港股</label>
                     </div>
                     <div class="param-item" style="display: flex; align-items: center;">
-                        <input type="radio" id="gmsScopeWatchlist" name="gmsScope" value="watchlist" style="margin-right: 5px;">
+                        <input type="radio" id="gmsScopeWatchlist" name="gmsScope" value="watchlist"
+                            style="margin-right: 5px;">
                         <label for="gmsScopeWatchlist" style="cursor: pointer;">我的自选</label>
                     </div>
                 </div>
@@ -796,12 +808,14 @@
                     </div>
                     <div class="parameter-group">
                         <label for="gms-accumulation_fz_min">蓄势 F/Z 下限</label>
-                        <input type="number" id="gms-accumulation_fz_min" class="param-input" min="0.5" max="5" step="0.1">
+                        <input type="number" id="gms-accumulation_fz_min" class="param-input" min="0.5" max="5"
+                            step="0.1">
                         <span class="param-rule">F/Z &gt; 此值得 30 分，默认 1.5</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-balance_ratio_max">平衡 |Δ/d₂₀| 上限</label>
-                        <input type="number" id="gms-balance_ratio_max" class="param-input" min="0" max="0.1" step="0.005">
+                        <input type="number" id="gms-balance_ratio_max" class="param-input" min="0" max="0.1"
+                            step="0.005">
                         <span class="param-rule">|Δ/d₂₀| &lt; 此值得 40 分，默认 0.01</span>
                     </div>
                     <div class="parameter-group">
@@ -816,65 +830,78 @@
                     </div>
                     <div class="parameter-group">
                         <label for="gms-overbought_ratio">乖离过大阈值</label>
-                        <input type="number" id="gms-overbought_ratio" class="param-input" min="0" max="0.5" step="0.01">
+                        <input type="number" id="gms-overbought_ratio" class="param-input" min="0" max="0.5"
+                            step="0.01">
                         <span class="param-rule">Δ/d₂₀ &gt; 此值退出，默认 0.15</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-accumulation_s_threshold">均值收敛态 S 级阈值</label>
-                        <input type="number" id="gms-accumulation_s_threshold" class="param-input" min="60" max="100" step="1">
+                        <input type="number" id="gms-accumulation_s_threshold" class="param-input" min="60" max="100"
+                            step="1">
                         <span class="param-rule">均值收敛态总分≥此值为 S 级，默认 85</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-accumulation_a_threshold">均值收敛态 A 级阈值</label>
-                        <input type="number" id="gms-accumulation_a_threshold" class="param-input" min="50" max="90" step="1">
+                        <input type="number" id="gms-accumulation_a_threshold" class="param-input" min="50" max="90"
+                            step="1">
                         <span class="param-rule">均值收敛态总分≥此值为 A 级，默认 70</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-momentum_full_threshold">动量溢出态全速切入阈值</label>
-                        <input type="number" id="gms-momentum_full_threshold" class="param-input" min="70" max="100" step="1">
+                        <input type="number" id="gms-momentum_full_threshold" class="param-input" min="70" max="100"
+                            step="1">
                         <span class="param-rule">动量溢出态总分≥此值全速切入，默认 90</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-momentum_batch_threshold">动量溢出态分批买入阈值</label>
-                        <input type="number" id="gms-momentum_batch_threshold" class="param-input" min="60" max="95" step="1">
+                        <input type="number" id="gms-momentum_batch_threshold" class="param-input" min="60" max="95"
+                            step="1">
                         <span class="param-rule">动量溢出态总分≥此值分批买入，默认 80</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-instant_deviation_stable_days">推力支撑站稳天数</label>
-                        <input type="number" id="gms-instant_deviation_stable_days" class="param-input" min="1" max="5" step="1">
+                        <input type="number" id="gms-instant_deviation_stable_days" class="param-input" min="1" max="5"
+                            step="1">
                         <span class="param-rule">d₂₀&gt;d 连续此日得 30 分，否则 15 分，默认 3</span>
                     </div>
                 </div>
-                <div class="params-grid gms-params-grid" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e8e8e8;">
+                <div class="params-grid gms-params-grid"
+                    style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e8e8e8;">
                     <h4 style="grid-column: 1 / -1; margin: 0 0 8px 0;">评分权重（每模块合计建议 100）</h4>
                     <div class="parameter-group">
                         <label for="gms-weight_acc_fz">均值收敛态 时间耗散 F/Z 权重</label>
-                        <input type="number" id="gms-weight_acc_fz" class="param-input" min="0" max="100" step="1" value="30">
+                        <input type="number" id="gms-weight_acc_fz" class="param-input" min="0" max="100" step="1"
+                            value="30">
                         <span class="param-rule">默认 30，权重为0时该维度不参与计分</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-weight_acc_balance">均值收敛态 引力粘合 |Δ/d| 权重</label>
-                        <input type="number" id="gms-weight_acc_balance" class="param-input" min="0" max="100" step="1" value="40">
+                        <input type="number" id="gms-weight_acc_balance" class="param-input" min="0" max="100" step="1"
+                            value="40">
                         <span class="param-rule">默认 40</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-weight_acc_volume">均值收敛态 成交量缩 权重</label>
-                        <input type="number" id="gms-weight_acc_volume" class="param-input" min="0" max="100" step="1" value="30">
+                        <input type="number" id="gms-weight_acc_volume" class="param-input" min="0" max="100" step="1"
+                            value="30">
                         <span class="param-rule">默认 30</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-weight_mom_ratio_d1">动量溢出态 盈亏反转 Δ/d₁ 权重</label>
-                        <input type="number" id="gms-weight_mom_ratio_d1" class="param-input" min="0" max="100" step="1" value="40">
+                        <input type="number" id="gms-weight_mom_ratio_d1" class="param-input" min="0" max="100" step="1"
+                            value="40">
                         <span class="param-rule">默认 40</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-weight_mom_deviation">动量溢出态 推力支撑 d₂₀-d 权重</label>
-                        <input type="number" id="gms-weight_mom_deviation" class="param-input" min="0" max="100" step="1" value="30">
+                        <input type="number" id="gms-weight_mom_deviation" class="param-input" min="0" max="100"
+                            step="1" value="30">
                         <span class="param-rule">默认 30</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-weight_mom_volume">动量溢出态 攻击强度 m₂₀/m 权重</label>
-                        <input type="number" id="gms-weight_mom_volume" class="param-input" min="0" max="100" step="1" value="30">
+                        <input type="number" id="gms-weight_mom_volume" class="param-input" min="0" max="100" step="1"
+                            value="30">
                         <span class="param-rule">默认 30</span>
                     </div>
                 </div>
@@ -907,10 +934,15 @@
                             <tr>
                                 <th>股票代码</th>
                                 <th>股票名称</th>
-                                <th>总分</th>
+                                <th style="display:none;">总分</th>
                                 <th>信号强度</th>
                                 <th>买点类型</th>
                                 <th>当前价格</th>
+                                <th>Δ (20日位移)</th>
+                                <th>F (下跌天)</th>
+                                <th>Z (上涨天)</th>
+                                <th>d (20日均价)</th>
+                                <th>Δ/d (位移/均价)</th>
                                 <th>Δ/d₂₀</th>
                                 <th>Δ/d₁</th>
                                 <th>F/Z</th>
@@ -920,7 +952,7 @@
                         </thead>
                         <tbody id="resultsTableBody-gms">
                             <tr>
-                                <td colspan="11" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                                <td colspan="16" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
                             </tr>
                         </tbody>
                     </table>

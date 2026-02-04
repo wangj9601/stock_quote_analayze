@@ -9,13 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from backend_api.database import get_db
+from backend_api.database import get_db, SessionLocal
 from backend_api.models import SystemAlert, SystemAlertRule, SystemServiceStatus
+from backend_api.auth import get_current_admin
 from backend_core.monitoring import system_monitor, alert_manager
 from backend_core.monitoring.system_monitor import AlertLevel, AlertType
 from backend_core.monitoring.alert_manager import NotificationChannel, NotificationConfig
 
-router = APIRouter(prefix="/system/monitoring", tags=["系统监控"])
+router = APIRouter(prefix="/api/admin/system/monitoring", tags=["系统监控"])
 
 # Pydantic 模型
 class AlertCreateRequest(BaseModel):
@@ -52,7 +53,7 @@ class NotificationConfigRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
 
 @router.get("/overview")
-async def get_monitoring_overview():
+async def get_monitoring_overview(current_user: Any = Depends(get_current_admin)):
     """获取监控概览"""
     try:
         data = system_monitor.get_monitoring_data()
@@ -65,7 +66,7 @@ async def get_monitoring_overview():
         raise HTTPException(status_code=500, detail=f"获取监控概览失败: {str(e)}")
 
 @router.get("/system-health")
-async def get_system_health():
+async def get_system_health(current_user: Any = Depends(get_current_admin)):
     """获取系统健康状态"""
     try:
         health = system_monitor.get_system_health()
@@ -87,7 +88,8 @@ async def get_system_health():
 @router.get("/metrics")
 async def get_performance_metrics(
     time_range: str = Query("1h", description="时间范围: 1h, 6h, 12h, 1d"),
-    interval: str = Query("1m", description="间隔时间")
+    interval: str = Query("1m", description="间隔时间"),
+    current_user: Any = Depends(get_current_admin)
 ):
     """获取性能指标"""
     try:
@@ -107,7 +109,8 @@ async def get_alerts(
     alert_type: Optional[str] = Query(None, description="告警类型过滤"),
     acknowledged: Optional[bool] = Query(None, description="是否已确认过滤"),
     start_time: Optional[str] = Query(None, description="开始时间 (ISO格式)"),
-    end_time: Optional[str] = Query(None, description="结束时间 (ISO格式)")
+    end_time: Optional[str] = Query(None, description="结束时间 (ISO格式)"),
+    current_user: Any = Depends(get_current_admin)
 ):
     """获取告警列表"""
     try:
@@ -137,7 +140,7 @@ async def get_alerts(
         raise HTTPException(status_code=500, detail=f"获取告警列表失败: {str(e)}")
 
 @router.post("/alerts")
-async def create_alert(request: AlertCreateRequest):
+async def create_alert(request: AlertCreateRequest, current_user: Any = Depends(get_current_admin)):
     """创建告警"""
     try:
         alert_id = system_monitor.add_alert(
@@ -161,7 +164,7 @@ async def create_alert(request: AlertCreateRequest):
         raise HTTPException(status_code=500, detail=f"创建告警失败: {str(e)}")
 
 @router.post("/alerts/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: int, request: AlertAcknowledgeRequest):
+async def acknowledge_alert(alert_id: int, request: AlertAcknowledgeRequest, current_user: Any = Depends(get_current_admin)):
     """确认告警"""
     try:
         success = system_monitor.acknowledge_alert(alert_id, request.acknowledged_by)
@@ -177,7 +180,7 @@ async def acknowledge_alert(alert_id: int, request: AlertAcknowledgeRequest):
         raise HTTPException(status_code=500, detail=f"确认告警失败: {str(e)}")
 
 @router.post("/alerts/{alert_id}/resolve")
-async def resolve_alert(alert_id: int, resolved_by: str = "admin"):
+async def resolve_alert(alert_id: int, resolved_by: str = "admin", current_user: Any = Depends(get_current_admin)):
     """解决告警"""
     try:
         success = alert_manager.resolve_alert(alert_id, resolved_by)
@@ -193,7 +196,7 @@ async def resolve_alert(alert_id: int, resolved_by: str = "admin"):
         raise HTTPException(status_code=500, detail=f"解决告警失败: {str(e)}")
 
 @router.get("/alerts/statistics")
-async def get_alert_statistics(days: int = Query(7, ge=1, le=365, description="统计天数")):
+async def get_alert_statistics(days: int = Query(7, ge=1, le=365, description="统计天数"), current_user: Any = Depends(get_current_admin)):
     """获取告警统计信息"""
     try:
         stats = alert_manager.get_alert_statistics(days)
@@ -206,7 +209,7 @@ async def get_alert_statistics(days: int = Query(7, ge=1, le=365, description="�
         raise HTTPException(status_code=500, detail=f"获取告警统计失败: {str(e)}")
 
 @router.get("/services")
-async def get_service_status():
+async def get_service_status(current_user: Any = Depends(get_current_admin)):
     """获取服务状态"""
     try:
         with SessionLocal() as db:
@@ -232,7 +235,7 @@ async def get_service_status():
         raise HTTPException(status_code=500, detail=f"获取服务状态失败: {str(e)}")
 
 @router.get("/rules")
-async def get_alert_rules():
+async def get_alert_rules(current_user: Any = Depends(get_current_admin)):
     """获取告警规则"""
     try:
         rules = system_monitor.get_alert_rules()
@@ -245,7 +248,7 @@ async def get_alert_rules():
         raise HTTPException(status_code=500, detail=f"获取告警规则失败: {str(e)}")
 
 @router.post("/rules")
-async def create_alert_rule(request: AlertRuleCreateRequest):
+async def create_alert_rule(request: AlertRuleCreateRequest, current_user: Any = Depends(get_current_admin)):
     """创建告警规则"""
     try:
         from backend_core.monitoring.system_monitor import AlertRule as SystemAlertRule
@@ -271,7 +274,7 @@ async def create_alert_rule(request: AlertRuleCreateRequest):
         raise HTTPException(status_code=500, detail=f"创建告警规则失败: {str(e)}")
 
 @router.delete("/rules/{rule_name}")
-async def delete_alert_rule(rule_name: str):
+async def delete_alert_rule(rule_name: str, current_user: Any = Depends(get_current_admin)):
     """删除告警规则"""
     try:
         system_monitor.remove_alert_rule(rule_name)
@@ -283,7 +286,7 @@ async def delete_alert_rule(rule_name: str):
         raise HTTPException(status_code=500, detail=f"删除告警规则失败: {str(e)}")
 
 @router.get("/notifications/configs")
-async def get_notification_configs():
+async def get_notification_configs(current_user: Any = Depends(get_current_admin)):
     """获取通知配置"""
     try:
         configs = []
@@ -305,7 +308,7 @@ async def get_notification_configs():
         raise HTTPException(status_code=500, detail=f"获取通知配置失败: {str(e)}")
 
 @router.post("/notifications/configs")
-async def create_notification_config(request: NotificationConfigRequest):
+async def create_notification_config(request: NotificationConfigRequest, current_user: Any = Depends(get_current_admin)):
     """创建通知配置"""
     try:
         config = NotificationConfig(
@@ -325,7 +328,7 @@ async def create_notification_config(request: NotificationConfigRequest):
         raise HTTPException(status_code=500, detail=f"创建通知配置失败: {str(e)}")
 
 @router.delete("/notifications/configs/{config_name}")
-async def delete_notification_config(config_name: str):
+async def delete_notification_config(config_name: str, current_user: Any = Depends(get_current_admin)):
     """删除通知配置"""
     try:
         alert_manager.remove_notification_config(config_name)
@@ -337,7 +340,7 @@ async def delete_notification_config(config_name: str):
         raise HTTPException(status_code=500, detail=f"删除通知配置失败: {str(e)}")
 
 @router.post("/maintenance/cleanup-alerts")
-async def cleanup_old_alerts(days: int = Query(30, ge=1, le=365, description="保留天数")):
+async def cleanup_old_alerts(days: int = Query(30, ge=1, le=365, description="保留天数"), current_user: Any = Depends(get_current_admin)):
     """清理旧告警"""
     try:
         deleted_count = alert_manager.cleanup_old_alerts(days)
@@ -350,7 +353,7 @@ async def cleanup_old_alerts(days: int = Query(30, ge=1, le=365, description="�
         raise HTTPException(status_code=500, detail=f"清理旧告警失败: {str(e)}")
 
 @router.post("/monitoring/start")
-async def start_monitoring():
+async def start_monitoring(current_user: Any = Depends(get_current_admin)):
     """启动监控"""
     try:
         system_monitor.start_background_monitoring()
@@ -362,7 +365,7 @@ async def start_monitoring():
         raise HTTPException(status_code=500, detail=f"启动监控失败: {str(e)}")
 
 @router.post("/monitoring/stop")
-async def stop_monitoring():
+async def stop_monitoring(current_user: Any = Depends(get_current_admin)):
     """停止监控"""
     try:
         system_monitor.stop_background_monitoring()
@@ -374,7 +377,7 @@ async def stop_monitoring():
         raise HTTPException(status_code=500, detail=f"停止监控失败: {str(e)}")
 
 @router.get("/monitoring/status")
-async def get_monitoring_status():
+async def get_monitoring_status(current_user: Any = Depends(get_current_admin)):
     """获取监控状态"""
     try:
         is_running = system_monitor.monitor_thread and system_monitor.monitor_thread.is_alive()

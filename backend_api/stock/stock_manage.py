@@ -499,35 +499,6 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
             return await get_hk_realtime_quote_by_code(code, db)
         
         # A股逻辑继续
-        # 优先从数据库获取市盈率等财务指标数据
-        # 获取最新交易日期
-        latest_date_result = pd.read_sql_query("""
-            SELECT MAX(trade_date) as latest_date 
-            FROM stock_realtime_quote 
-            WHERE change_percent IS NOT NULL AND change_percent != 0
-        """, db.bind)
-        
-        db_stock_data = None
-        if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
-            latest_trade_date = latest_date_result.iloc[0]['latest_date']
-            db_stock_data = db.query(StockRealtimeQuote).filter(
-                StockRealtimeQuote.code == code,
-                StockRealtimeQuote.trade_date == latest_trade_date
-            ).first()
-        
-        # 获取买卖盘数据
-        try:
-            df_bid_ask = ak.stock_bid_ask_em(symbol=code)
-            if df_bid_ask.empty:
-                print(f"[realtime_quote_by_code] 未找到股票代码: {code}")
-                return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
-        except Exception as e:
-            print(f"[realtime_quote_by_code] 获取买卖盘数据失败: {e}")
-            return JSONResponse({"success": False, "message": f"获取股票数据失败: {str(e)}"}, status_code=500)
-        
-        # 合并数据
-        bid_ask_dict = dict(zip(df_bid_ask['item'], df_bid_ask['value']))
-        
         def fmt(val):
             try:
                 if val is None:
@@ -535,37 +506,79 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 return f"{float(val):.2f}"
             except Exception:
                 return None
+
+        # 1. 优先尝试从实时行情表获取最新数据
+        # 先找到该股票最新的交易日期
+        db_stock_data = db.query(StockRealtimeQuote).filter(
+            StockRealtimeQuote.code == code
+        ).order_by(desc(StockRealtimeQuote.trade_date)).first()
         
-        # 增加均价字段
-        avg_price = None
-        try:
-            # 优先用akshare返回的均价字段
-            avg_price = bid_ask_dict.get("均价") or bid_ask_dict.get("成交均价")
-            if avg_price is None and bid_ask_dict.get("金额") and bid_ask_dict.get("总手") and float(bid_ask_dict.get("总手")) != 0:
-                avg_price = float(bid_ask_dict.get("金额")) / float(bid_ask_dict.get("总手"))
-        except Exception:
-            avg_price = None
+        source = "realtime_db"
         
-              
-        result = {
-            "code": code,
-            "current_price": fmt(bid_ask_dict.get("最新")),
-            "change_amount": fmt(bid_ask_dict.get("涨跌")),
-            "change_percent": fmt(bid_ask_dict.get("涨幅")),
-            "open": fmt(bid_ask_dict.get("今开")),
-            "pre_close": fmt(bid_ask_dict.get("昨收")),
-            "high": fmt(bid_ask_dict.get("最高")),
-            "low": fmt(bid_ask_dict.get("最低")),
-            "volume": fmt(bid_ask_dict.get("总手")),
-            "turnover": fmt(bid_ask_dict.get("金额")),
-            "turnover_rate": fmt(bid_ask_dict.get("换手")),
-            "pe_dynamic": None,
-            "average_price": fmt(avg_price),
-        }
-        print(f"[realtime_quote_by_code] 输出数据: {result}")
+        # 2. 如果实时行情表没有，从历史行情表获取最近一天的数据
+        if not db_stock_data:
+            latest_history = db.query(HistoricalQuotes).filter(
+                HistoricalQuotes.code == code
+            ).order_by(desc(HistoricalQuotes.date)).first()
+            
+            if latest_history:
+                db_stock_data = latest_history
+                source = "history_db"
+                # 统一字段名映射 (HistoricalQuotes 使用 date, change, change_percent)
+                # StockRealtimeQuote 使用 trade_date, change_percent
+                pass
+
+        if not db_stock_data:
+            print(f"[realtime_quote_by_code] 数据库中未找到股票代码: {code}")
+            return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+
+        # 构建统一的结果格式
+        # 注意：HistoricalQuotes 中的字段名和 StockRealtimeQuote 有些不同，需要适配
+        if source == "realtime_db":
+            result = {
+                "code": code,
+                "name": db_stock_data.name,
+                "current_price": fmt(db_stock_data.current_price),
+                "change_amount": fmt((db_stock_data.current_price - db_stock_data.pre_close) if db_stock_data.current_price and db_stock_data.pre_close else None),
+                "change_percent": fmt(db_stock_data.change_percent),
+                "open": fmt(db_stock_data.open),
+                "pre_close": fmt(db_stock_data.pre_close),
+                "high": fmt(db_stock_data.high),
+                "low": fmt(db_stock_data.low),
+                "volume": fmt(db_stock_data.volume), # 后端存的是"手"还是"张"？前端期望显示时除以10000
+                "turnover": fmt(db_stock_data.amount),
+                "turnover_rate": fmt(db_stock_data.turnover_rate),
+                "pe_dynamic": fmt(db_stock_data.pe_dynamic),
+                "average_price": fmt(None),
+            }
+            # 计算均价
+            if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
+                 result["average_price"] = fmt(db_stock_data.amount / db_stock_data.volume)
+        else: # history_db
+            result = {
+                "code": code,
+                "name": db_stock_data.name,
+                "current_price": fmt(db_stock_data.close),
+                "change_amount": fmt(db_stock_data.change),
+                "change_percent": fmt(db_stock_data.change_percent),
+                "open": fmt(db_stock_data.open),
+                "pre_close": fmt(db_stock_data.pre_close),
+                "high": fmt(db_stock_data.high),
+                "low": fmt(db_stock_data.low),
+                "volume": fmt(db_stock_data.volume),
+                "turnover": fmt(db_stock_data.amount),
+                "turnover_rate": fmt(db_stock_data.turnover_rate),
+                "pe_dynamic": None,
+                "average_price": fmt(None),
+            }
+            if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
+                 result["average_price"] = fmt(db_stock_data.amount / db_stock_data.volume)
+
+        print(f"[realtime_quote_by_code] 从{source}输出数据: {result}")
         return JSONResponse({"success": True, "data": result})
     except Exception as e:
         print(f"[realtime_quote_by_code] 异常: {e}")
+        traceback.print_exc()
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 # 股票类型判断接口

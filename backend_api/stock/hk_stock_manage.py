@@ -279,162 +279,118 @@ async def get_hk_realtime_quote_by_code(code: str = Query(None, description="股
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
     
     try:
-        # 获取最新交易日期
-        latest_date_result = pd.read_sql_query("""
-            SELECT MAX(trade_date) as latest_date 
-            FROM stock_realtime_quote_hk 
-            WHERE change_percent IS NOT NULL
-        """, db.bind)
-        
-        db_stock_data = None
-        if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
-            latest_trade_date = latest_date_result.iloc[0]['latest_date']
-            if isinstance(latest_trade_date, str):
-                latest_trade_date = latest_trade_date[:10]  # 只取日期部分
-            else:
-                latest_trade_date = str(latest_trade_date)[:10]
-            
-            db_stock_data = db.query(StockRealtimeQuoteHK).filter(
-                StockRealtimeQuoteHK.code == code,
-                StockRealtimeQuoteHK.trade_date == latest_trade_date
-            ).first()
-        
-        # 如果数据库有数据，直接返回
-        if db_stock_data:
-            def fmt(val):
-                try:
-                    if val is None:
-                        return None
-                    return f"{float(val):.2f}"
-                except Exception:
+        def fmt(val):
+            try:
+                if val is None or (isinstance(val, float) and math.isnan(val)):
                     return None
-            
-            result = {
-                "code": db_stock_data.code,
-                "name": db_stock_data.name,
-                "current_price": fmt(db_stock_data.current_price),
-                "change_amount": fmt(db_stock_data.change_amount),
-                "change_percent": fmt(db_stock_data.change_percent),
-                "open": fmt(db_stock_data.open),
-                "pre_close": fmt(db_stock_data.pre_close),
-                "high": fmt(db_stock_data.high),
-                "low": fmt(db_stock_data.low),
-                "volume": fmt(db_stock_data.volume),
-                "turnover": fmt(db_stock_data.amount),
-                "turnover_rate": None,  # 从历史行情表获取
-                "pe_dynamic": None,  # 从财务指标接口获取
-                "average_price": None,  # 需要计算
-            }
-            
-            # 计算均价
-            if db_stock_data.volume and db_stock_data.volume > 0 and db_stock_data.amount:
-                try:
-                    avg_price = float(db_stock_data.amount) / float(db_stock_data.volume)
-                    result["average_price"] = fmt(avg_price)
-                except Exception:
-                    pass
-            
-            # 从历史行情表获取最新的换手率
-            try:
-                latest_history = db.query(HistoricalQuotesHK).filter(
-                    HistoricalQuotesHK.code == code,
-                    HistoricalQuotesHK.turnover_rate.isnot(None)
-                ).order_by(HistoricalQuotesHK.date.desc()).first()
-                if latest_history and latest_history.turnover_rate is not None:
-                    result["turnover_rate"] = fmt(latest_history.turnover_rate)
-                    print(f"[hk_realtime_quote_by_code] 从历史行情表获取换手率: {result['turnover_rate']}")
-            except Exception as e:
-                print(f"[hk_realtime_quote_by_code] 获取换手率失败: {e}")
-            
-            # 从财务指标接口获取市盈率
-            try:
-                import akshare as ak
-                financial_df = ak.stock_hk_financial_indicator_em(symbol=code)
-                if financial_df is not None and not financial_df.empty and '市盈率' in financial_df.columns:
-                    pe_value = financial_df.iloc[0]['市盈率']
-                    if pd.notna(pe_value):
-                        result["pe_dynamic"] = fmt(pe_value)
-                        print(f"[hk_realtime_quote_by_code] 从财务指标获取市盈率: {result['pe_dynamic']}")
-            except Exception as e:
-                print(f"[hk_realtime_quote_by_code] 获取市盈率失败: {e}")
-            
-            print(f"[hk_realtime_quote_by_code] 从数据库返回数据: {result}")
-            return JSONResponse({"success": True, "data": result})
+                return f"{float(val):.2f}"
+            except Exception:
+                return None
+
+        # 1. 优先尝试从港股实时行情表获取最新数据
+        db_stock_data = db.query(StockRealtimeQuoteHK).filter(
+            StockRealtimeQuoteHK.code == code
+        ).order_by(desc(StockRealtimeQuoteHK.trade_date)).first()
         
-        # 数据库没有数据，尝试从akshare实时获取
+        source = "realtime_db_hk"
+
+        # 2. 如果实时行情表没有，从港股历史行情表获取最近一天的数据
+        if not db_stock_data:
+            latest_history = db.query(HistoricalQuotesHK).filter(
+                HistoricalQuotesHK.code == code
+            ).order_by(desc(HistoricalQuotesHK.date)).first()
+            
+            if latest_history:
+                db_stock_data = latest_history
+                source = "history_db_hk"
+
+        # 3. 如果数据库都没有，最后才尝试从akshare实时获取（保留作为保底，但用户要求优先表）
+        # 这里如果改为完全不依赖akshare，可以取消下面的逻辑。
+        # 考虑到用户需求是“修改为从实时行情表取，如果没有，则从历史行情表取”，我这里优先完成这两步。
+        
+        if db_stock_data:
+            if source == "realtime_db_hk":
+                result = {
+                    "code": db_stock_data.code,
+                    "name": db_stock_data.name,
+                    "current_price": fmt(db_stock_data.current_price),
+                    "change_amount": fmt(db_stock_data.change_amount),
+                    "change_percent": fmt(db_stock_data.change_percent),
+                    "open": fmt(db_stock_data.open),
+                    "pre_close": fmt(db_stock_data.pre_close),
+                    "high": fmt(db_stock_data.high),
+                    "low": fmt(db_stock_data.low),
+                    "volume": fmt(db_stock_data.volume),
+                    "turnover": fmt(db_stock_data.amount),
+                    "turnover_rate": None,
+                    "pe_dynamic": None,
+                    "average_price": None,
+                }
+                if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
+                    result["average_price"] = fmt(db_stock_data.amount / db_stock_data.volume)
+            else: # history_db_hk
+                result = {
+                    "code": db_stock_data.code,
+                    "name": db_stock_data.name,
+                    "current_price": fmt(db_stock_data.close),
+                    "change_amount": fmt(db_stock_data.change_amount),
+                    "change_percent": fmt(db_stock_data.change_percent),
+                    "open": fmt(db_stock_data.open),
+                    "pre_close": fmt(db_stock_data.pre_close),
+                    "high": fmt(db_stock_data.high),
+                    "low": fmt(db_stock_data.low),
+                    "volume": fmt(db_stock_data.volume),
+                    "turnover": fmt(db_stock_data.amount),
+                    "turnover_rate": fmt(db_stock_data.turnover_rate),
+                    "pe_dynamic": None,
+                    "average_price": None,
+                }
+                if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
+                    result["average_price"] = fmt(db_stock_data.amount / db_stock_data.volume)
+
+            # 补充实时表缺失的换手率（如果可用）
+            if source == "realtime_db_hk" and result["turnover_rate"] is None:
+                try:
+                    latest_history = db.query(HistoricalQuotesHK).filter(
+                        HistoricalQuotesHK.code == code,
+                        HistoricalQuotesHK.turnover_rate.isnot(None)
+                    ).order_by(HistoricalQuotesHK.date.desc()).first()
+                    if latest_history:
+                        result["turnover_rate"] = fmt(latest_history.turnover_rate)
+                except: pass
+
+            print(f"[hk_realtime_quote_by_code] 从{source}返回数据: {result}")
+            return JSONResponse({"success": True, "data": result})
+
+        # 4. 彻底没数据时的兜底 logic (可选是否保留 AK)
+        print(f"[hk_realtime_quote_by_code] 数据库中未找到股票代码: {code}，尝试AK保底")
         try:
+            import akshare as ak
             df_hk_spot = ak.stock_hk_spot_em()
             stock_data = df_hk_spot[df_hk_spot['代码'] == code]
-            
-            if stock_data.empty:
-                print(f"[hk_realtime_quote_by_code] 未找到股票代码: {code}")
-                return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
-            
-            row = stock_data.iloc[0]
-            
-            def fmt(val):
-                try:
-                    if val is None or pd.isna(val):
-                        return None
-                    return f"{float(val):.2f}"
-                except Exception:
-                    return None
-            
-            result = {
-                "code": code,
-                "name": row.get('名称', ''),
-                "current_price": fmt(row.get('最新价')),
-                "change_amount": fmt(row.get('涨跌额')),
-                "change_percent": fmt(row.get('涨跌幅')),
-                "open": fmt(row.get('今开')),
-                "pre_close": fmt(row.get('昨收')),
-                "high": fmt(row.get('最高')),
-                "low": fmt(row.get('最低')),
-                "volume": fmt(row.get('成交量')),
-                "turnover": fmt(row.get('成交额')),
-                "turnover_rate": None,  # 从历史行情表获取
-                "pe_dynamic": None,  # 从财务指标接口获取
-                "average_price": None,
-            }
-            
-            # 计算均价
-            if row.get('成交量') and float(row.get('成交量', 0)) > 0 and row.get('成交额'):
-                try:
-                    avg_price = float(row.get('成交额')) / float(row.get('成交量'))
-                    result["average_price"] = fmt(avg_price)
-                except Exception:
-                    pass
-            
-            # 从历史行情表获取最新的换手率
-            try:
-                latest_history = db.query(HistoricalQuotesHK).filter(
-                    HistoricalQuotesHK.code == code,
-                    HistoricalQuotesHK.turnover_rate.isnot(None)
-                ).order_by(HistoricalQuotesHK.date.desc()).first()
-                if latest_history and latest_history.turnover_rate is not None:
-                    result["turnover_rate"] = fmt(latest_history.turnover_rate)
-                    print(f"[hk_realtime_quote_by_code] 从历史行情表获取换手率: {result['turnover_rate']}")
-            except Exception as e:
-                print(f"[hk_realtime_quote_by_code] 获取换手率失败: {e}")
-            
-            # 从财务指标接口获取市盈率
-            try:
-                financial_df = ak.stock_hk_financial_indicator_em(symbol=code)
-                if financial_df is not None and not financial_df.empty and '市盈率' in financial_df.columns:
-                    pe_value = financial_df.iloc[0]['市盈率']
-                    if pd.notna(pe_value):
-                        result["pe_dynamic"] = fmt(pe_value)
-                        print(f"[hk_realtime_quote_by_code] 从财务指标获取市盈率: {result['pe_dynamic']}")
-            except Exception as e:
-                print(f"[hk_realtime_quote_by_code] 获取市盈率失败: {e}")
-            
-            print(f"[hk_realtime_quote_by_code] 从akshare返回数据: {result}")
-            return JSONResponse({"success": True, "data": result})
-            
-        except Exception as e:
-            print(f"[hk_realtime_quote_by_code] 从akshare获取数据失败: {e}")
-            return JSONResponse({"success": False, "message": f"获取港股实时行情失败: {str(e)}"}, status_code=500)
-            
+            if not stock_data.empty:
+                row = stock_data.iloc[0]
+                result = {
+                    "code": code,
+                    "name": row.get('名称', ''),
+                    "current_price": fmt(row.get('最新价')),
+                    "change_amount": fmt(row.get('涨跌额')),
+                    "change_percent": fmt(row.get('涨跌幅')),
+                    "open": fmt(row.get('今开')),
+                    "pre_close": fmt(row.get('昨收')),
+                    "high": fmt(row.get('最高')),
+                    "low": fmt(row.get('最低')),
+                    "volume": fmt(row.get('成交量')),
+                    "turnover": fmt(row.get('成交额')),
+                    "turnover_rate": None,
+                    "pe_dynamic": None,
+                    "average_price": None,
+                }
+                return JSONResponse({"success": True, "data": result})
+        except: pass
+
+        return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
+
     except Exception as e:
         print(f"[hk_realtime_quote_by_code] 异常: {e}")
         traceback.print_exc()

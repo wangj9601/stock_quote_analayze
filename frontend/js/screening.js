@@ -711,7 +711,7 @@ const ScreeningPage = {
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
             } else if (strategy === 'gms') {
-                colSpan = 11;
+                colSpan = 16;
             } else {
                 colSpan = 12;
             }
@@ -1093,7 +1093,7 @@ const ScreeningPage = {
                                 <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
                                 <tbody>
                                     <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
-                                    <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0]*100).toFixed(1)}%→满分; ≤${(balTiers[1]*100).toFixed(1)}%→1/2</td></tr>
+                                    <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0] * 100).toFixed(1)}%→满分; ≤${(balTiers[1] * 100).toFixed(1)}%→1/2</td></tr>
                                     <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
                                     <tr><td>均值收敛态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
                                 </tbody>
@@ -1104,7 +1104,7 @@ const ScreeningPage = {
                             <table class="gms-weight-table">
                                 <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
                                 <tbody>
-                                    <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1]*100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
+                                    <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1] * 100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
                                     <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
                                     <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
                                     <tr><td>动量溢出态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
@@ -1148,10 +1148,15 @@ const ScreeningPage = {
                     <tr data-gms-row="${index}">
                         <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
                         <td><span class="stock-name">${stock.name || '--'}</span></td>
-                        <td><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
+                        <td style="display:none;"><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
                         <td><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td><span class="${buyTypeClass}">${buyType}</span></td>
                         <td>${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td>${stock.delta != null ? stock.delta.toFixed(4) : '--'}</td>
+                        <td>${stock.falling_days != null ? stock.falling_days : '--'}</td>
+                        <td>${stock.rising_days != null ? stock.rising_days : '--'}</td>
+                        <td>${stock.d_ma20 != null ? stock.d_ma20.toFixed(2) : '--'}</td>
+                        <td>${stock.ratio_relative != null ? (stock.ratio_relative * 100).toFixed(2) + '%' : '--'}</td>
                         <td>${stock.ratio_d20 != null ? fmtPct(stock.ratio_d20) : '--'}</td>
                         <td>${stock.ratio_d1 != null ? fmtPct(stock.ratio_d1) : '--'}</td>
                         <td>${stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '--'}</td>
@@ -1165,7 +1170,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="11" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                        <td colspan="16" class="gms-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
@@ -1336,7 +1341,8 @@ const ScreeningPage = {
             filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'gms') {
             headers = [
-                '股票代码', '股票名称', '总分', '信号强度', '均值收敛态得分', '均值收敛态等级', '动量溢出态得分', '动量溢出态等级', '买点类型', '当前价格',
+                '股票代码', '股票名称', '信号强度', '买点类型', '当前价格',
+                'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
                 'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅'
             ];
             rows = data.map(stock => {
@@ -1344,14 +1350,14 @@ const ScreeningPage = {
                 return [
                     `'${stock.symbol || stock.code}`,
                     stock.name || '',
-                    stock.score_total != null ? stock.score_total.toFixed(1) : '',
                     (sig * 100).toFixed(1) + '%',
-                    stock.score_accumulation != null ? stock.score_accumulation.toFixed(1) : '',
-                    stock.accumulation_grade || '',
-                    stock.score_momentum != null ? stock.score_momentum.toFixed(1) : '',
-                    stock.momentum_grade || '',
                     stock.buy_type || '',
                     stock.current_price != null ? stock.current_price.toFixed(2) : '',
+                    stock.delta != null ? stock.delta.toFixed(4) : '',
+                    stock.falling_days != null ? stock.falling_days : '',
+                    stock.rising_days != null ? stock.rising_days : '',
+                    stock.d_ma20 != null ? stock.d_ma20.toFixed(2) : '',
+                    stock.ratio_relative != null ? (stock.ratio_relative * 100).toFixed(2) + '%' : '',
                     stock.ratio_d20 != null ? (stock.ratio_d20 * 100).toFixed(2) + '%' : '',
                     stock.ratio_d1 != null ? (stock.ratio_d1 * 100).toFixed(2) + '%' : '',
                     stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '',

@@ -1400,8 +1400,10 @@ const StockPage = {
 
         // 更新布林带
         if (indicators.bollinger_bands) {
+            console.log('[技术指标] BOLL数据:', indicators.bollinger_bands);
+            const bbDesc = indicators.bollinger_bands.desc || (indicators.bollinger_bands.middle ? indicators.bollinger_bands.middle.toFixed(2) : '--');
             const bbSignal = indicators.bollinger_bands.signal;
-            this.updateIndicator('布林带', '上轨', bbSignal);
+            this.updateIndicator('布林带', bbDesc, bbSignal);
         }
     },
 

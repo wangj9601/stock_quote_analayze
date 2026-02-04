@@ -389,7 +389,9 @@ class SystemMonitor:
         except:
             return [0.0, 0.0, 0.0]
 
-    def get_alerts(self, limit: int = 50, level: Optional[str] = None) -> List[Dict]:
+    def get_alerts(self, limit: int = 50, level: Optional[str] = None, 
+                   alert_type: Optional[str] = None, acknowledged: Optional[bool] = None,
+                   start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> List[Dict]:
         """获取告警列表"""
         try:
             with SessionLocal() as db:
@@ -397,6 +399,18 @@ class SystemMonitor:
                 
                 if level:
                     query = query.filter(SystemAlert.level == level.upper())
+                
+                if alert_type:
+                    query = query.filter(SystemAlert.alert_type == alert_type.lower())
+                
+                if acknowledged is not None:
+                    query = query.filter(SystemAlert.acknowledged == acknowledged)
+                
+                if start_time:
+                    query = query.filter(SystemAlert.timestamp >= start_time)
+                
+                if end_time:
+                    query = query.filter(SystemAlert.timestamp <= end_time)
                 
                 alerts = query.limit(limit).all()
                 
@@ -418,7 +432,7 @@ class SystemMonitor:
             logger.error(f"获取告警列表失败: {e}")
             return []
 
-    def acknowledge_alert(self, alert_id: int) -> bool:
+    def acknowledge_alert(self, alert_id: int, acknowledged_by: str = "admin") -> bool:
         """确认告警"""
         try:
             with SessionLocal() as db:
@@ -426,6 +440,7 @@ class SystemMonitor:
                 if alert:
                     alert.acknowledged = True
                     alert.acknowledged_at = datetime.now()
+                    alert.acknowledged_by = acknowledged_by
                     db.commit()
                     return True
                 return False
@@ -514,7 +529,7 @@ class SystemMonitor:
 
     def add_alert(self, level: str, title: str, message: str, 
                   alert_type: str = "system", source: str = "monitor", 
-                  metadata: Optional[Dict] = None):
+                  metadata: Optional[Dict] = None) -> Optional[int]:
         """生成告警"""
         try:
             with SessionLocal() as db:
@@ -530,9 +545,12 @@ class SystemMonitor:
                 )
                 db.add(alert)
                 db.commit()
+                db.refresh(alert)
                 logger.info(f"成功生成告警: [{level}] {title}")
+                return alert.id
         except Exception as e:
             logger.error(f"生成告警失败: {e}")
+            return None
 
     def add_metric_callback(self, metric_name: str, callback: Callable):
         """添加指标回调函数"""

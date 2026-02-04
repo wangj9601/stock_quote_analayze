@@ -6,9 +6,12 @@ import logging
 import os
 import google.generativeai as genai
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, desc
 from database import get_db
-from models import HistoricalQuotes, StockRealtimeQuote, HistoricalQuotesHK, StockRealtimeQuoteHK, StockBasicInfoHK, StockBasicInfo
+from models import (
+    HistoricalQuotes, StockRealtimeQuote, HistoricalQuotesHK, StockRealtimeQuoteHK, 
+    StockBasicInfoHK, StockBasicInfo, RSIIndicators, MACDIndicators, KDJIndicators, BOLLIndicators
+)
 import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -826,7 +829,7 @@ class StockAnalysisService:
                 current_price = float(historical_data[-1]['close'])
             
             # 计算技术指标
-            technical_indicators = self._calculate_technical_indicators(historical_data)
+            technical_indicators = self._calculate_technical_indicators(stock_code, historical_data)
             
             # 价格预测
             price_prediction = PricePrediction.predict_price(historical_data)
@@ -1055,45 +1058,140 @@ class StockAnalysisService:
             logger.error(f"获取当前价格失败: {str(e)}")
             return None
     
-    def _calculate_technical_indicators(self, historical_data: List[Dict]) -> Dict:
-        """计算技术指标"""
+    def _calculate_technical_indicators(self, stock_code: str, historical_data: List[Dict]) -> Dict:
+        """获取或计算技术指标"""
         if len(historical_data) < 20:
             return {}
         
-        # 提取数据
+        is_hk = self._is_hk_stock(stock_code)
+        market_type = 'HK' if is_hk else 'CN'
+        
+        # 提取历史价格数据用于计算（备用）
         closes = [data['close'] for data in historical_data]
         highs = [data['high'] for data in historical_data]
         lows = [data['low'] for data in historical_data]
+        last_close = historical_data[-1]['close']
         
-        # 计算各项指标
-        rsi = TechnicalIndicators.calculate_rsi(closes)
-        macd = TechnicalIndicators.calculate_macd(closes)
-        kdj = TechnicalIndicators.calculate_kdj(highs, lows, closes)
-        bb = TechnicalIndicators.calculate_bollinger_bands(closes)
+        # 初始化指标数据
+        rsi_val = None
+        macd_val = None
+        macd_hist = None
+        kdj_j = None
+        bb_upper = None
+        bb_middle = None
+        bb_lower = None
         
-        # 判断信号
-        rsi_signal = "超卖" if rsi < 30 else "超买" if rsi > 70 else "中性"
-        macd_signal = "看多" if macd["macd"] > 0 and macd["histogram"] > 0 else "看空" if macd["macd"] < 0 and macd["histogram"] < 0 else "中性"
-        kdj_signal = "超卖" if kdj["j"] < 20 else "超买" if kdj["j"] > 80 else "中性"
-        bb_signal = "看多" if historical_data[-1]['close'] < bb["lower"] else "看空" if historical_data[-1]['close'] > bb["upper"] else "中性"
+        # 1. 尝试从数据库获取最新RSI
+        try:
+            rsi_db = self.db.query(RSIIndicators).filter(
+                RSIIndicators.code == stock_code,
+                RSIIndicators.market_type == market_type
+            ).order_by(desc(RSIIndicators.date)).first()
+            if rsi_db:
+                rsi_val = rsi_db.rsi6 # 通常这里显示短周期的，或者您可以根据需要选择rsi12, rsi24
+        except Exception as e:
+            logger.warning(f"从数据库获取RSI失败: {e}")
+            
+        if rsi_val is None:
+            rsi_val = TechnicalIndicators.calculate_rsi(closes)
+            
+        # 2. 尝试从数据库获取最新MACD
+        try:
+            macd_db = self.db.query(MACDIndicators).filter(
+                MACDIndicators.code == stock_code,
+                MACDIndicators.market_type == market_type if is_hk else True # A股可能没存market_type或者存的不同，模型定义注释是'A股'
+            ).order_by(desc(MACDIndicators.date)).first()
+            # 兼容性处理：如果上面的查询没结果，尝试不带market_type
+            if not macd_db and not is_hk:
+                 macd_db = self.db.query(MACDIndicators).filter(
+                    MACDIndicators.code == stock_code
+                ).order_by(desc(MACDIndicators.date)).first()
+                 
+            if macd_db:
+                macd_val = macd_db.macd
+                macd_hist = macd_db.macd # 这里通常指的是柱状图值，在模型里macd字段存的就是DIF-DEA
+        except Exception as e:
+            logger.warning(f"从数据库获取MACD失败: {e}")
+            
+        if macd_val is None:
+            calc_macd = TechnicalIndicators.calculate_macd(closes)
+            macd_val = calc_macd["macd"]
+            macd_hist = calc_macd["histogram"]
+            
+        # 3. 尝试从数据库获取最新KDJ
+        try:
+            kdj_db = self.db.query(KDJIndicators).filter(
+                KDJIndicators.code == stock_code,
+                KDJIndicators.market_type == market_type
+            ).order_by(desc(KDJIndicators.date)).first()
+            if kdj_db:
+                kdj_j = kdj_db.j
+        except Exception as e:
+            logger.warning(f"从数据库获取KDJ失败: {e}")
+            
+        if kdj_j is None:
+            calc_kdj = TechnicalIndicators.calculate_kdj(highs, lows, closes)
+            kdj_j = calc_kdj["j"]
+            
+        # 4. 尝试从数据库获取最新BOLL
+        try:
+            bb_db = self.db.query(BOLLIndicators).filter(
+                BOLLIndicators.code == stock_code,
+                BOLLIndicators.market_type == market_type
+            ).order_by(desc(BOLLIndicators.date)).first()
+            if bb_db:
+                bb_upper = bb_db.upper
+                bb_middle = bb_db.mid
+                bb_lower = bb_db.lower
+        except Exception as e:
+            logger.warning(f"从数据库获取BOLL失败: {e}")
+            
+        if bb_upper is None:
+            calc_bb = TechnicalIndicators.calculate_bollinger_bands(closes)
+            bb_upper = calc_bb["upper"]
+            bb_middle = calc_bb["middle"]
+            bb_lower = calc_bb["lower"]
+            
+        # 判断信号 (信号逻辑保持基于计算结果，但数据源优先选数据库)
+        rsi_signal = "超卖" if rsi_val < 30 else "超买" if rsi_val > 70 else "中性"
+        macd_signal = "看多" if macd_val > 0 else "看空" if macd_val < 0 else "中性"
+        kdj_signal = "超卖" if kdj_j < 20 else "超买" if kdj_j > 80 else "中性"
+        
+        # 改进 BOLL 信号逻辑
+        if last_close > bb_upper:
+            bb_signal = "超买"
+            bb_desc = "突破上轨"
+        elif last_close < bb_lower:
+            bb_signal = "超卖"
+            bb_desc = "跌破下轨"
+        elif last_close > bb_middle:
+            bb_signal = "看多"
+            bb_desc = "中轨上方"
+        elif last_close < bb_middle:
+            bb_signal = "看空"
+            bb_desc = "中轨下方"
+        else:
+            bb_signal = "中性"
+            bb_desc = "中轨"
         
         return {
             "rsi": {
-                "value": rsi,
+                "value": round(rsi_val, 2),
                 "signal": rsi_signal
             },
             "macd": {
-                "value": macd["macd"],
+                "value": round(macd_val, 3),
                 "signal": macd_signal
             },
             "kdj": {
-                "value": kdj["j"],
+                "value": round(kdj_j, 2),
                 "signal": kdj_signal
             },
             "bollinger_bands": {
-                "upper": bb["upper"],
-                "middle": bb["middle"],
-                "lower": bb["lower"],
-                "signal": bb_signal
+                "upper": bb_upper,
+                "middle": bb_middle,
+                "lower": bb_lower,
+                "signal": bb_signal,
+                "desc": bb_desc
             }
         } 
