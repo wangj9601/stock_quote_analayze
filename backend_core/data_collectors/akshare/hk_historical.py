@@ -3,7 +3,7 @@
 负责采集港股历史行情数据并存储到数据库
 """
 
-from time import time
+import time
 import akshare as ak
 import pandas as pd
 from typing import Optional, Dict, Any
@@ -511,12 +511,14 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                             continue
                             
                         try:
+                            if macd_data.get('dif') is None and macd_data.get('dea') is None and macd_data.get('macd') is None:
+                                continue
                             session.execute(text("""
                                 INSERT INTO macd_indicators
-                                (code, date, market_type, diff, dea, macd, created_at)
-                                VALUES (:code, :date, :market_type, :diff, :dea, :macd, :created_at)
+                                (code, date, market_type, dif, dea, macd, created_at)
+                                VALUES (:code, :date, :market_type, :dif, :dea, :macd, :created_at)
                                 ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                    diff = EXCLUDED.diff,
+                                    dif = EXCLUDED.dif,
                                     dea = EXCLUDED.dea,
                                     macd = EXCLUDED.macd,
                                     created_at = EXCLUDED.created_at
@@ -524,9 +526,9 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                                 'code': stock_code,
                                 'date': date_str,
                                 'market_type': 'HK',
-                                'diff': macd_data['diff'],
-                                'dea': macd_data['dea'],
-                                'macd': macd_data['macd'],
+                                'dif': macd_data.get('dif'),
+                                'dea': macd_data.get('dea'),
+                                'macd': macd_data.get('macd'),
                                 'created_at': datetime.now()
                             })
                         except Exception as e:
