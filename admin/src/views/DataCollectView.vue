@@ -338,6 +338,7 @@
                     <el-radio-group v-model="hkForm.collection_type">
                       <el-radio label="specified">指定股票</el-radio>
                       <el-radio label="all">全量采集</el-radio>
+                      <el-radio label="sync_realtime">从实时行情表采集</el-radio>
                     </el-radio-group>
                   </el-form-item>
 
@@ -362,6 +363,18 @@
                     class="mb-4"
                   >
                     <p>将采集数据库中所有港股的历史数据。由于akshare限流要求，系统采用单任务执行模式，每次采集间隔5秒。</p>
+                  </el-alert>
+
+                  <!-- 从实时行情同步说明 -->
+                  <el-alert
+                    v-if="hkForm.collection_type === 'sync_realtime'"
+                    title="实时同步说明"
+                    type="success"
+                    :closable="false"
+                    show-icon
+                    class="mb-4"
+                  >
+                    <p>将从 [stock_realtime_quote_hk] 实时行情表中读取指定日期范围内的数据并同步到历史行情表，同时会为自选股自动计算各项指标。</p>
                   </el-alert>
 
                   <!-- 强制更新选项 -->
@@ -597,7 +610,7 @@ interface HKFormData {
   start_date: string
   end_date: string
   stock_codes_text: string
-  collection_type: 'specified' | 'all'
+  collection_type: 'specified' | 'all' | 'sync_realtime'
   force_update: boolean
 }
 
@@ -615,6 +628,7 @@ interface RequestData {
   market?: string
   force_update?: boolean
   indicators?: string[]
+  sync_from_realtime?: boolean
 }
 
 // 标签页状态
@@ -864,8 +878,10 @@ const startHKCollection = async () => {
         .map(code => code.trim())
         .filter(code => code.length > 0)
       requestData.stock_codes = stockCodes
-    } else {
+    } else if (hkForm.value.collection_type === 'all') {
       requestData.full_collection_mode = true
+    } else if (hkForm.value.collection_type === 'sync_realtime') {
+      requestData.sync_from_realtime = true
     }
 
     console.log('发送港股采集请求:', requestData)

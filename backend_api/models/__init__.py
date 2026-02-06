@@ -82,6 +82,10 @@ try:
         SystemServiceStatus = getattr(models_module, 'SystemServiceStatus', None)
         SystemAlertRule = getattr(models_module, 'SystemAlertRule', None)
         SystemPerformanceReport = getattr(models_module, 'SystemPerformanceReport', None)
+        
+        # 导入微信推送相关模型
+        UserPushConfig = getattr(models_module, 'UserPushConfig', None)
+        PushRecord = getattr(models_module, 'PushRecord', None)
     else:
         raise ImportError(f"找不到 models.py 文件: {models_py_path}")
     
@@ -137,6 +141,10 @@ except Exception as e:
     SystemServiceStatus = None
     SystemAlertRule = None
     SystemPerformanceReport = None
+    
+    # 微信推送模型占位符
+    UserPushConfig = None
+    PushRecord = None
 
 __all__ = [
     'PVFRSStrategyConfig',
@@ -194,5 +202,7 @@ __all__ = [
     'SystemServiceStatus',
     'SystemAlertRule',
     'SystemPerformanceReport',
+    'UserPushConfig',
+    'PushRecord',
     'User',
 ]

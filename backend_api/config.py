@@ -49,3 +49,21 @@ CORS_CONFIG = {
 } 
 # Gemini AI API Key
 GEMINI_API_KEY = "AIzaSyDhgCArPllwqHBfwRBNjDreqI3l8r0gyxY0"
+
+# SMTP邮件配置
+SMTP_CONFIG = {
+    "host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
+    "port": int(os.getenv("SMTP_PORT", "587")),
+    "username": os.getenv("SMTP_USERNAME", ""),
+    "password": os.getenv("SMTP_PASSWORD", ""),
+    "use_tls": os.getenv("SMTP_USE_TLS", "true").lower() == "true",
+    "from_email": os.getenv("SMTP_FROM_EMAIL", ""),
+    "from_name": os.getenv("SMTP_FROM_NAME", "股票分析系统")
+}
+
+# 推送配置
+PUSH_CONFIG = {
+    "max_retry_count": int(os.getenv("MAX_RETRY_COUNT", "3")),
+    "push_batch_size": int(os.getenv("PUSH_BATCH_SIZE", "100")),
+    "default_push_times": ["09:30", "15:30"]  # 默认推送时间
+}
