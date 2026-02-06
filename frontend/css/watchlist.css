@@ -4,7 +4,8 @@
     padding: 20px 0;
     background: #f5f5f5;
     min-height: calc(100vh - 60px);
-    padding-bottom: 60px; /* 为ICP备案留出空间 */
+    padding-bottom: 60px;
+    /* 为ICP备案留出空间 */
 }
 
 /* 工具栏样式 */
@@ -624,7 +625,7 @@
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 1rem;
     }
-    
+
     .alert-item {
         grid-template-columns: 1fr;
         gap: 0.5rem;
@@ -635,51 +636,51 @@
     .main-content {
         padding: 16px 0;
     }
-    
+
     .toolbar .container {
         flex-direction: column;
         align-items: stretch;
         gap: 1rem;
     }
-    
+
     .toolbar-right {
         justify-content: space-between;
     }
-    
+
     .stocks-grid {
         grid-template-columns: 1fr;
         gap: 1rem;
     }
-    
+
     .stock-card {
         padding: 1rem;
     }
-    
+
     .tabs-nav {
         gap: 2px;
     }
-    
+
     .tab-btn {
         padding: 6px 12px;
         font-size: 12px;
     }
-    
+
     /* 价格提醒区域移动端调整 */
     .price-alerts {
         margin: 1rem;
         max-width: calc(100% - 2rem);
     }
-    
+
     .search-modal,
     .add-stock-modal {
         padding: 10px;
     }
-    
+
     .search-content,
     .modal-content {
         margin: 10px;
     }
-    
+
     .search-header,
     .modal-header,
     .modal-body {
@@ -692,30 +693,30 @@
         grid-template-columns: 1fr;
         gap: 0.25rem;
     }
-    
+
     .stock-actions {
         flex-direction: column;
         gap: 0.5rem;
     }
-    
+
     .current-price {
         font-size: 1.4rem;
     }
-    
+
     .toolbar-left h1 {
         font-size: 1.5rem;
     }
-    
+
     /* 价格提醒区域小屏幕调整 */
     .price-alerts {
         margin: 0.5rem;
         max-width: calc(100% - 1rem);
     }
-    
+
     .alert-item {
         padding: 8px 0;
     }
-    
+
     .alert-actions {
         flex-direction: column;
         gap: 4px;
@@ -725,15 +726,19 @@
 .add-stock-modal {
     display: none;
     position: fixed;
-    left: 0; top: 0; width: 100vw; height: 100vh;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
     z-index: 1000;
-    background: rgba(0,0,0,0.3);
+    background: rgba(0, 0, 0, 0.3);
     align-items: center;
     justify-content: center;
 }
+
 .add-stock-modal.active {
     display: flex;
-} 
+}
 
 /* 表格整体样式 */
 .table {
@@ -743,24 +748,37 @@
     background: #fff;
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
-.table th, .table td {
+
+.table th,
+.table td {
     padding: 12px 16px;
     text-align: center;
     border-bottom: 1px solid #f0f0f0;
     font-size: 15px;
 }
+
 .table th {
     background: #fafbfc;
     color: #333;
     font-weight: 600;
 }
+
 .table tr:last-child td {
     border-bottom: none;
 }
-.table .positive { color: #e74c3c; }   /* 红色 */
-.table .negative { color: #27ae60; }   /* 绿色 */
+
+.table .positive {
+    color: #e74c3c;
+}
+
+/* 红色 */
+.table .negative {
+    color: #27ae60;
+}
+
+/* 绿色 */
 .table .btn {
     margin: 0 4px;
     min-width: 48px;
@@ -768,16 +786,19 @@
     font-size: 14px;
     padding: 4px 12px;
 }
+
 .table .btn-danger {
     background: #ff4d4f;
     color: #fff;
     border: none;
 }
+
 .table .btn-secondary {
     background: #f0f0f0;
     color: #333;
     border: none;
 }
+
 .table .btn:hover {
     opacity: 0.85;
 }
@@ -802,7 +823,8 @@
     background: #fff;
 }
 
-.table th, .table td {
+.table th,
+.table td {
     text-align: left !important;
     padding: 12px 8px;
 }
@@ -842,3 +864,48 @@
 }
 
 
+
+/* 导出下拉菜单样式 */
+.export-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.export-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background-color: #ffffff;
+    min-width: 120px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    z-index: 100;
+    border: 1px solid var(--color-border);
+    margin-top: 5px;
+}
+
+.export-menu.show {
+    display: block;
+}
+
+.export-item {
+    color: var(--color-text-primary);
+    padding: 10px 16px;
+    text-decoration: none;
+    display: block;
+    font-size: 14px;
+    transition: background 0.3s;
+}
+
+.export-item:hover {
+    background-color: #f5f5f5;
+    color: var(--color-primary);
+}
+
+.import-btn,
+.export-dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}

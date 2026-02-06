@@ -24,8 +24,14 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.now)
     last_login = Column(DateTime, nullable=True)
     
+    # 微信推送相关字段
+    wechat_openid = Column(String(100), nullable=True, index=True)  # 微信OpenID
+    wechat_type = Column(String(20), nullable=True)  # 'personal' 或 'enterprise'
+    
     watchlists = relationship("Watchlist", back_populates="user")
     watchlist_groups = relationship("WatchlistGroup", back_populates="user")
+    push_config = relationship("UserPushConfig", back_populates="user", uselist=False)
+    push_records = relationship("PushRecord", back_populates="user")
 
 class Admin(Base):
     __tablename__ = "admins"
@@ -732,6 +738,7 @@ class DataCollectionRequest(BaseModel):
     market: str = 'CN'  # CN: A股, HK: 港股
     force_update: bool = False  # 强制更新：如果为True，即使数据已存在也会重新采集并更新
     indicators: Optional[List[str]] = None  # 需要生成的技术指标列表
+    sync_from_realtime: bool = False  # 新增：是否从实时行情表同步到历史行情表
 
 class DataCollectionResponse(BaseModel):
     """数据采集响应模型"""
@@ -988,3 +995,72 @@ class SystemPerformanceReport(Base):
     
     report_data = Column(JSON, nullable=True)  # 详细报告数据
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+# 微信每日报告推送相关模型
+class UserPushConfig(Base):
+    """用户推送配置表"""
+    __tablename__ = "user_push_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    
+    # 推送开关
+    enabled = Column(Boolean, default=True, nullable=False)
+    
+    # 推送渠道配置 (JSON格式: ["wechat", "email"])
+    channels = Column(JSON, default=["wechat"], nullable=False)
+    
+    # 推送时间配置 (JSON格式: ["09:30", "15:30"])
+    push_times = Column(JSON, default=["09:30", "15:30"], nullable=False)
+    
+    # 报告类型: 'summary' 或 'detailed'
+    report_type = Column(String(20), default="summary", nullable=False)
+    
+    # 股票范围配置 (JSON格式: null表示全部, 或["000001", "600000"])
+    stock_codes = Column(JSON, nullable=True)
+    
+    # 时间戳
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    # 关系
+    user = relationship("User", back_populates="push_config")
+
+
+class PushRecord(Base):
+    """推送记录表"""
+    __tablename__ = "push_records"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # 推送信息
+    push_date = Column(Date, nullable=False, index=True)
+    push_time = Column(String(10), nullable=False)  # "09:30"
+    report_type = Column(String(20), nullable=False)  # 'summary' 或 'detailed'
+    
+    # 推送渠道和状态 (JSON格式)
+    # {"wechat": "success", "email": "failed"}
+    channel_status = Column(JSON, nullable=False)
+    
+    # 整体状态: 'pending', 'processing', 'success', 'partial_success', 'failed'
+    status = Column(String(20), default="pending", nullable=False, index=True)
+    
+    # 报告文件路径
+    report_file_path = Column(String(500), nullable=True)
+    
+    # 错误信息 (JSON格式: {"wechat": "error msg", "email": null})
+    error_messages = Column(JSON, nullable=True)
+    
+    # 重试信息
+    retry_count = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=3, nullable=False)
+    
+    # 时间戳
+    created_at = Column(DateTime, default=datetime.now)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    # 关系
+    user = relationship("User", back_populates="push_records")

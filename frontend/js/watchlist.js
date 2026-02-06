@@ -2,6 +2,7 @@
 const WatchlistPage = {
     // 全局API前缀
     //API_BASE_URL: 'http://192.168.31.237:5000',
+    initialized: false,
 
     // 修改获取用户ID的方法
     async getUserId() {
@@ -93,6 +94,7 @@ const WatchlistPage = {
 
     // 修改初始化方法
     async init() {
+        if (this.initialized) return;
         try {
             const user_id = await this.getUserId();
             if (!user_id) {
@@ -106,6 +108,8 @@ const WatchlistPage = {
             this.updateStockCount();
             this.renderStocks();
             this.startDataUpdate();
+            this.initialized = true;
+            console.log('自选股页面初始化完成');
         } catch (e) {
             console.error('初始化失败:', e);
         }
@@ -133,6 +137,46 @@ const WatchlistPage = {
         document.querySelector('.add-stock-btn').addEventListener('click', () => {
             this.showAddStockModal();
         });
+
+        // 导入按钮
+        const importBtn = document.querySelector('.import-btn');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => {
+                document.getElementById('importFile').click();
+            });
+        }
+
+        // 导入文件选择
+        const importFile = document.getElementById('importFile');
+        if (importFile) {
+            importFile.addEventListener('change', (e) => {
+                this.handleImport(e);
+            });
+        }
+
+        // 导出按钮切换菜单
+        const exportBtn = document.querySelector('.export-dropdown-btn');
+        const exportMenu = document.querySelector('.export-menu');
+        if (exportBtn && exportMenu) {
+            exportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                exportMenu.classList.toggle('show');
+            });
+
+            // 导出项点击
+            document.querySelectorAll('.export-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.exportWatchlist(item.dataset.format);
+                    exportMenu.classList.remove('show');
+                });
+            });
+
+            // 点击外部关闭菜单
+            document.addEventListener('click', () => {
+                exportMenu.classList.remove('show');
+            });
+        }
 
         // 删除自选股按钮
         document.addEventListener('click', (e) => {
@@ -823,6 +867,76 @@ const WatchlistPage = {
                 ${this.groups.filter(g => g !== 'default').map(g => `<option value="${g}">${g}</option>`).join('')}
             </select>
         `;
+    },
+
+    // 处理导入
+    async handleImport(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 检查登录状态
+        if (!CommonUtils.checkLoginAndHandleExpiry()) {
+            e.target.value = '';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('group_name', this.selectedGroup === 'all' || this.selectedGroup === 'default' ? 'default' : this.selectedGroup);
+
+        try {
+            CommonUtils.showToast('正在导入...', 'info');
+            const res = await authFetch(`${API_BASE_URL}/api/watchlist/import`, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await res.json();
+            if (result.success) {
+                CommonUtils.showToast(result.message, 'success');
+                await this.loadWatchlist();
+                this.renderStocks();
+            } else {
+                CommonUtils.showToast(result.message || '导入失败', 'error');
+            }
+        } catch (err) {
+            console.error('导入详情异常:', err);
+            CommonUtils.showToast('网络错误，导入失败', 'error');
+        } finally {
+            e.target.value = ''; // 重置以允许再次选择同一文件
+        }
+    },
+
+    // 处理导出
+    async exportWatchlist(format) {
+        // 检查登录状态
+        if (!CommonUtils.checkLoginAndHandleExpiry()) {
+            return;
+        }
+
+        try {
+            console.log(`准备导出自选股，格式：${format}`);
+            CommonUtils.showToast('正在准备导出...', 'info');
+            const res = await authFetch(`${API_BASE_URL}/api/watchlist/export?format=${format}`);
+            if (!res.ok) throw new Error('导出失败');
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            let extension = 'csv';
+            if (format === 'xlsx') extension = 'xlsx';
+            else if (format === 'txt') extension = 'txt';
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.download = `我的自选股_${timestamp}.${extension}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            CommonUtils.showToast('开始下载...', 'success');
+        } catch (err) {
+            console.error('导出详情异常:', err);
+            CommonUtils.showToast('导出失败', 'error');
+        }
     }
 };
 

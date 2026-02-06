@@ -1,21 +1,20 @@
-"""
-自选股管理API模块
-提供自选股管理相关的接口
-"""
-
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+import io
+import re
+import math
+from datetime import datetime
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
-from datetime import datetime
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import math
 
 from .models import (
     Watchlist, WatchlistGroup,
     WatchlistCreate, WatchlistInDB, WatchlistGroupCreate,
-    WatchlistGroupInDB, User, StockRealtimeQuote, StockRealtimeQuoteHK
+    WatchlistGroupInDB, User, StockRealtimeQuote, StockRealtimeQuoteHK,
+    StockBasicInfo, StockBasicInfoHK
 )
 from .database import get_db
 from .auth import get_current_user
@@ -398,3 +397,263 @@ async def delete_watchlist_group(
     db.delete(group)
     db.commit()
     return {"message": "分组删除成功"}
+
+@router.get("/export")
+async def export_watchlist(
+    format: str = "csv",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """导出自选股列表"""
+    try:
+        user_id = current_user.id
+        watchlist_rows = db.query(Watchlist).filter(
+            Watchlist.user_id == user_id
+        ).order_by(Watchlist.group_name, Watchlist.created_at).all()
+        
+        data = []
+        for row in watchlist_rows:
+            data.append({
+                "代码": row.stock_code,
+                "名称": row.stock_name,
+                "分组": row.group_name,
+                "添加时间": row.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            })
+            
+        if not data:
+            # 即使没数据，也导出一个带表头的空表
+            data = [{"代码": "", "名称": "", "分组": "", "添加时间": ""}]
+            
+        df = pd.DataFrame(data)
+        
+        if format.lower() == "xlsx":
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='我的自选股')
+            output.seek(0)
+            return StreamingResponse(
+                output,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename=watchlist_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"}
+            )
+        elif format.lower() == "txt":
+            # 导出纯文本格式（代码 名称）
+            output = io.StringIO()
+            for row in data:
+                output.write(f"{row['代码']} {row['名称']}\n")
+            output_bytes = output.getvalue().encode('utf-8')
+            return StreamingResponse(
+                io.BytesIO(output_bytes),
+                media_type="text/plain",
+                headers={"Content-Disposition": f"attachment; filename=watchlist_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt"}
+            )
+        else:
+            # 默认导出 CSV
+            output = io.StringIO()
+            df.to_csv(output, index=False, encoding='utf-8-sig')
+            output_bytes = output.getvalue().encode('utf-8-sig')
+            return StreamingResponse(
+                io.BytesIO(output_bytes),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=watchlist_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"}
+            )
+            
+    except Exception as e:
+        print(f"[watchlist] 导出异常: {str(e)}")
+        return JSONResponse({'success': False, 'message': f'导出失败: {str(e)}'}, status_code=500)
+
+@router.post("/import")
+async def import_watchlist(
+    file: UploadFile = File(...),
+    group_name: str = "default",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """导入自选股列表"""
+    try:
+        user_id = current_user.id
+        filename = file.filename
+        content = await file.read()
+        
+        stocks_to_import = []
+        
+        if filename.endswith('.txt'):
+            text_content = content.decode('utf-8')
+            # 按分隔符拆分，仅保留 4-6 位数字代码（港股5位、A股6位均可，不强制6位）
+            potential_codes = re.split(r'[,\n\r\t ]+', text_content)
+            for c in potential_codes:
+                c = c.strip()
+                if c and c.isdigit() and 4 <= len(c) <= 6:
+                    stocks_to_import.append({"code": c})
+                    
+        elif filename.endswith('.csv'):
+            # dtype=str 保留前导零，避免 09988/002271 被解析为 9988/2271
+            try:
+                df = pd.read_csv(io.BytesIO(content), encoding='utf-8-sig', dtype=str, keep_default_na=False)
+            except Exception:
+                try:
+                    df = pd.read_csv(io.BytesIO(content), encoding='gbk', dtype=str, keep_default_na=False)
+                except Exception:
+                    df = pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
+            stocks_to_import = df.to_dict('records')
+
+        elif filename.endswith(('.xlsx', '.xls')):
+            # dtype=str 保留前导零
+            df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+            stocks_to_import = df.to_dict('records')
+        else:
+            return JSONResponse({'success': False, 'message': '仅支持 .txt, .csv, .xlsx, .xls 格式'}, status_code=400)
+
+        added_count = 0
+        skipped_count = 0
+        failed_count = 0
+
+        def _resolve_code_by_name(name_str: str) -> Optional[str]:
+            """按名称在基础表中查找股票代码"""
+            n = str(name_str).strip()
+            if not n:
+                return None
+            basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.name == n).first()
+            if basic_a and basic_a.code:
+                return str(basic_a.code).zfill(6) if str(basic_a.code).isdigit() else str(basic_a.code)
+            basic_hk = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.name == n).first()
+            if basic_hk and basic_hk.code:
+                c = str(basic_hk.code).strip()
+                return c.zfill(5) if c.isdigit() else c
+            return None
+
+        def _is_valid_stock_code(s: str) -> bool:
+            """是否为有效股票代码格式（4-6位数字）"""
+            s = str(s).strip()
+            return bool(s and 4 <= len(s) <= 6 and s.isdigit())
+
+        def _normalize_to_canonical_code(raw: str) -> Optional[str]:
+            """归一化为规范代码：港股5位、A股6位。已为5位或6位则直接使用，不强制统一为6位。"""
+            s = str(raw).strip()
+            if not s or not s.isdigit():
+                return None
+            # 已为5位或6位则直接使用，符合要求
+            if len(s) == 5 or len(s) == 6:
+                return s
+            # 4位需补齐：先查港股，再查A股
+            if len(s) <= 5:
+                for c in [s.zfill(5), s]:
+                    basic_hk = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == c).first()
+                    if basic_hk and basic_hk.code is not None:
+                        cstr = str(basic_hk.code).strip()
+                        return cstr.zfill(5) if cstr.isdigit() else cstr
+                for c in [s.zfill(6), s]:
+                    basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == c).first()
+                    if not basic_a and c.isdigit():
+                        try:
+                            basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == int(c)).first()
+                        except Exception:
+                            pass
+                    if basic_a and basic_a.code is not None:
+                        return str(basic_a.code).zfill(6) if str(basic_a.code).isdigit() else str(basic_a.code)
+            else:
+                # 6位：先查 A 股
+                for c in [s.zfill(6), s]:
+                    basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == c).first()
+                    if not basic_a and c.isdigit():
+                        try:
+                            basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == int(c)).first()
+                        except Exception:
+                            pass
+                    if basic_a and basic_a.code is not None:
+                        return str(basic_a.code).zfill(6) if str(basic_a.code).isdigit() else str(basic_a.code)
+                for c in [s.zfill(5), s]:
+                    basic_hk = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == c).first()
+                    if basic_hk and basic_hk.code is not None:
+                        cstr = str(basic_hk.code).strip()
+                        return cstr.zfill(5) if cstr.isdigit() else cstr
+            # 未找到：5位保持5位，6位保持6位
+            return s.zfill(5) if len(s) <= 5 else s.zfill(6)
+
+        for item in stocks_to_import:
+            try:
+                # 使用 savepoint 隔离每条记录，单条失败不影响后续
+                with db.begin_nested():
+                    # 尝试各种可能的键名（优先代码列）
+                    code_val = (
+                        item.get('code') or item.get('代码') or item.get('Stock Code') or
+                        item.get('股票代码') or item.get('证券代码') or item.get('股票编号') or
+                        item.get('ts_code') or item.get('Symbol')
+                    )
+                    if code_val is None and len(item) > 0:
+                        code_val = list(item.values())[0]
+                    if code_val is None:
+                        continue
+
+                    code = str(code_val).strip()
+                    if not code.isdigit() and any('\u4e00' <= ch <= '\u9fff' for ch in code):
+                        resolved = _resolve_code_by_name(code)
+                        if resolved:
+                            code = resolved
+                        else:
+                            continue
+
+                    clean_code = code.split('.')[0].strip()
+                    if len(clean_code) > 6:
+                        clean_code = clean_code[-6:]
+                    if not _is_valid_stock_code(clean_code):
+                        continue
+
+                    # 归一化为规范代码：港股5位、A股6位
+                    clean_code = _normalize_to_canonical_code(clean_code) or clean_code
+
+                    existing = db.query(Watchlist).filter(
+                        Watchlist.user_id == user_id,
+                        Watchlist.stock_code == clean_code
+                    ).first()
+                    if existing:
+                        skipped_count += 1
+                        continue
+
+                    name = (
+                        item.get('name') or item.get('名称') or item.get('Stock Name') or
+                        item.get('股票名称') or item.get('证券名称') or item.get('Name')
+                    )
+                    if not name:
+                        try:
+                            # 5位代码从港股表取，6位从A股表取
+                            if len(clean_code) == 5:
+                                basic_hk = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == clean_code).first()
+                                name = basic_hk.name if basic_hk else clean_code
+                            else:
+                                basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == clean_code).first()
+                                if not basic_a and clean_code.isdigit():
+                                    try:
+                                        basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == int(clean_code)).first()
+                                    except Exception:
+                                        pass
+                                if basic_a:
+                                    name = basic_a.name
+                                else:
+                                    basic_hk = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == clean_code).first()
+                                    name = basic_hk.name if basic_hk else clean_code
+                        except Exception:
+                            name = clean_code
+
+                    db.add(Watchlist(
+                        user_id=user_id,
+                        stock_code=clean_code,
+                        stock_name=name,
+                        group_name=group_name
+                    ))
+                    db.flush()
+                added_count += 1
+            except Exception as item_err:
+                failed_count += 1
+                # savepoint 已自动回滚，继续处理下一条
+
+        db.commit()
+        msg = f'导入完成。成功导入 {added_count} 只股票，跳过 {skipped_count} 只已存在股票。'
+        if failed_count > 0:
+            msg += f' {failed_count} 条导入失败已跳过。'
+        return JSONResponse({'success': True, 'message': msg})
+        
+    except Exception as e:
+        print(f"[watchlist] 导入异常: {str(e)}")
+        db.rollback()
+        return JSONResponse({'success': False, 'message': f'导入异常: {str(e)}'}, status_code=500)

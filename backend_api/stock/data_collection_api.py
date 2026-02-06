@@ -1119,6 +1119,52 @@ class AkshareDataCollector:
             logger.error(f"更新港股 {stock_code} 全量采集标志失败: {e}")
             # 不抛出异常，避免影响主流程
     
+    def collect_hk_historical_from_realtime(self, start_date: str, end_date: str) -> Dict[str, any]:
+        """从港股实时行情表同步到历史行情表"""
+        try:
+            from backend_core.data_collectors.akshare.hk_historical import HKHistoricalQuoteCollector
+            collector = HKHistoricalQuoteCollector()
+            
+            # 生成日期范围
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            date_range = pd.date_range(start, end)
+            
+            total_dates = len(date_range)
+            success_count = 0
+            
+            for i, current_date in enumerate(date_range):
+                date_str = current_date.strftime('%Y%m%d')
+                logger.info(f"[{i+1}/{total_dates}] 正在从实时行情同步港股历史数据: {date_str}")
+                day_start = time.time()
+                try:
+                    if collector.collect_historical_quotes(date_str):
+                        success_count += 1
+                        logger.info(f"日期 {date_str} 同步完成，耗时: {time.time() - day_start:.2f}s")
+                    else:
+                        logger.warning(f"日期 {date_str} 同步未发现数据或执行失败，耗时: {time.time() - day_start:.2f}s")
+                except Exception as e:
+                    logger.error(f"同步日期 {date_str} 失败: {e}, 耗时: {time.time() - day_start:.2f}s")
+            
+            return {
+                'total': total_dates,
+                'success': success_count,
+                'failed': total_dates - success_count,
+                'collected': 0, # 这里难以精确统计条数，除非修改hk_historical
+                'skipped': 0,
+                'failed_details': []
+            }
+        except Exception as e:
+            logger.error(f"从实时行情同步港股历史数据失败: {e}")
+            return {
+                'total': 0,
+                'success': 0,
+                'failed': 1,
+                'collected': 0,
+                'skipped': 0,
+                'failed_details': [str(e)]
+            }
+
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
         """记录采集结果到日志表"""
         try:
@@ -1195,7 +1241,8 @@ async def start_historical_collection(
             request.full_collection_mode,
             request.market,
             request.force_update,
-            request.indicators
+            request.indicators,
+            request.sync_from_realtime
         )
         
         logger.info(f"启动历史数据采集任务: {task_id}")
@@ -1225,7 +1272,8 @@ def run_historical_collection_task(
     full_collection_mode: bool = False,
     market: str = 'CN',
     force_update: bool = False,
-    indicators: Optional[List[str]] = None
+    indicators: Optional[List[str]] = None,
+    sync_from_realtime: bool = False
 ):
     """运行历史数据采集任务（后台任务）"""
     global current_task_id
@@ -1268,7 +1316,10 @@ def run_historical_collection_task(
                     collection_tasks[task_id]["total_stocks"] = total
             
             # 执行采集
-            result = collector.collect_historical_data(start_date, end_date, stock_codes, full_collection_mode, market, force_update, indicators)
+            if sync_from_realtime and market == 'HK':
+                result = collector.collect_hk_historical_from_realtime(start_date, end_date)
+            else:
+                result = collector.collect_historical_data(start_date, end_date, stock_codes, full_collection_mode, market, force_update, indicators)
             
             # 更新任务状态
             with task_lock:

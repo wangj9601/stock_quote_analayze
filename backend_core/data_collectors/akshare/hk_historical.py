@@ -217,18 +217,20 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             self.logger.error(f"获取自选股列表失败: {e}")
             return set()
     
-    def collect_historical_quotes(self, date_str: str) -> bool:
+    def collect_historical_quotes(self, date_str: str, calculate_indicators: bool = True) -> bool:
         """
         采集指定日期的港股历史行情数据（从实时行情表读取并同步到历史行情表）
         
         Args:
             date_str: 日期字符串，格式：YYYYMMDD
+            calculate_indicators: 是否计算指标
         
         Returns:
             bool: 是否成功
         """
         self._init_db()  # 确保表结构存在
         session = SessionLocal()
+        start_time = time.time()
         try:
             # 将传入的日期字符串（YYYYMMDD）转为YYYY-MM-DD格式
             target_date = datetime.strptime(date_str, "%Y%m%d").strftime('%Y-%m-%d')
@@ -248,6 +250,9 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                 self.logger.error(f"读取实时行情数据失败: {e}")
                 session.close()
                 return False
+            
+            read_time = time.time() - start_time
+            self.logger.info(f"读取实时行情数据耗时: {read_time:.2f}s")
 
             # 获取字段名列表
             col_names = [col for col in result.keys()]
@@ -261,56 +266,93 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     stocks_data[stock_code] = []
                 stocks_data[stock_code].append(record)
             
-            affected = 0
-            batch_size = 50  # 每 50 只股票提交一次，避免长事务导致锁超时
-            processed_in_batch = 0
-            
+            group_time = time.time() - (start_time + read_time)
+            self.logger.info(f"汇总分组数据耗时: {group_time:.2f}s, 共 {len(stocks_data)} 只股票")
+
+            loop_start = time.time()
             # 对每只股票进行处理
-            affected_stocks = set()  # 记录已处理的股票代码，用于后续MACD计算
+            affected = 0
+            affected_stocks = set()
+            insert_dicts = []
+            
+            # 定义 UPSERT 语句
+            upsert_stmt = text("""
+                INSERT INTO historical_quotes_hk (
+                    code, name, date, english_name, close, open, high, low, pre_close, volume, amount,
+                    change_percent, change_amount,
+                    five_day_change_percent, ten_day_change_percent, sixty_day_change_percent, thirty_day_change_percent,
+                    collected_source, collected_date, create_date
+                ) VALUES (
+                    :code, :name, :date, :english_name, :close, :open, :high, :low, :pre_close, :volume, :amount,
+                    :change_percent, :change_amount,
+                    :five_day_change_percent, :ten_day_change_percent, :sixty_day_change_percent, :thirty_day_change_percent,
+                    :collected_source, :collected_date, :create_date
+                )
+                ON CONFLICT (code, date) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    english_name = EXCLUDED.english_name,
+                    close = EXCLUDED.close,
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    pre_close = EXCLUDED.pre_close,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    change_percent = EXCLUDED.change_percent,
+                    change_amount = EXCLUDED.change_amount,
+                    five_day_change_percent = EXCLUDED.five_day_change_percent,
+                    ten_day_change_percent = EXCLUDED.ten_day_change_percent,
+                    sixty_day_change_percent = EXCLUDED.sixty_day_change_percent,
+                    thirty_day_change_percent = EXCLUDED.thirty_day_change_percent,
+                    collected_source = EXCLUDED.collected_source,
+                    collected_date = EXCLUDED.collected_date,
+                    create_date = EXCLUDED.create_date
+            """)
+            
+            # 批量预加载历史数据
+            all_codes = list(stocks_data.keys())
+            min_hist_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
+            self.logger.info(f"正在批量预加载 {len(all_codes)} 只股票的历史数据...")
+            hist_fetch_start = time.time()
+            hist_map = {}
+            code_batches = [all_codes[i:i + 500] for i in range(0, len(all_codes), 500)]
+            for code_batch in code_batches:
+                hist_query = session.execute(text("""
+                    SELECT code, date, close 
+                    FROM historical_quotes_hk 
+                    WHERE code IN :codes AND date >= :min_date
+                    ORDER BY code, date ASC
+                """), {"codes": tuple(code_batch), "min_date": min_hist_date})
+                for h_code, h_date, h_close in hist_query.fetchall():
+                    if h_code not in hist_map:
+                        hist_map[h_code] = []
+                    hist_map[h_code].append({'date': h_date, 'close': h_close})
+            self.logger.info(f"批量预加载历史数据耗时: {time.time() - hist_fetch_start:.2f}s")
+
             for stock_code, records in stocks_data.items():
                 try:
-                    # 获取该股票在历史行情表中的已有数据（用于计算涨跌幅）
-                    historical_result = session.execute(text("""
-                        SELECT date, close 
-                        FROM historical_quotes_hk 
-                        WHERE code = :code 
-                        ORDER BY date ASC
-                    """), {"code": stock_code})
-                    historical_data = historical_result.fetchall()
+                    historical_data_list = hist_map.get(stock_code, [])
+                    historical_df_data = [{'date': item['date'], 'close': item['close']} for item in historical_data_list]
                     
-                    # 构建DataFrame用于计算涨跌幅
-                    historical_df_data = []
-                    for hist_row in historical_data:
-                        historical_df_data.append({
-                            'date': hist_row[0],
-                            'close': hist_row[1]
-                        })
-                    
-                    # 添加当前要插入的数据
                     for record in records:
                         close_price = record.get('current_price')
                         if close_price:
                             historical_df_data.append({
                                 'date': record.get('trade_date'),
-                                'close': float(close_price) if close_price else None
+                                'close': float(close_price)
                             })
                     
-                    # 如果有数据，计算涨跌幅
                     change_percents = {}
                     if historical_df_data:
                         df = pd.DataFrame(historical_df_data)
-                        df = df.sort_values('date')
-                        df = df.drop_duplicates(subset=['date'], keep='last')  # 去重，保留最新的
+                        df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
                         
                         if 'close' in df.columns and len(df) > 0:
-                            # 计算涨跌幅（与A股逻辑相同）
-                            # 使用 fill_method=None 避免 FutureWarning
                             df['five_day_change_percent'] = df['close'].pct_change(periods=5, fill_method=None) * 100
                             df['ten_day_change_percent'] = df['close'].pct_change(periods=10, fill_method=None) * 100
                             df['thirty_day_change_percent'] = df['close'].pct_change(periods=30, fill_method=None) * 100
                             df['sixty_day_change_percent'] = df['close'].pct_change(periods=60, fill_method=None) * 100
                             
-                            # 将计算结果存储到字典中
                             for _, row in df.iterrows():
                                 change_percents[row['date']] = {
                                     'five_day_change_percent': self._safe_value(row.get('five_day_change_percent')),
@@ -319,274 +361,88 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                                     'sixty_day_change_percent': self._safe_value(row.get('sixty_day_change_percent'))
                                 }
                     
-                    # 处理每条记录
                     for record in records:
-                        # 如果现价、开盘、最高、最低中有为空的，跳过不采集
                         if not record.get('current_price') or not record.get('open') or \
                            not record.get('high') or not record.get('low'):
                             continue
 
-                        try:
-                            trade_date = record.get('trade_date')
-                            change_data = change_percents.get(trade_date, {})
-                            
-                            # 构造要插入/更新的字段
-                            insert_dict = {
-                                # 字段映射：如有不同需调整
-                                'code': record.get('code'),
-                                'name': record.get('name'),
-                                'date': trade_date,  # 记得历史行情表日期字段为date
-                                'english_name': record.get('english_name'),
-                                'close': record.get('current_price'), # 实时行情表中，最后的当前价格，就相当于收盘价
-                                'open': record.get('open'),
-                                'high': record.get('high'),
-                                'low': record.get('low'),
-                                'pre_close': record.get('pre_close'),
-                                'volume': record.get('volume'),
-                                'amount': record.get('amount'),
-                                #'amplitude': record.get('amplitude'),
-                                #'turnover_rate': record.get('turnover_rate'),
-                                'change_percent': record.get('change_percent'),
-                                'change_amount': record.get('change_amount'),  # 可能字段名有差异
-                                'collected_source': "akshare",
-                                'collected_date': collect_date,
-                                # 用当前时间替换有语法错误的行，赋值方式如下：
-                                'create_date': datetime.now(),
-                                # 使用计算出的涨跌幅
-                                'five_day_change_percent': change_data.get('five_day_change_percent'),
-                                'ten_day_change_percent': change_data.get('ten_day_change_percent'),
-                                'thirty_day_change_percent': change_data.get('thirty_day_change_percent'),
-                                'sixty_day_change_percent': change_data.get('sixty_day_change_percent')
-                            }
-                            
-                            # upsert逻辑：使用 ON CONFLICT DO UPDATE 语法，并增加重试机制处理锁超时
-                            max_retries = 3
-                            retry_count = 0
-                            success_sync = False
-                            
-                            while retry_count < max_retries:
-                                try:
-                                    upsert_stmt = text("""
-                                        INSERT INTO historical_quotes_hk (
-                                            code, name, date, english_name, close, open, high, low, pre_close, volume, amount,
-                                            change_percent, change_amount,
-                                            five_day_change_percent, ten_day_change_percent, sixty_day_change_percent, thirty_day_change_percent,
-                                            collected_source, collected_date, create_date
-                                        ) VALUES (
-                                            :code, :name, :date, :english_name, :close, :open, :high, :low, :pre_close, :volume, :amount,
-                                            :change_percent, :change_amount,
-                                            :five_day_change_percent, :ten_day_change_percent, :sixty_day_change_percent, :thirty_day_change_percent,
-                                            :collected_source, :collected_date, :create_date
-                                        )
-                                        ON CONFLICT (code, date) DO UPDATE SET
-                                            name = EXCLUDED.name,
-                                            english_name = EXCLUDED.english_name,
-                                            close = EXCLUDED.close,
-                                            open = EXCLUDED.open,
-                                            high = EXCLUDED.high,
-                                            low = EXCLUDED.low,
-                                            pre_close = EXCLUDED.pre_close,
-                                            volume = EXCLUDED.volume,
-                                            amount = EXCLUDED.amount,
-                                            change_percent = EXCLUDED.change_percent,
-                                            change_amount = EXCLUDED.change_amount,
-                                            five_day_change_percent = EXCLUDED.five_day_change_percent,
-                                            ten_day_change_percent = EXCLUDED.ten_day_change_percent,
-                                            sixty_day_change_percent = EXCLUDED.sixty_day_change_percent,
-                                            thirty_day_change_percent = EXCLUDED.thirty_day_change_percent,
-                                            collected_source = EXCLUDED.collected_source,
-                                            collected_date = EXCLUDED.collected_date,
-                                            create_date = EXCLUDED.create_date
-                                    """)
-                                    session.execute(upsert_stmt, insert_dict)
-                                    affected += 1
-                                    affected_stocks.add(stock_code)
-                                    success_sync = True
-                                    break
-                                except Exception as sync_error:
-                                    error_str = str(sync_error)
-                                    if "LockNotAvailable" in error_str or "DeadlockDetected" in error_str or "锁超时" in error_str:
-                                        retry_count += 1
-                                        self.logger.warning(f"港股同步检测到锁竞争 ({insert_dict['code']}-{insert_dict['date']})，第 {retry_count} 次重试...")
-                                        session.rollback()
-                                        time.sleep(0.5 * retry_count) # 等待一段时间重试
-                                        continue
-                                    else:
-                                        raise sync_error
-                            
-                            if not success_sync:
-                                 self.logger.error(f"港股历史({insert_dict['code']}-{insert_dict['date']})同步失败，重试 {max_retries} 次后仍然失败")
-
-                        except Exception as e:
-                            self.logger.error(f"处理股票 {stock_code} 数据同步时出错: {e}")
-                            session.rollback()
-                            continue
+                        trade_date = record.get('trade_date')
+                        change_data = change_percents.get(trade_date, {})
                         
-                except Exception as stock_error:
-                    self.logger.error(f"处理股票 {stock_code} 的涨跌幅计算失败: {stock_error}")
-                    # 即使计算失败，也尝试插入数据（不包含涨跌幅）
-                    for record in records:
-                        # 如果现价、开盘、最高、最低中有为空的，跳过不采集
-                        if not record.get('current_price') or not record.get('open') or \
-                           not record.get('high') or not record.get('low'):
-                            continue
+                        insert_dicts.append({
+                            'code': record.get('code'),
+                            'name': record.get('name'),
+                            'date': trade_date,
+                            'english_name': record.get('english_name'),
+                            'close': record.get('current_price'),
+                            'open': record.get('open'),
+                            'high': record.get('high'),
+                            'low': record.get('low'),
+                            'pre_close': record.get('pre_close'),
+                            'volume': record.get('volume'),
+                            'amount': record.get('amount'),
+                            'change_percent': record.get('change_percent'),
+                            'change_amount': record.get('change_amount'),
+                            'collected_source': "akshare",
+                            'collected_date': collect_date,
+                            'create_date': datetime.now(),
+                            'five_day_change_percent': change_data.get('five_day_change_percent'),
+                            'ten_day_change_percent': change_data.get('ten_day_change_percent'),
+                            'thirty_day_change_percent': change_data.get('thirty_day_change_percent'),
+                            'sixty_day_change_percent': change_data.get('sixty_day_change_percent')
+                        })
+                        affected += 1
+                        affected_stocks.add(stock_code)
 
-                        try:
-                            insert_dict = {
-                                'code': record.get('code'),
-                                'name': record.get('name'),
-                                'date': record.get('trade_date'),
-                                'english_name': record.get('english_name'),
-                                'close': record.get('current_price'),
-                                'open': record.get('open'),
-                                'high': record.get('high'),
-                                'low': record.get('low'),
-                                'pre_close': record.get('pre_close'),
-                                'volume': record.get('volume'),
-                                'amount': record.get('amount'),
-                                'change_percent': record.get('change_percent'),
-                                'change_amount': record.get('change_amount'),
-                                'collected_source': "akshare",
-                                'collected_date': collect_date,
-                                'create_date': datetime.now(),
-                                'five_day_change_percent': None,
-                                'ten_day_change_percent': None,
-                                'thirty_day_change_percent': None,
-                                'sixty_day_change_percent': None
-                            }
-
-                            # upsert逻辑：使用 ON CONFLICT DO UPDATE 语法，并增加重试机制处理锁超时
-                            max_retries = 3
-                            retry_count = 0
-                            success_sync_fallback = False
-                            
-                            while retry_count < max_retries:
-                                try:
-                                    upsert_stmt = text("""
-                                        INSERT INTO historical_quotes_hk (
-                                            code, name, date, english_name, close, open, high, low, pre_close, volume, amount,
-                                            change_percent, change_amount,
-                                            five_day_change_percent, ten_day_change_percent, sixty_day_change_percent, thirty_day_change_percent,
-                                            collected_source, collected_date, create_date
-                                        ) VALUES (
-                                            :code, :name, :date, :english_name, :close, :open, :high, :low, :pre_close, :volume, :amount,
-                                            :change_percent, :change_amount,
-                                            :five_day_change_percent, :ten_day_change_percent, :sixty_day_change_percent, :thirty_day_change_percent,
-                                            :collected_source, :collected_date, :create_date
-                                        )
-                                        ON CONFLICT (code, date) DO UPDATE SET
-                                            name = EXCLUDED.name,
-                                            english_name = EXCLUDED.english_name,
-                                            close = EXCLUDED.close,
-                                            open = EXCLUDED.open,
-                                            high = EXCLUDED.high,
-                                            low = EXCLUDED.low,
-                                            pre_close = EXCLUDED.pre_close,
-                                            volume = EXCLUDED.volume,
-                                            amount = EXCLUDED.amount,
-                                            change_percent = EXCLUDED.change_percent,
-                                            change_amount = EXCLUDED.change_amount,
-                                            five_day_change_percent = EXCLUDED.five_day_change_percent,
-                                            ten_day_change_percent = EXCLUDED.ten_day_change_percent,
-                                            sixty_day_change_percent = EXCLUDED.sixty_day_change_percent,
-                                            thirty_day_change_percent = EXCLUDED.thirty_day_change_percent,
-                                            collected_source = EXCLUDED.collected_source,
-                                            collected_date = EXCLUDED.collected_date,
-                                            create_date = EXCLUDED.create_date
-                                    """)
-                                    session.execute(upsert_stmt, insert_dict)
-                                    affected += 1
-                                    affected_stocks.add(stock_code)
-                                    success_sync_fallback = True
-                                    break
-                                except Exception as sync_error:
-                                    error_str = str(sync_error)
-                                    if "LockNotAvailable" in error_str or "DeadlockDetected" in error_str or "锁超时" in error_str:
-                                        retry_count += 1
-                                        self.logger.warning(f"港股同步(备选路径)检测到锁竞争 ({insert_dict['code']}-{insert_dict['date']})，第 {retry_count} 次重试...")
-                                        session.rollback()
-                                        time.sleep(0.5 * retry_count) # 等待一段时间重试
-                                        continue
-                                    else:
-                                        raise sync_error
-                            
-                            if not success_sync_fallback:
-                                 self.logger.error(f"港股历史(备选路径)({insert_dict['code']}-{insert_dict['date']})同步失败，重试 {max_retries} 次后仍然失败")
-                        except Exception as e:
-                            self.logger.error(f"港股历史(备选路径)处理出错({stock_code}): {e}")
-                            session.rollback()
-                            continue
-                    
-                    # 检查是否达到分段提交阈值
-                    processed_in_batch += 1
-                    if processed_in_batch >= batch_size:
+                    if len(insert_dicts) >= 200:
+                        session.execute(upsert_stmt, insert_dicts)
                         session.commit()
-                        processed_in_batch = 0
-                        self.logger.debug(f"已批量提交 {batch_size} 只股票的数据")
+                        insert_dicts = []
 
-            session.commit()  # 提交剩余的数据
-            self.logger.info(f"{target_date} 共有 {affected} 条港股实时数据同步到了历史行情表")
+                except Exception as e:
+                    self.logger.error(f"处理股票 {stock_code} 出错: {e}")
+                    continue
+
+            if insert_dicts:
+                session.execute(upsert_stmt, insert_dicts)
+                session.commit()
+
+            loop_time = time.time() - loop_start
+            self.logger.info(f"主循环同步耗时: {loop_time:.2f}s, 共处理 {affected} 条记录")
             
-            # 计算并保存各项指标（仅对自选股中的股票）
-            if affected_stocks:
-                # 获取自选股列表
+            # 计算指标
+            indicators_start = time.time()
+            if calculate_indicators and affected_stocks:
                 watchlist_codes = self._get_watchlist_codes(session)
                 target_stocks = [s for s in affected_stocks if s in watchlist_codes]
                 
-                if not target_stocks:
-                    self.logger.info("同步完成，但没有自选股需要计算指标")
-                else:
+                if target_stocks:
                     self.logger.info(f"开始为 {len(target_stocks)} 只自选股计算指标...")
+                    funcs = [
+                        self._calculate_and_save_macd_hk, self._calculate_and_save_kdj_hk,
+                        self._calculate_and_save_rsi_hk, self._calculate_and_save_ma_hk,
+                        self._calculate_and_save_boll_hk, self._calculate_and_save_mavol_hk,
+                        self._calculate_and_save_mean_frequency_hk
+                    ]
+                    for func in funcs:
+                        try:
+                            item_start = time.time()
+                            func(target_stocks, target_date, session)
+                            self.logger.debug(f"{func.__name__} 耗时: {time.time() - item_start:.2f}s")
+                        except Exception as e:
+                            self.logger.warning(f"{func.__name__} 失败: {e}")
                     
-                    try:
-                        self._calculate_and_save_macd_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股MACD指标计算失败: {e}")
-                
-                    try:
-                        self._calculate_and_save_kdj_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股KDJ指标计算失败: {e}")
+                    self.logger.info(f"指标计算总耗时: {time.time() - indicators_start:.2f}s")
 
-                    try:
-                        self._calculate_and_save_rsi_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股RSI指标计算失败: {e}")
-
-                    try:
-                        self._calculate_and_save_ma_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股MA指标计算失败: {e}")
-
-                    try:
-                        self._calculate_and_save_boll_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股BOLL指标计算失败: {e}")
-                    
-                    try:
-                        self._calculate_and_save_mavol_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股MAVOL指标计算失败: {e}")
-                    
-                    try:
-                        self._calculate_and_save_mean_frequency_hk(target_stocks, target_date, session)
-                    except Exception as e:
-                        self.logger.warning(f"港股均值频率共振指标计算失败: {e}")
-            
             # 操作日志记录
             try:
-                op_log_stmt = text("""
+                session.execute(text("""
                     INSERT INTO historical_collect_operation_logs 
                         (operation_type, operation_desc, affected_rows, status, collect_source, created_at)
-                    VALUES
-                        (:operation_type, :operation_desc, :affected_rows, :status, :collect_source, CURRENT_TIMESTAMP)
-                """)
-                session.execute(op_log_stmt, {
-                    "operation_type": "sync_from_realtime",
-                    "operation_desc": f"同步{target_date}实时行情至历史行情",
-                    "affected_rows": affected,
-                    "status": "SUCCESS",
-                    "collect_source": "akshare"
+                    VALUES (:type, :desc, :rows, :status, :source, CURRENT_TIMESTAMP)
+                """), {
+                    "type": "sync_from_realtime", "desc": f"同步{target_date}实时行情至历史行情",
+                    "rows": affected, "status": "SUCCESS", "source": "akshare"
                 })
                 session.commit()
             except Exception as log_e:
@@ -600,7 +456,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             return False
         finally:
             session.close()
-    
+
     def _calculate_and_save_macd_hk(self, stock_codes: list, target_date: str, session):
         """
         计算并保存港股MACD指标
@@ -615,11 +471,11 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             
             for stock_code in stock_codes:
                 try:
-                    # 查询该股票最近至少26天的收盘价数据
-                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+                    # 查询该股票最近至少30天的收盘价数据（用于计算MACD）
+                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
                     
                     result = session.execute(text("""
-                        SELECT date, close 
+                        SELECT date, close
                         FROM historical_quotes_hk 
                         WHERE code = :stock_code 
                         AND date >= :query_start_date 
@@ -633,51 +489,44 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     })
                     
                     rows = result.fetchall()
-                    if len(rows) < 26:
+                    if len(rows) < 26: # macd至少需要26天数据
                         continue
                     
-                    # 提取收盘价列表
+                    # 提取数据列表
+                    dates = [str(row[0]) for row in rows]
                     closes = [float(row[1]) for row in rows]
-                    dates = [str(row[0]) for row in rows]  # 港股date是String类型
                     
-                    # 使用MACD计算器批量计算
+                    # 使用MACD计算器计算指标
                     macd_results = calculator.calculate_macd_batch(closes)
                     
                     if not macd_results:
                         continue
                     
-                    # 保存MACD数据（只保存目标日期的数据）
+                    # 保存指标到数据库
                     for i, macd_data in enumerate(macd_results):
-                        if macd_data['dif'] is None:
-                            continue
-                        
                         date_str = dates[i]
                         
                         # 只保存目标日期的数据
                         if date_str != target_date:
                             continue
-                        
+                            
                         try:
                             session.execute(text("""
                                 INSERT INTO macd_indicators
-                                (code, date, market_type, dif, dea, macd, ema12, ema26, created_at)
-                                VALUES (:code, :date, :market_type, :dif, :dea, :macd, :ema12, :ema26, :created_at)
+                                (code, date, market_type, diff, dea, macd, created_at)
+                                VALUES (:code, :date, :market_type, :diff, :dea, :macd, :created_at)
                                 ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                    dif = EXCLUDED.dif,
+                                    diff = EXCLUDED.diff,
                                     dea = EXCLUDED.dea,
                                     macd = EXCLUDED.macd,
-                                    ema12 = EXCLUDED.ema12,
-                                    ema26 = EXCLUDED.ema26,
                                     created_at = EXCLUDED.created_at
                             """), {
                                 'code': stock_code,
                                 'date': date_str,
                                 'market_type': 'HK',
-                                'dif': macd_data['dif'],
+                                'diff': macd_data['diff'],
                                 'dea': macd_data['dea'],
                                 'macd': macd_data['macd'],
-                                'ema12': macd_data['ema12'],
-                                'ema26': macd_data['ema26'],
                                 'created_at': datetime.now()
                             })
                         except Exception as e:
@@ -710,18 +559,16 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             
             for stock_code in stock_codes:
                 try:
-                    # 查询该股票最近至少20天的收盘价数据
-                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+                    # 查询该股票最近至少30天的最高、最低、收盘价数据（用于计算KDJ）
+                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
                     
                     result = session.execute(text("""
-                        SELECT date, close, high, low
+                        SELECT date, high, low, close
                         FROM historical_quotes_hk 
                         WHERE code = :stock_code 
                         AND date >= :query_start_date 
                         AND date <= :target_date
-                        AND close IS NOT NULL
-                        AND high IS NOT NULL
-                        AND low IS NOT NULL
+                        AND high IS NOT NULL AND low IS NOT NULL AND close IS NOT NULL
                         ORDER BY date ASC
                     """), {
                         'stock_code': stock_code,
@@ -730,29 +577,29 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     })
                     
                     rows = result.fetchall()
-                    if len(rows) < 9:
+                    if len(rows) < 9: # kdj至少需要9天数据
                         continue
                     
                     # 提取数据列表
                     dates = [str(row[0]) for row in rows]
-                    closes = [float(row[1]) for row in rows]
-                    highs = [float(row[2]) for row in rows]
-                    lows = [float(row[3]) for row in rows]
+                    highs = [float(row[1]) for row in rows]
+                    lows = [float(row[2]) for row in rows]
+                    closes = [float(row[3]) for row in rows]
                     
-                    # 使用KDJ计算器批量计算
-                    kdj_results = calculator.calculate_kdj_batch(closes, highs, lows)
+                    # 使用KDJ计算器计算指标
+                    kdj_results = calculator.calculate_kdj_batch(highs, lows, closes)
                     
                     if not kdj_results:
                         continue
                     
-                    # 保存KDJ数据（只保存目标日期的数据）
+                    # 保存指标到数据库
                     for i, kdj_data in enumerate(kdj_results):
                         date_str = dates[i]
                         
                         # 只保存目标日期的数据
                         if date_str != target_date:
                             continue
-                        
+                            
                         try:
                             session.execute(text("""
                                 INSERT INTO kdj_indicators
@@ -1230,8 +1077,8 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                         try:
                             session.execute(text("""
                                 INSERT INTO mean_frequency_resonance_indicators
-                                (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, d1, d1_date, d20, d20_date, created_at)
-                                VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :d1, :d1_date, :d20, :d20_date, :created_at)
+                                (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
+                                VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
                                 ON CONFLICT (code, date, market_type) DO UPDATE SET
                                     macro_displacement_delta = EXCLUDED.macro_displacement_delta,
                                     amplitude = EXCLUDED.amplitude,
@@ -1244,10 +1091,6 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                                     ma20_d = EXCLUDED.ma20_d,
                                     mavol20_m = EXCLUDED.mavol20_m,
                                     bias = EXCLUDED.bias,
-                                    d1 = EXCLUDED.d1,
-                                    d1_date = EXCLUDED.d1_date,
-                                    d20 = EXCLUDED.d20,
-                                    d20_date = EXCLUDED.d20_date,
                                     created_at = EXCLUDED.created_at
                             """), {
                                 'code': stock_code,
@@ -1264,10 +1107,6 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                                 'ma20': res['ma20_d'],
                                 'mavol20': res['mavol20_m'],
                                 'bias': res['bias'],
-                                'd1': res.get('d1'),
-                                'd1_date': res.get('d1_date'),
-                                'd20': res.get('d20'),
-                                'd20_date': res.get('d20_date'),
                                 'created_at': datetime.now()
                             })
                         except Exception as e:
@@ -1283,4 +1122,3 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     
         except Exception as e:
             self.logger.error(f"批量计算港股均值频率共振指标失败: {e}")
-

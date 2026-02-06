@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,9 +9,10 @@
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/watchlist.css">
 </head>
+
 <body>
-<script src="components/header.js"></script>
-<script>loadHeader('watchlist');</script>
+    <script src="components/header.js"></script>
+    <script>loadHeader('watchlist');</script>
     <!-- 主要内容 -->
     <main class="main-content">
         <!-- 工具栏 -->
@@ -21,7 +23,17 @@
                     <span class="stock-count">共 <span id="stockCount">6</span> 只股票</span>
                 </div>
                 <div class="toolbar-right">
-                    <button class="btn btn-primary add-stock-btn">+ 添加自选股</button>
+                    <button class="btn btn-primary add-stock-btn">+ 添加</button>
+                    <button class="btn btn-secondary import-btn">导入</button>
+                    <div class="export-dropdown">
+                        <button class="btn btn-secondary export-dropdown-btn">导出</button>
+                        <div class="export-menu">
+                            <a href="#" class="export-item" data-format="csv">CSV 格式</a>
+                            <a href="#" class="export-item" data-format="xlsx">Excel 格式</a>
+                            <a href="#" class="export-item" data-format="txt">Text 格式</a>
+                        </div>
+                    </div>
+                    <input type="file" id="importFile" style="display: none;" accept=".txt,.csv,.xlsx,.xls">
                     <div class="view-controls">
                         <button class="view-btn active" data-view="grid">⊞</button>
                         <button class="view-btn" data-view="list">☰</button>
@@ -266,7 +278,7 @@
                         </div>
                         <div class="stock-actions">
                             <button class="action-btn" onclick="goToStock('300750')">详情</button>
-                            <button class="action-btn trade-btn" onclick="goToStock('300750')" >历史</button>
+                            <button class="action-btn trade-btn" onclick="goToStock('300750')">历史</button>
                         </div>
                     </div>
                 </div>
@@ -385,7 +397,7 @@
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/watchlist.js"></script>
-    
+
     <!-- ICP备案信息 -->
     <footer class="icp-footer">
         <div class="icp-container">
@@ -395,10 +407,6 @@
         </div>
     </footer>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-        WatchlistPage.init();
-        });
-    </script>
 </body>
-</html> 
+
+</html>
