@@ -50,6 +50,7 @@ try:
         UserCreate = getattr(models_module, 'UserCreate', None)
         UserUpdate = getattr(models_module, 'UserUpdate', None)
         MeanFrequencyResonanceIndicators = getattr(models_module, 'MeanFrequencyResonanceIndicators', None)
+        GMSSignalTrace = getattr(models_module, 'GMSSignalTrace', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
         StockPriceData = getattr(models_module, 'StockPriceData', None)
@@ -109,6 +110,7 @@ except Exception as e:
     UserCreate = None
     UserUpdate = None
     MeanFrequencyResonanceIndicators = None
+    GMSSignalTrace = None
     StockBasicInfo = None
     StockBasicInfoHK = None
     StockPriceData = None
@@ -173,6 +175,7 @@ __all__ = [
     'UserCreate',
     'UserUpdate',
     'MeanFrequencyResonanceIndicators',
+    'GMSSignalTrace',
     'StockBasicInfo',
     'StockBasicInfoHK',
     'StockPriceData',

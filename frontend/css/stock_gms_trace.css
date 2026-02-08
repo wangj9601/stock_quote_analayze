@@ -1,0 +1,124 @@
+/* GMS 信号追溯页面样式 */
+.gms-trace-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.gms-trace-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #333;
+}
+
+.gms-trace-card .toolbar {
+    margin-bottom: 12px;
+}
+
+.gms-trace-card .toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.gms-trace-card .toolbar-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.gms-trace-card .toolbar-row input[type="date"] {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.gms-trace-card .toolbar-row button {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #2e7d32;
+    color: #fff;
+}
+
+.gms-trace-card .toolbar-row button.btn-secondary {
+    background: #666;
+}
+
+.gms-trace-card .toolbar-row button:hover {
+    opacity: 0.9;
+}
+
+.loading-msg, .empty-msg {
+    padding: 16px;
+    text-align: center;
+    color: #666;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+.trace-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.trace-table th, .trace-table td {
+    border: 1px solid #e0e0e0;
+    padding: 6px 10px;
+}
+
+.trace-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+.trace-table .buy-left { color: #1976d2; }
+.trace-table .buy-right { color: #2e7d32; }
+.trace-table .sell { color: #c62828; }
+.trace-table .strength-high { color: #2e7d32; }
+.trace-table .strength-mid { color: #f57c00; }
+.trace-table .strength-low { color: #666; }
+
+/* 信号强度≥60% 时整行与信号强度列同色 */
+.trace-table tr.row-strength-high { background-color: #e8f5e9; color: #2e7d32; }
+.trace-table tr.row-strength-high td { color: #2e7d32; }
+.trace-table tr.row-strength-mid { background-color: #fff3e0; color: #f57c00; }
+.trace-table tr.row-strength-mid td { color: #f57c00; }
+
+.gms-trace-card .pagination {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.gms-trace-card .pagination button {
+    padding: 4px 12px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.gms-trace-card .pagination button:hover {
+    background: #f5f5f5;
+}
+
+/* 得分明细按钮与筛选页一致 */
+.trace-table .gms-score-detail-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #2e7d32;
+    text-decoration: underline;
+    font-size: inherit;
+    padding: 0;
+}

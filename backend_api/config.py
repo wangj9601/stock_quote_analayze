@@ -65,5 +65,15 @@ SMTP_CONFIG = {
 PUSH_CONFIG = {
     "max_retry_count": int(os.getenv("MAX_RETRY_COUNT", "3")),
     "push_batch_size": int(os.getenv("PUSH_BATCH_SIZE", "100")),
+    "report_dir": os.getenv("REPORT_DIR", "./reports"),  # 报告文件存储目录
     "default_push_times": ["09:30", "15:30"]  # 默认推送时间
+}
+
+# 微信配置
+WECHAT_CONFIG = {
+    "corp_id": os.getenv("WECHAT_CORP_ID", ""),  # 企业微信Corp ID
+    "agent_id": os.getenv("WECHAT_AGENT_ID", ""),  # 企业微信Agent ID
+    "secret": os.getenv("WECHAT_SECRET", ""),  # 企业微信Secret
+    "token": os.getenv("WECHAT_TOKEN", ""),  # 微信公众号Token
+    "encoding_aes_key": os.getenv("WECHAT_ENCODING_AES_KEY", "")  # 微信公众号EncodingAESKey
 }

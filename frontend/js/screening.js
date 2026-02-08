@@ -1163,7 +1163,7 @@ const ScreeningPage = {
                         <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
                         <td>
                             <div class="action-links">
-                                <a href="stock_history.html?code=${stock.symbol || stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock_gms_trace.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">历史</a>
                                 <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
                                 <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
                             </div>

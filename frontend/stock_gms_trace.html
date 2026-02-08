@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMS 信号追溯</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+
+    <div class="container">
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">GMS 信号追溯记录</div>
+            <div class="toolbar">
+                <div class="toolbar-row">
+                    <label>股票: <span id="stockDisplay">--</span></label>
+                    <label>开始日期: <input type="date" id="startDate"></label>
+                    <label>结束日期: <input type="date" id="endDate"></label>
+                    <button id="searchBtn">查询</button>
+                    <button id="forceComputeBtn" class="btn-secondary">强制重新计算</button>
+                </div>
+            </div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">正在计算信号追溯，请稍候...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">该股票暂无 GMS 指标数据</div>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>总分</th>
+                            <th>信号强度</th>
+                            <th>买点类型</th>
+                            <th>均值收敛态</th>
+                            <th>动量溢出态</th>
+                            <th>Δ</th>
+                            <th>d</th>
+                            <th>Δ/d₂₀</th>
+                            <th>Δ/d₁</th>
+                            <th>F/Z</th>
+                            <th>量比</th>
+                            <th>左侧</th>
+                            <th>右侧</th>
+                            <th>卖出</th>
+                            <th>得分明细</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button id="firstPage">第一页</button>
+                <button id="prevPage">上一页</button>
+                <span id="pageInfo"></span>
+                <button id="nextPage">下一页</button>
+                <button id="lastPage">最后一页</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/stock_gms_trace.js"></script>
+
+    <footer class="icp-footer">
+        <div class="icp-container">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">京ICP备18061239号-1</a>
+        </div>
+    </footer>
+</body>
+
+</html>

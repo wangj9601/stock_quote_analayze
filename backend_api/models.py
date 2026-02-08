@@ -604,6 +604,47 @@ class MeanFrequencyResonanceIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class GMSSignalTrace(Base):
+    """GMS 信号追溯记录表：存储每只股票每日的 GMS 策略指标与信号"""
+    __tablename__ = 'gms_signal_trace'
+    code = Column(String(20), primary_key=True)
+    date = Column(String(20), primary_key=True)
+    market_type = Column(String(10), primary_key=True)
+
+    score_total = Column(Float, nullable=True)
+    score_accumulation = Column(Float, nullable=True)
+    score_momentum = Column(Float, nullable=True)
+    signal_strength = Column(Float, nullable=True)
+    buy_type = Column(String(20), nullable=True)
+    left_buy_signal = Column(Boolean, nullable=True)
+    right_buy_signal = Column(Boolean, nullable=True)
+    sell_signal = Column(Boolean, nullable=True)
+    accumulation_grade = Column(String(5), nullable=True)
+    momentum_grade = Column(String(20), nullable=True)
+    delta = Column(Float, nullable=True)
+    d = Column(Float, nullable=True)
+    ratio_d20 = Column(Float, nullable=True)
+    ratio_d1 = Column(Float, nullable=True)
+    fz_ratio = Column(Float, nullable=True)
+    volume_ratio = Column(Float, nullable=True)
+    instant_deviation = Column(Float, nullable=True)
+    rising_days = Column(Integer, nullable=True)
+    falling_days = Column(Integer, nullable=True)
+    score_acc_fz = Column(Float, nullable=True)
+    score_acc_balance = Column(Float, nullable=True)
+    score_acc_volume = Column(Float, nullable=True)
+    score_mom_ratio_d1 = Column(Float, nullable=True)
+    score_mom_deviation = Column(Float, nullable=True)
+    score_mom_volume = Column(Float, nullable=True)
+    acc_fz_judge = Column(String(50), nullable=True)
+    acc_balance_judge = Column(String(50), nullable=True)
+    acc_volume_judge = Column(String(50), nullable=True)
+    mom_ratio_d1_judge = Column(String(50), nullable=True)
+    mom_deviation_judge = Column(String(50), nullable=True)
+    mom_volume_judge = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class TradingNotes(Base):
     __tablename__ = 'trading_notes'
     id = Column(Integer, primary_key=True, autoincrement=True)

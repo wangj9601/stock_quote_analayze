@@ -1,0 +1,284 @@
+"""
+GMS 信号追溯 API 路由
+提供单只股票从指标表首日到最新日的 GMS 策略信号追溯记录
+"""
+
+import logging
+from typing import Optional, List
+from datetime import datetime
+from collections import defaultdict
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+
+from backend_api.database import get_db
+from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/stock", tags=["GMS信号追溯"])
+
+try:
+    from backend_core.strategies.gms.data_loader import GMSDataLoader
+    from backend_core.strategies.gms.strategy_engine import GMSStrategyEngine
+    from backend_core.strategies.gms.config import GMSConfigManager
+    GMS_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"GMS 模块导入失败: {e}")
+    GMS_AVAILABLE = False
+
+
+def _normalize_code(code: str, market_type: str) -> str:
+    """港股代码 5 位补零"""
+    s = str(code).strip()
+    if market_type == "HK" and len(s) < 5 and s.isdigit():
+        return s.zfill(5)
+    return s
+
+
+def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, config: dict) -> int:
+    """
+    对单只股票从 mean_frequency_resonance_indicators 的首日到最新日执行 GMS 追溯计算，
+    并写入 gms_signal_trace 表。
+    返回写入条数。
+    """
+    if not GMS_AVAILABLE:
+        raise RuntimeError("GMS 策略模块不可用")
+
+    # 查询该股票所有日期（升序）
+    rows = (
+        db.query(MeanFrequencyResonanceIndicators.date)
+        .filter(
+            MeanFrequencyResonanceIndicators.code == code,
+            MeanFrequencyResonanceIndicators.market_type == market_type,
+        )
+        .order_by(MeanFrequencyResonanceIndicators.date.asc())
+        .all()
+    )
+    dates = [str(r.date)[:10] for r in rows if r.date]
+    if not dates:
+        return 0
+
+    loader = GMSDataLoader(db)
+    engine = GMSStrategyEngine(loader, config)
+    stable_days = int(config.get("scoring", {}).get("instant_deviation_stable_days", 3))
+    codes = [code]
+    saved = 0
+
+    for i, target_date in enumerate(dates):
+        try:
+            # 加载当日指标（精确日期，不用 use_latest）
+            rows_data = loader.load_indicators(codes, target_date, market_type, use_latest_per_stock=False)
+            if not rows_data:
+                continue
+
+            # 加载多日序列（用于站稳3日）
+            dev_series_by_code = {}
+            if stable_days > 1:
+                multi_rows = loader.load_indicators_multi_day(codes, target_date, market_type, days=stable_days)
+                by_code = defaultdict(list)
+                for r in multi_rows:
+                    by_code[r["code"]].append(r)
+                for c, code_rows in by_code.items():
+                    code_rows.sort(key=lambda x: x["date"])
+                    recent = code_rows[-stable_days:]
+                    dev_series_by_code[c] = [float(r.get("instant_deviation", 0) or 0) for r in recent]
+
+            row = rows_data[0]
+            dev_series = dev_series_by_code.get(code)
+            ind = engine.calculator.calculate(row, instant_deviation_series=dev_series)
+            if ind is None:
+                continue
+
+            left = engine.detector.detect_left_buy(ind)
+            right = engine.detector.detect_right_buy(ind)
+            sell = engine.detector.detect_sell(ind)
+            buy_type = "左侧" if left else ("右侧" if right else "")
+            signal_strength = (ind.score_total / 100.0) if ind.score_total and ind.score_total > 0 else 0.0
+
+            rec = GMSSignalTrace(
+                code=code,
+                date=target_date,
+                market_type=market_type,
+                score_total=ind.score_total,
+                score_accumulation=ind.score_accumulation,
+                score_momentum=ind.score_momentum,
+                signal_strength=signal_strength,
+                buy_type=buy_type or None,
+                left_buy_signal=left,
+                right_buy_signal=right,
+                sell_signal=sell,
+                accumulation_grade=getattr(ind, "accumulation_grade", "") or None,
+                momentum_grade=getattr(ind, "momentum_grade", "") or None,
+                delta=ind.delta,
+                d=ind.d,
+                ratio_d20=ind.ratio_d20,
+                ratio_d1=ind.ratio_d1,
+                fz_ratio=ind.fz_ratio,
+                volume_ratio=ind.volume_ratio,
+                instant_deviation=ind.instant_deviation,
+                rising_days=ind.rising_days,
+                falling_days=ind.falling_days,
+                score_acc_fz=getattr(ind, "score_acc_fz", None),
+                score_acc_balance=getattr(ind, "score_acc_balance", None),
+                score_acc_volume=getattr(ind, "score_acc_volume", None),
+                score_mom_ratio_d1=getattr(ind, "score_mom_ratio_d1", None),
+                score_mom_deviation=getattr(ind, "score_mom_deviation", None),
+                score_mom_volume=getattr(ind, "score_mom_volume", None),
+                acc_fz_judge=getattr(ind, "acc_fz_judge", None) or None,
+                acc_balance_judge=getattr(ind, "acc_balance_judge", None) or None,
+                acc_volume_judge=getattr(ind, "acc_volume_judge", None) or None,
+                mom_ratio_d1_judge=getattr(ind, "mom_ratio_d1_judge", None) or None,
+                mom_deviation_judge=getattr(ind, "mom_deviation_judge", None) or None,
+                mom_volume_judge=getattr(ind, "mom_volume_judge", None) or None,
+            )
+            db.merge(rec)
+            saved += 1
+        except Exception as e:
+            logger.warning(f"GMS 追溯 {code} {target_date} 失败: {e}")
+            continue
+
+    db.commit()
+    return saved
+
+
+@router.get("/gms-signal-trace")
+async def get_gms_signal_trace(
+    code: str = Query(..., description="股票代码"),
+    start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    force_compute: Optional[int] = Query(None, description="1 时强制重新计算"),
+    db: Session = Depends(get_db),
+):
+    """
+    查询某股票的 GMS 信号追溯记录。
+    若表中无该股票记录且未传 force_compute：先执行追溯计算并入库，再返回。
+    force_compute=1：重新全量计算后返回。
+    """
+    if not GMS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "GMS 策略暂不可用", "data": [], "total": 0},
+        )
+
+    code = str(code).strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+
+    # 判断市场类型
+    is_a_share = len(code) >= 6 and code.isdigit() and code[0] in "6039"
+    market_type = "CN" if is_a_share else "HK"
+    code_norm = _normalize_code(code, market_type)
+
+    try:
+        config = GMSConfigManager().get_config()
+
+        if force_compute == 1:
+            # 先删除该股票已有追溯记录
+            db.query(GMSSignalTrace).filter(
+                GMSSignalTrace.code == code_norm,
+                GMSSignalTrace.market_type == market_type,
+            ).delete()
+            db.commit()
+            logger.info(f"GMS 追溯 强制重新计算: {code_norm}")
+            count = _compute_gms_trace_for_stock(db, code_norm, market_type, config)
+            logger.info(f"GMS 追溯 计算完成: {code_norm}, 写入 {count} 条")
+
+        else:
+            # 检查是否有记录
+            exists = (
+                db.query(GMSSignalTrace)
+                .filter(
+                    GMSSignalTrace.code == code_norm,
+                    GMSSignalTrace.market_type == market_type,
+                )
+                .first()
+            )
+            if not exists:
+                # 检查 mean_frequency_resonance_indicators 是否有该股票数据
+                has_mfr = (
+                    db.query(MeanFrequencyResonanceIndicators)
+                    .filter(
+                        MeanFrequencyResonanceIndicators.code == code_norm,
+                        MeanFrequencyResonanceIndicators.market_type == market_type,
+                    )
+                    .first()
+                )
+                if not has_mfr:
+                    return JSONResponse({
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "message": "该股票暂无 GMS 指标数据",
+                    })
+                # 执行追溯计算
+                logger.info(f"GMS 追溯 首次计算: {code_norm}")
+                count = _compute_gms_trace_for_stock(db, code_norm, market_type, config)
+                logger.info(f"GMS 追溯 计算完成: {code_norm}, 写入 {count} 条")
+
+        # 查询返回
+        q = (
+            db.query(GMSSignalTrace)
+            .filter(
+                GMSSignalTrace.code == code_norm,
+                GMSSignalTrace.market_type == market_type,
+            )
+        )
+        if start_date:
+            q = q.filter(GMSSignalTrace.date >= str(start_date)[:10])
+        if end_date:
+            q = q.filter(GMSSignalTrace.date <= str(end_date)[:10])
+        q = q.order_by(GMSSignalTrace.date.desc())
+        rows = q.all()
+
+        def to_dict(r):
+            return {
+                "code": r.code,
+                "date": r.date,
+                "market_type": r.market_type,
+                "score_total": r.score_total,
+                "score_accumulation": r.score_accumulation,
+                "score_momentum": r.score_momentum,
+                "signal_strength": r.signal_strength,
+                "buy_type": r.buy_type or "",
+                "left_buy_signal": r.left_buy_signal,
+                "right_buy_signal": r.right_buy_signal,
+                "sell_signal": r.sell_signal,
+                "accumulation_grade": r.accumulation_grade or "",
+                "momentum_grade": r.momentum_grade or "",
+                "delta": r.delta,
+                "d": r.d,
+                "ratio_d20": r.ratio_d20,
+                "ratio_d1": r.ratio_d1,
+                "fz_ratio": r.fz_ratio,
+                "volume_ratio": r.volume_ratio,
+                "instant_deviation": r.instant_deviation,
+                "rising_days": r.rising_days,
+                "falling_days": r.falling_days,
+                "score_acc_fz": getattr(r, "score_acc_fz", None),
+                "score_acc_balance": getattr(r, "score_acc_balance", None),
+                "score_acc_volume": getattr(r, "score_acc_volume", None),
+                "score_mom_ratio_d1": getattr(r, "score_mom_ratio_d1", None),
+                "score_mom_deviation": getattr(r, "score_mom_deviation", None),
+                "score_mom_volume": getattr(r, "score_mom_volume", None),
+                "acc_fz_judge": getattr(r, "acc_fz_judge", None) or "",
+                "acc_balance_judge": getattr(r, "acc_balance_judge", None) or "",
+                "acc_volume_judge": getattr(r, "acc_volume_judge", None) or "",
+                "mom_ratio_d1_judge": getattr(r, "mom_ratio_d1_judge", None) or "",
+                "mom_deviation_judge": getattr(r, "mom_deviation_judge", None) or "",
+                "mom_volume_judge": getattr(r, "mom_volume_judge", None) or "",
+            }
+
+        data = [to_dict(r) for r in rows]
+        return JSONResponse({
+            "success": True,
+            "data": data,
+            "total": len(data),
+        })
+    except Exception as e:
+        logger.exception("GMS 信号追溯查询失败")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": str(e), "data": [], "total": 0},
+        )

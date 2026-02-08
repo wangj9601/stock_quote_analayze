@@ -230,8 +230,52 @@ CREATE TABLE IF NOT EXISTS public.mean_frequency_resonance_indicators
 TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS public.mean_frequency_resonance_indicators
-    OWNER to postgres;    
+    OWNER to postgres;
 
+
+    -- Table: public.gms_signal_trace
+CREATE TABLE IF NOT EXISTS public.gms_signal_trace
+(
+    code character varying(20) NOT NULL,
+    date character varying(20) NOT NULL,
+    market_type character varying(10) NOT NULL,
+    score_total real,
+    score_accumulation real,
+    score_momentum real,
+    signal_strength real,
+    buy_type character varying(20),
+    left_buy_signal boolean,
+    right_buy_signal boolean,
+    sell_signal boolean,
+    accumulation_grade character varying(5),
+    momentum_grade character varying(20),
+    delta real,
+    d real,
+    ratio_d20 real,
+    ratio_d1 real,
+    fz_ratio real,
+    volume_ratio real,
+    instant_deviation real,
+    rising_days integer,
+    falling_days integer,
+    score_acc_fz real,
+    score_acc_balance real,
+    score_acc_volume real,
+    score_mom_ratio_d1 real,
+    score_mom_deviation real,
+    score_mom_volume real,
+    acc_fz_judge character varying(50),
+    acc_balance_judge character varying(50),
+    acc_volume_judge character varying(50),
+    mom_ratio_d1_judge character varying(50),
+    mom_deviation_judge character varying(50),
+    mom_volume_judge character varying(50),
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT gms_signal_trace_pkey PRIMARY KEY (code, date, market_type)
+);
+
+ALTER TABLE IF EXISTS public.gms_signal_trace
+    OWNER to postgres;
 
 
     -- 策略配置表

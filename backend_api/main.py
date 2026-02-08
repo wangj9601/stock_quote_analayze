@@ -133,6 +133,14 @@ except ImportError as e:
     print(f"❌ screening_router 导入失败: {e}")
     screening_router = None
 
+# 尝试导入 GMS 信号追溯路由
+try:
+    from .stock.gms_trace_routes import router as gms_trace_router
+    print("✅ gms_trace_router 导入成功")
+except ImportError as e:
+    print(f"❌ gms_trace_router 导入失败: {e}")
+    gms_trace_router = None
+
 # 尝试导入history路由
 try:
     from .stock.history_api import router as history_router
@@ -180,6 +188,15 @@ try:
 except ImportError as e:
     print(f"❌ quotes_router 导入失败: {e}")
     quotes_router = None
+
+# 尝试导入推送路由
+try:
+    from .push_routes import router as push_router, admin_router as push_admin_router
+    print("✅ push_router 导入成功")
+except ImportError as e:
+    print(f"❌ push_router 导入失败: {e}")
+    push_router = None
+    push_admin_router = None
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -271,6 +288,9 @@ else:
     print("❌ screening路由未注册")
 
 # 注册history路由
+if gms_trace_router is not None:
+    app.include_router(gms_trace_router)
+
 if history_router is not None:
     app.include_router(history_router)
     print("✅ history路由注册成功")
@@ -311,6 +331,20 @@ if quotes_router is not None:
     print("✅ quotes路由注册成功")
 else:
     print("❌ quotes路由未注册")
+
+# 注册推送路由
+if push_router is not None:
+    app.include_router(push_router)
+    print("✅ 推送路由注册成功")
+else:
+    print("❌ 推送路由未注册")
+
+# 注册推送管理员路由
+if push_admin_router is not None:
+    app.include_router(push_admin_router)
+    print("✅ 推送管理员路由注册成功")
+else:
+    print("❌ 推送管理员路由未注册")
 
 # 尝试导入admin路由
 try:
