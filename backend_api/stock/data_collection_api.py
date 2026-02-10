@@ -449,6 +449,9 @@ class AkshareDataCollector:
             if 'mavol' in indicators:
                 self._generate_mavol_indicators(stock_code, df)
             
+            if 'macd' in indicators:
+                self._generate_macd_indicators(stock_code, df)
+            
             if 'kdj' in indicators:
                 self._generate_kdj_indicators(stock_code, df)
             
@@ -586,6 +589,50 @@ class AkshareDataCollector:
             logger.error(f"生成股票 {stock_code} MAVOL指标失败: {e}")
             self.session.rollback()
     
+    def _generate_macd_indicators(self, stock_code: str, df: pd.DataFrame):
+        """生成MACD指标"""
+        try:
+            from backend_core.utils.macd_calculator import MACDCalculator
+            
+            macd_calc = MACDCalculator()
+            macd_data = macd_calc.calculate_macd_batch(df['close'].tolist())
+            
+            # 准备插入数据
+            for i, macd_row in enumerate(macd_data):
+                if i >= len(df):
+                    break
+                    
+                data = {
+                    'code': stock_code,
+                    'date': df.iloc[i]['date'].strftime('%Y-%m-%d'),
+                    'market_type': 'CN',  # A股市场
+                    'dif': macd_row.get('dif'),
+                    'dea': macd_row.get('dea'),
+                    'macd': macd_row.get('macd'),
+                    'ema12': macd_row.get('ema12'),
+                    'ema26': macd_row.get('ema26')
+                }
+                
+                # 插入或更新MACD指标数据
+                self.session.execute(text("""
+                    INSERT INTO macd_indicators
+                    (code, date, market_type, dif, dea, macd, ema12, ema26)
+                    VALUES (:code, :date, :market_type, :dif, :dea, :macd, :ema12, :ema26)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
+                        dif = EXCLUDED.dif,
+                        dea = EXCLUDED.dea,
+                        macd = EXCLUDED.macd,
+                        ema12 = EXCLUDED.ema12,
+                        ema26 = EXCLUDED.ema26
+                """), data)
+            
+            self.session.commit()
+            logger.info(f"股票 {stock_code} MACD指标生成完成")
+            
+        except Exception as e:
+            logger.error(f"生成股票 {stock_code} MACD指标失败: {e}")
+            self.session.rollback()
+    
     def _generate_kdj_indicators(self, stock_code: str, df: pd.DataFrame):
         """生成KDJ指标"""
         try:
@@ -710,17 +757,97 @@ class AkshareDataCollector:
             self.session.rollback()
     
     def _generate_pvfrs_indicators(self, stock_code: str, start_date: str, end_date: str):
-        """生成PVFRS指标（这里只是占位符，实际PVFRS计算比较复杂）"""
+        """生成PVFRS指标"""
         try:
-            # PVFRS指标计算比较复杂，这里提供一个简单的占位符实现
-            # 实际应该调用PVFRS计算模块
-            logger.info(f"股票 {stock_code} PVFRS指标生成（占位符实现）")
+            from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
             
-            # 这里可以调用现有的PVFRS计算逻辑
-            # 由于PVFRS计算比较复杂，建议使用专门的PVFRS计算工具
+            logger.info(f"开始为股票 {stock_code} 生成PVFRS指标")
+            
+            # 获取历史数据
+            result = self.session.execute(text("""
+                SELECT date, close, volume
+                FROM historical_quotes 
+                WHERE code = :stock_code 
+                AND date >= :start_date 
+                AND date <= :end_date
+                ORDER BY date
+            """), {
+                'stock_code': stock_code,
+                'start_date': start_date,
+                'end_date': end_date
+            })
+            
+            history_rows = result.fetchall()
+            if not history_rows or len(history_rows) < 21:  # PVFRS需要至少21天数据
+                logger.warning(f"股票 {stock_code} 历史数据不足，无法生成PVFRS指标（需要至少21天）")
+                return
+            
+            # 创建简单的类来模拟ORM对象
+            class HistoryRow:
+                def __init__(self, date, close, volume):
+                    self.date = date
+                    self.close = close
+                    self.volume = volume
+            
+            # 转换数据为ORM对象格式
+            orm_rows = [HistoryRow(row[0], row[1], row[2]) for row in history_rows]
+            
+            # 计算PVFRS指标
+            calculator = MeanFrequencyResonanceCalculator()
+            pvfrs_df = calculator.calculate_for_dataframe(orm_rows)
+            
+            if pvfrs_df.empty:
+                logger.warning(f"股票 {stock_code} PVFRS计算结果为空")
+                return
+            
+            # 保存到数据库
+            for _, row in pvfrs_df.iterrows():
+                data = {
+                    'code': stock_code,
+                    'date': row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']),
+                    'market_type': 'CN',  # A股市场
+                    'macro_displacement_delta': row.get('macro_displacement_delta'),
+                    'amplitude': row.get('amplitude'),
+                    'ratio_d20': row.get('ratio_d20'),
+                    'ratio_d1': row.get('ratio_d1'),
+                    'instant_deviation': row.get('instant_deviation'),
+                    'rising_days_z': row.get('rising_days_z'),
+                    'falling_days_f': row.get('falling_days_f'),
+                    'efficiency_m20_minus_m': row.get('efficiency_m20_minus_m'),
+                    'ma20_d': row.get('ma20_d'),
+                    'mavol20_m': row.get('mavol20_m'),
+                    'bias': row.get('bias')
+                }
+                
+                # 插入或更新PVFRS指标数据
+                self.session.execute(text("""
+                    INSERT INTO mean_frequency_resonance_indicators
+                    (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1,
+                     instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, 
+                     ma20_d, mavol20_m, bias)
+                    VALUES (:code, :date, :market_type, :macro_displacement_delta, :amplitude, :ratio_d20, :ratio_d1,
+                            :instant_deviation, :rising_days_z, :falling_days_f, :efficiency_m20_minus_m,
+                            :ma20_d, :mavol20_m, :bias)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
+                        macro_displacement_delta = EXCLUDED.macro_displacement_delta,
+                        amplitude = EXCLUDED.amplitude,
+                        ratio_d20 = EXCLUDED.ratio_d20,
+                        ratio_d1 = EXCLUDED.ratio_d1,
+                        instant_deviation = EXCLUDED.instant_deviation,
+                        rising_days_z = EXCLUDED.rising_days_z,
+                        falling_days_f = EXCLUDED.falling_days_f,
+                        efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
+                        ma20_d = EXCLUDED.ma20_d,
+                        mavol20_m = EXCLUDED.mavol20_m,
+                        bias = EXCLUDED.bias
+                """), data)
+            
+            self.session.commit()
+            logger.info(f"股票 {stock_code} PVFRS指标生成完成，共 {len(pvfrs_df)} 条记录")
             
         except Exception as e:
             logger.error(f"生成股票 {stock_code} PVFRS指标失败: {e}")
+            self.session.rollback()
     
     def collect_single_hk_stock_data(self, stock_code: str, stock_name: str, start_date: str, end_date: str, is_full_collection: bool = False, force_update: bool = False) -> bool:
         """

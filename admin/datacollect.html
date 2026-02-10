@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/element-plus@2.2.0/dist/index.full.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.2.0/dist/index.css">
 </head>
+
 <body class="bg-gray-50">
     <div id="app" class="min-h-screen">
         <!-- 头部 -->
@@ -38,52 +40,63 @@
                         <h2 class="text-lg font-semibold text-gray-900">管理后台</h2>
                     </div>
                     <div class="text-sm text-gray-600 mb-4">管理员</div>
-                    
+
                     <nav class="space-y-2">
-                        <a href="dashboard.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="dashboard.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-clipboard-list mr-3"></i>
                             仪表板
                         </a>
-                        <a href="users.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="users.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-users mr-3"></i>
                             用户管理
                         </a>
-                        <a href="quotes.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="quotes.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-chart-line mr-3"></i>
                             行情数据
                         </a>
-                        <a href="datasource.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="datasource.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-cog mr-3"></i>
                             数据源配置
                         </a>
-                        <a href="datacollect.html" class="flex items-center px-3 py-2 bg-blue-100 text-blue-700 rounded-md">
+                        <a href="datacollect.html"
+                            class="flex items-center px-3 py-2 bg-blue-100 text-blue-700 rounded-md">
                             <i class="fas fa-download mr-3"></i>
                             数据采集
                         </a>
-                        <a href="monitor.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="monitor.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-desktop mr-3"></i>
                             系统监控
                         </a>
-                        <a href="prediction.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="prediction.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-lightbulb mr-3"></i>
                             预测模型
                         </a>
-                        <a href="logs.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="logs.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-file-alt mr-3"></i>
                             系统日志
                         </a>
-                        <a href="content.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="content.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-file-lines mr-3"></i>
                             内容管理
                         </a>
-                        <a href="announcement.html" class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
+                        <a href="announcement.html"
+                            class="flex items-center px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100">
                             <i class="fas fa-bell mr-3"></i>
                             公告发布
                         </a>
                     </nav>
-                    
+
                     <div class="mt-8">
-                        <button class="w-full bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors">
+                        <button
+                            class="w-full bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors">
                             退出登录
                         </button>
                     </div>
@@ -111,7 +124,7 @@
                         <div>
                             <h3 class="text-sm font-medium text-yellow-800">当前有任务正在运行</h3>
                             <p class="text-sm text-yellow-700 mt-1">
-                                任务ID: {{ currentTask.task_id }} | 
+                                任务ID: {{ currentTask.task_id }} |
                                 开始时间: {{ formatTime(currentTask.start_time) }}
                             </p>
                         </div>
@@ -133,21 +146,15 @@
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-2">开始日期</label>
-                                    <input 
-                                        type="date" 
-                                        v-model="form.start_date"
+                                    <input type="date" v-model="form.start_date"
                                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    >
+                                        required>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-2">结束日期</label>
-                                    <input 
-                                        type="date" 
-                                        v-model="form.end_date"
+                                    <input type="date" v-model="form.end_date"
                                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    >
+                                        required>
                                 </div>
                             </div>
 
@@ -156,30 +163,16 @@
                                 <label class="block text-sm font-medium text-gray-700 mb-2">股票选择</label>
                                 <div class="space-y-3">
                                     <label class="flex items-center">
-                                        <input 
-                                            type="radio" 
-                                            v-model="form.collection_type" 
-                                            value="single"
-                                            class="mr-2"
-                                        >
+                                        <input type="radio" v-model="form.collection_type" value="single" class="mr-2">
                                         单个股票采集
                                     </label>
                                     <label class="flex items-center">
-                                        <input 
-                                            type="radio" 
-                                            v-model="form.collection_type" 
-                                            value="multiple"
-                                            class="mr-2"
-                                        >
+                                        <input type="radio" v-model="form.collection_type" value="multiple"
+                                            class="mr-2">
                                         多个股票采集
                                     </label>
                                     <label class="flex items-center">
-                                        <input 
-                                            type="radio" 
-                                            v-model="form.collection_type" 
-                                            value="all"
-                                            class="mr-2"
-                                        >
+                                        <input type="radio" v-model="form.collection_type" value="all" class="mr-2">
                                         全量股票采集
                                     </label>
                                 </div>
@@ -188,31 +181,25 @@
                             <!-- 单个股票代码输入 -->
                             <div v-if="form.collection_type === 'single'">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">股票代码</label>
-                                <input 
-                                    type="text" 
-                                    v-model="form.single_stock_code"
-                                    placeholder="请输入股票代码，例如：000001"
+                                <input type="text" v-model="form.single_stock_code" placeholder="请输入股票代码，例如：000001"
                                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    required
-                                >
+                                    required>
                                 <p class="text-sm text-gray-500 mt-1">支持输入单个股票代码进行采集</p>
                             </div>
 
                             <!-- 多个股票代码输入 -->
                             <div v-if="form.collection_type === 'multiple'">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">股票代码</label>
-                                <textarea 
-                                    v-model="form.stock_codes_text"
+                                <textarea v-model="form.stock_codes_text"
                                     placeholder="请输入股票代码，每行一个，例如：&#10;000001&#10;000002&#10;000858"
                                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    rows="5"
-                                    required
-                                ></textarea>
+                                    rows="5" required></textarea>
                                 <p class="text-sm text-gray-500 mt-1">支持输入多个股票代码，每行一个</p>
                             </div>
 
                             <!-- 全量采集说明 -->
-                            <div v-if="form.collection_type === 'all'" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div v-if="form.collection_type === 'all'"
+                                class="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                 <div class="flex items-center">
                                     <i class="fas fa-info-circle text-blue-600 mr-3"></i>
                                     <div>
@@ -228,30 +215,56 @@
                             <!-- 测试模式 -->
                             <div>
                                 <label class="flex items-center">
-                                    <input 
-                                        type="checkbox" 
-                                        v-model="form.test_mode"
-                                        class="mr-2"
-                                    >
+                                    <input type="checkbox" v-model="form.test_mode" class="mr-2">
                                     <span class="text-sm font-medium text-gray-700">测试模式（只采集前5只股票）</span>
                                 </label>
                             </div>
 
+                            <!-- 指标生成选项 -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">指标数据生成（可选）</label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.ma" class="mr-2">
+                                        <span class="text-sm text-gray-700">MA（移动平均线）</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.mavol" class="mr-2">
+                                        <span class="text-sm text-gray-700">MAVOL（成交量均线）</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.macd" class="mr-2">
+                                        <span class="text-sm text-gray-700">MACD指标</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.kdj" class="mr-2">
+                                        <span class="text-sm text-gray-700">KDJ指标</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.rsi" class="mr-2">
+                                        <span class="text-sm text-gray-700">RSI指标</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.boll" class="mr-2">
+                                        <span class="text-sm text-gray-700">BOLL指标</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" v-model="form.indicators.pvfrs" class="mr-2">
+                                        <span class="text-sm text-gray-700">PVFRS指标</span>
+                                    </label>
+                                </div>
+                                <p class="text-sm text-gray-500 mt-2">勾选后将在采集历史数据的同时生成相应的技术指标数据</p>
+                            </div>
+
                             <!-- 操作按钮 -->
                             <div class="flex space-x-4">
-                                <button 
-                                    type="submit" 
-                                    :disabled="loading || currentTask"
-                                    class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
+                                <button type="submit" :disabled="loading || currentTask"
+                                    class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
                                     {{ loading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
                                 </button>
-                                <button 
-                                    type="button" 
-                                    @click="resetForm"
-                                    class="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600"
-                                >
+                                <button type="button" @click="resetForm"
+                                    class="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600">
                                     重置
                                 </button>
                             </div>
@@ -263,10 +276,7 @@
                 <div class="mt-8 bg-white rounded-lg shadow-sm border">
                     <div class="px-6 py-4 border-b flex justify-between items-center">
                         <h3 class="text-lg font-semibold text-gray-900">采集任务</h3>
-                        <button 
-                            @click="loadTasks"
-                            class="text-blue-600 hover:text-blue-800 text-sm"
-                        >
+                        <button @click="loadTasks" class="text-blue-600 hover:text-blue-800 text-sm">
                             <i class="fas fa-refresh mr-1"></i>
                             刷新
                         </button>
@@ -276,40 +286,32 @@
                             暂无采集任务
                         </div>
                         <div v-else class="space-y-4">
-                            <div 
-                                v-for="task in tasks" 
-                                :key="task.task_id"
-                                class="border rounded-lg p-4 hover:bg-gray-50"
-                            >
+                            <div v-for="task in tasks" :key="task.task_id"
+                                class="border rounded-lg p-4 hover:bg-gray-50">
                                 <div class="flex justify-between items-start mb-3">
                                     <div>
                                         <h4 class="font-medium text-gray-900">任务 {{ task.task_id }}</h4>
                                         <p class="text-sm text-gray-500">
-                                            {{ formatTime(task.start_time) }} - {{ task.end_time ? formatTime(task.end_time) : '进行中' }}
+                                            {{ formatTime(task.start_time) }} - {{ task.end_time ?
+                                            formatTime(task.end_time) : '进行中' }}
                                         </p>
                                     </div>
                                     <div class="flex items-center space-x-2">
-                                        <span 
-                                            :class="{
+                                        <span :class="{
                                                 'bg-green-100 text-green-800': task.status === 'completed',
                                                 'bg-blue-100 text-blue-800': task.status === 'running',
                                                 'bg-red-100 text-red-800': task.status === 'failed',
                                                 'bg-yellow-100 text-yellow-800': task.status === 'cancelled'
-                                            }"
-                                            class="px-2 py-1 rounded-full text-xs font-medium"
-                                        >
+                                            }" class="px-2 py-1 rounded-full text-xs font-medium">
                                             {{ getStatusText(task.status) }}
                                         </span>
-                                        <button 
-                                            v-if="task.status === 'running'"
-                                            @click="cancelTask(task.task_id)"
-                                            class="text-red-600 hover:text-red-800 text-sm"
-                                        >
+                                        <button v-if="task.status === 'running'" @click="cancelTask(task.task_id)"
+                                            class="text-red-600 hover:text-red-800 text-sm">
                                             取消
                                         </button>
                                     </div>
                                 </div>
-                                
+
                                 <!-- 进度条 -->
                                 <div v-if="task.status === 'running'" class="mb-3">
                                     <div class="flex justify-between text-sm text-gray-600 mb-1">
@@ -317,10 +319,8 @@
                                         <span>{{ task.progress }}%</span>
                                     </div>
                                     <div class="w-full bg-gray-200 rounded-full h-2">
-                                        <div 
-                                            class="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                            :style="{ width: task.progress + '%' }"
-                                        ></div>
+                                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                            :style="{ width: task.progress + '%' }"></div>
                                     </div>
                                 </div>
 
@@ -345,7 +345,8 @@
                                 </div>
 
                                 <!-- 错误信息 -->
-                                <div v-if="task.error_message" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                                <div v-if="task.error_message"
+                                    class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
                                     <p class="text-sm text-red-800">{{ task.error_message }}</p>
                                 </div>
                             </div>
@@ -369,7 +370,16 @@
                         collection_type: 'single',
                         single_stock_code: '',
                         stock_codes_text: '',
-                        test_mode: false
+                        test_mode: false,
+                        indicators: {
+                            ma: false,
+                            mavol: false,
+                            macd: false,
+                            kdj: false,
+                            rsi: false,
+                            boll: false,
+                            pvfrs: false
+                        }
                     },
                     tasks: [],
                     currentTask: null,
@@ -389,19 +399,30 @@
                 async startCollection() {
                     try {
                         this.loading = true;
-                        
+
                         // 检查当前任务状态
                         if (this.currentTask) {
                             ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务');
                             return;
                         }
-                        
+
                         // 准备请求数据
                         const requestData = {
                             start_date: this.form.start_date,
                             end_date: this.form.end_date,
                             test_mode: this.form.test_mode
                         };
+
+                        // 收集选中的指标
+                        const selectedIndicators = [];
+                        for (const [key, value] of Object.entries(this.form.indicators)) {
+                            if (value) {
+                                selectedIndicators.push(key);
+                            }
+                        }
+                        if (selectedIndicators.length > 0) {
+                            requestData.indicators = selectedIndicators;
+                        }
 
                         // 根据采集类型设置股票代码
                         if (this.form.collection_type === 'single') {
@@ -415,24 +436,24 @@
                                 .split('\n')
                                 .map(code => code.trim())
                                 .filter(code => code.length > 0);
-                            
+
                             if (stockCodes.length === 0) {
                                 ElMessage.error('请输入至少一个股票代码');
                                 return;
                             }
-                            
+
                             requestData.stock_codes = stockCodes;
                         }
                         // 全量采集不需要设置stock_codes
 
                         const response = await axios.post('/data-collection/historical', requestData);
-                        
+
                         if (response.data.status === 'started') {
                             ElMessage.success('采集任务已启动');
                             this.loadTasks();
                             this.loadCurrentTask();
                         }
-                        
+
                     } catch (error) {
                         console.error('启动采集任务失败:', error);
                         const errorMsg = error.response?.data?.detail || '启动采集任务失败';
@@ -472,7 +493,7 @@
                         ElMessage.success('任务已取消');
                         this.loadTasks();
                         this.loadCurrentTask();
-                        
+
                     } catch (error) {
                         if (error !== 'cancel') {
                             console.error('取消任务失败:', error);
@@ -488,7 +509,16 @@
                         collection_type: 'single',
                         single_stock_code: '',
                         stock_codes_text: '',
-                        test_mode: false
+                        test_mode: false,
+                        indicators: {
+                            ma: false,
+                            mavol: false,
+                            macd: false,
+                            kdj: false,
+                            rsi: false,
+                            boll: false,
+                            pvfrs: false
+                        }
                     };
                 },
 
@@ -525,4 +555,5 @@
         }).use(ElementPlus).mount('#app');
     </script>
 </body>
+
 </html>
