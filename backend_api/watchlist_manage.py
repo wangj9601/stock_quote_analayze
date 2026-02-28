@@ -239,6 +239,71 @@ async def add_to_watchlist(
             status_code=500
         )
 
+
+class CollectIndicatorsRequest(BaseModel):
+    """触发单只自选股历史行情采集与指标计算的请求体"""
+    stock_code: str
+
+
+def _collect_and_calculate_impl(stock_code: str) -> JSONResponse:
+    """
+    实际执行单股历史行情采集与指标计算的内部函数，供多种HTTP方法复用。
+    """
+    stock_code = (stock_code or "").strip()
+    if not stock_code:
+        return JSONResponse(
+            {'success': False, 'message': '股票代码不能为空'},
+            status_code=400
+        )
+    try:
+        from backend_core.database.db import get_db as get_core_db
+        from backend_core.data_collectors.akshare.watchlist_history_collector import (
+            collect_one_stock_history_and_indicators,
+        )
+        db = next(get_core_db())
+        try:
+            result = collect_one_stock_history_and_indicators(db, stock_code)
+        finally:
+            db.close()
+        if result.get("success"):
+            return JSONResponse({'success': True, 'message': result.get('message', '已触发采集与指标计算')})
+        return JSONResponse(
+            {'success': False, 'message': result.get('message', '采集或指标计算失败')},
+            status_code=422
+        )
+    except Exception as e:
+        print(f"[watchlist] 采集与指标计算异常: {e}")
+        return JSONResponse(
+            {'success': False, 'message': f'请求失败: {str(e)}'},
+            status_code=500
+        )
+
+
+@router.post("/collect-and-calculate-indicators", response_model=None)
+async def collect_and_calculate_indicators(
+    body: CollectIndicatorsRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    对单只自选股拉取历史行情并计算 MA、MACD、RSI、KDJ、BOLL、MAVOL、PVFRS 指标。
+    添加自选股成功后由前端调用，使用 backend_core 独立会话执行。
+    （POST JSON 版本）
+    """
+    return _collect_and_calculate_impl(body.stock_code)
+
+
+@router.get("/collect-and-calculate-indicators", response_model=None)
+async def collect_and_calculate_indicators_get(
+    stock_code: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    同一功能的 GET 版本，便于调试或直接在浏览器调用：
+    /api/watchlist/collect-and-calculate-indicators?stock_code=000001
+    """
+    return _collect_and_calculate_impl(stock_code)
+
+
 @router.post("/groups", response_model=WatchlistGroupInDB)
 async def create_watchlist_group(
     group: WatchlistGroupCreate,

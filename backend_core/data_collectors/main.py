@@ -299,7 +299,7 @@ scheduler.add_job(collect_akshare_index_realtime, 'cron', day_of_week='mon-fri',
 scheduler.add_job(collect_akshare_industry_board_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute=3, id='akshare_industry_board_realtime')
 scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
 scheduler.add_job(collect_akshare_turnover_rate, 'cron', day_of_week='mon-fri', hour='11', minute='13', id='akshare_turnover_rate')
-# scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
+#scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
 scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
 scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
 scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
