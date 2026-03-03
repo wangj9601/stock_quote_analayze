@@ -78,7 +78,7 @@ if weight_acc_fz is not None: config["scoring"]["weight_acc_fz"] = weight_acc_fz
 
 ### 3.3 评分计算 [backend_core/strategies/gms/indicators_calculator.py](backend_core/strategies/gms/indicators_calculator.py)
 
-- 在 `__init__` 中从 `config["scoring"]` 读取 6 个权重，缺失时使用默认值（30/40/30 等）。
+- 在 `__init`__ 中从 `config["scoring"]` 读取 6 个权重，缺失时使用默认值（30/40/30 等）。
 - 将原先写死的 30、40、30 替换为对应权重变量，例如：
   - `score_acc` 满足条件时给 `weight_acc_fz` 分
   - `score_bal` 满足条件时给 `weight_acc_balance` 分
