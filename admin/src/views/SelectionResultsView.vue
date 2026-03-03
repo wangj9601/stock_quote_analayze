@@ -2,7 +2,7 @@
   <div class="selection-results">
     <!-- 页面头部 -->
     <div class="page-header">
-      <h1>PVFRS选股结果</h1>
+      <h1>GMS策略管理</h1>
       <div class="header-actions">
         <el-button type="primary" @click="loadSelectionResults" :loading="loading">
           <el-icon><Refresh /></el-icon>
@@ -87,38 +87,38 @@
           </template>
         </el-table-column>
         
-        <!-- 价格维度 -->
-        <el-table-column label="价格维度" width="120">
+        <!-- 吸筹维度 -->
+        <el-table-column label="吸筹维度" width="120">
           <template #default="scope">
             <div class="dimension-info">
               <div class="dimension-value">
-                {{ scope.row.indicators?.price_dimension?.macro_displacement?.toFixed(2) || '-' }}
+                {{ scope.row.indicators?.price_dimension?.macro_displacement || '-' }}
               </div>
-              <div class="dimension-label">宏观位移</div>
+              <div class="dimension-label">吸筹得分</div>
             </div>
           </template>
         </el-table-column>
         
-        <!-- 频率维度 -->
-        <el-table-column label="频率维度" width="120">
+        <!-- 动量维度 -->
+        <el-table-column label="动量维度" width="120">
           <template #default="scope">
             <div class="dimension-info">
               <div class="dimension-value">
-                {{ scope.row.indicators?.frequency_dimension?.rising_days || '-' }}/{{ scope.row.indicators?.frequency_dimension?.falling_days || '-' }}
+                {{ scope.row.indicators?.frequency_dimension?.rising_days || '-' }}
               </div>
-              <div class="dimension-label">涨/跌天数</div>
+              <div class="dimension-label">动量得分</div>
             </div>
           </template>
         </el-table-column>
         
-        <!-- 成交量维度 -->
-        <el-table-column label="成交量维度" width="120">
+        <!-- 均衡维度 -->
+        <el-table-column label="均衡维度" width="120">
           <template #default="scope">
             <div class="dimension-info">
               <div class="dimension-value">
-                {{ scope.row.indicators?.volume_dimension?.efficiency_ratio?.toFixed(2) || '-' }}
+                {{ scope.row.indicators?.volume_dimension?.efficiency_ratio || '-' }}
               </div>
-              <div class="dimension-label">效率比</div>
+              <div class="dimension-label">均衡得分</div>
             </div>
           </template>
         </el-table-column>
@@ -185,22 +185,33 @@
         <!-- 维度分析详情 -->
         <el-row :gutter="20" class="dimension-details">
           <el-col :span="8">
-            <el-card header="价格维度分析" class="dimension-card">
+            <el-card header="吸筹维度分析" class="dimension-card">
               <div class="dimension-content">
                 <div class="dimension-item">
-                  <span class="label">宏观位移:</span>
-                  <span class="value">{{ selectedStock.indicators?.price_dimension?.macro_displacement?.toFixed(4) || '-' }}</span>
+                  <span class="label">吸筹得分:</span>
+                  <span class="value">{{ selectedStock.indicators?.price_dimension?.macro_displacement || '-' }}</span>
                 </div>
                 <div class="dimension-item">
                   <span class="label">即时偏离:</span>
                   <span class="value">{{ selectedStock.indicators?.price_dimension?.instant_deviation?.toFixed(4) || '-' }}</span>
                 </div>
                 <div class="dimension-item">
-                  <span class="label">20日均价:</span>
+                  <span class="label">参考均价:</span>
                   <span class="value">¥{{ selectedStock.indicators?.price_dimension?.avg_price_20d?.toFixed(2) || '-' }}</span>
                 </div>
+              </div>
+            </el-card>
+          </el-col>
+          
+          <el-col :span="8">
+            <el-card header="动量维度分析" class="dimension-card">
+              <div class="dimension-content">
                 <div class="dimension-item">
-                  <span class="label">幅度系数:</span>
+                  <span class="label">动量得分:</span>
+                  <span class="value">{{ selectedStock.indicators?.frequency_dimension?.rising_days || '-' }}</span>
+                </div>
+                <div class="dimension-item">
+                  <span class="label">波动系数:</span>
                   <span class="value">{{ selectedStock.indicators?.amplitude_ratio?.toFixed(4) || '-' }}</span>
                 </div>
               </div>
@@ -208,50 +219,15 @@
           </el-col>
           
           <el-col :span="8">
-            <el-card header="频率维度分析" class="dimension-card">
+            <el-card header="均衡维度分析" class="dimension-card">
               <div class="dimension-content">
                 <div class="dimension-item">
-                  <span class="label">上涨天数:</span>
-                  <span class="value">{{ selectedStock.indicators?.frequency_dimension?.rising_days || '-' }}</span>
+                  <span class="label">均衡得分:</span>
+                  <span class="value">{{ selectedStock.indicators?.volume_dimension?.efficiency_ratio || '-' }}</span>
                 </div>
                 <div class="dimension-item">
-                  <span class="label">下跌天数:</span>
-                  <span class="value">{{ selectedStock.indicators?.frequency_dimension?.falling_days || '-' }}</span>
-                </div>
-                <div class="dimension-item">
-                  <span class="label">频率优势:</span>
-                  <el-tag :type="selectedStock.indicators?.frequency_dimension?.frequency_advantage ? 'success' : 'danger'" size="small">
-                    {{ selectedStock.indicators?.frequency_dimension?.frequency_advantage ? '是' : '否' }}
-                  </el-tag>
-                </div>
-                <div class="dimension-item">
-                  <span class="label">虚假繁荣:</span>
-                  <el-tag :type="!selectedStock.indicators?.frequency_dimension?.has_false_prosperity ? 'success' : 'danger'" size="small">
-                    {{ selectedStock.indicators?.frequency_dimension?.has_false_prosperity ? '是' : '否' }}
-                  </el-tag>
-                </div>
-              </div>
-            </el-card>
-          </el-col>
-          
-          <el-col :span="8">
-            <el-card header="成交量维度分析" class="dimension-card">
-              <div class="dimension-content">
-                <div class="dimension-item">
-                  <span class="label">20日均量:</span>
-                  <span class="value">{{ formatNumber(selectedStock.indicators?.volume_dimension?.avg_volume_20d) }}</span>
-                </div>
-                <div class="dimension-item">
-                  <span class="label">当前成交量:</span>
-                  <span class="value">{{ formatNumber(selectedStock.indicators?.volume_dimension?.current_volume) }}</span>
-                </div>
-                <div class="dimension-item">
-                  <span class="label">效率比:</span>
-                  <span class="value">{{ selectedStock.indicators?.volume_dimension?.efficiency_ratio?.toFixed(4) || '-' }}</span>
-                </div>
-                <div class="dimension-item">
-                  <span class="label">量比:</span>
-                  <span class="value">{{ selectedStock.indicators?.volume_multiplier?.toFixed(2) || '-' }}</span>
+                  <span class="label">综合评分:</span>
+                  <span class="value text-blue-600 font-bold">{{ selectedStock.resonance_status || '-' }}</span>
                 </div>
               </div>
             </el-card>

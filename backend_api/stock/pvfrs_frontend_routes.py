@@ -11,10 +11,16 @@ from typing import List, Dict, Optional
 import logging
 import traceback
 
-from backend_api.database import get_db
-from backend_core.strategies.pvfrs.frontend_interface import FrontendInterface, create_frontend_interface
-from backend_core.strategies.pvfrs.models import PVFRSException
-from backend_core.strategies.pvfrs.serialization import get_formatter, validate_data
+from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators, StockBasicInfo, StockBasicInfoHK
+from sqlalchemy import func, desc, or_
+
+# 导入 GMS 策略接口
+try:
+    from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
+    from backend_core.strategies.gms.config import GMSConfigManager as GMSConfigManagerCls
+    GMS_AVAILABLE = True
+except ImportError:
+    GMS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -54,120 +60,86 @@ async def get_selection_results(
         PVFRS选股结果列表，按信号强度降序排列
     """
     try:
-        logger.info(f"获取PVFRS选股结果 - 日期: {date or '当前'}, 限制: {limit}, 最低强度: {min_strength}")
+        logger.info(f"获取GMS选股结果 - 日期: {date or '最新'}, 限制: {limit}, 最低强度: {min_strength}")
+
+        # 确定目标日期
+        target_date = date
+        if not target_date:
+            target_date = db.query(func.max(GMSSignalTrace.date)).scalar()
         
-        # 参数验证
-        if date:
-            try:
-                datetime.strptime(date, "%Y-%m-%d")
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="日期格式错误，应为 YYYY-MM-DD"
-                )
+        if not target_date:
+            return JSONResponse({
+                "success": True,
+                "data": [],
+                "total": 0,
+                "message": "策略结果表中无数据"
+            })
+
+        # 从 GMS 结果表中查询数据，不再重新执行筛选
+        query = db.query(GMSSignalTrace).filter(GMSSignalTrace.date == target_date)
         
-        # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        if min_strength:
+            min_score = min_strength * 100
+            query = query.filter(GMSSignalTrace.score_total >= min_score)
         
-        # 设置选股配置
-        if limit is not None:
-            frontend_interface.set_selection_config(max_results=limit, min_strength=min_strength)
-        else:
-            # 不限制结果数量，设置一个很大的值
-            frontend_interface.set_selection_config(max_results=10000, min_strength=min_strength)
+        query = query.order_by(desc(GMSSignalTrace.score_total))
         
-        # 获取选股结果
-        selection_results = frontend_interface.get_selection_results(date)
-        
-        # 转换为API响应格式
+        if limit:
+            query = query.limit(limit)
+            
+        selection_results = query.all()
+
+        # 映射字段以适配前端
         results_data = []
-        for result in selection_results:
-            result_dict = result.to_dict()
+        for r in selection_results:
+            code = r.code
+            st = r.score_total or 0
             
-            # 格式化维度状态显示（前端期望的字段）
-            indicators = result_dict.get('indicators', {})
-            
-            # 价格维度状态
-            price_dim = indicators.get('price_dimension', {})
-            if price_dim.get('price_dimension_valid', False):
-                # 优先显示位移幅度，如果没有则显示未满足条件
-                amplitude = price_dim.get('amplitude')
-                if amplitude is not None:
-                    price_status = f"位移幅度: {float(amplitude):.2f}"
-                else:
-                    price_status = "未满足条件"
+            # 获取股票名称 (简单缓存或批量查询更佳，这里保持逻辑一致)
+            name = f"股票{code}"
+            # 判断 CN/HK 并查询
+            is_cn = len(code) >= 6 and code.isdigit() and code[0] in "6039"
+            if is_cn:
+                stock_info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code).first()
             else:
-                price_status = "未满足条件"
-            
-            # 频率维度状态
-            frequency_dim = indicators.get('frequency_dimension', {})
-            if frequency_dim.get('frequency_dimension_valid', False):
-                rising_days = frequency_dim.get('rising_days', 0)
-                falling_days = frequency_dim.get('falling_days', 0)
-                frequency_status = f"上涨{rising_days}天/下跌{falling_days}天"
-            else:
-                frequency_status = "未满足条件"
-            
-            # 成交量维度状态
-            volume_dim = indicators.get('volume_dimension', {})
-            if volume_dim.get('volume_dimension_valid', False):
-                efficiency_ratio = volume_dim.get('efficiency_ratio', 0)
-                volume_status = f"效率比: {efficiency_ratio:.2f}"
-            else:
-                volume_status = "未满足条件"
-            
-            # 入场时机状态
-            entry_timing = indicators.get('entry_timing_analysis', {})
-            if entry_timing.get('optimal_timing', False):
-                entry_status = "最佳时机"
-            elif entry_timing.get('acceptable_timing', False):
-                entry_status = "可接受"
-            else:
-                entry_status = "等待时机"
-            
-            # 共振状态
-            resonance_analysis = indicators.get('resonance_analysis', {})
-            if resonance_analysis.get('three_dimension_resonance', False):
-                resonance_status = "三维共振"
-            elif resonance_analysis.get('partial_resonance', False):
-                resonance_status = "部分共振"
-            else:
-                resonance_status = "无共振"
-            
-            # 投资建议
-            investment_advice = indicators.get('investment_advice', {})
-            if isinstance(investment_advice, dict):
-                advice = investment_advice.get('recommendation', '观望')
-            else:
-                advice = str(investment_advice) if investment_advice else '观望'
-            
-            # 添加前端期望的字段
-            result_dict.update({
-                'price_dimension_status': price_status,
-                'frequency_dimension_status': frequency_status,
-                'volume_dimension_status': volume_status,
-                'entry_timing_status': entry_status,
-                'resonance_status': resonance_status,
+                stock_info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
+            if stock_info:
+                name = stock_info.name
+
+            # 投资建议逻辑
+            if st >= 90: advice = "强烈推荐"
+            elif st >= 75: advice = "推荐"
+            elif st >= 60: advice = "关注"
+            else: advice = "观望"
+
+            results_data.append({
+                'symbol': code,
+                'name': name,
+                'signal_strength': st / 100.0,
+                'price_dimension_status': f"吸筹: {r.accumulation_grade or '-'}",
+                'frequency_dimension_status': f"动量: {r.momentum_grade or '-'}",
+                'volume_dimension_status': f"类型: {r.buy_type or '观望'}",
+                'resonance_status': f"总分: {st}",
                 'investment_advice': advice,
-                'current_price': result_dict.get('price', 0)
+                'price': r.d or 0,
+                'indicators': {
+                    'price_dimension': {'macro_displacement': r.score_accumulation or 0},
+                    'frequency_dimension': {'rising_days': r.score_momentum or 0, 'falling_days': 0},
+                    'volume_dimension': {'efficiency_ratio': r.score_balance or 0}
+                },
+                'timestamp': datetime.now().isoformat()
             })
             
-            results_data.append(result_dict)
+        logger.info(f"直接读取GMS选股结果完成，日期 {target_date}，共 {len(results_data)} 只股票")
         
-        logger.info(f"PVFRS选股结果获取完成，返回 {len(results_data)} 只股票")
-        
-        # 使用格式化器生成响应
-        formatter = get_formatter()
-        response_data = formatter.format_selection_results(
-            results_data,
-            query_date=date or datetime.now().strftime("%Y-%m-%d"),
-            parameters={
-                "limit": limit or "无限制",
-                "min_strength": min_strength
-            }
-        )
-        
-        return JSONResponse(response_data)
+        return JSONResponse({
+            "success": True,
+            "data": results_data,
+            "total": len(results_data),
+            "search_date": target_date,
+            "strategy_name": "GMS均值引力动量策略",
+            "timestamp": datetime.now().isoformat()
+        })
         
     except PVFRSException as e:
         logger.error(f"PVFRS选股结果获取失败: {str(e)}")
@@ -190,65 +162,132 @@ async def get_selection_results(
 @router.get("/stock-detail/{symbol}")
 async def get_stock_detail(
     symbol: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin)
 ):
     """
-    获取股票详细PVFRS分析指标
-    
-    提供单只股票的完整三维分析结果展示。
-    
-    Args:
-        symbol: 股票代码
-        db: 数据库会话
-    
-    Returns:
-        股票详细PVFRS分析信息
+    获取股票详细 GMS 分析指标
     """
     try:
-        logger.info(f"获取股票详细PVFRS分析 - 股票代码: {symbol}")
+        logger.info(f"获取股票详细GMS分析 - 股票代码: {symbol}")
         
-        # 参数验证
-        if not symbol or len(symbol.strip()) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="股票代码不能为空"
-            )
+        if not symbol:
+            raise HTTPException(status_code=400, detail="股票代码不能为空")
+            
+        # 获取股票详细 GMS 记录 (优先读取追溯表中的已计算好的数据)
+        trace = db.query(GMSSignalTrace).filter(
+            GMSSignalTrace.code == symbol
+        ).order_by(desc(GMSSignalTrace.date)).first()
         
-        symbol = symbol.strip().upper()
+        if not trace:
+            # 如果 trace 表中没有记录，尝试回退到原始指标表显示基础数据，但总分为0
+            ind = db.query(MeanFrequencyResonanceIndicators).filter(
+                MeanFrequencyResonanceIndicators.code == symbol
+            ).order_by(desc(MeanFrequencyResonanceIndicators.date)).first()
+            
+            if not ind:
+                raise HTTPException(status_code=404, detail="未找到该股票的GMS指标数据")
+                
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "symbol": symbol,
+                    "date": ind.date,
+                    "score_total": 0,
+                    "score_accumulation": 0,
+                    "score_momentum": 0,
+                    "score_balance": 0,
+                    "accumulation_grade": "无数据",
+                    "momentum_grade": "无数据",
+                    "buy_type": "观望",
+                    "indicators": {
+                        "delta": ind.macro_displacement_delta,
+                        "d": ind.ma20_d,
+                        "ratio_d20": ind.ratio_d20,
+                        "ratio_d1": ind.ratio_d1,
+                        "instant_deviation": ind.instant_deviation,
+                        "rising_days": ind.rising_days_z,
+                        "falling_days": ind.falling_days_f,
+                        "avg_volume_20d": ind.mavol20_m,
+                    }
+                }
+            })
+
+        # 获取股票名称
+        name = symbol
+        is_cn = len(symbol) >= 6 and symbol.isdigit() and symbol[0] in "6039"
+        if is_cn:
+            stock_info = db.query(StockBasicInfo).filter(StockBasicInfo.code == symbol).first()
+        else:
+            stock_info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == symbol).first()
+        if stock_info:
+            name = stock_info.name
+
+        # 投资建议逻辑
+        st = trace.score_total or 0
+        if st >= 90: advice = "强烈推荐"
+        elif st >= 75: advice = "推荐"
+        elif st >= 60: advice = "关注"
+        else: advice = "观望"
+
+        detail_data = {
+            'symbol': symbol,
+            'name': name,
+            'price': trace.d,
+            'signal_strength': st / 100.0,
+            'investment_advice': advice,
+            'analysis_time': trace.date,
+            'indicators': {
+                'price_dimension': {
+                    'macro_displacement': trace.score_accumulation,
+                    'instant_deviation': trace.instant_deviation,
+                    'avg_price_20d': trace.d,
+                    'price_dimension_valid': True
+                },
+                'frequency_dimension': {
+                    'rising_days': trace.rising_days,
+                    'falling_days': trace.falling_days,
+                    'frequency_advantage': (trace.falling_days or 0) > (trace.rising_days or 0),
+                    'has_false_prosperity': False,
+                    'frequency_dimension_valid': True
+                },
+                'volume_dimension': {
+                    'avg_volume_20d': trace.avg_volume_20d,
+                    'current_volume': trace.current_volume,
+                    'efficiency_ratio': trace.score_balance,
+                    'volume_dimension_valid': True
+                },
+                'amplitude_ratio': getattr(trace, 'fz_ratio', 0),
+                'volume_multiplier': getattr(trace, 'volume_ratio', 1.0),
+                'entry_timing_analysis': {
+                    'comprehensive_assessment': {
+                        'score': st / 100.0,
+                        'optimal_timing': st >= 85,
+                        'recommendation': advice
+                    }
+                }
+            },
+            'score_detail': {
+                'score_acc_fz': getattr(trace, 'score_acc_fz', 0),
+                'score_acc_balance': getattr(trace, 'score_acc_balance', 0),
+                'score_acc_volume': getattr(trace, 'score_acc_volume', 0),
+                'score_mom_ratio_d1': getattr(trace, 'score_mom_ratio_d1', 0),
+                'score_mom_deviation': getattr(trace, 'score_mom_deviation', 0),
+                'score_mom_volume': getattr(trace, 'score_mom_volume', 0)
+            }
+        }
         
-        # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        return JSONResponse({
+            "success": True,
+            "data": detail_data,
+            "strategy_name": "GMS均值引力动量策略",
+            "timestamp": datetime.now().isoformat()
+        })
         
-        # 获取股票详细信息
-        stock_detail = frontend_interface.get_stock_detail(symbol)
-        
-        # 转换为API响应格式
-        detail_data = stock_detail.to_dict()
-        
-        logger.info(f"股票 {symbol} 详细PVFRS分析获取完成")
-        
-        # 使用格式化器生成响应
-        formatter = get_formatter()
-        response_data = formatter.format_stock_detail(detail_data)
-        
-        return JSONResponse(response_data)
-        
-    except PVFRSException as e:
-        logger.error(f"获取股票 {symbol} 详细分析失败: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"获取股票 {symbol} 详细分析失败: {str(e)}"
-        )
-    except HTTPException:
-        # 重新抛出HTTP异常
-        raise
     except Exception as e:
-        logger.error(f"获取股票 {symbol} 详细分析时发生未知错误: {str(e)}")
+        logger.error(f"获取股票 {symbol} GMS详情失败: {str(e)}")
         logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取股票 {symbol} 详细分析时发生未知错误: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/refresh-results")
@@ -306,44 +345,70 @@ async def get_selection_summary(
     db: Session = Depends(get_db)
 ):
     """
-    获取PVFRS选股汇总信息
-    
-    提供选股结果的统计汇总信息。
-    
-    Args:
-        db: 数据库会话
-    
-    Returns:
-        PVFRS选股汇总信息
+    获取 GMS 选股汇总信息
     """
     try:
-        logger.info("获取PVFRS选股汇总信息")
+        logger.info("获取GMS选股汇总信息 (从GMSSignalTrace读取)")
         
-        # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        # 获取结果表的最新日期
+        latest_date = db.query(func.max(GMSSignalTrace.date)).scalar()
         
-        # 获取汇总信息
-        summary_data = frontend_interface.get_selection_summary()
+        if not latest_date:
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "total_stocks": 0,
+                    "strong_signals": 0,
+                    "last_update_date": None
+                }
+            })
+
+        # 统计总数
+        total_count = db.query(func.count(GMSSignalTrace.code)).filter(
+            GMSSignalTrace.date == latest_date
+        ).scalar()
         
-        logger.info("PVFRS选股汇总信息获取完成")
+        # 强信号定义
+        strong_count = db.query(func.count(GMSSignalTrace.code)).filter(
+            GMSSignalTrace.date == latest_date,
+            or_(
+                GMSSignalTrace.score_total >= 70,
+                GMSSignalTrace.accumulation_grade == 'S',
+                GMSSignalTrace.momentum_grade == '全速切入'
+            )
+        ).scalar()
+        
+        summary_data = {
+            "total_stocks": total_count,
+            "active_signals": total_count,
+            "strong_signals": strong_count,
+            "latest_date": latest_date,
+            "dimension_stats": {
+                "high_accumulation": db.query(func.count(GMSSignalTrace.code)).filter(
+                    GMSSignalTrace.date == latest_date,
+                    GMSSignalTrace.score_accumulation >= 80
+                ).scalar(),
+                "high_momentum": db.query(func.count(GMSSignalTrace.code)).filter(
+                    GMSSignalTrace.date == latest_date,
+                    GMSSignalTrace.score_momentum >= 80
+                ).scalar()
+            }
+        }
         
         return JSONResponse({
             "success": True,
             "data": summary_data,
             "query_time": datetime.now().isoformat(),
-            "strategy_name": "PVFARS量价频幅度共振策略"
+            "strategy_name": "GMS均值引力动量策略"
         })
         
     except Exception as e:
-        logger.error(f"获取PVFRS选股汇总信息时发生错误: {str(e)}")
+        logger.error(f"获取GMS选股汇总信息时发生错误: {str(e)}")
         logger.error(traceback.format_exc())
-        
-        # 返回错误信息而不是抛出异常，因为汇总信息可能包含部分错误
         return JSONResponse({
             "success": False,
-            "error": f"获取PVFRS选股汇总信息失败: {str(e)}",
-            "query_time": datetime.now().isoformat(),
-            "strategy_name": "PVFARS量价频幅度共振策略"
+            "error": f"获取汇总信息失败: {str(e)}",
+            "query_time": datetime.now().isoformat()
         })
 
 
