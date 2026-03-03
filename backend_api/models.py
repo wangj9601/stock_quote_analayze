@@ -1105,3 +1105,36 @@ class PushRecord(Base):
     
     # 关系
     user = relationship("User", back_populates="push_records")
+
+
+class EmailSenderConfig(Base):
+    """发件邮箱配置表（单行配置，id=1）"""
+    __tablename__ = "email_sender_config"
+
+    id = Column(Integer, primary_key=True, index=True, default=1)
+    host = Column(String(255), nullable=False, default="smtp.example.com")
+    port = Column(Integer, nullable=False, default=587)
+    username = Column(String(255), nullable=False, default="")
+    password = Column(String(500), nullable=True)  # 存储时可加密
+    from_email = Column(String(255), nullable=False, default="")
+    from_name = Column(String(100), nullable=False, default="股票分析系统")
+    use_tls = Column(Boolean, nullable=False, default=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class EmailSendLog(Base):
+    """邮件发送日志表"""
+    __tablename__ = "email_send_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    to_email = Column(String(255), nullable=False)
+    subject = Column(String(500), nullable=False)
+    report_type = Column(String(20), nullable=False)
+    push_record_id = Column(Integer, ForeignKey("push_records.id"), nullable=True, index=True)
+    sent_at = Column(DateTime, nullable=False, default=datetime.now)
+    success = Column(Boolean, nullable=False)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", backref="email_send_logs")

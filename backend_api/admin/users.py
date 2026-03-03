@@ -29,7 +29,7 @@ class ChangePasswordRequest(BaseModel):
 @router.get("", response_model=UsersResponse)
 async def get_users(
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     search: Optional[str] = Query(None),
     current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)

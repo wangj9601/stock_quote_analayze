@@ -7,7 +7,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from backend_api.models import PushRecord
+from backend_api.models import PushRecord, EmailSendLog
 
 
 class RecordRepository:
@@ -328,5 +328,29 @@ class RecordRepository:
         ).delete()
         
         self.db.commit()
-        
+
         return deleted_count
+
+    def create_email_send_log(
+        self,
+        user_id: int,
+        to_email: str,
+        subject: str,
+        report_type: str,
+        success: bool,
+        error_message: Optional[str] = None,
+        push_record_id: Optional[int] = None,
+    ):
+        """写入一条邮件发送日志。"""
+        log = EmailSendLog(
+            user_id=user_id,
+            to_email=to_email,
+            subject=subject,
+            report_type=report_type,
+            push_record_id=push_record_id,
+            sent_at=datetime.now(),
+            success=success,
+            error_message=error_message,
+        )
+        self.db.add(log)
+        self.db.commit()

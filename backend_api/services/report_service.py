@@ -304,6 +304,8 @@ class ReportService:
                 return self._generate_summary_report(user_id, watchlist)
             elif report_type == 'detailed':
                 return self._generate_detailed_report(user_id, watchlist)
+            elif report_type == 'gms_daily':
+                return self._generate_gms_report_for_user(user_id)
             else:
                 return ReportResult(
                     success=False,
@@ -529,7 +531,133 @@ class ReportService:
             ),
             error_message=None
         )
-    
+
+    def _generate_gms_report_for_user(self, user_id: int) -> ReportResult:
+        """
+        生成该用户自选股范围内的 GMS 均值引力策略选股报告。
+        """
+        watchlist = self.get_user_watchlist(user_id)
+        if not watchlist:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=datetime.now().strftime("%Y-%m-%d"),
+                    report_type="gms_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="用户没有自选股",
+            )
+        # 自选股代码规范化：A 股 6 位，港股 5 位，与 GMS 指标表一致
+        def _norm(s: str, market: str) -> str:
+            s = str(s).strip()
+            if not s:
+                return s
+            if market == "HK":
+                return s.zfill(5) if s.isdigit() else s
+            return s.zfill(6) if s.isdigit() else s
+
+        stock_pool = []
+        code_to_name = {}
+        for s in watchlist:
+            code = _norm(s["stock_code"], s["market"])
+            if code:
+                stock_pool.append(code)
+                code_to_name[code] = s.get("stock_name") or ""
+
+        if not stock_pool:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=datetime.now().strftime("%Y-%m-%d"),
+                    report_type="gms_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="自选股代码无效",
+            )
+
+        try:
+            from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
+
+            gms = GMSFrontendInterface(self.db)
+            results = gms.get_selection_results(date=None, stock_pool=stock_pool, market="all")
+        except Exception as e:
+            logger.exception("GMS 选股失败: %s", e)
+            return ReportResult(
+                success=False,
+                file_path=None,
+                report_info=None,
+                error_message=str(e),
+            )
+
+        if not results:
+            report_date = datetime.now().strftime("%Y-%m-%d")
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=report_date,
+                    report_type="gms_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="当日自选股范围内无 GMS 选股结果",
+            )
+
+        report_date = str(results[0].get("date", "")[:10]) if results else datetime.now().strftime("%Y-%m-%d")
+        rows = []
+        for r in results:
+            code = r.get("code") or r.get("symbol") or ""
+            name = code_to_name.get(code, "")
+            rows.append({
+                "股票代码": code,
+                "股票名称": name,
+                "日期": r.get("date", ""),
+                "总分": r.get("score_total"),
+                "蓄势分": r.get("score_accumulation"),
+                "平衡分": r.get("score_balance"),
+                "动量分": r.get("score_momentum"),
+                "买点类型": r.get("buy_type", ""),
+                "蓄势等级": r.get("accumulation_grade", ""),
+                "动量等级": r.get("momentum_grade", ""),
+                "ratio_d20": r.get("ratio_d20"),
+                "ratio_d1": r.get("ratio_d1"),
+                "volume_ratio": r.get("volume_ratio"),
+                "fz_ratio": r.get("fz_ratio"),
+                "instant_deviation": r.get("instant_deviation"),
+                "rising_days": r.get("rising_days"),
+                "falling_days": r.get("falling_days"),
+            })
+
+        filename = f"gms_{user_id}_{report_date.replace('-', '')}.csv"
+        filepath = os.path.join(self.report_dir, filename)
+        df = pd.DataFrame(rows)
+        df.to_csv(filepath, index=False, encoding="utf-8-sig")
+        file_size = os.path.getsize(filepath)
+        logger.info("生成 GMS 自选股报告成功: %s, 选股数: %s", filepath, len(rows))
+        return ReportResult(
+            success=True,
+            file_path=filepath,
+            report_info=ReportInfo(
+                stock_count=len(rows),
+                report_date=report_date,
+                report_type="gms_daily",
+                file_size=file_size,
+                has_data=True,
+                missing_data_stocks=[],
+            ),
+            error_message=None,
+        )
+
     def get_report_info(self, report_path: str) -> Optional[ReportInfo]:
         """
         获取报告信息
@@ -550,7 +678,12 @@ class ReportService:
             
             # 从文件名解析报告类型和日期
             filename = os.path.basename(report_path)
-            report_type = 'summary' if 'summary' in filename else 'detailed'
+            if 'gms_' in filename:
+                report_type = 'gms_daily'
+            elif 'summary' in filename:
+                report_type = 'summary'
+            else:
+                report_type = 'detailed'
             report_date = datetime.now().strftime("%Y-%m-%d")
             
             # 读取文件获取股票数量

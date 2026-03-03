@@ -87,6 +87,8 @@ try:
         # 导入微信推送相关模型
         UserPushConfig = getattr(models_module, 'UserPushConfig', None)
         PushRecord = getattr(models_module, 'PushRecord', None)
+        EmailSenderConfig = getattr(models_module, 'EmailSenderConfig', None)
+        EmailSendLog = getattr(models_module, 'EmailSendLog', None)
     else:
         raise ImportError(f"找不到 models.py 文件: {models_py_path}")
     
@@ -147,6 +149,8 @@ except Exception as e:
     # 微信推送模型占位符
     UserPushConfig = None
     PushRecord = None
+    EmailSenderConfig = None
+    EmailSendLog = None
 
 __all__ = [
     'PVFRSStrategyConfig',
@@ -207,5 +211,7 @@ __all__ = [
     'SystemPerformanceReport',
     'UserPushConfig',
     'PushRecord',
+    'EmailSenderConfig',
+    'EmailSendLog',
     'User',
 ]

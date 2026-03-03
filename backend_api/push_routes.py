@@ -10,13 +10,13 @@ from datetime import date, datetime
 from pydantic import BaseModel, EmailStr
 import logging
 
-from backend_api.models import User, UserPushConfig, PushRecord
+from backend_api.models import User, UserPushConfig, PushRecord, EmailSenderConfig, EmailSendLog
 from backend_api.auth import get_current_user, get_current_admin
 from backend_core.database.db import get_db
 from backend_api.services.config_service import ConfigService, ConfigUpdate
 from backend_api.services.record_repository import RecordRepository
 from backend_api.services.push_service import PushService
-from backend_api.services.email_service import EmailService, SMTPConfig
+from backend_api.services.email_service import EmailService, SMTPConfig, EmailSendException
 from backend_api.services.report_service import ReportService
 from backend_core.wechat.wechat_service import WeChatService
 
@@ -115,6 +115,53 @@ class PushStatisticsResponse(BaseModel):
     records_by_channel: Dict[str, int]
 
 
+class EmailSenderConfigResponse(BaseModel):
+    """发件邮箱配置响应（password 脱敏）"""
+    id: int
+    host: str
+    port: int
+    username: str
+    password_masked: Optional[str] = None  # 仅显示占位或后几位
+    from_email: str
+    from_name: str
+    use_tls: bool
+    updated_at: Optional[datetime] = None
+
+
+class EmailSenderConfigUpdateRequest(BaseModel):
+    """发件邮箱配置更新请求"""
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    password: Optional[str] = None  # 不传则保留原密码
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    use_tls: Optional[bool] = None
+
+
+class EmailSenderConfigTestRequest(BaseModel):
+    """测试发信请求"""
+    to_email: EmailStr
+
+
+class EmailSendLogResponse(BaseModel):
+    """邮件发送日志响应"""
+    id: int
+    user_id: int
+    username: Optional[str] = None
+    to_email: str
+    subject: str
+    report_type: str
+    push_record_id: Optional[int] = None
+    sent_at: datetime
+    success: bool
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ==================== 依赖注入函数 ====================
 
 def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
@@ -127,34 +174,49 @@ def get_record_repository(db: Session = Depends(get_db)) -> RecordRepository:
     return RecordRepository(db)
 
 
-def get_push_service(db: Session = Depends(get_db)) -> PushService:
-    """获取推送服务实例"""
-    # 初始化各个服务
-    wechat_service = WeChatService()
-    
-    # 从配置文件加载SMTP配置
-    from backend_api.config import SMTP_CONFIG
-    smtp_config = SMTPConfig(
-        host=SMTP_CONFIG["host"],
-        port=SMTP_CONFIG["port"],
-        username=SMTP_CONFIG["username"],
-        password=SMTP_CONFIG["password"],
-        use_tls=SMTP_CONFIG["use_tls"],
-        from_email=SMTP_CONFIG["from_email"],
-        from_name=SMTP_CONFIG["from_name"]
+def get_smtp_config_from_db(db: Session) -> Optional[SMTPConfig]:
+    """优先从数据库读取发件邮箱配置；无效则返回 None，调用方回退到环境变量。"""
+    if EmailSenderConfig is None:
+        return None
+    row = db.query(EmailSenderConfig).filter(EmailSenderConfig.id == 1).first()
+    if not row or not (row.host and row.username):
+        return None
+    return SMTPConfig(
+        host=str(row.host),
+        port=int(row.port),
+        username=str(row.username),
+        password=str(row.password) if row.password else "",
+        use_tls=bool(row.use_tls),
+        from_email=str(row.from_email) if row.from_email else str(row.username),
+        from_name=str(row.from_name) if row.from_name else "股票分析系统",
     )
+
+
+def get_push_service(db: Session = Depends(get_db)) -> PushService:
+    """获取推送服务实例。发件邮箱优先使用 DB 中的 email_sender_config，否则回退到 SMTP_CONFIG。"""
+    wechat_service = WeChatService()
+    smtp_config = get_smtp_config_from_db(db)
+    if smtp_config is None:
+        from backend_api.config import SMTP_CONFIG
+        smtp_config = SMTPConfig(
+            host=SMTP_CONFIG["host"],
+            port=SMTP_CONFIG["port"],
+            username=SMTP_CONFIG["username"],
+            password=SMTP_CONFIG["password"],
+            use_tls=SMTP_CONFIG["use_tls"],
+            from_email=SMTP_CONFIG["from_email"],
+            from_name=SMTP_CONFIG["from_name"],
+        )
     email_service = EmailService(smtp_config)
-    
     report_service = ReportService(db)
     config_service = ConfigService(db)
     record_repository = RecordRepository(db)
-    
     return PushService(
         wechat_service=wechat_service,
         email_service=email_service,
         report_service=report_service,
         config_service=config_service,
-        record_repository=record_repository
+        record_repository=record_repository,
     )
 
 
@@ -203,7 +265,7 @@ def update_push_config(
                     )
         
         if config_update.report_type is not None:
-            valid_types = ['summary', 'detailed']
+            valid_types = ['summary', 'detailed', 'gms_daily']
             if config_update.report_type not in valid_types:
                 raise HTTPException(
                     status_code=400,
@@ -580,7 +642,7 @@ admin_router = APIRouter(prefix="/api/admin/push", tags=["admin-push"])
 
 @admin_router.get("/configs", response_model=List[UserPushConfigResponse])
 def get_all_push_configs(
-    limit: int = Query(50, ge=1, le=200, description="返回记录数量限制"),
+    limit: int = Query(50, ge=1, le=500, description="返回记录数量限制"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -595,6 +657,203 @@ def get_all_push_configs(
     except Exception as e:
         logger.error(f"查询所有用户配置失败: error={str(e)}")
         raise HTTPException(status_code=500, detail=f"查询所有用户配置失败: {str(e)}")
+
+
+@admin_router.put("/configs/{user_id}", response_model=UserPushConfigResponse)
+def admin_update_push_config(
+    user_id: int,
+    config_update: ConfigUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+    db: Session = Depends(get_db),
+):
+    """管理员修改指定用户的推送配置"""
+    if config_update.report_type is not None and config_update.report_type not in ("summary", "detailed", "gms_daily"):
+        raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily")
+    config_update_obj = ConfigUpdate(
+        enabled=config_update.enabled,
+        channels=config_update.channels,
+        push_times=config_update.push_times,
+        report_type=config_update.report_type,
+        stock_codes=config_update.stock_codes,
+    )
+    try:
+        updated = config_service.update_user_config(user_id=user_id, config_update=config_update_obj)
+        return updated
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"管理员更新用户 {user_id} 推送配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- 发件邮箱参数配置 ----------
+
+@admin_router.get("/email-sender-config", response_model=EmailSenderConfigResponse)
+def get_email_sender_config(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """获取发件邮箱配置（password 脱敏）"""
+    if EmailSenderConfig is None:
+        raise HTTPException(status_code=503, detail="发件邮箱配置模型未就绪")
+    row = db.query(EmailSenderConfig).filter(EmailSenderConfig.id == 1).first()
+    if not row:
+        return EmailSenderConfigResponse(
+            id=1,
+            host="",
+            port=587,
+            username="",
+            password_masked="",
+            from_email="",
+            from_name="股票分析系统",
+            use_tls=True,
+            updated_at=None,
+        )
+    return EmailSenderConfigResponse(
+        id=row.id,
+        host=str(row.host),
+        port=int(row.port),
+        username=str(row.username),
+        password_masked="********" if row.password else "",
+        from_email=str(row.from_email),
+        from_name=str(row.from_name),
+        use_tls=bool(row.use_tls),
+        updated_at=row.updated_at,
+    )
+
+
+@admin_router.put("/email-sender-config", response_model=EmailSenderConfigResponse)
+def update_email_sender_config(
+    body: EmailSenderConfigUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """更新发件邮箱配置；不传 password 则保留原密码"""
+    if EmailSenderConfig is None:
+        raise HTTPException(status_code=503, detail="发件邮箱配置模型未就绪")
+    row = db.query(EmailSenderConfig).filter(EmailSenderConfig.id == 1).first()
+    if not row:
+        row = EmailSenderConfig(id=1)
+        db.add(row)
+        db.flush()
+    if body.host is not None:
+        row.host = body.host
+    if body.port is not None:
+        row.port = body.port
+    if body.username is not None:
+        row.username = body.username
+    if body.password is not None and body.password != "":
+        row.password = body.password
+    if body.from_email is not None:
+        row.from_email = body.from_email
+    if body.from_name is not None:
+        row.from_name = body.from_name
+    if body.use_tls is not None:
+        row.use_tls = body.use_tls
+    row.updated_at = datetime.now()
+    db.commit()
+    db.refresh(row)
+    return EmailSenderConfigResponse(
+        id=row.id,
+        host=str(row.host),
+        port=int(row.port),
+        username=str(row.username),
+        password_masked="********" if row.password else "",
+        from_email=str(row.from_email),
+        from_name=str(row.from_name),
+        use_tls=bool(row.use_tls),
+        updated_at=row.updated_at,
+    )
+
+
+@admin_router.post("/email-sender-config/test")
+def test_email_sender_config(
+    body: EmailSenderConfigTestRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """使用当前发件配置向指定邮箱发送测试邮件"""
+    smtp_config = get_smtp_config_from_db(db)
+    if smtp_config is None:
+        from backend_api.config import SMTP_CONFIG
+        smtp_config = SMTPConfig(
+            host=SMTP_CONFIG["host"],
+            port=SMTP_CONFIG["port"],
+            username=SMTP_CONFIG["username"],
+            password=SMTP_CONFIG["password"],
+            use_tls=SMTP_CONFIG["use_tls"],
+            from_email=SMTP_CONFIG["from_email"],
+            from_name=SMTP_CONFIG["from_name"],
+        )
+    email_service = EmailService(smtp_config)
+    import tempfile
+    import os
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False)
+    tmp.write("test,test\n")
+    tmp.close()
+    try:
+        result = email_service.send_report_email(
+            to_email=body.to_email,
+            subject="【测试】股票分析系统发件配置测试",
+            content="<p>这是一封测试邮件，说明发件邮箱配置正常。</p>",
+            attachment_path=tmp.name,
+        )
+        return {"success": result.success, "message": result.message}
+    except EmailSendException as e:
+        return {"success": False, "message": str(e)}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
+
+
+@admin_router.get("/email-logs", response_model=List[EmailSendLogResponse])
+def get_email_send_logs(
+    user_id: Optional[int] = Query(None, description="用户ID"),
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+    success: Optional[bool] = Query(None, description="是否成功"),
+    limit: int = Query(50, ge=1, le=200, description="返回记录数量限制"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """查询邮件发送日志（管理端）"""
+    if EmailSendLog is None:
+        raise HTTPException(status_code=503, detail="邮件发送日志模型未就绪")
+    query = db.query(EmailSendLog)
+    if user_id is not None:
+        query = query.filter(EmailSendLog.user_id == user_id)
+    if start_date is not None:
+        query = query.filter(EmailSendLog.sent_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date is not None:
+        query = query.filter(EmailSendLog.sent_at <= datetime.combine(end_date, datetime.max.time()))
+    if success is not None:
+        query = query.filter(EmailSendLog.success == success)
+    query = query.order_by(EmailSendLog.sent_at.desc())
+    logs = query.offset(offset).limit(limit).all()
+    # 补全 username
+    out = []
+    for log in logs:
+        u = db.query(User).filter(User.id == log.user_id).first()
+        out.append(EmailSendLogResponse(
+            id=log.id,
+            user_id=log.user_id,
+            username=u.username if u else None,
+            to_email=log.to_email,
+            subject=log.subject,
+            report_type=log.report_type,
+            push_record_id=log.push_record_id,
+            sent_at=log.sent_at,
+            success=log.success,
+            error_message=log.error_message,
+            created_at=log.created_at,
+        ))
+    return out
 
 
 @admin_router.get("/records", response_model=List[PushRecordResponse])

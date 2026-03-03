@@ -90,7 +90,8 @@ const menuItems = [
   { path: '/models', name: '预测模型', icon: Cpu },
   { path: '/logs', name: '系统日志', icon: Document },
   { path: '/content', name: '内容管理', icon: DocumentCopy },
-  { path: '/announcements', name: '公告发布', icon: Bell }
+  { path: '/announcements', name: '公告发布', icon: Bell },
+  { path: '/email-management', name: '邮件管理', icon: Setting }
 ]
 
 // 计算属性

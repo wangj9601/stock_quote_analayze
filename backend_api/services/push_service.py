@@ -497,7 +497,8 @@ class PushService:
                         result = self._send_via_email(
                             user=user,
                             report_path=report_result.file_path,
-                            report_info=report_result.report_info
+                            report_info=report_result.report_info,
+                            push_record_id=record.id,
                         )
                     else:
                         result = ChannelResult(
@@ -689,119 +690,95 @@ class PushService:
             )
     
     def _send_via_email(
-        self, 
-        user: User, 
-        report_path: str, 
-        report_info: ReportInfo
+        self,
+        user: User,
+        report_path: str,
+        report_info: ReportInfo,
+        push_record_id: Optional[int] = None,
     ) -> ChannelResult:
         """
-        通过邮件发送报告
-        
-        Args:
-            user: 用户对象
-            report_path: 报告文件路径
-            report_info: 报告信息
-            
-        Returns:
-            ChannelResult: 邮件推送结果
+        通过邮件发送报告；发送后写入邮件发送日志。
         """
+        subject = (
+            f"GMS自选股选股结果 - {report_info.report_date}"
+            if report_info.report_type == "gms_daily"
+            else f"股票报告推送 - {report_info.report_date}"
+        )
+
+        def _write_email_log(success: bool, err_msg: Optional[str] = None):
+            try:
+                self.record_repository.create_email_send_log(
+                    user_id=user.id,
+                    to_email=user.email or "",
+                    subject=subject,
+                    report_type=report_info.report_type,
+                    success=success,
+                    error_message=err_msg,
+                    push_record_id=push_record_id,
+                )
+            except Exception as log_ex:
+                logger.warning("写入邮件发送日志失败: %s", log_ex)
+
         try:
-            # 检查用户是否绑定了邮箱
             if not user.email:
                 error_msg = f"用户 {user.id} 未绑定邮箱"
                 logger.warning(error_msg)
-                return ChannelResult(
-                    channel='email',
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 验证邮箱格式
+                return ChannelResult(channel="email", success=False, error_message=error_msg)
             if not self.email_service.validate_email(user.email):
                 error_msg = f"用户 {user.id} 邮箱格式无效: {user.email}"
                 logger.error(error_msg)
-                return ChannelResult(
-                    channel='email',
-                    success=False,
-                    error_message=error_msg
-                )
-            
-            # 构建邮件主题
-            subject = f"股票报告推送 - {report_info.report_date}"
-            
-            # 构建HTML邮件正文
+                return ChannelResult(channel="email", success=False, error_message=error_msg)
+
             content = self._format_email_content(user, report_info)
-            
-            # 发送邮件
-            logger.info(f"向用户 {user.id} 发送邮件: {user.email}")
+            logger.info("向用户 %s 发送邮件: %s", user.id, user.email)
             result = self.email_service.send_report_email(
                 to_email=user.email,
                 subject=subject,
                 content=content,
-                attachment_path=report_path
+                attachment_path=report_path,
             )
-            
+
             if result.success:
-                logger.info(f"用户 {user.id} 邮件推送成功")
-                # 记录渠道发送成功事件
+                _write_email_log(success=True)
                 log_push_event(
                     event_type=PushEventType.CHANNEL_SEND_SUCCESS,
                     user_id=user.id,
-                    channel='email',
-                    details={"to_email": user.email}
+                    channel="email",
+                    details={"to_email": user.email},
                 )
-                return ChannelResult(
-                    channel='email',
-                    success=True,
-                    error_message=None
-                )
+                return ChannelResult(channel="email", success=True, error_message=None)
             else:
-                error_msg = f"邮件发送失败: {result.error}"
-                logger.error(f"用户 {user.id}: {error_msg}")
-                # 记录渠道发送失败事件
+                _write_email_log(success=False, err_msg=result.error)
                 log_push_event(
                     event_type=PushEventType.CHANNEL_SEND_FAILED,
                     user_id=user.id,
-                    channel='email',
+                    channel="email",
                     error_message=result.error,
-                    details={"to_email": user.email}
+                    details={"to_email": user.email},
                 )
                 return ChannelResult(
-                    channel='email',
+                    channel="email",
                     success=False,
-                    error_message=error_msg
+                    error_message=result.error or "发送失败",
                 )
-            
         except EmailSendException as e:
-            error_msg = f"邮件发送异常: {str(e)}"
-            logger.error(f"用户 {user.id}: {error_msg}")
-            # 记录服务不可用事件
+            _write_email_log(success=False, err_msg=str(e))
             log_service_unavailable(
-                service_name='email',
+                service_name="email",
                 user_id=user.id,
-                channel='email',
-                error_message=error_msg
+                channel="email",
+                error_message=str(e),
             )
-            return ChannelResult(
-                channel='email',
-                success=False,
-                error_message=error_msg
-            )
+            return ChannelResult(channel="email", success=False, error_message=str(e))
         except Exception as e:
-            error_msg = f"邮件推送异常: {str(e)}"
-            logger.error(f"用户 {user.id}: {error_msg}")
-            # 记录渠道发送失败事件
+            _write_email_log(success=False, err_msg=str(e))
             log_push_event(
                 event_type=PushEventType.CHANNEL_SEND_FAILED,
                 user_id=user.id,
-                channel='email',
-                error_message=error_msg
+                channel="email",
+                error_message=str(e),
             )
-            return ChannelResult(
-                channel='email',
-                success=False,
-                error_message=error_msg
-            )
+            return ChannelResult(channel="email", success=False, error_message=str(e))
     
     def _format_push_message(self, user: User, report_info: ReportInfo) -> str:
         """
@@ -814,8 +791,12 @@ class PushService:
         Returns:
             str: 格式化后的消息文本
         """
-        report_type_name = "汇总报告" if report_info.report_type == "summary" else "详细报告"
-        
+        if report_info.report_type == "gms_daily":
+            report_type_name = "GMS自选股选股结果"
+        elif report_info.report_type == "summary":
+            report_type_name = "汇总报告"
+        else:
+            report_type_name = "详细报告"
         message = f"""【股票报告推送】
 
 尊敬的 {user.username}，您好！
@@ -846,8 +827,13 @@ class PushService:
         Returns:
             str: HTML格式的邮件正文
         """
-        report_type_name = "汇总报告" if report_info.report_type == "summary" else "详细报告"
-        
+        if report_info.report_type == "gms_daily":
+            report_type_name = "GMS自选股选股结果"
+        elif report_info.report_type == "summary":
+            report_type_name = "汇总报告"
+        else:
+            report_type_name = "详细报告"
+
         html_content = f"""
 <!DOCTYPE html>
 <html>
