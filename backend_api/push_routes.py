@@ -52,6 +52,15 @@ class ConfigUpdateRequest(BaseModel):
     stock_codes: Optional[List[str]] = None
 
 
+class ConfigCreateRequest(BaseModel):
+    """管理员创建推送配置请求模型（用户来源于 user 表，配置写入 user_push_configs 表）"""
+    user_id: int
+    enabled: Optional[bool] = True
+    channels: Optional[List[str]] = None  # 不传则默认 ["email"]
+    push_times: Optional[List[str]] = None  # 不传则默认 ["09:00", "15:00"]
+    report_type: Optional[str] = None  # 不传则默认 "summary"
+
+
 class BindWeChatRequest(BaseModel):
     """绑定微信请求模型"""
     wechat_openid: str
@@ -659,6 +668,34 @@ def get_all_push_configs(
         raise HTTPException(status_code=500, detail=f"查询所有用户配置失败: {str(e)}")
 
 
+@admin_router.post("/configs", response_model=UserPushConfigResponse)
+def admin_create_push_config(
+    body: ConfigCreateRequest,
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+):
+    """管理员为指定用户新建推送配置（用户来源于 user 表，配置写入 user_push_configs 表）"""
+    try:
+        config = config_service.create_default_config(user_id=body.user_id)
+        # 若请求中带了初始配置，则更新（只传非 None 的字段）
+        from backend_api.services.config_service import ConfigUpdate
+        update = ConfigUpdate(
+            enabled=body.enabled if body.enabled is not None else None,
+            channels=body.channels if body.channels is not None else None,
+            push_times=body.push_times if body.push_times is not None else None,
+            report_type=body.report_type if body.report_type is not None else None,
+        )
+        if any([update.enabled is not None, update.channels is not None, update.push_times is not None, update.report_type is not None]):
+            config_service.update_user_config(user_id=body.user_id, config_update=update)
+            config = config_service.get_user_config(body.user_id)
+        return config
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"管理员创建用户 {body.user_id} 推送配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @admin_router.put("/configs/{user_id}", response_model=UserPushConfigResponse)
 def admin_update_push_config(
     user_id: int,
@@ -684,6 +721,21 @@ def admin_update_push_config(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"管理员更新用户 {user_id} 推送配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.delete("/configs/{user_id}")
+def admin_delete_push_config(
+    user_id: int,
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+):
+    """管理员删除指定用户的邮件推送配置（从 user_push_configs 表删除）"""
+    try:
+        deleted = config_service.delete_user_config(user_id)
+        return {"success": True, "deleted": deleted, "message": "已删除该用户的推送配置" if deleted else "该用户暂无推送配置"}
+    except Exception as e:
+        logger.error(f"管理员删除用户 {user_id} 推送配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

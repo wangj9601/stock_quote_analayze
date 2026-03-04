@@ -7,14 +7,14 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status, Body
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, date
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import logging
 import traceback
 
 from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators, StockBasicInfo, StockBasicInfoHK
 from sqlalchemy import func, desc, or_
 
-# 导入 GMS 策略接口
+# 导入 GMS 策略接口与 get_db
 try:
     from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
     from backend_core.strategies.gms.config import GMSConfigManager as GMSConfigManagerCls
@@ -22,20 +22,26 @@ try:
 except ImportError:
     GMS_AVAILABLE = False
 
+try:
+    from backend_api.database import get_db
+except ImportError:
+    from backend_core.database.db import get_db
+
+from backend_api.auth import get_current_admin
+
+try:
+    from backend_core.strategies.pvfrs.models import PVFRSException
+except ImportError:
+    PVFRSException = Exception  # 无 pvfrs 时用 Exception 占位，避免 except 块 NameError
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/frontend/pvfrs", tags=["PVFRS前端接口"])
 
-# 全局前端接口实例
-_frontend_interface: Optional[FrontendInterface] = None
 
-
-def get_frontend_interface() -> FrontendInterface:
-    """获取前端接口实例"""
-    global _frontend_interface
-    if _frontend_interface is None:
-        _frontend_interface = create_frontend_interface()
-    return _frontend_interface
+def get_frontend_interface(db: Session):
+    """获取前端接口实例（每次请求创建，因需绑定当前 db 会话）"""
+    return GMSFrontendInterface(db)
 
 
 @router.get("/selection-results")
@@ -62,8 +68,9 @@ async def get_selection_results(
     try:
         logger.info(f"获取GMS选股结果 - 日期: {date or '最新'}, 限制: {limit}, 最低强度: {min_strength}")
 
-        # 确定目标日期
-        target_date = date
+        # 确定目标日期：未传则取表内最新日期
+        requested_date = date
+        target_date = requested_date
         if not target_date:
             target_date = db.query(func.max(GMSSignalTrace.date)).scalar()
         
@@ -75,19 +82,33 @@ async def get_selection_results(
                 "message": "策略结果表中无数据"
             })
 
-        # 从 GMS 结果表中查询数据，不再重新执行筛选
+        # 从 GMS 结果表中查询目标日期的数据
         query = db.query(GMSSignalTrace).filter(GMSSignalTrace.date == target_date)
-        
         if min_strength:
             min_score = min_strength * 100
             query = query.filter(GMSSignalTrace.score_total >= min_score)
-        
         query = query.order_by(desc(GMSSignalTrace.score_total))
-        
         if limit:
             query = query.limit(limit)
-            
         selection_results = query.all()
+
+        # 当日无数据时，回退到最近有数据的日期
+        fallback_message: Optional[str] = None
+        if not selection_results and requested_date:
+            latest_date = db.query(func.max(GMSSignalTrace.date)).scalar()
+            if latest_date and latest_date != target_date:
+                target_date = latest_date
+                query = db.query(GMSSignalTrace).filter(GMSSignalTrace.date == target_date)
+                if min_strength:
+                    query = query.filter(GMSSignalTrace.score_total >= min_strength * 100)
+                query = query.order_by(desc(GMSSignalTrace.score_total))
+                if limit:
+                    query = query.limit(limit)
+                selection_results = query.all()
+                fallback_message = f"请求日期 {requested_date} 暂无数据，已展示最近日期 {target_date} 的选股结果"
+        elif not selection_results:
+            # 未传日期且表内最新日期也无数据（表空）
+            pass
 
         # 映射字段以适配前端
         results_data = []
@@ -125,21 +146,24 @@ async def get_selection_results(
                 'indicators': {
                     'price_dimension': {'macro_displacement': r.score_accumulation or 0},
                     'frequency_dimension': {'rising_days': r.score_momentum or 0, 'falling_days': 0},
-                    'volume_dimension': {'efficiency_ratio': r.score_balance or 0}
+                    'volume_dimension': {'efficiency_ratio': getattr(r, 'score_acc_balance', 0) or 0}
                 },
                 'timestamp': datetime.now().isoformat()
             })
             
         logger.info(f"直接读取GMS选股结果完成，日期 {target_date}，共 {len(results_data)} 只股票")
         
-        return JSONResponse({
+        payload = {
             "success": True,
             "data": results_data,
             "total": len(results_data),
             "search_date": target_date,
             "strategy_name": "GMS均值引力动量策略",
             "timestamp": datetime.now().isoformat()
-        })
+        }
+        if fallback_message:
+            payload["message"] = fallback_message
+        return JSONResponse(payload)
         
     except PVFRSException as e:
         logger.error(f"PVFRS选股结果获取失败: {str(e)}")
@@ -252,9 +276,9 @@ async def get_stock_detail(
                     'frequency_dimension_valid': True
                 },
                 'volume_dimension': {
-                    'avg_volume_20d': trace.avg_volume_20d,
-                    'current_volume': trace.current_volume,
-                    'efficiency_ratio': trace.score_balance,
+                    'avg_volume_20d': getattr(trace, 'avg_volume_20d', None),
+                    'current_volume': getattr(trace, 'current_volume', None),
+                    'efficiency_ratio': getattr(trace, 'score_acc_balance', 0) or 0,
                     'volume_dimension_valid': True
                 },
                 'amplitude_ratio': getattr(trace, 'fz_ratio', 0),
@@ -309,7 +333,7 @@ async def refresh_results(
         logger.info("刷新PVFRS选股结果")
         
         # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        frontend_interface = get_frontend_interface(db)
         
         # 执行刷新
         refresh_success = frontend_interface.refresh_results()
@@ -431,7 +455,7 @@ async def get_interface_status(
         logger.info("获取PVFRS前端接口状态")
         
         # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        frontend_interface = get_frontend_interface(db)
         
         # 获取接口状态
         status_data = frontend_interface.get_interface_status()
@@ -581,7 +605,7 @@ async def set_cache_config(
         logger.info(f"设置PVFRS前端接口缓存配置 - 启用: {enabled}, 持续时间: {duration_minutes}分钟")
         
         # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        frontend_interface = get_frontend_interface(db)
         
         # 设置缓存配置
         frontend_interface.set_cache_config(enabled, duration_minutes)
@@ -628,7 +652,7 @@ async def set_selection_config(
         logger.info(f"设置PVFRS前端接口选股配置 - 最大结果: {max_results}, 最低强度: {min_strength}")
         
         # 获取前端接口实例
-        frontend_interface = get_frontend_interface()
+        frontend_interface = get_frontend_interface(db)
         
         # 设置选股配置
         if max_results is not None:

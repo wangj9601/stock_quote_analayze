@@ -8,6 +8,7 @@ import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+from email.utils import formataddr
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -90,9 +91,13 @@ class EmailService:
                 logger.error(error_msg)
                 raise EmailSendException(error_msg)
             
-            # 创建邮件对象
+            # 创建邮件对象（From/To 使用 formataddr 符合 RFC5322/RFC2047，避免 QQ 等服务器报错）
             msg = MIMEMultipart()
-            msg['From'] = f"{self.config.from_name} <{self.config.from_email}>"
+            from_email = (self.config.from_email or self.config.username or "").strip()
+            from_name = (self.config.from_name or "").strip() or from_email
+            if not from_email:
+                raise EmailSendException("发件人邮箱未配置")
+            msg['From'] = formataddr((from_name, from_email))
             msg['To'] = to_email
             msg['Subject'] = subject
             
@@ -111,26 +116,25 @@ class EmailService:
                 msg.attach(attachment)
             
             # 连接SMTP服务器并发送
+            # 465 端口为隐式 SSL（SMTPS），必须用 SMTP_SSL；587 为 STARTTLS，用 SMTP+starttls
             logger.info(f"正在连接SMTP服务器: {self.config.host}:{self.config.port}")
             
-            if self.config.use_tls:
-                # 使用TLS加密连接
+            if self.config.port == 465:
+                # 465 端口：隐式 SSL，必须用 SMTP_SSL 直连（与 use_tls 勾选无关）
+                with smtplib.SMTP_SSL(self.config.host, self.config.port, timeout=30) as server:
+                    server.login(self.config.username, self.config.password)
+                    server.send_message(msg)
+            elif self.config.use_tls:
+                # 587 等端口：先明文连接再 STARTTLS 升级
                 with smtplib.SMTP(self.config.host, self.config.port, timeout=30) as server:
                     server.starttls()
                     server.login(self.config.username, self.config.password)
                     server.send_message(msg)
             else:
-                # 使用SSL加密连接或不加密
-                if self.config.port == 465:
-                    # SSL连接
-                    with smtplib.SMTP_SSL(self.config.host, self.config.port, timeout=30) as server:
-                        server.login(self.config.username, self.config.password)
-                        server.send_message(msg)
-                else:
-                    # 不加密连接
-                    with smtplib.SMTP(self.config.host, self.config.port, timeout=30) as server:
-                        server.login(self.config.username, self.config.password)
-                        server.send_message(msg)
+                # 不加密（不推荐）
+                with smtplib.SMTP(self.config.host, self.config.port, timeout=30) as server:
+                    server.login(self.config.username, self.config.password)
+                    server.send_message(msg)
             
             success_msg = f"邮件发送成功: {to_email}"
             logger.info(success_msg)

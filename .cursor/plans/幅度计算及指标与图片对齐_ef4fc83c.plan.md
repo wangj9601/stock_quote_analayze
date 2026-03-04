@@ -18,23 +18,27 @@ isProject: false
 
 ## 一、图片中的定义（摘要）
 
-| 项 | 定义 |
-|----|------|
-| 公式 | Δ = d₂₀ - d₁ |
-| 幅度 | **Δ 的数值大小** → 幅度 |
-| 比例 | **Δ/d₂₀**、**Δ/d₁** |
-| 判断 | **① Δ = 0 → 横盘** |
+
+| 项   | 定义                 |
+| --- | ------------------ |
+| 公式  | Δ = d₂₀ - d₁       |
+| 幅度  | **Δ 的数值大小** → 幅度   |
+| 比例  | **Δ/d₂₀**、**Δ/d₁** |
+| 判断  | **① Δ = 0 → 横盘**   |
+
 
 ---
 
 ## 二、PVFRS 当前实现 vs 图片
 
-| 图片 | PVFRS 现状 | 是否一致 |
-|------|------------|----------|
-| Δ = d₂₀ - d₁ | [analyzers.py](backend_core/strategies/pvfrs/analyzers.py) 第 74–81 行：d₁、d₂₀ 取首尾收盘价，`macro_displacement = d20 - d1` | 一致 |
-| 幅度 = Δ 的数值大小 | 仅有 **幅度系数** Δ/d（d=20 日均价），无单独的「幅度」标量 | 不一致 |
-| Δ/d₂₀、Δ/d₁ | 仅实现 **Δ/d**（d=20 日均价），未实现 Δ/d₂₀、Δ/d₁ | 不一致 |
-| Δ = 0 → 横盘 | 通过 Δ>0 才买、Δ<0 反转卖隐式处理；**无显式横盘状态** | 逻辑等效，未显式 |
+
+| 图片           | PVFRS 现状                                                                                                           | 是否一致     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ | -------- |
+| Δ = d₂₀ - d₁ | [analyzers.py](backend_core/strategies/pvfrs/analyzers.py) 第 74–81 行：d₁、d₂₀ 取首尾收盘价，`macro_displacement = d20 - d1` | 一致       |
+| 幅度 = Δ 的数值大小 | 仅有 **幅度系数** Δ/d（d=20 日均价），无单独的「幅度」标量                                                                               | 不一致      |
+| Δ/d₂₀、Δ/d₁   | 仅实现 **Δ/d**（d=20 日均价），未实现 Δ/d₂₀、Δ/d₁                                                                               | 不一致      |
+| Δ = 0 → 横盘   | 通过 Δ>0 才买、Δ<0 反转卖隐式处理；**无显式横盘状态**                                                                                  | 逻辑等效，未显式 |
+
 
 ---
 
@@ -75,12 +79,14 @@ isProject: false
 
 ## 四、涉及文件与修改点
 
-| 文件 | 修改内容 |
-|------|----------|
-| [backend_core/strategies/pvfrs/analyzers.py](backend_core/strategies/pvfrs/analyzers.py) | ① `calculate_macro_displacement` 返回 `(Δ, d1, d20)` 或在 `analyze` 中取得 d₁、d₂₀；② 在 `analyze` 中计算 `amplitude`、`ratio_d20`、`ratio_d1`、`is_sideways` 并加入返回字典 |
-| [backend_core/strategies/pvfrs/models.py](backend_core/strategies/pvfrs/models.py) | 在 `PVFRSIndicators` 中**可选**增加 `amplitude`、`ratio_d20`、`ratio_d1`、`is_sideways`（若下游或序列化需要） |
-| [backend_core/strategies/pvfrs/strategy_engine.py](backend_core/strategies/pvfrs/strategy_engine.py) | 构建 `PVFRSIndicators` 时传入上述新字段（若 models 已扩展） |
-| [backend_core/strategies/pvfrs/config.py](backend_core/strategies/pvfrs/config.py) 或策略配置 | 可选：`amplitude_flat_threshold`（横盘判定阈值） |
+
+| 文件                                                                                                   | 修改内容                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [backend_core/strategies/pvfrs/analyzers.py](backend_core/strategies/pvfrs/analyzers.py)             | ① `calculate_macro_displacement` 返回 `(Δ, d1, d20)` 或在 `analyze` 中取得 d₁、d₂₀；② 在 `analyze` 中计算 `amplitude`、`ratio_d20`、`ratio_d1`、`is_sideways` 并加入返回字典 |
+| [backend_core/strategies/pvfrs/models.py](backend_core/strategies/pvfrs/models.py)                   | 在 `PVFRSIndicators` 中**可选**增加 `amplitude`、`ratio_d20`、`ratio_d1`、`is_sideways`（若下游或序列化需要）                                                             |
+| [backend_core/strategies/pvfrs/strategy_engine.py](backend_core/strategies/pvfrs/strategy_engine.py) | 构建 `PVFRSIndicators` 时传入上述新字段（若 models 已扩展）                                                                                                           |
+| [backend_core/strategies/pvfrs/config.py](backend_core/strategies/pvfrs/config.py) 或策略配置             | 可选：`amplitude_flat_threshold`（横盘判定阈值）                                                                                                                 |
+
 
 不影响现有幅度系数 Δ/d、入场时机、信号过滤等逻辑；仅**新增与图片对应的指标与横盘判断**。
 

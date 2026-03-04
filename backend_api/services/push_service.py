@@ -81,20 +81,23 @@ class PushService:
         
         logger.info("PushService 初始化完成")
     
-    def execute_scheduled_push(self, push_time: str, max_workers: int = 5) -> PushBatchResult:
+    def execute_scheduled_push(self, push_time: str, max_workers: int = 1) -> PushBatchResult:
         """
         执行定时推送任务（批量推送）
+        
+        ConfigService/ReportService/RecordRepository 共用同一 DB Session，非线程安全，
+        因此默认 max_workers=1，避免多线程并发访问同一 Session 导致 InvalidRequestError。
         
         实现步骤:
         1. 查询指定时间点需要推送的用户(调用ConfigService.get_users_for_push_time)
         2. 使用RecordRepository.check_duplicate_push检查推送去重
-        3. 使用线程池或异步方式并发处理多个用户推送
+        3. 串行或线程池处理各用户推送（默认串行）
         4. 处理单个用户失败不影响其他用户(异常捕获和隔离)
         5. 返回批量推送结果统计(成功数、失败数、跳过数)
         
         Args:
             push_time: 推送时间点 (如 "09:30")
-            max_workers: 最大并发工作线程数，默认5
+            max_workers: 最大并发工作线程数，默认1（Session 非线程安全）
             
         Returns:
             PushBatchResult: 批量推送结果
@@ -170,36 +173,30 @@ class PushService:
             success_count = 0
             failed_count = 0
             
-            # 使用线程池并发执行推送
+            # 使用线程池并发执行推送（future 仅映射 user_id，避免主线程访问 ORM 触发懒加载导致 Session 并发错误）
+            user_ids = [u.id for u in users_to_push]
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # 提交所有推送任务
-                future_to_user = {
-                    executor.submit(self._push_to_user_safe, user.id, push_time): user
-                    for user in users_to_push
+                future_to_user_id = {
+                    executor.submit(self._push_to_user_safe, uid, push_time): uid
+                    for uid in user_ids
                 }
-                
-                # 收集结果
-                for future in as_completed(future_to_user):
-                    user = future_to_user[future]
+                for future in as_completed(future_to_user_id):
+                    user_id = future_to_user_id[future]
                     try:
                         result = future.result()
                         push_results.append(result)
-                        
                         if result.success:
                             success_count += 1
-                            logger.info(f"用户 {user.id} 推送成功")
+                            logger.info(f"用户 {user_id} 推送成功")
                         else:
                             failed_count += 1
-                            logger.warning(f"用户 {user.id} 推送失败: {result.error_message}")
-                    
+                            logger.warning(f"用户 {user_id} 推送失败: {result.error_message}")
                     except Exception as e:
-                        # 即使获取结果时出错，也不影响其他用户
-                        error_msg = f"获取用户 {user.id} 推送结果时异常: {str(e)}"
+                        error_msg = f"获取用户 {user_id} 推送结果时异常: {str(e)}"
                         logger.error(error_msg, exc_info=True)
-                        
                         failed_count += 1
                         push_results.append(PushResult(
-                            user_id=user.id,
+                            user_id=user_id,
                             success=False,
                             channel_results=[],
                             record_id=None,

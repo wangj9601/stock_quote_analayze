@@ -39,53 +39,56 @@ class JobInfo:
 
 
 class PushScheduler:
-    """定时任务调度器"""
-    
+    """定时任务调度器。推送时间以 user_push_configs 表中启用配置的 push_times 为准。"""
+
     def __init__(self, push_service, default_push_times: Optional[List[str]] = None):
         """
         初始化调度器
-        
+
         Args:
-            push_service: 推送服务实例 (PushService)
-            default_push_times: 默认推送时间列表 (如 ["09:30", "15:30"])
+            push_service: 推送服务实例 (PushService)，其 config_service 用于读取表内推送时间
+            default_push_times: 仅当无法从表读取时使用的兜底时间（可为空）
         """
         self.push_service = push_service
-        self.default_push_times = default_push_times or ["09:30", "15:30"]
-        
-        # 创建后台调度器（每个实例独立）
-        self.scheduler = BackgroundScheduler(
-            timezone='Asia/Shanghai'  # 使用中国时区
-        )
-        
+        self.fallback_push_times = default_push_times or []
+        self.scheduler = BackgroundScheduler(timezone='Asia/Shanghai')
         self._is_running = False
-        
-        logger.info(f"PushScheduler 初始化完成，默认推送时间: {self.default_push_times}")
-    
+        logger.info("PushScheduler 初始化完成，推送时间以 user_push_configs 表为准")
+
+    def _get_push_times_from_config(self) -> List[str]:
+        """从 user_push_configs 表读取所有需要调度的推送时间点（去重）。"""
+        try:
+            if getattr(self.push_service, 'config_service', None) is not None:
+                return self.push_service.config_service.get_all_distinct_push_times()
+        except Exception as e:
+            logger.warning(f"从 user_push_configs 读取推送时间失败，使用兜底: {e}")
+        return list(self.fallback_push_times)
+
     def start(self):
         """
-        启动调度器
-        
-        启动后会自动添加默认推送时间的任务
+        启动调度器。
+        从 user_push_configs 表读取启用配置的 push_times，为每个时间点添加定时任务。
         """
         if self._is_running:
             logger.warning("调度器已经在运行中")
             return
-        
+
         try:
-            # 启动调度器
             self.scheduler.start()
             self._is_running = True
-            
             logger.info("调度器已启动")
-            
-            # 添加默认推送任务
-            for push_time in self.default_push_times:
-                try:
-                    self.add_push_job(push_time)
-                    logger.info(f"已添加默认推送任务: {push_time}")
-                except Exception as e:
-                    logger.error(f"添加默认推送任务失败 ({push_time}): {str(e)}")
-            
+
+            push_times = self._get_push_times_from_config()
+            if not push_times:
+                logger.warning("user_push_configs 中暂无推送时间配置，未添加任何定时任务")
+            else:
+                for push_time in push_times:
+                    try:
+                        self.add_push_job(push_time)
+                        logger.info(f"已添加推送任务（来自表配置）: {push_time}")
+                    except Exception as e:
+                        logger.error(f"添加推送任务失败 ({push_time}): {str(e)}")
+
             logger.info(f"调度器启动完成，已调度 {len(self.get_scheduled_jobs())} 个任务")
             
         except Exception as e:

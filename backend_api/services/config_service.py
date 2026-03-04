@@ -63,7 +63,39 @@ class ConfigService:
         except Exception as e:
             logger.error(f"获取用户配置失败: user_id={user_id}, error={str(e)}")
             raise
-    
+
+    def get_all_distinct_push_times(self) -> List[str]:
+        """
+        从 user_push_configs 表获取所有启用配置中出现过的推送时间点（去重、排序）。
+        用于 PushScheduler 按表内配置的时间点调度任务。
+        """
+        try:
+            configs = self.db.query(UserPushConfig).filter(UserPushConfig.enabled == True).all()
+            times_set = set()
+            for c in configs:
+                if c.push_times:
+                    for t in c.push_times:
+                        if t and isinstance(t, str) and self._validate_time_format(t):
+                            times_set.add(t)
+            result = sorted(times_set)
+            logger.info(f"从 user_push_configs 读取到 {len(result)} 个推送时间点: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"获取推送时间点失败: {str(e)}")
+            raise
+
+    @staticmethod
+    def _validate_time_format(time_str: str) -> bool:
+        """校验时间为 HH:MM 格式"""
+        try:
+            parts = time_str.split(":")
+            if len(parts) != 2:
+                return False
+            h, m = int(parts[0]), int(parts[1])
+            return 0 <= h <= 23 and 0 <= m <= 59
+        except (ValueError, AttributeError):
+            return False
+
     def update_user_config(
         self, 
         user_id: int, 
@@ -157,12 +189,12 @@ class ConfigService:
                 logger.warning(error_msg)
                 raise ValueError(error_msg)
             
-            # 创建默认配置
+            # 创建默认配置（管理端「邮件推送配置」添加时默认走邮件）
             config = UserPushConfig(
                 user_id=user_id,
                 enabled=True,
-                channels=["wechat"],
-                push_times=["09:30", "15:30"],
+                channels=["email"],
+                push_times=["09:00", "15:00"],
                 report_type="summary",
                 stock_codes=None  # None表示全部自选股
             )
@@ -180,7 +212,23 @@ class ConfigService:
             self.db.rollback()
             logger.error(f"创建默认配置失败: user_id={user_id}, error={str(e)}")
             raise
-    
+
+    def delete_user_config(self, user_id: int) -> bool:
+        """删除用户推送配置（从 user_push_configs 表删除）。无配置时返回 False。"""
+        try:
+            config = self.get_user_config(user_id)
+            if not config:
+                logger.warning(f"用户推送配置不存在: user_id={user_id}")
+                return False
+            self.db.delete(config)
+            self.db.commit()
+            logger.info(f"删除用户推送配置成功: user_id={user_id}")
+            return True
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"删除用户推送配置失败: user_id={user_id}, error={str(e)}")
+            raise
+
     def get_users_for_push_time(self, push_time: str) -> List[User]:
         """
         获取指定时间点需要推送的用户列表

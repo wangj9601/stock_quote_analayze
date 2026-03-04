@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-启动推送调度器脚本
+启动推送调度器脚本 (PushScheduler)
 
-该脚本用于启动每日报告推送的定时调度器。
-调度器会在配置的时间点自动触发推送任务。
+在配置的时间点自动执行邮件/微信报告推送（从 user_push_configs 读取用户配置）。
 
-使用方法:
-    python start_scheduler.py [选项]
+启动方式（在项目根目录执行）:
+    python start_scheduler.py
 
-选项:
-    --config-file PATH    指定配置文件路径 (默认: backend_api/config.py)
-    --push-times TIMES    指定推送时间点，逗号分隔 (默认: 09:30,15:30)
-    --log-level LEVEL     日志级别 (DEBUG, INFO, WARNING, ERROR) (默认: INFO)
-    --daemon              以守护进程模式运行
-    --pid-file PATH       PID文件路径 (默认: scheduler.pid)
+可选参数:
+    --push-times TIMES    推送时间点，逗号分隔 (默认: 09:30,15:30)
+    --log-level LEVEL     日志级别 (默认: INFO)
+    --daemon              守护进程模式
+    --pid-file PATH       PID 文件路径 (默认: scheduler.pid)
 """
 
 import sys
@@ -28,15 +26,43 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from backend_api.config import PUSH_CONFIG, WECHAT_CONFIG, SMTP_CONFIG
+from backend_api.config import PUSH_CONFIG, SMTP_CONFIG
+from backend_api.services.email_service import EmailService, SMTPConfig
 from backend_core.scheduler.push_scheduler import PushScheduler
 from backend_api.services.push_service import PushService
-from backend_api.services.email_service import EmailService
 from backend_api.services.config_service import ConfigService
 from backend_api.services.report_service import ReportService
 from backend_api.services.record_repository import RecordRepository
 from backend_core.wechat.wechat_service import WeChatService
-from backend_core.database.db import get_db_session
+from backend_core.database.db import SessionLocal
+
+
+def _get_smtp_config(db):
+    """从数据库或环境变量获取发件配置（与 push_routes 逻辑一致）"""
+    try:
+        from backend_api.models import EmailSenderConfig
+        row = db.query(EmailSenderConfig).filter(EmailSenderConfig.id == 1).first()
+        if row and row.host and row.username:
+            return SMTPConfig(
+                host=str(row.host),
+                port=int(row.port),
+                username=str(row.username),
+                password=str(row.password) if row.password else "",
+                use_tls=bool(row.use_tls),
+                from_email=str(row.from_email) if row.from_email else str(row.username),
+                from_name=str(row.from_name) if row.from_name else "股票分析系统",
+            )
+    except Exception:
+        pass
+    return SMTPConfig(
+        host=SMTP_CONFIG["host"],
+        port=SMTP_CONFIG["port"],
+        username=SMTP_CONFIG["username"],
+        password=SMTP_CONFIG["password"],
+        use_tls=SMTP_CONFIG["use_tls"],
+        from_email=SMTP_CONFIG["from_email"],
+        from_name=SMTP_CONFIG["from_name"],
+    )
 
 
 def setup_logging(log_level: str):
@@ -56,37 +82,21 @@ def setup_logging(log_level: str):
 
 
 def create_push_service():
-    """创建推送服务实例"""
-    # 创建数据库会话
-    db_session = get_db_session()
-    
-    # 创建各个服务实例
-    wechat_service = WeChatService(
-        corp_id=WECHAT_CONFIG.get("corp_id"),
-        agent_id=WECHAT_CONFIG.get("agent_id"),
-        secret=WECHAT_CONFIG.get("secret")
-    )
-    
-    email_service = EmailService(smtp_config=SMTP_CONFIG)
-    
-    config_service = ConfigService(db_session=db_session)
-    
-    report_service = ReportService(
-        db_session=db_session,
-        report_dir=PUSH_CONFIG.get("report_dir", "./reports")
-    )
-    
-    record_repository = RecordRepository(db_session=db_session)
-    
-    # 创建推送服务
+    """创建推送服务实例（使用与 API 一致的 DB 会话与发件配置）"""
+    db = SessionLocal()
+    smtp_config = _get_smtp_config(db)
+    email_service = EmailService(smtp_config)
+    wechat_service = WeChatService()
+    config_service = ConfigService(db)
+    report_service = ReportService(db, report_dir=PUSH_CONFIG.get("report_dir", "./reports"))
+    record_repository = RecordRepository(db)
     push_service = PushService(
         wechat_service=wechat_service,
         email_service=email_service,
         report_service=report_service,
         config_service=config_service,
-        record_repository=record_repository
+        record_repository=record_repository,
     )
-    
     return push_service
 
 
@@ -160,23 +170,18 @@ def main():
         logger.info("正在初始化推送服务...")
         push_service = create_push_service()
         
-        # 创建调度器
+        # 创建调度器（default_push_times 会在 start() 时自动添加）
         logger.info("正在创建调度器...")
-        scheduler = PushScheduler(push_service=push_service)
+        scheduler = PushScheduler(push_service=push_service, default_push_times=push_times)
         
         # 注册信号处理器
         signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, scheduler, args.pid_file))
         signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s, f, scheduler, args.pid_file))
         
-        # 添加推送任务
-        for push_time in push_times:
-            logger.info(f"添加推送任务: {push_time}")
-            scheduler.add_push_job(push_time)
-        
-        # 启动调度器
+        # 启动调度器（内部会按 default_push_times 添加定时任务）
         logger.info("正在启动调度器...")
         scheduler.start()
-        logger.info("调度器已启动，按Ctrl+C停止")
+        logger.info("调度器已启动，按 Ctrl+C 停止")
         
         # 保持运行
         import time

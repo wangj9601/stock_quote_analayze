@@ -35,7 +35,7 @@ isProject: false
 
 - **Δ = d₂₀ − d₁**：20 日位移；|Δ| 为幅度；**Δ = 0 → 横盘**。
 - **Δ/d₂₀、Δ/d₁**：位移相对期末价、期初价的比例（已算：`ratio_d20`、`ratio_d1`，见 [analyzers.py](backend_core/strategies/pvfrs/analyzers.py) 第 40–41、50–52 行）。
-- **警示条件**：Δi = d_{i+1}−d_i；F = Δi&lt;0 天数，Z = Δi&gt;0 天数。**若 F ≥ Z 且 d₂₀ &lt; d₁（即 Δ &lt; 0）→「则位以重来关注」**：不参与买点或降权。
+- **警示条件**：Δi = d_{i+1}−d_i；F = Δi<0 天数，Z = Δi>0 天数。**若 F ≥ Z 且 d₂₀ < d₁（即 Δ < 0）→「则位以重来关注」**：不参与买点或降权。
 
 ### 图2（趋势论 A，《详细说明》未单独展开）
 
@@ -108,8 +108,8 @@ isProject: false
 | 需求              | 当前实现                                                                                                        | 缺口                                |
 | --------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | Δ、Δ/d₂₀、Δ/d₁、横盘 | [analyzers.py](backend_core/strategies/pvfrs/analyzers.py) 已计算并输出                                           | 买点中未用 ratio_d20/ratio_d1；未用「横盘」排除 |
-| F、Z（下跌/上涨天数）    | [resonance_detector.py](backend_core/strategies/pvfrs/resonance_detector.py) 中 `rising_days`、`falling_days` | 未实现「F≥Z 且 Δ&lt;0 → 排除」            |
-| Δ/d₂₀ 越小越好      | 无                                                                                                           | 需增加「ratio_d20 &lt; 上限」条件          |
+| F、Z（下跌/上涨天数）    | [resonance_detector.py](backend_core/strategies/pvfrs/resonance_detector.py) 中 `rising_days`、`falling_days` | 未实现「F≥Z 且 Δ<0 → 排除」               |
+| Δ/d₂₀ 越小越好      | 无                                                                                                           | 需增加「ratio_d20 < 上限」条件             |
 | d、m             | 已有 20 日均价、均量                                                                                                | 无                                 |
 | s₂₀-d 条件        | 笔记未定义 s₂₀                                                                                                   | 不纳入本次实施                           |
 
@@ -118,7 +118,7 @@ isProject: false
 
 ## 四、建议的买点逻辑改动（与两图及《详细说明》一致）
 
-### 1. 排除条件：F ≥ Z 且 Δ &lt; 0（图1「则位以重来关注」）
+### 1. 排除条件：F ≥ Z 且 Δ < 0（图1「则位以重来关注」）
 
 - **位置**：在构造买点条件处（如 [resonance_detector.py](backend_core/strategies/pvfrs/resonance_detector.py) 的 `_check_conditions` 或 [signal_generator.py](backend_core/strategies/pvfrs/signal_generator.py) 的买入前校验）。
 - **逻辑**：若 `falling_days >= rising_days` 且 `macro_displacement < 0`，则**不发出买点**（或标记为「弱势/观望」）。
@@ -127,7 +127,7 @@ isProject: false
 ### 2. Δ/d₂₀ 越小越好 → 作为买点上限（图2）
 
 - **位置**：同一买点判断处，在已有价格维度条件之后。
-- **逻辑**：仅当 `ratio_d20` 有值且 **ratio_d20 &lt; 配置上限** 时允许买（否则过滤）。例如：`ratio_d20 is None or ratio_d20 < buy_ratio_d20_max`。
+- **逻辑**：仅当 `ratio_d20` 有值且 **ratio_d20 < 配置上限** 时允许买（否则过滤）。例如：`ratio_d20 is None or ratio_d20 < buy_ratio_d20_max`。
 - **配置**：在 [config.py](backend_core/strategies/pvfrs/config.py)（及 [pvfrs_strategy.py](backend_core/strategies/pvfrs/pvfrs_strategy.py) 的默认参数）中新增 `buy_ratio_d20_max`（如 0.5 或 0.8，表示 50% 或 80%；0 表示不启用该过滤）。
 - **说明**：「越小越好」在实现上体现为「不超过某上限」，避免追高或波动过大的位移。
 
@@ -141,7 +141,7 @@ isProject: false
 ### 4. 横盘（Δ ≈ 0）不参与买点（图1；《详细说明》2.2.4 横盘时建议等待波幅放大）
 
 - **位置**：买点条件中，与 `macro_displacement_positive` 并列。
-- **逻辑**：已有 `is_sideways`（|Δ| &lt; ε）。增加：若 `is_sideways == True` 则**不发出买点**（或仅当「突破横盘」逻辑单独实现后再用）。
+- **逻辑**：已有 `is_sideways`（|Δ| < ε）。增加：若 `is_sideways == True` 则**不发出买点**（或仅当「突破横盘」逻辑单独实现后再用）。
 - **配置**：可沿用现有 `amplitude_flat_threshold`；若需可配置开关，可加 `buy_exclude_sideways`（默认 True）。
 
 ### 5. 注释掉虚假繁荣判断（本次新增）
@@ -183,8 +183,8 @@ flowchart LR
 
 1. **配置**：在 [config.py](backend_core/strategies/pvfrs/config.py) 与策略默认参数中增加 `buy_ratio_d20_max`（及可选 `buy_exclude_sideways`）。
 2. **买点条件**：在 [resonance_detector.py](backend_core/strategies/pvfrs/resonance_detector.py) 的 `_check_conditions`（或统一入口）中：
-  - 增加「F ≥ Z 且 Δ &lt; 0 → 不满足买点」；
-  - 增加「ratio_d20 不为空且 ratio_d20 &lt; buy_ratio_d20_max」；
+  - 增加「F ≥ Z 且 Δ < 0 → 不满足买点」；
+  - 增加「ratio_d20 不为空且 ratio_d20 < buy_ratio_d20_max」；
   - 增加「is_sideways 为 True 则不满足买点」（若启用）；
   - **注释掉**对虚假繁荣（no_false_prosperity / has_false_prosperity）的判断，使该条件不参与共振/买点；
   - **频率权重**：将「Z > F（频率优势）」改为「F > Z」作为买点判断的一个权重（`frequency_advantage` 等由 `rising_days > falling_days` 改为 `falling_days > rising_days`）。

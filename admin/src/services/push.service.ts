@@ -79,8 +79,28 @@ export class PushService {
     })
   }
 
+  /** 管理员为指定用户新建推送配置（用户来源于 user 表，配置写入 user_push_configs 表） */
+  async createPushConfig(
+    userId: number,
+    options?: { enabled?: boolean; channels?: string[]; push_times?: string[]; report_type?: string }
+  ): Promise<UserPushConfigResponse> {
+    const body: { user_id: number; enabled?: boolean; channels?: string[]; push_times?: string[]; report_type?: string } = {
+      user_id: userId
+    }
+    if (options?.enabled !== undefined) body.enabled = options.enabled
+    if (options?.channels !== undefined) body.channels = options.channels
+    if (options?.push_times !== undefined) body.push_times = options.push_times
+    if (options?.report_type !== undefined) body.report_type = options.report_type
+    return apiService.post<UserPushConfigResponse>(`${this.base}/configs`, body)
+  }
+
   async adminUpdatePushConfig(userId: number, data: ConfigUpdateRequest): Promise<UserPushConfigResponse> {
     return apiService.put<UserPushConfigResponse>(`${this.base}/configs/${userId}`, data)
+  }
+
+  /** 管理员删除指定用户的邮件推送配置 */
+  async deletePushConfig(userId: number): Promise<{ success: boolean; deleted: boolean; message: string }> {
+    return apiService.delete<{ success: boolean; deleted: boolean; message: string }>(`${this.base}/configs/${userId}`)
   }
 
   async getEmailLogs(params: {

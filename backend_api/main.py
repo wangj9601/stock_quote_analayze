@@ -69,6 +69,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+import re
 import uvicorn
 import logging
 import os
@@ -224,6 +225,16 @@ origins = [
     "http://icemaplecity.com",  # 生产环境域名（无www）
     "https://icemaplecity.com",  # 生产环境HTTPS域名（无www）
 ]
+
+# 用于 CORS 的 origin 校验（含正则匹配 localhost 任意端口）
+_cors_origin_regex = re.compile(r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+)(:\d+)?$")
+
+def _is_allowed_origin(origin: str) -> bool:
+    if not origin:
+        return False
+    if origin in origins:
+        return True
+    return bool(_cors_origin_regex.match(origin))
 
 app.add_middleware(
     CORSMiddleware,
@@ -504,6 +515,21 @@ if pvfrs_frontend_router is not None:
     print("✅ PVFRS前端接口路由注册成功")
 else:
     print("❌ PVFRS前端接口路由未注册")
+
+# 全局异常处理：确保错误响应也带 CORS 头，避免前端跨域时报 No 'Access-Control-Allow-Origin'
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    logger.error(f"未捕获异常: {exc}\n{traceback.format_exc()}")
+    body = {"detail": str(exc), "success": False}
+    response = JSONResponse(status_code=500, content=body)
+    origin = request.headers.get("origin")
+    if origin and _is_allowed_origin(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # 根路由重定向到管理后台
 @app.get("/")

@@ -613,34 +613,88 @@ class ReportService:
                 error_message="当日自选股范围内无 GMS 选股结果",
             )
 
+        # 报告日期：优先使用 GMS 结果中的 date 字段（YYYY-MM-DD），否则为今天
         report_date = str(results[0].get("date", "")[:10]) if results else datetime.now().strftime("%Y-%m-%d")
+
+        # 从 gms_signal_trace 表读取同一日期、同一股票的指标，报告字段以该表为准
+        from backend_api.models import GMSSignalTrace  # 局部导入避免循环依赖
+        codes = [r.get("code") or r.get("symbol") or "" for r in results]
+        trace_map: Dict[str, Any] = {}
+        if codes:
+            traces = (
+                self.db.query(GMSSignalTrace)
+                .filter(GMSSignalTrace.date == report_date, GMSSignalTrace.code.in_(codes))
+                .all()
+            )
+            trace_map = {t.code: t for t in traces}
+
         rows = []
         for r in results:
             code = r.get("code") or r.get("symbol") or ""
+            trace = trace_map.get(code)
             name = code_to_name.get(code, "")
-            rows.append({
-                "股票代码": code,
-                "股票名称": name,
-                "日期": r.get("date", ""),
-                "总分": r.get("score_total"),
-                "蓄势分": r.get("score_accumulation"),
-                "平衡分": r.get("score_balance"),
-                "动量分": r.get("score_momentum"),
-                "买点类型": r.get("buy_type", ""),
-                "蓄势等级": r.get("accumulation_grade", ""),
-                "动量等级": r.get("momentum_grade", ""),
-                "ratio_d20": r.get("ratio_d20"),
-                "ratio_d1": r.get("ratio_d1"),
-                "volume_ratio": r.get("volume_ratio"),
-                "fz_ratio": r.get("fz_ratio"),
-                "instant_deviation": r.get("instant_deviation"),
-                "rising_days": r.get("rising_days"),
-                "falling_days": r.get("falling_days"),
-            })
+            rows.append(
+                {
+                    # 股票代码保持字符串格式（不丢失前导 0），后面再统一 astype(str)
+                    "股票代码": str(code),
+                    "股票名称": name,
+                    "日期": report_date,
+                    "总分": (trace.score_total if trace and trace.score_total is not None else r.get("score_total")),
+                    "蓄势分": (
+                        trace.score_accumulation
+                        if trace and trace.score_accumulation is not None
+                        else r.get("score_accumulation")
+                    ),
+                    # 平衡分取自 gms_signal_trace.score_acc_balance
+                    "平衡分": (
+                        trace.score_acc_balance
+                        if trace and hasattr(trace, "score_acc_balance") and trace.score_acc_balance is not None
+                        else r.get("score_balance")
+                    ),
+                    "动量分": (
+                        trace.score_momentum
+                        if trace and trace.score_momentum is not None
+                        else r.get("score_momentum")
+                    ),
+                    "买点类型": (trace.buy_type if trace and trace.buy_type is not None else r.get("buy_type", "")),
+                    "蓄势等级": (
+                        trace.accumulation_grade
+                        if trace and trace.accumulation_grade is not None
+                        else r.get("accumulation_grade", "")
+                    ),
+                    "动量等级": (
+                        trace.momentum_grade
+                        if trace and trace.momentum_grade is not None
+                        else r.get("momentum_grade", "")
+                    ),
+                    "ratio_d20": (
+                        trace.ratio_d20 if trace and trace.ratio_d20 is not None else r.get("ratio_d20")
+                    ),
+                    "ratio_d1": (trace.ratio_d1 if trace and trace.ratio_d1 is not None else r.get("ratio_d1")),
+                    "volume_ratio": (
+                        trace.volume_ratio if trace and trace.volume_ratio is not None else r.get("volume_ratio")
+                    ),
+                    "fz_ratio": (trace.fz_ratio if trace and trace.fz_ratio is not None else r.get("fz_ratio")),
+                    "instant_deviation": (
+                        trace.instant_deviation
+                        if trace and trace.instant_deviation is not None
+                        else r.get("instant_deviation")
+                    ),
+                    "rising_days": (
+                        trace.rising_days if trace and trace.rising_days is not None else r.get("rising_days")
+                    ),
+                    "falling_days": (
+                        trace.falling_days if trace and trace.falling_days is not None else r.get("falling_days")
+                    ),
+                }
+            )
 
         filename = f"gms_{user_id}_{report_date.replace('-', '')}.csv"
         filepath = os.path.join(self.report_dir, filename)
         df = pd.DataFrame(rows)
+        # 明确将股票代码列转为字符串，避免被 pandas 识别为数值后丢失前导 0
+        if "股票代码" in df.columns:
+            df["股票代码"] = df["股票代码"].astype(str)
         df.to_csv(filepath, index=False, encoding="utf-8-sig")
         file_size = os.path.getsize(filepath)
         logger.info("生成 GMS 自选股报告成功: %s, 选股数: %s", filepath, len(rows))
