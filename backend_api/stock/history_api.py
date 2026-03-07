@@ -343,11 +343,38 @@ def get_stock_history(
                 print(f"[港股] akshare查询结果: {hist_df}")
                 table_name = "historical_quotes_hk"
             else:
-                # A股：使用stock_zh_a_hist接口
-                hist_df = ak.stock_zh_a_hist(symbol=code, start_date=start_date.replace("-", ""), end_date=end_date.replace("-", ""), adjust="")
-                print(f"[A股] akshare查询结果: {hist_df}")
+                # A股：优先使用 stock_zh_a_hist，失败时回退到 stock_zh_a_daily
                 table_name = "historical_quotes"
-            
+                start_ymd = start_date.replace("-", "")
+                end_ymd = end_date.replace("-", "")
+                hist_df = None
+                try:
+                    hist_df = ak.stock_zh_a_hist(symbol=code, start_date=start_ymd, end_date=end_ymd, adjust="")
+                    print(f"[A股] stock_zh_a_hist 查询结果: {hist_df}")
+                except Exception as e_hist:
+                    print(f"[A股] stock_zh_a_hist 失败 ({e_hist})，改用 stock_zh_a_daily")
+                    try:
+                        # stock_zh_a_daily 需要 sh/sz/bj 前缀的 symbol
+                        _c = code.lstrip("0") or "0"
+                        if code.startswith("6"):
+                            _symbol = "sh" + code
+                        elif code.startswith(("0", "3")):
+                            _symbol = "sz" + code
+                        else:
+                            _symbol = "bj" + code
+                        _daily_df = ak.stock_zh_a_daily(symbol=_symbol, start_date=start_ymd, end_date=end_ymd, adjust="")
+                        if _daily_df is not None and not _daily_df.empty and "date" in _daily_df.columns and "turnover" in _daily_df.columns:
+                            hist_df = pd.DataFrame()
+                            hist_df["日期"] = pd.to_datetime(_daily_df["date"]).dt.strftime("%Y-%m-%d")
+                            # 换手率：daily 返回小数(如 0.001465 表示 0.1465%)，转为与 hist 一致的百分比数值
+                            hist_df["换手率"] = _daily_df["turnover"].astype(float) * 100
+                            print(f"[A股] stock_zh_a_daily 查询结果(已统一列名): {hist_df}")
+                        else:
+                            hist_df = _daily_df  # 可能为空，后面会按 empty 处理
+                    except Exception as e_daily:
+                        print(f"[A股] stock_zh_a_daily 也失败: {e_daily}")
+                        hist_df = pd.DataFrame()
+
             # 将日期设为index，便于查找
             if not hist_df.empty and "换手率" in hist_df.columns and "日期" in hist_df.columns:
                 # 处理日期格式：akshare返回的日期可能是YYYYMMDD或YYYY-MM-DD格式

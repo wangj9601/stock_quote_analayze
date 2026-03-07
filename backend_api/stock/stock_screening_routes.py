@@ -13,6 +13,8 @@ from typing import Optional, Dict, Any
 
 # PVFRS 选股为 CPU 密集型，允许较长超时（秒）；Nginx 的 proxy_read_timeout 需 >= 此值
 PVFRS_SCREENING_TIMEOUT = 300
+# GMS 选股计算量大，单独使用更长超时，避免与 PVFRS 共用导致 307s 超时
+GMS_SCREENING_TIMEOUT = 600
 
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -20,7 +22,7 @@ from jose import jwt, JWTError
 from backend_api.auth import SECRET_KEY, ALGORITHM
 from backend_api.models import Watchlist, TokenData
 
-from backend_api.database import get_db
+from backend_api.database import get_db, SessionLocal
 from backend_api.models import MeanFrequencyResonanceIndicators
 from .stock_screening import StockScreeningStrategy
 from .high_tight_flag_strategy import HighTightFlagStrategy
@@ -839,16 +841,22 @@ async def get_gms_strategy(
             config.setdefault("scoring", {})["weight_mom_deviation"] = weight_mom_deviation
         if weight_mom_volume is not None:
             config.setdefault("scoring", {})["weight_mom_volume"] = weight_mom_volume
-        gms_if = GMSFrontendInterface(db, config)
-        gms_if.set_selection_config(min_score=min_score, max_results=limit or 10000)
+        max_results = limit or 10000
+
+        # 在 executor 内使用独立 Session，避免请求的 db 跨线程或已关闭导致 "identity map is no longer valid"
+        def _run_gms(_target_date: str, _config: dict, _min_score: float, _max_results: int):
+            session = SessionLocal()
+            try:
+                gms_if = GMSFrontendInterface(session, _config)
+                gms_if.set_selection_config(min_score=_min_score, max_results=_max_results)
+                return gms_if.get_selection_results(_target_date, stock_pool, market)
+            finally:
+                session.close()
 
         loop = asyncio.get_event_loop()
-        def _run():
-            return gms_if.get_selection_results(target_date, stock_pool, market)
-
         selection_results = await asyncio.wait_for(
-            loop.run_in_executor(None, _run),
-            timeout=PVFRS_SCREENING_TIMEOUT,
+            loop.run_in_executor(None, lambda: _run_gms(target_date, config, min_score, max_results)),
+            timeout=GMS_SCREENING_TIMEOUT,
         )
 
         # 当指定日期无数据时，回退到指标表最新可用日期
@@ -863,11 +871,9 @@ async def get_gms_strategy(
                     fallback_date_str = str(fallback_date).strip()[:10]
                     if fallback_date_str != target_date:
                         logger.info(f"GMS 所选日期 {target_date} 无数据，回退到指标表最新日期 {fallback_date_str}")
-                        def _run_fallback():
-                            return gms_if.get_selection_results(fallback_date_str, stock_pool, market)
                         selection_results = await asyncio.wait_for(
-                            loop.run_in_executor(None, _run_fallback),
-                            timeout=PVFRS_SCREENING_TIMEOUT,
+                            loop.run_in_executor(None, lambda: _run_gms(fallback_date_str, config, min_score, max_results)),
+                            timeout=GMS_SCREENING_TIMEOUT,
                         )
                         target_date = fallback_date_str
                         fallback_used = bool(selection_results)
@@ -981,6 +987,12 @@ async def get_gms_strategy(
         return JSONResponse(resp)
     except HTTPException:
         raise
+    except asyncio.TimeoutError:
+        logger.warning(f"GMS 选股超时({GMS_SCREENING_TIMEOUT}s)，scope={scope}")
+        raise HTTPException(
+            status_code=504,
+            detail=f"GMS选股计算超时（超过{GMS_SCREENING_TIMEOUT}秒），请缩小范围或稍后重试",
+        )
     except Exception as e:
         logger.error(f"GMS 策略选股失败: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"GMS策略选股失败: {str(e)}")

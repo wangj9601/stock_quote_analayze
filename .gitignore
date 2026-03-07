@@ -63,3 +63,5 @@ node_modules/
 
 backend_api/config.py
 backend_core/database/db.py
+
+*.pid

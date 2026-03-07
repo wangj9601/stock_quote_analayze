@@ -132,12 +132,16 @@ const ScreeningPage = {
 
         // 绑定所有导出按钮
         document.querySelectorAll('.export-btn').forEach(btn => {
+            if (btn.id === 'exportExcelBtn-gms') return; // GMS Excel 单独绑定
             btn.addEventListener('click', () => {
-                // 从ID中提取策略名称，例如 exportBtn-one-yang-three-lines -> one-yang-three-lines
                 const strategy = btn.id.replace('exportBtn-', '');
                 this.exportToCSV(strategy);
             });
         });
+        const exportExcelBtnGms = document.getElementById('exportExcelBtn-gms');
+        if (exportExcelBtnGms) {
+            exportExcelBtnGms.addEventListener('click', () => this.exportToExcelGms());
+        }
 
         // 绑定PVFARS策略范围切换事件
         document.querySelectorAll('input[name="pvfrsScope"]').forEach(radio => {
@@ -251,6 +255,10 @@ const ScreeningPage = {
         }
         if (exportBtn) {
             exportBtn.style.display = 'none';
+        }
+        if (strategy === 'gms') {
+            const excelBtn = document.getElementById('exportExcelBtn-gms');
+            if (excelBtn) excelBtn.style.display = 'none';
         }
 
         try {
@@ -399,6 +407,10 @@ const ScreeningPage = {
                 // 显示导出按钮
                 if (exportBtn && result.data.length > 0) {
                     exportBtn.style.display = 'inline-block';
+                }
+                if (strategy === 'gms' && result.data.length > 0) {
+                    const excelBtn = document.getElementById('exportExcelBtn-gms');
+                    if (excelBtn) excelBtn.style.display = 'inline-block';
                 }
             } else {
                 this.lastResults[strategy] = [];
@@ -1285,7 +1297,7 @@ const ScreeningPage = {
                 '回撤幅度', 'BIAS30', '信号评分', '风险提示'
             ];
             rows = data.map(stock => [
-                `'${stock.code}`, // 防止Excel自动转换长数字
+                `\u2060${stock.code}`, // 零宽字符前缀使 Excel 整列统一按文本显示，左对齐且保留前导零
                 stock.name,
                 stock.signal_date || '',
                 stock.current_price || '',
@@ -1306,7 +1318,7 @@ const ScreeningPage = {
                 'MA5', 'MA10', 'MA20'
             ];
             rows = data.map(stock => [
-                `'${stock.code}`,
+                `\u2060${stock.code}`,
                 stock.name,
                 stock.limit_up_date || '',
                 stock.limit_up_price || '',
@@ -1326,7 +1338,7 @@ const ScreeningPage = {
                 '入场时机', '投资建议', '当前涨跌幅'
             ];
             rows = data.map(stock => [
-                `'${stock.symbol || stock.code}`,
+                `\u2060${stock.symbol || stock.code}`,
                 stock.name || '',
                 stock.signal_strength ? (stock.signal_strength * 100).toFixed(1) + '%' : '',
                 stock.current_price || '',
@@ -1343,12 +1355,21 @@ const ScreeningPage = {
             headers = [
                 '股票代码', '股票名称', '信号强度', '买点类型', '当前价格',
                 'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
-                'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅'
+                'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
             ];
             rows = data.map(stock => {
                 const sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+                const sd = stock.score_detail || {};
+                const fmt = (v) => (v != null && typeof v === 'number' && !isNaN(v)) ? v.toFixed(1) : '--';
+                const accPart = sd.score_accumulation != null
+                    ? `蓄势${fmt(sd.score_accumulation)}(引力${fmt(sd.score_acc_fz)}+平衡${fmt(sd.score_acc_balance)}+量缩${fmt(sd.score_acc_volume)})${sd.accumulation_grade || ''}`
+                    : '蓄势--';
+                const momPart = sd.score_momentum != null
+                    ? `动量${fmt(sd.score_momentum)}(推力${fmt(sd.score_mom_ratio_d1)}+支撑${fmt(sd.score_mom_deviation)}+攻击${fmt(sd.score_mom_volume)})${sd.momentum_grade || ''}`
+                    : '动量--';
+                const scoreDetailStr = `总分${fmt(sd.score_total)} ${accPart} ${momPart}`;
                 return [
-                    `'${stock.symbol || stock.code}`,
+                    `\u2060${stock.symbol || stock.code}`,
                     stock.name || '',
                     (sig * 100).toFixed(1) + '%',
                     stock.buy_type || '',
@@ -1361,7 +1382,8 @@ const ScreeningPage = {
                     stock.ratio_d20 != null ? (stock.ratio_d20 * 100).toFixed(2) + '%' : '',
                     stock.ratio_d1 != null ? (stock.ratio_d1 * 100).toFixed(2) + '%' : '',
                     stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '',
-                    stock.current_change_percent != null ? stock.current_change_percent.toFixed(2) + '%' : '0%'
+                    stock.current_change_percent != null ? stock.current_change_percent.toFixed(2) + '%' : '0%',
+                    scoreDetailStr
                 ];
             });
             filename = `GMS均值引力动量筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
@@ -1372,7 +1394,7 @@ const ScreeningPage = {
                 '当前价格', '当前涨跌幅', 'MA20', '偏离MA20'
             ];
             rows = data.map(stock => [
-                `'${stock.code}`,
+                `\u2060${stock.code}`,
                 stock.name,
                 stock.pattern_date || '',
                 stock.pattern_close || '',
@@ -1392,7 +1414,7 @@ const ScreeningPage = {
                 '当日MA30', '30日前MA30', 'MA30涨幅'
             ];
             rows = data.map(stock => [
-                `'${stock.code}`,
+                `\u2060${stock.code}`,
                 stock.name,
                 stock.current_price || '',
                 stock.current_change_percent ? stock.current_change_percent + '%' : '0%',
@@ -1408,7 +1430,7 @@ const ScreeningPage = {
                 '当前价格', '当前涨跌幅'
             ];
             rows = data.map(stock => [
-                `'${stock.code}`,
+                `\u2060${stock.code}`,
                 stock.name,
                 stock.pattern_start_date || '',
                 stock.pattern_end_date || '',
@@ -1462,6 +1484,136 @@ const ScreeningPage = {
         if (window.CommonUtils) {
             CommonUtils.showToast('导出成功', 'success');
         }
+    },
+
+    /**
+     * 生成 GMS 得分明细的纯文本（与前端页面展示结构一致），用于 Excel 批注
+     */
+    buildGmsScoreDetailCommentText(sd) {
+        if (!sd || typeof sd !== 'object') return '—';
+        const gmsFmt = (v, type) => {
+            if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
+            if (type === 'pct') return (v * 100).toFixed(2) + '%';
+            if (type === 'int') return String(Math.round(v));
+            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万' : Number(v).toFixed(0));
+            if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
+            if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
+            if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);
+            return String(v);
+        };
+        const accS = (sd.accumulation_s_threshold != null && !isNaN(sd.accumulation_s_threshold)) ? sd.accumulation_s_threshold : 85;
+        const accA = (sd.accumulation_a_threshold != null && !isNaN(sd.accumulation_a_threshold)) ? sd.accumulation_a_threshold : 70;
+        const momFull = (sd.momentum_full_threshold != null && !isNaN(sd.momentum_full_threshold)) ? sd.momentum_full_threshold : 90;
+        const momBatch = (sd.momentum_batch_threshold != null && !isNaN(sd.momentum_batch_threshold)) ? sd.momentum_batch_threshold : 80;
+        const fzTiers = sd.acc_fz_tiers || [2.5, 1.5];
+        const balTiers = sd.balance_tiers || [0.01, 0.015];
+        const volShrink = sd.vol_shrink_tiers || [0.6, 0.8];
+        const ratioD1Tiers = sd.ratio_d1_tiers || [0.001, 0.03];
+        const volAttack = sd.vol_attack_tiers || [2.0, 1.5];
+        const wAccFz = (sd.weight_acc_fz != null && !isNaN(sd.weight_acc_fz)) ? sd.weight_acc_fz : 30;
+        const wAccBal = (sd.weight_acc_balance != null && !isNaN(sd.weight_acc_balance)) ? sd.weight_acc_balance : 40;
+        const wAccVol = (sd.weight_acc_volume != null && !isNaN(sd.weight_acc_volume)) ? sd.weight_acc_volume : 30;
+        const wMomD1 = (sd.weight_mom_ratio_d1 != null && !isNaN(sd.weight_mom_ratio_d1)) ? sd.weight_mom_ratio_d1 : 40;
+        const wMomDev = (sd.weight_mom_deviation != null && !isNaN(sd.weight_mom_deviation)) ? sd.weight_mom_deviation : 30;
+        const wMomVol = (sd.weight_mom_volume != null && !isNaN(sd.weight_mom_volume)) ? sd.weight_mom_volume : 30;
+        const n = (v) => (v != null && !isNaN(v)) ? v.toFixed(1) : '--';
+        const lines = [];
+        lines.push('【均值收敛态】得分明细');
+        lines.push('维度\t得分\t判定\t规则');
+        lines.push(`时间耗散 F/Z\t${n(sd.score_acc_fz)}\t${sd.acc_fz_judge || '—'}\t权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3`);
+        lines.push(`引力粘合 |Δ/d|\t${n(sd.score_acc_balance)}\t${sd.acc_balance_judge || '—'}\t权重${wAccBal}: ≤${(balTiers[0] * 100).toFixed(1)}%→满分; ≤${(balTiers[1] * 100).toFixed(1)}%→1/2`);
+        lines.push(`成交量缩 m₂₀/m\t${n(sd.score_acc_volume)}\t${sd.acc_volume_judge || '—'}\t权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2`);
+        lines.push(`均值收敛态小计\t${n(sd.score_accumulation)}\t判定: ${sd.accumulation_grade || '—'} (≥${accS} S; ≥${accA} A)`);
+        lines.push('');
+        lines.push('【动量溢出态】得分明细');
+        lines.push('维度\t得分\t判定\t规则');
+        lines.push(`盈亏反转 Δ/d₁\t${n(sd.score_mom_ratio_d1)}\t${sd.mom_ratio_d1_judge || '—'}\t权重${wMomD1}: (0,${(ratioD1Tiers[1] * 100).toFixed(1)}%]→满分; 刚过0→1/2`);
+        lines.push(`推力支撑 d₂₀-d\t${n(sd.score_mom_deviation)}\t${sd.mom_deviation_judge || '—'}\t权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; <0→-10`);
+        lines.push(`攻击强度 m₂₀/m\t${n(sd.score_mom_volume)}\t${sd.mom_volume_judge || '—'}\t权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3`);
+        lines.push(`动量溢出态小计\t${n(sd.score_momentum)}\t判定: ${sd.momentum_grade || '—'} (≥${momFull}全速; ≥${momBatch}分批)`);
+        lines.push('');
+        lines.push('综合  总分=' + (sd.score_total != null ? sd.score_total.toFixed(1) : '--') + '；信号强度=总分/100');
+        lines.push('');
+        lines.push('计算指标细项');
+        lines.push('d₁ (首日收盘价)\t' + gmsFmt(sd.d1, 'price') + '\t周期起点价格' + (sd.d1_date ? '，交易日期 ' + sd.d1_date : ''));
+        lines.push('d₂₀ (末日收盘价)\t' + gmsFmt(sd.d20, 'price') + '\t周期末位/当日价格' + (sd.d20_date ? '，交易日期 ' + sd.d20_date : ''));
+        lines.push('d (20日均价)\t' + gmsFmt(sd.d, 'price') + '\t周期均价');
+        lines.push('Δ (d₂₀ - d₁)\t' + gmsFmt(sd.delta, 'num') + '\t宏观位移');
+        lines.push('Δ/d\t' + (sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--') + '\t宏观位移相对均价');
+        lines.push('偏离率 (Δ/d₂₀)\t' + gmsFmt(sd.ratio_d20, 'pct') + '\t现价相对周期末价张力');
+        lines.push('突变率 (Δ/d₁)\t' + gmsFmt(sd.ratio_d1, 'pct') + '\t现价相对周期起点位移');
+        lines.push('Δ₂₀/d\t' + gmsFmt(sd.ratio_d, 'pct') + '\t价格相对均线偏离率');
+        lines.push('Z (上涨天数)\t' + gmsFmt(sd.rising_days, 'int') + '\t多头天数');
+        lines.push('F (下跌天数)\t' + gmsFmt(sd.falling_days, 'int') + '\t空头天数');
+        lines.push('m (20日平均成交量)\t' + gmsFmt(sd.avg_volume_20d, 'vol') + '\t平均量');
+        lines.push('m₂₀ (当日成交量)\t' + gmsFmt(sd.current_volume, 'vol') + '\t当日成交量');
+        lines.push('量比 (m₂₀/m)\t' + gmsFmt(sd.volume_ratio, 'ratio') + '\t放量/地量判断');
+        lines.push('F/Z (数方比)\t' + gmsFmt(sd.fz_ratio, 'ratio') + '\t蓄势判断');
+        lines.push('d₂₀ - d (价格vs均线)\t' + gmsFmt(sd.instant_deviation, 'num') + '\t价格相对均线偏离');
+        return lines.join('\n');
+    },
+
+    /**
+     * GMS 策略导出 Excel：每只股票占两行（数据行 + 得分明细行），明细行用 Excel 行分组默认折叠，点击行首 +/- 可展开/收起
+     */
+    exportToExcelGms() {
+        const data = this.lastResults['gms'];
+        if (!data || data.length === 0) {
+            if (window.CommonUtils) CommonUtils.showToast('没有可导出的数据', 'warning');
+            else alert('没有可导出的数据');
+            return;
+        }
+        if (typeof XLSX === 'undefined') {
+            if (window.CommonUtils) CommonUtils.showToast('请刷新页面后重试（Excel 导出依赖未加载）', 'warning');
+            else alert('请刷新页面后重试');
+            return;
+        }
+        const headers = [
+            '股票代码', '股票名称', '信号强度', '买点类型', '当前价格',
+            'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
+            'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
+        ];
+        const aoa = [headers];
+        data.forEach(stock => {
+            const sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+            aoa.push([
+                '\u2060' + (stock.symbol || stock.code),
+                stock.name || '',
+                (sig * 100).toFixed(1) + '%',
+                stock.buy_type || '',
+                stock.current_price != null ? stock.current_price.toFixed(2) : '',
+                stock.delta != null ? stock.delta.toFixed(4) : '',
+                stock.falling_days != null ? stock.falling_days : '',
+                stock.rising_days != null ? stock.rising_days : '',
+                stock.d_ma20 != null ? stock.d_ma20.toFixed(2) : '',
+                stock.ratio_relative != null ? (stock.ratio_relative * 100).toFixed(2) + '%' : '',
+                stock.ratio_d20 != null ? (stock.ratio_d20 * 100).toFixed(2) + '%' : '',
+                stock.ratio_d1 != null ? (stock.ratio_d1 * 100).toFixed(2) + '%' : '',
+                stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '',
+                stock.current_change_percent != null ? stock.current_change_percent.toFixed(2) + '%' : '0%',
+                '点击行首 + 展开'
+            ]);
+            const detailText = this.buildGmsScoreDetailCommentText(stock.score_detail);
+            const detailRow = [detailText];
+            for (let c = 1; c < headers.length; c++) detailRow.push('');
+            aoa.push(detailRow);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        if (!ws['!rows']) ws['!rows'] = [];
+        const merges = ws['!merges'] || [];
+        data.forEach((stock, i) => {
+            const dataRowIdx = 1 + i * 2;
+            const detailRowIdx = 2 + i * 2;
+            ws['!rows'][dataRowIdx] = { level: 0 };
+            ws['!rows'][detailRowIdx] = { level: 1, hidden: true };
+            merges.push({ s: { r: detailRowIdx, c: 0 }, e: { r: detailRowIdx, c: 14 } });
+        });
+        ws['!merges'] = merges;
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'GMS选股结果');
+        const filename = `GMS均值引力动量筛选结果_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, filename, { cellStyles: true });
+        if (window.CommonUtils) CommonUtils.showToast('Excel 导出成功，点击每行左侧 + 展开得分明细，- 收起', 'success');
     }
 };
 

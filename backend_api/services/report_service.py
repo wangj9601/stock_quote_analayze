@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 import pandas as pd
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 from backend_api.models import Watchlist, HistoricalQuotes, HistoricalQuotesHK, StockBasicInfo, StockBasicInfoHK
 
@@ -616,83 +616,123 @@ class ReportService:
         # 报告日期：优先使用 GMS 结果中的 date 字段（YYYY-MM-DD），否则为今天
         report_date = str(results[0].get("date", "")[:10]) if results else datetime.now().strftime("%Y-%m-%d")
 
-        # 从 gms_signal_trace 表读取同一日期、同一股票的指标，报告字段以该表为准
-        from backend_api.models import GMSSignalTrace  # 局部导入避免循环依赖
         codes = [r.get("code") or r.get("symbol") or "" for r in results]
-        trace_map: Dict[str, Any] = {}
-        if codes:
-            traces = (
-                self.db.query(GMSSignalTrace)
-                .filter(GMSSignalTrace.date == report_date, GMSSignalTrace.code.in_(codes))
-                .all()
-            )
-            trace_map = {t.code: t for t in traces}
+        cn_codes = [c for c in codes if len(c) >= 6 and c.isdigit() and c[0] in "6039"]
+        hk_codes = [c for c in codes if c not in cn_codes]
+
+        # 与前端选股一致：从历史行情表取最近交易日收盘价、涨跌幅，用于「当前价格」「当前涨跌幅」
+        hist_quotes_a: Dict[str, Any] = {}
+        hist_quotes_hk: Dict[str, Any] = {}
+        if cn_codes:
+            latest_date_a = self.db.query(func.max(HistoricalQuotes.date)).scalar()
+            if latest_date_a:
+                quotes_a = self.db.query(HistoricalQuotes).filter(
+                    HistoricalQuotes.code.in_(cn_codes),
+                    HistoricalQuotes.date == latest_date_a,
+                ).all()
+                hist_quotes_a = {q.code: q for q in quotes_a}
+        if hk_codes:
+            latest_date_hk = self.db.query(func.max(HistoricalQuotesHK.date)).scalar()
+            if latest_date_hk:
+                latest_hk_str = str(latest_date_hk).strip()[:10]
+                quotes_hk = self.db.query(HistoricalQuotesHK).filter(
+                    HistoricalQuotesHK.code.in_(hk_codes),
+                    HistoricalQuotesHK.date == latest_hk_str,
+                ).all()
+                hist_quotes_hk = {q.code: q for q in quotes_hk}
+
+        # 补全股票名称：先用自选股 code_to_name，缺失时查 StockBasicInfo / StockBasicInfoHK（与前端 API 一致）
+        for code in codes:
+            if code_to_name.get(code):
+                continue
+            if code in hk_codes:
+                info = self.db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
+                if info and info.name:
+                    code_to_name[code] = info.name
+            else:
+                info = self.db.query(StockBasicInfo).filter(StockBasicInfo.code == code).first()
+                if not info and code.startswith("SZ"):
+                    info = self.db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
+                if not info and code.startswith("SH"):
+                    info = self.db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
+                if info and info.name:
+                    code_to_name[code] = info.name
+            if not code_to_name.get(code):
+                code_to_name[code] = f"股票{code}"
+
+        # CSV 表头与内容与前端「选股 - GMS均值引力动量」导出一致（见 frontend/js/screening.js strategy===gms）
+        def _fmt_pct(val, decimals=2):
+            if val is None:
+                return ""
+            try:
+                return f"{float(val) * 100:.{decimals}f}%"
+            except (TypeError, ValueError):
+                return ""
+
+        def _fmt_score_detail(sd):
+            """与前端 screening.js GMS 导出格式一致：总分 蓄势(引力+平衡+量缩)等级 动量(推力+支撑+攻击)等级"""
+            if not sd or not isinstance(sd, dict):
+                return ""
+            def _n(v):
+                if v is None:
+                    return "--"
+                try:
+                    return f"{float(v):.1f}"
+                except (TypeError, ValueError):
+                    return "--"
+            acc = sd.get("score_accumulation")
+            acc_part = f"蓄势{_n(acc)}(引力{_n(sd.get('score_acc_fz'))}+平衡{_n(sd.get('score_acc_balance'))}+量缩{_n(sd.get('score_acc_volume'))}){sd.get('accumulation_grade') or ''}" if acc is not None else "蓄势--"
+            mom = sd.get("score_momentum")
+            mom_part = f"动量{_n(mom)}(推力{_n(sd.get('score_mom_ratio_d1'))}+支撑{_n(sd.get('score_mom_deviation'))}+攻击{_n(sd.get('score_mom_volume'))}){sd.get('momentum_grade') or ''}" if mom is not None else "动量--"
+            return f"总分{_n(sd.get('score_total'))} {acc_part} {mom_part}"
 
         rows = []
         for r in results:
             code = r.get("code") or r.get("symbol") or ""
-            trace = trace_map.get(code)
             name = code_to_name.get(code, "")
-            rows.append(
-                {
-                    # 股票代码保持字符串格式（不丢失前导 0），后面再统一 astype(str)
-                    "股票代码": str(code),
-                    "股票名称": name,
-                    "日期": report_date,
-                    "总分": (trace.score_total if trace and trace.score_total is not None else r.get("score_total")),
-                    "蓄势分": (
-                        trace.score_accumulation
-                        if trace and trace.score_accumulation is not None
-                        else r.get("score_accumulation")
-                    ),
-                    # 平衡分取自 gms_signal_trace.score_acc_balance
-                    "平衡分": (
-                        trace.score_acc_balance
-                        if trace and hasattr(trace, "score_acc_balance") and trace.score_acc_balance is not None
-                        else r.get("score_balance")
-                    ),
-                    "动量分": (
-                        trace.score_momentum
-                        if trace and trace.score_momentum is not None
-                        else r.get("score_momentum")
-                    ),
-                    "买点类型": (trace.buy_type if trace and trace.buy_type is not None else r.get("buy_type", "")),
-                    "蓄势等级": (
-                        trace.accumulation_grade
-                        if trace and trace.accumulation_grade is not None
-                        else r.get("accumulation_grade", "")
-                    ),
-                    "动量等级": (
-                        trace.momentum_grade
-                        if trace and trace.momentum_grade is not None
-                        else r.get("momentum_grade", "")
-                    ),
-                    "ratio_d20": (
-                        trace.ratio_d20 if trace and trace.ratio_d20 is not None else r.get("ratio_d20")
-                    ),
-                    "ratio_d1": (trace.ratio_d1 if trace and trace.ratio_d1 is not None else r.get("ratio_d1")),
-                    "volume_ratio": (
-                        trace.volume_ratio if trace and trace.volume_ratio is not None else r.get("volume_ratio")
-                    ),
-                    "fz_ratio": (trace.fz_ratio if trace and trace.fz_ratio is not None else r.get("fz_ratio")),
-                    "instant_deviation": (
-                        trace.instant_deviation
-                        if trace and trace.instant_deviation is not None
-                        else r.get("instant_deviation")
-                    ),
-                    "rising_days": (
-                        trace.rising_days if trace and trace.rising_days is not None else r.get("rising_days")
-                    ),
-                    "falling_days": (
-                        trace.falling_days if trace and trace.falling_days is not None else r.get("falling_days")
-                    ),
-                }
-            )
+            st = r.get("score_total")
+            sig = (float(st) / 100.0) if st is not None and st > 0 else (r.get("signal_strength") or 0.0)
+            buy_type = r.get("buy_type") or ""
+            delta = r.get("delta")
+            d = r.get("d")
+            ratio_d20 = r.get("ratio_d20")
+            ratio_d1 = r.get("ratio_d1")
+            fz_ratio = r.get("fz_ratio")
+            rising_days = r.get("rising_days")
+            falling_days = r.get("falling_days")
+            ratio_relative = (delta / d) if (delta is not None and d is not None and d != 0) else None
+
+            quote = hist_quotes_a.get(code) or hist_quotes_hk.get(code)
+            current_price = d or 0
+            current_change_percent = None
+            if quote and hasattr(quote, "close") and quote.close is not None:
+                current_price = float(quote.close)
+            if quote and hasattr(quote, "change_percent") and quote.change_percent is not None:
+                current_change_percent = float(quote.change_percent)
+
+            score_detail_str = _fmt_score_detail(r.get("score_detail"))
+
+            rows.append({
+                "股票代码": "\u2060" + str(code),  # 零宽字符前缀使 Excel 整列统一按文本显示，左对齐且保留前导零
+                "股票名称": name,
+                "信号强度": f"{sig * 100:.1f}%",
+                "买点类型": buy_type,
+                "当前价格": f"{current_price:.2f}" if current_price is not None else "",
+                "Δ (20日位移)": f"{delta:.4f}" if delta is not None else "",
+                "F (下跌天)": falling_days if falling_days is not None else "",
+                "Z (上涨天)": rising_days if rising_days is not None else "",
+                "d (20日均价)": f"{d:.2f}" if d is not None else "",
+                "Δ/d (位移/均价)": _fmt_pct(ratio_relative),
+                "Δ/d₂₀": _fmt_pct(ratio_d20),
+                "Δ/d₁": _fmt_pct(ratio_d1),
+                "F/Z": f"{fz_ratio:.2f}" if fz_ratio is not None else "",
+                "当前涨跌幅": f"{current_change_percent:.2f}%" if current_change_percent is not None else "0%",
+                "得分明细": score_detail_str,
+            })
 
         filename = f"gms_{user_id}_{report_date.replace('-', '')}.csv"
         filepath = os.path.join(self.report_dir, filename)
         df = pd.DataFrame(rows)
-        # 明确将股票代码列转为字符串，避免被 pandas 识别为数值后丢失前导 0
         if "股票代码" in df.columns:
             df["股票代码"] = df["股票代码"].astype(str)
         df.to_csv(filepath, index=False, encoding="utf-8-sig")

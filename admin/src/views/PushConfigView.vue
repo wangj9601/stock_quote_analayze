@@ -76,16 +76,13 @@
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="推送时间">
-          <el-select v-model="addForm.push_times" multiple placeholder="选择推送时间" style="width: 100%;">
-            <el-option label="08:00" value="08:00" />
-            <el-option label="09:00" value="09:00" />
-            <el-option label="10:00" value="10:00" />
-            <el-option label="11:00" value="11:00" />
-            <el-option label="12:00" value="12:00" />
-            <el-option label="15:00" value="15:00" />
-            <el-option label="16:00" value="16:00" />
-            <el-option label="17:00" value="17:00" />
-            <el-option label="18:00" value="18:00" />
+          <el-select v-model="addForm.push_times" multiple placeholder="选择推送时间（半小时间隔，0-24 点）" style="width: 100%;">
+            <el-option
+              v-for="t in PUSH_TIME_OPTIONS"
+              :key="t"
+              :label="t"
+              :value="t"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="报告类型">
@@ -120,18 +117,15 @@
           <el-select
             v-model="editForm.push_times"
             multiple
-            placeholder="选择推送时间"
+            placeholder="选择推送时间（半小时间隔，0-24 点）"
             style="width: 100%;"
           >
-            <el-option label="08:00" value="08:00" />
-            <el-option label="09:00" value="09:00" />
-            <el-option label="10:00" value="10:00" />
-            <el-option label="11:00" value="11:00" />
-            <el-option label="12:00" value="12:00" />
-            <el-option label="15:00" value="15:00" />
-            <el-option label="16:00" value="16:00" />
-            <el-option label="17:00" value="17:00" />
-            <el-option label="18:00" value="18:00" />
+            <el-option
+              v-for="t in PUSH_TIME_OPTIONS"
+              :key="t"
+              :label="t"
+              :value="t"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="报告类型">
@@ -163,6 +157,16 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   detailed: '详细报告',
   gms_daily: 'GMS自选股选股'
 }
+
+/** 推送时间选项：半小时间隔，0-24 小时（00:00 ~ 23:30） */
+const PUSH_TIME_OPTIONS = (() => {
+  const opts: string[] = []
+  for (let h = 0; h < 24; h++) {
+    opts.push(`${String(h).padStart(2, '0')}:00`)
+    opts.push(`${String(h).padStart(2, '0')}:30`)
+  }
+  return opts
+})()
 
 const loading = ref(false)
 const submitLoading = ref(false)
