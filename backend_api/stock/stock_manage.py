@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
+from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
@@ -481,6 +481,118 @@ def get_quote_board_list(
         tb = traceback.format_exc()
         print(tb)
         return JSONResponse({'success': False, 'message': '获取A股排行数据失败', 'error': str(e), 'traceback': tb}, status_code=500)
+
+
+@router.get("/volume_aberration_list")
+def get_volume_aberration_list(
+    market: str = Query(..., description="市场: cn(A股) 或 hk(港股)"),
+    date: str = Query(None, description="交易日期 YYYY-MM-DD，不传则取该市场最新交易日"),
+    order: str = Query("desc", description="排序: desc 放量榜(量比降序), asc 缩量榜(量比升序)"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=500),
+):
+    """
+    A股/港股每日成交量异动榜：行情表 JOIN mavol_indicators，按量比(20)排序分页。
+    仅返回当日有 mavol 记录的股票（量比可算）。
+    """
+    if market not in ("cn", "hk"):
+        return JSONResponse({"success": False, "message": "market 须为 cn 或 hk"}, status_code=400)
+    if order not in ("desc", "asc"):
+        order = "desc"
+
+    db = next(get_db())
+    try:
+        if market == "cn":
+            if date:
+                trade_date = date.strip()[:10]
+            else:
+                r = db.query(func.max(HistoricalQuotes.date)).scalar()
+                if not r:
+                    return JSONResponse({"success": True, "data": [], "total": 0, "date": None})
+                trade_date = r.strftime("%Y-%m-%d") if hasattr(r, "strftime") else str(r).strip()[:10]
+            sql = text("""
+                SELECT h.code, h.name, h.date, h.volume, h.amount, h.change_percent, h.close, h.turnover_rate,
+                       m.mavol5 AS mavol5, m.mavol10 AS mavol10, m.mavol20 AS mavol20
+                FROM historical_quotes h
+                INNER JOIN mavol_indicators m ON h.code = m.code AND m.market_type = 'CN'
+                   AND m.date = :trade_date
+                WHERE h.date = :h_date
+                  AND m.mavol20 IS NOT NULL AND m.mavol20 > 0
+            """)
+            rows = db.execute(sql, {"trade_date": trade_date, "h_date": trade_date}).fetchall()
+        else:
+            if date:
+                trade_date = date.strip()[:10]
+            else:
+                r = db.execute(text("SELECT MAX(date) as d FROM historical_quotes_hk")).scalar()
+                if not r:
+                    return JSONResponse({"success": True, "data": [], "total": 0, "date": None})
+                trade_date = str(r).strip()[:10]
+            sql = text("""
+                SELECT h.code, h.name, h.date, h.volume, h.amount, h.change_percent, h.close, h.turnover_rate,
+                       m.mavol5 AS mavol5, m.mavol10 AS mavol10, m.mavol20 AS mavol20
+                FROM historical_quotes_hk h
+                INNER JOIN mavol_indicators m ON h.code = m.code AND m.market_type = 'HK'
+                   AND m.date = :trade_date
+                WHERE h.date = :trade_date
+                  AND m.mavol20 IS NOT NULL AND m.mavol20 > 0
+            """)
+            rows = db.execute(sql, {"trade_date": trade_date}).fetchall()
+
+        def _get(r, name):
+            try:
+                if hasattr(r, "_mapping"):
+                    return r._mapping.get(name)
+                return getattr(r, name, None)
+            except Exception:
+                return None
+
+        result = []
+        for r in rows:
+            vol = float(r.volume) if r.volume is not None else None
+            _m5, _m10, _m20 = _get(r, "mavol5"), _get(r, "mavol10"), _get(r, "mavol20")
+            m5 = float(_m5) if _m5 is not None and float(_m5) > 0 else None
+            m20 = float(_m20) if _m20 is not None and float(_m20) > 0 else None
+            ratio_5 = round(vol / m5, 4) if vol is not None and m5 else None
+            ratio_20 = round(vol / m20, 4) if vol is not None and m20 else None
+            date_str = r.date.strftime("%Y-%m-%d") if hasattr(r.date, "strftime") else str(r.date).strip()[:10]
+            result.append({
+                "code": str(r.code) if r.code else "",
+                "name": (r.name or "").strip(),
+                "date": date_str,
+                "volume": vol,
+                "amount": safe_float(r.amount),
+                "mavol5": m5,
+                "mavol10": safe_float(_m10),
+                "mavol20": m20,
+                "ratio_5": ratio_5,
+                "ratio_20": ratio_20,
+                "change_percent": safe_float(r.change_percent),
+                "close": safe_float(r.close),
+                "turnover_rate": safe_float(r.turnover_rate),
+            })
+
+        result.sort(key=lambda x: (x["ratio_20"] is None, -(x["ratio_20"] or 0) if order == "desc" else (x["ratio_20"] or 0)))
+        total = len(result)
+        start = (page - 1) * page_size
+        page_data = result[start : start + page_size]
+        for i, item in enumerate(page_data):
+            item["rank"] = start + i + 1
+
+        return JSONResponse({
+            "success": True,
+            "data": page_data,
+            "total": total,
+            "date": trade_date,
+            "page": page,
+            "page_size": page_size,
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    finally:
+        db.close()
+
 
 # 根据股票代码获取实时行情
 @router.get("/realtime_quote_by_code")

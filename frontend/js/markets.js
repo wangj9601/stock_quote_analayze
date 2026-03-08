@@ -72,6 +72,18 @@ const MarketsPage = {
             this.filterMarket(e.target.value);
         });
 
+        // 成交量异动榜：查询、导出
+        const queryBtn = document.getElementById('volumeAberrationQueryBtn');
+        if (queryBtn) queryBtn.addEventListener('click', () => this.loadVolumeAberrationData(1));
+        const marketSel = document.getElementById('volumeAberrationMarket');
+        const orderSel = document.getElementById('volumeAberrationOrder');
+        if (marketSel) marketSel.addEventListener('change', () => this.loadVolumeAberrationData(1));
+        if (orderSel) orderSel.addEventListener('change', () => this.loadVolumeAberrationData(1));
+        const exportCsv = document.getElementById('volumeAberrationExportCsv');
+        const exportExcel = document.getElementById('volumeAberrationExportExcel');
+        if (exportCsv) exportCsv.addEventListener('click', () => this.exportVolumeAberrationCsv());
+        if (exportExcel) exportExcel.addEventListener('click', () => this.exportVolumeAberrationExcel());
+
         // 点击股票行跳转
         document.addEventListener('click', (e) => {
             if (e.target.closest('.hot-stock-item')) {
@@ -112,7 +124,24 @@ const MarketsPage = {
     switchRankingType(type) {
         this.currentRankingType = type;
         this.currentPage = 1;
-        this.loadRankingData(1);
+        const toolbar = document.getElementById('volumeAberrationToolbar');
+        const thead = document.getElementById('rankingsTableHead');
+        if (type === 'volume_aberration') {
+            if (toolbar) toolbar.style.display = 'flex';
+            const hintWrap = document.getElementById('volumeAberrationHintWrap');
+            if (hintWrap) hintWrap.style.display = 'block';
+            if (thead) {
+                this._defaultRankingThead = this._defaultRankingThead || thead.innerHTML;
+                thead.innerHTML = '<tr><th>排名</th><th>股票代码</th><th>股票名称</th><th>日期</th><th>当日成交量</th><th>成交额</th><th>MAVOL5</th><th>MAVOL10</th><th>MAVOL20</th><th>量比(5)</th><th>量比(20)</th><th>涨跌幅(%)</th><th>收盘价</th><th>换手率(%)</th><th>操作</th></tr>';
+            }
+            this.loadVolumeAberrationData(1);
+        } else {
+            if (toolbar) toolbar.style.display = 'none';
+            const hintWrap = document.getElementById('volumeAberrationHintWrap');
+            if (hintWrap) hintWrap.style.display = 'none';
+            if (thead && this._defaultRankingThead) thead.innerHTML = this._defaultRankingThead;
+            this.loadRankingData(1);
+        }
     },
 
     // 更新活动排行榜类型
@@ -323,6 +352,9 @@ const MarketsPage = {
 
 // 加载排行榜数据
 async loadRankingData(page = 1, keyword = null) {
+    if (this.currentRankingType === 'volume_aberration') {
+        return this.loadVolumeAberrationData(page);
+    }
     const typeMap = {
         rise: 'rise',
         fall: 'fall',
@@ -421,7 +453,166 @@ async loadRankingData(page = 1, keyword = null) {
             this.highlightAndScrollToStock(data[0].code);
         }
     },
-    
+
+    // 加载成交量异动榜数据
+    async loadVolumeAberrationData(page = 1) {
+        this.currentPage = page;
+        const market = (document.getElementById('volumeAberrationMarket')?.value || 'cn').toLowerCase();
+        const dateInput = document.getElementById('volumeAberrationDate');
+        const date = dateInput?.value?.trim() || '';
+        const order = document.getElementById('volumeAberrationOrder')?.value || 'desc';
+        const pageSize = this.pageSize;
+        try {
+            let url = `${this.API_BASE_URL}/api/stock/volume_aberration_list?market=${market}&order=${order}&page=${page}&page_size=${pageSize}`;
+            if (date) url += `&date=${encodeURIComponent(date)}`;
+            const resp = await fetch(url);
+            const result = await resp.json();
+            if (result.success) {
+                this.total = result.total || 0;
+                this._volumeAberrationDate = result.date || '';
+                this._volumeAberrationRows = result.data || [];
+                this.renderVolumeAberrationTable(this._volumeAberrationRows);
+                this.renderPagination();
+            } else {
+                this.total = 0;
+                this._volumeAberrationRows = [];
+                this.renderVolumeAberrationTable([]);
+                this.renderPagination();
+                CommonUtils.showToast(result.message || '获取成交量异动榜失败', 'error');
+            }
+        } catch (e) {
+            this.total = 0;
+            this._volumeAberrationRows = [];
+            this.renderVolumeAberrationTable([]);
+            this.renderPagination();
+            CommonUtils.showToast('网络错误，获取数据失败', 'error');
+        }
+    },
+
+    // 渲染成交量异动榜表格
+    renderVolumeAberrationTable(data) {
+        const tbody = document.getElementById('rankingsTableBody');
+        if (!tbody) return;
+        const fmtNum = (v) => (v != null && v !== '' && !Number.isNaN(Number(v))) ? Number(v) : null;
+        const fmtStr = (v) => v != null ? String(v) : '--';
+        const fmtRatio = (v) => (v != null && v !== '') ? Number(v).toFixed(4) : '--';
+        const fmtPct = (v) => {
+            const n = fmtNum(v);
+            return n != null ? (n >= 0 ? '+' + n.toFixed(2) : n.toFixed(2)) + '%' : '--';
+        };
+        tbody.innerHTML = (data || []).map(row => {
+            const code = fmtStr(row.code);
+            const name = fmtStr(row.name);
+            return `<tr data-code="${code}" onclick="goToStock('${code.replace(/'/g, "\\'")}', '${(name || '').replace(/'/g, "\\'")}')" style="cursor: pointer;">
+                <td><span class="rank-number ${row.rank <= 3 ? 'rank-' + row.rank : ''}">${row.rank != null ? row.rank : '--'}</span></td>
+                <td>${code}</td>
+                <td>${name}</td>
+                <td>${fmtStr(row.date)}</td>
+                <td class="price-column">${row.volume != null ? this.formatVolume(row.volume) : '--'}</td>
+                <td class="price-column">${row.amount != null ? this.formatTurnover(row.amount) : '--'}</td>
+                <td class="price-column">${fmtStr(row.mavol5 != null ? this.formatVolume(row.mavol5) : '--')}</td>
+                <td class="price-column">${fmtStr(row.mavol10 != null ? this.formatVolume(row.mavol10) : '--')}</td>
+                <td class="price-column">${fmtStr(row.mavol20 != null ? this.formatVolume(row.mavol20) : '--')}</td>
+                <td>${fmtRatio(row.ratio_5)}</td>
+                <td>${fmtRatio(row.ratio_20)}</td>
+                <td class="price-column ${this.getChangeClass(row.change_percent)}">${fmtPct(row.change_percent)}</td>
+                <td class="price-column">${row.close != null ? this.formatPrice(row.close) : '--'}</td>
+                <td class="price-column">${row.turnover_rate != null ? this.formatTurnoverRate(row.turnover_rate) : '--'}</td>
+                <td>
+                    <div class="ranking-actions">
+                        <button class="btn btn-sm btn-secondary" data-stock-code="${code}" data-stock-name="${name}" onclick="addToWatchlist('${code.replace(/'/g, "\\'")}', event); event.stopPropagation();">+自选</button>
+                        <button class="btn btn-sm btn-secondary" onclick="goToStockHistory('${code.replace(/'/g, "\\'")}', '${(name || '').replace(/'/g, "\\'")}'); event.stopPropagation();">历史</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+        this.updateAllWatchlistButtons();
+    },
+
+    // 导出成交量异动榜 CSV（当前页数据，不含操作列，股票代码加 \u2060 前缀）
+    exportVolumeAberrationCsv() {
+        const rows = this._volumeAberrationRows || [];
+        if (rows.length === 0) {
+            CommonUtils.showToast('没有可导出的数据', 'warning');
+            return;
+        }
+        const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量', '成交额', 'MAVOL5', 'MAVOL10', 'MAVOL20', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
+        const toStr = (v) => (v != null && v !== '') ? String(v) : '';
+        const escapeCsv = (s) => {
+            const t = String(s);
+            if (/[",\n\r]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+            return t;
+        };
+        const lines = [headers.map(escapeCsv).join(',')];
+        rows.forEach(row => {
+            const r = [
+                row.rank != null ? row.rank : '',
+                '\u2060' + toStr(row.code),
+                toStr(row.name),
+                toStr(row.date),
+                row.volume != null ? row.volume : '',
+                row.amount != null ? row.amount : '',
+                row.mavol5 != null ? row.mavol5 : '',
+                row.mavol10 != null ? row.mavol10 : '',
+                row.mavol20 != null ? row.mavol20 : '',
+                row.ratio_5 != null ? row.ratio_5 : '',
+                row.ratio_20 != null ? row.ratio_20 : '',
+                row.change_percent != null ? row.change_percent : '',
+                row.close != null ? row.close : '',
+                row.turnover_rate != null ? row.turnover_rate : ''
+            ];
+            lines.push(r.map(escapeCsv).join(','));
+        });
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `成交量异动榜_${this._volumeAberrationDate || new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        CommonUtils.showToast('CSV 导出成功', 'success');
+    },
+
+    // 导出成交量异动榜 Excel（当前页数据，不含操作列，股票代码加 \u2060 前缀）
+    exportVolumeAberrationExcel() {
+        const rows = this._volumeAberrationRows || [];
+        if (rows.length === 0) {
+            CommonUtils.showToast('没有可导出的数据', 'warning');
+            return;
+        }
+        if (typeof XLSX === 'undefined') {
+            CommonUtils.showToast('请刷新页面后重试（Excel 导出依赖未加载）', 'warning');
+            return;
+        }
+        const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量', '成交额', 'MAVOL5', 'MAVOL10', 'MAVOL20', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
+        const aoa = [headers];
+        const toStr = (v) => (v != null && v !== '') ? String(v) : '';
+        rows.forEach(row => {
+            aoa.push([
+                row.rank != null ? row.rank : '',
+                '\u2060' + toStr(row.code),
+                toStr(row.name),
+                toStr(row.date),
+                row.volume != null ? row.volume : '',
+                row.amount != null ? row.amount : '',
+                row.mavol5 != null ? row.mavol5 : '',
+                row.mavol10 != null ? row.mavol10 : '',
+                row.mavol20 != null ? row.mavol20 : '',
+                row.ratio_5 != null ? row.ratio_5 : '',
+                row.ratio_20 != null ? row.ratio_20 : '',
+                row.change_percent != null ? row.change_percent : '',
+                row.close != null ? row.close : '',
+                row.turnover_rate != null ? row.turnover_rate : ''
+            ]);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '成交量异动榜');
+        const filename = `成交量异动榜_${this._volumeAberrationDate || new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, filename, { cellStyles: true });
+        CommonUtils.showToast('Excel 导出成功', 'success');
+    },
+
     // 高亮并滚动到指定股票
     highlightAndScrollToStock(stockCode) {
         const row = document.querySelector(`#rankingsTableBody tr[data-code="${stockCode}"]`);
@@ -936,7 +1127,11 @@ async loadRankingData(page = 1, keyword = null) {
             btn.onclick = (e) => {
                 const page = parseInt(btn.dataset.page);
                 if (!isNaN(page) && page !== this.currentPage && page >= 1 && page <= totalPages) {
-                    this.loadRankingData(page);
+                    if (this.currentRankingType === 'volume_aberration') {
+                        this.loadVolumeAberrationData(page);
+                    } else {
+                        this.loadRankingData(page);
+                    }
                 }
             };
         });

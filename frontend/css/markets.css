@@ -262,6 +262,42 @@
     border-color: var(--color-primary);
 }
 
+/* 成交量异动榜 - 异动说明区域 */
+.volume-aberration-hint-wrap {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 10px;
+    order: 10;
+}
+
+.volume-aberration-hint-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 16px;
+    padding: 10px 14px;
+    background: #f0f7ff;
+    border-left: 4px solid var(--color-primary, #1976d2);
+    border-radius: 6px;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.5;
+}
+
+.volume-aberration-hint-title {
+    font-weight: 600;
+    color: var(--color-primary, #1976d2);
+    flex-shrink: 0;
+}
+
+.volume-aberration-hint-formula {
+    color: #333;
+}
+
+.volume-aberration-hint-desc {
+    color: #555;
+}
+
 .rankings-content {
     border-radius: 6px;
     overflow: hidden;
