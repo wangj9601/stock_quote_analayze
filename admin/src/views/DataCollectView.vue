@@ -235,6 +235,84 @@
               </div>
             </el-card>
           </el-tab-pane>
+
+          <!-- 实时行情表标签页 -->
+          <el-tab-pane label="历史数据采集-实时行情表" name="realtime_hist">
+            <el-card>
+              <div class="text-center mb-8">
+                <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">历史数据采集-实时行情表</h2>
+                <p class="text-gray-600">根据日期区间，从 A 股实时行情表同步到历史行情表，并可同时生成技术指标</p>
+              </div>
+
+              <div class="max-w-2xl mx-auto">
+                <el-form @submit.prevent="startRealtimeHistoricalCollection" :model="realtimeHistForm" label-width="120px">
+                  <!-- 日期范围 -->
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="开始日期" required>
+                        <el-date-picker
+                          v-model="realtimeHistForm.start_date"
+                          type="date"
+                          placeholder="选择开始日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="结束日期" required>
+                        <el-date-picker
+                          v-model="realtimeHistForm.end_date"
+                          type="date"
+                          placeholder="选择结束日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+
+                  <!-- 指标数据生成选项 -->
+                  <el-form-item label="指标数据生成">
+                    <div class="flex items-center mb-2">
+                      <el-checkbox 
+                        v-model="isAllRealtimeIndicatorsSelected" 
+                        :indeterminate="isRealtimeIndicatorsIndeterminate"
+                        @change="handleSelectAllRealtimeIndicators"
+                      >
+                        全选
+                      </el-checkbox>
+                    </div>
+                    <el-checkbox-group v-model="safeRealtimeIndicators">
+                      <el-checkbox value="ma">MA移动平均线</el-checkbox>
+                      <el-checkbox value="mavol">MAVOL成交量移动平均线</el-checkbox>
+                      <el-checkbox value="kdj">KDJ随机指标</el-checkbox>
+                      <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
+                      <el-checkbox value="boll">BOLL布林带</el-checkbox>
+                      <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                    </el-checkbox-group>
+                    <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
+                  </el-form-item>
+
+                  <!-- 操作按钮 -->
+                  <el-form-item>
+                    <el-button
+                      type="primary"
+                      :loading="loading"
+                      :disabled="!!currentTask"
+                      @click="startRealtimeHistoricalCollection"
+                    >
+                      <el-icon v-if="loading" class="mr-2"><Loading /></el-icon>
+                      {{ loading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                    </el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-card>
+          </el-tab-pane>
         </el-tabs>
       </el-tab-pane>
 
@@ -631,6 +709,12 @@ interface RequestData {
   sync_from_realtime?: boolean
 }
 
+interface RealtimeHistRequest {
+  start_date: string
+  end_date: string
+  indicators?: string[]
+}
+
 // 标签页状态
 const activeMainTab = ref('ashare')
 const activeAShareTab = ref('akshare')
@@ -679,6 +763,19 @@ const tushareForm = ref<TushareFormData>({
   start_date: '',
   end_date: '',
   force_update: false,
+  indicators: []
+})
+
+// 实时行情表历史采集表单
+interface RealtimeHistFormData {
+  start_date: string
+  end_date: string
+  indicators: string[]
+}
+
+const realtimeHistForm = ref<RealtimeHistFormData>({
+  start_date: '',
+  end_date: '',
   indicators: []
 })
 
@@ -763,6 +860,42 @@ const handleSelectAllTushareIndicators = (checked: boolean | string | number | b
   }
 }
 
+// 实时行情表指标选择
+const safeRealtimeIndicators = computed<string[]>({
+  get: () => {
+    const indicators = realtimeHistForm.value.indicators
+    return Array.isArray(indicators) ? indicators : []
+  },
+  set: (val: string[]) => {
+    realtimeHistForm.value.indicators = Array.isArray(val) ? val : []
+  }
+})
+
+const isRealtimeIndicatorsIndeterminate = computed(() => {
+  const indicators = safeRealtimeIndicators.value
+  const selectedCount = indicators.length
+  if (selectedCount === 0) {
+    return false
+  } else if (selectedCount === allIndicators.length) {
+    return false
+  } else {
+    return true
+  }
+})
+
+const isAllRealtimeIndicatorsSelected = computed(() => {
+  return safeRealtimeIndicators.value.length === allIndicators.length
+})
+
+const handleSelectAllRealtimeIndicators = (checked: boolean | string | number | boolean[] | undefined) => {
+  const isChecked = typeof checked === 'boolean' ? checked : Boolean(checked)
+  if (isChecked) {
+    safeRealtimeIndicators.value = [...allIndicators]
+  } else {
+    safeRealtimeIndicators.value = []
+  }
+}
+
 // 方法
 const startCollection = async () => {
   try {
@@ -836,6 +969,53 @@ const startCollection = async () => {
       errorMsg = error.message || '未知错误'
     }
     
+    ElMessage.error(errorMsg)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 从实时行情表同步历史数据（A股）
+const startRealtimeHistoricalCollection = async () => {
+  try {
+    loading.value = true
+
+    if (!realtimeHistForm.value.start_date || !realtimeHistForm.value.end_date) {
+      ElMessage.error('请选择开始日期和结束日期')
+      return
+    }
+
+    if (currentTask.value) {
+      ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
+      return
+    }
+
+    const payload: RealtimeHistRequest = {
+      start_date: realtimeHistForm.value.start_date,
+      end_date: realtimeHistForm.value.end_date,
+      indicators: safeRealtimeIndicators.value
+    }
+
+    console.log('发送实时行情表历史采集请求:', payload)
+    const response = await axios.post(`${API_BASE}/api/data-collection/realtime-historical`, payload)
+
+    if (response.data.status === 'started') {
+      ElMessage.success('实时行情表历史采集任务已启动')
+      loadTasks()
+      loadCurrentTask()
+    }
+  } catch (error: any) {
+    console.error('启动实时行情表历史采集任务失败:', error)
+    let errorMsg = '启动实时行情表历史采集任务失败'
+
+    if (error.response) {
+      errorMsg = error.response.data?.detail || `服务器错误 (${error.response.status})`
+    } else if (error.request) {
+      errorMsg = '无法连接到服务器，请检查网络连接'
+    } else {
+      errorMsg = error.message || '未知错误'
+    }
+
     ElMessage.error(errorMsg)
   } finally {
     loading.value = false

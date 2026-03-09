@@ -190,6 +190,14 @@ except ImportError as e:
     print(f"❌ quotes_router 导入失败: {e}")
     quotes_router = None
 
+# 尝试导入多周期历史行情路由
+try:
+    from .multi_period_quotes_routes import router as multi_period_quotes_router
+    print("✅ multi_period_quotes_router 导入成功")
+except ImportError as e:
+    print(f"❌ multi_period_quotes_router 导入失败: {e}")
+    multi_period_quotes_router = None
+
 # 尝试导入推送路由
 try:
     from .push_routes import router as push_router, admin_router as push_admin_router
@@ -342,6 +350,13 @@ if quotes_router is not None:
     print("✅ quotes路由注册成功")
 else:
     print("❌ quotes路由未注册")
+
+# 注册多周期历史行情路由
+if multi_period_quotes_router is not None:
+    app.include_router(multi_period_quotes_router)
+    print("✅ multi_period_quotes 路由注册成功")
+else:
+    print("❌ multi_period_quotes 路由未注册")
 
 # 注册推送路由
 if push_router is not None:

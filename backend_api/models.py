@@ -779,7 +779,13 @@ class DataCollectionRequest(BaseModel):
     market: str = 'CN'  # CN: A股, HK: 港股
     force_update: bool = False  # 强制更新：如果为True，即使数据已存在也会重新采集并更新
     indicators: Optional[List[str]] = None  # 需要生成的技术指标列表
-    sync_from_realtime: bool = False  # 新增：是否从实时行情表同步到历史行情表
+    sync_from_realtime: bool = False  # 是否从实时行情表同步到历史行情表（港股/A股共用）
+
+class RealtimeHistoricalCollectionRequest(BaseModel):
+    """从实时行情表同步历史数据请求模型（主要用于 A 股）"""
+    start_date: str
+    end_date: str
+    indicators: Optional[List[str]] = None  # 可选：同步后生成的技术指标列表
 
 class DataCollectionResponse(BaseModel):
     """数据采集响应模型"""

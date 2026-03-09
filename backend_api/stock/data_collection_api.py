@@ -7,7 +7,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +25,7 @@ from backend_api.models import (
     TushareHistoricalCollectionRequest,
     RealtimeCollectionRequest,
     RealtimeCollectionResponse,
+    RealtimeHistoricalCollectionRequest,
 )
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
@@ -182,7 +183,28 @@ class AkshareDataCollector:
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
             return []
-    
+
+    def get_stock_list_from_realtime_quote(self) -> List[Dict[str, str]]:
+        """从 A 股实时行情表 stock_realtime_quote 获取股票列表（去重 code）"""
+        try:
+            result = self.session.execute(text("""
+                SELECT code, MAX(name) AS name
+                FROM stock_realtime_quote
+                GROUP BY code
+                ORDER BY code
+            """))
+            stocks = []
+            for row in result.fetchall():
+                stocks.append({
+                    'code': str(row[0]).strip(),
+                    'name': (row[1] or '').strip() if row[1] else ''
+                })
+            logger.info(f"从实时行情表获取到 {len(stocks)} 只A股")
+            return stocks
+        except Exception as e:
+            logger.error(f"从实时行情表获取股票列表失败: {e}")
+            return []
+
     def get_hk_stock_list(self, only_uncompleted: bool = False) -> List[Dict[str, str]]:
         """从stock_basic_info_hk表获取港股列表"""
         try:
@@ -413,10 +435,11 @@ class AkshareDataCollector:
             logger.error(f"更新股票 {stock_code} 全量采集标志失败: {e}")
             # 不抛出异常，避免影响主流程
     
-    def _generate_indicators(self, stock_code: str, start_date: str, end_date: str, indicators: List[str]):
-        """为指定股票生成技术指标数据"""
+    def _generate_indicators(self, stock_code: str, start_date: str, end_date: str, indicators: List[str], do_commit: bool = True):
+        """为指定股票生成技术指标数据。do_commit=False 时由调用方批量提交以提升性能。"""
         try:
-            logger.info(f"开始为股票 {stock_code} 生成指标: {', '.join(indicators)}")
+            if do_commit:
+                logger.info(f"开始为股票 {stock_code} 生成指标: {', '.join(indicators)}")
             
             # 获取历史数据
             result = self.session.execute(text("""
@@ -442,326 +465,234 @@ class AkshareDataCollector:
             df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
             
-            # 生成各种指标
+            # 生成各种指标（批量模式下不逐项 commit）
             if 'ma' in indicators:
-                self._generate_ma_indicators(stock_code, df)
-            
+                self._generate_ma_indicators(stock_code, df, do_commit=do_commit)
             if 'mavol' in indicators:
-                self._generate_mavol_indicators(stock_code, df)
-            
+                self._generate_mavol_indicators(stock_code, df, do_commit=do_commit)
             if 'macd' in indicators:
-                self._generate_macd_indicators(stock_code, df)
-            
+                self._generate_macd_indicators(stock_code, df, do_commit=do_commit)
             if 'kdj' in indicators:
-                self._generate_kdj_indicators(stock_code, df)
-            
+                self._generate_kdj_indicators(stock_code, df, do_commit=do_commit)
             if 'rsi' in indicators:
-                self._generate_rsi_indicators(stock_code, df)
-            
+                self._generate_rsi_indicators(stock_code, df, do_commit=do_commit)
             if 'boll' in indicators:
-                self._generate_boll_indicators(stock_code, df)
-            
+                self._generate_boll_indicators(stock_code, df, do_commit=do_commit)
             if 'pvfrs' in indicators:
-                self._generate_pvfrs_indicators(stock_code, start_date, end_date)
+                self._generate_pvfrs_indicators(stock_code, start_date, end_date, do_commit=do_commit)
             
-            logger.info(f"股票 {stock_code} 指标生成完成")
-            
+            if do_commit:
+                logger.info(f"股票 {stock_code} 指标生成完成")
         except Exception as e:
             logger.error(f"为股票 {stock_code} 生成指标失败: {e}")
+            if do_commit:
+                self.session.rollback()
     
-    def generate_indicators_for_date_range(self, start_date: str, end_date: str, indicators: List[str]) -> Dict[str, Any]:
-        """为指定日期范围内有历史数据的股票批量生成技术指标"""
+    def generate_indicators_for_date_range(self, start_date: str, end_date: str, indicators: List[str], extended_start_days: int = 0) -> Dict[str, Any]:
+        """为指定日期范围内有历史数据的股票批量生成技术指标。
+        extended_start_days: 向前扩展查询历史的天数，便于 MA200 等长周期指标有足够数据（如 300）。"""
         if not indicators:
             return {'total': 0, 'success': 0, 'failed': 0}
         try:
+            query_start = start_date
+            if extended_start_days > 0:
+                from datetime import datetime as dt, timedelta
+                start_dt = dt.strptime(start_date, '%Y-%m-%d').date()
+                query_start = (start_dt - timedelta(days=extended_start_days)).strftime('%Y-%m-%d')
+                logger.info(f"指标计算使用扩展历史: 查询起始 {query_start}（向前 {extended_start_days} 天）")
             result = self.session.execute(text("""
                 SELECT DISTINCT code FROM historical_quotes 
                 WHERE date >= :start_date AND date <= :end_date
                 ORDER BY code
-            """), {'start_date': start_date, 'end_date': end_date})
+            """), {'start_date': query_start, 'end_date': end_date})
             codes = [row[0] for row in result.fetchall()]
+            BATCH_SIZE = 50  # 每 50 只股票批量提交一次，减少 commit 次数
+            logger.info(f"指标数据生成: 共 {len(codes)} 只股票，每 {BATCH_SIZE} 只批量提交，每 100 条打印进度")
             success = 0
             failed = 0
             for idx, code in enumerate(codes):
                 if (idx + 1) % 100 == 0:
-                    logger.info(f"指标生成进度: {idx + 1}/{len(codes)}")
+                    logger.info(f"指标生成进度: {idx + 1}/{len(codes)}（成功 {success}，失败 {failed}）")
                 try:
-                    self._generate_indicators(str(code), start_date, end_date, indicators)
+                    self._generate_indicators(str(code), query_start, end_date, indicators, do_commit=False)
                     success += 1
                 except Exception as e:
                     logger.error(f"为股票 {code} 生成指标失败: {e}")
                     failed += 1
+                    self.session.rollback()
+                # 每 BATCH_SIZE 只股票提交一次，显著减少磁盘 I/O
+                if (idx + 1) % BATCH_SIZE == 0:
+                    self.session.commit()
+            self.session.commit()  # 最后一批
             logger.info(f"指标生成完成: 总数={len(codes)}, 成功={success}, 失败={failed}")
             return {'total': len(codes), 'success': success, 'failed': failed}
         except Exception as e:
             logger.error(f"批量生成指标失败: {e}")
             return {'total': 0, 'success': 0, 'failed': 0}
     
-    def _generate_ma_indicators(self, stock_code: str, df: pd.DataFrame):
-        """生成MA指标"""
+    def _generate_ma_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True):
+        """生成MA指标。do_commit=False 时由调用方批量提交。"""
         try:
             ma_calc = MACalculator()
             ma_df = ma_calc.calculate_ma_for_dataframe(df)
-            
-            # 准备插入数据
             for _, row in ma_df.iterrows():
                 if pd.isna(row['date']):
                     continue
-                    
                 data = {
                     'code': stock_code,
                     'date': row['date'].strftime('%Y-%m-%d'),
-                    'market_type': 'CN',  # A股市场
-                    'ma5': row.get('ma5'),
-                    'ma10': row.get('ma10'),
-                    'ma20': row.get('ma20'),
-                    'ma30': row.get('ma30'),
-                    'ma60': row.get('ma60'),
-                    'ma120': row.get('ma120'),
-                    'ma200': row.get('ma200')
+                    'market_type': 'CN',
+                    'ma5': row.get('ma5'), 'ma10': row.get('ma10'), 'ma20': row.get('ma20'),
+                    'ma30': row.get('ma30'), 'ma60': row.get('ma60'), 'ma120': row.get('ma120'), 'ma200': row.get('ma200')
                 }
-                
-                # 插入或更新MA指标数据
                 self.session.execute(text("""
                     INSERT INTO ma_indicators
                     (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200)
                     VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200)
                     ON CONFLICT (code, date, market_type) DO UPDATE SET
-                        ma5 = EXCLUDED.ma5,
-                        ma10 = EXCLUDED.ma10,
-                        ma20 = EXCLUDED.ma20,
-                        ma30 = EXCLUDED.ma30,
-                        ma60 = EXCLUDED.ma60,
-                        ma120 = EXCLUDED.ma120,
-                        ma200 = EXCLUDED.ma200
+                        ma5 = EXCLUDED.ma5, ma10 = EXCLUDED.ma10, ma20 = EXCLUDED.ma20, ma30 = EXCLUDED.ma30,
+                        ma60 = EXCLUDED.ma60, ma120 = EXCLUDED.ma120, ma200 = EXCLUDED.ma200
                 """), data)
-            
-            self.session.commit()
-            logger.info(f"股票 {stock_code} MA指标生成完成")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} MA指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} MA指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
-    def _generate_mavol_indicators(self, stock_code: str, df: pd.DataFrame):
-        """生成MAVOL指标"""
+    def _generate_mavol_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True):
+        """生成MAVOL指标。do_commit=False 时由调用方批量提交。"""
         try:
             mavol_calc = MAVOLCalculator()
             mavol_df = mavol_calc.calculate_mavol_for_dataframe(df)
-            
-            # 准备插入数据
             for _, row in mavol_df.iterrows():
                 if pd.isna(row['date']):
                     continue
-                    
                 data = {
-                    'code': stock_code,
-                    'date': row['date'].strftime('%Y-%m-%d'),
-                    'market_type': 'CN',  # A股市场
-                    'mavol5': row.get('mavol5'),
-                    'mavol10': row.get('mavol10'),
-                    'mavol20': row.get('mavol20'),
-                    'mavol30': row.get('mavol30'),
-                    'mavol60': row.get('mavol60'),
-                    'mavol120': row.get('mavol120'),
-                    'mavol200': row.get('mavol200')
+                    'code': stock_code, 'date': row['date'].strftime('%Y-%m-%d'), 'market_type': 'CN',
+                    'mavol5': row.get('mavol5'), 'mavol10': row.get('mavol10'), 'mavol20': row.get('mavol20'),
+                    'mavol30': row.get('mavol30'), 'mavol60': row.get('mavol60'), 'mavol120': row.get('mavol120'), 'mavol200': row.get('mavol200')
                 }
-                
-                # 插入或更新MAVOL指标数据
                 self.session.execute(text("""
                     INSERT INTO mavol_indicators
                     (code, date, market_type, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200)
                     VALUES (:code, :date, :market_type, :mavol5, :mavol10, :mavol20, :mavol30, :mavol60, :mavol120, :mavol200)
                     ON CONFLICT (code, date, market_type) DO UPDATE SET
-                        mavol5 = EXCLUDED.mavol5,
-                        mavol10 = EXCLUDED.mavol10,
-                        mavol20 = EXCLUDED.mavol20,
-                        mavol30 = EXCLUDED.mavol30,
-                        mavol60 = EXCLUDED.mavol60,
-                        mavol120 = EXCLUDED.mavol120,
-                        mavol200 = EXCLUDED.mavol200
+                        mavol5 = EXCLUDED.mavol5, mavol10 = EXCLUDED.mavol10, mavol20 = EXCLUDED.mavol20, mavol30 = EXCLUDED.mavol30,
+                        mavol60 = EXCLUDED.mavol60, mavol120 = EXCLUDED.mavol120, mavol200 = EXCLUDED.mavol200
                 """), data)
-            
-            self.session.commit()
-            logger.info(f"股票 {stock_code} MAVOL指标生成完成")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} MAVOL指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} MAVOL指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
-    def _generate_macd_indicators(self, stock_code: str, df: pd.DataFrame):
-        """生成MACD指标"""
+    def _generate_macd_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True):
+        """生成MACD指标。do_commit=False 时由调用方批量提交。"""
         try:
             from backend_core.utils.macd_calculator import MACDCalculator
-            
             macd_calc = MACDCalculator()
             macd_data = macd_calc.calculate_macd_batch(df['close'].tolist())
-            
-            # 准备插入数据
             for i, macd_row in enumerate(macd_data):
                 if i >= len(df):
                     break
-                    
                 data = {
-                    'code': stock_code,
-                    'date': df.iloc[i]['date'].strftime('%Y-%m-%d'),
-                    'market_type': 'CN',  # A股市场
-                    'dif': macd_row.get('dif'),
-                    'dea': macd_row.get('dea'),
-                    'macd': macd_row.get('macd'),
-                    'ema12': macd_row.get('ema12'),
-                    'ema26': macd_row.get('ema26')
+                    'code': stock_code, 'date': df.iloc[i]['date'].strftime('%Y-%m-%d'), 'market_type': 'CN',
+                    'dif': macd_row.get('dif'), 'dea': macd_row.get('dea'), 'macd': macd_row.get('macd'),
+                    'ema12': macd_row.get('ema12'), 'ema26': macd_row.get('ema26')
                 }
-                
-                # 插入或更新MACD指标数据
                 self.session.execute(text("""
-                    INSERT INTO macd_indicators
-                    (code, date, market_type, dif, dea, macd, ema12, ema26)
+                    INSERT INTO macd_indicators (code, date, market_type, dif, dea, macd, ema12, ema26)
                     VALUES (:code, :date, :market_type, :dif, :dea, :macd, :ema12, :ema26)
-                    ON CONFLICT (code, date, market_type) DO UPDATE SET
-                        dif = EXCLUDED.dif,
-                        dea = EXCLUDED.dea,
-                        macd = EXCLUDED.macd,
-                        ema12 = EXCLUDED.ema12,
-                        ema26 = EXCLUDED.ema26
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET dif = EXCLUDED.dif, dea = EXCLUDED.dea, macd = EXCLUDED.macd, ema12 = EXCLUDED.ema12, ema26 = EXCLUDED.ema26
                 """), data)
-            
-            self.session.commit()
-            logger.info(f"股票 {stock_code} MACD指标生成完成")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} MACD指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} MACD指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
-    def _generate_kdj_indicators(self, stock_code: str, df: pd.DataFrame):
-        """生成KDJ指标"""
+    def _generate_kdj_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True):
+        """生成KDJ指标。do_commit=False 时由调用方批量提交。"""
         try:
             kdj_calc = KDJCalculator()
-            kdj_data = kdj_calc.calculate_kdj_batch(
-                df['close'].tolist(),
-                df['high'].tolist(),
-                df['low'].tolist()
-            )
-            
-            # 准备插入数据
+            kdj_data = kdj_calc.calculate_kdj_batch(df['close'].tolist(), df['high'].tolist(), df['low'].tolist())
             for i, (_, row) in enumerate(df.iterrows()):
                 if i >= len(kdj_data):
                     break
-                    
                 kdj = kdj_data[i]
-                data = {
-                    'code': stock_code,
-                    'date': row['date'].strftime('%Y-%m-%d'),
-                    'market_type': 'CN',  # A股市场
-                    'k': kdj.get('k'),
-                    'd': kdj.get('d'),
-                    'j': kdj.get('j'),
-                    'rsv': kdj.get('rsv')
-                }
-                
-                # 插入或更新KDJ指标数据
+                data = {'code': stock_code, 'date': row['date'].strftime('%Y-%m-%d'), 'market_type': 'CN', 'k': kdj.get('k'), 'd': kdj.get('d'), 'j': kdj.get('j'), 'rsv': kdj.get('rsv')}
                 self.session.execute(text("""
-                    INSERT INTO kdj_indicators
-                    (code, date, market_type, k, d, j, rsv)
+                    INSERT INTO kdj_indicators (code, date, market_type, k, d, j, rsv)
                     VALUES (:code, :date, :market_type, :k, :d, :j, :rsv)
-                    ON CONFLICT (code, date, market_type) DO UPDATE SET
-                        k = EXCLUDED.k,
-                        d = EXCLUDED.d,
-                        j = EXCLUDED.j,
-                        rsv = EXCLUDED.rsv
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET k = EXCLUDED.k, d = EXCLUDED.d, j = EXCLUDED.j, rsv = EXCLUDED.rsv
                 """), data)
-            
-            self.session.commit()
-            logger.info(f"股票 {stock_code} KDJ指标生成完成")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} KDJ指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} KDJ指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
-    def _generate_rsi_indicators(self, stock_code: str, df: pd.DataFrame):
-        """生成RSI指标"""
+    def _generate_rsi_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True):
+        """生成RSI指标。do_commit=False 时由调用方批量提交。"""
         try:
             rsi_calc = RSICalculator()
             rsi_data = rsi_calc.calculate_rsi_batch(df['close'].tolist())
-            
-            # 准备插入数据
             for i, (_, row) in enumerate(df.iterrows()):
                 if i >= len(rsi_data):
                     break
-                    
                 rsi = rsi_data[i]
-                data = {
-                    'code': stock_code,
-                    'date': row['date'].strftime('%Y-%m-%d'),
-                    'market_type': 'CN',  # A股市场
-                    'rsi6': rsi.get('rsi6'),
-                    'rsi12': rsi.get('rsi12'),
-                    'rsi24': rsi.get('rsi24')
-                }
-                
-                # 插入或更新RSI指标数据
+                data = {'code': stock_code, 'date': row['date'].strftime('%Y-%m-%d'), 'market_type': 'CN', 'rsi6': rsi.get('rsi6'), 'rsi12': rsi.get('rsi12'), 'rsi24': rsi.get('rsi24')}
                 self.session.execute(text("""
-                    INSERT INTO rsi_indicators
-                    (code, date, market_type, rsi6, rsi12, rsi24)
+                    INSERT INTO rsi_indicators (code, date, market_type, rsi6, rsi12, rsi24)
                     VALUES (:code, :date, :market_type, :rsi6, :rsi12, :rsi24)
-                    ON CONFLICT (code, date, market_type) DO UPDATE SET
-                        rsi6 = EXCLUDED.rsi6,
-                        rsi12 = EXCLUDED.rsi12,
-                        rsi24 = EXCLUDED.rsi24
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET rsi6 = EXCLUDED.rsi6, rsi12 = EXCLUDED.rsi12, rsi24 = EXCLUDED.rsi24
                 """), data)
-            
-            self.session.commit()
-            logger.info(f"股票 {stock_code} RSI指标生成完成")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} RSI指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} RSI指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
-    def _generate_boll_indicators(self, stock_code: str, df: pd.DataFrame):
-        """生成BOLL指标"""
+    def _generate_boll_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True):
+        """生成BOLL指标。do_commit=False 时由调用方批量提交。"""
         try:
             boll_calc = BOLLCalculator()
             boll_data = boll_calc.calculate_boll_batch(df['close'].tolist())
-            
-            # 准备插入数据
             for i, (_, row) in enumerate(df.iterrows()):
                 if i >= len(boll_data):
                     break
-                    
                 boll = boll_data[i]
-                data = {
-                    'code': stock_code,
-                    'date': row['date'].strftime('%Y-%m-%d'),
-                    'market_type': 'CN',  # A股市场
-                    'mid': boll.get('mid'),
-                    'upper': boll.get('upper'),
-                    'lower': boll.get('lower')
-                }
-                
-                # 插入或更新BOLL指标数据
+                data = {'code': stock_code, 'date': row['date'].strftime('%Y-%m-%d'), 'market_type': 'CN', 'mid': boll.get('mid'), 'upper': boll.get('upper'), 'lower': boll.get('lower')}
                 self.session.execute(text("""
-                    INSERT INTO boll_indicators
-                    (code, date, market_type, mid, upper, lower)
+                    INSERT INTO boll_indicators (code, date, market_type, mid, upper, lower)
                     VALUES (:code, :date, :market_type, :mid, :upper, :lower)
-                    ON CONFLICT (code, date, market_type) DO UPDATE SET
-                        mid = EXCLUDED.mid,
-                        upper = EXCLUDED.upper,
-                        lower = EXCLUDED.lower
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET mid = EXCLUDED.mid, upper = EXCLUDED.upper, lower = EXCLUDED.lower
                 """), data)
-            
-            self.session.commit()
-            logger.info(f"股票 {stock_code} BOLL指标生成完成")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} BOLL指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} BOLL指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
-    def _generate_pvfrs_indicators(self, stock_code: str, start_date: str, end_date: str):
-        """生成PVFRS指标"""
+    def _generate_pvfrs_indicators(self, stock_code: str, start_date: str, end_date: str, do_commit: bool = True):
+        """生成PVFRS指标。do_commit=False 时由调用方批量提交。"""
         try:
             from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
             
-            logger.info(f"开始为股票 {stock_code} 生成PVFRS指标")
+            if do_commit:
+                logger.info(f"开始为股票 {stock_code} 生成PVFRS指标")
             
             # 获取历史数据
             result = self.session.execute(text("""
@@ -842,12 +773,13 @@ class AkshareDataCollector:
                         bias = EXCLUDED.bias
                 """), data)
             
-            self.session.commit()
-            logger.info(f"股票 {stock_code} PVFRS指标生成完成，共 {len(pvfrs_df)} 条记录")
-            
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} PVFRS指标生成完成，共 {len(pvfrs_df)} 条记录")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} PVFRS指标失败: {e}")
-            self.session.rollback()
+            if do_commit:
+                self.session.rollback()
     
     def collect_single_hk_stock_data(self, stock_code: str, stock_name: str, start_date: str, end_date: str, is_full_collection: bool = False, force_update: bool = False) -> bool:
         """
@@ -1292,6 +1224,339 @@ class AkshareDataCollector:
                 'failed_details': [str(e)]
             }
 
+    def collect_cn_historical_from_realtime(self, start_date: str, end_date: str) -> Dict[str, any]:
+        """从 A 股实时行情表同步到历史行情表（行为与港股 sync 类似）"""
+        try:
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            date_range = pd.date_range(start, end)
+
+            total_dates = len(date_range)
+            success_count = 0
+
+            for i, current_date in enumerate(date_range):
+                trade_date = current_date.strftime('%Y-%m-%d')
+                logger.info(f"[{i+1}/{total_dates}] 正在从实时行情同步A股历史数据: {trade_date}")
+                day_start = time.time()
+                try:
+                    # 从实时行情表获取当日全部A股数据
+                    result = self.session.execute(text("""
+                        SELECT code, name, open, high, low, current_price, pre_close,
+                               volume, amount, change_percent, turnover_rate
+                        FROM stock_realtime_quote
+                        WHERE trade_date = :trade_date
+                    """), {'trade_date': trade_date})
+                    rows = result.fetchall()
+
+                    if not rows:
+                        logger.warning(f"日期 {trade_date} 在实时行情表中无数据")
+                        continue
+
+                    for row in rows:
+                        code = str(row[0]).strip()
+                        name = (row[1] or '').strip() if row[1] else code
+                        open_price = row[2]
+                        high = row[3]
+                        low = row[4]
+                        close = row[5]
+                        pre_close = row[6]
+                        volume = row[7]
+                        amount = row[8]
+                        change_percent = row[9]
+                        turnover_rate = row[10]
+
+                        change = None
+                        try:
+                            if close is not None and pre_close is not None:
+                                change = float(close) - float(pre_close)
+                        except Exception:
+                            change = None
+
+                        self.session.execute(text("""
+                            INSERT INTO historical_quotes
+                            (code, name, market, date, open, high, low, close,
+                             pre_close, volume, amount, change_percent, change, turnover_rate,
+                             collected_source, collected_date)
+                            VALUES
+                            (:code, :name, :market, :date, :open, :high, :low, :close,
+                             :pre_close, :volume, :amount, :change_percent, :change, :turnover_rate,
+                             :collected_source, :collected_date)
+                            ON CONFLICT (code, date) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                market = EXCLUDED.market,
+                                open = EXCLUDED.open,
+                                high = EXCLUDED.high,
+                                low = EXCLUDED.low,
+                                close = EXCLUDED.close,
+                                pre_close = EXCLUDED.pre_close,
+                                volume = EXCLUDED.volume,
+                                amount = EXCLUDED.amount,
+                                change_percent = EXCLUDED.change_percent,
+                                change = EXCLUDED.change,
+                                turnover_rate = EXCLUDED.turnover_rate,
+                                collected_source = EXCLUDED.collected_source,
+                                collected_date = EXCLUDED.collected_date
+                        """), {
+                            'code': code,
+                            'name': name,
+                            'market': 'A股',
+                            'date': trade_date,
+                            'open': open_price,
+                            'high': high,
+                            'low': low,
+                            'close': close,
+                            'pre_close': pre_close,
+                            'volume': volume,
+                            'amount': amount,
+                            'change_percent': change_percent,
+                            'change': change,
+                            'turnover_rate': turnover_rate,
+                            'collected_source': 'realtime_sync',
+                            'collected_date': datetime.now()
+                        })
+
+                    self.session.commit()
+                    success_count += 1
+                    logger.info(f"日期 {trade_date} A股同步完成，耗时: {time.time() - day_start:.2f}s，记录数: {len(rows)}")
+                except Exception as e:
+                    self.session.rollback()
+                    logger.error(f"同步 A股日期 {trade_date} 失败: {e}, 耗时: {time.time() - day_start:.2f}s")
+
+            return {
+                'total': total_dates,
+                'success': success_count,
+                'failed': total_dates - success_count,
+                'collected': 0,
+                'skipped': 0,
+                'failed_details': []
+            }
+        except Exception as e:
+            logger.error(f"从实时行情同步A股历史数据失败: {e}")
+            return {
+                'total': 0,
+                'success': 0,
+                'failed': 1,
+                'collected': 0,
+                'skipped': 0,
+                'failed_details': [str(e)]
+            }
+
+    def update_multi_day_change_for_date_range(self, start_date: str, end_date: str):
+        """
+        为指定日期范围内的 A 股历史数据，批量计算并更新
+        5天、10天、30天、60天涨跌百分比。
+        """
+        try:
+            import pandas as pd
+
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            # 向前多取一段时间，保证有足够的历史数据计算 60 天涨跌
+            extended_start = start - pd.Timedelta(days=120)
+
+            logger.info(f"开始批量计算 {start_date} ~ {end_date} 的 5/10/30/60 天涨跌%（扩展查询起始: {extended_start.date()}）")
+
+            result = self.session.execute(text("""
+                SELECT code, date, close
+                FROM historical_quotes
+                WHERE date >= :extended_start AND date <= :end_date
+                ORDER BY code, date
+            """), {
+                'extended_start': extended_start.date().isoformat(),
+                'end_date': end.date().isoformat(),
+            })
+
+            rows = result.fetchall()
+            if not rows:
+                logger.warning("指定日期范围内没有历史数据，跳过多周期涨跌计算")
+                return
+
+            df = pd.DataFrame(rows, columns=['code', 'date', 'close'])
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values(['code', 'date'])
+
+            # 分组按代码计算多周期涨跌
+            def _calc_changes(group: pd.DataFrame) -> pd.DataFrame:
+                group = group.sort_values('date')
+                group['five_day_change_percent'] = group['close'].pct_change(periods=5, fill_method=None) * 100
+                group['ten_day_change_percent'] = group['close'].pct_change(periods=10, fill_method=None) * 100
+                group['thirty_day_change_percent'] = group['close'].pct_change(periods=30, fill_method=None) * 100
+                group['sixty_day_change_percent'] = group['close'].pct_change(periods=60, fill_method=None) * 100
+                return group
+
+            df = df.groupby('code', group_keys=False).apply(_calc_changes)
+
+            # 只更新目标日期范围内的记录
+            mask = (df['date'] >= start) & (df['date'] <= end)
+            df_update = df.loc[mask].dropna(subset=['close'])
+
+            updated = 0
+            total_rows = len(df_update)
+            if total_rows > 0:
+                logger.info(f"多周期涨跌%更新: 共 {total_rows} 条，每 100 条打印进度")
+            for _, row in df_update.iterrows():
+                self.session.execute(text("""
+                    UPDATE historical_quotes
+                    SET
+                        five_day_change_percent = :five_day_change_percent,
+                        ten_day_change_percent = :ten_day_change_percent,
+                        thirty_day_change_percent = :thirty_day_change_percent,
+                        sixty_day_change_percent = :sixty_day_change_percent
+                    WHERE code = :code AND date = :date
+                """), {
+                    'five_day_change_percent': float(row['five_day_change_percent']) if pd.notna(row['five_day_change_percent']) else None,
+                    'ten_day_change_percent': float(row['ten_day_change_percent']) if pd.notna(row['ten_day_change_percent']) else None,
+                    'thirty_day_change_percent': float(row['thirty_day_change_percent']) if pd.notna(row['thirty_day_change_percent']) else None,
+                    'sixty_day_change_percent': float(row['sixty_day_change_percent']) if pd.notna(row['sixty_day_change_percent']) else None,
+                    'code': str(row['code']),
+                    'date': row['date'].date().isoformat(),
+                })
+                updated += 1
+                if updated % 100 == 0:
+                    logger.info(f"多周期涨跌%更新进度: {updated}/{total_rows}")
+
+            self.session.commit()
+            logger.info(f"多周期涨跌%计算完成，更新记录数: {updated}")
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"批量计算多周期涨跌%失败: {e}")
+
+
+def run_realtime_historical_collection_task(
+    task_id: str,
+    start_date: str,
+    end_date: str,
+    indicators: Optional[List[str]] = None,
+):
+    """从实时行情表同步 A 股历史数据（后台任务），并可选生成技术指标"""
+    global current_task_id
+    try:
+        logger.info(f"开始执行实时行情表历史采集任务: {task_id}")
+
+        from backend_api.database import SessionLocal
+        db = SessionLocal()
+
+        try:
+            collector = AkshareDataCollector(db)
+
+            # 1. 从实时行情表同步到 historical_quotes
+            result_sync = collector.collect_cn_historical_from_realtime(start_date, end_date)
+
+            # 2. 生成技术指标（MA/MAVOL/KDJ/RSI/BOLL/PVFRS 等）；未勾选时默认生成全部
+            indicator_result = {'total': 0, 'success': 0, 'failed': 0}
+            indicators_to_run = indicators if indicators else ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'macd', 'pvfrs']
+            logger.info(f"实时行情表历史采集完成，开始生成指标: {indicators_to_run}（扩展历史以计算 MA200 等）")
+            indicator_result = collector.generate_indicators_for_date_range(
+                start_date, end_date, indicators_to_run, extended_start_days=300
+            )
+
+            # 3. 计算 5/10/30/60 天涨跌百分比
+            collector.update_multi_day_change_for_date_range(start_date, end_date)
+
+            # 汇总结果
+            with task_lock:
+                if task_id in collection_tasks:
+                    collection_tasks[task_id].update({
+                        "status": "completed",
+                        "progress": 100,
+                        "processed_stocks": indicator_result.get("total", 0),
+                        "success_count": indicator_result.get("success", 0),
+                        "failed_count": indicator_result.get("failed", 0),
+                        "collected_count": result_sync.get("collected", 0),
+                        "skipped_count": result_sync.get("skipped", 0),
+                        "end_time": datetime.now(),
+                        "failed_details": result_sync.get("failed_details", []),
+                    })
+
+            logger.info(f"实时行情表历史采集任务完成: {task_id}")
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"实时行情表历史采集任务执行失败: {task_id}, 错误: {e}")
+        with task_lock:
+            if task_id in collection_tasks:
+                collection_tasks[task_id].update({
+                    "status": "failed",
+                    "end_time": datetime.now(),
+                    "error_message": str(e)
+                })
+    finally:
+        with task_execution_lock:
+            if current_task_id == task_id:
+                current_task_id = None
+                logger.info(f"已清除当前任务ID: {task_id}")
+
+
+@router.post("/realtime-historical", response_model=DataCollectionResponse)
+async def start_realtime_historical_collection(
+    request: RealtimeHistoricalCollectionRequest,
+    background_tasks: BackgroundTasks,
+):
+    """启动从实时行情表同步 A 股历史数据的任务（支持指标生成）"""
+    global current_task_id
+    try:
+        # 验证日期格式
+        try:
+            datetime.strptime(request.start_date, '%Y-%m-%d')
+            datetime.strptime(request.end_date, '%Y-%m-%d')
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+
+        # 检查是否有其他任务正在运行
+        with task_execution_lock:
+            if current_task_id is not None:
+                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
+
+        # 生成任务ID
+        task_id = f"realtime_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
+
+        # 初始化任务状态
+        with task_lock:
+            collection_tasks[task_id] = {
+                "status": "running",
+                "progress": 0,
+                "total_stocks": 0,
+                "processed_stocks": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "collected_count": 0,
+                "skipped_count": 0,
+                "start_time": datetime.now(),
+                "end_time": None,
+                "error_message": None,
+                "failed_details": []
+            }
+
+        # 设置当前任务ID
+        with task_execution_lock:
+            current_task_id = task_id
+
+        # 启动后台任务
+        background_tasks.add_task(
+            run_realtime_historical_collection_task,
+            task_id,
+            request.start_date,
+            request.end_date,
+            request.indicators,
+        )
+
+        logger.info(f"启动实时行情表历史采集任务: {task_id}")
+
+        return DataCollectionResponse(
+            task_id=task_id,
+            status="started",
+            message="实时行情表历史采集任务已启动",
+            start_date=request.start_date,
+            end_date=request.end_date,
+            market="CN",
+        )
+
+    except Exception as e:
+        logger.error(f"启动实时行情表历史采集任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动采集任务失败: {str(e)}")
+
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
         """记录采集结果到日志表"""
         try:
@@ -1369,7 +1634,8 @@ async def start_historical_collection(
             request.market,
             request.force_update,
             request.indicators,
-            request.sync_from_realtime
+            request.sync_from_realtime,
+            False  # stock_list_from_realtime 仅用于内部控制，不对外暴露
         )
         
         logger.info(f"启动历史数据采集任务: {task_id}")
@@ -1400,7 +1666,8 @@ def run_historical_collection_task(
     market: str = 'CN',
     force_update: bool = False,
     indicators: Optional[List[str]] = None,
-    sync_from_realtime: bool = False
+    sync_from_realtime: bool = False,
+    stock_list_from_realtime: bool = False
 ):
     """运行历史数据采集任务（后台任务）"""
     global current_task_id
@@ -1414,7 +1681,7 @@ def run_historical_collection_task(
         try:
             # 创建采集器
             collector = AkshareDataCollector(db)
-            
+
             # 获取股票列表
             if test_mode:
                 logger.info("测试模式：只采集前5只股票")
@@ -1423,7 +1690,11 @@ def run_historical_collection_task(
                 else:
                     stocks = collector.get_stock_list()[:5]
                 stock_codes = [stock['code'] for stock in stocks]
-            
+            elif stock_list_from_realtime and market == 'CN':
+                logger.info("A股历史采集：从实时行情表获取股票列表")
+                stocks = collector.get_stock_list_from_realtime_quote()
+                stock_codes = [s['code'] for s in stocks] if stocks else []
+
             # 更新任务状态
             with task_lock:
                 if task_id in collection_tasks:
@@ -1441,12 +1712,15 @@ def run_historical_collection_task(
                             else:
                                 total = len(collector.get_stock_list())
                     collection_tasks[task_id]["total_stocks"] = total
-            
+
             # 执行采集
             if sync_from_realtime and market == 'HK':
                 result = collector.collect_hk_historical_from_realtime(start_date, end_date)
             else:
-                result = collector.collect_historical_data(start_date, end_date, stock_codes, full_collection_mode, market, force_update, indicators)
+                # 从实时行情表获取列表时，使用该列表作为 stock_codes，不再按全量模式从 basic_info 取
+                use_codes = stock_codes
+                use_full = full_collection_mode and not (stock_list_from_realtime and market == 'CN')
+                result = collector.collect_historical_data(start_date, end_date, use_codes, use_full, market, force_update, indicators)
             
             # 更新任务状态
             with task_lock:
@@ -1663,6 +1937,38 @@ def _is_task_cancelled(task_id: str) -> bool:
         if task_id not in collection_tasks:
             return True
         return collection_tasks[task_id].get('status') == 'cancelled'
+
+
+def _trigger_indicators_after_realtime(codes_snapshot: List[str], task_id: str):
+    """A股实时采集成功且时间在15:30之后时，在后台线程中触发 MA/MAVOL/KDJ/RSI/BOLL/MACD/PVFRS(GMS) 指标计算。"""
+    if not codes_snapshot:
+        return
+
+    def _run():
+        from backend_api.database import SessionLocal
+        session = SessionLocal()
+        try:
+            collector = AkshareDataCollector(session)
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d')
+            indicators = ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'macd', 'pvfrs']
+            logger.info(f"[任务 {task_id}] 15:30 后触发指标计算: 共 {len(codes_snapshot)} 只A股, 指标={indicators}")
+            for idx, code in enumerate(codes_snapshot):
+                try:
+                    collector._generate_indicators(code, start_date, end_date, indicators)
+                    session.commit()
+                except Exception as e:
+                    logger.error(f"[任务 {task_id}] 指标计算失败 {code}: {e}")
+                    session.rollback()
+                if (idx + 1) % 100 == 0:
+                    logger.info(f"[任务 {task_id}] 指标计算进度: {idx + 1}/{len(codes_snapshot)}")
+            logger.info(f"[任务 {task_id}] 指标计算完成: {len(codes_snapshot)} 只A股")
+        except Exception as e:
+            logger.error(f"[任务 {task_id}] 指标计算任务异常: {e}")
+        finally:
+            session.close()
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional[str], full_collection_mode: bool):
@@ -1926,6 +2232,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                 processed = 0
                 success = 0
                 failed_details: List[str] = []
+                collected_codes: List[str] = []  # 采集成功的A股代码，用于 15:30 后触发指标计算
 
                 for _, row in df.iterrows():
                     if _is_task_cancelled(task_id):
@@ -2007,6 +2314,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
 
                         db.commit()
                         success += 1
+                        collected_codes.append(code_val)
                     except Exception as e:
                         db.rollback()
                         failed_details.append(str(e))
@@ -2020,6 +2328,13 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             collection_tasks[task_id]['collected_count'] = success
                             collection_tasks[task_id]['failed_details'] = failed_details[-200:]
                             collection_tasks[task_id]['progress'] = min(100, int((processed / total_stocks) * 100))
+
+            # A股实时采集成功且当前时间在下午3点半之后，后台触发 MA/MAVOL/KDJ/RSI/BOLL/MACD/PVFRS(GMS) 指标计算
+            if market != 'HK' and success > 0:
+                now = datetime.now()
+                if now.hour > 15 or (now.hour == 15 and now.minute >= 30):
+                    codes_snapshot = list(collected_codes)
+                    _trigger_indicators_after_realtime(codes_snapshot, task_id)
 
             with task_lock:
                 if task_id in collection_tasks:
