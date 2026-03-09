@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 港股半年线数据生成器
-基于港股日线数据生成半年线数据并保存到数据库
+基于港股季线数据生成半年线数据并保存到数据库
 """
 
 import sys
@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class HKSemiAnnualDataGenerator:
-    """港股半年线数据生成器"""
+    """港股半年线数据生成器（基于季线数据累加）"""
     
     def __init__(self):
         self.session = SessionLocal()
@@ -65,7 +65,7 @@ class HKSemiAnnualDataGenerator:
         try:
             query = text("""
                 SELECT date, open, high, low, close, volume, amount, name
-                FROM historical_quotes_hk
+                FROM hk_quarterly_quotes
                 WHERE code = :code AND date >= :start_date AND date <= :end_date
                 ORDER BY date ASC
             """)
@@ -89,10 +89,11 @@ class HKSemiAnnualDataGenerator:
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             
-            # 半年线聚合 (6ME 表示6个月月末)
+            # 半年线聚合 (6ME 表示6个月月末)，name 取第一条
             semiannual_df = df.resample('6ME').agg({
                 'open': 'first', 'high': 'max', 'low': 'min',
-                'close': 'last', 'volume': 'sum', 'amount': 'sum'
+                'close': 'last', 'volume': 'sum', 'amount': 'sum',
+                'name': 'first'
             })
             
             semiannual_df.dropna(subset=['open', 'close'], inplace=True)
@@ -117,7 +118,7 @@ class HKSemiAnnualDataGenerator:
                         'change_percent': float(row['change_percent']) if pd.notna(row['change_percent']) else None,
                         'change': float(row['change']) if pd.notna(row['change']) else None,
                         'amplitude': float(row['amplitude']) if pd.notna(row['amplitude']) else None,
-                        'turnover_rate': None, 'collected_source': 'generated_from_daily',
+                        'turnover_rate': None, 'collected_source': 'generated_from_quarterly',
                         'collected_date': datetime.now().isoformat()
                     }
                     
@@ -153,7 +154,7 @@ class HKSemiAnnualDataGenerator:
             # 计算当前半年的开始月份（1月或7月）
             semiannual_start_month = 1 if today.month <= 6 else 7
             semiannual_start = datetime(today.year, semiannual_start_month, 1)
-            start_date = (semiannual_start - timedelta(days=200)).strftime('%Y-%m-%d')
+            start_date = (semiannual_start - timedelta(days=180)).strftime('%Y-%m-%d')
             end_date = today.strftime('%Y-%m-%d')
             
             logger.info(f"开始生成港股当前半年线数据: 本半年 {semiannual_start.strftime('%Y-%m-%d')} 到今天 {end_date}")
@@ -167,7 +168,7 @@ class HKSemiAnnualDataGenerator:
     def generate_semiannual_data(self, start_date: str, end_date: str, stock_codes: Optional[List[str]] = None) -> Dict[str, any]:
         try:
             logger.info(f"开始生成港股半年线数据: {start_date} 到 {end_date}")
-            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=200)).strftime('%Y-%m-%d')
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=180)).strftime('%Y-%m-%d')
             
             stocks = [{'code': code} for code in stock_codes] if stock_codes else self.get_hk_stock_list()
             if not stocks:
@@ -194,7 +195,7 @@ class HKSemiAnnualDataGenerator:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='基于日线数据生成港股半年线数据')
+    parser = argparse.ArgumentParser(description='基于季线数据生成港股半年线数据')
     parser.add_argument('start_date', help='开始日期 (YYYY-MM-DD)')
     parser.add_argument('end_date', help='结束日期 (YYYY-MM-DD)')
     parser.add_argument('--stocks', nargs='+', help='指定港股代码列表')

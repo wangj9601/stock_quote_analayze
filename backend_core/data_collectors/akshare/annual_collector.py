@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""A股年线数据生成器 - 基于A股日线数据生成年线数据并保存到数据库"""
+"""A股年线数据生成器 - 基于A股半年线数据生成年线数据并保存到数据库"""
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class AnnualDataGenerator:
-    """A股年线数据生成器"""
+    """A股年线数据生成器（基于半年线数据累加）"""
     
     def __init__(self):
         self.session = SessionLocal()
@@ -61,7 +61,7 @@ class AnnualDataGenerator:
         try:
             query = text("""
                 SELECT date, open, high, low, close, volume, amount, name
-                FROM historical_quotes
+                FROM semiannual_quotes
                 WHERE code = :code AND date >= :start_date AND date <= :end_date
                 ORDER BY date ASC
             """)
@@ -85,10 +85,11 @@ class AnnualDataGenerator:
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             
-            # 年线聚合 (YE 表示年末)
+            # 年线聚合 (YE 表示年末)，name 取第一条
             annual_df = df.resample('YE').agg({
                 'open': 'first', 'high': 'max', 'low': 'min',
-                'close': 'last', 'volume': 'sum', 'amount': 'sum'
+                'close': 'last', 'volume': 'sum', 'amount': 'sum',
+                'name': 'first'
             })
             
             annual_df.dropna(subset=['open', 'close'], inplace=True)
@@ -114,7 +115,7 @@ class AnnualDataGenerator:
                         'change_percent': float(row['change_percent']) if pd.notna(row['change_percent']) else None,
                         'change': float(row['change']) if pd.notna(row['change']) else None,
                         'amplitude': float(row['amplitude']) if pd.notna(row['amplitude']) else None,
-                        'turnover_rate': None, 'collected_source': 'generated_from_daily',
+                        'turnover_rate': None, 'collected_source': 'generated_from_semiannual',
                         'collected_date': datetime.now().isoformat()
                     }
                     
@@ -147,7 +148,7 @@ class AnnualDataGenerator:
         try:
             today = datetime.now()
             year_start = datetime(today.year, 1, 1)
-            start_date = (year_start - timedelta(days=400)).strftime('%Y-%m-%d')
+            start_date = (year_start - timedelta(days=365)).strftime('%Y-%m-%d')
             end_date = today.strftime('%Y-%m-%d')
             
             logger.info(f"开始生成A股当前年线数据: 本年 {year_start.strftime('%Y-%m-%d')} 到今天 {end_date}")
@@ -161,7 +162,7 @@ class AnnualDataGenerator:
     def generate_annual_data(self, start_date: str, end_date: str, stock_codes: Optional[List[str]] = None) -> Dict[str, any]:
         try:
             logger.info(f"开始生成A股年线数据: {start_date} 到 {end_date}")
-            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=400)).strftime('%Y-%m-%d')
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=365)).strftime('%Y-%m-%d')
             
             stocks = [{'code': code} for code in stock_codes] if stock_codes else self.get_stock_list()
             if not stocks:
@@ -188,7 +189,7 @@ class AnnualDataGenerator:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='基于日线数据生成A股年线数据')
+    parser = argparse.ArgumentParser(description='基于半年线数据生成A股年线数据')
     parser.add_argument('start_date', help='开始日期 (YYYY-MM-DD)')
     parser.add_argument('end_date', help='结束日期 (YYYY-MM-DD)')
     parser.add_argument('--stocks', nargs='+', help='指定股票代码列表')

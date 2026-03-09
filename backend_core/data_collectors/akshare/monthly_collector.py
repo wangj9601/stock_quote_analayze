@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 A股月线数据生成器
-基于A股日线数据生成月线数据并保存到数据库
+基于A股周线数据生成月线数据并保存到数据库
 """
 
 import sys
@@ -32,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class MonthlyDataGenerator:
-    """A股月线数据生成器"""
+    """A股月线数据生成器（基于周线数据累加）"""
     
     def __init__(self):
         self.session = SessionLocal()
@@ -102,10 +102,10 @@ class MonthlyDataGenerator:
         生成单只股票的月线数据
         """
         try:
-            # 1. 获取日线数据
+            # 1. 获取周线数据
             query = text("""
                 SELECT date, open, high, low, close, volume, amount, name
-                FROM historical_quotes
+                FROM weekly_quotes
                 WHERE code = :code AND date >= :start_date AND date <= :end_date
                 ORDER BY date ASC
             """)
@@ -137,14 +137,15 @@ class MonthlyDataGenerator:
             # 获取股票名称
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             
-            # 2. 重采样为月线 (ME 表示月末)
+            # 2. 重采样为月线 (ME 表示月末)，name 取第一条
             monthly_df = df.resample('ME').agg({
                 'open': 'first',
                 'high': 'max',
                 'low': 'min',
                 'close': 'last',
                 'volume': 'sum',
-                'amount': 'sum'
+                'amount': 'sum',
+                'name': 'first'
             })
             
             # 去除无效行
@@ -182,7 +183,7 @@ class MonthlyDataGenerator:
                         'change': float(row['change']) if pd.notna(row['change']) else None,
                         'amplitude': float(row['amplitude']) if pd.notna(row['amplitude']) else None,
                         'turnover_rate': None,
-                        'collected_source': 'generated_from_daily',
+                        'collected_source': 'generated_from_weekly',
                         'collected_date': datetime.now().isoformat()
                     }
                     
@@ -227,8 +228,8 @@ class MonthlyDataGenerator:
             first_day = today.replace(day=1)
             
             # 为了计算涨跌幅，需要获取上月的数据
-            # 向前扩展60天确保能获取到上月收盘价
-            start_date = (first_day - timedelta(days=60)).strftime('%Y-%m-%d')
+            # 向前扩展约5周（35天）确保能获取到上月周线
+            start_date = (first_day - timedelta(days=35)).strftime('%Y-%m-%d')
             end_date = today.strftime('%Y-%m-%d')
             
             logger.info(f"开始生成A股当前月线数据: 本月1号 {first_day.strftime('%Y-%m-%d')} 到今天 {end_date}")
@@ -248,8 +249,8 @@ class MonthlyDataGenerator:
         try:
             logger.info(f"开始生成A股月线数据: {start_date} 到 {end_date}")
             
-            # 为了计算涨跌幅，自动向前多取60天的数据
-            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
+            # 为了计算涨跌幅，自动向前多取约5周（35天）的周线数据
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=35)).strftime('%Y-%m-%d')
             
             if stock_codes:
                 stocks = [{'code': code} for code in stock_codes]
@@ -297,7 +298,7 @@ class MonthlyDataGenerator:
                 (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
                 VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
             """), {
-                'operation_type': 'generate_monthly_from_daily',
+                'operation_type': 'generate_monthly_from_weekly',
                 'operation_desc': f'生成日期范围: {start_date} 到 {end_date}\n总计A股: {total_stocks}\n成功处理: {success_stocks}\n生成记录: {self.generated_count}',
                 'affected_rows': self.generated_count,
                 'status': 'success' if self.failed_count == 0 else 'partial_success',
@@ -311,7 +312,7 @@ class MonthlyDataGenerator:
 def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description='基于日线数据生成A股月线数据')
+    parser = argparse.ArgumentParser(description='基于周线数据生成A股月线数据')
     parser.add_argument('start_date', help='开始日期 (YYYY-MM-DD)')
     parser.add_argument('end_date', help='结束日期 (YYYY-MM-DD)')
     parser.add_argument('--stocks', nargs='+', help='指定股票代码列表')

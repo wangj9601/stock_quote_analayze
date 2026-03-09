@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 A股季线数据生成器
-基于A股日线数据生成季线数据并保存到数据库
+基于A股月线数据生成季线数据并保存到数据库
 """
 
 import sys
@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class QuarterlyDataGenerator:
-    """A股季线数据生成器"""
+    """A股季线数据生成器（基于月线数据累加）"""
     
     def __init__(self):
         self.session = SessionLocal()
@@ -85,7 +85,7 @@ class QuarterlyDataGenerator:
         try:
             query = text("""
                 SELECT date, open, high, low, close, volume, amount, name
-                FROM historical_quotes
+                FROM monthly_quotes
                 WHERE code = :code AND date >= :start_date AND date <= :end_date
                 ORDER BY date ASC
             """)
@@ -109,14 +109,15 @@ class QuarterlyDataGenerator:
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             
-            # 季线聚合 (QE 表示季度末)
+            # 季线聚合 (QE 表示季度末)，name 取第一条
             quarterly_df = df.resample('QE').agg({
                 'open': 'first',
                 'high': 'max',
                 'low': 'min',
                 'close': 'last',
                 'volume': 'sum',
-                'amount': 'sum'
+                'amount': 'sum',
+                'name': 'first'
             })
             
             quarterly_df.dropna(subset=['open', 'close'], inplace=True)
@@ -142,7 +143,7 @@ class QuarterlyDataGenerator:
                         'change_percent': float(row['change_percent']) if pd.notna(row['change_percent']) else None,
                         'change': float(row['change']) if pd.notna(row['change']) else None,
                         'amplitude': float(row['amplitude']) if pd.notna(row['amplitude']) else None,
-                        'turnover_rate': None, 'collected_source': 'generated_from_daily',
+                        'turnover_rate': None, 'collected_source': 'generated_from_monthly',
                         'collected_date': datetime.now().isoformat()
                     }
                     
@@ -177,7 +178,7 @@ class QuarterlyDataGenerator:
         try:
             today = datetime.now()
             quarter_start = datetime(today.year, ((today.month - 1) // 3) * 3 + 1, 1)
-            start_date = (quarter_start - timedelta(days=120)).strftime('%Y-%m-%d')
+            start_date = (quarter_start - timedelta(days=90)).strftime('%Y-%m-%d')
             end_date = today.strftime('%Y-%m-%d')
             
             logger.info(f"开始生成A股当前季线数据: 本季度 {quarter_start.strftime('%Y-%m-%d')} 到今天 {end_date}")
@@ -191,7 +192,7 @@ class QuarterlyDataGenerator:
     def generate_quarterly_data(self, start_date: str, end_date: str, stock_codes: Optional[List[str]] = None) -> Dict[str, any]:
         try:
             logger.info(f"开始生成A股季线数据: {start_date} 到 {end_date}")
-            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=120)).strftime('%Y-%m-%d')
+            query_start_date = (datetime.strptime(start_date, '%Y-%m-%d') - timedelta(days=90)).strftime('%Y-%m-%d')
             
             stocks = [{'code': code} for code in stock_codes] if stock_codes else self.get_stock_list()
             if not stocks:
@@ -218,7 +219,7 @@ class QuarterlyDataGenerator:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='基于日线数据生成A股季线数据')
+    parser = argparse.ArgumentParser(description='基于月线数据生成A股季线数据')
     parser.add_argument('start_date', help='开始日期 (YYYY-MM-DD)')
     parser.add_argument('end_date', help='结束日期 (YYYY-MM-DD)')
     parser.add_argument('--stocks', nargs='+', help='指定股票代码列表')
