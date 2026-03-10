@@ -1762,26 +1762,24 @@ async def get_batch_quotes(
         print(f"[batch_quotes] 收到请求: codes={codes}")
         
         # 获取最新交易日期
-        latest_date_result = pd.read_sql_query("""
-            SELECT MAX(trade_date) AS latest_date 
-            FROM stock_realtime_quote 
-            WHERE change_percent IS NOT NULL
-        """, db.bind)
-        
         latest_trade_date = None
-        if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
-            latest_trade_date = latest_date_result.iloc[0]['latest_date']
+        latest_date_row = db.execute(text("""
+            SELECT MAX(trade_date) AS latest_date
+            FROM stock_realtime_quote
+            WHERE change_percent IS NOT NULL
+        """)).fetchone()
+        if latest_date_row and latest_date_row[0] is not None:
+            latest_trade_date = latest_date_row[0]
         
         # 获取港股最新交易日期
-        latest_hk_date_result = pd.read_sql_query("""
-            SELECT MAX(trade_date) AS latest_date 
-            FROM stock_realtime_quote_hk 
-            WHERE change_percent IS NOT NULL
-        """, db.bind)
-        
         latest_hk_trade_date = None
-        if not latest_hk_date_result.empty and latest_hk_date_result.iloc[0]['latest_date'] is not None:
-            latest_hk_trade_date = latest_hk_date_result.iloc[0]['latest_date']
+        latest_hk_date_row = db.execute(text("""
+            SELECT MAX(trade_date) AS latest_date
+            FROM stock_realtime_quote_hk
+            WHERE change_percent IS NOT NULL
+        """)).fetchone()
+        if latest_hk_date_row and latest_hk_date_row[0] is not None:
+            latest_hk_trade_date = latest_hk_date_row[0]
         
         result = []
         

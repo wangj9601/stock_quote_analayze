@@ -298,7 +298,7 @@ def collect_hk_index_historical():
 
 # 定时任务配置
 scheduler.add_job(collect_akshare_realtime, 'cron', day_of_week='mon-fri', hour='15', minute='31', id='akshare_realtime')
-scheduler.add_job(collect_tushare_historical, 'cron', hour='16', minute='22', id='tushare_historical')
+scheduler.add_job(collect_tushare_historical, 'cron', hour='16', minute='2', id='tushare_historical')
 scheduler.add_job(collect_akshare_index_realtime, 'cron', day_of_week='mon-fri', hour='11,15', minute='59', id='akshare_index_realtime')
 scheduler.add_job(collect_akshare_industry_board_realtime, 'cron', day_of_week='mon-fri', hour='11,16', minute=3, id='akshare_industry_board_realtime')
 #scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')

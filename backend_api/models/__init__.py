@@ -69,6 +69,9 @@ try:
         RSIIndicators = getattr(models_module, 'RSIIndicators', None)
         BOLLIndicators = getattr(models_module, 'BOLLIndicators', None)
         MAVOLIndicators = getattr(models_module, 'MAVOLIndicators', None)
+        QuoteData = getattr(models_module, 'QuoteData', None)
+        QuoteDataCreate = getattr(models_module, 'QuoteDataCreate', None)
+        QuoteDataInDB = getattr(models_module, 'QuoteDataInDB', None)
         DataCollectionRequest = getattr(models_module, 'DataCollectionRequest', None)
         DataCollectionResponse = getattr(models_module, 'DataCollectionResponse', None)
         DataCollectionStatus = getattr(models_module, 'DataCollectionStatus', None)
@@ -132,6 +135,9 @@ except Exception as e:
     RSIIndicators = None
     BOLLIndicators = None
     MAVOLIndicators = None
+    QuoteData = None
+    QuoteDataCreate = None
+    QuoteDataInDB = None
     DataCollectionRequest = None
     DataCollectionResponse = None
     DataCollectionStatus = None
@@ -200,6 +206,9 @@ __all__ = [
     'RSIIndicators',
     'BOLLIndicators',
     'MAVOLIndicators',
+    'QuoteData',
+    'QuoteDataCreate',
+    'QuoteDataInDB',
     'DataCollectionRequest',
     'DataCollectionResponse',
     'DataCollectionStatus',
