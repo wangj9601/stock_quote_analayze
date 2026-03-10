@@ -76,14 +76,18 @@ def collect_tushare_historical():
     try:
         today = datetime.now()
         if today.weekday() in (5, 6):
-            logging.info("[定时任务] 今天是周末，不执行 Tushare 历史行情采集。")
+            logging.info("[定时任务] 今天是周末，不执行 A 股历史行情采集。")
             return
-        today = today.strftime('%Y%m%d')
-        logging.info(f"[定时任务] Tushare 历史行情采集开始，日期: {today}")
-        tushare_hist_collector.collect_historical_quotes(today)
-        logging.info("[定时任务] Tushare 历史行情采集完成")
+        today_str = today.strftime('%Y%m%d')
+        logging.info(f"[定时任务] A 股历史行情采集开始，日期: {today_str}")
+        # 优先从 A 股实时行情表同步；若无对应交易日数据再走 tushare 接口
+        if tushare_hist_collector.collect_historical_quotes_from_realtime(today_str):
+            logging.info("[定时任务] A 股历史行情已从实时表同步完成")
+        else:
+            tushare_hist_collector.collect_historical_quotes(today_str)
+            logging.info("[定时任务] A 股历史行情从 Tushare 采集完成")
     except Exception as e:
-        logging.error(f"[定时任务] Tushare 历史行情采集异常: {e}")
+        logging.error(f"[定时任务] A 股历史行情采集异常: {e}")
 
 def collect_tushare_realtime():
     try:
@@ -293,17 +297,17 @@ def collect_hk_index_historical():
         logging.error(f"[定时任务] 港股指数历史行情采集异常: {e}")
 
 # 定时任务配置
-scheduler.add_job(collect_akshare_realtime, 'cron', day_of_week='mon-fri', hour='11,15', minute='31', id='akshare_realtime')
+scheduler.add_job(collect_akshare_realtime, 'cron', day_of_week='mon-fri', hour='15', minute='31', id='akshare_realtime')
 scheduler.add_job(collect_tushare_historical, 'cron', hour='16', minute='22', id='tushare_historical')
-scheduler.add_job(collect_akshare_index_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute='59', id='akshare_index_realtime')
-scheduler.add_job(collect_akshare_industry_board_realtime, 'cron', day_of_week='mon-fri', hour='9-11,13-16', minute=3, id='akshare_industry_board_realtime')
-scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
+scheduler.add_job(collect_akshare_index_realtime, 'cron', day_of_week='mon-fri', hour='11,15', minute='59', id='akshare_index_realtime')
+scheduler.add_job(collect_akshare_industry_board_realtime, 'cron', day_of_week='mon-fri', hour='11,16', minute=3, id='akshare_industry_board_realtime')
+#scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
 scheduler.add_job(collect_akshare_turnover_rate, 'cron', day_of_week='mon-fri', hour='11', minute='13', id='akshare_turnover_rate')
 #scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
-scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
-scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
-scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
-scheduler.add_job(collect_hk_realtime, 'cron', day_of_week='mon-fri', hour='12,16', minute='39', id='hk_realtime')
+#scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
+#scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
+#scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
+scheduler.add_job(collect_hk_realtime, 'cron', day_of_week='mon-fri', hour='16', minute='39', id='hk_realtime')
 scheduler.add_job(collect_hk_historical, 'cron', day_of_week='mon-fri', hour=16, minute=55, id='hk_historical')
 scheduler.add_job(generate_weekly_data, 'cron', day_of_week='mon-fri', hour=16, minute=25, id='generate_weekly')
 scheduler.add_job(generate_hk_weekly_data, 'cron', day_of_week='mon-fri', hour=17, minute=1, id='generate_hk_weekly')
@@ -315,7 +319,7 @@ scheduler.add_job(generate_semiannual_data, 'cron', day_of_week='mon-fri', hour=
 scheduler.add_job(generate_hk_semiannual_data, 'cron', day_of_week='mon-fri', hour=17, minute=13, id='generate_hk_semiannual')
 scheduler.add_job(generate_annual_data, 'cron', day_of_week='mon-fri', hour=16, minute=47, id='generate_annual')
 scheduler.add_job(generate_hk_annual_data, 'cron', day_of_week='mon-fri', hour=17, minute=16, id='generate_hk_annual')
-scheduler.add_job(collect_hk_index_realtime, 'cron', day_of_week='mon-fri', hour='9-12,13-16', minute='35', id='hk_index_realtime')
+scheduler.add_job(collect_hk_index_realtime, 'cron', day_of_week='mon-fri', hour='12,16', minute='35', id='hk_index_realtime')
 scheduler.add_job(collect_hk_index_historical, 'cron', day_of_week='mon-fri', hour=17, minute=18, id='hk_index_historical')
 
 if __name__ == "__main__":
