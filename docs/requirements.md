@@ -1,13 +1,14 @@
 # 股票分析软件数据服务系统需求规格说明书(SRS) 
 
-**文档版本：** V0.5 
-**日    期：** 2025年05月 
+**文档版本：** V0.6 
+**日    期：** 2026年03月 
 
 ## 目录 
 1. 项目概述 
 2. 功能需求分析 
 3. 接口设计说明 
-4. 非功能性需求分析
+4. 非功能性需求分析 
+5. 附录（当前实现状态与文档索引）
 
 ## 1. 项目概述 
 ### 1.1. 目标 
@@ -597,6 +598,43 @@
   - 输出：CSV文件流
   - 逻辑规则：字段顺序与数据库一致，支持大批量导出。
 
+#### 2.5.6a. 选股与筛选 API（已实现）
+
+- **选股结果（GMS/PVFRS）**
+  - 路径：`GET /api/screening/test-gms`、`GET /api/screening/test-pvfrs` 等（见 stock_screening_routes）
+  - 输入参数：日期、市场、数据来源（全市场/自选股/指定代码）
+  - 输出：选股结果列表（代码、得分、信号类型等）
+  - 逻辑规则：GMS 选股优先从 gms_signal_trace 读取，缺失时计算并回填；支持 A 股与港股。
+
+- **成交量异动榜**
+  - 路径：`GET /api/stock/volume_aberration_list?market=cn|hk&date=&order=desc|asc&page=&page_size=`
+  - 输入参数：market 必填，date 可选（默认最新交易日），order 放量/缩量，分页
+  - 输出：按量比(20) 排序的列表（code、name、volume、mavol5/10/20、ratio_5/20、涨跌幅等）
+  - 逻辑规则：行情表 INNER JOIN mavol_indicators，仅展示有均量指标的股票；详见《成交量异动榜设计与使用手册》。
+
+#### 2.5.6b. GMS 回测与信号追溯 API（已实现）
+
+- **GMS 回测任务（管理端）**
+  - 路径：`POST /api/admin/gms/backtests` 创建；`GET /api/admin/gms/backtests` 列表；`GET /api/admin/gms/backtests/{task_id}` 详情；`GET /api/admin/gms/backtests/{task_id}/logs` 日志；`POST .../cancel` 取消；`DELETE` 删除；`GET /api/admin/gms/reports/{id}/download` 下载明细 CSV
+  - 输入参数：创建时 task_name、market、start_date、end_date、target_pct、horizon_days、min_score、stock_pool_mode（all/single/custom）、stock_code 或 stock_pool
+  - 逻辑规则：单股/自定义股票池时仅回测该池所属市场；选股优先读 gms_signal_trace，缺失再计算并回填。
+
+- **GMS 信号追溯**
+  - 路径：`GET /api/stock/gms-signal-trace?code=xxxxxx&start_date=&end_date=&force_compute=`
+  - 输入参数：code 必填；force_compute=1 时强制重新计算并入库
+  - 输出：该股票在 gms_signal_trace 中的信号列表
+  - 逻辑规则：无记录且未传 force_compute 时先执行追溯计算再返回。
+
+#### 2.5.6c. 推送 API（已实现）
+
+- **用户推送配置**
+  - 路径：`GET /api/push/config`、`PUT /api/push/config`
+  - 输入参数：enabled、channels（wechat/email）、push_times、report_type（summary/detailed/gms_daily/volume_aberration）、stock_codes
+  - 逻辑规则：需登录；报告类型含自选股汇总、明细、GMS 日报、成交量异动榜。
+
+- **手动触发推送**：`POST /api/push/trigger` 等（见 push_routes）。
+- **管理端**：`/api/admin/push/*` 管理用户推送配置与任务。
+
 #### 2.5.7. 基本面信息 API 
 获取公司财务、基本面数据、股本结构等。
 
@@ -814,4 +852,64 @@ graph TB
 - 网络环境：在不同网络环境（Wi-Fi, 4G/5G）下均能正常使用，进行网络优化。
 
 ## 5. 附录 
-- PyJWT：用于 JSON Web Token 的编码与解码
+
+### 5.1 当前实现状态与文档索引（截至 2026-03）
+
+本节根据代码工程通读结果整理，供开发与测试对照需求使用。
+
+#### 5.1.1 后端 API 模块与路由前缀
+
+| 前缀/模块 | 说明 | 路由文件 |
+|-----------|------|----------|
+| `/api/auth` | 用户认证（登录/登出/状态） | auth_routes.py |
+| `/api/users` | 用户信息与注册 | user_manage.py |
+| `/api/watchlist` | 自选股与分组 | watchlist_manage.py |
+| `/api/market` | 指数、行业板块 | market_routes.py |
+| `/api/stock` | A股行情、K线、财务、排行榜、成交量异动榜等 | stock_manage.py |
+| `/api/stock/hk` | 港股行情、K线、技术指标 | hk_stock_manage.py |
+| `/api/stock/history` | 历史行情分页与导出 | history_api.py |
+| `/api/stock/news` | 个股新闻、研报、PDF | stock_news.py |
+| `/api/stock_fund_flow` | 资金流向 | stock_fund_flow.py |
+| `/api/screening` | 选股（GMS/PVFRS、自选股筛选、指定日期） | stock_screening_routes.py |
+| `/api/stock`（GMS 信号追溯） | GMS 信号追溯查询与强制重算 | gms_trace_routes.py |
+| `/api/quotes` | 行情与多周期 | quotes_routes.py, multi_period_quotes_routes.py |
+| `/api/push` | 用户推送配置、绑定微信、手动触发推送 | push_routes.py |
+| `/api/analysis` | 智能分析/交易建议 | stock_analysis_routes.py |
+| `/api/data-collection` | 数据采集触发与状态 | data_collection_api.py |
+| `/api/admin/*` | 管理端：认证、用户、仪表盘、日志、行情、采集、指标 | admin/*.py |
+| `/api/admin/gms` | GMS 回测任务与报告（创建/列表/详情/日志/取消/删除/下载） | admin/gms_admin_routes.py |
+| `/api/admin/pvfrs` | PVFRS 策略配置与回测 | admin/pvfrs_admin_routes.py, pvfrs_strategy.py |
+| `/api/admin/push` | 管理员推送配置与任务 | push_routes.py（admin_router） |
+
+#### 5.1.2 已实现功能摘要
+
+- **行情与个股**：A股/港股实时与历史行情、涨跌/成交量/换手率/成交量异动榜、K线（日/周/月/分钟）、分时、技术指标（MA/MACD/RSI/KDJ/BOLL 等）、财务摘要、资金流向、新闻与研报。
+- **自选股**：列表（含实时行情）、添加/删除、分组管理；与选股、推送联动。
+- **选股**：GMS 策略选股、PVFRS 量价频共振选股；支持按日期、市场、自选股范围；GMS 选股优先读 `gms_signal_trace` 表，缺失时计算并回填。
+- **GMS 回测**：管理端创建任务（全市场/单股/自定义股票池），单股或自定义池时仅跑所属市场；异步执行、进度与日志、命中率统计、明细 CSV 下载；报告与任务一一对应。
+- **推送**：用户推送配置（渠道：企业微信、邮件；报告类型：summary、detailed、gms_daily、volume_aberration）；定时与手动触发；企业微信需配置可信 IP/回调或可信域名。
+- **成交量异动榜**：A股/港股按量比(20) 放量榜/缩量榜，依赖 `mavol_indicators`；港股条数少时需补全港股 MAVOL（见《成交量异动榜设计与使用手册》）。
+- **管理后台**：Vue 3 + TypeScript + Vite + Element Plus；用户、日志、仪表盘、行情、数据采集、GMS 回测管理、PVFRS 策略、推送配置等；生产部署 base `/admin/`，需 Nginx SPA fallback。
+
+#### 5.1.3 关键数据表与设计文档索引
+
+| 主题 | 设计/说明文档 |
+|------|----------------|
+| 成交量异动榜 | docs/成交量异动榜设计与使用手册.md |
+| GMS 回测管理 | docs/GMS回测管理中心设计开发与使用手册.md |
+| 管理后台 | docs/管理后台说明与使用指南.md |
+| 日常运维 | 日常运维.md |
+| 推送/报告 | backend_api 内 push_routes、report_service、wechat_service |
+| GMS 信号表 | gms_signal_trace（优先读表再计算回填见 backend_core/strategies/gms/frontend_interface.py） |
+| 企业微信测试 | test/test_wechat_send_message.py（需 .env 中 WECHAT_* 与可信 IP） |
+
+### 5.2 技术栈与依赖
+
+- PyJWT：用于 JSON Web Token 的编码与解码。
+
+### 5.3 文档修订记录
+
+| 版本 | 日期 | 修订说明 |
+|------|------|----------|
+| V0.5 | 2025-05 | 初版 SRS |
+| V0.6 | 2026-03 | 通读代码工程：新增 5.1 当前实现状态与文档索引；2.5 补充选股、GMS 回测与信号追溯、推送、成交量异动榜等 API 说明。 |
