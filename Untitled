@@ -1,0 +1,12 @@
+# 数据库配置（backend_core/database/db.py 从此文件读取）
+# 复制本文件为 .env 并按需修改，.env 不要提交到版本库
+
+# 方式一：分项配置
+DB_HOST=192.168.31.237
+DB_PORT=5446
+DB_USER=postgres
+DB_PASSWORD=qidianspacetime
+DB_NAME=stock_analysis
+
+# 方式二：直接写完整连接串（若设置则优先于上面分项）
+# DATABASE_URL=postgresql+psycopg2://postgres:qidianspacetime@192.168.31.237:5446/stock_analysis

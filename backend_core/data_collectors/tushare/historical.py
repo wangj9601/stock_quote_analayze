@@ -197,6 +197,18 @@ class HistoricalQuoteCollector(TushareCollector):
     
     def extract_code_from_ts_code(self, ts_code: str) -> str:
         return ts_code.split(".")[0] if ts_code else ""
+
+    def _code_to_ts_code(self, code: str) -> str:
+        """根据 A 股代码推断 ts_code（如 000001 -> 000001.SZ）。"""
+        if not code or len(code) < 6:
+            return f"{code}.SZ"
+        if code[0] == '6':
+            return f"{code}.SH"
+        if code[0] in ('0', '3'):
+            return f"{code}.SZ"
+        if code[0] in ('4', '8'):
+            return f"{code}.BJ"
+        return f"{code}.SZ"
     
     def _get_watchlist_codes(self, session) -> set:
         """获取所有用户的自选股代码"""
@@ -1270,364 +1282,9 @@ class HistoricalQuoteCollector(TushareCollector):
             session.commit()
             self.logger.info(f"全部历史行情数据采集并入库完成，成功: {success_count}，失败: {fail_count}")
             
-            # 数据采集完成后，自动计算扩展涨跌幅（5日、10日、60日）
+            # 数据采集完成后，自动计算扩展涨跌幅与各类指标
             if success_count > 0:
-                try:
-                    self.logger.info("开始自动计算扩展涨跌幅（5日、10日、60日）...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    calculator = ExtendedChangeCalculator(session)
-                    calc_result = calculator.calculate_for_date(target_date)
-                    
-                    self.logger.info(f"扩展涨跌幅计算完成: 总计 {calc_result['total']}, 成功 {calc_result['success']}, 失败 {calc_result['failed']}")
-                    
-                    # 记录扩展涨跌幅计算日志
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs 
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'extended_change_calculation',
-                        'operation_desc': f'计算日期: {target_date}\n总计股票: {calc_result["total"]}\n成功计算: {calc_result["success"]}\n失败计算: {calc_result["failed"]}',
-                        'affected_rows': calc_result['success'],
-                        'status': 'success' if calc_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(calc_result['details']) if calc_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                    
-                except Exception as calc_error:
-                    self.logger.error(f"自动计算扩展涨跌幅失败: {calc_error}")
-                    # 记录计算失败日志
-                    try:
-                        session.execute(text('''
-                            INSERT INTO historical_collect_operation_logs 
-                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                        '''), {
-                            'operation_type': 'extended_change_calculation',
-                            'operation_desc': f'计算日期: {datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")}',
-                            'affected_rows': 0,
-                            'status': 'error',
-                            'error_message': str(calc_error),
-                            'collect_source': 'tushare'
-                        })
-                        session.commit()
-                    except Exception as log_error:
-                        self.logger.error(f"记录扩展涨跌幅计算失败日志时出错: {log_error}")
-                
-                # 扩展涨跌幅计算完成后，再计算30日涨跌幅
-                try:
-                    self.logger.info("开始自动计算30日涨跌幅...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    thirty_calculator = ThirtyDayChangeCalculator(session)
-                    thirty_result = thirty_calculator.calculate_for_date(target_date)
-
-                    self.logger.info(
-                        "30日涨跌幅计算完成: 总计 %d, 成功 %d, 失败 %d",
-                        thirty_result['total'],
-                        thirty_result['success'],
-                        thirty_result['failed']
-                    )
-
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'thirty_day_change_calculation',
-                        'operation_desc': f'计算日期: {target_date}\n总计股票: {thirty_result["total"]}\n成功计算: {thirty_result["success"]}\n失败计算: {thirty_result["failed"]}',
-                        'affected_rows': thirty_result['success'],
-                        'status': 'success' if thirty_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(thirty_result['details']) if thirty_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-
-                except Exception as calc_error:
-                    self.logger.error(f"自动计算30日涨跌幅失败: {calc_error}")
-                    try:
-                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                        session.execute(text('''
-                            INSERT INTO historical_collect_operation_logs 
-                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                        '''), {
-                            'operation_type': 'thirty_day_change_calculation',
-                            'operation_desc': f'计算日期: {target_date}',
-                            'affected_rows': 0,
-                            'status': 'error',
-                            'error_message': str(calc_error),
-                            'collect_source': 'tushare'
-                        })
-                        session.commit()
-                    except Exception as log_error:
-                        self.logger.error(f"记录30日涨跌幅计算失败日志时出错: {log_error}")
-                
-                # 30日涨跌幅计算完成后，再计算MACD等指标（仅针对自选股）
-                try:
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    
-                    # 获取自选股列表
-                    watchlist_codes = self._get_watchlist_codes(session)
-                    self.logger.info(f"获取到 {len(watchlist_codes)} 只自选股")
-
-                    self.logger.info("开始自动计算MACD指标...")
-                    macd_result = self._calculate_and_save_macd_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    
-                    self.logger.info(
-                        "MACD指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
-                        macd_result['total'],
-                        macd_result['success'],
-                        macd_result['skipped'],
-                        macd_result['failed']
-                    )
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'macd_calculation',
-                        'operation_desc': f'计算日期: {target_date}\n总计股票: {macd_result["total"]}\n成功计算: {macd_result["success"]}\n跳过: {macd_result["skipped"]}\n失败计算: {macd_result["failed"]}',
-                        'affected_rows': macd_result['success'],
-                        'status': 'success' if macd_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(macd_result['details']) if macd_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                    
-                except Exception as macd_error:
-                    self.logger.error(f"自动计算MACD指标失败: {macd_error}")
-                    try:
-                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                        session.execute(text('''
-                            INSERT INTO historical_collect_operation_logs 
-                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                        '''), {
-                            'operation_type': 'macd_calculation',
-                            'operation_desc': f'计算日期: {target_date}',
-                            'affected_rows': 0,
-                            'status': 'error',
-                            'error_message': str(macd_error),
-                            'collect_source': 'tushare'
-                        })
-                        session.commit()
-                    except Exception as log_error:
-                        self.logger.error(f"记录MACD计算失败日志时出错: {log_error}")
-                
-                # MACD指标计算完成后，再计算MA指标
-                try:
-                    self.logger.info("开始自动计算MA指标...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    ma_result = self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    
-                    self.logger.info(
-                        "MA指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
-                        ma_result['total'],
-                        ma_result['success'],
-                        ma_result['skipped'],
-                        ma_result['failed']
-                    )
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'ma_calculation',
-                        'operation_desc': f'计算日期: {target_date}\n总计股票: {ma_result["total"]}\n成功计算: {ma_result["success"]}\n跳过: {ma_result["skipped"]}\n失败计算: {ma_result["failed"]}',
-                        'affected_rows': ma_result['success'],
-                        'status': 'success' if ma_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(ma_result['details']) if ma_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                    
-                except Exception as ma_error:
-                    self.logger.error(f"自动计算MA指标失败: {ma_error}")
-                    try:
-                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                        session.execute(text('''
-                            INSERT INTO historical_collect_operation_logs 
-                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                        '''), {
-                            'operation_type': 'ma_calculation',
-                            'operation_desc': f'计算日期: {target_date}',
-                            'affected_rows': 0,
-                            'status': 'error',
-                            'error_message': str(ma_error),
-                            'collect_source': 'tushare'
-                        })
-                        session.commit()
-                    except Exception as log_error:
-                        self.logger.error(f"记录MA计算失败日志时出错: {log_error}")
-                
-                # MA指标计算完成后，再计算KDJ指标
-                try:
-                    self.logger.info("开始自动计算KDJ指标...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    kdj_result = self._calculate_and_save_kdj_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    
-                    self.logger.info(
-                        "KDJ指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
-                        kdj_result['total'],
-                        kdj_result['success'],
-                        kdj_result['skipped'],
-                        kdj_result['failed']
-                    )
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'kdj_calculation',
-                        'operation_desc': f'计算日期: {target_date}\n总计股票: {kdj_result["total"]}\n成功计算: {kdj_result["success"]}\n跳过: {kdj_result["skipped"]}\n失败计算: {kdj_result["failed"]}',
-                        'affected_rows': kdj_result['success'],
-                        'status': 'success' if kdj_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(kdj_result['details']) if kdj_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                    
-                except Exception as kdj_error:
-                    self.logger.error(f"自动计算KDJ指标失败: {kdj_error}")
-                    try:
-                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                        session.execute(text('''
-                            INSERT INTO historical_collect_operation_logs 
-                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                        '''), {
-                            'operation_type': 'kdj_calculation',
-                            'operation_desc': f'计算日期: {target_date}',
-                            'affected_rows': 0,
-                            'status': 'error',
-                            'error_message': str(kdj_error),
-                            'collect_source': 'tushare'
-                        })
-                        session.commit()
-                    except Exception as log_error:
-                        self.logger.error(f"记录KDJ计算失败日志时出错: {log_error}")
-                
-                # KDJ指标计算完成后，再计算RSI指标
-                try:
-                    self.logger.info("开始自动计算RSI指标...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    rsi_result = self._calculate_and_save_rsi_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    
-                    self.logger.info(
-                        "RSI指标计算完成: 总计 %d, 成功 %d, 跳过 %d, 失败 %d",
-                        rsi_result['total'],
-                        rsi_result['success'],
-                        rsi_result['skipped'],
-                        rsi_result['failed']
-                    )
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'rsi_calculation',
-                        'operation_desc': f'计算日期: {target_date}\n总计股票: {rsi_result["total"]}\n成功计算: {rsi_result["success"]}\n跳过: {rsi_result["skipped"]}\n失败计算: {rsi_result["failed"]}',
-                        'affected_rows': rsi_result['success'],
-                        'status': 'success' if rsi_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(rsi_result['details']) if rsi_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                    
-                except Exception as rsi_error:
-                    self.logger.error(f"自动计算RSI指标失败: {rsi_error}")
-                    try:
-                        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                        session.execute(text('''
-                            INSERT INTO historical_collect_operation_logs 
-                            (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                            VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                        '''), {
-                            'operation_type': 'rsi_calculation',
-                            'operation_desc': f'计算日期: {target_date}',
-                            'affected_rows': 0,
-                            'status': 'error',
-                            'error_message': str(rsi_error),
-                            'collect_source': 'tushare'
-                        })
-                        session.commit()
-                    except Exception as log_error:
-                        self.logger.error(f"记录RSI计算失败日志时出错: {log_error}")
-
-                # RSI指标计算完成后，计算BOLL指标
-                try:
-                    self.logger.info("开始自动计算BOLL指标...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    boll_result = self._calculate_and_save_boll_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    self.logger.info(f"BOLL指标计算完成: 成功 {boll_result['success']}, 失败 {boll_result['failed']}")
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'boll_calculation',
-                        'operation_desc': f'计算日期: {target_date}',
-                        'affected_rows': boll_result['success'],
-                        'status': 'success' if boll_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(boll_result['details']) if boll_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                except Exception as boll_error:
-                    self.logger.error(f"自动计算BOLL指标失败: {boll_error}")
-
-                # 计算MAVOL指标
-                try:
-                    self.logger.info("开始自动计算MAVOL指标...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    mavol_result = self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    self.logger.info(f"MAVOL指标计算完成: 成功 {mavol_result['success']}, 失败 {mavol_result['failed']}")
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'mavol_calculation',
-                        'operation_desc': f'计算日期: {target_date}',
-                        'affected_rows': mavol_result['success'],
-                        'status': 'success' if mavol_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(mavol_result['details']) if mavol_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                except Exception as mavol_error:
-                    self.logger.error(f"自动计算MAVOL指标失败: {mavol_error}")
-
-                # 计算均值频率共振 (PVFRS) 指标
-                try:
-                    self.logger.info("开始自动计算均值频率共振指标...")
-                    target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                    mf_result = self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=watchlist_codes)
-                    self.logger.info(f"均值频率共振指标计算完成: 成功 {mf_result['success']}, 失败 {mf_result['failed']}")
-                    
-                    session.execute(text('''
-                        INSERT INTO historical_collect_operation_logs
-                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-                    '''), {
-                        'operation_type': 'mean_frequency_resonance_calculation',
-                        'operation_desc': f'计算日期: {target_date}',
-                        'affected_rows': mf_result['success'],
-                        'status': 'success' if mf_result['failed'] == 0 else 'partial_success',
-                        'error_message': '\n'.join(mf_result['details']) if mf_result['failed'] > 0 else None,
-                        'collect_source': 'tushare'
-                    })
-                    session.commit()
-                except Exception as mf_error:
-                    self.logger.error(f"自动计算均值频率共振指标失败: {mf_error}")
+                self._run_indicators_for_date(session, date_str)
             
             return True
         except Exception as e:
@@ -1652,3 +1309,277 @@ class HistoricalQuoteCollector(TushareCollector):
             return False
         finally:
             session.close()
+
+    def collect_historical_quotes_from_realtime(self, date_str: str) -> bool:
+        """
+        当 A 股实时行情表存在对应交易日期的数据时，从实时表同步到历史表。
+        调用方应在返回 False 时改用 tushare 接口采集。
+
+        Args:
+            date_str: 交易日期，格式 YYYYMMDD
+
+        Returns:
+            True 表示已从实时表同步并完成；False 表示实时表无该日数据，应走 tushare。
+        """
+        self._init_db()
+        session = SessionLocal()
+        try:
+            trade_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+            # 检查实时表是否有该交易日数据
+            count_result = session.execute(
+                text("SELECT COUNT(1) FROM stock_realtime_quote WHERE trade_date = :trade_date"),
+                {'trade_date': trade_date}
+            )
+            row = count_result.fetchone()
+            count = row[0] if row else 0
+            if count == 0:
+                self.logger.info(f"实时行情表无日期 {trade_date} 的数据，将走 tushare 采集")
+                return False
+
+            self.logger.info(f"从实时行情表同步历史数据，日期: {trade_date}，约 {count} 条")
+            rows = session.execute(text("""
+                SELECT code, name, current_price, change_percent, volume, amount, high, low, open, pre_close, turnover_rate
+                FROM stock_realtime_quote
+                WHERE trade_date = :trade_date
+            """), {'trade_date': trade_date}).fetchall()
+
+            success_count = 0
+            fail_count = 0
+            fail_detail = []
+            for row in rows:
+                code = row[0]
+                name = row[1] or ''
+                current_price = self._safe_value(row[2])
+                change_percent = self._safe_value(row[3])
+                volume = self._safe_value(row[4])
+                amount = self._safe_value(row[5])
+                high = self._safe_value(row[6])
+                low = self._safe_value(row[7])
+                open_ = self._safe_value(row[8])
+                pre_close = self._safe_value(row[9])
+                turnover_rate = self._safe_value(row[10])
+
+                if current_price is None:
+                    fail_count += 1
+                    fail_detail.append(f"{code}: 无收盘价")
+                    continue
+
+                amplitude = None
+                if pre_close and pre_close > 0 and high is not None and low is not None:
+                    amplitude = (high - low) / pre_close * 100
+                change = (current_price - pre_close) if (current_price is not None and pre_close is not None) else None
+
+                ts_code = self._code_to_ts_code(code)
+                data = {
+                    'code': code,
+                    'ts_code': ts_code,
+                    'name': name,
+                    'market': '',
+                    'date': trade_date,
+                    'open': open_,
+                    'high': high,
+                    'low': low,
+                    'close': current_price,
+                    'pre_close': pre_close,
+                    'volume': volume,
+                    'amount': amount,
+                    'amplitude': amplitude,
+                    'turnover_rate': turnover_rate,
+                    'change_percent': change_percent,
+                    'change': change,
+                    'collected_source': 'akshare_realtime',
+                    'collected_date': datetime.datetime.now().isoformat(),
+                }
+                try:
+                    session.execute(text('''
+                        INSERT INTO stock_basic_info (code, name)
+                        VALUES (:code, :name)
+                        ON CONFLICT (code) DO NOTHING
+                    '''), {'code': code, 'name': name})
+                    session.execute(text('''
+                        INSERT INTO historical_quotes
+                        (code, ts_code, name, market, collected_source, collected_date, date, open, high, low, close, volume, amount, change_percent, pre_close, change, amplitude, turnover_rate)
+                        VALUES (:code, :ts_code, :name, :market, :collected_source, :collected_date, :date, :open, :high, :low, :close, :volume, :amount, :change_percent, :pre_close, :change, :amplitude, :turnover_rate)
+                        ON CONFLICT (code, date) DO UPDATE SET
+                            ts_code = EXCLUDED.ts_code,
+                            name = EXCLUDED.name,
+                            market = EXCLUDED.market,
+                            collected_source = EXCLUDED.collected_source,
+                            collected_date = EXCLUDED.collected_date,
+                            open = EXCLUDED.open,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            close = EXCLUDED.close,
+                            volume = EXCLUDED.volume,
+                            amount = EXCLUDED.amount,
+                            change_percent = EXCLUDED.change_percent,
+                            pre_close = EXCLUDED.pre_close,
+                            amplitude = EXCLUDED.amplitude,
+                            turnover_rate = EXCLUDED.turnover_rate,
+                            change = EXCLUDED.change
+                    '''), data)
+                    success_count += 1
+                except Exception as e:
+                    fail_count += 1
+                    fail_detail.append(f"{code}: {e}")
+                    self.logger.debug(f"同步实时到历史失败 {code}: {e}")
+
+            session.execute(text('''
+                INSERT INTO historical_collect_operation_logs
+                (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+            '''), {
+                'operation_type': 'historical_quote_collect',
+                'operation_desc': f'从实时表同步 日期: {trade_date}\n成功: {success_count}\n失败: {fail_count}',
+                'affected_rows': success_count,
+                'status': 'success' if fail_count == 0 else 'partial_success',
+                'error_message': '\n'.join(fail_detail[:50]) if fail_detail else None,
+                'collect_source': 'akshare_realtime'
+            })
+            session.commit()
+            self.logger.info(f"从实时表同步历史行情完成，成功: {success_count}，失败: {fail_count}")
+
+            if success_count > 0:
+                self._run_indicators_for_date(session, date_str)
+                # 显式触发 MA、MAVOL、PVFRS（GMS）全市场计算（不限于自选股）
+                target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                try:
+                    self.logger.info("从实时表同步后：开始全市场 MA 指标计算...")
+                    ma_result = self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=None)
+                    self.logger.info("全市场 MA 指标计算完成: 成功 %s, 失败 %s", ma_result.get('success', 0), ma_result.get('failed', 0))
+                    session.commit()
+                except Exception as e:
+                    self.logger.error("从实时表同步后全市场 MA 计算失败: %s", e)
+                try:
+                    self.logger.info("从实时表同步后：开始全市场 MAVOL 指标计算...")
+                    mavol_result = self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=None)
+                    self.logger.info("全市场 MAVOL 指标计算完成: 成功 %s, 失败 %s", mavol_result.get('success', 0), mavol_result.get('failed', 0))
+                    session.commit()
+                except Exception as e:
+                    self.logger.error("从实时表同步后全市场 MAVOL 计算失败: %s", e)
+                try:
+                    self.logger.info("从实时表同步后：开始全市场 PVFRS（GMS）指标计算...")
+                    pvfrs_result = self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=None)
+                    self.logger.info("全市场 PVFRS（GMS）指标计算完成: 成功 %s, 失败 %s", pvfrs_result.get('success', 0), pvfrs_result.get('failed', 0))
+                    session.commit()
+                except Exception as e:
+                    self.logger.error("从实时表同步后全市场 PVFRS（GMS）计算失败: %s", e)
+            return True
+        except Exception as e:
+            self.logger.error("从实时表同步历史行情失败: %s", e, exc_info=True)
+            try:
+                session.rollback()
+                session.execute(text('''
+                    INSERT INTO historical_collect_operation_logs
+                    (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                    VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                '''), {
+                    'operation_type': 'historical_quote_collect',
+                    'operation_desc': f'从实时表同步 日期: {date_str}',
+                    'affected_rows': 0,
+                    'status': 'error',
+                    'error_message': str(e),
+                    'collect_source': 'akshare_realtime'
+                })
+                session.commit()
+            except Exception as log_error:
+                self.logger.error("记录错误日志失败: %s", str(log_error))
+            return False
+        finally:
+            session.close()
+
+    def _run_indicators_for_date(self, session, date_str: str) -> None:
+        """采集写入 historical_quotes 后，为指定日期运行扩展涨跌幅与各类指标。date_str 格式 YYYYMMDD。"""
+        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+        watchlist_codes = self._get_watchlist_codes(session)
+        try:
+            self.logger.info("开始自动计算扩展涨跌幅（5日、10日、60日）...")
+            calculator = ExtendedChangeCalculator(session)
+            calc_result = calculator.calculate_for_date(target_date)
+            self.logger.info(f"扩展涨跌幅计算完成: 总计 {calc_result['total']}, 成功 {calc_result['success']}, 失败 {calc_result['failed']}")
+            session.execute(text('''
+                INSERT INTO historical_collect_operation_logs
+                (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+            '''), {
+                'operation_type': 'extended_change_calculation',
+                'operation_desc': f'计算日期: {target_date}\n总计: {calc_result["total"]}\n成功: {calc_result["success"]}\n失败: {calc_result["failed"]}',
+                'affected_rows': calc_result['success'],
+                'status': 'success' if calc_result['failed'] == 0 else 'partial_success',
+                'error_message': '\n'.join(calc_result['details']) if calc_result['failed'] > 0 else None,
+                'collect_source': 'tushare'
+            })
+            session.commit()
+        except Exception as calc_error:
+            self.logger.error("自动计算扩展涨跌幅失败: %s", calc_error)
+            try:
+                session.execute(text('''
+                    INSERT INTO historical_collect_operation_logs
+                    (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                    VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                '''), {
+                    'operation_type': 'extended_change_calculation',
+                    'operation_desc': f'计算日期: {target_date}',
+                    'affected_rows': 0,
+                    'status': 'error',
+                    'error_message': str(calc_error),
+                    'collect_source': 'tushare'
+                })
+                session.commit()
+            except Exception as log_error:
+                self.logger.error("记录扩展涨跌幅计算失败日志时出错: %s", log_error)
+
+        try:
+            self.logger.info("开始自动计算30日涨跌幅...")
+            thirty_calculator = ThirtyDayChangeCalculator(session)
+            thirty_result = thirty_calculator.calculate_for_date(target_date)
+            self.logger.info("30日涨跌幅计算完成: 总计 %d, 成功 %d, 失败 %d", thirty_result['total'], thirty_result['success'], thirty_result['failed'])
+            session.execute(text('''
+                INSERT INTO historical_collect_operation_logs
+                (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+            '''), {
+                'operation_type': 'thirty_day_change_calculation',
+                'operation_desc': f'计算日期: {target_date}\n总计: {thirty_result["total"]}\n成功: {thirty_result["success"]}\n失败: {thirty_result["failed"]}',
+                'affected_rows': thirty_result['success'],
+                'status': 'success' if thirty_result['failed'] == 0 else 'partial_success',
+                'error_message': '\n'.join(thirty_result['details']) if thirty_result['failed'] > 0 else None,
+                'collect_source': 'tushare'
+            })
+            session.commit()
+        except Exception as calc_error:
+            self.logger.error("自动计算30日涨跌幅失败: %s", calc_error)
+            try:
+                session.execute(text('''
+                    INSERT INTO historical_collect_operation_logs
+                    (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                    VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                '''), {
+                    'operation_type': 'thirty_day_change_calculation',
+                    'operation_desc': f'计算日期: {target_date}',
+                    'affected_rows': 0,
+                    'status': 'error',
+                    'error_message': str(calc_error),
+                    'collect_source': 'tushare'
+                })
+                session.commit()
+            except Exception as log_error:
+                self.logger.error("记录30日涨跌幅计算失败日志时出错: %s", log_error)
+
+        for calc_name, calc_method in [
+            ('MACD', lambda: self._calculate_and_save_macd_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('MA', lambda: self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('KDJ', lambda: self._calculate_and_save_kdj_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('RSI', lambda: self._calculate_and_save_rsi_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('BOLL', lambda: self._calculate_and_save_boll_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('MAVOL', lambda: self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('mean_frequency_resonance', lambda: self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+        ]:
+            try:
+                self.logger.info("开始自动计算%s指标...", calc_name)
+                result = calc_method()
+                if isinstance(result, dict):
+                    self.logger.info("%s指标计算完成: 成功 %s, 失败 %s", calc_name, result.get('success', 0), result.get('failed', 0))
+                session.commit()
+            except Exception as err:
+                self.logger.error("自动计算%s指标失败: %s", calc_name, err)
