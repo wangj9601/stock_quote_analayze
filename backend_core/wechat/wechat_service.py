@@ -26,6 +26,10 @@ class WeChatService:
         
         response = requests.post(url, json=data)
         result = response.json()
+
+        # 调试输出，方便定位发送失败原因（如用户不在应用可见范围、userid 不存在等）
+        if result.get('errcode') != 0:
+            print(f"企业微信发送文本消息失败: {result}")
         
         return result.get('errcode') == 0
     

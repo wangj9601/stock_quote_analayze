@@ -797,7 +797,7 @@ class ReportService:
 
             rows.append({
                 "股票代码": "\u2060" + str(code),  # 零宽字符前缀使 Excel 整列统一按文本显示，左对齐且保留前导零
-                "股票名称": name,
+                    "股票名称": name,
                 "信号强度": f"{sig * 100:.1f}%",
                 "买点类型": buy_type,
                 "当前价格": f"{current_price:.2f}" if current_price is not None else "",
