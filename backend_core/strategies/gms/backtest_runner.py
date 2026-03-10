@@ -151,11 +151,28 @@ def run_gms_backtest(
     start_str = str(start_date).strip()[:10]
     end_str = str(end_date).strip()[:10]
 
+    # 单股/自定义股票池时只跑该池所属市场，避免“选单股仍跑全市场”
+    def _is_a_share(c: str) -> bool:
+        s = str(c).strip()
+        return len(s) >= 6 and s.isdigit() and s[0] in "6039"
+
     if market == "all":
         dates_cn = _get_trading_dates_cn(db, start_str, end_str)
         dates_hk = _get_trading_dates_hk(db, start_str, end_str)
         all_dates = sorted(set(dates_cn) | set(dates_hk))
-        markets_to_run = [("cn", dates_cn), ("hk", dates_hk)]
+        if stock_pool:
+            cn_codes = [c for c in stock_pool if _is_a_share(c)]
+            hk_codes = [c for c in stock_pool if c not in cn_codes]
+            if cn_codes and not hk_codes:
+                markets_to_run = [("cn", dates_cn)]
+                all_dates = dates_cn
+            elif hk_codes and not cn_codes:
+                markets_to_run = [("hk", dates_hk)]
+                all_dates = dates_hk
+            else:
+                markets_to_run = [("cn", dates_cn), ("hk", dates_hk)]
+        else:
+            markets_to_run = [("cn", dates_cn), ("hk", dates_hk)]
     elif market == "cn":
         all_dates = _get_trading_dates_cn(db, start_str, end_str)
         markets_to_run = [("cn", all_dates)]

@@ -1,0 +1,46 @@
+{
+  "report_id": "1eae3ad1-c6e1-4242-a536-6492123c95e7",
+  "task_id": "1eae3ad1-c6e1-4242-a536-6492123c95e7",
+  "name": "GMS回测_1eae3ad1",
+  "created_at": "2026-03-10T15:16:55.225280Z",
+  "summary": {
+    "total_samples": 32,
+    "hit_count": 18,
+    "hit_rate": 0.5625,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2020-03-10",
+    "end_date": "2026-03-10",
+    "market": "cn",
+    "by_buy_type": {
+      "右侧": {
+        "total": 11,
+        "hit": 7,
+        "hit_rate": 0.6363636363636364
+      },
+      "左侧": {
+        "total": 21,
+        "hit": 11,
+        "hit_rate": 0.5238095238095238
+      }
+    },
+    "by_score_bucket": {
+      "[80,90)": {
+        "total": 2,
+        "hit": 1,
+        "hit_rate": 0.5
+      },
+      "[70,80)": {
+        "total": 24,
+        "hit": 13,
+        "hit_rate": 0.5416666666666666
+      },
+      "[90,100]": {
+        "total": 6,
+        "hit": 4,
+        "hit_rate": 0.6666666666666666
+      }
+    }
+  },
+  "details_path": "1eae3ad1-c6e1-4242-a536-6492123c95e7.csv"
+}
