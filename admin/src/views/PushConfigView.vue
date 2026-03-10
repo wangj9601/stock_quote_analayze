@@ -5,10 +5,10 @@
         <span>邮件推送配置</span>
         <div style="float: right; display: flex; gap: 8px;">
           <el-button type="primary" :loading="loading" @click="loadConfigs">刷新</el-button>
-          <el-button type="success" @click="openAddUser">添加推送用户</el-button>
+          <el-button type="success" @click="openAddTask">添加推送任务</el-button>
         </div>
       </template>
-      <el-table :data="displayList" v-loading="loading" border stripe>
+      <el-table :data="displayList" v-loading="loading" border stripe row-key="id">
         <el-table-column prop="username" label="用户名" width="120" />
         <el-table-column prop="email" label="邮箱" min-width="180" />
         <el-table-column prop="enabled" label="启用" width="80">
@@ -47,24 +47,24 @@
       </div>
     </el-card>
 
-    <!-- 添加推送用户：从 user 表选择用户，新建一条推送配置并保存到 user_push_configs -->
-    <el-dialog v-model="addUserVisible" title="添加推送用户" width="520px" @close="resetAddForm">
+    <!-- 添加推送任务：选择用户与报告类型等，同一用户可配置多条任务 -->
+    <el-dialog v-model="addTaskVisible" title="添加推送任务" width="520px" @close="resetAddForm">
       <el-form ref="addFormRef" :model="addForm" label-width="100px">
         <el-form-item label="选择用户" required>
           <el-select
             v-model="addForm.user_id"
-            placeholder="请选择用户（来源于用户表，仅显示尚未配置推送的用户）"
+            placeholder="请选择用户（同一用户可配置多条推送任务）"
             filterable
             style="width: 100%;"
           >
             <el-option
-              v-for="u in availableUsers"
+              v-for="u in allUsers"
               :key="u.id"
               :label="`${u.username} (${u.email})`"
               :value="u.id"
             />
           </el-select>
-          <div v-if="availableUsers.length === 0" class="el-form-item__error">当前没有可添加的用户（所有用户已配置或用户列表为空）</div>
+          <div v-if="allUsers.length === 0" class="el-form-item__error">当前没有用户可选</div>
         </el-form-item>
         <el-form-item label="启用推送">
           <el-switch v-model="addForm.enabled" />
@@ -90,12 +90,13 @@
             <el-option label="汇总报告" value="summary" />
             <el-option label="详细报告" value="detailed" />
             <el-option label="GMS自选股选股" value="gms_daily" />
+            <el-option label="成交量异动榜" value="volume_aberration" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="addUserVisible = false">取消</el-button>
-        <el-button type="primary" :loading="addLoading" :disabled="!addForm.user_id" @click="submitAddUser">确定</el-button>
+        <el-button type="primary" :loading="addLoading" :disabled="!addForm.user_id" @click="submitAddTask">确定</el-button>
       </template>
     </el-dialog>
 
@@ -133,6 +134,7 @@
             <el-option label="汇总报告" value="summary" />
             <el-option label="详细报告" value="detailed" />
             <el-option label="GMS自选股选股" value="gms_daily" />
+            <el-option label="成交量异动榜" value="volume_aberration" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -155,7 +157,8 @@ import type { User } from '@/types/users.types'
 const REPORT_TYPE_LABELS: Record<string, string> = {
   summary: '汇总报告',
   detailed: '详细报告',
-  gms_daily: 'GMS自选股选股'
+  gms_daily: 'GMS自选股选股',
+  volume_aberration: '成交量异动榜'
 }
 
 /** 推送时间选项：半小时间隔，0-24 小时（00:00 ~ 23:30） */
@@ -172,7 +175,7 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const addLoading = ref(false)
 const editVisible = ref(false)
-const addUserVisible = ref(false)
+const addTaskVisible = ref(false)
 const editFormRef = ref()
 const addFormRef = ref()
 const configs = ref<UserPushConfigResponse[]>([])
@@ -196,12 +199,6 @@ const displayList = computed(() => {
   return list.slice(start, start + pageSize.value)
 })
 
-/** 尚未配置推送的用户（来源于 user 表，排除已有 config 的 user_id） */
-const availableUsers = computed(() => {
-  const configuredIds = new Set(configs.value.map((c) => c.user_id))
-  return allUsers.value.filter((u) => !configuredIds.has(u.id))
-})
-
 const addForm = ref({
   user_id: 0 as number,
   enabled: true,
@@ -211,6 +208,7 @@ const addForm = ref({
 })
 
 const editForm = ref({
+  config_id: 0 as number,
   user_id: 0,
   username: '',
   enabled: true,
@@ -242,9 +240,9 @@ async function loadConfigs() {
   }
 }
 
-function openAddUser() {
+function openAddTask() {
   resetAddForm()
-  addUserVisible.value = true
+  addTaskVisible.value = true
 }
 
 function resetAddForm() {
@@ -257,7 +255,7 @@ function resetAddForm() {
   }
 }
 
-async function submitAddUser() {
+async function submitAddTask() {
   if (!addForm.value.user_id) return
   addLoading.value = true
   try {
@@ -267,8 +265,8 @@ async function submitAddUser() {
       push_times: addForm.value.push_times,
       report_type: addForm.value.report_type
     })
-    ElMessage.success('已添加推送用户，配置已保存')
-    addUserVisible.value = false
+    ElMessage.success('已添加推送任务')
+    addTaskVisible.value = false
     await loadConfigs()
   } catch (e: unknown) {
     const msg = e && typeof e === 'object' && 'response' in e
@@ -280,8 +278,9 @@ async function submitAddUser() {
   }
 }
 
-function openEdit(row: { user_id: number; username?: string; enabled: boolean; channels: string[]; push_times: string[]; report_type: string }) {
+function openEdit(row: { id: number; user_id: number; username?: string; enabled: boolean; channels: string[]; push_times: string[]; report_type: string }) {
   editForm.value = {
+    config_id: row.id,
     user_id: row.user_id,
     username: row.username ?? '',
     enabled: row.enabled,
@@ -294,6 +293,7 @@ function openEdit(row: { user_id: number; username?: string; enabled: boolean; c
 
 function resetEditForm() {
   editForm.value = {
+    config_id: 0,
     user_id: 0,
     username: '',
     enabled: true,
@@ -303,9 +303,9 @@ function resetEditForm() {
   }
 }
 
-function confirmDelete(row: { user_id: number; username?: string; email?: string }) {
+function confirmDelete(row: { id: number; username?: string; email?: string; report_type_label?: string }) {
   ElMessageBox.confirm(
-    `确定要删除用户「${row.username ?? row.email ?? row.user_id}」的邮件推送配置吗？删除后该用户将不再接收推送。`,
+    `确定要删除该推送任务吗？（${row.username ?? row.email ?? ''} - ${row.report_type_label ?? ''}）`,
     '确认删除',
     {
       confirmButtonText: '确定',
@@ -314,8 +314,8 @@ function confirmDelete(row: { user_id: number; username?: string; email?: string
     }
   ).then(async () => {
     try {
-      await pushService.deletePushConfig(row.user_id)
-      ElMessage.success('已删除推送配置')
+      await pushService.deletePushConfigByConfigId(row.id)
+      ElMessage.success('已删除该推送任务')
       await loadConfigs()
     } catch (e: unknown) {
       const msg = e && typeof e === 'object' && 'response' in e
@@ -327,9 +327,10 @@ function confirmDelete(row: { user_id: number; username?: string; email?: string
 }
 
 async function submitEdit() {
+  if (!editForm.value.config_id) return
   submitLoading.value = true
   try {
-    await pushService.adminUpdatePushConfig(editForm.value.user_id, {
+    await pushService.adminUpdatePushConfigByConfigId(editForm.value.config_id, {
       enabled: editForm.value.enabled,
       channels: editForm.value.channels,
       push_times: editForm.value.push_times,

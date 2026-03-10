@@ -79,3 +79,14 @@ class GMSConfigManager:
     def get_config(self) -> Dict:
         """获取当前配置"""
         return self.load_config()
+
+    def save_config(self, config: Dict) -> bool:
+        """保存配置到文件，并清除缓存。"""
+        try:
+            with open(self.default_config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            self._config = None
+            return True
+        except Exception as e:
+            logger.warning("保存 GMS 配置失败: %s", e)
+            return False

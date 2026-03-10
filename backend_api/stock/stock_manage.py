@@ -500,85 +500,18 @@ def get_volume_aberration_list(
     if order not in ("desc", "asc"):
         order = "desc"
 
+    from backend_api.services.volume_aberration_service import get_volume_aberration_data
+
     db = next(get_db())
     try:
-        if market == "cn":
-            if date:
-                trade_date = date.strip()[:10]
-            else:
-                r = db.query(func.max(HistoricalQuotes.date)).scalar()
-                if not r:
-                    return JSONResponse({"success": True, "data": [], "total": 0, "date": None})
-                trade_date = r.strftime("%Y-%m-%d") if hasattr(r, "strftime") else str(r).strip()[:10]
-            sql = text("""
-                SELECT h.code, h.name, h.date, h.volume, h.amount, h.change_percent, h.close, h.turnover_rate,
-                       m.mavol5 AS mavol5, m.mavol10 AS mavol10, m.mavol20 AS mavol20
-                FROM historical_quotes h
-                INNER JOIN mavol_indicators m ON h.code = m.code AND m.market_type = 'CN'
-                   AND m.date = :trade_date
-                WHERE h.date = :h_date
-                  AND m.mavol20 IS NOT NULL AND m.mavol20 > 0
-            """)
-            rows = db.execute(sql, {"trade_date": trade_date, "h_date": trade_date}).fetchall()
-        else:
-            if date:
-                trade_date = date.strip()[:10]
-            else:
-                r = db.execute(text("SELECT MAX(date) as d FROM historical_quotes_hk")).scalar()
-                if not r:
-                    return JSONResponse({"success": True, "data": [], "total": 0, "date": None})
-                trade_date = str(r).strip()[:10]
-            sql = text("""
-                SELECT h.code, h.name, h.date, h.volume, h.amount, h.change_percent, h.close, h.turnover_rate,
-                       m.mavol5 AS mavol5, m.mavol10 AS mavol10, m.mavol20 AS mavol20
-                FROM historical_quotes_hk h
-                INNER JOIN mavol_indicators m ON h.code = m.code AND m.market_type = 'HK'
-                   AND m.date = :trade_date
-                WHERE h.date = :trade_date
-                  AND m.mavol20 IS NOT NULL AND m.mavol20 > 0
-            """)
-            rows = db.execute(sql, {"trade_date": trade_date}).fetchall()
-
-        def _get(r, name):
-            try:
-                if hasattr(r, "_mapping"):
-                    return r._mapping.get(name)
-                return getattr(r, name, None)
-            except Exception:
-                return None
-
-        result = []
-        for r in rows:
-            vol = float(r.volume) if r.volume is not None else None
-            _m5, _m10, _m20 = _get(r, "mavol5"), _get(r, "mavol10"), _get(r, "mavol20")
-            m5 = float(_m5) if _m5 is not None and float(_m5) > 0 else None
-            m20 = float(_m20) if _m20 is not None and float(_m20) > 0 else None
-            ratio_5 = round(vol / m5, 4) if vol is not None and m5 else None
-            ratio_20 = round(vol / m20, 4) if vol is not None and m20 else None
-            date_str = r.date.strftime("%Y-%m-%d") if hasattr(r.date, "strftime") else str(r.date).strip()[:10]
-            result.append({
-                "code": str(r.code) if r.code else "",
-                "name": (r.name or "").strip(),
-                "date": date_str,
-                "volume": vol,
-                "amount": safe_float(r.amount),
-                "mavol5": m5,
-                "mavol10": safe_float(_m10),
-                "mavol20": m20,
-                "ratio_5": ratio_5,
-                "ratio_20": ratio_20,
-                "change_percent": safe_float(r.change_percent),
-                "close": safe_float(r.close),
-                "turnover_rate": safe_float(r.turnover_rate),
-            })
-
-        result.sort(key=lambda x: (x["ratio_20"] is None, -(x["ratio_20"] or 0) if order == "desc" else (x["ratio_20"] or 0)))
+        result, trade_date = get_volume_aberration_data(db, market=market, date=date, order=order)
+        if trade_date is None:
+            return JSONResponse({"success": True, "data": [], "total": 0, "date": None, "page": page, "page_size": page_size})
         total = len(result)
         start = (page - 1) * page_size
         page_data = result[start : start + page_size]
         for i, item in enumerate(page_data):
             item["rank"] = start + i + 1
-
         return JSONResponse({
             "success": True,
             "data": page_data,

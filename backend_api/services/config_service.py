@@ -3,7 +3,7 @@
 提供用户推送配置的管理功能
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
 from dataclasses import dataclass
@@ -62,6 +62,22 @@ class ConfigService:
         
         except Exception as e:
             logger.error(f"获取用户配置失败: user_id={user_id}, error={str(e)}")
+            raise
+
+    def get_config_by_id(self, config_id: int) -> Optional[UserPushConfig]:
+        """按主键获取一条推送配置（单条任务）。"""
+        try:
+            return self.db.query(UserPushConfig).filter(UserPushConfig.id == config_id).first()
+        except Exception as e:
+            logger.error(f"获取推送配置失败: config_id={config_id}, error={str(e)}")
+            raise
+
+    def get_user_configs(self, user_id: int) -> List[UserPushConfig]:
+        """获取某用户的全部推送任务配置列表。"""
+        try:
+            return self.db.query(UserPushConfig).filter(UserPushConfig.user_id == user_id).all()
+        except Exception as e:
+            logger.error(f"获取用户推送配置列表失败: user_id={user_id}, error={str(e)}")
             raise
 
     def get_all_distinct_push_times(self) -> List[str]:
@@ -182,13 +198,7 @@ class ConfigService:
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             
-            # 检查配置是否已存在
-            existing_config = self.get_user_config(user_id)
-            if existing_config:
-                error_msg = f"用户配置已存在: user_id={user_id}"
-                logger.warning(error_msg)
-                raise ValueError(error_msg)
-            
+            # 允许同一用户有多条推送任务，不再检查“已存在”
             # 创建默认配置（管理端「邮件推送配置」添加时默认走邮件）
             config = UserPushConfig(
                 user_id=user_id,
@@ -214,7 +224,7 @@ class ConfigService:
             raise
 
     def delete_user_config(self, user_id: int) -> bool:
-        """删除用户推送配置（从 user_push_configs 表删除）。无配置时返回 False。"""
+        """删除该用户的第一条推送配置（兼容旧逻辑）。无配置时返回 False。"""
         try:
             config = self.get_user_config(user_id)
             if not config:
@@ -229,37 +239,117 @@ class ConfigService:
             logger.error(f"删除用户推送配置失败: user_id={user_id}, error={str(e)}")
             raise
 
+    def delete_config_by_id(self, config_id: int) -> bool:
+        """按配置主键删除一条推送任务。不存在返回 False。"""
+        try:
+            config = self.get_config_by_id(config_id)
+            if not config:
+                logger.warning(f"推送配置不存在: config_id={config_id}")
+                return False
+            self.db.delete(config)
+            self.db.commit()
+            logger.info(f"删除推送配置成功: config_id={config_id}")
+            return True
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"删除推送配置失败: config_id={config_id}, error={str(e)}")
+            raise
+
+    def update_config_by_id(self, config_id: int, config_update: ConfigUpdate) -> Optional[UserPushConfig]:
+        """按配置主键更新一条推送任务。"""
+        try:
+            config = self.get_config_by_id(config_id)
+            if not config:
+                return None
+            if config_update.enabled is not None:
+                config.enabled = config_update.enabled
+            if config_update.channels is not None:
+                config.channels = config_update.channels
+            if config_update.push_times is not None:
+                config.push_times = config_update.push_times
+            if config_update.report_type is not None:
+                config.report_type = config_update.report_type
+            if config_update.stock_codes is not None:
+                config.stock_codes = config_update.stock_codes
+            config.updated_at = datetime.now()
+            self.db.commit()
+            self.db.refresh(config)
+            logger.info(f"更新推送配置成功: config_id={config_id}")
+            return config
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"更新推送配置失败: config_id={config_id}, error={str(e)}")
+            raise
+
+    def create_config(
+        self,
+        user_id: int,
+        *,
+        enabled: bool = True,
+        channels: Optional[List[str]] = None,
+        push_times: Optional[List[str]] = None,
+        report_type: str = "summary",
+        stock_codes: Optional[List[str]] = None,
+    ) -> UserPushConfig:
+        """为指定用户新增一条推送任务（同一用户可有多条）。"""
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise ValueError(f"用户不存在: user_id={user_id}")
+            config = UserPushConfig(
+                user_id=user_id,
+                enabled=enabled,
+                channels=channels or ["email"],
+                push_times=push_times or ["09:00", "15:00"],
+                report_type=report_type,
+                stock_codes=stock_codes,
+            )
+            self.db.add(config)
+            self.db.commit()
+            self.db.refresh(config)
+            logger.info(f"创建推送任务成功: user_id={user_id}, config_id={config.id}")
+            return config
+        except ValueError:
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"创建推送任务失败: user_id={user_id}, error={str(e)}")
+            raise
+
     def get_users_for_push_time(self, push_time: str) -> List[User]:
         """
-        获取指定时间点需要推送的用户列表
-        
-        Args:
-            push_time: 推送时间点 (如 "09:30")
-            
-        Returns:
-            List[User]: 需要推送的用户列表
+        获取指定时间点需要推送的用户列表（按用户去重，每用户只出现一次；用于兼容旧逻辑）。
+        """
+        tasks = self.get_configs_for_push_time(push_time)
+        seen = set()
+        users = []
+        for config, user in tasks:
+            if user.id not in seen:
+                seen.add(user.id)
+                users.append(user)
+        return users
+
+    def get_configs_for_push_time(self, push_time: str) -> List[Tuple[UserPushConfig, User]]:
+        """
+        获取指定时间点需要推送的「任务」列表：每条任务为 (config, user)。
+        同一用户可有多个任务（不同 report_type）。
         """
         try:
-            # 查询启用推送且包含指定时间点的用户配置
             configs = self.db.query(UserPushConfig).filter(
                 UserPushConfig.enabled == True
             ).all()
-            
-            # 筛选包含指定推送时间的配置
-            users = []
+            result = []
             for config in configs:
-                if push_time in config.push_times:
-                    user = self.db.query(User).filter(
-                        User.id == config.user_id,
-                        User.status == "active"  # 只包含活跃用户
-                    ).first()
-                    
-                    if user:
-                        users.append(user)
-            
-            logger.info(f"获取推送用户列表成功: push_time={push_time}, count={len(users)}")
-            return users
-        
+                if not config.push_times or push_time not in config.push_times:
+                    continue
+                user = self.db.query(User).filter(
+                    User.id == config.user_id,
+                    User.status == "active"
+                ).first()
+                if user:
+                    result.append((config, user))
+            logger.info(f"获取推送任务列表成功: push_time={push_time}, count={len(result)}")
+            return result
         except Exception as e:
-            logger.error(f"获取推送用户列表失败: push_time={push_time}, error={str(e)}")
+            logger.error(f"获取推送任务列表失败: push_time={push_time}, error={str(e)}")
             raise

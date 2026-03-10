@@ -112,14 +112,12 @@ class PushService:
         )
         
         try:
-            # 1. 查询指定时间点需要推送的用户
-            users = self.config_service.get_users_for_push_time(push_time)
-            total_users = len(users)
-            
-            logger.info(f"找到 {total_users} 个需要推送的用户")
-            
-            if total_users == 0:
-                logger.info("没有需要推送的用户，任务结束")
+            # 1. 查询指定时间点需要推送的「任务」列表（同一用户可有多个任务，不同 report_type）
+            tasks = self.config_service.get_configs_for_push_time(push_time)
+            total_tasks = len(tasks)
+            logger.info(f"找到 {total_tasks} 个需要推送的任务")
+            if total_tasks == 0:
+                logger.info("没有需要推送的任务，任务结束")
                 return PushBatchResult(
                     total_users=0,
                     success_count=0,
@@ -127,61 +125,48 @@ class PushService:
                     skipped_count=0,
                     push_results=[]
                 )
-            
-            # 2. 检查推送去重，筛选出需要推送的用户
             push_date = date.today()
-            users_to_push = []
-            skipped_users = []
-            
-            for user in users:
-                # 检查是否已经推送过
+            # 2. 按 (user, report_type, push_time) 去重：已推送过的任务跳过
+            tasks_to_push = []
+            skipped_count = 0
+            for config, user in tasks:
                 is_duplicate = self.record_repository.check_duplicate_push(
                     user_id=user.id,
                     push_date=push_date,
-                    push_time=push_time
+                    push_time=push_time,
+                    report_type=config.report_type,
                 )
-                
                 if is_duplicate:
-                    logger.info(f"用户 {user.id} 今日已推送，跳过")
-                    # 记录重复推送跳过事件
+                    logger.info(f"用户 {user.id} 任务 {config.report_type} 今日已推送，跳过")
                     log_push_event(
                         event_type=PushEventType.DUPLICATE_PUSH_SKIPPED,
                         user_id=user.id,
                         push_time=push_time,
-                        details={"push_date": str(push_date)}
+                        details={"push_date": str(push_date), "report_type": config.report_type}
                     )
-                    skipped_users.append(user.id)
+                    skipped_count += 1
                 else:
-                    users_to_push.append(user)
-            
-            logger.info(f"去重后需要推送的用户数: {len(users_to_push)}, 跳过: {len(skipped_users)}")
-            
-            # 如果所有用户都已推送，直接返回
-            if not users_to_push:
-                logger.info("所有用户今日已推送，任务结束")
+                    tasks_to_push.append((user.id, config.id))
+            logger.info(f"去重后需要推送的任务数: {len(tasks_to_push)}, 跳过: {skipped_count}")
+            if not tasks_to_push:
                 return PushBatchResult(
-                    total_users=total_users,
+                    total_users=total_tasks,
                     success_count=0,
                     failed_count=0,
-                    skipped_count=len(skipped_users),
-                    push_results=[]
+                    skipped_count=skipped_count,
+                    push_results=[],
                 )
-            
-            # 3. 使用线程池并发处理多个用户推送
-            # 4. 处理单个用户失败不影响其他用户(异常捕获和隔离)
+            # 3. 按任务执行推送（传入 config_id，worker 内再查 config）
             push_results = []
             success_count = 0
             failed_count = 0
-            
-            # 使用线程池并发执行推送（future 仅映射 user_id，避免主线程访问 ORM 触发懒加载导致 Session 并发错误）
-            user_ids = [u.id for u in users_to_push]
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_user_id = {
-                    executor.submit(self._push_to_user_safe, uid, push_time): uid
-                    for uid in user_ids
+                future_to_key = {
+                    executor.submit(self._push_to_user_safe, uid, push_time, cid): (uid, cid)
+                    for uid, cid in tasks_to_push
                 }
-                for future in as_completed(future_to_user_id):
-                    user_id = future_to_user_id[future]
+                for future in as_completed(future_to_key):
+                    user_id, _ = future_to_key[future]
                     try:
                         result = future.result()
                         push_results.append(result)
@@ -203,33 +188,25 @@ class PushService:
                             error_message=error_msg
                         ))
             
-            # 5. 返回批量推送结果统计
             batch_result = PushBatchResult(
-                total_users=total_users,
+                total_users=total_tasks,
                 success_count=success_count,
                 failed_count=failed_count,
-                skipped_count=len(skipped_users),
+                skipped_count=skipped_count,
                 push_results=push_results
             )
-            
             logger.info(
-                f"批量推送任务完成: "
-                f"总用户数={total_users}, "
-                f"成功={success_count}, "
-                f"失败={failed_count}, "
-                f"跳过={len(skipped_users)}"
+                f"批量推送任务完成: 总任务数={total_tasks}, 成功={success_count}, 失败={failed_count}, 跳过={skipped_count}"
             )
-            
-            # 记录批量推送完成事件
             log_push_event(
                 event_type=PushEventType.BATCH_PUSH_COMPLETED,
                 push_time=push_time,
                 status="completed",
                 details={
-                    "total_users": total_users,
+                    "total_tasks": total_tasks,
                     "success_count": success_count,
                     "failed_count": failed_count,
-                    "skipped_count": len(skipped_users)
+                    "skipped_count": skipped_count
                 }
             )
             
@@ -257,21 +234,15 @@ class PushService:
                 push_results=[]
             )
     
-    def _push_to_user_safe(self, user_id: int, push_time: str) -> PushResult:
+    def _push_to_user_safe(
+        self, user_id: int, push_time: str, config_id: Optional[int] = None
+    ) -> PushResult:
         """
-        安全地向单个用户推送（捕获所有异常）
-        
-        这是一个包装方法，确保单个用户的推送失败不会影响其他用户
-        
-        Args:
-            user_id: 用户ID
-            push_time: 推送时间点
-            
-        Returns:
-            PushResult: 推送结果
+        安全地向单个用户推送（捕获所有异常）。
+        若传入 config_id 则按该任务配置推送；否则按用户当前一条配置推送（兼容）。
         """
         try:
-            return self.push_to_user(user_id, push_time)
+            return self.push_to_user(user_id, push_time, config_id=config_id)
         except Exception as e:
             error_msg = f"推送过程发生未捕获异常: {str(e)}"
             logger.error(f"用户 {user_id}: {error_msg}", exc_info=True)
@@ -284,40 +255,27 @@ class PushService:
                 error_message=error_msg
             )
     
-    def push_to_user(self, user_id: int, push_time: str, db_session=None) -> PushResult:
+    def push_to_user(
+        self,
+        user_id: int,
+        push_time: str,
+        config_id: Optional[int] = None,
+        db_session=None,
+    ) -> PushResult:
         """
-        向单个用户推送报告
-        
-        实现步骤:
-        1. 获取用户配置
-        2. 验证用户是否绑定了推送渠道
-        3. 生成报告(调用ReportService)
-        4. 根据配置选择推送渠道
-        5. 创建推送记录(状态为processing)
-        6. 处理多渠道推送(并行发送)
-        7. 处理渠道失败隔离(一个渠道失败不影响其他渠道)
-        8. 更新推送记录状态(success/partial_success/failed)
-        
-        Args:
-            user_id: 用户ID
-            push_time: 推送时间点 (如 "09:30")
-            db_session: 数据库会话（可选，用于测试）
-            
-        Returns:
-            PushResult: 推送结果
+        向单个用户推送报告。若传入 config_id 则使用该任务配置，否则使用该用户的第一条配置（兼容）。
         """
         logger.info(f"开始向用户 {user_id} 推送报告，推送时间: {push_time}")
-        
-        # 记录推送开始事件
         log_push_event(
             event_type=PushEventType.PUSH_STARTED,
             user_id=user_id,
             push_time=push_time
         )
-        
         try:
-            # 1. 获取用户配置
-            config = self.config_service.get_user_config(user_id)
+            if config_id is not None:
+                config = self.config_service.get_config_by_id(config_id)
+            else:
+                config = self.config_service.get_user_config(user_id)
             if not config:
                 error_msg = f"用户 {user_id} 没有推送配置"
                 logger.error(error_msg)
@@ -699,6 +657,8 @@ class PushService:
         subject = (
             f"GMS自选股选股结果 - {report_info.report_date}"
             if report_info.report_type == "gms_daily"
+            else f"成交量异动榜 - {report_info.report_date}"
+            if report_info.report_type == "volume_aberration"
             else f"股票报告推送 - {report_info.report_date}"
         )
 
@@ -790,6 +750,8 @@ class PushService:
         """
         if report_info.report_type == "gms_daily":
             report_type_name = "GMS自选股选股结果"
+        elif report_info.report_type == "volume_aberration":
+            report_type_name = "成交量异动榜"
         elif report_info.report_type == "summary":
             report_type_name = "汇总报告"
         else:
@@ -826,6 +788,8 @@ class PushService:
         """
         if report_info.report_type == "gms_daily":
             report_type_name = "GMS自选股选股结果"
+        elif report_info.report_type == "volume_aberration":
+            report_type_name = "成交量异动榜"
         elif report_info.report_type == "summary":
             report_type_name = "汇总报告"
         else:

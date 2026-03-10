@@ -94,13 +94,21 @@ export class PushService {
     return apiService.post<UserPushConfigResponse>(`${this.base}/configs`, body)
   }
 
-  async adminUpdatePushConfig(userId: number, data: ConfigUpdateRequest): Promise<UserPushConfigResponse> {
-    return apiService.put<UserPushConfigResponse>(`${this.base}/configs/${userId}`, data)
+  /** 管理员按任务 id 更新一条推送配置（同一用户可有多条任务） */
+  async adminUpdatePushConfigByConfigId(
+    configId: number,
+    data: ConfigUpdateRequest
+  ): Promise<UserPushConfigResponse> {
+    return apiService.put<UserPushConfigResponse>(`${this.base}/configs/${configId}`, data)
   }
 
-  /** 管理员删除指定用户的邮件推送配置 */
-  async deletePushConfig(userId: number): Promise<{ success: boolean; deleted: boolean; message: string }> {
-    return apiService.delete<{ success: boolean; deleted: boolean; message: string }>(`${this.base}/configs/${userId}`)
+  /** 管理员按任务 id 删除一条推送配置 */
+  async deletePushConfigByConfigId(
+    configId: number
+  ): Promise<{ success: boolean; deleted: boolean; message: string }> {
+    return apiService.delete<{ success: boolean; deleted: boolean; message: string }>(
+      `${this.base}/configs/${configId}`
+    )
   }
 
   async getEmailLogs(params: {

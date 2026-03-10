@@ -141,6 +141,14 @@ class TestConfigManagementAPI:
         assert data["channels"] == ["email"]
         assert data["push_times"] == ["10:00"]
         assert data["report_type"] == "detailed"
+
+    def test_update_push_config_volume_aberration(self, client, db_session, test_user):
+        """测试用户更新推送配置时可设置 report_type 为 volume_aberration"""
+        client.get("/api/push/config")
+        response = client.put("/api/push/config", json={"report_type": "volume_aberration"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["report_type"] == "volume_aberration"
     
     def test_update_config_invalid_channel(self, client):
         """测试更新配置时使用无效渠道"""
@@ -429,6 +437,25 @@ class TestAdminAPI:
         assert "enabled_users" in data
         assert "total_records" in data
         assert "success_rate" in data
+
+    def test_admin_update_push_config_volume_aberration(self, client, db_session, test_user):
+        """测试管理员更新推送配置时可设置 report_type 为 volume_aberration"""
+        config = UserPushConfig(
+            user_id=test_user.id,
+            enabled=True,
+            channels=["email"],
+            push_times=["09:30"],
+            report_type="summary"
+        )
+        db_session.add(config)
+        db_session.commit()
+        response = client.put(
+            f"/api/admin/push/configs/{test_user.id}",
+            json={"report_type": "volume_aberration"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["report_type"] == "volume_aberration"
 
 
 if __name__ == "__main__":

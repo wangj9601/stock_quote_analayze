@@ -30,7 +30,7 @@ class User(Base):
     
     watchlists = relationship("Watchlist", back_populates="user")
     watchlist_groups = relationship("WatchlistGroup", back_populates="user")
-    push_config = relationship("UserPushConfig", back_populates="user", uselist=False)
+    push_configs = relationship("UserPushConfig", back_populates="user", uselist=True)
     push_records = relationship("PushRecord", back_populates="user")
 
 class Admin(Base):
@@ -1050,7 +1050,7 @@ class UserPushConfig(Base):
     __tablename__ = "user_push_configs"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # 推送开关
     enabled = Column(Boolean, default=True, nullable=False)
@@ -1072,7 +1072,7 @@ class UserPushConfig(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
     # 关系
-    user = relationship("User", back_populates="push_config")
+    user = relationship("User", back_populates="push_configs")
 
 
 class PushRecord(Base):

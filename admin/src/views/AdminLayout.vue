@@ -83,6 +83,7 @@ const menuItems = [
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/pvfrs-strategy', name: 'PVFARS交易策略', icon: TrendCharts },
   { path: '/pvfrs-management', name: 'PVFARS策略管理', icon: DataAnalysis },
+  { path: '/gms-management', name: 'GMS回测管理', icon: TrendCharts },
   { path: '/selection-results', name: 'GMS策略管理', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },

@@ -524,6 +524,20 @@ if pvfrs_admin_router is not None:
 else:
     print("❌ PVFRS管理路由未注册")
 
+# 尝试导入 GMS admin 路由
+try:
+    from backend_api.admin.gms_admin_routes import router as gms_admin_router
+    print("✅ gms_admin_router 导入成功")
+except Exception as e:
+    print(f"❌ gms_admin_router 导入失败: {e}")
+    gms_admin_router = None
+
+if gms_admin_router is not None:
+    app.include_router(gms_admin_router)
+    print("✅ GMS admin 路由注册成功")
+else:
+    print("❌ GMS admin 路由未注册")
+
 # 注册PVFRS前端路由
 if pvfrs_frontend_router is not None:
     app.include_router(pvfrs_frontend_router)

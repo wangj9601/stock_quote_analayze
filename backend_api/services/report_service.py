@@ -280,6 +280,10 @@ class ReportService:
             ReportResult: 报告生成结果
         """
         try:
+            # 成交量异动榜不依赖自选股，直接生成
+            if report_type == 'volume_aberration':
+                return self._generate_volume_aberration_report(user_id)
+
             # 获取用户自选股列表
             watchlist = self.get_user_watchlist(user_id, stock_codes)
             
@@ -532,6 +536,85 @@ class ReportService:
             error_message=None
         )
 
+    def _generate_volume_aberration_report(self, user_id: int) -> ReportResult:
+        """
+        生成成交量异动榜报告（A股+港股放量榜全量），不依赖自选股。
+        输出 Excel 两 sheet：A股放量榜、港股放量榜。
+        """
+        from backend_api.services.volume_aberration_service import get_volume_aberration_data
+
+        result_cn, date_cn = get_volume_aberration_data(self.db, market="cn", date=None, order="desc")
+        result_hk, date_hk = get_volume_aberration_data(self.db, market="hk", date=None, order="desc")
+
+        report_date = date_cn or date_hk or datetime.now().strftime("%Y-%m-%d")
+        total_count = len(result_cn) + len(result_hk)
+
+        if total_count == 0:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=report_date,
+                    report_type="volume_aberration",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message=None,
+            )
+
+        def to_rows(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            rows = []
+            for item in data:
+                rows.append({
+                    "排名": item.get("rank"),
+                    "股票代码": "\u2060" + str(item.get("code", "")),
+                    "股票名称": (item.get("name") or "").strip(),
+                    "日期": item.get("date", ""),
+                    "当日成交量": item.get("volume"),
+                    "成交额": item.get("amount"),
+                    "MAVOL5": item.get("mavol5"),
+                    "MAVOL10": item.get("mavol10"),
+                    "MAVOL20": item.get("mavol20"),
+                    "量比(5)": item.get("ratio_5"),
+                    "量比(20)": item.get("ratio_20"),
+                    "涨跌幅(%)": item.get("change_percent"),
+                    "收盘价": item.get("close"),
+                    "换手率(%)": item.get("turnover_rate"),
+                })
+            return rows
+
+        rows_cn = to_rows(result_cn)
+        rows_hk = to_rows(result_hk)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"volume_aberration_{user_id}_{report_date.replace('-', '')}_{timestamp}.xlsx"
+        filepath = os.path.join(self.report_dir, filename)
+
+        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+            if rows_cn:
+                pd.DataFrame(rows_cn).to_excel(writer, sheet_name="A股放量榜", index=False)
+            if rows_hk:
+                pd.DataFrame(rows_hk).to_excel(writer, sheet_name="港股放量榜", index=False)
+
+        file_size = os.path.getsize(filepath)
+        logger.info("生成成交量异动榜报告成功: %s, A股=%s, 港股=%s", filepath, len(rows_cn), len(rows_hk))
+
+        return ReportResult(
+            success=True,
+            file_path=filepath,
+            report_info=ReportInfo(
+                stock_count=total_count,
+                report_date=report_date,
+                report_type="volume_aberration",
+                file_size=file_size,
+                has_data=True,
+                missing_data_stocks=[],
+            ),
+            error_message=None,
+        )
+
     def _generate_gms_report_for_user(self, user_id: int) -> ReportResult:
         """
         生成该用户自选股范围内的 GMS 均值引力策略选股报告。
@@ -772,7 +855,9 @@ class ReportService:
             
             # 从文件名解析报告类型和日期
             filename = os.path.basename(report_path)
-            if 'gms_' in filename:
+            if 'volume_aberration' in filename:
+                report_type = 'volume_aberration'
+            elif 'gms_' in filename:
                 report_type = 'gms_daily'
             elif 'summary' in filename:
                 report_type = 'summary'
@@ -789,10 +874,22 @@ class ReportService:
                 stock_count = len(df)
                 has_data = stock_count > 0
             elif report_path.endswith('.xlsx'):
-                # 读取汇总表
-                df = pd.read_excel(report_path, sheet_name='股票汇总')
-                stock_count = len(df)
-                has_data = stock_count > 0
+                if report_type == 'volume_aberration':
+                    try:
+                        df_cn = pd.read_excel(report_path, sheet_name='A股放量榜')
+                        stock_count += len(df_cn)
+                    except Exception:
+                        pass
+                    try:
+                        df_hk = pd.read_excel(report_path, sheet_name='港股放量榜')
+                        stock_count += len(df_hk)
+                    except Exception:
+                        pass
+                    has_data = stock_count > 0
+                else:
+                    df = pd.read_excel(report_path, sheet_name='股票汇总')
+                    stock_count = len(df)
+                    has_data = stock_count > 0
             
             return ReportInfo(
                 stock_count=stock_count,

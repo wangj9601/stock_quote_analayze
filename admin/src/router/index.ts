@@ -53,6 +53,11 @@ const routes = [
         component: () => import('@/views/PVFRSManagementView.vue')
       },
       {
+        path: 'gms-management',
+        name: 'GMSManagement',
+        component: () => import('@/views/GMSManagementView.vue')
+      },
+      {
         path: 'selection-results',
         name: 'SelectionResults',
         component: () => import('@/views/SelectionResultsView.vue')

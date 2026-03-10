@@ -359,6 +359,34 @@ class TestPushServiceBasic:
         assert "数据缺失提示" in content
         assert "2" in content
 
+    def test_format_push_message_volume_aberration(self, push_service, sample_user):
+        """测试 report_type 为 volume_aberration 时推送消息展示名为「成交量异动榜」"""
+        report_info = ReportInfo(
+            stock_count=100,
+            report_date="2026-01-01",
+            report_type="volume_aberration",
+            file_size=2048,
+            has_data=True,
+            missing_data_stocks=[],
+        )
+        message = push_service._format_push_message(sample_user, report_info)
+        assert "成交量异动榜" in message
+        assert "股票报告推送" in message
+
+    def test_format_email_content_volume_aberration(self, push_service, sample_user):
+        """测试 report_type 为 volume_aberration 时邮件正文展示名为「成交量异动榜」"""
+        report_info = ReportInfo(
+            stock_count=100,
+            report_date="2026-01-01",
+            report_type="volume_aberration",
+            file_size=2048,
+            has_data=True,
+            missing_data_stocks=[],
+        )
+        content = push_service._format_email_content(sample_user, report_info)
+        assert "成交量异动榜" in content
+        assert "<!DOCTYPE html>" in content
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

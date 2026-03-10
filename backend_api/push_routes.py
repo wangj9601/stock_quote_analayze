@@ -274,7 +274,7 @@ def update_push_config(
                     )
         
         if config_update.report_type is not None:
-            valid_types = ['summary', 'detailed', 'gms_daily']
+            valid_types = ['summary', 'detailed', 'gms_daily', 'volume_aberration']
             if config_update.report_type not in valid_types:
                 raise HTTPException(
                     status_code=400,
@@ -674,40 +674,36 @@ def admin_create_push_config(
     current_admin: User = Depends(get_current_admin),
     config_service: ConfigService = Depends(get_config_service),
 ):
-    """管理员为指定用户新建推送配置（用户来源于 user 表，配置写入 user_push_configs 表）"""
+    """管理员为指定用户新建一条推送任务（同一用户可有多条，不同 report_type/时间等）"""
+    if body.report_type is not None and body.report_type not in ("summary", "detailed", "gms_daily", "volume_aberration"):
+        raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily, volume_aberration")
     try:
-        config = config_service.create_default_config(user_id=body.user_id)
-        # 若请求中带了初始配置，则更新（只传非 None 的字段）
-        from backend_api.services.config_service import ConfigUpdate
-        update = ConfigUpdate(
-            enabled=body.enabled if body.enabled is not None else None,
-            channels=body.channels if body.channels is not None else None,
-            push_times=body.push_times if body.push_times is not None else None,
-            report_type=body.report_type if body.report_type is not None else None,
+        config = config_service.create_config(
+            user_id=body.user_id,
+            enabled=body.enabled if body.enabled is not None else True,
+            channels=body.channels or ["email"],
+            push_times=body.push_times or ["09:00", "15:00"],
+            report_type=body.report_type or "summary",
         )
-        if any([update.enabled is not None, update.channels is not None, update.push_times is not None, update.report_type is not None]):
-            config_service.update_user_config(user_id=body.user_id, config_update=update)
-            config = config_service.get_user_config(body.user_id)
         return config
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"管理员创建用户 {body.user_id} 推送配置失败: {e}")
+        logger.error(f"管理员创建用户 {body.user_id} 推送任务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@admin_router.put("/configs/{user_id}", response_model=UserPushConfigResponse)
-def admin_update_push_config(
-    user_id: int,
+@admin_router.put("/configs/{config_id}", response_model=UserPushConfigResponse)
+def admin_update_push_config_by_id(
+    config_id: int,
     config_update: ConfigUpdateRequest,
     current_admin: User = Depends(get_current_admin),
     config_service: ConfigService = Depends(get_config_service),
-    db: Session = Depends(get_db),
 ):
-    """管理员修改指定用户的推送配置"""
-    if config_update.report_type is not None and config_update.report_type not in ("summary", "detailed", "gms_daily"):
-        raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily")
-    config_update_obj = ConfigUpdate(
+    """管理员按任务 id 修改一条推送配置"""
+    if config_update.report_type is not None and config_update.report_type not in ("summary", "detailed", "gms_daily", "volume_aberration"):
+        raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily, volume_aberration")
+    update_obj = ConfigUpdate(
         enabled=config_update.enabled,
         channels=config_update.channels,
         push_times=config_update.push_times,
@@ -715,27 +711,29 @@ def admin_update_push_config(
         stock_codes=config_update.stock_codes,
     )
     try:
-        updated = config_service.update_user_config(user_id=user_id, config_update=config_update_obj)
+        updated = config_service.update_config_by_id(config_id, update_obj)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="推送配置不存在")
         return updated
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"管理员更新用户 {user_id} 推送配置失败: {e}")
+        logger.error(f"管理员更新推送配置 {config_id} 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@admin_router.delete("/configs/{user_id}")
-def admin_delete_push_config(
-    user_id: int,
+@admin_router.delete("/configs/{config_id}")
+def admin_delete_push_config_by_id(
+    config_id: int,
     current_admin: User = Depends(get_current_admin),
     config_service: ConfigService = Depends(get_config_service),
 ):
-    """管理员删除指定用户的邮件推送配置（从 user_push_configs 表删除）"""
+    """管理员按任务 id 删除一条推送配置"""
     try:
-        deleted = config_service.delete_user_config(user_id)
-        return {"success": True, "deleted": deleted, "message": "已删除该用户的推送配置" if deleted else "该用户暂无推送配置"}
+        deleted = config_service.delete_config_by_id(config_id)
+        return {"success": True, "deleted": deleted, "message": "已删除该推送任务" if deleted else "推送任务不存在"}
     except Exception as e:
-        logger.error(f"管理员删除用户 {user_id} 推送配置失败: {e}")
+        logger.error(f"管理员删除推送配置 {config_id} 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -220,32 +220,35 @@ class RecordRepository:
         self,
         user_id: int,
         push_date: date,
-        push_time: str
+        push_time: str,
+        report_type: Optional[str] = None,
     ) -> bool:
         """
-        检查是否存在重复的推送记录
+        检查是否存在重复的推送记录。
+        按 (user_id, push_date, push_time, report_type) 判断，同一用户同一时间可存在不同 report_type 的记录。
         
         Args:
             user_id: 用户ID
             push_date: 推送日期
             push_time: 推送时间
+            report_type: 报告类型；不传则按 (user_id, push_date, push_time) 判断（兼容旧逻辑）
             
         Returns:
             bool: 如果存在成功或处理中的推送记录则返回True，否则返回False
         """
-        existing_record = self.db.query(PushRecord).filter(
-            and_(
-                PushRecord.user_id == user_id,
-                PushRecord.push_date == push_date,
-                PushRecord.push_time == push_time,
-                or_(
-                    PushRecord.status == "success",
-                    PushRecord.status == "processing",
-                    PushRecord.status == "partial_success"
-                )
+        q = and_(
+            PushRecord.user_id == user_id,
+            PushRecord.push_date == push_date,
+            PushRecord.push_time == push_time,
+            or_(
+                PushRecord.status == "success",
+                PushRecord.status == "processing",
+                PushRecord.status == "partial_success"
             )
-        ).first()
-        
+        )
+        if report_type is not None:
+            q = and_(q, PushRecord.report_type == report_type)
+        existing_record = self.db.query(PushRecord).filter(q).first()
         return existing_record is not None
     
     def get_records_by_date_range(

@@ -358,6 +358,45 @@ def test_invalid_report_type(report_service, test_user, test_watchlist):
     assert "不支持的报告类型" in result.error_message
 
 
+def test_volume_aberration_report_no_data(report_service, test_user):
+    """测试成交量异动榜报告：无数据时返回成功、has_data=False"""
+    from unittest.mock import patch
+    from backend_api.services import volume_aberration_service
+    with patch.object(volume_aberration_service, 'get_volume_aberration_data') as m:
+        m.return_value = ([], None)
+        result = report_service.generate_user_report(test_user.id, 'volume_aberration')
+    assert result.success is True
+    assert result.report_info is not None
+    assert result.report_info.report_type == 'volume_aberration'
+    assert result.report_info.has_data is False
+    assert result.report_info.stock_count == 0
+    assert result.file_path is None
+
+
+def test_volume_aberration_report_with_data(report_service, test_user):
+    """测试成交量异动榜报告：有数据时生成 Excel、report_type 与 has_data 正确"""
+    from unittest.mock import patch
+    from backend_api.services import volume_aberration_service
+    row = {
+        "rank": 1, "code": "000001", "name": "平安银行", "date": "2026-01-01",
+        "volume": 1e7, "amount": 1e9, "mavol5": 8e6, "mavol10": 9e6, "mavol20": 9e6,
+        "ratio_5": 1.25, "ratio_20": 1.11, "change_percent": 2.5, "close": 12.0, "turnover_rate": 5.0,
+    }
+    with patch.object(volume_aberration_service, 'get_volume_aberration_data', side_effect=[
+        ([row], "2026-01-01"),  # cn
+        ([], None),              # hk
+    ]):
+        result = report_service.generate_user_report(test_user.id, 'volume_aberration')
+    assert result.success is True
+    assert result.report_info.report_type == 'volume_aberration'
+    assert result.report_info.has_data is True
+    assert result.report_info.stock_count == 1
+    assert result.file_path is not None
+    assert result.file_path.endswith('.xlsx')
+    if os.path.exists(result.file_path):
+        os.remove(result.file_path)
+
+
 if __name__ == "__main__":
     print("=" * 80)
     print("测试 ReportService - 报告生成服务")
