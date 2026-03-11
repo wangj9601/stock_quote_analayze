@@ -30,44 +30,32 @@ from sqlalchemy.exc import IntegrityError
 # 配置日志输出到文件
 def setup_strategy_logger():
     """配置策略日志输出到文件"""
-    # 创建日志目录
+    # 创建日志目录（.env 中 LOG_TO_FILE=true 时才写文件）
+    from backend_core.logging_utils import should_log_to_file
     log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    
-    # 生成日志文件名（按日期）
     log_filename = f"one_yang_three_lines_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     log_filepath = os.path.join(log_dir, log_filename)
-    
-    # 配置logger
+
     logger = logging.getLogger('one_yang_three_lines_strategy')
     logger.setLevel(logging.INFO)
-    
-    # 清除已有的handlers
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
-    
-    # 创建文件handler
-    file_handler = logging.FileHandler(log_filepath, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    
-    # 创建控制台handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    
-    # 创建formatter
+
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
-    # 设置formatter
-    file_handler.setFormatter(formatter)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
-    
-    # 添加handlers
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+    if should_log_to_file():
+        file_handler = logging.FileHandler(log_filepath, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
     
     logger.info(f"日志文件路径: {log_filepath}")
     return logger

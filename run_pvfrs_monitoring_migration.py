@@ -13,16 +13,15 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('pvfrs_migration.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+from dotenv import load_dotenv
+load_dotenv(project_root / '.env')
+from backend_core.logging_utils import should_log_to_file
 
+# 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
+_handlers = [logging.StreamHandler()]
+if should_log_to_file():
+    _handlers.append(logging.FileHandler('pvfrs_migration.log', encoding='utf-8'))
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=_handlers)
 logger = logging.getLogger(__name__)
 
 def main():

@@ -15,16 +15,12 @@ import pandas as pd
 import logging
 from datetime import datetime
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('test_stock_notice_report.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-
+# 设置日志（.env 中 LOG_TO_FILE=true 时才写文件）
+from backend_core.logging_utils import should_log_to_file
+_handlers = [logging.StreamHandler()]
+if should_log_to_file():
+    _handlers.append(logging.FileHandler('test_stock_notice_report.log', encoding='utf-8'))
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=_handlers)
 logger = logging.getLogger(__name__)
 
 def test_notice_collector():

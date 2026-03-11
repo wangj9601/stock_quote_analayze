@@ -20,15 +20,12 @@ from backend_core.data_collectors.tushare.thirty_day_change_calculator import ( 
     ThirtyDayChangeCalculator,
 )
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("thirty_day_change_calculation.log", encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
-)
+# 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
+from backend_core.logging_utils import should_log_to_file
+_handlers = [logging.StreamHandler()]
+if should_log_to_file():
+    _handlers.append(logging.FileHandler("thirty_day_change_calculation.log", encoding="utf-8"))
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", handlers=_handlers)
 logger = logging.getLogger(__name__)
 
 

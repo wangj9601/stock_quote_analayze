@@ -19,14 +19,11 @@ import pandas as pd
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('quarterly_generation.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+from backend_core.logging_utils import should_log_to_file
+_handlers = [logging.StreamHandler()]
+if should_log_to_file():
+    _handlers.append(logging.FileHandler('quarterly_generation.log', encoding='utf-8'))
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=_handlers)
 logger = logging.getLogger(__name__)
 
 class QuarterlyDataGenerator:

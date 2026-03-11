@@ -24,14 +24,15 @@ from .auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
-# 配置日志
+# 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
+from backend_core.logging_utils import should_log_to_file
+_handlers = [logging.StreamHandler()]
+if should_log_to_file():
+    _handlers.append(logging.FileHandler('auth.log', encoding='utf-8', mode='a'))
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
-    handlers=[
-        logging.FileHandler('auth.log', encoding='utf-8', mode='a'),
-        logging.StreamHandler()
-    ]
+    handlers=_handlers
 )
 logger = logging.getLogger(__name__)
 
