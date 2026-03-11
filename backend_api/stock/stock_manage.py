@@ -300,42 +300,41 @@ def get_quote_board_list(
     try:
         print(f"📊 获取A股行情排行 (from DB): type={ranking_type}, market={market}, page={page}, page_size={page_size}, keyword={keyword}")
         
-        # 1. 获取最新交易日期的实时行情数据
+        # 1. 获取最新交易日期的实时行情数据（使用 session.execute 避免 pd.read_sql_query 与 Engine 不兼容）
         db = next(get_db())
-        
         try:
-            latest_date_result = pd.read_sql_query("""
-                SELECT MAX(trade_date) as latest_date 
-                FROM stock_realtime_quote 
+            latest_date_row = db.execute(text("""
+                SELECT MAX(trade_date) AS latest_date
+                FROM stock_realtime_quote
                 WHERE change_percent IS NOT NULL
-            """, db.bind)
-            
-            if latest_date_result.empty or latest_date_result.iloc[0]['latest_date'] is None:
+            """)).fetchone()
+
+            if not latest_date_row or latest_date_row[0] is None:
                 latest_trade_date = None
                 df = pd.DataFrame()
             else:
-                latest_trade_date = latest_date_result.iloc[0]['latest_date']
+                latest_trade_date = latest_date_row[0]
                 if latest_trade_date is not None and len(str(latest_trade_date)) > 10:
                     latest_trade_date = str(latest_trade_date)[:10]
                 print(f"📅 使用最新交易日期: {latest_trade_date}")
-              
-                # 构建查询SQL - 使用text()包装SQL语句
+
                 if keyword and keyword.strip():
-                    keyword_clean = keyword.strip().replace("'", "''")  # 防止SQL注入
-                    sql_query = text(f"""
-                        SELECT * FROM stock_realtime_quote 
-                        WHERE change_percent IS NOT NULL AND trade_date = '{latest_trade_date}'
-                        AND (code LIKE '%{keyword_clean}%' OR name LIKE '%{keyword_clean}%')
+                    kw = keyword.strip()
+                    result = db.execute(text("""
+                        SELECT * FROM stock_realtime_quote
+                        WHERE change_percent IS NOT NULL AND trade_date = :trade_date
+                        AND (code LIKE :pat OR name LIKE :pat)
                         ORDER BY code
-                    """)
+                    """), {"trade_date": latest_trade_date, "pat": f"%{kw}%"})
                 else:
-                    sql_query = text(f"""
-                        SELECT * FROM stock_realtime_quote 
-                        WHERE change_percent IS NOT NULL AND trade_date = '{latest_trade_date}'
+                    result = db.execute(text("""
+                        SELECT * FROM stock_realtime_quote
+                        WHERE change_percent IS NOT NULL AND trade_date = :trade_date
                         ORDER BY code
-                    """)
-                
-                df = pd.read_sql_query(sql_query, db.bind)
+                    """), {"trade_date": latest_trade_date})
+
+                rows = result.fetchall()
+                df = pd.DataFrame(rows, columns=result.keys()) if rows else pd.DataFrame()
         finally:
             db.close()
 
