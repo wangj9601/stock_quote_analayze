@@ -1152,7 +1152,11 @@ const ScreeningPage = {
                 `;
                 const buyType = stock.buy_type || '—';
                 const buyTypeClass = stock.left_buy_signal ? 'gms-left' : (stock.right_buy_signal ? 'gms-right' : '');
-                const signalStrength = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+                // 信号强度：优先用后端值；若为 0 但 score_detail 有总分则用总分/100（避免 trace 中 score_total=0 导致显示 0）
+                let signalStrength = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+                if (signalStrength === 0 && sd && sd.score_total != null && sd.score_total > 0) {
+                    signalStrength = sd.score_total / 100;
+                }
                 let strengthClass = 'strength-low';
                 if (signalStrength >= 0.8) strengthClass = 'strength-high';
                 else if (signalStrength >= 0.6) strengthClass = 'strength-mid';
@@ -1358,8 +1362,9 @@ const ScreeningPage = {
                 'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
             ];
             rows = data.map(stock => {
-                const sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+                let sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
                 const sd = stock.score_detail || {};
+                if (sig === 0 && sd.score_total != null && sd.score_total > 0) sig = sd.score_total / 100;
                 const fmt = (v) => (v != null && typeof v === 'number' && !isNaN(v)) ? v.toFixed(1) : '--';
                 const accPart = sd.score_accumulation != null
                     ? `蓄势${fmt(sd.score_accumulation)}(引力${fmt(sd.score_acc_fz)}+平衡${fmt(sd.score_acc_balance)}+量缩${fmt(sd.score_acc_volume)})${sd.accumulation_grade || ''}`
@@ -1575,7 +1580,9 @@ const ScreeningPage = {
         ];
         const aoa = [headers];
         data.forEach(stock => {
-            const sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+            let sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
+            const sd = stock.score_detail || {};
+            if (sig === 0 && sd.score_total != null && sd.score_total > 0) sig = sd.score_total / 100;
             aoa.push([
                 '\u2060' + (stock.symbol || stock.code),
                 stock.name || '',

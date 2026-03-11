@@ -35,6 +35,210 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/screening", tags=["screening"])
 
+
+def _fill_gms_indicator_fallback(db: Session, code: str, target_date: str, market_type: str) -> Optional[Dict[str, Any]]:
+    """
+    兜底：当 GMS 引擎输出的关键指标字段缺失/为空时，从指标表补齐。
+    取 date<=target_date 的最近一条。
+    """
+    try:
+        from sqlalchemy import desc
+        row = (
+            db.query(MeanFrequencyResonanceIndicators)
+            .filter(
+                MeanFrequencyResonanceIndicators.code == code,
+                MeanFrequencyResonanceIndicators.market_type == market_type,
+                MeanFrequencyResonanceIndicators.date <= str(target_date).strip()[:10],
+            )
+            .order_by(desc(MeanFrequencyResonanceIndicators.date))
+            .first()
+        )
+        if not row:
+            return None
+        # 映射到前端需要的字段名（与 screening.js 的列一致）
+        delta = getattr(row, "macro_displacement_delta", None)
+        d = getattr(row, "ma20_d", None)
+        rising_days = getattr(row, "rising_days_z", None)
+        falling_days = getattr(row, "falling_days_f", None)
+        ratio_d20 = getattr(row, "ratio_d20", None)
+        ratio_d1 = getattr(row, "ratio_d1", None)
+        instant_deviation = getattr(row, "instant_deviation", None)
+        # F/Z
+        fz_ratio = None
+        try:
+            if rising_days and float(rising_days) != 0:
+                fz_ratio = float(falling_days or 0) / float(rising_days)
+        except Exception:
+            fz_ratio = None
+        ratio_relative = None
+        try:
+            if delta is not None and d not in (None, 0):
+                ratio_relative = float(delta) / float(d)
+        except Exception:
+            ratio_relative = None
+        return {
+            "delta": delta,
+            "d_ma20": d,
+            "rising_days": rising_days,
+            "falling_days": falling_days,
+            "ratio_d20": ratio_d20,
+            "ratio_d1": ratio_d1,
+            "fz_ratio": fz_ratio,
+            "ratio_relative": ratio_relative,
+            "instant_deviation": instant_deviation,
+        }
+    except Exception:
+        logger.debug("GMS 指标兜底补全失败 code=%s", code, exc_info=True)
+        return None
+
+
+def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_type: str, config: dict) -> Optional[Dict[str, Any]]:
+    """
+    兜底：当 score_detail 为空或得分字段缺失时，使用指标表 + 当前配置重新计算得分明细。
+    """
+    try:
+        from sqlalchemy import desc
+        from backend_core.strategies.gms.indicators_calculator import GMSIndicatorsCalculator
+
+        date_str = str(target_date).strip()[:10]
+        row = (
+            db.query(MeanFrequencyResonanceIndicators)
+            .filter(
+                MeanFrequencyResonanceIndicators.code == code,
+                MeanFrequencyResonanceIndicators.market_type == market_type,
+                MeanFrequencyResonanceIndicators.date <= date_str,
+            )
+            .order_by(desc(MeanFrequencyResonanceIndicators.date))
+            .first()
+        )
+        if not row:
+            return None
+
+        # 构造 calculator 需要的 row dict（对齐 GMSDataLoader 输出字段名）
+        delta = getattr(row, "macro_displacement_delta", None)
+        d = getattr(row, "ma20_d", None)
+        mavol20_m = getattr(row, "mavol20_m", None)
+        eff_m20_m = getattr(row, "efficiency_m20_minus_m", None)
+        current_volume = (float(mavol20_m or 0) + float(eff_m20_m or 0)) if mavol20_m is not None else 0.0
+        volume_ratio = (current_volume / float(mavol20_m)) if mavol20_m not in (None, 0) else None
+
+        calc_row = {
+            "code": code,
+            "date": str(getattr(row, "date", date_str))[:10],
+            "market_type": market_type,
+            "macro_displacement_delta": delta,
+            "ma20_d": d,
+            "ratio_d20": getattr(row, "ratio_d20", None),
+            "ratio_d1": getattr(row, "ratio_d1", None),
+            "instant_deviation": getattr(row, "instant_deviation", None),
+            "rising_days_z": getattr(row, "rising_days_z", 0),
+            "falling_days_f": getattr(row, "falling_days_f", 0),
+            "mavol20_m": mavol20_m,
+            "efficiency_m20_minus_m": eff_m20_m,
+            "ratio_d": getattr(row, "bias", None),
+            "current_volume": current_volume,
+            "volume_ratio": volume_ratio,
+            "d1": getattr(row, "d1", None),
+            "d1_date": getattr(row, "d1_date", None),
+            "d20": getattr(row, "d20", None),
+            "d20_date": getattr(row, "d20_date", None),
+        }
+
+        # 站稳 N 日：取最近 N 日的 instant_deviation 序列（最后一项为当日）
+        stable_days = int((config.get("scoring") or {}).get("instant_deviation_stable_days", 3) or 3)
+        series_rows = (
+            db.query(MeanFrequencyResonanceIndicators.instant_deviation)
+            .filter(
+                MeanFrequencyResonanceIndicators.code == code,
+                MeanFrequencyResonanceIndicators.market_type == market_type,
+                MeanFrequencyResonanceIndicators.date <= date_str,
+            )
+            .order_by(desc(MeanFrequencyResonanceIndicators.date))
+            .limit(max(1, stable_days))
+            .all()
+        )
+        series = [float(r[0]) for r in reversed(series_rows) if r and r[0] is not None]  # 升序，末尾为当日
+        ind = GMSIndicatorsCalculator(config).calculate(calc_row, instant_deviation_series=series if series else None)
+        if not ind:
+            return None
+
+        # 复用 strategy_engine 的 score_detail 结构（前端得分明细依赖这些 key）
+        calculator = GMSIndicatorsCalculator(config)
+        score_detail = {
+            "score_accumulation": ind.score_accumulation,
+            "score_balance": ind.score_balance,
+            "score_momentum": ind.score_momentum,
+            "score_total": ind.score_total,
+            "accumulation_grade": getattr(ind, "accumulation_grade", ""),
+            "momentum_grade": getattr(ind, "momentum_grade", ""),
+            "accumulation_fz_min": calculator.accumulation_fz_min,
+            "balance_ratio_max": calculator.balance_ratio_max,
+            "momentum_volume_ratio_min": calculator.momentum_volume_ratio_min,
+            "accumulation_s_threshold": calculator.acc_s_threshold,
+            "accumulation_a_threshold": calculator.acc_a_threshold,
+            "momentum_full_threshold": calculator.mom_full_threshold,
+            "momentum_batch_threshold": calculator.mom_batch_threshold,
+            "score_acc_fz": getattr(ind, "score_acc_fz", 0),
+            "score_acc_balance": getattr(ind, "score_acc_balance", 0),
+            "score_acc_volume": getattr(ind, "score_acc_volume", 0),
+            "score_mom_ratio_d1": getattr(ind, "score_mom_ratio_d1", 0),
+            "score_mom_deviation": getattr(ind, "score_mom_deviation", 0),
+            "score_mom_volume": getattr(ind, "score_mom_volume", 0),
+            "acc_fz_tiers": calculator.acc_fz_tiers,
+            "balance_tiers": calculator.balance_tiers,
+            "vol_shrink_tiers": calculator.vol_shrink_tiers,
+            "ratio_d1_tiers": calculator.ratio_d1_tiers,
+            "vol_attack_tiers": calculator.vol_attack_tiers,
+            "weight_acc_fz": calculator.weight_acc_fz,
+            "weight_acc_balance": calculator.weight_acc_balance,
+            "weight_acc_volume": calculator.weight_acc_volume,
+            "weight_mom_ratio_d1": calculator.weight_mom_ratio_d1,
+            "weight_mom_deviation": calculator.weight_mom_deviation,
+            "weight_mom_volume": calculator.weight_mom_volume,
+            "acc_fz_judge": getattr(ind, "acc_fz_judge", ""),
+            "acc_balance_judge": getattr(ind, "acc_balance_judge", ""),
+            "acc_volume_judge": getattr(ind, "acc_volume_judge", ""),
+            "mom_ratio_d1_judge": getattr(ind, "mom_ratio_d1_judge", ""),
+            "mom_deviation_judge": getattr(ind, "mom_deviation_judge", ""),
+            "mom_volume_judge": getattr(ind, "mom_volume_judge", ""),
+            "delta": ind.delta,
+            "d": ind.d,
+            "d20": ind.d + ind.instant_deviation,
+            "d1": ind.d + ind.instant_deviation - ind.delta,
+            "d1_date": (ind.raw_row.get("d1_date") if ind.raw_row else None) or None,
+            "d20_date": (ind.raw_row.get("d20_date") if ind.raw_row else None) or ind.date,
+            "ratio_d20": ind.ratio_d20,
+            "ratio_d1": ind.ratio_d1,
+            "ratio_d": ind.ratio_d,
+            "rising_days": ind.rising_days,
+            "falling_days": ind.falling_days,
+            "avg_volume_20d": ind.avg_volume_20d,
+            "current_volume": ind.current_volume,
+            "volume_ratio": ind.volume_ratio,
+            "fz_ratio": ind.fz_ratio,
+            "instant_deviation": ind.instant_deviation,
+        }
+
+        return {
+            "score_total": ind.score_total,
+            "score_accumulation": ind.score_accumulation,
+            "score_momentum": ind.score_momentum,
+            "accumulation_grade": getattr(ind, "accumulation_grade", ""),
+            "momentum_grade": getattr(ind, "momentum_grade", ""),
+            "score_detail": score_detail,
+            # 同时补齐顶层关键指标，避免表格列仍为 --
+            "delta": ind.delta,
+            "d_ma20": ind.d,
+            "rising_days": ind.rising_days,
+            "falling_days": ind.falling_days,
+            "ratio_d20": ind.ratio_d20,
+            "ratio_d1": ind.ratio_d1,
+            "fz_ratio": ind.fz_ratio,
+        }
+    except Exception:
+        logger.debug("GMS 得分兜底计算失败 code=%s", code, exc_info=True)
+        return None
+
 # OAuth2 scheme (optional auth)
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
 
@@ -751,6 +955,7 @@ async def get_gms_strategy(
 
         stock_pool = None
         market = "all"
+        stock_pool_size = 0
         if code:
             stock_pool = [str(code).strip()]
             logger.info(f"GMS 单个股票查询: {code}")
@@ -788,6 +993,7 @@ async def get_gms_strategy(
                     return s
                 stock_pool = list(dict.fromkeys(_normalize_code_for_gms(item.stock_code) for item in watchlist_items))
                 stock_pool = [c for c in stock_pool if c]
+                stock_pool_size = len(stock_pool)
                 logger.info(f"GMS 数据来源=我的自选, 股票数={len(stock_pool)}")
                 market = "all"
             except JWTError:
@@ -974,13 +1180,61 @@ async def get_gms_strategy(
                 "sell_signal": r.get("sell_signal", False),
             })
 
+        # 兜底补全：避免前端出现“有信号但 Δ/F/Z/d 全空白 / 得分明细为空”
+        # 仅对缺失关键字段的条目补全，且尽量不增加全市场的额外负担
+        for item in results_data:
+            need_fill = (
+                item.get("delta") is None
+                or item.get("d_ma20") is None
+                or item.get("rising_days") is None
+                or item.get("falling_days") is None
+            )
+            mt = "HK" if (item.get("symbol") in hk_codes) else "CN"
+            if need_fill:
+                fallback = _fill_gms_indicator_fallback(db, item.get("symbol"), target_date, mt)
+                if fallback:
+                    # 仅填空字段，不覆盖已有值
+                    for k, v in fallback.items():
+                        if item.get(k) is None and v is not None:
+                            item[k] = v
+                    # ratio_relative 如果仍为空且可算则补
+                    if item.get("ratio_relative") is None:
+                        try:
+                            if item.get("delta") is not None and item.get("d_ma20") not in (None, 0):
+                                item["ratio_relative"] = float(item["delta"]) / float(item["d_ma20"])
+                        except Exception:
+                            pass
+
+            if not item.get("score_detail"):
+                score_fallback = _fill_gms_score_fallback(db, item.get("symbol"), target_date, mt, config)
+                if score_fallback:
+                    for k, v in score_fallback.items():
+                        if k == "score_detail":
+                            item["score_detail"] = v
+                            # 同步综合总分与信号强度，确保与 score_detail 一致（避免 trace 中 score_total=0 导致信号强度为 0）
+                            sd_total = v.get("score_total") if isinstance(v, dict) else None
+                            if sd_total is not None:
+                                item["score_total"] = sd_total
+                                item["signal_strength"] = float(sd_total) / 100.0 if float(sd_total) > 0 else 0.0
+                        elif item.get(k) is None:
+                            item[k] = v
+
+        # 按信号强度由高到低排列
+        def _gms_signal_sort_key(x):
+            s = x.get("signal_strength")
+            if s is not None:
+                return float(s)
+            st = x.get("score_total")
+            return (float(st) / 100.0) if st is not None else 0.0
+        results_data.sort(key=_gms_signal_sort_key, reverse=True)
+
         resp = {
             "success": True,
             "data": results_data,
             "total": len(results_data),
             "search_date": target_date,
             "strategy_name": "GMS均值引力动量策略",
-            "parameters": {"limit": limit or "无限制", "min_score": min_score, "scope": scope},
+            "parameters": {"limit": limit or "无限制", "min_score": min_score, "scope": scope, "stock_pool_size": stock_pool_size},
         }
         if fallback_used and user_specified_date:
             resp["message"] = f"所选日期无指标数据，已使用最新可用日期 {target_date}"
