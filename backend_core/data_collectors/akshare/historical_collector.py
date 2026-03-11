@@ -433,6 +433,15 @@ class AkshareHistoricalCollector:
             bool: 采集是否成功
         """
         try:
+            # 名称含「退」的股票（退市等）不再写入历史行情表
+            try:
+                name_row = self.session.execute(text("SELECT name FROM stock_basic_info WHERE code = :code"), {"code": stock_code}).fetchone()
+                stock_name = (name_row[0] or '').strip() if name_row and name_row[0] else ''
+                if stock_name and '退' in stock_name:
+                    logger.info(f"跳过名称含「退」的A股: {stock_code} {stock_name}")
+                    return True
+            except Exception:
+                pass  # 表或字段不存在时继续采集
             # 检查已存在的数据
             existing_dates = self.check_existing_data(stock_code, start_date, end_date)
             if existing_dates:

@@ -158,6 +158,10 @@ def save_to_database(stock_code: str, stock_name: str, df: pd.DataFrame, session
         df: 数据DataFrame
         session: 数据库会话
     """
+    # 名称含「退」的股票（退市等）不再写入历史行情表
+    if '退' in (stock_name or ''):
+        logger.info(f"跳过名称含「退」的港股，不写入历史行情: {stock_code} {stock_name}")
+        return 0
     saved_count = 0
     
     for _, row in df.iterrows():

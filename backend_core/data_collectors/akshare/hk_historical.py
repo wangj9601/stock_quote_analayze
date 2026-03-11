@@ -362,6 +362,9 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                                 }
                     
                     for record in records:
+                        # 名称含「退」的股票（退市等）不再写入历史行情表
+                        if '退' in (record.get('name') or ''):
+                            continue
                         if not record.get('current_price') or not record.get('open') or \
                            not record.get('high') or not record.get('low'):
                             continue

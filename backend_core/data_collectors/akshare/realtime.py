@@ -149,6 +149,9 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                     # 如果新浪数据源，则过滤掉code前2位字母
                     code = code[2:] if isinstance(code, str) and len(code) > 2 else code
                 name = row['名称']
+                # 名称含「退」的股票（退市等）不再写入实时、历史行情表
+                if '退' in (name or ''):
+                    continue
                 # 获取当前交易日期
                 trade_date = datetime.now().strftime('%Y-%m-%d')
                 data = {

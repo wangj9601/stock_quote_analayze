@@ -124,6 +124,9 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
             for _, row in df.iterrows():
                 code = row['代码']
                 name = row['名称']
+                # 名称含「退」的股票（退市等）不再写入实时、历史行情表
+                if '退' in (name or ''):
+                    continue
                 # 获取当前交易日期
                 trade_date = datetime.now().strftime('%Y-%m-%d')
                 data = {

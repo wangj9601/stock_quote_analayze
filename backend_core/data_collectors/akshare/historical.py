@@ -156,8 +156,11 @@ class HistoricalQuoteCollector(AKShareCollector):
                 try:
                     code = row['代码']
                     name = row['名称']
+                    # 名称含「退」的股票（退市等）不再写入历史行情表
+                    if '退' in (name or ''):
+                        continue
                     market = 'A股'
-                    
+
                     # 获取历史数据
                     try:
                         df = self._fetch_stock_data(code, date_str)

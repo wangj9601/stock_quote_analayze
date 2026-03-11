@@ -292,6 +292,10 @@ class AkshareDataCollector:
     
     def collect_single_stock_data(self, stock_code: str, stock_name: str, start_date: str, end_date: str, indicators: Optional[List[str]] = None) -> bool:
         """采集单只股票的历史数据"""
+        # 名称含「退」的股票（退市等）不再写入历史行情表
+        if stock_name and '退' in stock_name:
+            logger.info(f"跳过名称含「退」的A股: {stock_code} {stock_name}")
+            return True
         try:
             # 检查已存在的数据
             existing_dates = self.check_existing_data(stock_code, start_date, end_date)
@@ -821,6 +825,10 @@ class AkshareDataCollector:
             is_full_collection: 是否全量采集模式
             force_update: 是否强制更新（如果为True，即使数据已存在也会重新采集并更新）
         """
+        # 名称含「退」的股票（退市等）不再写入历史行情表
+        if stock_name and '退' in stock_name:
+            logger.info(f"跳过名称含「退」的港股: {stock_code} {stock_name}")
+            return True
         try:
             # 检查已存在的数据（仅在非强制更新模式下）
             existing_dates = []
@@ -1283,6 +1291,9 @@ class AkshareDataCollector:
                     for row in rows:
                         code = str(row[0]).strip()
                         name = (row[1] or '').strip() if row[1] else code
+                        # 名称含「退」的股票不再写入历史行情表
+                        if '退' in (name or ''):
+                            continue
                         open_price = row[2]
                         high = row[3]
                         low = row[4]
@@ -2133,6 +2144,12 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         }
 
+                        # 名称含「退」的股票（退市等）不再写入实时、历史行情表
+                        if '退' in (str(data.get('name') or '')):
+                            with task_lock:
+                                if task_id in collection_tasks:
+                                    collection_tasks[task_id]['skipped_count'] += 1
+                            continue
                         # 检查数据是否有效（现价和成交量不能同时为空）
                         if data['current_price'] is None and data['volume'] is None:
                             logger.debug(f"跳过港股 {data['code']} ({data['name']}): 实时行情数据为空")
@@ -2298,6 +2315,12 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         }
 
+                        # 名称含「退」的股票（退市等）不再写入实时、历史行情表
+                        if '退' in (str(data.get('name') or '')):
+                            with task_lock:
+                                if task_id in collection_tasks:
+                                    collection_tasks[task_id]['skipped_count'] += 1
+                            continue
                         # 检查数据是否有效（现价和成交量不能同时为空）
                         if data['current_price'] is None and data['volume'] is None:
                             logger.debug(f"跳过A股 {data['code']} ({data['name']}): 实时行情数据为空")
