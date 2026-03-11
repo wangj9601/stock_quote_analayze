@@ -227,59 +227,54 @@ async def get_quote_board(limit: int = Query(10, description="返回前N个涨�
         # 获取最新交易日期的实时行情数据
         db = next(get_db())
         
-        # 首先获取最新的交易日期
-        latest_date_result = pd.read_sql_query("""
-            SELECT MAX(trade_date) as latest_date 
-            FROM stock_realtime_quote 
+        # 首先获取最新的交易日期（使用 session.execute 避免 pd.read_sql_query 与 Engine 不兼容）
+        latest_date_row = db.execute(text("""
+            SELECT MAX(trade_date) AS latest_date
+            FROM stock_realtime_quote
             WHERE change_percent IS NOT NULL AND change_percent != 0
-        """, db.bind)
-        
-        if latest_date_result.empty or latest_date_result.iloc[0]['latest_date'] is None:
+        """)).fetchone()
+
+        if not latest_date_row or latest_date_row[0] is None:
             db.close()
             return JSONResponse({'success': False, 'message': '暂无行情数据'}, status_code=404)
-        
-        latest_trade_date = latest_date_result.iloc[0]['latest_date']
-        print(f"📅 首页涨幅榜使用最新交易日期: {latest_trade_date}")
-        
-        # 获取最新交易日期的数据
-        df = pd.read_sql_query(f"""
-            SELECT * FROM stock_realtime_quote 
-            WHERE change_percent IS NOT NULL AND change_percent != 0 AND trade_date = '{latest_trade_date}'
-            ORDER BY change_percent DESC
-        """, db.bind)
-        
-        # 按涨幅降序排列
 
-        # 取前limit个
-        df_limit = df.head(limit)
-        
+        latest_trade_date = latest_date_row[0]
+        print(f"📅 首页涨幅榜使用最新交易日期: {latest_trade_date}")
+
+        # 获取最新交易日期的数据（参数化查询，避免 SQL 注入）
+        rows = db.execute(text("""
+            SELECT code, name, current_price, change_percent, open, pre_close, high, low, volume, amount
+            FROM stock_realtime_quote
+            WHERE change_percent IS NOT NULL AND change_percent != 0 AND trade_date = :trade_date
+            ORDER BY change_percent DESC
+        """), {"trade_date": latest_trade_date}).fetchmany(limit)
+
         # 准备名称映射，避免名称字段为空
+        code_list = [str(r[0]) for r in rows if r[0]]
         name_map = {}
-        if not df_limit.empty:
-            code_list = [str(code) for code in df_limit['code'].tolist() if code]
-            if code_list:
-                name_rows = db.query(StockBasicInfo.code, StockBasicInfo.name).filter(
-                    StockBasicInfo.code.in_(code_list)
-                ).all()
-                name_map = {str(row.code): row.name for row in name_rows if row.name}
-        
+        if code_list:
+            name_rows = db.query(StockBasicInfo.code, StockBasicInfo.name).filter(
+                StockBasicInfo.code.in_(code_list)
+            ).all()
+            name_map = {str(row.code): row.name for row in name_rows if row.name}
+
         data = []
-        for _, row in df_limit.iterrows():
-            code = str(row['code'])
-            display_name = row['name']
+        for row in rows:
+            code = str(row[0])
+            display_name = row[1]
             if not display_name or str(display_name).lower() == 'null':
                 display_name = name_map.get(code) or ''
             data.append({
                 'code': code,
                 'name': display_name,
-                'current': row['current_price'],
-                'change_percent': row['change_percent'],
-                'open': row['open'],
-                'pre_close': row['pre_close'],
-                'high': row['high'],
-                'low': row['low'],
-                'volume': row['volume'],
-                'turnover': row['amount'],
+                'current': row[2],
+                'change_percent': row[3],
+                'open': row[4],
+                'pre_close': row[5],
+                'high': row[6],
+                'low': row[7],
+                'volume': row[8],
+                'turnover': row[9],
             })
         print(f"✅(DB) 成功获取 {len(data)} 条A股涨幅榜数据（已去重）")
         db.close()

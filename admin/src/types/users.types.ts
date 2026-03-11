@@ -5,8 +5,9 @@ export interface User {
   role: 'admin' | 'user' | 'guest'
   status: 'active' | 'disabled' | 'suspended'
   created_at: string
-  updated_at: string
+  updated_at?: string
   last_login?: string
+  wechat_userid?: string  // 企业微信成员UserID，用于微信通知
 }
 
 export interface CreateUserRequest {
@@ -20,6 +21,7 @@ export interface UpdateUserRequest {
   email?: string
   role?: 'admin' | 'user' | 'guest'
   status?: 'active' | 'disabled' | 'suspended'
+  wechat_userid?: string  // 企业微信成员UserID，用于微信通知
 }
 
 export interface UsersResponse {

@@ -25,7 +25,8 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
     
     # 微信推送相关字段
-    wechat_openid = Column(String(100), nullable=True, index=True)  # 微信OpenID
+    wechat_openid = Column(String(100), nullable=True, index=True)  # 微信OpenID（公众号/个人）
+    wechat_userid = Column(String(100), nullable=True, index=True)  # 企业微信成员UserID，通知发送时优先使用
     wechat_type = Column(String(20), nullable=True)  # 'personal' 或 'enterprise'
     
     watchlists = relationship("Watchlist", back_populates="user")
@@ -98,6 +99,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     role: Optional[str] = None
     status: Optional[str] = None
+    wechat_userid: Optional[str] = None  # 企业微信成员UserID，用于微信通知
 
 class UserInDB(UserBase):
     id: int
@@ -105,6 +107,7 @@ class UserInDB(UserBase):
     status: str
     created_at: datetime
     last_login: Optional[datetime] = None
+    wechat_userid: Optional[str] = None  # 企业微信成员UserID
 
     class Config:
         from_attributes = True

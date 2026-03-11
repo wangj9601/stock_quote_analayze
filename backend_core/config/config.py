@@ -1,46 +1,56 @@
-#配置文件
-#含各个模块的配置信息
+# 配置文件：含各个模块的配置信息，优先从项目根目录 .env 读取
 
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # 项目根目录
 ROOT_DIR = Path(__file__).parent.parent.parent
+load_dotenv(ROOT_DIR / ".env")
+
+def _env(key: str, default: str = "") -> str:
+    return (os.getenv(key) or default).strip()
+
+def _env_int(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)))
+    except ValueError:
+        return default
 
 # 数据库目录 - 使用相对路径
 DB_DIR = ROOT_DIR / 'database'
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
-# Tushare配置
+# Tushare 配置（从 .env 读取，未设置则用默认）
 TUSHARE_CONFIG = {
-    'token': '9701deb356e76d8d9918d797aff060ce90bd1a24339866c02444014f',
-    'max_retries': 3,
-    'timeout': 30
+    'token': _env('TUSHARE_TOKEN', ''),
+    'max_retries': _env_int('TUSHARE_MAX_RETRIES', 3),
+    'timeout': _env_int('TUSHARE_TIMEOUT', 30),
 }
 
 # 数据采集器配置
 DATA_COLLECTORS = {
     'tushare': {
-        'max_retries': 3,  # 最大重试次数
-        'retry_delay': 5,  # 重试延迟（秒）
-        'timeout': 30,     # 请求超时时间（秒）
-        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),  # 日志目录
-        'db_file': str(DB_DIR / 'stock_analysis.db'),  # 数据库文件路径
-        'max_connection_errors': 10,  # 最大连接错误次数
-        'token': TUSHARE_CONFIG['token']  # Tushare token
+        'max_retries': _env_int('TUSHARE_MAX_RETRIES', 3),
+        'retry_delay': _env_int('TUSHARE_RETRY_DELAY', 5),
+        'timeout': _env_int('TUSHARE_TIMEOUT', 30),
+        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),
+        'db_file': str(DB_DIR / 'stock_analysis.db'),
+        'max_connection_errors': _env_int('TUSHARE_MAX_CONNECTION_ERRORS', 10),
+        'token': TUSHARE_CONFIG['token'],
     },
     'akshare': {
-        'max_retries': 3,  # 最大重试次数
-        'retry_delay': 5,  # 重试延迟（秒）
-        'timeout': 30,     # 请求超时时间（秒）
-        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),  # 日志目录
-        'db_file': str(DB_DIR / 'stock_analysis.db'),  # 数据库文件路径
-        'max_connection_errors': 10,  # 最大连接错误次数
-        # 增强配置
-        'proxy_pool': [],  # 代理池，格式: [{'http': 'http://proxy:port', 'https': 'https://proxy:port'}]
-        'random_delay_range': (1, 3),  # 随机延迟范围（秒）
-        'ssl_verify': False,  # SSL验证，设为False可解决SSL连接问题
-        'use_fallback_sources': True,  # 是否使用备用数据源
+        'max_retries': _env_int('AKSHARE_MAX_RETRIES', 3),
+        'retry_delay': _env_int('AKSHARE_RETRY_DELAY', 5),
+        'timeout': _env_int('AKSHARE_TIMEOUT', 30),
+        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),
+        'db_file': str(DB_DIR / 'stock_analysis.db'),
+        'max_connection_errors': _env_int('AKSHARE_MAX_CONNECTION_ERRORS', 10),
+        'proxy_pool': [],
+        'random_delay_range': (1, 3),
+        'ssl_verify': os.getenv('AKSHARE_SSL_VERIFY', 'false').lower() in ('true', '1', 'yes'),
+        'use_fallback_sources': os.getenv('AKSHARE_USE_FALLBACK_SOURCES', 'true').lower() in ('true', '1', 'yes'),
     }
 }
 

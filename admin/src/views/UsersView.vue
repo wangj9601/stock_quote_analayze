@@ -158,6 +158,11 @@
             {{ row.last_login ? formatDate(row.last_login) : '从未登录' }}
           </template>
         </el-table-column>
+        <el-table-column prop="wechat_userid" label="企业微信UserID" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.wechat_userid || '—' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" min-width="220" fixed="right" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button
@@ -292,6 +297,9 @@
             <el-option label="暂停" value="suspended" />
           </el-select>
         </el-form-item>
+        <el-form-item label="企业微信UserID" prop="wechat_userid">
+          <el-input v-model="editForm.wechat_userid" placeholder="企业微信成员UserID，用于微信通知" clearable />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
@@ -355,7 +363,7 @@ const searchKeyword = ref('')
 const statusFilter = ref('')
 const roleFilter = ref('')
 const currentEditUser = ref<UserType | null>(null)
-const tableHeight = ref(600) // 表格默认高度
+const tableHeight = ref(720) // 表格默认高度（约 15 行），实际由 updateTableHeight 按窗口与最小高度取大
 
 // Forms
 const createForm = ref<CreateUserRequest>({
@@ -369,7 +377,8 @@ const editForm = ref<UpdateUserRequest & { username: string }>({
   username: '',
   email: '',
   role: 'user',
-  status: 'active'
+  status: 'active',
+  wechat_userid: ''
 })
 
 // Form rules
@@ -524,7 +533,8 @@ const resetEditForm = () => {
     username: '',
     email: '',
     role: 'user',
-    status: 'active'
+    status: 'active',
+    wechat_userid: ''
   }
   editFormRef.value?.resetFields()
   currentEditUser.value = null
@@ -549,7 +559,8 @@ const editUser = (user: UserType) => {
     username: user.username,
     email: user.email,
     role: user.role,
-    status: user.status
+    status: user.status,
+    wechat_userid: user.wechat_userid ?? ''
   }
   showEditDialog.value = true
 }
@@ -624,16 +635,21 @@ const submitChangePassword = async () => {
 onMounted(async () => {
   console.log('🚀 用户管理页面已挂载，开始加载数据...')
   
-  // 设置响应式表格高度
+  // 设置响应式表格高度：保证至少可显示约 15 条记录（约 600px），再按窗口剩余空间放大
+  const ROW_HEIGHT_ESTIMATE = 48
+  const MIN_VISIBLE_ROWS = 15
+  const MIN_TABLE_HEIGHT = Math.max(400, ROW_HEIGHT_ESTIMATE * MIN_VISIBLE_ROWS)
+
   const updateTableHeight = () => {
     const windowHeight = window.innerHeight
-    const headerHeight = 80 // 页面头部高度
-    const statsHeight = 120 // 统计卡片高度
-    const searchHeight = 100 // 搜索区域高度
-    const paginationHeight = 80 // 分页区域高度
-    const padding = 100 // 其他间距
-    
-    tableHeight.value = windowHeight - headerHeight - statsHeight - searchHeight - paginationHeight - padding
+    const headerHeight = 64
+    const statsHeight = 120
+    const searchHeight = 100
+    const paginationHeight = 72
+    const padding = 48
+
+    const calculated = windowHeight - headerHeight - statsHeight - searchHeight - paginationHeight - padding
+    tableHeight.value = Math.max(MIN_TABLE_HEIGHT, calculated)
   }
   
   // 初始设置

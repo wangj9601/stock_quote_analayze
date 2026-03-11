@@ -322,10 +322,11 @@ class PushService:
                     error_message=error_msg
                 )
             
-            # 检查是否有可用的推送渠道
+            # 检查是否有可用的推送渠道（微信优先使用 wechat_userid，其次 wechat_openid）
+            wechat_id = getattr(user, 'wechat_userid', None) or user.wechat_openid
             available_channels = []
             for channel in config.channels:
-                if channel == 'wechat' and user.wechat_openid:
+                if channel == 'wechat' and wechat_id:
                     available_channels.append('wechat')
                 elif channel == 'email' and user.email:
                     available_channels.append('email')
@@ -558,9 +559,10 @@ class PushService:
             ChannelResult: 微信推送结果
         """
         try:
-            # 检查用户是否绑定了微信
-            if not user.wechat_openid:
-                error_msg = f"用户 {user.id} 未绑定微信"
+            # 微信接收人：优先使用 wechat_userid（企业微信），否则 wechat_openid
+            wechat_recipient = getattr(user, 'wechat_userid', None) or user.wechat_openid
+            if not wechat_recipient:
+                error_msg = f"用户 {user.id} 未绑定微信（未设置 wechat_userid 或 wechat_openid）"
                 logger.warning(error_msg)
                 return ChannelResult(
                     channel='wechat',
@@ -574,7 +576,7 @@ class PushService:
             # 1. 先发送文本消息
             logger.info(f"向用户 {user.id} 发送微信文本消息")
             text_success = self.wechat_service.send_text_message(
-                user_ids=[user.wechat_openid],
+                user_ids=[wechat_recipient],
                 content=text_message
             )
             
@@ -600,7 +602,7 @@ class PushService:
             import os
             file_name = os.path.basename(report_path)
             file_success = self.wechat_service.send_file_message(
-                user_ids=[user.wechat_openid],
+                user_ids=[wechat_recipient],
                 file_path=report_path,
                 file_name=file_name
             )
@@ -1060,8 +1062,9 @@ class PushService:
             channels_to_retry = []
             for channel, status in record.channel_status.items():
                 if status == "failed" or status == "pending":
-                    # 检查用户是否仍然绑定了该渠道
-                    if channel == 'wechat' and user.wechat_openid:
+                    # 检查用户是否仍然绑定了该渠道（微信：wechat_userid 或 wechat_openid）
+                    wechat_id = getattr(user, 'wechat_userid', None) or user.wechat_openid
+                    if channel == 'wechat' and wechat_id:
                         channels_to_retry.append('wechat')
                     elif channel == 'email' and user.email:
                         channels_to_retry.append('email')
