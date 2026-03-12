@@ -139,7 +139,7 @@ class StockGMSTracePage {
         const gmsFmt = (v, type) => {
             if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
             if (type === 'pct') return (v * 100).toFixed(2) + '%';
-            if (type === 'int') return String(v);
+            if (type === 'int') return String(Math.round(v));
             return typeof v === 'number' ? v.toFixed(4) : String(v);
         };
         return `
@@ -206,7 +206,10 @@ class StockGMSTracePage {
         pageData.forEach((r, index) => {
             const buyClass = r.left_buy_signal ? 'buy-left' : (r.right_buy_signal ? 'buy-right' : '');
             let strengthClass = 'strength-low';
-            const ss = r.signal_strength;
+            let ss = r.signal_strength;
+            if ((ss == null || ss === 0) && r.score_total != null && r.score_total > 0) {
+                ss = r.score_total / 100;
+            }
             if (ss != null && ss >= 0.8) strengthClass = 'strength-high';
             else if (ss != null && ss >= 0.6) strengthClass = 'strength-mid';
 

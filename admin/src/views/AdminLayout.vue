@@ -92,7 +92,7 @@ const menuItems = [
   { path: '/logs', name: '系统日志', icon: Document },
   { path: '/content', name: '内容管理', icon: DocumentCopy },
   { path: '/announcements', name: '公告发布', icon: Bell },
-  { path: '/email-management', name: '邮件管理', icon: Setting }
+  { path: '/report-management', name: '报告管理', icon: Setting }
 ]
 
 // 计算属性

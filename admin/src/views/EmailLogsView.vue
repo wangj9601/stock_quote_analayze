@@ -2,7 +2,7 @@
   <div class="email-logs-view">
     <el-card>
       <template #header>
-        <span>邮件发送日志</span>
+        <span>报告发送日志</span>
       </template>
       <el-form :inline="true" class="filter-form">
         <el-form-item label="用户">

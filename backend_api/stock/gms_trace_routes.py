@@ -29,6 +29,122 @@ except ImportError as e:
     GMS_AVAILABLE = False
 
 
+def _enrich_trace_row_score_detail(db: Session, row_dict: dict, config: dict) -> dict:
+    """
+    当 trace 记录的得分明细或计算指标为空时，从指标表重新计算并补全。
+    用于兼容迁移前写入的历史数据。
+    """
+    code = row_dict.get("code")
+    date_str = str(row_dict.get("date", ""))[:10]
+    market_type = row_dict.get("market_type", "CN")
+    if not code or not date_str:
+        return row_dict
+    # 若已有完整得分明细则跳过
+    if row_dict.get("score_acc_fz") is not None and row_dict.get("d") is not None:
+        return row_dict
+    try:
+        from backend_core.strategies.gms.indicators_calculator import GMSIndicatorsCalculator
+
+        row = (
+            db.query(MeanFrequencyResonanceIndicators)
+            .filter(
+                MeanFrequencyResonanceIndicators.code == code,
+                MeanFrequencyResonanceIndicators.market_type == market_type,
+                MeanFrequencyResonanceIndicators.date == date_str,
+            )
+            .first()
+        )
+        if not row:
+            return row_dict
+
+        delta = getattr(row, "macro_displacement_delta", None)
+        d = getattr(row, "ma20_d", None)
+        mavol20_m = getattr(row, "mavol20_m", None)
+        eff_m20_m = getattr(row, "efficiency_m20_minus_m", None)
+        current_volume = (float(mavol20_m or 0) + float(eff_m20_m or 0)) if mavol20_m is not None else 0.0
+        volume_ratio = (current_volume / float(mavol20_m)) if mavol20_m not in (None, 0) else None
+        calc_row = {
+            "code": code,
+            "date": date_str,
+            "market_type": market_type,
+            "macro_displacement_delta": delta,
+            "ma20_d": d,
+            "ratio_d20": getattr(row, "ratio_d20", None),
+            "ratio_d1": getattr(row, "ratio_d1", None),
+            "instant_deviation": getattr(row, "instant_deviation", None),
+            "rising_days_z": getattr(row, "rising_days_z", 0),
+            "falling_days_f": getattr(row, "falling_days_f", 0),
+            "mavol20_m": mavol20_m,
+            "efficiency_m20_minus_m": eff_m20_m,
+            "ratio_d": getattr(row, "bias", None),
+            "current_volume": current_volume,
+            "volume_ratio": volume_ratio,
+            "d1": getattr(row, "d1", None),
+            "d1_date": getattr(row, "d1_date", None),
+            "d20": getattr(row, "d20", None),
+            "d20_date": getattr(row, "d20_date", None),
+        }
+        stable_days = int(config.get("scoring", {}).get("instant_deviation_stable_days", 3) or 3)
+        series_rows = (
+            db.query(MeanFrequencyResonanceIndicators.instant_deviation)
+            .filter(
+                MeanFrequencyResonanceIndicators.code == code,
+                MeanFrequencyResonanceIndicators.market_type == market_type,
+                MeanFrequencyResonanceIndicators.date <= date_str,
+            )
+            .order_by(MeanFrequencyResonanceIndicators.date.desc())
+            .limit(max(1, stable_days))
+            .all()
+        )
+        series = [float(r[0]) for r in reversed(series_rows) if r and r[0] is not None]
+        ind = GMSIndicatorsCalculator(config).calculate(calc_row, instant_deviation_series=series if series else None)
+        if not ind:
+            return row_dict
+
+        # 补全得分明细与计算指标
+        out = dict(row_dict)
+        if out.get("score_acc_fz") is None:
+            out["score_acc_fz"] = getattr(ind, "score_acc_fz", None)
+            out["score_acc_balance"] = getattr(ind, "score_acc_balance", None)
+            out["score_acc_volume"] = getattr(ind, "score_acc_volume", None)
+            out["acc_fz_judge"] = getattr(ind, "acc_fz_judge", None) or ""
+            out["acc_balance_judge"] = getattr(ind, "acc_balance_judge", None) or ""
+            out["acc_volume_judge"] = getattr(ind, "acc_volume_judge", None) or ""
+        if out.get("score_mom_ratio_d1") is None:
+            out["score_mom_ratio_d1"] = getattr(ind, "score_mom_ratio_d1", None)
+            out["score_mom_deviation"] = getattr(ind, "score_mom_deviation", None)
+            out["score_mom_volume"] = getattr(ind, "score_mom_volume", None)
+            out["mom_ratio_d1_judge"] = getattr(ind, "mom_ratio_d1_judge", None) or ""
+            out["mom_deviation_judge"] = getattr(ind, "mom_deviation_judge", None) or ""
+            out["mom_volume_judge"] = getattr(ind, "mom_volume_judge", None) or ""
+        if out.get("delta") is None:
+            out["delta"] = ind.delta
+            out["d"] = ind.d
+            out["ratio_d20"] = ind.ratio_d20
+            out["ratio_d1"] = ind.ratio_d1
+            out["fz_ratio"] = ind.fz_ratio
+            out["volume_ratio"] = ind.volume_ratio
+            out["instant_deviation"] = ind.instant_deviation
+            out["rising_days"] = ind.rising_days
+            out["falling_days"] = ind.falling_days
+        if out.get("score_accumulation") is None:
+            out["score_accumulation"] = ind.score_accumulation
+        if out.get("score_momentum") is None:
+            out["score_momentum"] = ind.score_momentum
+        if out.get("score_total") is None:
+            out["score_total"] = ind.score_total
+        if out.get("accumulation_grade") in (None, ""):
+            out["accumulation_grade"] = getattr(ind, "accumulation_grade", "") or ""
+        if out.get("momentum_grade") in (None, ""):
+            out["momentum_grade"] = getattr(ind, "momentum_grade", "") or ""
+        if (out.get("signal_strength") is None or out.get("signal_strength") == 0) and ind.score_total and ind.score_total > 0:
+            out["signal_strength"] = ind.score_total / 100.0
+        return out
+    except Exception as e:
+        logger.debug("GMS 追溯 enrichment 失败 %s %s: %s", code, date_str, e)
+        return row_dict
+
+
 def _normalize_code(code: str, market_type: str) -> str:
     """港股代码 5 位补零"""
     s = str(code).strip()
@@ -271,6 +387,9 @@ async def get_gms_signal_trace(
             }
 
         data = [to_dict(r) for r in rows]
+        # 对缺失得分明细或计算指标的历史记录做 enrichment
+        for i, item in enumerate(data):
+            data[i] = _enrich_trace_row_score_detail(db, item, config)
         return JSONResponse({
             "success": True,
             "data": data,

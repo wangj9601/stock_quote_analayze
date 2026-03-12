@@ -98,21 +98,21 @@ const routes = [
         component: () => import('@/views/ReportDetailView.vue')
       },
       {
-        path: 'email-management',
-        name: 'EmailManagement',
+        path: 'report-management',
+        name: 'ReportManagement',
         component: () => import('@/views/EmailManagementView.vue')
       },
       {
         path: 'email-sender-config',
-        redirect: { path: '/email-management', query: { tab: 'sender' } }
+        redirect: { path: '/report-management', query: { tab: 'sender' } }
       },
       {
         path: 'push-config',
-        redirect: { path: '/email-management', query: { tab: 'push' } }
+        redirect: { path: '/report-management', query: { tab: 'push' } }
       },
       {
         path: 'email-logs',
-        redirect: { path: '/email-management', query: { tab: 'logs' } }
+        redirect: { path: '/report-management', query: { tab: 'logs' } }
       }
     ]
   }

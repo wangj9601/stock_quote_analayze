@@ -184,6 +184,7 @@ def run_gms_backtest(
     if total_dates == 0:
         return {"summary": {"total_samples": 0, "hit_count": 0, "hit_rate": 0.0}, "details": []}
 
+    # GMSFrontendInterface 已实现：优先从 gms_signal_trace 取策略信号，不存在或缺失则增量计算并回填
     interface = GMSFrontendInterface(db)
     interface.set_selection_config(min_score=min_score, max_results=10000)
 

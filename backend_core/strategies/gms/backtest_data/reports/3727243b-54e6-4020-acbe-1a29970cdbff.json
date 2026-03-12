@@ -1,0 +1,46 @@
+{
+  "report_id": "3727243b-54e6-4020-acbe-1a29970cdbff",
+  "task_id": "3727243b-54e6-4020-acbe-1a29970cdbff",
+  "name": "GMS回测_002100_天康生物",
+  "created_at": "2026-03-12T08:43:03.875282Z",
+  "summary": {
+    "total_samples": 29,
+    "hit_count": 5,
+    "hit_rate": 0.1724,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2022-03-01",
+    "end_date": "2026-03-11",
+    "market": "all",
+    "by_buy_type": {
+      "右侧": {
+        "total": 21,
+        "hit": 5,
+        "hit_rate": 0.23809523809523808
+      },
+      "左侧": {
+        "total": 8,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 10,
+        "hit": 2,
+        "hit_rate": 0.2
+      },
+      "[80,90)": {
+        "total": 6,
+        "hit": 2,
+        "hit_rate": 0.3333333333333333
+      },
+      "[90,100]": {
+        "total": 13,
+        "hit": 1,
+        "hit_rate": 0.07692307692307693
+      }
+    }
+  },
+  "details_path": "3727243b-54e6-4020-acbe-1a29970cdbff.csv"
+}

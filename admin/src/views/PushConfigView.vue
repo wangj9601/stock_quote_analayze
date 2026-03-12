@@ -2,7 +2,7 @@
   <div class="push-config-view">
     <el-card>
       <template #header>
-        <span>邮件推送配置</span>
+        <span>报告推送配置</span>
         <div style="float: right; display: flex; gap: 8px;">
           <el-button type="primary" :loading="loading" @click="loadConfigs">刷新</el-button>
           <el-button type="success" @click="openAddTask">添加推送任务</el-button>

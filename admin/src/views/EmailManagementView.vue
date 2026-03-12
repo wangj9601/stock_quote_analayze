@@ -1,13 +1,13 @@
 <template>
-  <div class="email-management-view">
+  <div class="report-management-view">
     <el-tabs v-model="activeTab" type="border-card" @tab-change="onTabChange">
       <el-tab-pane label="发送邮箱配置" name="sender">
         <EmailSenderConfigView />
       </el-tab-pane>
-      <el-tab-pane label="邮件推送配置" name="push">
+      <el-tab-pane label="报告推送配置" name="push">
         <PushConfigView />
       </el-tab-pane>
-      <el-tab-pane label="邮件发送日志" name="logs">
+      <el-tab-pane label="报告发送日志" name="logs">
         <EmailLogsView />
       </el-tab-pane>
     </el-tabs>
@@ -41,10 +41,10 @@ watch(
 </script>
 
 <style scoped>
-.email-management-view {
+.report-management-view {
   padding: 0;
 }
-.email-management-view :deep(.el-tabs__content) {
+.report-management-view :deep(.el-tabs__content) {
   padding: 16px 0 0;
 }
 </style>

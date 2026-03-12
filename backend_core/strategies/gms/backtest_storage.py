@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -46,13 +47,35 @@ def _load_index() -> Dict[str, Dict[str, Any]]:
 
 
 def _save_index(index: Dict[str, Dict[str, Any]]) -> None:
+    """原子写入 task_index.json。Windows 上若 replace 失败（文件被占用），重试后回退为直接覆盖。"""
     _ensure_dirs()
     tmp = _INDEX_FILE + ".tmp"
+    content = json.dumps(index, ensure_ascii=False, indent=2)
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(index, f, ensure_ascii=False, indent=2)
+        f.write(content)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, _INDEX_FILE)
+    for attempt in range(3):
+        try:
+            os.replace(tmp, _INDEX_FILE)
+            return
+        except OSError as e:
+            if attempt < 2:
+                time.sleep(0.05 * (attempt + 1))
+            else:
+                try:
+                    with open(_INDEX_FILE, "w", encoding="utf-8") as f:
+                        f.write(content)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    if os.path.isfile(tmp):
+                        try:
+                            os.remove(tmp)
+                        except OSError:
+                            pass
+                    logger.debug("task_index 原子替换失败，已回退为直接写入: %s", e)
+                except Exception as fallback_err:
+                    logger.warning("task_index 写入失败: %s; 回退写入也失败: %s", e, fallback_err)
 
 
 def _set_index_entry(task_id: str, created_at: Optional[str] = None, status: Optional[str] = None) -> None:
