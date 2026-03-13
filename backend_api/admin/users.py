@@ -26,6 +26,11 @@ class ChangePasswordRequest(BaseModel):
     """管理员修改用户密码请求体"""
     new_password: str
 
+
+class StatusUpdateRequest(BaseModel):
+    """更新用户状态请求体"""
+    status: str
+
 @router.get("", response_model=UsersResponse)
 async def get_users(
     skip: int = Query(0, ge=0),
@@ -112,54 +117,72 @@ async def create_user(
             detail=error_msg
         )
 
+def _update_user_impl(user_id: int, user_update: UserUpdate, db: Session) -> User:
+    """更新用户信息实现，供 PUT/POST 共用"""
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    update_data = user_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_user, field, value)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
 @router.put("/{user_id}", response_model=UserInDB)
-async def update_user(
+async def update_user_put(
     user_id: int,
     user_update: UserUpdate,
     current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """更新用户信息"""
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户不存在"
-        )
-    
-    # 更新用户信息
-    update_data = user_update.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_user, field, value)
-    
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    """更新用户信息（PUT）。"""
+    return _update_user_impl(user_id, user_update, db)
 
-@router.put("/{user_id}/status")
-async def update_user_status(
+
+@router.post("/{user_id}", response_model=UserInDB)
+async def update_user_post(
     user_id: int,
-    status: str,
+    user_update: UserUpdate,
     current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """更新用户状态"""
-    if status not in ["active", "disabled", "suspended"]:
+    """更新用户信息（POST）；与 PUT 行为一致，用于生产环境对 PUT 有限制时。"""
+    return _update_user_impl(user_id, user_update, db)
+
+
+def _update_user_status_impl(user_id: int, new_status: str, db: Session) -> dict:
+    """更新用户状态实现，供 PUT/POST 共用"""
+    if new_status not in ["active", "disabled", "suspended"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="无效的状态值"
         )
-    
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
-    
-    db_user.status = status
+    db_user.status = new_status
     db.commit()
-    return {"message": f"用户状态已更新为{status}"}
+    return {"message": f"用户状态已更新为{new_status}"}
+
+
+@router.put("/{user_id}/status")
+@router.post("/{user_id}/status")
+async def update_user_status(
+    user_id: int,
+    body: StatusUpdateRequest,
+    current_user = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """更新用户状态。支持 PUT 与 POST，请求体为 { \"status\": \"active\"|\"disabled\"|\"suspended\" }。"""
+    return _update_user_status_impl(user_id, body.status, db)
 
 @router.delete("/{user_id}")
 async def delete_user(
@@ -181,31 +204,44 @@ async def delete_user(
     
     return {"message": "用户删除成功"}
 
-@router.put("/{user_id}/password")
-async def change_user_password(
-    user_id: int,
-    body: ChangePasswordRequest,
-    current_user = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    """管理员直接修改指定用户密码"""
+def _change_user_password_impl(user_id: int, new_password: str, db: Session) -> dict:
+    """管理员修改用户密码实现，供 PUT/POST 共用"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
-
-    if not body.new_password or len(body.new_password) < 6:
+    if not new_password or len(new_password) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="新密码长度不能少于6位"
         )
-
-    db_user.password_hash = get_password_hash(body.new_password)
+    db_user.password_hash = get_password_hash(new_password)
     db.commit()
-
     return {"message": "密码修改成功"}
+
+
+@router.put("/{user_id}/password")
+async def change_user_password_put(
+    user_id: int,
+    body: ChangePasswordRequest,
+    current_user = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """管理员直接修改指定用户密码（PUT）。"""
+    return _change_user_password_impl(user_id, body.new_password, db)
+
+
+@router.post("/{user_id}/password")
+async def change_user_password_post(
+    user_id: int,
+    body: ChangePasswordRequest,
+    current_user = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """管理员直接修改指定用户密码（POST）；与 PUT 行为一致。"""
+    return _change_user_password_impl(user_id, body.new_password, db)
 
 @router.post("/{user_id}/password/reset")
 async def reset_user_password(

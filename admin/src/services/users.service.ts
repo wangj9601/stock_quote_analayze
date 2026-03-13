@@ -31,11 +31,12 @@ export class UsersService {
   }
 
   async updateUser(userId: number, userData: UpdateUserRequest): Promise<User> {
-    return apiService.put<User>(`/users/${userId}`, userData)
+    // 使用 POST 避免生产环境对 PUT 返回 405；后端同时支持 PUT 与 POST
+    return apiService.post<User>(`/users/${userId}`, userData)
   }
 
   async updateUserStatus(userId: number, status: string): Promise<{ message: string }> {
-    return apiService.put<{ message: string }>(`/users/${userId}/status`, { status })
+    return apiService.post<{ message: string }>(`/users/${userId}/status`, { status })
   }
 
   async deleteUser(userId: number): Promise<{ message: string }> {
@@ -43,7 +44,7 @@ export class UsersService {
   }
 
   async changePassword(userId: number, newPassword: string): Promise<{ message: string }> {
-    return apiService.put<{ message: string }>(`/users/${userId}/password`, { new_password: newPassword })
+    return apiService.post<{ message: string }>(`/users/${userId}/password`, { new_password: newPassword })
   }
 
   async resetPassword(userId: number): Promise<{ message: string; default: string }> {
