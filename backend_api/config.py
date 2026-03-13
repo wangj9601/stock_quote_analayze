@@ -5,11 +5,15 @@ backend_api 配置文件，参数均从项目根目录 .env 读取。
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # 生产环境可无 python-dotenv
 
-# 加载项目根目录 .env（backend_api 的上一级）
+# 加载项目根目录 .env（有 python-dotenv 时）；生产环境无则使用系统环境变量
 _project_root = Path(__file__).resolve().parent.parent
-load_dotenv(_project_root / ".env")
+if load_dotenv is not None:
+    load_dotenv(_project_root / ".env")
 
 
 def _env(key: str, default: str = "") -> str:

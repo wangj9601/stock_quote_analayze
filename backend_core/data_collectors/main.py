@@ -3,7 +3,10 @@ import sys
 import logging
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # 生产环境可无 python-dotenv，依赖系统环境变量
 from apscheduler.schedulers.blocking import BlockingScheduler
 from datetime import datetime, timedelta
 from backend_core.data_collectors.akshare.realtime import AkshareRealtimeQuoteCollector
@@ -33,9 +36,10 @@ from backend_core.data_collectors.akshare.annual_collector import AnnualDataGene
 from backend_core.data_collectors.akshare.hk_annual_collector import HKAnnualDataGenerator
 import time
 
-# 加载项目根目录 .env（backend_core/data_collectors 的上级的上级的上级）
+# 加载项目根目录 .env（有 python-dotenv 时；生产环境无则使用系统环境变量）
 _project_root = Path(__file__).resolve().parent.parent.parent
-load_dotenv(_project_root / ".env")
+if load_dotenv is not None:
+    load_dotenv(_project_root / ".env")
 
 
 def _env(key: str, default: str = "") -> str:

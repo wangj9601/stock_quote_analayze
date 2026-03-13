@@ -52,8 +52,12 @@ def _get_smtp_config(db):
                 from_email=str(row.from_email) if row.from_email else str(row.username),
                 from_name=str(row.from_name) if row.from_name else "股票分析系统",
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"从数据库读取发件配置失败，将使用环境变量: {e}", exc_info=True)
+        try:
+            db.rollback()
+        except Exception as rb_e:
+            logging.warning(f"rollback 失败: {rb_e}")
     return SMTPConfig(
         host=SMTP_CONFIG["host"],
         port=SMTP_CONFIG["port"],

@@ -61,7 +61,11 @@ class ConfigService:
             return config
         
         except Exception as e:
-            logger.error(f"获取用户配置失败: user_id={user_id}, error={str(e)}")
+            logger.error(f"获取用户配置失败: user_id={user_id}, error={str(e)}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise
 
     def get_config_by_id(self, config_id: int) -> Optional[UserPushConfig]:
@@ -69,7 +73,11 @@ class ConfigService:
         try:
             return self.db.query(UserPushConfig).filter(UserPushConfig.id == config_id).first()
         except Exception as e:
-            logger.error(f"获取推送配置失败: config_id={config_id}, error={str(e)}")
+            logger.error(f"获取推送配置失败: config_id={config_id}, error={str(e)}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise
 
     def get_user_configs(self, user_id: int) -> List[UserPushConfig]:
@@ -77,7 +85,11 @@ class ConfigService:
         try:
             return self.db.query(UserPushConfig).filter(UserPushConfig.user_id == user_id).all()
         except Exception as e:
-            logger.error(f"获取用户推送配置列表失败: user_id={user_id}, error={str(e)}")
+            logger.error(f"获取用户推送配置列表失败: user_id={user_id}, error={str(e)}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise
 
     def get_all_distinct_push_times(self) -> List[str]:
@@ -97,7 +109,11 @@ class ConfigService:
             logger.info(f"从 user_push_configs 读取到 {len(result)} 个推送时间点: {result}")
             return result
         except Exception as e:
-            logger.error(f"获取推送时间点失败: {str(e)}")
+            logger.error(f"获取推送时间点失败: {str(e)}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise
 
     @staticmethod
@@ -174,7 +190,7 @@ class ConfigService:
             raise
         except Exception as e:
             self.db.rollback()
-            logger.error(f"更新用户配置失败: user_id={user_id}, error={str(e)}")
+            logger.error(f"更新用户配置失败: user_id={user_id}, error={str(e)}", exc_info=True)
             raise
     
     def create_default_config(self, user_id: int) -> UserPushConfig:
@@ -220,7 +236,7 @@ class ConfigService:
             raise
         except Exception as e:
             self.db.rollback()
-            logger.error(f"创建默认配置失败: user_id={user_id}, error={str(e)}")
+            logger.error(f"创建默认配置失败: user_id={user_id}, error={str(e)}", exc_info=True)
             raise
 
     def delete_user_config(self, user_id: int) -> bool:
@@ -236,7 +252,7 @@ class ConfigService:
             return True
         except Exception as e:
             self.db.rollback()
-            logger.error(f"删除用户推送配置失败: user_id={user_id}, error={str(e)}")
+            logger.error(f"删除用户推送配置失败: user_id={user_id}, error={str(e)}", exc_info=True)
             raise
 
     def delete_config_by_id(self, config_id: int) -> bool:
@@ -252,7 +268,7 @@ class ConfigService:
             return True
         except Exception as e:
             self.db.rollback()
-            logger.error(f"删除推送配置失败: config_id={config_id}, error={str(e)}")
+            logger.error(f"删除推送配置失败: config_id={config_id}, error={str(e)}", exc_info=True)
             raise
 
     def update_config_by_id(self, config_id: int, config_update: ConfigUpdate) -> Optional[UserPushConfig]:
@@ -278,7 +294,7 @@ class ConfigService:
             return config
         except Exception as e:
             self.db.rollback()
-            logger.error(f"更新推送配置失败: config_id={config_id}, error={str(e)}")
+            logger.error(f"更新推送配置失败: config_id={config_id}, error={str(e)}", exc_info=True)
             raise
 
     def create_config(
@@ -313,7 +329,7 @@ class ConfigService:
             raise
         except Exception as e:
             self.db.rollback()
-            logger.error(f"创建推送任务失败: user_id={user_id}, error={str(e)}")
+            logger.error(f"创建推送任务失败: user_id={user_id}, error={str(e)}", exc_info=True)
             raise
 
     def get_users_for_push_time(self, push_time: str) -> List[User]:
@@ -351,5 +367,9 @@ class ConfigService:
             logger.info(f"获取推送任务列表成功: push_time={push_time}, count={len(result)}")
             return result
         except Exception as e:
-            logger.error(f"获取推送任务列表失败: push_time={push_time}, error={str(e)}")
+            logger.error(f"获取推送任务列表失败: push_time={push_time}, error={str(e)}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise

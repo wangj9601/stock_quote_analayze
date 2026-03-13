@@ -1,13 +1,17 @@
-# 配置文件：含各个模块的配置信息，优先从项目根目录 .env 读取
+# 配置文件：含各个模块的配置信息，优先从项目根目录 .env 读取（有 python-dotenv 时）
 
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # 生产环境可无 python-dotenv，依赖系统环境变量
 
 # 项目根目录
 ROOT_DIR = Path(__file__).parent.parent.parent
-load_dotenv(ROOT_DIR / ".env")
+if load_dotenv is not None:
+    load_dotenv(ROOT_DIR / ".env")
 
 def _env(key: str, default: str = "") -> str:
     return (os.getenv(key) or default).strip()

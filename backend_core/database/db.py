@@ -1,14 +1,18 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # 生产环境可无 python-dotenv，依赖系统环境变量
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-# 加载本地 .env：优先项目根目录（backend_core 的上一级）
+# 加载本地 .env（有 python-dotenv 时）；生产环境无则使用系统环境变量
 _project_root = Path(__file__).resolve().parent.parent.parent
-load_dotenv(_project_root / ".env")
+if load_dotenv is not None:
+    load_dotenv(_project_root / ".env")
 
 Base = declarative_base()
 
