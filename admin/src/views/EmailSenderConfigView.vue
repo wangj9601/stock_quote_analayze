@@ -64,7 +64,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { pushService } from '@/services/push.service'
-import type { EmailSenderConfigResponse, EmailSenderConfigUpdateRequest } from '@/services/push.service'
+import type { EmailSenderConfigUpdateRequest } from '@/services/push.service'
 
 const formRef = ref()
 const saving = ref(false)

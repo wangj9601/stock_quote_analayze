@@ -60,13 +60,7 @@ class ProjectPackager:
             "frontend/**/*",
             "frontend/*.html",
             "frontend/*.txt",
-            "admin/**/*",
-            "admin/*.json",
-            "admin/*.js",
-            "admin/*.ts",
-            "admin/*.md",
-            "admin/*.sh",
-            "admin/*.bat",
+            # admin 工程目录不打包（单独构建部署）
             
             # 根目录重要文件
             "requirements.txt",
@@ -164,6 +158,10 @@ class ProjectPackager:
             "**/build/**",
             "**/dist/**",
             
+            # admin 工程目录不打包
+            "admin",
+            "admin/**",
+            
             # 其他
             "**/node_modules/**",
             "**/package-lock.json",
@@ -210,10 +208,12 @@ class ProjectPackager:
         
         for root, dirs, files in os.walk(self.project_root):
             root_path = Path(root)
-            
-            # 过滤目录
-            dirs[:] = [d for d in dirs if not any(self.match_pattern(str(root_path / d), pattern) for pattern in exclude_patterns)]
-            
+            def _rel(d: str) -> str:
+                try:
+                    return str((root_path / d).relative_to(self.project_root))
+                except ValueError:
+                    return str(root_path / d)
+            dirs[:] = [d for d in dirs if not any(self.match_pattern(_rel(d), pattern) for pattern in exclude_patterns)]
             for file in files:
                 file_path = root_path / file
                 if self.should_include_file(file_path, include_patterns, exclude_patterns):
@@ -484,13 +484,7 @@ class ProjectPackager:
             "backend_api/**/*.py",
             "backend_core/**/*.py",
             "frontend/**/*",
-            "admin/**/*",
-            "admin/*.json",
-            "admin/*.js",
-            "admin/*.ts",
-            "admin/*.md",
-            "admin/*.sh",
-            "admin/*.bat",
+            # admin 工程目录不打包
             "requirements.txt",
             "requirements-prod.txt",
             "start_system.py",
@@ -514,6 +508,8 @@ class ProjectPackager:
             "**/*.pyd",
             "**/.pytest_cache/**",
             "**/.mypy_cache/**",
+            "admin",
+            "admin/**",
             "**/test/**",
             "**/tests/**",
             "**/*_test.py",
@@ -533,10 +529,12 @@ class ProjectPackager:
         files = []
         for root, dirs, filenames in os.walk(self.project_root):
             root_path = Path(root)
-            
-            # 过滤目录
-            dirs[:] = [d for d in dirs if not any(self.match_pattern(str(root_path / d), pattern) for pattern in minimal_excludes)]
-            
+            def _rel(d: str) -> str:
+                try:
+                    return str((root_path / d).relative_to(self.project_root))
+                except ValueError:
+                    return str(root_path / d)
+            dirs[:] = [d for d in dirs if not any(self.match_pattern(_rel(d), pattern) for pattern in minimal_excludes)]
             for filename in filenames:
                 file_path = root_path / filename
                 if self.should_include_file(file_path, minimal_patterns, minimal_excludes):

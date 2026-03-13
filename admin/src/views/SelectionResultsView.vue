@@ -492,14 +492,6 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString('zh-CN')
 }
 
-const formatNumber = (num: number) => {
-  if (!num) return '-'
-  if (num >= 10000) {
-    return (num / 10000).toFixed(1) + '万'
-  }
-  return num.toFixed(0)
-}
-
 // 生命周期
 onMounted(() => {
   // 设置默认日期为今天

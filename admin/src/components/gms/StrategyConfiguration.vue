@@ -87,7 +87,7 @@ function resetDefault() {
   messageType.value = 'info'
 }
 
-const emit = defineEmits<{ (e: 'config-saved'): void }>()
+defineEmits<{ (e: 'config-saved'): void }>()
 defineExpose({ loadConfig })
 
 onMounted(() => loadConfig())

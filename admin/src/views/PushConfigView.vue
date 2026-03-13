@@ -95,7 +95,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="addUserVisible = false">取消</el-button>
+        <el-button @click="addTaskVisible = false">取消</el-button>
         <el-button type="primary" :loading="addLoading" :disabled="!addForm.user_id" @click="submitAddTask">确定</el-button>
       </template>
     </el-dialog>

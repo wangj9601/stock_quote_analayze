@@ -25,8 +25,9 @@ const route = useRoute()
 const router = useRouter()
 const activeTab = ref<'sender' | 'push' | 'logs'>('sender')
 
-function onTabChange(name: string) {
-  router.replace({ query: { ...route.query, tab: name } }).catch(() => {})
+function onTabChange(name: string | number) {
+  const tab = typeof name === 'number' ? String(name) : name
+  router.replace({ query: { ...route.query, tab } }).catch(() => {})
 }
 
 watch(

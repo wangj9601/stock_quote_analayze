@@ -182,8 +182,8 @@ const filteredTasks = computed(() => {
   return tasks.value.filter((t: any) => t.status === statusFilter.value)
 })
 
-function statusTagType(s: string) {
-  const map: Record<string, string> = {
+function statusTagType(s: string): 'info' | 'primary' | 'success' | 'warning' | 'danger' {
+  const map: Record<string, 'info' | 'primary' | 'success' | 'warning' | 'danger'> = {
     pending: 'info',
     running: 'primary',
     completed: 'success',

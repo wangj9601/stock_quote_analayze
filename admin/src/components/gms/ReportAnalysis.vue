@@ -105,7 +105,7 @@ async function downloadReport(row: any) {
   }
 }
 
-const emit = defineEmits<{ (e: 'report-generated', report: any): void }>()
+defineEmits<{ (e: 'report-generated', report: any): void }>()
 defineExpose({ refresh })
 
 onMounted(() => refresh())
