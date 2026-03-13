@@ -64,7 +64,8 @@ export class PushService {
   }
 
   async updateEmailSenderConfig(data: EmailSenderConfigUpdateRequest): Promise<EmailSenderConfigResponse> {
-    return apiService.put<EmailSenderConfigResponse>(`${this.base}/email-sender-config`, data)
+    // 使用 POST 避免生产环境对 PUT 返回 405 (Method Not Allowed)；后端同时支持 PUT 与 POST
+    return apiService.post<EmailSenderConfigResponse>(`${this.base}/email-sender-config`, data)
   }
 
   async testEmailSenderConfig(to_email: string): Promise<{ success: boolean; message: string }> {

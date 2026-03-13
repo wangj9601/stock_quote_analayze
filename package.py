@@ -84,6 +84,7 @@ class ProjectPackager:
             "start_frontend.py",
             "start_backend_core.py",
             "start_backend_api.py",
+            "start_scheduler.py",
             
             # 数据库相关
             "migrate_db.py",

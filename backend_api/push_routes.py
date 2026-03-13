@@ -773,13 +773,11 @@ def get_email_sender_config(
     )
 
 
-@admin_router.put("/email-sender-config", response_model=EmailSenderConfigResponse)
-def update_email_sender_config(
+def _update_email_sender_config_impl(
     body: EmailSenderConfigUpdateRequest,
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db),
-):
-    """更新发件邮箱配置；不传 password 则保留原密码"""
+    db: Session,
+) -> "EmailSenderConfigResponse":
+    """更新发件邮箱配置实现；不传 password 则保留原密码。供 PUT/POST 共用。"""
     if EmailSenderConfig is None:
         raise HTTPException(status_code=503, detail="发件邮箱配置模型未就绪")
     row = db.query(EmailSenderConfig).filter(EmailSenderConfig.id == 1).first()
@@ -815,6 +813,26 @@ def update_email_sender_config(
         use_tls=bool(row.use_tls),
         updated_at=row.updated_at,
     )
+
+
+@admin_router.put("/email-sender-config", response_model=EmailSenderConfigResponse)
+def update_email_sender_config_put(
+    body: EmailSenderConfigUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """更新发件邮箱配置（PUT）；不传 password 则保留原密码。"""
+    return _update_email_sender_config_impl(body, db)
+
+
+@admin_router.post("/email-sender-config", response_model=EmailSenderConfigResponse)
+def update_email_sender_config_post(
+    body: EmailSenderConfigUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """更新发件邮箱配置（POST）；与 PUT 行为一致，用于生产环境对 PUT 有限制时。"""
+    return _update_email_sender_config_impl(body, db)
 
 
 @admin_router.post("/email-sender-config/test")
