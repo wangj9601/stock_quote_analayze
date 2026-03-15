@@ -96,6 +96,30 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
         '''))
         session.commit()
 
+        # 为 stock_basic_info 表新增股本相关字段（用于自行计算换手率）
+        session.execute(text('''
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_basic_info'
+                               AND column_name='total_shares') THEN
+                    ALTER TABLE stock_basic_info ADD COLUMN total_shares REAL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_basic_info'
+                               AND column_name='free_float_shares') THEN
+                    ALTER TABLE stock_basic_info ADD COLUMN free_float_shares REAL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_basic_info'
+                               AND column_name='shares_updated_at') THEN
+                    ALTER TABLE stock_basic_info ADD COLUMN shares_updated_at TIMESTAMP;
+                END IF;
+            END
+            $$;
+        '''))
+        session.commit()
+
         session.close()
         return True
     

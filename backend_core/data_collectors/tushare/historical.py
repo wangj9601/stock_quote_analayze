@@ -1150,7 +1150,7 @@ class HistoricalQuoteCollector(TushareCollector):
                     # 从实时行情表获取换手率数据
                     turnover_rate = None
                     try:
-                        # 查询实时行情表中的换手率
+                        # Level 1: 查询实时行情表中的换手率
                         result_turnover = session.execute(text('''
                             SELECT turnover_rate 
                             FROM stock_realtime_quote 
@@ -1165,13 +1165,26 @@ class HistoricalQuoteCollector(TushareCollector):
                             turnover_rate = float(row_turnover[0])
                             self.logger.debug(f"从实时行情表获取股票 {code} 换手率: {turnover_rate}")
                         else:
-                            self.logger.debug(f"实时行情表中未找到股票 {code} 的换手率数据")
+                            # Level 2: 从 stock_basic_info.free_float_shares 计算
+                            volume = self._safe_value(row['vol'])
+                            if volume and volume > 0:
+                                try:
+                                    result_shares = session.execute(text('''
+                                        SELECT free_float_shares FROM stock_basic_info WHERE code = :code
+                                    '''), {'code': code})
+                                    shares_row = result_shares.fetchone()
+                                    if shares_row and shares_row[0] is not None and float(shares_row[0]) > 0:
+                                        free_float_shares = float(shares_row[0])
+                                        turnover_rate = round(volume / free_float_shares * 100, 4)
+                                        self.logger.debug(f"通过流通股本计算股票 {code} 换手率: {turnover_rate}")
+                                    else:
+                                        self.logger.debug(f"股票 {code} 无流通股本数据，无法计算换手率")
+                                except Exception as e2:
+                                    self.logger.debug(f"从流通股本计算换手率失败: {e2}")
                             
                     except Exception as e:
                         self.logger.warning(f"从实时行情表获取换手率失败: {e}")
                         turnover_rate = None
-                    # 打印前面取得的参数
-                    #self.logger.info(f"参数: code={code}, ts_code={ts_code}, name={name}, market={market}, pre_close={pre_close}, high={high}, low={low}, turnover_rate={turnover_rate}, amplitude={amplitude}")
 
                     data = {
                         'code': code,

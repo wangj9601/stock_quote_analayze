@@ -11,6 +11,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from datetime import datetime, timedelta
 from backend_core.data_collectors.akshare.realtime import AkshareRealtimeQuoteCollector
 from backend_core.data_collectors.akshare.historical_turnover_rate import HistoricalTurnoverRateCollector
+from backend_core.data_collectors.akshare.stock_shares_collector import StockSharesCollector
 from backend_core.data_collectors.tushare.historical import HistoricalQuoteCollector
 from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
 from backend_core.config.config import DATA_COLLECTORS
@@ -58,6 +59,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 # 初始化采集器
 ak_collector = AkshareRealtimeQuoteCollector(DATA_COLLECTORS.get('akshare', {}))
 ak_turnover_collector = HistoricalTurnoverRateCollector(DATA_COLLECTORS.get('akshare', {}))
+stock_shares_collector = StockSharesCollector(DATA_COLLECTORS.get('akshare', {}))
 tushare_hist_collector = HistoricalQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 tushare_realtime_collector = RealtimeQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 index_collector = RealtimeIndexSpotAkCollector()
@@ -151,6 +153,17 @@ def collect_akshare_turnover_rate():
             logging.warning("[定时任务] AKShare 历史换手率数据采集部分失败")
     except Exception as e:
         logging.error(f"[定时任务] AKShare 历史换手率数据采集异常: {e}")
+
+def update_stock_shares():
+    try:
+        logging.info("[定时任务] 股本数据更新开始...")
+        result = stock_shares_collector.run(mode='incremental')
+        if result and result.get('success', 0) > 0:
+            logging.info(f"[定时任务] 股本数据更新完成: {result}")
+        else:
+            logging.warning(f"[定时任务] 股本数据更新结果: {result}")
+    except Exception as e:
+        logging.error(f"[定时任务] 股本数据更新异常: {e}")
 
 def run_watchlist_history_collection():
     try:
@@ -353,6 +366,11 @@ scheduler.add_job(collect_akshare_turnover_rate, 'cron',
     hour=_cron('SCHED_AKSHARE_TURNOVER_HOUR', '11'),
     minute=_cron_int('SCHED_AKSHARE_TURNOVER_MINUTE', 13),
     id='akshare_turnover_rate')
+scheduler.add_job(update_stock_shares, 'cron',
+    day_of_week=_cron('SCHED_STOCK_SHARES_DOW', 'sat'),
+    hour=_cron_int('SCHED_STOCK_SHARES_HOUR', 10),
+    minute=_cron_int('SCHED_STOCK_SHARES_MINUTE', 0),
+    id='stock_shares_update')
 # scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
 # scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
 # scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
