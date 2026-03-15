@@ -447,6 +447,11 @@ scheduler.add_job(collect_hk_index_historical, 'cron',
     id='hk_index_historical')
 
 if __name__ == "__main__":
+    enable_sched = os.getenv('ENABLE_SCHEDULED_COLLECTION', 'true').lower() in ('true', '1', 'yes')
+    if not enable_sched:
+        logging.info("定时采集任务已根据 ENABLE_SCHEDULED_COLLECTION 配置禁用。")
+        sys.exit(0)
+
     logging.info("启动定时采集任务...")
     try:
         scheduler.start()

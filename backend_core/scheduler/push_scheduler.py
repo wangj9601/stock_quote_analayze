@@ -146,8 +146,9 @@ class PushScheduler:
             return
         
         try:
-            # 创建Cron触发器 (每天在指定时间执行)
+            # 创建Cron触发器 (仅在周一至周五指定时间执行)
             trigger = CronTrigger(
+                day_of_week='mon-fri',
                 hour=hour,
                 minute=minute,
                 timezone='Asia/Shanghai'

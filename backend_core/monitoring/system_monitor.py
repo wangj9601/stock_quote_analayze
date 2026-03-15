@@ -163,8 +163,8 @@ class SystemMonitor:
                 # 4. 更新服务状态
                 self._update_service_status()
                 
-                # 休眠30秒
-                for _ in range(30):
+                # 休眠30分钟 (1800秒)
+                for _ in range(1800):
                     if self.stop_event.is_set():
                         break
                     time.sleep(1)
