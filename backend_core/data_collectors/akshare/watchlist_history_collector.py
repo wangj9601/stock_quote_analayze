@@ -241,7 +241,14 @@ def insert_historical_quotes_hk(db: Session, stock_code: str, df):
         else:
             date_formatted = date_str
         
-        # 港股数据字段映射
+        # 港股数据字段映射；历史行情表成交量按「手」存，ak.stock_hk_hist 成交量为股，÷100 转为手
+        vol_raw = row.get('成交量') if '成交量' in row.index else None
+        vol_val = None
+        if vol_raw is not None and not (isinstance(vol_raw, float) and pd.isna(vol_raw)):
+            try:
+                vol_val = float(vol_raw) / 100
+            except (TypeError, ValueError):
+                vol_val = None
         row_data = {
             'code': stock_code,
             'name': stock_name,
@@ -251,7 +258,7 @@ def insert_historical_quotes_hk(db: Session, stock_code: str, df):
             'high': row.get('最高') if '最高' in row.index else None,
             'low': row.get('最低') if '最低' in row.index else None,
             'pre_close': row.get('昨收') if '昨收' in row.index else None,
-            'volume': row.get('成交量') if '成交量' in row.index else None,
+            'volume': vol_val,
             'amount': row.get('成交额') if '成交额' in row.index else None,
             'amplitude': row.get('振幅') if '振幅' in row.index else None,
             'change_percent': row.get('涨跌幅') if '涨跌幅' in row.index else None,

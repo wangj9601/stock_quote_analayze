@@ -550,11 +550,11 @@ async loadRankingData(page = 1, keyword = null) {
                 '\u2060' + toStr(row.code),
                 toStr(row.name),
                 toStr(row.date),
-                row.volume != null ? row.volume : '',
+                row.volume != null ? (row.volume / 10000).toFixed(2) : '',
                 row.amount != null ? row.amount : '',
-                row.mavol5 != null ? row.mavol5 : '',
-                row.mavol10 != null ? row.mavol10 : '',
-                row.mavol20 != null ? row.mavol20 : '',
+                row.mavol5 != null ? (row.mavol5 / 10000).toFixed(2) : '',
+                row.mavol10 != null ? (row.mavol10 / 10000).toFixed(2) : '',
+                row.mavol20 != null ? (row.mavol20 / 10000).toFixed(2) : '',
                 row.ratio_5 != null ? row.ratio_5 : '',
                 row.ratio_20 != null ? row.ratio_20 : '',
                 row.change_percent != null ? row.change_percent : '',
@@ -593,11 +593,11 @@ async loadRankingData(page = 1, keyword = null) {
                 '\u2060' + toStr(row.code),
                 toStr(row.name),
                 toStr(row.date),
-                row.volume != null ? row.volume : '',
+                row.volume != null ? (row.volume / 10000).toFixed(2) : '',
                 row.amount != null ? row.amount : '',
-                row.mavol5 != null ? row.mavol5 : '',
-                row.mavol10 != null ? row.mavol10 : '',
-                row.mavol20 != null ? row.mavol20 : '',
+                row.mavol5 != null ? (row.mavol5 / 10000).toFixed(2) : '',
+                row.mavol10 != null ? (row.mavol10 / 10000).toFixed(2) : '',
+                row.mavol20 != null ? (row.mavol20 / 10000).toFixed(2) : '',
                 row.ratio_5 != null ? row.ratio_5 : '',
                 row.ratio_20 != null ? row.ratio_20 : '',
                 row.change_percent != null ? row.change_percent : '',
@@ -1010,12 +1010,13 @@ async loadRankingData(page = 1, keyword = null) {
         return `${percent.toFixed(2)}%`;
     },
 
-    // 格式化成交量（以万为单位，保留两位小数）
+    // 格式化成交量（库存为手；按手显示：万手/亿手）
     formatVolume(volume) {
         if (volume === null || typeof volume === 'undefined' || isNaN(volume)) return '--';
-        // 转换为万为单位
-        const volumeInWan = volume / 10000;
-        return `${volumeInWan.toFixed(2)}万`;
+        const v = Number(volume);
+        if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿手`;
+        if (v >= 10000) return `${(v / 10000).toFixed(2)}万手`;
+        return `${v.toFixed(0)}手`;
     },
 
     // 格式化成交额（以亿为单位，保留两位小数）

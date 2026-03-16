@@ -372,6 +372,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                         trade_date = record.get('trade_date')
                         change_data = change_percents.get(trade_date, {})
                         
+                        # 历史行情表成交量按「手」存；实时表 volume 已为手，直接写入
                         insert_dicts.append({
                             'code': record.get('code'),
                             'name': record.get('name'),

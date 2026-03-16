@@ -185,13 +185,15 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                         except Exception as e:
                             self.logger.warning(f"获取总股本失败: {e}")
                             total_share = None
-                        volume = self._safe_value(row.get('vol'))
+                        # 历史行情表成交量按「手」存；文件 vol 一般为股，÷100 转为手
+                        vol_raw = self._safe_value(row.get('vol'))
+                        volume = (vol_raw / 100) if vol_raw is not None else None
                         pre_close = self._safe_value(row.get('pre_close'))
                         high = self._safe_value(row.get('high'))
                         low = self._safe_value(row.get('low'))
                         turnover_rate = None
-                        if total_share and volume is not None and total_share > 0:
-                            turnover_rate = volume / total_share * 100
+                        if total_share and vol_raw is not None and total_share > 0:
+                            turnover_rate = vol_raw / total_share * 100
                         amplitude = None
                         if pre_close and pre_close > 0 and high is not None and low is not None:
                             amplitude = (high - low) / pre_close * 100

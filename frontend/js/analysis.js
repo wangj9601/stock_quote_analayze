@@ -480,7 +480,7 @@ const AnalysisPage = {
                             ${(item.close || 0).toFixed(2)}
                             <span style="font-size: 0.75rem; margin-left: 4px;">(${sign}${changePercent.toFixed(2)}%)</span>
                         </td>
-                        <td style="padding: 1rem; color: #64748b;">${((item.volume || 0) / 10000).toFixed(2)}万</td>
+                        <td style="padding: 1rem; color: #64748b;">${(function(v){ v=Number(v)||0; if(v>=1e8) return (v/1e8).toFixed(2)+'亿手'; if(v>=1e4) return (v/1e4).toFixed(2)+'万手'; return v.toFixed(0)+'手'; })(item.volume)}</td>
                         <td style="padding: 1rem; color: #64748b;">${((item.amount || 0) / 100000000).toFixed(2)}亿</td>
                         <td style="padding: 1rem; color: #64748b;">${item.turnover_rate ? item.turnover_rate.toFixed(2) + '%' : '--'}</td>
                     </tr>

@@ -617,10 +617,13 @@ const WatchlistPage = {
         return '';  // 相等，默认颜色
     },
 
-    // 格式化成交量
+    // 格式化成交量（库存为手；按手显示：万手/亿手）
     formatVolume(volume) {
         if (volume === null || volume === undefined || isNaN(volume)) return '--';
-        return volume;
+        const v = Number(volume);
+        if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿手`;
+        if (v >= 10000) return `${(v / 10000).toFixed(2)}万手`;
+        return `${v.toFixed(0)}手`;
     },
 
     // 开始数据更新

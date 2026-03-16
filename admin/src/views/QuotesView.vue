@@ -966,12 +966,13 @@ const formatPercent = (value: any) => {
   return `${Number(value).toFixed(2)}%`
 }
 
+// 成交量库存为手；按手显示：万手/亿手
 const formatVolume = (value: any) => {
   if (value === null || value === undefined || value === '') return '-'
   const num = Number(value)
-  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
-  if (num >= 10000) return `${(num / 10000).toFixed(2)}万`
-  return num.toFixed(0)
+  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿手`
+  if (num >= 10000) return `${(num / 10000).toFixed(2)}万手`
+  return `${num.toFixed(0)}手`
 }
 
 const formatAmount = (value: any) => {

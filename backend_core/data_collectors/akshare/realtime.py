@@ -144,12 +144,13 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
         try:
             affected_rows = 0 
             session = SessionLocal()
+            data_source = "em"  # 东方财富 stock_zh_a_spot_em：成交量单位为「手」
             try:
                 df = self._retry_on_failure(ak.stock_zh_a_spot_em)
             except Exception as e:
                 self.logger.warning(f"东方财富数据接口（stock_zh_a_spot_em）调用失败: {e}，将尝试切换至新浪接口")
                 try:
-                    # 直接尝试新浪行情数据源
+                    # 直接尝试新浪行情数据源（新浪：成交量单位为「股」）
                     data_source = "sina"
                     df_sina = self._retry_on_failure(ak.stock_zh_a_spot)
                     if df_sina is not None and hasattr(df_sina, 'empty') and not df_sina.empty:
@@ -169,7 +170,7 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
 
             for _, row in df.iterrows():
                 code = row['代码']
-                if 'data_source' in locals() and data_source == "sina":
+                if data_source == "sina":
                     # 如果新浪数据源，则过滤掉code前2位字母
                     code = code[2:] if isinstance(code, str) and len(code) > 2 else code
                 name = row['名称']
@@ -178,13 +179,16 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                     continue
                 # 获取当前交易日期
                 trade_date = datetime.now().strftime('%Y-%m-%d')
+                # 成交量统一按「手」存库。东方财富=手(原样)，新浪=股(÷100 转为手)
+                raw_vol = self._safe_value(row['成交量'])
+                volume = (raw_vol / 100) if (data_source == "sina" and raw_vol is not None) else raw_vol
                 data = {
                     'code': code,
                     'name': name,
                     'trade_date': trade_date,
                     'current_price': self._safe_value(row['最新价']),
                     'change_percent': self._safe_value(row['涨跌幅']),
-                    'volume': self._safe_value(row['成交量']),
+                    'volume': volume,
                     'amount': self._safe_value(row['成交额']),
                     'high': self._safe_value(row['最高']),
                     'low': self._safe_value(row['最低']),

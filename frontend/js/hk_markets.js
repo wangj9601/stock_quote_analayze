@@ -449,15 +449,13 @@ const HKMarketsPage = {
         return percent >= 0 ? `+${percent.toFixed(2)}%` : `${percent.toFixed(2)}%`;
     },
 
-    // 格式化成交量
+    // 格式化成交量（库存为手；按手显示：万手/亿手）
     formatVolume(volume) {
         if (volume === null || typeof volume === 'undefined' || isNaN(volume)) return '--';
-        if (volume >= 100000000) {
-            return `${(volume / 100000000).toFixed(2)}亿`;
-        } else if (volume >= 10000) {
-            return `${(volume / 10000).toFixed(2)}万`;
-        }
-        return volume.toLocaleString();
+        const v = Number(volume);
+        if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿手`;
+        if (v >= 10000) return `${(v / 10000).toFixed(2)}万手`;
+        return `${v.toFixed(0)}手`;
     },
 
     // 格式化成交额

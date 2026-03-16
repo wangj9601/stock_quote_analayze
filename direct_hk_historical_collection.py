@@ -166,6 +166,9 @@ def save_to_database(stock_code: str, stock_name: str, df: pd.DataFrame, session
             # 提取数据
             trade_date = pd.to_datetime(row['日期']).strftime('%Y-%m-%d')
             
+            # 历史行情表成交量按「手」存；ak 港股日线成交量为股，÷100 转为手
+            vol_raw = safe_value(row.get('成交量'))
+            volume = (vol_raw / 100) if vol_raw is not None else None
             # 构造插入数据
             insert_dict = {
                 'code': stock_code,
@@ -175,7 +178,7 @@ def save_to_database(stock_code: str, stock_name: str, df: pd.DataFrame, session
                 'high': safe_value(row.get('最高')),
                 'low': safe_value(row.get('最低')),
                 'close': safe_value(row.get('收盘')),
-                'volume': safe_value(row.get('成交量')),
+                'volume': volume,
                 'amount': safe_value(row.get('成交额')),
                 'amplitude': safe_value(row.get('振幅')),
                 'change_percent': safe_value(row.get('涨跌幅')),

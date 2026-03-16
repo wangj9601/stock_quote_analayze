@@ -890,7 +890,7 @@ const StockPage = {
                     return `
                         时间：${d.axisValue}<br/>
                         价格：<b>${data.value[1]}</b><br/>
-                        成交量：${data.volume || '-'}<br/>
+                        成交量：${(function(v){ if(v==null||v==='') return '-'; v=Number(v); if(v>=1e8) return (v/1e8).toFixed(2)+'亿手'; if(v>=1e4) return (v/1e4).toFixed(2)+'万手'; return v.toFixed(0)+'手'; })(data.volume)}<br/>
                         成交额：${data.amount || '-'}<br/>
                         买卖盘性质：${data.trade_type || '-'}
                     `;
@@ -1154,8 +1154,11 @@ const StockPage = {
             } else {
                 // 格式化
                 if (label === '成交量') {
-                    // 假设后端volume为"手"，显示为"万手"
-                    valueElement.textContent = (Number(val) / 10000).toFixed(2) + '万';
+                    // 库存为手；按手显示：万手/亿手
+                    const v = Number(val);
+                    if (v >= 100000000) valueElement.textContent = (v / 100000000).toFixed(2) + '亿手';
+                    else if (v >= 10000) valueElement.textContent = (v / 10000).toFixed(2) + '万手';
+                    else valueElement.textContent = v.toFixed(0) + '手';
                 } else if (label === '成交额') {
                     valueElement.textContent = (val / 100000000).toFixed(2) + '亿';
                 } else {
@@ -1495,7 +1498,7 @@ const StockPage = {
             if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
             if (type === 'pct') return (v * 100).toFixed(2) + '%';
             if (type === 'int') return String(Math.round(v));
-            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万' : Number(v).toFixed(0));
+            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万手' : Number(v).toFixed(0) + '手');
             if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
             if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
             if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);

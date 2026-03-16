@@ -2127,6 +2127,9 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                                         return v
                             return None
 
+                        # 港股成交量统一按「手」存库；接口成交量为股，÷100 转为手
+                        raw_vol = _safe_float(safe_get('成交量', 'volume'))
+                        vol_hand = (raw_vol / 100) if raw_vol is not None else None
                         data = {
                             'code': code_val,
                             'trade_date': trade_date,
@@ -2135,7 +2138,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             'current_price': _safe_float(safe_get('最新价', '现价', 'lasttrade')),
                             'change_percent': _safe_float(safe_get('涨跌幅', '涨跌%', 'changepercent')),
                             'change_amount': _safe_float(safe_get('涨跌额', '涨跌', 'pricechange')),
-                            'volume': _safe_float(safe_get('成交量', 'volume')),
+                            'volume': vol_hand,
                             'amount': _safe_float(safe_get('成交额', 'amount')),
                             'high': _safe_float(safe_get('最高', 'high')),
                             'low': _safe_float(safe_get('最低', 'low')),

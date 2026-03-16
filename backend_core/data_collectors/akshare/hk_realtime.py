@@ -222,6 +222,9 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                                     return val
                         return None
                     
+                    # 成交量统一按「手」存库；港股接口（东方财富/新浪）成交量为股，÷100 转为手
+                    raw_vol = self._safe_value(safe_get_value('成交量', 'volume'))
+                    volume = (raw_vol / 100) if raw_vol is not None else None
                     data = {
                         'code': code,
                         'name': name,
@@ -230,7 +233,7 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                         'current_price': self._safe_value(safe_get_value('最新价', '现价', 'lasttrade')),
                         'change_percent': self._safe_value(safe_get_value('涨跌幅', '涨跌%', 'changepercent')),
                         'change_amount': self._safe_value(safe_get_value('涨跌额', '涨跌', 'pricechange')),
-                        'volume': self._safe_value(safe_get_value('成交量', 'volume')),
+                        'volume': volume,
                         'amount': self._safe_value(safe_get_value('成交额', 'amount')),
                         'high': self._safe_value(safe_get_value('最高', 'high')),
                         'low': self._safe_value(safe_get_value('最低', 'low')),

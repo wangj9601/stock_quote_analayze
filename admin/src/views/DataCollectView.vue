@@ -1209,12 +1209,17 @@ const startTushareCollection = async () => {
       return
     }
 
+    // 使用TuShare采集全量历史数据时，强制附加 MA、MAVOL、PVFRS 指标
+    const indicatorsToRun = Array.from(
+      new Set([...safeTushareIndicators.value, 'ma', 'mavol', 'pvfrs'])
+    )
+
     console.log('发送TuShare采集请求:', tushareForm.value)
     const response = await axios.post(`${API_BASE}/api/data-collection/tushare-historical`, {
       start_date: tushareForm.value.start_date,
       end_date: tushareForm.value.end_date,
       force_update: tushareForm.value.force_update,
-      indicators: safeTushareIndicators.value
+      indicators: indicatorsToRun
     })
     
     if (response.data.status === 'started') {

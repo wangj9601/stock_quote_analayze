@@ -67,3 +67,5 @@ backend_core/database/db.py
 *.pid
 
 *.env
+
+*.env.local

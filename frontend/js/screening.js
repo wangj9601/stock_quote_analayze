@@ -1076,7 +1076,7 @@ const ScreeningPage = {
                     if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
                     if (type === 'pct') return (v * 100).toFixed(2) + '%';
                     if (type === 'int') return String(Math.round(v));
-                    if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万' : Number(v).toFixed(0));
+                    if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万手' : Number(v).toFixed(0) + '手');
                     if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
                     if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
                     if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);
@@ -1500,7 +1500,7 @@ const ScreeningPage = {
             if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
             if (type === 'pct') return (v * 100).toFixed(2) + '%';
             if (type === 'int') return String(Math.round(v));
-            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万' : Number(v).toFixed(0));
+            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万手' : Number(v).toFixed(0) + '手');
             if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
             if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
             if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);

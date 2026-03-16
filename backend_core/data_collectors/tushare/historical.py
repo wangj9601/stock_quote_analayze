@@ -19,6 +19,25 @@ from backend_core.utils.mavol_calculator import MAVOLCalculator
 from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 from datetime import timedelta
 
+
+def _format_exception_cause(exc: BaseException, max_len: int = 8000) -> str:
+    """格式化异常及其链式原因，便于打印问题具体原因。"""
+    parts = []
+    current = exc
+    seen = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = type(current).__name__
+        msg = str(current).strip()
+        if msg:
+            parts.append(f"[{name}] {msg}")
+        else:
+            parts.append(f"[{name}]")
+        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+    out = "\n根本原因(链): ".join(parts) if len(parts) > 1 else (parts[0] if parts else str(exc))
+    return out[:max_len] + ("..." if len(out) > max_len else "")
+
+
 class HistoricalQuoteCollector(TushareCollector):
     
     """历史行情数据采集器"""
@@ -1109,6 +1128,8 @@ class HistoricalQuoteCollector(TushareCollector):
         self._init_db()  # 初始化表结构
         session = SessionLocal()  # 新建 session
         try:
+            # 清除可能从连接池继承的失败事务状态，避免首条就报 InFailedSqlTransaction
+            session.rollback()
             input_params = {'date': date_str}
             collect_date = datetime.date.today().isoformat()
             success_count = 0
@@ -1180,9 +1201,11 @@ class HistoricalQuoteCollector(TushareCollector):
                                     else:
                                         self.logger.debug(f"股票 {code} 无流通股本数据，无法计算换手率")
                                 except Exception as e2:
+                                    session.rollback()
                                     self.logger.debug(f"从流通股本计算换手率失败: {e2}")
                             
                     except Exception as e:
+                        session.rollback()
                         self.logger.warning(f"从实时行情表获取换手率失败: {e}")
                         turnover_rate = None
 
@@ -1198,7 +1221,8 @@ class HistoricalQuoteCollector(TushareCollector):
                         'high': high,
                         'low': low,
                         'close': self._safe_value(row['close']),
-                        'volume': self._safe_value(row['vol']),
+                        # 历史行情表成交量按「手」存；tushare vol 单位为股，÷100 转为手
+                        'volume': (self._safe_value(row['vol']) / 100) if self._safe_value(row['vol']) is not None else None,
                         # tushare返回的amount单位是千元，需折算为元
                         'amount': self._safe_value(row['amount']) * 1000 if self._safe_value(row['amount']) is not None else None,
                         'change_percent': self._safe_value(row['pct_chg']),
@@ -1267,22 +1291,22 @@ class HistoricalQuoteCollector(TushareCollector):
                                 time.sleep(0.1 * retry_count)  # 递增等待时间
                                 continue
                             else:
-                                # 其他错误，直接抛出
+                                # 其他错误：先回滚再抛出，便于外层写日志
+                                session.rollback()
                                 raise insert_error
                     
-                    # 如果重试次数用完仍然失败
+                    # 如果重试次数用完仍然失败，视为数据库错误并退出本次运行
                     if retry_count >= max_retries:
-                        fail_count += 1
-                        fail_detail.append(f"股票 {code} 插入失败，重试 {max_retries} 次后仍然死锁")
-                        self.logger.error(f"股票 {code} 插入失败，重试 {max_retries} 次后仍然死锁")
-                        continue
+                        session.rollback()
+                        self.logger.error("股票 %s 插入失败，重试 %s 次后仍然死锁，退出本次运行", code, max_retries)
+                        raise RuntimeError(f"股票 {code} 插入失败，重试 {max_retries} 次后仍然死锁")
                         
                 except Exception as row_e:
-                    fail_count += 1
-                    fail_detail.append(str(row_e))
-                    self.logger.error(f"采集单条数据失败: {row_e}")
-                    # 移除 sys.exit(1)，避免程序退出
-                    continue
+                    # 出现一次数据库错误即回滚并退出本次运行，避免事务进入失败状态后继续执行报 InFailedSqlTransaction
+                    session.rollback()
+                    cause_str = _format_exception_cause(row_e)
+                    self.logger.error("采集单条数据失败，退出本次运行。问题具体原因: %s", cause_str, exc_info=True)
+                    raise
             # 记录采集日志（汇总信息）
             session.execute(text('''
                 INSERT INTO historical_collect_operation_logs 
@@ -1305,8 +1329,13 @@ class HistoricalQuoteCollector(TushareCollector):
             return True
         except Exception as e:
             error_msg = str(e)
-            self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)
+            cause_str = _format_exception_cause(e)
+            self.logger.error("采集或入库时出错。问题具体原因: %s", cause_str, exc_info=True)
             try:
+                # 事务已失败时必须先 rollback，否则后续任何 execute 都会报 InFailedSqlTransaction
+                session.rollback()
+                # 错误信息过长时截断，避免日志表字段或网络限制；写入库的日志包含完整异常链
+                log_error_msg = cause_str if len(cause_str) <= 10000 else cause_str[:10000] + "\n...(truncated)"
                 session.execute(text('''
                     INSERT INTO historical_collect_operation_logs 
                     (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
@@ -1316,7 +1345,7 @@ class HistoricalQuoteCollector(TushareCollector):
                     'operation_desc': f'采集日期: {datetime.date.today().isoformat()}\n输入参数: {input_params if "input_params" in locals() else ""}',
                     'affected_rows': 0,
                     'status': 'error',
-                    'error_message': error_msg,
+                    'error_message': log_error_msg,
                     'collect_source': 'tushare'
                 })
                 session.commit()
@@ -1324,6 +1353,10 @@ class HistoricalQuoteCollector(TushareCollector):
                 self.logger.error("记录错误日志失败: %s", str(log_error))
             return False
         finally:
+            try:
+                session.rollback()
+            except Exception:
+                pass
             session.close()
 
     def collect_historical_quotes_from_realtime(self, date_str: str) -> bool:
@@ -1367,6 +1400,7 @@ class HistoricalQuoteCollector(TushareCollector):
                 name = row[1] or ''
                 current_price = self._safe_value(row[2])
                 change_percent = self._safe_value(row[3])
+                # 历史行情表成交量按「手」存；实时表 volume 已为手，直接写入
                 volume = self._safe_value(row[4])
                 amount = self._safe_value(row[5])
                 high = self._safe_value(row[6])
@@ -1529,6 +1563,7 @@ class HistoricalQuoteCollector(TushareCollector):
         except Exception as calc_error:
             self.logger.error("自动计算扩展涨跌幅失败: %s", calc_error)
             try:
+                session.rollback()
                 session.execute(text('''
                     INSERT INTO historical_collect_operation_logs
                     (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
@@ -1566,6 +1601,7 @@ class HistoricalQuoteCollector(TushareCollector):
         except Exception as calc_error:
             self.logger.error("自动计算30日涨跌幅失败: %s", calc_error)
             try:
+                session.rollback()
                 session.execute(text('''
                     INSERT INTO historical_collect_operation_logs
                     (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
