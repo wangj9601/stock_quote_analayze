@@ -722,6 +722,37 @@ def admin_update_push_config_by_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 兼容某些生产环境/代理不允许 PUT 的情况：同时支持 POST/PATCH 更新
+@admin_router.post("/configs/{config_id}", response_model=UserPushConfigResponse)
+def admin_update_push_config_by_id_post(
+    config_id: int,
+    config_update: ConfigUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+):
+    return admin_update_push_config_by_id(
+        config_id=config_id,
+        config_update=config_update,
+        current_admin=current_admin,
+        config_service=config_service,
+    )
+
+
+@admin_router.patch("/configs/{config_id}", response_model=UserPushConfigResponse)
+def admin_update_push_config_by_id_patch(
+    config_id: int,
+    config_update: ConfigUpdateRequest,
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+):
+    return admin_update_push_config_by_id(
+        config_id=config_id,
+        config_update=config_update,
+        current_admin=current_admin,
+        config_service=config_service,
+    )
+
+
 @admin_router.delete("/configs/{config_id}")
 def admin_delete_push_config_by_id(
     config_id: int,

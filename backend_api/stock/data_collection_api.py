@@ -2298,13 +2298,16 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             continue
 
                         trade_date = datetime.now().strftime('%Y-%m-%d')
+                        # 成交量统一按「手」存库：东方财富=手(原样)，新浪=股(÷100 转为手)
+                        raw_vol = _safe_float(row.get('成交量'))
+                        volume = (raw_vol / 100) if (data_source == 'sina' and raw_vol is not None) else raw_vol
                         data = {
                             'code': code_val,
                             'trade_date': trade_date,
                             'name': str(row.get('名称') or code_val),
                             'current_price': _safe_float(row.get('最新价')),
                             'change_percent': _safe_float(row.get('涨跌幅')),
-                            'volume': _safe_float(row.get('成交量')),
+                            'volume': volume,
                             'amount': _safe_float(row.get('成交额')),
                             'high': _safe_float(row.get('最高')),
                             'low': _safe_float(row.get('最低')),
@@ -2762,14 +2765,14 @@ def run_tushare_historical_collection_task(
                 force_update
             )
             
-            # 采集完成后，如指定了指标则批量生成
-            if indicators and len(indicators) > 0:
-                logger.info(f"开始为采集日期范围内股票生成指标: {indicators}")
-                akshare_collector = AkshareDataCollector(db)
-                indicator_result = akshare_collector.generate_indicators_for_date_range(
-                    start_date, end_date, indicators
-                )
-                logger.info(f"TuShare采集后指标生成完成: {indicator_result}")
+            # 采集完成后，按选定日期范围进行全量 MA、MAVOL、PVFRS(GMS) 指标计算并入库（至少此三项，可与请求的其它指标合并）
+            indicators_to_run = list(set((indicators or []) + ['ma', 'mavol', 'pvfrs']))
+            logger.info(f"开始为采集日期范围 [{start_date}, {end_date}] 生成指标: {indicators_to_run}")
+            akshare_collector = AkshareDataCollector(db)
+            indicator_result = akshare_collector.generate_indicators_for_date_range(
+                start_date, end_date, indicators_to_run, extended_start_days=300
+            )
+            logger.info(f"TuShare采集后指标生成完成: {indicator_result}")
             
             # 更新任务状态
             with task_lock:

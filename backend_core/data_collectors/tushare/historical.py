@@ -1186,9 +1186,9 @@ class HistoricalQuoteCollector(TushareCollector):
                             turnover_rate = float(row_turnover[0])
                             self.logger.debug(f"从实时行情表获取股票 {code} 换手率: {turnover_rate}")
                         else:
-                            # Level 2: 从 stock_basic_info.free_float_shares 计算
-                            volume = self._safe_value(row['vol'])
-                            if volume and volume > 0:
+                            # Level 2: 从 stock_basic_info.free_float_shares 计算（tushare vol 为手，换手率需股/流通股：手*100）
+                            vol_hand = self._safe_value(row['vol'])
+                            if vol_hand and vol_hand > 0:
                                 try:
                                     result_shares = session.execute(text('''
                                         SELECT free_float_shares FROM stock_basic_info WHERE code = :code
@@ -1196,7 +1196,7 @@ class HistoricalQuoteCollector(TushareCollector):
                                     shares_row = result_shares.fetchone()
                                     if shares_row and shares_row[0] is not None and float(shares_row[0]) > 0:
                                         free_float_shares = float(shares_row[0])
-                                        turnover_rate = round(volume / free_float_shares * 100, 4)
+                                        turnover_rate = round((vol_hand * 100) / free_float_shares * 100, 4)
                                         self.logger.debug(f"通过流通股本计算股票 {code} 换手率: {turnover_rate}")
                                     else:
                                         self.logger.debug(f"股票 {code} 无流通股本数据，无法计算换手率")
@@ -1221,8 +1221,8 @@ class HistoricalQuoteCollector(TushareCollector):
                         'high': high,
                         'low': low,
                         'close': self._safe_value(row['close']),
-                        # 历史行情表成交量按「手」存；tushare vol 单位为股，÷100 转为手
-                        'volume': (self._safe_value(row['vol']) / 100) if self._safe_value(row['vol']) is not None else None,
+                        # 历史行情表成交量按「手」存；tushare vol 单位已是手，直接写入
+                        'volume': self._safe_value(row['vol']),
                         # tushare返回的amount单位是千元，需折算为元
                         'amount': self._safe_value(row['amount']) * 1000 if self._safe_value(row['amount']) is not None else None,
                         'change_percent': self._safe_value(row['pct_chg']),

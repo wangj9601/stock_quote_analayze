@@ -93,6 +93,16 @@ try:
         PushRecord = getattr(models_module, 'PushRecord', None)
         EmailSenderConfig = getattr(models_module, 'EmailSenderConfig', None)
         EmailSendLog = getattr(models_module, 'EmailSendLog', None)
+        # 交易笔记与模拟交易模型
+        TradingNotes = getattr(models_module, 'TradingNotes', None)
+        TradingJournalLog = getattr(models_module, 'TradingJournalLog', None)
+        TradeExecutionLog = getattr(models_module, 'TradeExecutionLog', None)
+        SimTradeAccount = getattr(models_module, 'SimTradeAccount', None)
+        SimTradePosition = getattr(models_module, 'SimTradePosition', None)
+        SimTradeOrder = getattr(models_module, 'SimTradeOrder', None)
+        QuoteSyncTask = getattr(models_module, 'QuoteSyncTask', None)
+        QuoteSyncTaskCreate = getattr(models_module, 'QuoteSyncTaskCreate', None)
+        QuoteSyncTaskInDB = getattr(models_module, 'QuoteSyncTaskInDB', None)
     else:
         raise ImportError(f"找不到 models.py 文件: {models_py_path}")
     
@@ -159,6 +169,13 @@ except Exception as e:
     PushRecord = None
     EmailSenderConfig = None
     EmailSendLog = None
+    # 交易笔记与模拟交易模型占位符
+    TradingNotes = None
+    TradingJournalLog = None
+    TradeExecutionLog = None
+    SimTradeAccount = None
+    SimTradePosition = None
+    SimTradeOrder = None
 
 __all__ = [
     'PVFRSStrategyConfig',
@@ -225,5 +242,14 @@ __all__ = [
     'PushRecord',
     'EmailSenderConfig',
     'EmailSendLog',
+    'TradingNotes',
+    'TradingJournalLog',
+    'TradeExecutionLog',
+    'SimTradeAccount',
+    'SimTradePosition',
+    'SimTradeOrder',
+    'QuoteSyncTask',
+    'QuoteSyncTaskCreate',
+    'QuoteSyncTaskInDB',
     'User',
 ]

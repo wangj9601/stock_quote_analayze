@@ -100,7 +100,8 @@ export class PushService {
     configId: number,
     data: ConfigUpdateRequest
   ): Promise<UserPushConfigResponse> {
-    return apiService.put<UserPushConfigResponse>(`${this.base}/configs/${configId}`, data)
+    // 使用 PATCH 避免生产环境对 PUT 返回 405 (Method Not Allowed)；后端同时支持 PUT/POST/PATCH
+    return apiService.patch<UserPushConfigResponse>(`${this.base}/configs/${configId}`, data)
   }
 
   /** 管理员按任务 id 删除一条推送配置 */

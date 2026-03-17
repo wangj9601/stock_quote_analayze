@@ -372,6 +372,31 @@ if push_admin_router is not None:
 else:
     print("❌ 推送管理员路由未注册")
 
+# 尝试导入交易笔记与模拟交易路由
+try:
+    from .trading_notes_routes import router as trading_notes_router
+    print("✅ trading_notes_router 导入成功")
+except ImportError as e:
+    print(f"❌ trading_notes_router 导入失败: {e}")
+    trading_notes_router = None
+try:
+    from .trading_routes import router as simtrade_router
+    print("✅ simtrade_router 导入成功")
+except ImportError as e:
+    print(f"❌ simtrade_router 导入失败: {e}")
+    simtrade_router = None
+
+if trading_notes_router is not None:
+    app.include_router(trading_notes_router)
+    print("✅ trading_notes 路由注册成功")
+else:
+    print("❌ trading_notes 路由未注册")
+if simtrade_router is not None:
+    app.include_router(simtrade_router)
+    print("✅ simtrade 路由注册成功")
+else:
+    print("❌ simtrade 路由未注册")
+
 # 尝试导入admin路由
 try:
     from .admin.auth import router as admin_auth_router

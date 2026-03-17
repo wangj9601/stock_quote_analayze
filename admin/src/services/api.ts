@@ -78,6 +78,10 @@ class ApiService {
     return this.api.put(url, data, config)
   }
 
+  patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    return this.api.patch(url, data, config)
+  }
+
   delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return this.api.delete(url, config)
   }
