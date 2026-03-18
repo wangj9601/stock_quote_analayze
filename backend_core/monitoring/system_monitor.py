@@ -162,8 +162,10 @@ class SystemMonitor:
                 
                 # 4. 采集数据库指标
                 db_metrics = self._collect_database_metrics()
-                for table_name, size_mb in db_metrics.items():
-                    self.record_metric(f"db_table_size_{table_name}", size_mb, {"unit": "MB"})
+                for table_name, metrics in db_metrics.items():
+                    self.record_metric(f"db_table_size_{table_name}", metrics['table_size_mb'], {"unit": "MB", "type": "table"})
+                    self.record_metric(f"db_index_size_{table_name}", metrics['index_size_mb'], {"unit": "MB", "type": "index"})
+                    self.record_metric(f"db_total_size_{table_name}", metrics['total_size_mb'], {"unit": "MB", "type": "total"})
                 
                 # 5. 更新服务状态
                 self._update_service_status()
@@ -212,21 +214,27 @@ class SystemMonitor:
             logger.error(f"采集系统指标失败: {e}")
             return {}
 
-    def _collect_database_metrics(self) -> Dict[str, float]:
-        """采集数据库表大小指标 (单位: MB)"""
+    def _collect_database_metrics(self) -> Dict[str, Dict[str, float]]:
+        """采集数据库表及其索引大小指标 (单位: MB)"""
         try:
             db_metrics = {}
             sql = """
             SELECT 
                 relname as table_name,
-                pg_total_relation_size(relid) / (1024.0 * 1024.0) as size_mb
+                pg_relation_size(relid) / (1024.0 * 1024.0) as table_size_mb,
+                pg_indexes_size(relid) / (1024.0 * 1024.0) as index_size_mb,
+                pg_total_relation_size(relid) / (1024.0 * 1024.0) as total_size_mb
             FROM pg_catalog.pg_statio_user_tables;
             """
             with SessionLocal() as db:
                 result = db.execute(text(sql))
                 for row in result:
-                    # row[0] 是表名, row[1] 是大小(MB)
-                    db_metrics[row[0]] = float(row[1])
+                    # row[0]: table_name, row[1]: table_size_mb, row[2]: index_size_mb, row[3]: total_size_mb
+                    db_metrics[row[0]] = {
+                        "table_size_mb": float(row[1]),
+                        "index_size_mb": float(row[2]),
+                        "total_size_mb": float(row[3])
+                    }
             return db_metrics
         except Exception as e:
             logger.error(f"采集数据库指标失败: {e}")

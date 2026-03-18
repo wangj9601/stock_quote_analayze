@@ -83,20 +83,30 @@
       </template>
       
       <el-table :data="databaseTables" stripe style="width: 100%" height="400">
-        <el-table-column prop="name" label="业务表名" min-width="200" sortable />
-        <el-table-column prop="size" label="占用大小 (MB)" width="180" sortable>
+        <el-table-column prop="name" label="业务表名" min-width="180" sortable />
+        <el-table-column prop="table_size" label="表大小 (MB)" width="120" sortable>
           <template #default="{ row }">
-            <span :class="{'text-danger': row.size > 1000, 'text-warning': row.size > 500}">
-              {{ row.size.toFixed(2) }} MB
+            {{ row.table_size.toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="index_size" label="索引大小 (MB)" width="130" sortable>
+          <template #default="{ row }">
+            {{ row.index_size.toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="total_size" label="合计 (MB)" width="120" sortable>
+          <template #default="{ row }">
+            <span :class="{'text-danger': row.total_size > 1000, 'text-warning': row.total_size > 500}">
+              {{ row.total_size.toFixed(2) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="占用比例" min-width="200">
+        <el-table-column label="占比" min-width="150">
           <template #default="{ row }">
             <el-progress 
-              :percentage="getTablePercentage(row.size)" 
+              :percentage="getTablePercentage(row.total_size)" 
               :stroke-width="12"
-              :color="getTableColor(row.size)"
+              :color="getTableColor(row.total_size)"
             />
           </template>
         </el-table-column>
@@ -289,7 +299,7 @@ const overviewData = reactive({
   status: 'unknown',
   alerts: { total_24h: 0, critical_24h: 0 },
   performance: { uptime: 0, process_count: 0 },
-  database_size: {} as Record<string, number>
+  database_size: {} as Record<string, { table_size_mb: number, index_size_mb: number, total_size_mb: number }>
 })
 
 import { computed } from 'vue'
@@ -297,12 +307,17 @@ import { computed } from 'vue'
 const databaseTables = computed(() => {
   if (!overviewData.database_size) return []
   return Object.entries(overviewData.database_size)
-    .map(([name, size]) => ({ name, size }))
-    .sort((a, b) => b.size - a.size)
+    .map(([name, metrics]) => ({ 
+      name, 
+      table_size: metrics.table_size_mb,
+      index_size: metrics.index_size_mb,
+      total_size: metrics.total_size_mb 
+    }))
+    .sort((a, b) => b.total_size - a.total_size)
 })
 
 const totalDbSize = computed(() => {
-  return databaseTables.value.reduce((acc, curr) => acc + curr.size, 0)
+  return databaseTables.value.reduce((acc, curr) => acc + curr.total_size, 0)
 })
 
 const getTablePercentage = (size: number) => {
