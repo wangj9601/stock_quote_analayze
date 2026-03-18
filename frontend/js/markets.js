@@ -1060,7 +1060,10 @@ async loadRankingData(page = 1, keyword = null) {
         setInterval(() => {
             if (this.currentTab === 'rankings') {
                 //this.updateRankingPrices();
-                this.loadRankingData(this.currentPage);
+                // 成交量异动榜不做定时刷新（避免前台持续请求接口）
+                if (this.currentRankingType !== 'volume_aberration') {
+                    this.loadRankingData(this.currentPage);
+                }
             } else if (this.currentTab === 'sectors') {
                 this.loadSectorData(); // 重新加载真实数据
             } else if (this.currentTab === 'hot') {
