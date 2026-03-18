@@ -100,16 +100,17 @@ export class PushService {
     configId: number,
     data: ConfigUpdateRequest
   ): Promise<UserPushConfigResponse> {
-    // 使用 PATCH 避免生产环境对 PUT 返回 405 (Method Not Allowed)；后端同时支持 PUT/POST/PATCH
-    return apiService.patch<UserPushConfigResponse>(`${this.base}/configs/${configId}`, data)
+    // 使用 POST 避免生产环境对 PUT/PATCH 返回 405；后端支持 PUT/POST/PATCH
+    return apiService.post<UserPushConfigResponse>(`${this.base}/configs/${configId}`, data)
   }
 
   /** 管理员按任务 id 删除一条推送配置 */
   async deletePushConfigByConfigId(
     configId: number
   ): Promise<{ success: boolean; deleted: boolean; message: string }> {
-    return apiService.delete<{ success: boolean; deleted: boolean; message: string }>(
-      `${this.base}/configs/${configId}`
+    // 使用 POST 避免生产环境对 DELETE 返回 405；后端提供 POST /configs/{id}/delete 兼容接口
+    return apiService.post<{ success: boolean; deleted: boolean; message: string }>(
+      `${this.base}/configs/${configId}/delete`
     )
   }
 

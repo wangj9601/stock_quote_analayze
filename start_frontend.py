@@ -8,10 +8,39 @@ import os
 import sys
 import webbrowser
 import time
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import socket
 import urllib.parse
+from pathlib import Path
+
+
+def load_dotenv_file(dotenv_path: str) -> None:
+    """轻量读取 .env 文件并写入 os.environ（不覆盖已存在的环境变量）。
+    只支持 KEY=VALUE 形式，忽略空行与 # 注释行。
+    """
+    try:
+        p = Path(dotenv_path)
+        if not p.exists() or not p.is_file():
+            return
+        for raw in p.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except Exception:
+        # 读取失败时不影响启动
+        return
+
+
+def is_production_env() -> bool:
+    """判断是否生产环境。"""
+    v = (os.getenv("ENVIRONMENT") or os.getenv("VITE_ENVIRONMENT") or os.getenv("APP_ENV") or "").strip().lower()
+    return v in ("prod", "production", "release")
 
 class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
     """自定义HTTP请求处理器"""
@@ -68,12 +97,14 @@ def find_available_port(start_port=8000, max_attempts=100):
 
 def start_server(port):
     try:
-        with HTTPServer(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
+        server_cls = ThreadingHTTPServer if is_production_env() else HTTPServer
+        with server_cls(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
             print(f"✓ 前端服务器启动成功")
             print(f"✓ 服务地址: http://localhost:{port}")
             print(f"✓ 登录页面: http://localhost:{port}/login.html")
             print(f"✓ 首页: http://localhost:{port}/index.html")
             print(f"✓ 管理后台: http://localhost:{port}/admin")
+            print(f"✓ 运行环境: {'production(多线程)' if is_production_env() else 'development(单线程)'}")
             print("-" * 60)
             print("按 Ctrl+C 停止服务")
             print("-" * 60)
@@ -94,6 +125,9 @@ def main():
     print("=" * 60)
     print("           股票分析系统前端启动器")
     print("=" * 60)
+    # 尝试读取项目根目录 .env（不覆盖已存在环境变量）
+    project_root = Path(__file__).resolve().parent
+    load_dotenv_file(str(project_root / ".env"))
     port = find_available_port(8000)
     if not port:
         print("❌ 无法找到可用端口")

@@ -415,16 +415,16 @@ scheduler.add_job(generate_hk_quarterly_data, 'cron',
     hour=_cron_int('SCHED_HK_QUARTERLY_HOUR', 17),
     minute=_cron_int('SCHED_HK_QUARTERLY_MINUTE', 9),
     id='generate_hk_quarterly')
-scheduler.add_job(generate_semiannual_data, 'cron',
-    day_of_week=_cron('SCHED_SEMIANNUAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_SEMIANNUAL_HOUR', 16),
-    minute=_cron_int('SCHED_SEMIANNUAL_MINUTE', 42),
-    id='generate_semiannual')
-scheduler.add_job(generate_hk_semiannual_data, 'cron',
-    day_of_week=_cron('SCHED_HK_SEMIANNUAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_SEMIANNUAL_HOUR', 17),
-    minute=_cron_int('SCHED_HK_SEMIANNUAL_MINUTE', 13),
-    id='generate_hk_semiannual')
+#scheduler.add_job(generate_semiannual_data, 'cron',
+#    day_of_week=_cron('SCHED_SEMIANNUAL_DOW', 'mon-fri'),
+#    hour=_cron_int('SCHED_SEMIANNUAL_HOUR', 16),
+#    minute=_cron_int('SCHED_SEMIANNUAL_MINUTE', 42),
+#    id='generate_semiannual')
+#scheduler.add_job(generate_hk_semiannual_data, 'cron',
+#    day_of_week=_cron('SCHED_HK_SEMIANNUAL_DOW', 'mon-fri'),
+#    hour=_cron_int('SCHED_HK_SEMIANNUAL_HOUR', 17),
+#    minute=_cron_int('SCHED_HK_SEMIANNUAL_MINUTE', 13),
+#    id='generate_hk_semiannual')
 scheduler.add_job(generate_annual_data, 'cron',
     day_of_week=_cron('SCHED_ANNUAL_DOW', 'mon-fri'),
     hour=_cron_int('SCHED_ANNUAL_HOUR', 16),

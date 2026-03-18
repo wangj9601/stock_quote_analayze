@@ -2596,9 +2596,7 @@ class TushareDataCollector:
             采集结果
         """
         try:
-            import tushare as ts
             import pandas as pd
-            from backend_core.data_collectors.tushare.historical import HistoricalQuoteCollector
             
             # 检查已存在的数据
             if not force_update:
@@ -2609,14 +2607,33 @@ class TushareDataCollector:
                 """), {'date': display_date})
                 existing_count = result.scalar()
                 
-                if existing_count > 0:
-                    logger.info(f"日期 {display_date} 已存在 {existing_count} 条数据，跳过采集")
+                # 仅当当天数据量接近全量才跳过；否则继续采集并通过 upsert 补齐全量
+                # 避免出现“当天先写入了少量残缺数据（如 56 条），后续永远跳过，导致指标也只生成 56 条”的问题
+                try:
+                    expected_total = self.session.execute(text("""
+                        SELECT COUNT(*) FROM stock_basic_info
+                        WHERE name IS NULL OR name NOT LIKE '%退%'
+                    """)).scalar() or 0
+                except Exception:
+                    expected_total = 0
+
+                # 经验阈值：A股全量通常 5k+；若 expected_total 异常则退回到 5000 作为阈值
+                full_threshold = int(expected_total * 0.95) if expected_total >= 1000 else 5000
+
+                if existing_count >= full_threshold:
+                    logger.info(
+                        f"日期 {display_date} 已存在 {existing_count} 条数据(阈值{full_threshold})，视为已全量，跳过采集"
+                    )
                     return {
                         'success': True,
                         'collected': 0,
                         'skipped': existing_count,
                         'error': None
                     }
+                if existing_count > 0:
+                    logger.info(
+                        f"日期 {display_date} 已存在 {existing_count} 条数据(<阈值{full_threshold})，将继续采集以补齐全量"
+                    )
             
             # 如果需要强制更新，先删除该日期的数据
             if force_update:
@@ -2627,32 +2644,103 @@ class TushareDataCollector:
                 self.session.commit()
                 logger.info(f"强制更新模式：已删除日期 {display_date} 的 {deleted_count} 条数据")
             
-            # 使用backend_core的HistoricalQuoteCollector进行采集
-            collector = HistoricalQuoteCollector()
-            success = collector.collect_historical_quotes(trade_date)
-            
-            if success:
-                # 查询本次采集的数据量
-                result = self.session.execute(text("""
-                    SELECT COUNT(*) 
-                    FROM historical_quotes 
-                    WHERE date = :date AND collected_source = 'tushare'
-                """), {'date': display_date})
-                collected_count = result.scalar()
-                
-                return {
-                    'success': True,
-                    'collected': collected_count,
-                    'skipped': 0,
-                    'error': None
-                }
-            else:
-                return {
-                    'success': False,
-                    'collected': 0,
-                    'skipped': 0,
-                    'error': '采集失败'
-                }
+            # 直接使用 Tushare Pro 接口采集并用当前 Session 写库，确保与指标生成使用同一连接/同一库
+            df = self.ts_pro.daily(trade_date=trade_date)
+            if df is None or (hasattr(df, "empty") and df.empty):
+                return {'success': False, 'collected': 0, 'skipped': 0, 'error': 'tushare返回空数据'}
+
+            # 规范字段
+            # tushare daily: ts_code, open, high, low, close, pre_close, change, pct_chg, vol, amount
+            df = df.copy()
+            if "ts_code" not in df.columns:
+                return {'success': False, 'collected': 0, 'skipped': 0, 'error': 'tushare返回缺少ts_code字段'}
+            df["code"] = df["ts_code"].astype(str).str.split(".").str[0]
+
+            # 读取名称（避免逐行查库）
+            codes = df["code"].dropna().astype(str).unique().tolist()
+            name_map = {}
+            if codes:
+                try:
+                    from sqlalchemy import bindparam
+                    name_rows = self.session.execute(
+                        text("SELECT code, name FROM stock_basic_info WHERE code IN :codes").bindparams(
+                            bindparam("codes", expanding=True)
+                        ),
+                        {"codes": codes},
+                    ).fetchall()
+                    name_map = {str(r[0]): (r[1] or "") for r in name_rows}
+                except Exception:
+                    # 名称非关键字段，失败则置空
+                    name_map = {}
+
+            # 组装批量 upsert
+            rows = []
+            for _, r in df.iterrows():
+                code = str(r.get("code") or "").strip()
+                if not code:
+                    continue
+                name = name_map.get(code, "")
+                if "退" in (name or ""):
+                    continue
+                vol = r.get("vol")
+                amount = r.get("amount")
+                # 成交量单位：按手存（用户已确认 tushare 全量历史 vol 为手）
+                vol_hand = float(vol) if vol is not None and not pd.isna(vol) else None
+                # tushare amount 通常为千元，折算为元
+                amt_yuan = (float(amount) * 1000) if amount is not None and not pd.isna(amount) else None
+                rows.append({
+                    "code": code,
+                    "ts_code": str(r.get("ts_code") or ""),
+                    "name": name,
+                    "market": "",
+                    "collected_source": "tushare",
+                    "collected_date": datetime.now().isoformat(),
+                    "date": display_date,
+                    "open": float(r.get("open")) if r.get("open") is not None and not pd.isna(r.get("open")) else None,
+                    "high": float(r.get("high")) if r.get("high") is not None and not pd.isna(r.get("high")) else None,
+                    "low": float(r.get("low")) if r.get("low") is not None and not pd.isna(r.get("low")) else None,
+                    "close": float(r.get("close")) if r.get("close") is not None and not pd.isna(r.get("close")) else None,
+                    "volume": vol_hand,
+                    "amount": amt_yuan,
+                    "change_percent": float(r.get("pct_chg")) if r.get("pct_chg") is not None and not pd.isna(r.get("pct_chg")) else None,
+                    "pre_close": float(r.get("pre_close")) if r.get("pre_close") is not None and not pd.isna(r.get("pre_close")) else None,
+                    "change": float(r.get("change")) if r.get("change") is not None and not pd.isna(r.get("change")) else None,
+                    "amplitude": None,
+                    "turnover_rate": None,
+                })
+
+            if not rows:
+                return {'success': True, 'collected': 0, 'skipped': 0, 'error': None}
+
+            upsert_sql = text("""
+                INSERT INTO historical_quotes
+                (code, ts_code, name, market, collected_source, collected_date, date,
+                 open, high, low, close, volume, amount, change_percent, pre_close, change, amplitude, turnover_rate)
+                VALUES
+                (:code, :ts_code, :name, :market, :collected_source, :collected_date, :date,
+                 :open, :high, :low, :close, :volume, :amount, :change_percent, :pre_close, :change, :amplitude, :turnover_rate)
+                ON CONFLICT (code, date) DO UPDATE SET
+                    ts_code = EXCLUDED.ts_code,
+                    name = EXCLUDED.name,
+                    market = EXCLUDED.market,
+                    collected_source = EXCLUDED.collected_source,
+                    collected_date = EXCLUDED.collected_date,
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    close = EXCLUDED.close,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    change_percent = EXCLUDED.change_percent,
+                    pre_close = EXCLUDED.pre_close,
+                    amplitude = EXCLUDED.amplitude,
+                    turnover_rate = EXCLUDED.turnover_rate,
+                    change = EXCLUDED.change
+            """)
+
+            self.session.execute(upsert_sql, rows)
+            self.session.commit()
+            return {'success': True, 'collected': len(rows), 'skipped': 0, 'error': None}
                 
         except Exception as e:
             logger.error(f"采集日期 {display_date} 失败: {e}")

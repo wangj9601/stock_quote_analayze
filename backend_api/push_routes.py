@@ -768,6 +768,20 @@ def admin_delete_push_config_by_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 兼容某些生产环境/代理不允许 DELETE 的情况：使用 POST 删除
+@admin_router.post("/configs/{config_id}/delete")
+def admin_delete_push_config_by_id_post(
+    config_id: int,
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+):
+    return admin_delete_push_config_by_id(
+        config_id=config_id,
+        current_admin=current_admin,
+        config_service=config_service,
+    )
+
+
 # ---------- 发件邮箱参数配置 ----------
 
 @admin_router.get("/email-sender-config", response_model=EmailSenderConfigResponse)
