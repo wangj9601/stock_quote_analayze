@@ -73,6 +73,36 @@
       </el-col>
     </el-row>
 
+    <!-- 数据库占用存储监控 -->
+    <el-card class="mb-6">
+      <template #header>
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-semibold">数据库存储占用 (MB)</span>
+          <el-button size="small" @click="refreshOverview">刷新</el-button>
+        </div>
+      </template>
+      
+      <el-table :data="databaseTables" stripe style="width: 100%" height="400">
+        <el-table-column prop="name" label="业务表名" min-width="200" sortable />
+        <el-table-column prop="size" label="占用大小 (MB)" width="180" sortable>
+          <template #default="{ row }">
+            <span :class="{'text-danger': row.size > 1000, 'text-warning': row.size > 500}">
+              {{ row.size.toFixed(2) }} MB
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="占用比例" min-width="200">
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="getTablePercentage(row.size)" 
+              :stroke-width="12"
+              :color="getTableColor(row.size)"
+            />
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- 系统健康状态 -->
     <el-card class="mb-6">
       <template #header>
@@ -258,8 +288,33 @@ const metricsTimeRange = ref('1h')
 const overviewData = reactive({
   status: 'unknown',
   alerts: { total_24h: 0, critical_24h: 0 },
-  performance: { uptime: 0, process_count: 0 }
+  performance: { uptime: 0, process_count: 0 },
+  database_size: {} as Record<string, number>
 })
+
+import { computed } from 'vue'
+
+const databaseTables = computed(() => {
+  if (!overviewData.database_size) return []
+  return Object.entries(overviewData.database_size)
+    .map(([name, size]) => ({ name, size }))
+    .sort((a, b) => b.size - a.size)
+})
+
+const totalDbSize = computed(() => {
+  return databaseTables.value.reduce((acc, curr) => acc + curr.size, 0)
+})
+
+const getTablePercentage = (size: number) => {
+  if (totalDbSize.value === 0) return 0
+  return parseFloat(((size / totalDbSize.value) * 100).toFixed(2))
+}
+
+const getTableColor = (size: number) => {
+  if (size > 1000) return '#f56c6c'
+  if (size > 500) return '#e6a23c'
+  return '#409eff'
+}
 
 const systemHealth = reactive({
   cpu_usage: 0,

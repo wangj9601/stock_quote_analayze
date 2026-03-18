@@ -160,7 +160,12 @@ class SystemMonitor:
                 # 3. 检查告警规则
                 self._check_alert_rules(system_metrics)
                 
-                # 4. 更新服务状态
+                # 4. 采集数据库指标
+                db_metrics = self._collect_database_metrics()
+                for table_name, size_mb in db_metrics.items():
+                    self.record_metric(f"db_table_size_{table_name}", size_mb, {"unit": "MB"})
+                
+                # 5. 更新服务状态
                 self._update_service_status()
                 
                 # 休眠30分钟 (1800秒)
@@ -205,6 +210,26 @@ class SystemMonitor:
             return metrics
         except Exception as e:
             logger.error(f"采集系统指标失败: {e}")
+            return {}
+
+    def _collect_database_metrics(self) -> Dict[str, float]:
+        """采集数据库表大小指标 (单位: MB)"""
+        try:
+            db_metrics = {}
+            sql = """
+            SELECT 
+                relname as table_name,
+                pg_total_relation_size(relid) / (1024.0 * 1024.0) as size_mb
+            FROM pg_catalog.pg_statio_user_tables;
+            """
+            with SessionLocal() as db:
+                result = db.execute(text(sql))
+                for row in result:
+                    # row[0] 是表名, row[1] 是大小(MB)
+                    db_metrics[row[0]] = float(row[1])
+            return db_metrics
+        except Exception as e:
+            logger.error(f"采集数据库指标失败: {e}")
             return {}
 
     def _check_alert_rules(self, metrics: Dict[str, float]):
@@ -369,7 +394,8 @@ class SystemMonitor:
                     "uptime": self._get_system_uptime(),
                     "process_count": len(psutil.pids()),
                     "load_average": self._get_load_average()
-                }
+                },
+                "database_size": self._collect_database_metrics()
             }
         except Exception as e:
             logger.error(f"获取监控数据失败: {e}")
