@@ -10,7 +10,7 @@
 import sys
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 import argparse
 import logging
@@ -74,14 +74,36 @@ class GMSMeanFrequencyBackfill:
             )
         return [row[0] for row in r.fetchall()]
 
-    def get_history(self, code: str, market_type: str) -> List[Tuple[str, float, float]]:
-        """返回 [(date_yyyy_mm_dd, close, volume), ...] 按日期升序"""
+    def get_history(
+        self,
+        code: str,
+        market_type: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[Tuple[str, float, float]]:
+        """返回 [(date_yyyy_mm_dd, close, volume), ...] 按日期升序。
+        当指定 start_date 时，从 start_date 前 300 天开始取数，确保有足够回看窗口计算 GMS 指标。
+        """
         table = "historical_quotes" if market_type == "CN" else "historical_quotes_hk"
+        params: dict = {"code": code}
+        extra = ""
+        if start_date:
+            try:
+                query_start = (
+                    datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=300)
+                ).strftime("%Y-%m-%d")
+                extra += " AND date >= :query_start "
+                params["query_start"] = query_start
+            except Exception:
+                pass
+        if end_date:
+            extra += " AND date <= :query_end "
+            params["query_end"] = end_date
         q = text(
             f"SELECT date, close, volume FROM {table} WHERE code = :code "
-            "AND close IS NOT NULL AND volume IS NOT NULL ORDER BY date ASC"
+            "AND close IS NOT NULL AND volume IS NOT NULL " + extra + " ORDER BY date ASC"
         )
-        rows = self.session.execute(q, {"code": code}).fetchall()
+        rows = self.session.execute(q, params).fetchall()
         out = []
         for r in rows:
             dt_str = _date_to_str(r[0])
@@ -112,7 +134,7 @@ class GMSMeanFrequencyBackfill:
         skip_existing: bool = True,
     ) -> bool:
         try:
-            rows = self.get_history(code, market_type)
+            rows = self.get_history(code, market_type, start_date, end_date)
             if len(rows) < WINDOW + 1:
                 self.skipped_stocks += 1
                 return True
