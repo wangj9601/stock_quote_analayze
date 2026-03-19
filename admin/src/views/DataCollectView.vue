@@ -1327,10 +1327,17 @@ const formatTime = (timeStr: string): string => {
 }
 
 const startPolling = () => {
-  pollingInterval.value = setInterval(() => {
-    loadTasks()
-    loadCurrentTask()
-  }, 5000) // 每5秒刷新一次
+  // 仅在任务运行时轮询 current-task，避免频繁刷接口导致日志/网络压力过大
+  const tick = async () => {
+    await loadCurrentTask()
+    // 当任务不处于运行中时停止轮询，并在停止前刷新任务列表一次
+    if (currentTask.value && currentTask.value.status && currentTask.value.status !== 'running') {
+      stopPolling()
+      await loadTasks()
+    }
+  }
+  // 每 15 秒刷新一次（生产环境建议更长轮询间隔）
+  pollingInterval.value = setInterval(tick, 15000)
 }
 
 const stopPolling = () => {

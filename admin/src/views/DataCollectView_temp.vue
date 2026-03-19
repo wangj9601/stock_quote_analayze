@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="datacollect-view">
     <!-- 褰撳墠浠诲姟鐘舵€?-->
     <div v-if="currentTask" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -790,10 +790,14 @@ const formatTime = (timeStr: string): string => {
 }
 
 const startPolling = () => {
-  pollingInterval.value = setInterval(() => {
-    loadTasks()
-    loadCurrentTask()
-  }, 5000) // 姣?绉掑埛鏂颁竴娆?
+  const tick = async () => {
+    await loadCurrentTask()
+    if (currentTask.value && currentTask.value.status && currentTask.value.status !== 'running') {
+      stopPolling()
+      await loadTasks()
+    }
+  }
+  pollingInterval.value = setInterval(tick, 15000)
 }
 
 const stopPolling = () => {

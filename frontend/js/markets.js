@@ -351,10 +351,10 @@ const MarketsPage = {
     },
 
 // 加载排行榜数据
-async loadRankingData(page = 1, keyword = null) {
-    if (this.currentRankingType === 'volume_aberration') {
-        return this.loadVolumeAberrationData(page);
-    }
+    async loadRankingData(page = 1, keyword = null) {
+        if (this.currentRankingType === 'volume_aberration') {
+            return this.loadVolumeAberrationData(page, keyword);
+        }
     const typeMap = {
         rise: 'rise',
         fall: 'fall',
@@ -455,7 +455,15 @@ async loadRankingData(page = 1, keyword = null) {
     },
 
     // 加载成交量异动榜数据
-    async loadVolumeAberrationData(page = 1) {
+    normalizeVolumeAberrationStockCode(input) {
+        if (input == null) return '';
+        const v = String(input).trim();
+        // 仅处理纯数字股票代码：补齐到6位（例如输入“1”->“000001”）
+        if (/^\d+$/.test(v) && v.length < 6) return v.padStart(6, '0');
+        return v;
+    },
+
+    async loadVolumeAberrationData(page = 1, keyword = null) {
         this.currentPage = page;
         const market = (document.getElementById('volumeAberrationMarket')?.value || 'cn').toLowerCase();
         const dateInput = document.getElementById('volumeAberrationDate');
@@ -472,6 +480,24 @@ async loadRankingData(page = 1, keyword = null) {
                 this._volumeAberrationDate = result.date || '';
                 this._volumeAberrationRows = result.data || [];
                 this.renderVolumeAberrationTable(this._volumeAberrationRows);
+                // 支持“股票代码查询”定位
+                if (keyword) {
+                    const kw = String(keyword).trim();
+                    const normalized = this.normalizeVolumeAberrationStockCode(kw);
+                    const rows = this._volumeAberrationRows || [];
+                    const isPureDigits = /^\d+$/.test(kw);
+                    const hit = rows.find(r => {
+                        const codeStr = String(r.code || '');
+                        const nameStr = String(r.name || '');
+                        // 支持：代码精确匹配 / 名称包含匹配
+                        return codeStr === normalized || (!isPureDigits && nameStr.includes(kw));
+                    });
+                    if (hit) {
+                        this.highlightAndScrollToStock(String(hit.code));
+                    } else {
+                        CommonUtils.showToast('当前页未包含该股票，请切换页后重试', 'info');
+                    }
+                }
                 this.renderPagination();
             } else {
                 this.total = 0;
@@ -529,9 +555,49 @@ async loadRankingData(page = 1, keyword = null) {
         this.updateAllWatchlistButtons();
     },
 
-    // 导出成交量异动榜 CSV（当前页数据，不含操作列，股票代码加 \u2060 前缀）
-    exportVolumeAberrationCsv() {
-        const rows = this._volumeAberrationRows || [];
+    getVolumeAberrationExportScope() {
+        const sel = document.getElementById('volumeAberrationExportScope');
+        return sel?.value === 'all' ? 'all' : 'page';
+    },
+
+    getVolumeAberrationQueryParams() {
+        const market = (document.getElementById('volumeAberrationMarket')?.value || 'cn').toLowerCase();
+        const dateInput = document.getElementById('volumeAberrationDate');
+        const date = dateInput?.value?.trim() || '';
+        const order = document.getElementById('volumeAberrationOrder')?.value || 'desc';
+        return { market, date, order };
+    },
+
+    async fetchAllVolumeAberrationRows(pageSize = 500) {
+        const { market, date, order } = this.getVolumeAberrationQueryParams();
+        // 优先用已有 total；没有的话先拉第一页拿 total
+        let page = 1;
+        let all = [];
+        // pageSize 要和后端允许的范围一致（接口 page_size 最大500）
+        const firstUrl = `${this.API_BASE_URL}/api/stock/volume_aberration_list?market=${market}&order=${order}&page=1&page_size=${pageSize}` + (date ? `&date=${encodeURIComponent(date)}` : '');
+        const firstResp = await fetch(firstUrl);
+        const firstResult = await firstResp.json();
+        if (!firstResult.success) return [];
+        const total = firstResult.total || 0;
+        all = firstResult.data || [];
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        for (page = 2; page <= totalPages; page++) {
+            const url = `${this.API_BASE_URL}/api/stock/volume_aberration_list?market=${market}&order=${order}&page=${page}&page_size=${pageSize}` + (date ? `&date=${encodeURIComponent(date)}` : '');
+            const resp = await fetch(url);
+            const result = await resp.json();
+            if (!result.success) break;
+            all = all.concat(result.data || []);
+        }
+        return all;
+    },
+
+    // 导出成交量异动榜 CSV（支持当前页/全部，不含操作列）
+    async exportVolumeAberrationCsv() {
+        let rows = this._volumeAberrationRows || [];
+        if (this.getVolumeAberrationExportScope() === 'all') {
+            CommonUtils.showToast('正在拉取全部数据用于导出...', 'info');
+            rows = await this.fetchAllVolumeAberrationRows(500);
+        }
         if (rows.length === 0) {
             CommonUtils.showToast('没有可导出的数据', 'warning');
             return;
@@ -573,9 +639,13 @@ async loadRankingData(page = 1, keyword = null) {
         CommonUtils.showToast('CSV 导出成功', 'success');
     },
 
-    // 导出成交量异动榜 Excel（当前页数据，不含操作列，股票代码加 \u2060 前缀）
-    exportVolumeAberrationExcel() {
-        const rows = this._volumeAberrationRows || [];
+    // 导出成交量异动榜 Excel（支持当前页/全部，不含操作列）
+    async exportVolumeAberrationExcel() {
+        let rows = this._volumeAberrationRows || [];
+        if (this.getVolumeAberrationExportScope() === 'all') {
+            CommonUtils.showToast('正在拉取全部数据用于导出...', 'info');
+            rows = await this.fetchAllVolumeAberrationRows(500);
+        }
         if (rows.length === 0) {
             CommonUtils.showToast('没有可导出的数据', 'warning');
             return;

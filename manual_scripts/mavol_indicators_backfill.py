@@ -10,7 +10,7 @@
 import sys
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 import argparse
 import logging
@@ -98,9 +98,21 @@ class MAVOLBackfill:
                 return True
 
             data = []
+            # 为了在指定日期范围内也能正确计算 MAVOL(20/200)，需要引入 start_date 之前的足够历史数据。
+            # 这里用“日历天”回看窗口（约 300 天）覆盖 200 交易日的需要。
+            query_start_date = None
+            if start_date:
+                try:
+                    query_start_date = (
+                        datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=300)
+                    ).strftime("%Y-%m-%d")
+                except Exception:
+                    query_start_date = None
+
             for date_val, vol in rows:
                 dt_str = _date_to_str(date_val)
-                if start_date and dt_str < start_date:
+                # 计算用数据：允许回看 query_start_date（而非直接裁剪到 start_date）
+                if query_start_date and dt_str < query_start_date:
                     continue
                 if end_date and dt_str > end_date:
                     continue
@@ -126,6 +138,11 @@ class MAVOLBackfill:
 
             for _, row in mavol_df.iterrows():
                 dt_str = row["date"].strftime("%Y-%m-%d")
+                # 仅保存用户指定日期范围内的数据
+                if start_date and dt_str < start_date:
+                    continue
+                if end_date and dt_str > end_date:
+                    continue
                 if skip_existing and self.exists(code, market_type, dt_str):
                     skipped += 1
                     continue

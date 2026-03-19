@@ -565,6 +565,35 @@ class ReportService:
             )
 
         def to_rows(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            def format_volume_hand(v: Any) -> str:
+                """成交量/均量按手、万手、亿手展示（volume 已存为“手”）。"""
+                if v is None or v == "":
+                    return ""
+                try:
+                    num = float(v)
+                except (ValueError, TypeError):
+                    return str(v)
+
+                if num >= 100000000:
+                    return f"{(num / 100000000):.2f}亿手"
+                if num >= 10000:
+                    return f"{(num / 10000):.2f}万手"
+                return f"{num:.0f}手"
+
+            def format_amount(v: Any) -> str:
+                """成交额按“万/亿”展示（最小单位为万）。"""
+                if v is None or v == "":
+                    return ""
+                try:
+                    num = float(v)
+                except (ValueError, TypeError):
+                    return str(v)
+
+                if num >= 100000000:
+                    return f"{(num / 100000000):.2f}亿"
+                # 最小单位为“万”，即便小于 1 万也显示为 0.xx 万
+                return f"{(num / 10000):.2f}万"
+
             rows = []
             for item in data:
                 rows.append({
@@ -572,11 +601,11 @@ class ReportService:
                     "股票代码": "\u2060" + str(item.get("code", "")),
                     "股票名称": (item.get("name") or "").strip(),
                     "日期": item.get("date", ""),
-                    "当日成交量": item.get("volume"),
-                    "成交额": item.get("amount"),
-                    "MAVOL5": item.get("mavol5"),
-                    "MAVOL10": item.get("mavol10"),
-                    "MAVOL20": item.get("mavol20"),
+                    "当日成交量": format_volume_hand(item.get("volume")),
+                    "成交额": format_amount(item.get("amount")),
+                    "MAVOL5": format_volume_hand(item.get("mavol5")),
+                    "MAVOL10": format_volume_hand(item.get("mavol10")),
+                    "MAVOL20": format_volume_hand(item.get("mavol20")),
                     "量比(5)": item.get("ratio_5"),
                     "量比(20)": item.get("ratio_20"),
                     "涨跌幅(%)": item.get("change_percent"),
@@ -588,7 +617,8 @@ class ReportService:
         rows_cn = to_rows(result_cn)
         rows_hk = to_rows(result_hk)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 文件名里 report_date 已包含日期信息，避免 timestamp 再附带日期导致重复
+        timestamp = datetime.now().strftime("%H%M%S")
         filename = f"volume_aberration_{user_id}_{report_date.replace('-', '')}_{timestamp}.xlsx"
         filepath = os.path.join(self.report_dir, filename)
 
@@ -597,6 +627,53 @@ class ReportService:
                 pd.DataFrame(rows_cn).to_excel(writer, sheet_name="A股放量榜", index=False)
             if rows_hk:
                 pd.DataFrame(rows_hk).to_excel(writer, sheet_name="港股放量榜", index=False)
+
+        # 对量比(20)>2.5 的行做颜色加深（整行填充）
+        try:
+            from openpyxl import load_workbook
+            from openpyxl.styles import PatternFill, Font
+
+            wb = load_workbook(filepath)
+
+            deep_fill = PatternFill(start_color="FFC00000", end_color="FFC00000", fill_type="solid")
+            deep_font = Font(color="FFFFFFFF", bold=True)
+
+            def apply_sheet_style(sheet_name: str, rows_data: List[Dict[str, Any]]):
+                if sheet_name not in wb.sheetnames or not rows_data:
+                    return
+
+                ws = wb[sheet_name]
+                # 表头行=1，找到“量比(20)”列
+                ratio_col = None
+                for cell in ws[1]:
+                    if cell.value == "量比(20)":
+                        ratio_col = cell.column
+                        break
+                if not ratio_col:
+                    return
+
+                for idx, item in enumerate(rows_data):
+                    ratio_val = item.get("量比(20)")
+                    if ratio_val is None:
+                        continue
+                    try:
+                        ratio_f = float(ratio_val)
+                    except (ValueError, TypeError):
+                        continue
+                    if ratio_f > 2.5:
+                        row_idx = 2 + idx  # 数据从第2行开始
+                        for col_idx in range(1, ws.max_column + 1):
+                            c = ws.cell(row=row_idx, column=col_idx)
+                            c.fill = deep_fill
+                            c.font = deep_font
+
+            apply_sheet_style("A股放量榜", rows_cn)
+            apply_sheet_style("港股放量榜", rows_hk)
+
+            wb.save(filepath)
+        except Exception as e:
+            # 样式失败不应影响报告生成成功
+            logger.warning("成交量异动榜 Excel 样式应用失败: %s", e)
 
         file_size = os.path.getsize(filepath)
         logger.info("生成成交量异动榜报告成功: %s, A股=%s, 港股=%s", filepath, len(rows_cn), len(rows_hk))

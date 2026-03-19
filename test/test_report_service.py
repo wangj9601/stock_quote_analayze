@@ -375,12 +375,14 @@ def test_volume_aberration_report_no_data(report_service, test_user):
 
 def test_volume_aberration_report_with_data(report_service, test_user):
     """测试成交量异动榜报告：有数据时生成 Excel、report_type 与 has_data 正确"""
+    import re
+    from openpyxl import load_workbook
     from unittest.mock import patch
     from backend_api.services import volume_aberration_service
     row = {
         "rank": 1, "code": "000001", "name": "平安银行", "date": "2026-01-01",
         "volume": 1e7, "amount": 1e9, "mavol5": 8e6, "mavol10": 9e6, "mavol20": 9e6,
-        "ratio_5": 1.25, "ratio_20": 1.11, "change_percent": 2.5, "close": 12.0, "turnover_rate": 5.0,
+        "ratio_5": 1.25, "ratio_20": 3.0, "change_percent": 2.5, "close": 12.0, "turnover_rate": 5.0,
     }
     with patch.object(volume_aberration_service, 'get_volume_aberration_data', side_effect=[
         ([row], "2026-01-01"),  # cn
@@ -393,7 +395,22 @@ def test_volume_aberration_report_with_data(report_service, test_user):
     assert result.report_info.stock_count == 1
     assert result.file_path is not None
     assert result.file_path.endswith('.xlsx')
+    assert re.search(
+        rf"volume_aberration_{test_user.id}_20260101_\d{{6}}\.xlsx$",
+        result.file_path.replace('\\', '/').split('/')[-1],
+    ), f"unexpected filename: {result.file_path}"
     if os.path.exists(result.file_path):
+        wb = load_workbook(result.file_path)
+        ws = wb["A股放量榜"]
+        # 校验成交额格式化：amount=1e9 -> 10.00亿
+        header = [c.value for c in ws[1]]
+        amount_col = header.index("成交额") + 1
+        assert ws.cell(row=2, column=amount_col).value == "10.00亿"
+        # 数据行从第2行开始；ratio_20 > 2.5 应触发行整行填充
+        cell = ws.cell(row=2, column=1)  # A2
+        assert cell.fill.patternType == "solid"
+        # deep_fill = PatternFill(start_color="FFC00000", ...)
+        assert cell.fill.start_color.rgb in ("FFC00000", "FF C00000".replace(" ", ""))
         os.remove(result.file_path)
 
 
