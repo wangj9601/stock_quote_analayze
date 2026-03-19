@@ -566,7 +566,7 @@ class ReportService:
 
         def to_rows(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             def format_volume_hand(v: Any) -> str:
-                """成交量/均量按手、万手、亿手展示（volume 已存为“手”）。"""
+                """成交量/均量展示为手口径数值（不显示“手”字）。"""
                 if v is None or v == "":
                     return ""
                 try:
@@ -575,10 +575,10 @@ class ReportService:
                     return str(v)
 
                 if num >= 100000000:
-                    return f"{(num / 100000000):.2f}亿手"
+                    return f"{(num / 100000000):.2f}亿"
                 if num >= 10000:
-                    return f"{(num / 10000):.2f}万手"
-                return f"{num:.0f}手"
+                    return f"{(num / 10000):.2f}万"
+                return f"{num:.0f}"
 
             def format_amount(v: Any) -> str:
                 """成交额按“万/亿”展示（最小单位为万）。"""
@@ -601,11 +601,11 @@ class ReportService:
                     "股票代码": "\u2060" + str(item.get("code", "")),
                     "股票名称": (item.get("name") or "").strip(),
                     "日期": item.get("date", ""),
-                    "当日成交量": format_volume_hand(item.get("volume")),
-                    "成交额": format_amount(item.get("amount")),
-                    "MAVOL5": format_volume_hand(item.get("mavol5")),
-                    "MAVOL10": format_volume_hand(item.get("mavol10")),
-                    "MAVOL20": format_volume_hand(item.get("mavol20")),
+                    "当日成交量(手)": format_volume_hand(item.get("volume")),
+                    "成交额(元)": format_amount(item.get("amount")),
+                    "MAVOL5(手)": format_volume_hand(item.get("mavol5")),
+                    "MAVOL10(手)": format_volume_hand(item.get("mavol10")),
+                    "MAVOL20(手)": format_volume_hand(item.get("mavol20")),
                     "量比(5)": item.get("ratio_5"),
                     "量比(20)": item.get("ratio_20"),
                     "涨跌幅(%)": item.get("change_percent"),
@@ -631,12 +631,12 @@ class ReportService:
         # 对量比(20)>2.5 的行做颜色加深（整行填充）
         try:
             from openpyxl import load_workbook
-            from openpyxl.styles import PatternFill, Font
+            from openpyxl.styles import Font
 
             wb = load_workbook(filepath)
 
-            deep_fill = PatternFill(start_color="FFC00000", end_color="FFC00000", fill_type="solid")
-            deep_font = Font(color="FFFFFFFF", bold=True)
+            # 视觉优化：仅字体加深，不再整行填充底色
+            deep_font = Font(color="FF8B0000", bold=True)
 
             def apply_sheet_style(sheet_name: str, rows_data: List[Dict[str, Any]]):
                 if sheet_name not in wb.sheetnames or not rows_data:
@@ -664,7 +664,6 @@ class ReportService:
                         row_idx = 2 + idx  # 数据从第2行开始
                         for col_idx in range(1, ws.max_column + 1):
                             c = ws.cell(row=row_idx, column=col_idx)
-                            c.fill = deep_fill
                             c.font = deep_font
 
             apply_sheet_style("A股放量榜", rows_cn)
@@ -890,12 +889,13 @@ class ReportService:
                 "得分明细": score_detail_str,
             })
 
-        filename = f"gms_{user_id}_{report_date.replace('-', '')}.csv"
+        filename = f"gms_{user_id}_{report_date.replace('-', '')}.xlsx"
         filepath = os.path.join(self.report_dir, filename)
         df = pd.DataFrame(rows)
         if "股票代码" in df.columns:
             df["股票代码"] = df["股票代码"].astype(str)
-        df.to_csv(filepath, index=False, encoding="utf-8-sig")
+        # GMS 推送报告改为 Excel 格式
+        df.to_excel(filepath, index=False, sheet_name="GMS策略信号列表")
         file_size = os.path.getsize(filepath)
         logger.info("生成 GMS 自选股报告成功: %s, 选股数: %s", filepath, len(rows))
         return ReportResult(
@@ -962,6 +962,16 @@ class ReportService:
                         stock_count += len(df_hk)
                     except Exception:
                         pass
+                    has_data = stock_count > 0
+                elif report_type == 'gms_daily':
+                    # GMS 推送报告默认写入该 sheet；兼容历史/异常文件时回退到首个 sheet
+                    try:
+                        df = pd.read_excel(report_path, sheet_name='GMS策略信号列表')
+                    except Exception:
+                        xls = pd.ExcelFile(report_path)
+                        first_sheet = xls.sheet_names[0] if xls.sheet_names else 0
+                        df = pd.read_excel(report_path, sheet_name=first_sheet)
+                    stock_count = len(df)
                     has_data = stock_count > 0
                 else:
                     df = pd.read_excel(report_path, sheet_name='股票汇总')

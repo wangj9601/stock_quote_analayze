@@ -10,7 +10,7 @@
 import sys
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 import argparse
 import logging
@@ -121,8 +121,20 @@ class MAIndicatorsBackfill:
                 return True
 
             data = []
+            # 为了在指定日期范围内也能正确计算 MA(20/200)，需要保留 start_date 之前的足够历史数据。
+            # 这里使用约 300 天回看窗口来覆盖 200 交易日计算需求。
+            query_start_date = None
+            if start_date:
+                try:
+                    query_start_date = (
+                        datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=300)
+                    ).strftime("%Y-%m-%d")
+                except Exception:
+                    query_start_date = None
+
             for dt_str, close in rows:
-                if start_date and dt_str < start_date:
+                # 计算阶段：不过早裁剪到 start_date，允许使用回看窗口
+                if query_start_date and dt_str < query_start_date:
                     continue
                 if end_date and dt_str > end_date:
                     continue
@@ -142,6 +154,11 @@ class MAIndicatorsBackfill:
 
             for _, row in ma_df.iterrows():
                 dt_str = row["date"].strftime("%Y-%m-%d") if hasattr(row["date"], "strftime") else str(row["date"])[:10]
+                # 落库阶段：仅保存用户指定日期范围内的数据
+                if start_date and dt_str < start_date:
+                    continue
+                if end_date and dt_str > end_date:
+                    continue
                 if skip_existing and self.exists(code, market_type, dt_str):
                     skipped += 1
                     continue

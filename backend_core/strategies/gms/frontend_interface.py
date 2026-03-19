@@ -27,6 +27,45 @@ def _infer_market_type(code: str) -> str:
 def _trace_row_to_result(row) -> dict:
     """将 gms_signal_trace 表的一行转为与 engine.screen 一致的选股结果 dict。"""
     code_str = str(row.code).strip() if row.code is not None else ""
+    delta = getattr(row, "delta", None)
+    d = getattr(row, "d", None)
+    instant_deviation = getattr(row, "instant_deviation", None)
+    # 与 strategy_engine 中 score_detail 的口径对齐：
+    # d20 = d + instant_deviation
+    # d1  = d20 - delta
+    d20 = (d + instant_deviation) if (d is not None and instant_deviation is not None) else None
+    d1 = (d20 - delta) if (d20 is not None and delta is not None) else None
+    score_detail = {
+        "score_total": getattr(row, "score_total", None),
+        "score_accumulation": getattr(row, "score_accumulation", None),
+        "score_momentum": getattr(row, "score_momentum", None),
+        "score_acc_fz": getattr(row, "score_acc_fz", None),
+        "score_acc_balance": getattr(row, "score_acc_balance", None),
+        "score_acc_volume": getattr(row, "score_acc_volume", None),
+        "score_mom_ratio_d1": getattr(row, "score_mom_ratio_d1", None),
+        "score_mom_deviation": getattr(row, "score_mom_deviation", None),
+        "score_mom_volume": getattr(row, "score_mom_volume", None),
+        "acc_fz_judge": getattr(row, "acc_fz_judge", None),
+        "acc_balance_judge": getattr(row, "acc_balance_judge", None),
+        "acc_volume_judge": getattr(row, "acc_volume_judge", None),
+        "mom_ratio_d1_judge": getattr(row, "mom_ratio_d1_judge", None),
+        "mom_deviation_judge": getattr(row, "mom_deviation_judge", None),
+        "mom_volume_judge": getattr(row, "mom_volume_judge", None),
+        "accumulation_grade": getattr(row, "accumulation_grade", None),
+        "momentum_grade": getattr(row, "momentum_grade", None),
+        # 指标细项（前端得分明细面板直接读取这些字段）
+        "delta": delta,
+        "d": d,
+        "d20": d20,
+        "d1": d1,
+        "ratio_d20": getattr(row, "ratio_d20", None),
+        "ratio_d1": getattr(row, "ratio_d1", None),
+        "fz_ratio": getattr(row, "fz_ratio", None),
+        "volume_ratio": getattr(row, "volume_ratio", None),
+        "instant_deviation": instant_deviation,
+        "rising_days": getattr(row, "rising_days", None),
+        "falling_days": getattr(row, "falling_days", None),
+    }
     return {
         "symbol": code_str,
         "code": code_str,
@@ -40,6 +79,14 @@ def _trace_row_to_result(row) -> dict:
         "buy_type": (row.buy_type or "").strip(),
         "signal_strength": getattr(row, "signal_strength", None),
         "sell_signal": getattr(row, "sell_signal", None),
+        "delta": delta,
+        "d": d,
+        "ratio_d20": getattr(row, "ratio_d20", None),
+        "ratio_d1": getattr(row, "ratio_d1", None),
+        "fz_ratio": getattr(row, "fz_ratio", None),
+        "rising_days": getattr(row, "rising_days", None),
+        "falling_days": getattr(row, "falling_days", None),
+        "score_detail": score_detail,
     }
 
 

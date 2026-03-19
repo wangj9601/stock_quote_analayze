@@ -404,13 +404,21 @@ def test_volume_aberration_report_with_data(report_service, test_user):
         ws = wb["A股放量榜"]
         # 校验成交额格式化：amount=1e9 -> 10.00亿
         header = [c.value for c in ws[1]]
-        amount_col = header.index("成交额") + 1
+        amount_col = header.index("成交额(元)") + 1
         assert ws.cell(row=2, column=amount_col).value == "10.00亿"
-        # 数据行从第2行开始；ratio_20 > 2.5 应触发行整行填充
+        # 校验列标题已按新口径命名
+        assert "当日成交量(手)" in header
+        assert "MAVOL5(手)" in header
+        assert "MAVOL10(手)" in header
+        assert "MAVOL20(手)" in header
+        # 校验行记录不再显示“手”字
+        volume_col = header.index("当日成交量(手)") + 1
+        assert "手" not in str(ws.cell(row=2, column=volume_col).value)
+        # 数据行从第2行开始；ratio_20 > 2.5 应触发深色字体
         cell = ws.cell(row=2, column=1)  # A2
-        assert cell.fill.patternType == "solid"
-        # deep_fill = PatternFill(start_color="FFC00000", ...)
-        assert cell.fill.start_color.rgb in ("FFC00000", "FF C00000".replace(" ", ""))
+        assert cell.font.bold is True
+        assert cell.font.color is not None
+        assert cell.font.color.rgb in ("FF8B0000", "FF 8B0000".replace(" ", ""))
         os.remove(result.file_path)
 
 

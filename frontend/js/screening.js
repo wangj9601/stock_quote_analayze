@@ -1064,7 +1064,21 @@ const ScreeningPage = {
                 `;
             } else if (strategy === 'gms') {
                 // GMS 均值引力动量策略表格
-                const sd = stock.score_detail || {};
+                const sd = {
+                    ratio_d: stock.ratio_d,
+                    avg_volume_20d: stock.avg_volume_20d,
+                    current_volume: stock.current_volume,
+                    ratio_d20: stock.ratio_d20,
+                    ratio_d1: stock.ratio_d1,
+                    delta: stock.delta,
+                    d: stock.d_ma20,
+                    rising_days: stock.rising_days,
+                    falling_days: stock.falling_days,
+                    fz_ratio: stock.fz_ratio,
+                    instant_deviation: stock.instant_deviation,
+                    volume_ratio: stock.volume_ratio,
+                    ...(stock.score_detail || stock.indicators?.score_detail || {})
+                };
                 const fmtPct = (v) => (v != null && typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '--';
                 const gmsParam = (id, def) => {
                     const el = document.getElementById(id);
@@ -1363,7 +1377,21 @@ const ScreeningPage = {
             ];
             rows = data.map(stock => {
                 let sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
-                const sd = stock.score_detail || {};
+                const sd = {
+                    ratio_d: stock.ratio_d,
+                    avg_volume_20d: stock.avg_volume_20d,
+                    current_volume: stock.current_volume,
+                    ratio_d20: stock.ratio_d20,
+                    ratio_d1: stock.ratio_d1,
+                    delta: stock.delta,
+                    d: stock.d_ma20,
+                    rising_days: stock.rising_days,
+                    falling_days: stock.falling_days,
+                    fz_ratio: stock.fz_ratio,
+                    instant_deviation: stock.instant_deviation,
+                    volume_ratio: stock.volume_ratio,
+                    ...(stock.score_detail || {})
+                };
                 if (sig === 0 && sd.score_total != null && sd.score_total > 0) sig = sd.score_total / 100;
                 const fmt = (v) => (v != null && typeof v === 'number' && !isNaN(v)) ? v.toFixed(1) : '--';
                 const accPart = sd.score_accumulation != null
@@ -1581,7 +1609,21 @@ const ScreeningPage = {
         const aoa = [headers];
         data.forEach(stock => {
             let sig = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
-            const sd = stock.score_detail || {};
+            const sd = {
+                ratio_d: stock.ratio_d,
+                avg_volume_20d: stock.avg_volume_20d,
+                current_volume: stock.current_volume,
+                ratio_d20: stock.ratio_d20,
+                ratio_d1: stock.ratio_d1,
+                delta: stock.delta,
+                d: stock.d_ma20,
+                rising_days: stock.rising_days,
+                falling_days: stock.falling_days,
+                fz_ratio: stock.fz_ratio,
+                instant_deviation: stock.instant_deviation,
+                volume_ratio: stock.volume_ratio,
+                ...(stock.score_detail || {})
+            };
             if (sig === 0 && sd.score_total != null && sd.score_total > 0) sig = sd.score_total / 100;
             aoa.push([
                 '\u2060' + (stock.symbol || stock.code),

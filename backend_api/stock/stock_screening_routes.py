@@ -63,6 +63,15 @@ def _fill_gms_indicator_fallback(db: Session, code: str, target_date: str, marke
         ratio_d20 = getattr(row, "ratio_d20", None)
         ratio_d1 = getattr(row, "ratio_d1", None)
         instant_deviation = getattr(row, "instant_deviation", None)
+        ratio_d = getattr(row, "bias", None)  # Δ20/d
+        avg_volume_20d = getattr(row, "mavol20_m", None)  # m
+        current_volume = None
+        eff_m20_m = getattr(row, "efficiency_m20_minus_m", None)
+        try:
+            if avg_volume_20d is not None:
+                current_volume = float(avg_volume_20d) + float(eff_m20_m or 0)  # m20
+        except Exception:
+            current_volume = None
         # F/Z
         fz_ratio = None
         try:
@@ -83,9 +92,12 @@ def _fill_gms_indicator_fallback(db: Session, code: str, target_date: str, marke
             "falling_days": falling_days,
             "ratio_d20": ratio_d20,
             "ratio_d1": ratio_d1,
+            "ratio_d": ratio_d,
             "fz_ratio": fz_ratio,
             "ratio_relative": ratio_relative,
             "instant_deviation": instant_deviation,
+            "avg_volume_20d": avg_volume_20d,
+            "current_volume": current_volume,
         }
     except Exception:
         logger.debug("GMS 指标兜底补全失败 code=%s", code, exc_info=True)
@@ -1124,6 +1136,22 @@ async def get_gms_strategy(
                 hist_quotes_hk = {q.code: q for q in quotes_hk}
 
         results_data = []
+        def _normalize_buy_type(raw_buy_type, left_signal, right_signal):
+            """
+            统一买点类型展示，避免历史 trace 脏值导致前端显示异常。
+            优先按信号位判定，其次兼容旧值映射。
+            """
+            if left_signal:
+                return "左侧"
+            if right_signal:
+                return "右侧"
+            s = str(raw_buy_type or "").strip().lower()
+            if s in ("左侧", "left", "left_buy", "leftbuy"):
+                return "左侧"
+            if s in ("右侧", "right", "right_buy", "rightbuy"):
+                return "右侧"
+            return "观望"
+
         for r in selection_results:
             code = r["symbol"]
             name = ""
@@ -1153,6 +1181,9 @@ async def get_gms_strategy(
 
             st = r.get("score_total")
             signal_strength = (float(st) / 100.0) if st is not None and st > 0 else (r.get("signal_strength") or 0.0)
+            left_signal = bool(r.get("left_buy_signal", False))
+            right_signal = bool(r.get("right_buy_signal", False))
+            buy_type_text = _normalize_buy_type(r.get("buy_type"), left_signal, right_signal)
             results_data.append({
                 "symbol": code,
                 "code": code,
@@ -1163,20 +1194,23 @@ async def get_gms_strategy(
                 "accumulation_grade": r.get("accumulation_grade", ""),
                 "momentum_grade": r.get("momentum_grade", ""),
                 "signal_strength": signal_strength,
-                "buy_type": r["buy_type"],
+                "buy_type": buy_type_text,
                 "current_price": current_price,
                 "ratio_d20": r.get("ratio_d20"),
                 "ratio_d1": r.get("ratio_d1"),
+                "ratio_d": r.get("ratio_d"),
                 "fz_ratio": r.get("fz_ratio"),
                 "delta": r.get("delta"),
                 "falling_days": r.get("falling_days"),
                 "rising_days": r.get("rising_days"),
                 "d_ma20": r.get("d"),
+                "avg_volume_20d": r.get("avg_volume_20d"),
+                "current_volume": r.get("current_volume"),
                 "ratio_relative": (r.get("delta") / r.get("d")) if r.get("delta") is not None and r.get("d") is not None and r.get("d") != 0 else None,
                 "current_change_percent": change_percent if change_percent is not None else 0.0,
                 "score_detail": r.get("score_detail", {}),
-                "left_buy_signal": r.get("left_buy_signal", False),
-                "right_buy_signal": r.get("right_buy_signal", False),
+                "left_buy_signal": left_signal,
+                "right_buy_signal": right_signal,
                 "sell_signal": r.get("sell_signal", False),
             })
 
@@ -1188,6 +1222,9 @@ async def get_gms_strategy(
                 or item.get("d_ma20") is None
                 or item.get("rising_days") is None
                 or item.get("falling_days") is None
+                or item.get("ratio_d") is None
+                or item.get("avg_volume_20d") is None
+                or item.get("current_volume") is None
             )
             mt = "HK" if (item.get("symbol") in hk_codes) else "CN"
             if need_fill:
@@ -1205,7 +1242,24 @@ async def get_gms_strategy(
                         except Exception:
                             pass
 
-            if not item.get("score_detail"):
+            sd = item.get("score_detail")
+            # 兼容历史 trace：
+            # 1) score_detail 为空/全空；
+            # 2) 关键细项缺失（前端“计算指标细项”依赖这几个键）
+            score_detail_empty = (
+                not isinstance(sd, dict)
+                or len(sd) == 0
+                or all(v is None or v == "" for v in sd.values())
+            )
+            score_detail_missing_keys = False
+            if isinstance(sd, dict):
+                required_keys = ("ratio_d", "avg_volume_20d", "current_volume")
+                for k in required_keys:
+                    if sd.get(k) is None or sd.get(k) == "":
+                        score_detail_missing_keys = True
+                        break
+
+            if score_detail_empty or score_detail_missing_keys:
                 score_fallback = _fill_gms_score_fallback(db, item.get("symbol"), target_date, mt, config)
                 if score_fallback:
                     for k, v in score_fallback.items():
