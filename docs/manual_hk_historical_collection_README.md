@@ -283,7 +283,9 @@ ORDER BY date;
 
 1. **数据依赖**：本程序依赖实时行情数据，需先采集实时数据
 2. **交易日判断**：程序会自动跳过周末，但不会判断节假日
-3. **指标计算**：技术指标仅对自选股计算，如需全量计算需修改代码
+3. **指标计算开关**：可通过 `.env` 配置 `HK_HISTORICAL_INDICATOR_MODE`
+   - `watchlist`：只算自选港股 `MA/MAVOL/PVFRS(GMS)/KDJ/BOLL/MACD/RSI`
+   - `full`：全量港股只算 `MA/MAVOL/PVFRS(GMS)`（不算 `KDJ/BOLL/MACD/RSI`）
 4. **数据库锁**：大量并发写入可能导致数据库锁，建议单线程运行
 5. **日志文件**：长期运行会产生大量日志，建议定期清理
 

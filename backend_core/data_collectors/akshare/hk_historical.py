@@ -4,12 +4,17 @@
 """
 
 import time
+import os
 import akshare as ak
 import pandas as pd
 from typing import Optional, Dict, Any
 from pathlib import Path
 import logging
 from datetime import datetime, timedelta
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
 # 直接导入base模块
 from .base import AKShareCollector
@@ -22,6 +27,20 @@ from backend_core.utils.boll_calculator import BOLLCalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
 from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
+
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if load_dotenv is not None:
+    load_dotenv(_project_root / ".env")
+
+
+def _get_hk_indicator_mode() -> str:
+    """
+    港股历史采集后指标计算模式：
+    - watchlist: 仅计算自选港股的 MA/MAVOL/PVFRS/KDJ/BOLL/MACD
+    - full: 计算全部港股的 MA/MAVOL/PVFRS（不计算 KDJ/BOLL/MACD/RSI）
+    """
+    mode = (os.getenv("HK_HISTORICAL_INDICATOR_MODE", "watchlist") or "watchlist").strip().lower()
+    return mode if mode in ("watchlist", "full") else "watchlist"
 
 class HKHistoricalQuoteCollector(AKShareCollector):
     """港股历史行情数据采集器"""
@@ -414,20 +433,49 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             loop_time = time.time() - loop_start
             self.logger.info(f"主循环同步耗时: {loop_time:.2f}s, 共处理 {affected} 条记录")
             
-            # 计算指标
+            # 计算指标（按 .env 开关模式）
             indicators_start = time.time()
             if calculate_indicators and affected_stocks:
-                watchlist_codes = self._get_watchlist_codes(session)
-                target_stocks = [s for s in affected_stocks if s in watchlist_codes]
-                
-                if target_stocks:
-                    self.logger.info(f"开始为 {len(target_stocks)} 只自选股计算指标...")
+                indicator_mode = _get_hk_indicator_mode()
+                target_stocks = []
+                if indicator_mode == "watchlist":
+                    # 仅自选港股：按自选表全量代码，筛选出在本交易日存在历史行情的港股
+                    watchlist_codes = self._get_watchlist_codes(session)
+                    for code in watchlist_codes:
+                        exists_row = session.execute(text("""
+                            SELECT 1 FROM historical_quotes_hk
+                            WHERE code = :code AND date = :target_date
+                            LIMIT 1
+                        """), {"code": str(code), "target_date": target_date}).fetchone()
+                        if exists_row:
+                            target_stocks.append(str(code))
                     funcs = [
-                        self._calculate_and_save_macd_hk, self._calculate_and_save_kdj_hk,
-                        self._calculate_and_save_rsi_hk, self._calculate_and_save_ma_hk,
-                        self._calculate_and_save_boll_hk, self._calculate_and_save_mavol_hk,
-                        self._calculate_and_save_mean_frequency_hk
+                        self._calculate_and_save_ma_hk,
+                        self._calculate_and_save_mavol_hk,
+                        self._calculate_and_save_mean_frequency_hk,
+                        self._calculate_and_save_kdj_hk,
+                        self._calculate_and_save_boll_hk,
+                        self._calculate_and_save_macd_hk,
+                        self._calculate_and_save_rsi_hk,
                     ]
+                    self.logger.info(
+                        f"港股指标模式=watchlist，本次将为 {len(target_stocks)} 只自选港股计算 "
+                        f"MA/MAVOL/PVFRS/KDJ/BOLL/MACD/RSI，目标日期={target_date}"
+                    )
+                else:
+                    # 全量港股：仅计算 MA/MAVOL/PVFRS，不计算 KDJ/BOLL/MACD/RSI
+                    target_stocks = list(affected_stocks)
+                    funcs = [
+                        self._calculate_and_save_ma_hk,
+                        self._calculate_and_save_mavol_hk,
+                        self._calculate_and_save_mean_frequency_hk,
+                    ]
+                    self.logger.info(
+                        f"港股指标模式=full，本次将为 {len(target_stocks)} 只港股计算 "
+                        f"MA/MAVOL/PVFRS，目标日期={target_date}"
+                    )
+
+                if target_stocks:
                     for func in funcs:
                         try:
                             item_start = time.time()
@@ -435,7 +483,6 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                             self.logger.debug(f"{func.__name__} 耗时: {time.time() - item_start:.2f}s")
                         except Exception as e:
                             self.logger.warning(f"{func.__name__} 失败: {e}")
-                    
                     self.logger.info(f"指标计算总耗时: {time.time() - indicators_start:.2f}s")
 
             # 操作日志记录
