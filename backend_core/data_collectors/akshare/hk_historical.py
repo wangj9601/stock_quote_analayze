@@ -36,7 +36,7 @@ if load_dotenv is not None:
 def _get_hk_indicator_mode() -> str:
     """
     港股历史采集后指标计算模式：
-    - watchlist: 仅计算自选港股的 MA/MAVOL/PVFRS/KDJ/BOLL/MACD
+    - watchlist: 仅计算自选港股的 MA/MAVOL/PVFRS/KDJ/BOLL/MACD/RSI
     - full: 计算全部港股的 MA/MAVOL/PVFRS（不计算 KDJ/BOLL/MACD/RSI）
     """
     mode = (os.getenv("HK_HISTORICAL_INDICATOR_MODE", "watchlist") or "watchlist").strip().lower()
@@ -463,8 +463,14 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                         f"MA/MAVOL/PVFRS/KDJ/BOLL/MACD/RSI，目标日期={target_date}"
                     )
                 else:
-                    # 全量港股：仅计算 MA/MAVOL/PVFRS，不计算 KDJ/BOLL/MACD/RSI
-                    target_stocks = list(affected_stocks)
+                    # 全量港股：与 manual_scripts/mavol_indicators_backfill.py 保持一致，
+                    # 使用 historical_quotes_hk 在目标日期存在数据的全量代码集合
+                    full_rows = session.execute(text("""
+                        SELECT DISTINCT code
+                        FROM historical_quotes_hk
+                        WHERE date = :target_date
+                    """), {"target_date": target_date}).fetchall()
+                    target_stocks = [str(r[0]) for r in full_rows if r and r[0]]
                     funcs = [
                         self._calculate_and_save_ma_hk,
                         self._calculate_and_save_mavol_hk,
@@ -1005,7 +1011,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     for row in rows:
                         df_data.append({
                             'date': str(row[0]),
-                            'volume': float(row[1]) if row[1] else None
+                            'volume': float(row[1]) if row[1] is not None else None
                         })
                     
                     df = pd.DataFrame(df_data)

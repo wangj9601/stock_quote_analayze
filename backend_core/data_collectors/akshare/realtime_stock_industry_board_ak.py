@@ -57,6 +57,13 @@ class RealtimeStockIndustryBoardCollector:
                 )
             '''))
             session.commit()
+            # 兼容旧表结构：补齐历史缺失字段
+            session.execute(text(f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS up_count INTEGER"))
+            session.execute(text(f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS down_count INTEGER"))
+            session.execute(text(f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS leading_stock_name TEXT"))
+            session.execute(text(f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS leading_stock_change_percent REAL"))
+            session.execute(text(f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS leading_stock_code TEXT"))
+            session.commit()
             print(f"Created {self.table_name}.")
         except Exception as e:
             print(f"Error creating {self.table_name}: {e}")
