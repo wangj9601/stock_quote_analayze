@@ -132,7 +132,7 @@ const MarketsPage = {
             if (hintWrap) hintWrap.style.display = 'block';
             if (thead) {
                 this._defaultRankingThead = this._defaultRankingThead || thead.innerHTML;
-                thead.innerHTML = '<tr><th>排名</th><th>股票代码</th><th>股票名称</th><th>日期</th><th>当日成交量</th><th>成交额</th><th>MAVOL5</th><th>MAVOL10</th><th>MAVOL20</th><th>量比(5)</th><th>量比(20)</th><th>涨跌幅(%)</th><th>收盘价</th><th>换手率(%)</th><th>操作</th></tr>';
+                thead.innerHTML = '<tr><th>排名</th><th>股票代码</th><th>股票名称</th><th>日期</th><th>当日成交量(手)</th><th>成交额</th><th>MAVOL5(手)</th><th>MAVOL10(手)</th><th>MAVOL20(手)</th><th>量比(5)</th><th>量比(20)</th><th>涨跌幅(%)</th><th>收盘价</th><th>换手率(%)</th><th>操作</th></tr>';
             }
             this.loadVolumeAberrationData(1);
         } else {
@@ -604,7 +604,7 @@ const MarketsPage = {
             CommonUtils.showToast('没有可导出的数据', 'warning');
             return;
         }
-        const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量', '成交额', 'MAVOL5', 'MAVOL10', 'MAVOL20', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
+        const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量(手)', '成交额', 'MAVOL5(手)', 'MAVOL10(手)', 'MAVOL20(手)', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
         const toStr = (v) => (v != null && v !== '') ? String(v) : '';
         const fmt2 = (v) => (v != null && v !== '' && !Number.isNaN(Number(v))) ? Number(v).toFixed(2) : '';
         const escapeCsv = (s) => {
@@ -657,7 +657,7 @@ const MarketsPage = {
             CommonUtils.showToast('请刷新页面后重试（Excel 导出依赖未加载）', 'warning');
             return;
         }
-        const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量', '成交额', 'MAVOL5', 'MAVOL10', 'MAVOL20', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
+        const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量(手)', '成交额', 'MAVOL5(手)', 'MAVOL10(手)', 'MAVOL20(手)', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
         const aoa = [headers];
         const toStr = (v) => (v != null && v !== '') ? String(v) : '';
         const fmt2 = (v) => (v != null && v !== '' && !Number.isNaN(Number(v))) ? Number(v).toFixed(2) : '';
@@ -1093,12 +1093,13 @@ const MarketsPage = {
         return `${v.toFixed(0)}手`;
     },
 
-    // 格式化成交额（以亿为单位，保留两位小数）
+    // 格式化成交额（保留两位小数，显示万或亿）
     formatTurnover(turnover) {
         if (turnover === null || typeof turnover === 'undefined' || isNaN(turnover)) return '--';
-        // 转换为亿为单位
-        const turnoverInYi = turnover / 100000000;
-        return `${turnoverInYi.toFixed(2)}亿`;
+        const t = Number(turnover);
+        const absT = Math.abs(t);
+        if (absT >= 100000000) return `${(t / 100000000).toFixed(2)}亿`;
+        return `${(t / 10000).toFixed(2)}万`;
     },
 
     // 格式化换手率（加上%符号，保留两位小数）

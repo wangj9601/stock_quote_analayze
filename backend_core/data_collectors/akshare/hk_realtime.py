@@ -222,9 +222,16 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                                     return val
                         return None
                     
-                    # 成交量统一按「手」存库；港股接口（东方财富/新浪）成交量为股，÷100 转为手
+                    # 按数据源区分成交量单位：
+                    # - 东方财富 stock_hk_spot_em：返回股，需 /100 转手
+                    # - 新浪 stock_hk_spot：按当前业务约定直接按手入库（不换算）
                     raw_vol = self._safe_value(safe_get_value('成交量', 'volume'))
-                    volume = (raw_vol / 100) if raw_vol is not None else None
+                    if raw_vol is None:
+                        volume = None
+                    elif source_name == "stock_hk_spot_em":
+                        volume = raw_vol / 100.0
+                    else:
+                        volume = raw_vol
                     data = {
                         'code': code,
                         'name': name,
