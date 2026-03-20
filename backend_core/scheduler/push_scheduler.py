@@ -41,7 +41,12 @@ class JobInfo:
 class PushScheduler:
     """定时任务调度器。推送时间以 user_push_configs 表中启用配置的 push_times 为准。"""
 
-    def __init__(self, push_service, default_push_times: Optional[List[str]] = None):
+    def __init__(
+        self,
+        push_service,
+        default_push_times: Optional[List[str]] = None,
+        enable_weekend_push: bool = False,
+    ):
         """
         初始化调度器
 
@@ -52,8 +57,12 @@ class PushScheduler:
         self.push_service = push_service
         self.fallback_push_times = default_push_times or []
         self.scheduler = BackgroundScheduler(timezone='Asia/Shanghai')
+        self.enable_weekend_push = bool(enable_weekend_push)
         self._is_running = False
-        logger.info("PushScheduler 初始化完成，推送时间以 user_push_configs 表为准")
+        logger.info(
+            "PushScheduler 初始化完成，推送时间以 user_push_configs 表为准，周末推送=%s",
+            self.enable_weekend_push,
+        )
 
     def _get_push_times_from_config(self) -> List[str]:
         """从 user_push_configs 表读取所有需要调度的推送时间点（去重）。"""
@@ -146,9 +155,10 @@ class PushScheduler:
             return
         
         try:
-            # 创建Cron触发器 (仅在周一至周五指定时间执行)
+            # 创建Cron触发器（默认仅工作日；可通过开关启用周末）
+            day_of_week = '*' if self.enable_weekend_push else 'mon-fri'
             trigger = CronTrigger(
-                day_of_week='mon-fri',
+                day_of_week=day_of_week,
                 hour=hour,
                 minute=minute,
                 timezone='Asia/Shanghai'

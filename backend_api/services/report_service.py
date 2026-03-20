@@ -594,6 +594,15 @@ class ReportService:
                 # 最小单位为“万”，即便小于 1 万也显示为 0.xx 万
                 return f"{(num / 10000):.2f}万"
 
+            def format_two_decimals(v: Any) -> Any:
+                """涨跌幅、量比等：保留两位小数；空值保持空。"""
+                if v is None or v == "":
+                    return ""
+                try:
+                    return f"{float(v):.2f}"
+                except (ValueError, TypeError):
+                    return str(v)
+
             rows = []
             for item in data:
                 rows.append({
@@ -606,9 +615,9 @@ class ReportService:
                     "MAVOL5(手)": format_volume_hand(item.get("mavol5")),
                     "MAVOL10(手)": format_volume_hand(item.get("mavol10")),
                     "MAVOL20(手)": format_volume_hand(item.get("mavol20")),
-                    "量比(5)": item.get("ratio_5"),
-                    "量比(20)": item.get("ratio_20"),
-                    "涨跌幅(%)": item.get("change_percent"),
+                    "量比(5)": format_two_decimals(item.get("ratio_5")),
+                    "量比(20)": format_two_decimals(item.get("ratio_20")),
+                    "涨跌幅(%)": format_two_decimals(item.get("change_percent")),
                     "收盘价": item.get("close"),
                     "换手率(%)": item.get("turnover_rate"),
                 })
@@ -628,15 +637,45 @@ class ReportService:
             if rows_hk:
                 pd.DataFrame(rows_hk).to_excel(writer, sheet_name="港股放量榜", index=False)
 
-        # 对量比(20)>2.5 的行做颜色加深（整行填充）
+        # 量比(20) > 2.5 时，仅「量比(20)」列单元格使用红色字体（不整行着色、不设底色）
         try:
             from openpyxl import load_workbook
             from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
 
             wb = load_workbook(filepath)
 
-            # 视觉优化：仅字体加深，不再整行填充底色
-            deep_font = Font(color="FF8B0000", bold=True)
+            def apply_volume_aberration_column_widths(ws):
+                """按表头名加宽常用列，便于阅读（股票名称、日期、成交量、成交额、MAVOL 等）。"""
+                if ws.max_row < 1:
+                    return
+                title_to_col = {}
+                for cell in ws[1]:
+                    if cell.value is not None:
+                        title_to_col[str(cell.value).strip()] = cell.column
+                # 单位：Excel 列宽约等于字符数；中文列略加宽
+                desired = {
+                    "股票名称": 20,
+                    "日期": 13,
+                    "当日成交量(手)": 22,
+                    "成交额(元)": 18,
+                    "MAVOL5(手)": 16,
+                    "MAVOL10(手)": 16,
+                    "MAVOL20(手)": 16,
+                    "涨跌幅(%)": 14,
+                    "量比(5)": 12,
+                    "量比(20)": 12,
+                }
+                for title, width in desired.items():
+                    col_idx = title_to_col.get(title)
+                    if col_idx:
+                        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+            for _sn in ("A股放量榜", "港股放量榜"):
+                if _sn in wb.sheetnames:
+                    apply_volume_aberration_column_widths(wb[_sn])
+
+            ratio_highlight_font = Font(color="FFFF0000")  # 标准红字
 
             def apply_sheet_style(sheet_name: str, rows_data: List[Dict[str, Any]]):
                 if sheet_name not in wb.sheetnames or not rows_data:
@@ -662,9 +701,8 @@ class ReportService:
                         continue
                     if ratio_f > 2.5:
                         row_idx = 2 + idx  # 数据从第2行开始
-                        for col_idx in range(1, ws.max_column + 1):
-                            c = ws.cell(row=row_idx, column=col_idx)
-                            c.font = deep_font
+                        c = ws.cell(row=row_idx, column=ratio_col)
+                        c.font = ratio_highlight_font
 
             apply_sheet_style("A股放量榜", rows_cn)
             apply_sheet_style("港股放量榜", rows_hk)
@@ -877,7 +915,7 @@ class ReportService:
                 "信号强度": f"{sig * 100:.1f}%",
                 "买点类型": buy_type,
                 "当前价格": f"{current_price:.2f}" if current_price is not None else "",
-                "Δ (20日位移)": f"{delta:.4f}" if delta is not None else "",
+                "Δ (20日位移)": f"{delta:.2f}" if delta is not None else "",
                 "F (下跌天)": falling_days if falling_days is not None else "",
                 "Z (上涨天)": rising_days if rising_days is not None else "",
                 "d (20日均价)": f"{d:.2f}" if d is not None else "",
@@ -896,6 +934,43 @@ class ReportService:
             df["股票代码"] = df["股票代码"].astype(str)
         # GMS 推送报告改为 Excel 格式
         df.to_excel(filepath, index=False, sheet_name="GMS策略信号列表")
+        # 设置 GMS 报告列宽，提升可读性
+        try:
+            from openpyxl import load_workbook
+            from openpyxl.utils import get_column_letter
+
+            wb = load_workbook(filepath)
+            ws = wb["GMS策略信号列表"] if "GMS策略信号列表" in wb.sheetnames else wb[wb.sheetnames[0]]
+            title_to_col = {}
+            for cell in ws[1]:
+                if cell.value is not None:
+                    title_to_col[str(cell.value).strip()] = cell.column
+
+            desired = {
+                "股票代码": 12,
+                "股票名称": 18,
+                "信号强度": 12,
+                "买点类型": 10,
+                "当前价格": 12,
+                "Δ (20日位移)": 14,
+                "F (下跌天)": 10,
+                "Z (上涨天)": 10,
+                "d (20日均价)": 12,
+                "Δ/d (位移/均价)": 14,
+                "Δ/d₂₀": 12,
+                "Δ/d₁": 12,
+                "F/Z": 10,
+                "当前涨跌幅": 12,
+                "得分明细": 90,
+            }
+            for title, width in desired.items():
+                col_idx = title_to_col.get(title)
+                if col_idx:
+                    ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+            wb.save(filepath)
+        except Exception as e:
+            logger.warning("GMS 报告 Excel 列宽样式应用失败: %s", e)
         file_size = os.path.getsize(filepath)
         logger.info("生成 GMS 自选股报告成功: %s, 选股数: %s", filepath, len(rows))
         return ReportResult(

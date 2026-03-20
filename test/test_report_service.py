@@ -414,11 +414,17 @@ def test_volume_aberration_report_with_data(report_service, test_user):
         # 校验行记录不再显示“手”字
         volume_col = header.index("当日成交量(手)") + 1
         assert "手" not in str(ws.cell(row=2, column=volume_col).value)
-        # 数据行从第2行开始；ratio_20 > 2.5 应触发深色字体
-        cell = ws.cell(row=2, column=1)  # A2
-        assert cell.font.bold is True
+        # 涨跌幅、量比保留两位小数
+        ch_col = header.index("涨跌幅(%)") + 1
+        r5_col = header.index("量比(5)") + 1
+        assert ws.cell(row=2, column=ch_col).value == "2.50"
+        assert ws.cell(row=2, column=r5_col).value == "1.25"
+        # 数据行从第2行开始；ratio_20 > 2.5 时仅「量比(20)」列为红色字体
+        ratio_col = header.index("量比(20)") + 1
+        assert ws.cell(row=2, column=ratio_col).value == "3.00"
+        cell = ws.cell(row=2, column=ratio_col)
         assert cell.font.color is not None
-        assert cell.font.color.rgb in ("FF8B0000", "FF 8B0000".replace(" ", ""))
+        assert str(cell.font.color.rgb).upper() == "FFFF0000"
         os.remove(result.file_path)
 
 

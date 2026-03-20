@@ -657,7 +657,7 @@ class PushService:
         通过邮件发送报告；发送后写入邮件发送日志。
         """
         subject = (
-            f"GMS自选股选股结果 - {report_info.report_date}"
+            f"自选股GSM策略指标信号列表 - {report_info.report_date}"
             if report_info.report_type == "gms_daily"
             else f"成交量异动榜 - {report_info.report_date}"
             if report_info.report_type == "volume_aberration"
@@ -751,7 +751,7 @@ class PushService:
             str: 格式化后的消息文本
         """
         if report_info.report_type == "gms_daily":
-            report_type_name = "GMS自选股选股结果"
+            report_type_name = "自选股GSM策略指标信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
         elif report_info.report_type == "summary":
@@ -789,7 +789,7 @@ class PushService:
             str: HTML格式的邮件正文
         """
         if report_info.report_type == "gms_daily":
-            report_type_name = "GMS自选股选股结果"
+            report_type_name = "自选股GSM策略指标信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
         elif report_info.report_type == "summary":

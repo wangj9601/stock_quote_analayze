@@ -62,7 +62,7 @@ flowchart TB
 - 新增 `_generate_gms_report_for_user(self, user_id: int) -> ReportResult`：
   - 调用现有 `get_user_watchlist(user_id)` 得到该用户自选股列表（stock_code, stock_name, market）。
   - 若自选股为空，返回 `success=True, has_data=False`，与现有「无自选股」逻辑一致。
-  - 使用 `GMSFrontendInterface(self.db, config).get_selection_results(date=None, stock_pool=watchlist_codes, market="all")` 获取该用户自选股范围内的 GMS 选股结果（date 由接口内部取最新可用日）。
+  - 使用 `GMSFrontendInterface(self.db, config).get_selection_results(date=None, stock_pool=watchlist_codes, market="all")` 获取该用户自选股范围内的 自选股GSM策略指标信号列表（date 由接口内部取最新可用日）。
   - 将结果写入 CSV（代码、名称、日期、总分、蓄势/平衡/动量分、买点类型、等级、关键指标等），文件路径建议：`gms_{user_id}_{date}.csv`，避免多用户并发覆盖。
   - 返回 `ReportResult`，`report_info.report_type='gms_daily'`。
 - 名称列：若 GMS 结果中无 name，用 watchlist 或 StockBasicInfo/StockBasicInfoHK 补全，与 [stock_screening_routes.py](backend_api/stock/stock_screening_routes.py) 中 GMS 接口补全方式一致。
@@ -117,7 +117,7 @@ flowchart TB
 ### 3.6 邮件主题与正文（GMS）
 
 - 在 [backend_api/services/push_service.py](backend_api/services/push_service.py) 中，当 `report_info.report_type == 'gms_daily'` 时：
-  - 邮件主题使用：`GMS自选股选股结果 - {report_info.report_date}`（或类似表述）。
+  - 邮件主题使用：`结果 - {report_info.report_date}`（或类似表述）。
   - `_format_email_content` 中为该类型定制 HTML 正文（标题与简要说明，注明详见附件 CSV）。
 
 ## 四、管理端前端
@@ -127,9 +127,9 @@ flowchart TB
 - **路由与菜单**：在 [admin/src/router/index.ts](admin/src/router/index.ts) 中新增路由（如 `path: 'push-config'`）；在 [admin/src/views/AdminLayout.vue](admin/src/views/AdminLayout.vue) 的 `menuItems` 中增加一项，如「邮件推送配置」，指向该路由。
 - **页面功能**：
   - 列表：调用 `GET /api/admin/push/configs`（现有接口），展示用户列表及推送配置（用户名、邮箱、启用状态、渠道、推送时间、报告类型等）；可带分页。
-  - 编辑：每行或每用户提供「编辑」入口，打开对话框/抽屉，表单字段包括：启用推送、渠道（多选：微信/邮件）、推送时间（多选或输入）、报告类型（下拉：汇总报告 / 详细报告 / **GMS自选股选股**）。
+  - 编辑：每行或每用户提供「编辑」入口，打开对话框/抽屉，表单字段包括：启用推送、渠道（多选：微信/邮件）、推送时间（多选或输入）、报告类型（下拉：汇总报告 / 详细报告 / ****）。
   - 提交：调用 `PUT /api/admin/push/configs/{user_id}`，成功后刷新列表。
-- **报告类型选项**：前端下拉选项增加 `gms_daily`，展示名称为「GMS自选股选股」或「GMS 均值引力策略（自选股）」。
+- **报告类型选项**：前端下拉选项增加 `gms_daily`，展示名称为「」或「GMS 均值引力策略（自选股）」。
 
 ### 4.2 发送邮箱参数配置界面
 

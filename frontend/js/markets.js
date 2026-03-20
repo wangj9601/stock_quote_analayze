@@ -521,7 +521,9 @@ const MarketsPage = {
         if (!tbody) return;
         const fmtNum = (v) => (v != null && v !== '' && !Number.isNaN(Number(v))) ? Number(v) : null;
         const fmtStr = (v) => v != null ? String(v) : '--';
-        const fmtRatio = (v) => (v != null && v !== '') ? Number(v).toFixed(4) : '--';
+        // 量比(5)、量比(20)：保留两位小数
+        const fmtRatio = (v) => (v != null && v !== '') ? Number(v).toFixed(2) : '--';
+        // 涨跌幅：保留两位小数（带 +/- 与 %）
         const fmtPct = (v) => {
             const n = fmtNum(v);
             return n != null ? (n >= 0 ? '+' + n.toFixed(2) : n.toFixed(2)) + '%' : '--';
@@ -604,6 +606,7 @@ const MarketsPage = {
         }
         const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量', '成交额', 'MAVOL5', 'MAVOL10', 'MAVOL20', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
         const toStr = (v) => (v != null && v !== '') ? String(v) : '';
+        const fmt2 = (v) => (v != null && v !== '' && !Number.isNaN(Number(v))) ? Number(v).toFixed(2) : '';
         const escapeCsv = (s) => {
             const t = String(s);
             if (/[",\n\r]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
@@ -621,9 +624,9 @@ const MarketsPage = {
                 row.mavol5 != null ? (row.mavol5 / 10000).toFixed(2) : '',
                 row.mavol10 != null ? (row.mavol10 / 10000).toFixed(2) : '',
                 row.mavol20 != null ? (row.mavol20 / 10000).toFixed(2) : '',
-                row.ratio_5 != null ? row.ratio_5 : '',
-                row.ratio_20 != null ? row.ratio_20 : '',
-                row.change_percent != null ? row.change_percent : '',
+                fmt2(row.ratio_5),
+                fmt2(row.ratio_20),
+                fmt2(row.change_percent),
                 row.close != null ? row.close : '',
                 row.turnover_rate != null ? row.turnover_rate : ''
             ];
@@ -657,6 +660,7 @@ const MarketsPage = {
         const headers = ['排名', '股票代码', '股票名称', '日期', '当日成交量', '成交额', 'MAVOL5', 'MAVOL10', 'MAVOL20', '量比(5)', '量比(20)', '涨跌幅(%)', '收盘价', '换手率(%)'];
         const aoa = [headers];
         const toStr = (v) => (v != null && v !== '') ? String(v) : '';
+        const fmt2 = (v) => (v != null && v !== '' && !Number.isNaN(Number(v))) ? Number(v).toFixed(2) : '';
         rows.forEach(row => {
             aoa.push([
                 row.rank != null ? row.rank : '',
@@ -668,9 +672,9 @@ const MarketsPage = {
                 row.mavol5 != null ? (row.mavol5 / 10000).toFixed(2) : '',
                 row.mavol10 != null ? (row.mavol10 / 10000).toFixed(2) : '',
                 row.mavol20 != null ? (row.mavol20 / 10000).toFixed(2) : '',
-                row.ratio_5 != null ? row.ratio_5 : '',
-                row.ratio_20 != null ? row.ratio_20 : '',
-                row.change_percent != null ? row.change_percent : '',
+                fmt2(row.ratio_5),
+                fmt2(row.ratio_20),
+                fmt2(row.change_percent),
                 row.close != null ? row.close : '',
                 row.turnover_rate != null ? row.turnover_rate : ''
             ]);

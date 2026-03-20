@@ -37,6 +37,14 @@ from backend_core.wechat.wechat_service import WeChatService
 from backend_core.database.db import SessionLocal
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    """解析环境变量布尔值。"""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
 def _get_smtp_config(db):
     """从数据库或环境变量获取发件配置（与 push_routes 逻辑一致）"""
     try:
@@ -176,7 +184,14 @@ def main():
         
         # 创建调度器（default_push_times 会在 start() 时自动添加）
         logger.info("正在创建调度器...")
-        scheduler = PushScheduler(push_service=push_service, default_push_times=push_times)
+        # 周末推送开关（默认关闭）：ENABLE_WEEKEND_PUSH=true 可启用周六/周日推送
+        enable_weekend_push = _env_bool("ENABLE_WEEKEND_PUSH", False)
+        logger.info("周末推送开关 ENABLE_WEEKEND_PUSH=%s", enable_weekend_push)
+        scheduler = PushScheduler(
+            push_service=push_service,
+            default_push_times=push_times,
+            enable_weekend_push=enable_weekend_push,
+        )
         
         # 注册信号处理器
         signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, scheduler, args.pid_file))
