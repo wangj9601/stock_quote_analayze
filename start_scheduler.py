@@ -45,6 +45,18 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return str(raw).strip().lower() in ("1", "true", "yes", "y", "on")
 
 
+def _env_int(name: str, default: int) -> int:
+    """解析环境变量整数值，非法值时回退默认值。"""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        val = int(str(raw).strip())
+        return val if val > 0 else default
+    except Exception:
+        return default
+
+
 def _get_smtp_config(db):
     """从数据库或环境变量获取发件配置（与 push_routes 逻辑一致）"""
     try:
@@ -187,10 +199,16 @@ def main():
         # 周末推送开关（默认关闭）：ENABLE_WEEKEND_PUSH=true 可启用周六/周日推送
         enable_weekend_push = _env_bool("ENABLE_WEEKEND_PUSH", False)
         logger.info("周末推送开关 ENABLE_WEEKEND_PUSH=%s", enable_weekend_push)
+        refresh_interval_minutes = _env_int("PUSH_CONFIG_REFRESH_INTERVAL_MINUTES", 5)
+        logger.info(
+            "推送配置刷新间隔 PUSH_CONFIG_REFRESH_INTERVAL_MINUTES=%s 分钟",
+            refresh_interval_minutes,
+        )
         scheduler = PushScheduler(
             push_service=push_service,
             default_push_times=push_times,
             enable_weekend_push=enable_weekend_push,
+            refresh_interval_minutes=refresh_interval_minutes,
         )
         
         # 注册信号处理器

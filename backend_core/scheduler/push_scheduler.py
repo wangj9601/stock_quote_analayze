@@ -5,6 +5,7 @@
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -46,6 +47,7 @@ class PushScheduler:
         push_service,
         default_push_times: Optional[List[str]] = None,
         enable_weekend_push: bool = False,
+        refresh_interval_minutes: int = 5,
     ):
         """
         初始化调度器
@@ -58,10 +60,13 @@ class PushScheduler:
         self.fallback_push_times = default_push_times or []
         self.scheduler = BackgroundScheduler(timezone='Asia/Shanghai')
         self.enable_weekend_push = bool(enable_weekend_push)
+        self.refresh_interval_minutes = max(1, int(refresh_interval_minutes or 5))
         self._is_running = False
+        self._refresh_job_id = "refresh_push_times_job"
         logger.info(
-            "PushScheduler 初始化完成，推送时间以 user_push_configs 表为准，周末推送=%s",
+            "PushScheduler 初始化完成，推送时间以 user_push_configs 表为准，周末推送=%s，刷新间隔=%s分钟",
             self.enable_weekend_push,
+            self.refresh_interval_minutes,
         )
 
     def _get_push_times_from_config(self) -> List[str]:
@@ -87,16 +92,20 @@ class PushScheduler:
             self._is_running = True
             logger.info("调度器已启动")
 
-            push_times = self._get_push_times_from_config()
-            if not push_times:
-                logger.warning("user_push_configs 中暂无推送时间配置，未添加任何定时任务")
-            else:
-                for push_time in push_times:
-                    try:
-                        self.add_push_job(push_time)
-                        logger.info(f"已添加推送任务（来自表配置）: {push_time}")
-                    except Exception as e:
-                        logger.error(f"添加推送任务失败 ({push_time}): {str(e)}")
+            # 启动时先全量同步一次任务
+            self._refresh_push_jobs_from_config()
+            # 每5分钟自动刷新一次推送时间配置，无需重启调度器
+            self.scheduler.add_job(
+                func=self._refresh_push_jobs_from_config,
+                trigger=IntervalTrigger(minutes=self.refresh_interval_minutes, timezone='Asia/Shanghai'),
+                id=self._refresh_job_id,
+                name="刷新推送时间配置任务",
+                replace_existing=True
+            )
+            logger.info(
+                "已启用推送任务自动刷新：每%s分钟同步一次 user_push_configs",
+                self.refresh_interval_minutes,
+            )
 
             logger.info(f"调度器启动完成，已调度 {len(self.get_scheduled_jobs())} 个任务")
             
@@ -104,6 +113,38 @@ class PushScheduler:
             logger.error(f"启动调度器失败: {str(e)}", exc_info=True)
             self._is_running = False
             raise
+
+    def _refresh_push_jobs_from_config(self):
+        """
+        从 user_push_configs 同步推送任务：
+        - 配置新增的时间点：自动添加任务
+        - 配置删除/禁用的时间点：自动移除任务
+        """
+        desired_times = set(self._get_push_times_from_config() or [])
+        existing_times = set()
+        for job in self.scheduler.get_jobs():
+            if job.id.startswith("push_job_"):
+                t = job.id.replace("push_job_", "")
+                if len(t) == 4:
+                    existing_times.add(f"{t[:2]}:{t[2:]}")
+
+        # 先删后加，确保与配置保持一致
+        to_remove = sorted(existing_times - desired_times)
+        to_add = sorted(desired_times - existing_times)
+
+        for push_time in to_remove:
+            try:
+                self.remove_push_job(push_time)
+                logger.info("自动刷新：移除推送任务 %s", push_time)
+            except Exception as e:
+                logger.warning("自动刷新：移除任务失败 %s: %s", push_time, e)
+
+        for push_time in to_add:
+            try:
+                self.add_push_job(push_time)
+                logger.info("自动刷新：添加推送任务 %s", push_time)
+            except Exception as e:
+                logger.warning("自动刷新：添加任务失败 %s: %s", push_time, e)
     
     def stop(self):
         """
