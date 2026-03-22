@@ -616,7 +616,8 @@ chmod +x start.sh start_backend.sh start_frontend.sh
 ### 1. 使用Gunicorn
 ```bash
 pip install gunicorn
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend_api.main:app
+# --timeout：静默超过该秒数会重启 worker；GMS 全 A 股选股可能超过数分钟，须 >= 600，并与 Nginx proxy_read_timeout、GMS_SCREENING_TIMEOUT 一致
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend_api.main:app -b 0.0.0.0:5000 --timeout 600
 ```
 
 ### 2. 使用Nginx反向代理

@@ -231,26 +231,48 @@ class GMSFrontendInterface:
         if missing:
             loader = GMSDataLoader(self.db)
             engine = GMSStrategyEngine(loader, self.config)
-            market_val = "CN" if market == "cn" else "HK" if market == "hk" else "all"
             missing_cn = [c for c, mt in missing if mt == "CN"]
             missing_hk = [c for c, mt in missing if mt == "HK"]
+            # 大批量股票池时每 100 只一批计算并打印进度，避免长时间无日志
+            batch_size = 100
+            pool_label = {"CN": "全部A股", "HK": "全部港股"}
             for codes_sub, mt in [(missing_cn, "CN"), (missing_hk, "HK")]:
                 if not codes_sub:
                     continue
-                try:
-                    sub = engine.screen(
-                        codes=codes_sub,
-                        date=date,
-                        market=mt,
-                        config=self.config,
-                        min_score=0,
-                        max_results=self.max_results,
-                    )
-                    for r in sub:
-                        computed.append(r)
-                        _save_result_to_trace(self.db, r, date)
-                except Exception as e:
-                    logger.warning("GMS 选股计算失败 %s %s: %s", date, mt, e)
+                total_missing = len(codes_sub)
+                label = pool_label.get(mt, mt)
+                for start in range(0, total_missing, batch_size):
+                    chunk = codes_sub[start : start + batch_size]
+                    done = min(start + len(chunk), total_missing)
+                    try:
+                        sub = engine.screen(
+                            codes=chunk,
+                            date=date,
+                            market=mt,
+                            config=self.config,
+                            min_score=0,
+                            max_results=self.max_results,
+                        )
+                        for r in sub:
+                            computed.append(r)
+                            _save_result_to_trace(self.db, r, date)
+                        logger.info(
+                            "GMS 策略信号计算进度 %s(%s) %s：已完成 %d/%d 只",
+                            label,
+                            mt,
+                            date,
+                            done,
+                            total_missing,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "GMS 选股计算失败 %s %s 批次 %d-%d: %s",
+                            date,
+                            mt,
+                            start + 1,
+                            done,
+                            e,
+                        )
             if computed:
                 try:
                     self.db.commit()

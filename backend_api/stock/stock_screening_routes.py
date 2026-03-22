@@ -9,12 +9,21 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
 import asyncio
+import os
 from typing import Optional, Dict, Any
 
 # PVFRS 选股为 CPU 密集型，允许较长超时（秒）；Nginx 的 proxy_read_timeout 需 >= 此值
 PVFRS_SCREENING_TIMEOUT = 300
-# GMS 选股计算量大，单独使用更长超时，避免与 PVFRS 共用导致 307s 超时
-GMS_SCREENING_TIMEOUT = 600
+# GMS 选股计算量大（全 A 约 6000+ 只），默认 600 秒；生产若仍出现 502，多为网关超时小于此值。
+# 环境变量 GMS_SCREENING_TIMEOUT（秒）可覆盖；部署时请同步调大 Nginx location 的 proxy_read_timeout / send_timeout。
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+GMS_SCREENING_TIMEOUT = max(60, _int_env("GMS_SCREENING_TIMEOUT", 600))
 
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -32,6 +41,11 @@ from .low_nine_strategy import LowNineStrategy
 from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 
 logger = logging.getLogger(__name__)
+logger.info(
+    "选股接口超时: PVFRS_SCREENING_TIMEOUT=%ss, GMS_SCREENING_TIMEOUT=%ss（全A股请保证网关超时≥此值）",
+    PVFRS_SCREENING_TIMEOUT,
+    GMS_SCREENING_TIMEOUT,
+)
 
 router = APIRouter(prefix="/api/screening", tags=["screening"])
 
