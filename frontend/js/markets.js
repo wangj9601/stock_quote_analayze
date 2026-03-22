@@ -534,7 +534,7 @@ const MarketsPage = {
             return `<tr data-code="${code}" onclick="goToStock('${code.replace(/'/g, "\\'")}', '${(name || '').replace(/'/g, "\\'")}')" style="cursor: pointer;">
                 <td><span class="rank-number ${row.rank <= 3 ? 'rank-' + row.rank : ''}">${row.rank != null ? row.rank : '--'}</span></td>
                 <td>${code}</td>
-                <td>${name}</td>
+                <td><div class="stock-name">${name}</div></td>
                 <td>${fmtStr(row.date)}</td>
                 <td class="price-column">${row.volume != null ? this.formatVolume(row.volume) : '--'}</td>
                 <td class="price-column">${row.amount != null ? this.formatTurnover(row.amount) : '--'}</td>
@@ -1422,9 +1422,10 @@ function addToWatchlist(code, event) {
         event.stopPropagation();
     }
 
-    // 获取股票名称
-    const stockRow = event.target.closest('tr');
-    const stockName = stockRow ? stockRow.querySelector('.stock-name').textContent : code;
+    // 获取股票名称 (通过 dataset 或 class 选择器)
+    const stockName = event.target.dataset.stockName || 
+                     (event.target.closest('tr')?.querySelector('.stock-name')?.textContent) || 
+                     code;
 
     // 调用自选股管理器
     watchlistManager.toggleWatchlist(code, stockName).then(() => {
