@@ -484,6 +484,7 @@ def get_volume_aberration_list(
     order: str = Query("desc", description="排序: desc 放量榜(量比降序), asc 缩量榜(量比升序)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=500),
+    keyword: str = Query(None, description="搜索关键词（股票代码或名称）")
 ):
     """
     A股/港股每日成交量异动榜：行情表 JOIN mavol_indicators，按量比(20)排序分页。
@@ -501,6 +502,19 @@ def get_volume_aberration_list(
         result, trade_date = get_volume_aberration_data(db, market=market, date=date, order=order)
         if trade_date is None:
             return JSONResponse({"success": True, "data": [], "total": 0, "date": None, "page": page, "page_size": page_size})
+        
+        # 处理搜索关键词
+        if keyword and keyword.strip():
+            kw = keyword.strip().lower()
+            # 如果是纯数字且长度不足6位，通常可能是A股代码简写，但这里结果已经是全量，直接包含匹配即可
+            filtered = []
+            for item in result:
+                code_str = str(item.get('code', '')).lower()
+                name_str = str(item.get('name', '')).lower()
+                if kw in code_str or kw in name_str:
+                    filtered.append(item)
+            result = filtered
+
         total = len(result)
         start = (page - 1) * page_size
         page_data = result[start : start + page_size]

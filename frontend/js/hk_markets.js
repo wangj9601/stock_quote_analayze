@@ -1,25 +1,30 @@
 // 港股行情页面功能模块
 const HKMarketsPage = {
-    
+
     currentTab: 'rankings',
     currentRankingType: 'rise',
     currentPage: 1,
     pageSize: 20,
     total: 0,
+    initialized: false, // 是否已经初始化过
 
     // 全局API前缀
     API_BASE_URL: Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000',
 
     // 初始化
     async init() {
-        this.bindEvents();
+        if (!this.initialized) {
+            this.bindEvents();
+            this.startDataUpdate();
+            this.initialized = true;
+        }
+
         this.loadHKIndices(); // 加载港股指数模拟数据
         this.loadHKRankingData();
-        this.startDataUpdate();
-        
-        // 初始化自选股管理器
+
+        // 确保自选股管理器已初始化 (管理器内部已有单例保护)
         await watchlistManager.init();
-        
+
         // 确保搜索弹窗隐藏
         const searchModal = document.getElementById('searchModal');
         if (searchModal) {
@@ -75,12 +80,12 @@ const HKMarketsPage = {
     // 切换标签
     switchTab(tabId) {
         this.currentTab = tabId;
-        
+
         // 隐藏所有面板
         document.querySelectorAll('#hk-market-tab .tab-panel').forEach(panel => {
             panel.classList.remove('active');
         });
-        
+
         // 显示目标面板
         const targetPanel = document.querySelector(`#hk-market-tab .tab-panel[data-tab="${tabId}"]`);
         if (targetPanel) {
@@ -116,7 +121,7 @@ const HKMarketsPage = {
 
     // 加载标签数据
     loadTabData(tabId) {
-        switch(tabId) {
+        switch (tabId) {
             case 'rankings':
                 this.loadHKRankingData();
                 break;
@@ -137,7 +142,7 @@ const HKMarketsPage = {
         try {
             const response = await fetch(`${this.API_BASE_URL}/api/stock/hk_indices`);
             const result = await response.json();
-            
+
             if (result.success && result.data) {
                 this.updateHKIndicesDisplay(result.data);
             } else {
@@ -220,17 +225,17 @@ const HKMarketsPage = {
         const rankingType = typeMap[this.currentRankingType] || 'rise';
         this.currentPage = page;
         const pageSize = this.pageSize;
-        
+
         // 获取搜索关键词
         const searchInput = document.getElementById('hkMarketSearchInput');
         const keyword = searchInput ? searchInput.value.trim() : '';
-        
+
         try {
             let url = `${this.API_BASE_URL}/api/stock/hk_quote_board_list?ranking_type=${rankingType}&page=${page}&page_size=${pageSize}`;
             if (keyword) {
                 url += `&keyword=${encodeURIComponent(keyword)}`;
             }
-            
+
             const resp = await fetch(url);
             const result = await resp.json();
             if (result.success) {
@@ -308,7 +313,7 @@ const HKMarketsPage = {
                 </td>
             </tr>
         `).join('');
-        
+
         // 渲染完成后，更新所有自选股按钮的状态
         this.updateAllWatchlistButtons();
     },
@@ -345,7 +350,7 @@ const HKMarketsPage = {
     renderHKPagination() {
         const container = document.querySelector('#hk-market-tab .rankings-content');
         if (!container) return;
-        
+
         let pagination = document.getElementById('hkRankingsPagination');
         if (!pagination) {
             pagination = document.createElement('div');
@@ -353,24 +358,24 @@ const HKMarketsPage = {
             pagination.className = 'pagination';
             container.insertBefore(pagination, container.querySelector('table'));
         }
-        
+
         const totalPages = Math.ceil(this.total / this.pageSize);
         if (totalPages <= 1) {
             pagination.innerHTML = '';
             return;
         }
-        
+
         let html = '';
-    
+
         // 上一页
         html += `<button class="page-btn prev-btn" ${this.currentPage === 1 ? 'disabled' : ''} data-page="${this.currentPage - 1}">上一页</button>`;
-    
+
         // 首页
         if (this.currentPage > 3) {
             html += `<button class="page-btn" data-page="1">1</button>`;
             if (this.currentPage > 4) html += `<span class="page-ellipsis">...</span>`;
         }
-    
+
         // 当前页前后各2页
         let start = Math.max(1, this.currentPage - 2);
         let end = Math.min(totalPages, this.currentPage + 2);
@@ -378,16 +383,16 @@ const HKMarketsPage = {
             if (i === 1 || i === totalPages) continue;
             html += `<button class="page-btn${i === this.currentPage ? ' active' : ''}" data-page="${i}">${i}</button>`;
         }
-    
+
         // 尾页
         if (this.currentPage < totalPages - 2) {
             if (this.currentPage < totalPages - 3) html += `<span class="page-ellipsis">...</span>`;
             html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
         }
-    
+
         // 下一页
         html += `<button class="page-btn next-btn" ${this.currentPage === totalPages ? 'disabled' : ''} data-page="${this.currentPage + 1}">下一页</button>`;
-    
+
         pagination.innerHTML = html;
         pagination.querySelectorAll('.page-btn').forEach(btn => {
             btn.onclick = (e) => {
@@ -405,7 +410,7 @@ const HKMarketsPage = {
         buttons.forEach(button => {
             const stockCode = button.dataset.stockCode;
             const stockName = button.dataset.stockName;
-            
+
             if (watchlistManager.isInWatchlist(stockCode)) {
                 button.textContent = '已自选';
                 button.className = 'btn btn-sm btn-secondary';
@@ -453,9 +458,9 @@ const HKMarketsPage = {
     formatVolume(volume) {
         if (volume === null || typeof volume === 'undefined' || isNaN(volume)) return '--';
         const v = Number(volume);
-        if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿手`;
-        if (v >= 10000) return `${(v / 10000).toFixed(2)}万手`;
-        return `${v.toFixed(0)}手`;
+        if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿`;
+        if (v >= 10000) return `${(v / 10000).toFixed(2)}万`;
+        return `${v.toFixed(0)}`;
     },
 
     // 格式化成交额

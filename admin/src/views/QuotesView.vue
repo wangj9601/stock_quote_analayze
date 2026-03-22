@@ -970,9 +970,9 @@ const formatPercent = (value: any) => {
 const formatVolume = (value: any) => {
   if (value === null || value === undefined || value === '') return '-'
   const num = Number(value)
-  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿手`
-  if (num >= 10000) return `${(num / 10000).toFixed(2)}万手`
-  return `${num.toFixed(0)}手`
+  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
+  if (num >= 10000) return `${(num / 10000).toFixed(2)}万`
+  return `${num.toFixed(0)}`
 }
 
 const formatAmount = (value: any) => {
