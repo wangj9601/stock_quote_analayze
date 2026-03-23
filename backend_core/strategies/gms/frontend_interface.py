@@ -5,7 +5,7 @@ GMS 前端选股接口
 """
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime
 
 from .data_loader import GMSDataLoader
@@ -165,10 +165,16 @@ class GMSFrontendInterface:
         date: Optional[str] = None,
         stock_pool: Optional[List[str]] = None,
         market: str = "all",
-    ) -> List[dict]:
+        trace_only: bool = False,
+        return_meta: bool = False,
+    ) -> Union[List[dict], Tuple[List[dict], Dict[str, Any]]]:
         """
         获取选股结果。优先从 gms_signal_trace 表读取策略信号记录；
         若不存在或缺失，则增量重新计算，结果回填写入 gms_signal_trace 后返回。
+
+        Args:
+            trace_only: 为 True 时只读库内 trace，不对缺失股票做实时计算（用于前端先快速展示缓存）。
+            return_meta: 为 True 时返回 (列表, 统计字典)，便于接口返回 trace_complete 等字段。
         """
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
@@ -180,7 +186,13 @@ class GMSFrontendInterface:
             stock_pool = list(dict.fromkeys(stock_pool))
 
         if not stock_pool:
-            return []
+            empty_meta = {
+                "from_trace_count": 0,
+                "computed_count": 0,
+                "requested_count": 0,
+                "trace_complete": True,
+            }
+            return ([], empty_meta) if return_meta else []
 
         # 按市场过滤：只保留当前 market 下的代码
         requested: List[Tuple[str, str]] = []
@@ -194,7 +206,13 @@ class GMSFrontendInterface:
                 requested.append((code, mt))
 
         if not requested:
-            return []
+            empty_meta = {
+                "from_trace_count": 0,
+                "computed_count": 0,
+                "requested_count": 0,
+                "trace_complete": True,
+            }
+            return ([], empty_meta) if return_meta else []
 
         # 1) 先从 gms_signal_trace 读取已有记录（单次查询）
         from backend_api.models import GMSSignalTrace
@@ -228,7 +246,7 @@ class GMSFrontendInterface:
         # 2) 找出需要计算的 (code, market_type)
         missing = [(code, mt) for code, mt in uniq_requested if _key(code, mt) not in have_keys]
         computed: List[dict] = []
-        if missing:
+        if missing and not trace_only:
             loader = GMSDataLoader(self.db)
             engine = GMSStrategyEngine(loader, self.config)
             missing_cn = [c for c, mt in missing if mt == "CN"]
@@ -285,6 +303,15 @@ class GMSFrontendInterface:
             combined = [r for r in combined if (r.get("score_total") or 0) >= self.min_score]
         if self.max_results and len(combined) > self.max_results:
             combined = sorted(combined, key=lambda x: -(x.get("score_total") or 0))[: self.max_results]
+
+        meta: Dict[str, Any] = {
+            "from_trace_count": len(from_trace),
+            "computed_count": len(computed),
+            "requested_count": len(uniq_requested),
+            "trace_complete": len(missing) == 0,
+        }
+        if return_meta:
+            return combined, meta
         return combined
 
     def _get_stock_pool(self, date: str, market: str) -> List[str]:

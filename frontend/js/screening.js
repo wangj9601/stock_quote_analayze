@@ -265,6 +265,7 @@ const ScreeningPage = {
             // 获取API基础URL
             const apiBaseUrl = this.API_BASE_URL;
             let url;
+            let gmsQueryString = null;
 
             if (strategy === 'cyb-midline') {
                 url = `${apiBaseUrl}/api/screening/cyb-midline-strategy?months=4`;
@@ -343,7 +344,7 @@ const ScreeningPage = {
                 if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
                 if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
                 if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
-                url = `${apiBaseUrl}/api/screening/gms-strategy?${q.toString()}`;
+                gmsQueryString = q.toString();
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -360,56 +361,68 @@ const ScreeningPage = {
                     return fetch(url, { ...options, headers });
                 };
 
-            const response = await fetchFn(url);
-            const contentType = response.headers.get('Content-Type') || '';
             // 全 A 股 GMS 计算耗时长，生产环境若网关超时短于后端，易出现 502（Bad Gateway）
             const gateway502Msg =
                 strategy === 'gms'
                     ? '网关502/503：全A股 GMS 耗时常达数分钟。请确认 Nginx 已用 location ^~ /api/screening/gms-strategy 且 proxy_read_timeout≥600s，并已 nginx -t 与 reload；若经 Cloudflare 等 CDN，免费版约 100s 也会断连。也可改用「港股」或「自选股」。'
                     : '服务暂时不可用，请稍后重试';
-            const text = await response.text();
 
-            // 必须先按 HTTP 状态处理：502 时上游可能仍返回 application/json 错误体，
-            // 若先 JSON.parse 再判断 ok，会走到 result.detail 变成含糊的「请求失败」。
-            if (!response.ok) {
-                if (response.status === 504) {
-                    throw new Error(
-                        strategy === 'gms'
-                            ? '请求超时(504)，全A股 GMS 计算耗时较长，请稍后重试或缩小股票范围'
-                            : '请求超时(504)，选股计算耗时较长，请稍后重试'
-                    );
-                }
-                if (response.status === 502 || response.status === 503) {
-                    throw new Error(gateway502Msg);
-                }
-                let errMsg = `请求失败(${response.status})`;
-                if (contentType.includes('application/json') && text && text.trim().startsWith('{')) {
-                    try {
-                        const errBody = JSON.parse(text);
-                        errMsg = errBody.detail || errBody.message || errMsg;
-                        if (typeof errMsg !== 'string') {
-                            errMsg = JSON.stringify(errMsg);
-                        }
-                    } catch (_) {
-                        if (text.length < 200) errMsg = text;
+            const handleHttpAndParse = async (response) => {
+                const contentType = response.headers.get('Content-Type') || '';
+                const text = await response.text();
+                if (!response.ok) {
+                    if (response.status === 504) {
+                        throw new Error(
+                            strategy === 'gms'
+                                ? '请求超时(504)，全A股 GMS 计算耗时较长，请稍后重试或缩小股票范围'
+                                : '请求超时(504)，选股计算耗时较长，请稍后重试'
+                        );
                     }
-                } else if (text && text.length < 200) {
-                    errMsg = text;
+                    if (response.status === 502 || response.status === 503) {
+                        throw new Error(gateway502Msg);
+                    }
+                    let errMsg = `请求失败(${response.status})`;
+                    if (contentType.includes('application/json') && text && text.trim().startsWith('{')) {
+                        try {
+                            const errBody = JSON.parse(text);
+                            errMsg = errBody.detail || errBody.message || errMsg;
+                            if (typeof errMsg !== 'string') {
+                                errMsg = JSON.stringify(errMsg);
+                            }
+                        } catch (_) {
+                            if (text.length < 200) errMsg = text;
+                        }
+                    } else if (text && text.length < 200) {
+                        errMsg = text;
+                    }
+                    throw new Error(errMsg);
                 }
-                throw new Error(errMsg);
-            }
+                let parsed;
+                try {
+                    if (!contentType.includes('application/json') || !text || !text.trim().startsWith('{')) {
+                        throw new Error('服务器返回了非 JSON 数据，请稍后重试');
+                    }
+                    parsed = JSON.parse(text);
+                } catch (parseError) {
+                    if (parseError instanceof SyntaxError) {
+                        throw new Error('服务返回异常，请稍后重试');
+                    }
+                    throw parseError;
+                }
+                return parsed;
+            };
 
             let result;
-            try {
-                if (!contentType.includes('application/json') || !text || !text.trim().startsWith('{')) {
-                    throw new Error('服务器返回了非 JSON 数据，请稍后重试');
+            if (strategy === 'gms' && gmsQueryString != null) {
+                const traceUrl = `${apiBaseUrl}/api/screening/gms-strategy?${gmsQueryString}&trace_only=true`;
+                result = await handleHttpAndParse(await fetchFn(traceUrl));
+                const meta = result.gms_trace_meta || {};
+                if (meta.trace_complete !== true) {
+                    const fullUrl = `${apiBaseUrl}/api/screening/gms-strategy?${gmsQueryString}`;
+                    result = await handleHttpAndParse(await fetchFn(fullUrl));
                 }
-                result = JSON.parse(text);
-            } catch (parseError) {
-                if (parseError instanceof SyntaxError) {
-                    throw new Error('服务返回异常，请稍后重试');
-                }
-                throw parseError;
+            } else {
+                result = await handleHttpAndParse(await fetchFn(url));
             }
 
             if (result.success && result.data) {

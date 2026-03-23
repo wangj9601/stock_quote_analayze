@@ -341,6 +341,70 @@ def _cron(k: str, default: str) -> str:
 def _cron_int(k: str, default: int):
     return _env_int(k, default)
 
+
+def _env_bool(k: str, default: bool = True) -> bool:
+    v = (os.getenv(k) or "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "yes", "y", "on")
+
+
+def _register_gms_signal_precompute_jobs():
+    """定时将 GMS 信号写入 gms_signal_trace（全 A、全港股、自定义池、全量自关注并集），供选股页优先读库。"""
+    if not _env_bool("ENABLE_GMS_PRECOMPUTE", True):
+        logging.info("GMS 信号预计算已禁用（ENABLE_GMS_PRECOMPUTE=false）")
+        return
+    try:
+        from backend_core.strategies.gms.scheduled_precompute import (
+            scheduled_gms_signals_cn,
+            scheduled_gms_signals_hk,
+            scheduled_gms_signals_custom,
+            scheduled_gms_signals_watchlist,
+        )
+    except Exception as e:
+        logging.error("导入 GMS 预计算任务失败，跳过注册: %s", e)
+        return
+
+    scheduler.add_job(
+        scheduled_gms_signals_cn,
+        "cron",
+        day_of_week=_cron("SCHED_GMS_SIGNALS_CN_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_GMS_SIGNALS_CN_HOUR", 18),
+        minute=_cron_int("SCHED_GMS_SIGNALS_CN_MINUTE", 20),
+        id="gms_signals_cn",
+    )
+    scheduler.add_job(
+        scheduled_gms_signals_hk,
+        "cron",
+        day_of_week=_cron("SCHED_GMS_SIGNALS_HK_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_GMS_SIGNALS_HK_HOUR", 18),
+        minute=_cron_int("SCHED_GMS_SIGNALS_HK_MINUTE", 50),
+        id="gms_signals_hk",
+    )
+    scheduler.add_job(
+        scheduled_gms_signals_custom,
+        "cron",
+        day_of_week=_cron("SCHED_GMS_SIGNALS_CUSTOM_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_GMS_SIGNALS_CUSTOM_HOUR", 19),
+        minute=_cron_int("SCHED_GMS_SIGNALS_CUSTOM_MINUTE", 10),
+        id="gms_signals_custom",
+    )
+    scheduler.add_job(
+        scheduled_gms_signals_watchlist,
+        "cron",
+        day_of_week=_cron("SCHED_GMS_SIGNALS_WATCHLIST_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_GMS_SIGNALS_WATCHLIST_HOUR", 19),
+        minute=_cron_int("SCHED_GMS_SIGNALS_WATCHLIST_MINUTE", 25),
+        id="gms_signals_watchlist",
+    )
+    logging.info(
+        "已注册 GMS 信号预计算任务（ENABLE_GMS_PRECOMPUTE=true）：A股/港股/自定义池/自关注并集，"
+        "自定义代码见 .env GMS_CUSTOM_STOCK_CODES"
+    )
+
+
+_register_gms_signal_precompute_jobs()
+
 scheduler.add_job(collect_akshare_realtime, 'cron',
     day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),
     hour=_cron('SCHED_AKSHARE_REALTIME_HOUR', '15'),

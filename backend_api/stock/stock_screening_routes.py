@@ -930,6 +930,10 @@ async def get_gms_strategy(
     weight_mom_deviation: Optional[float] = Query(None, description="动量溢出态 推力支撑 d₂₀-d 权重"),
     weight_mom_volume: Optional[float] = Query(None, description="动量溢出态 攻击强度 m₂₀/m 权重"),
     code: Optional[str] = Query(None, description="单个股票代码（如果提供，则忽略 scope）"),
+    trace_only: bool = Query(
+        False,
+        description="为 true 时仅从 gms_signal_trace 读缓存，不触发缺失股票的实时计算（前端可先快显再二次请求全量）",
+    ),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
@@ -1076,18 +1080,34 @@ async def get_gms_strategy(
         max_results = limit or 10000
 
         # 在 executor 内使用独立 Session，避免请求的 db 跨线程或已关闭导致 "identity map is no longer valid"
-        def _run_gms(_target_date: str, _config: dict, _min_score: float, _max_results: int):
+        def _run_gms(
+            _target_date: str,
+            _config: dict,
+            _min_score: float,
+            _max_results: int,
+            _trace_only: bool,
+        ):
             session = SessionLocal()
             try:
                 gms_if = GMSFrontendInterface(session, _config)
                 gms_if.set_selection_config(min_score=_min_score, max_results=_max_results)
-                return gms_if.get_selection_results(_target_date, stock_pool, market)
+                return gms_if.get_selection_results(
+                    _target_date,
+                    stock_pool,
+                    market,
+                    trace_only=_trace_only,
+                    return_meta=True,
+                )
             finally:
                 session.close()
 
         loop = asyncio.get_event_loop()
-        selection_results = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _run_gms(target_date, config, min_score, max_results)),
+        gms_meta: dict = {}
+        selection_results, gms_meta = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: _run_gms(target_date, config, min_score, max_results, trace_only),
+            ),
             timeout=GMS_SCREENING_TIMEOUT,
         )
 
@@ -1103,8 +1123,13 @@ async def get_gms_strategy(
                     fallback_date_str = str(fallback_date).strip()[:10]
                     if fallback_date_str != target_date:
                         logger.info(f"GMS 所选日期 {target_date} 无数据，回退到指标表最新日期 {fallback_date_str}")
-                        selection_results = await asyncio.wait_for(
-                            loop.run_in_executor(None, lambda: _run_gms(fallback_date_str, config, min_score, max_results)),
+                        selection_results, gms_meta = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                lambda: _run_gms(
+                                    fallback_date_str, config, min_score, max_results, trace_only
+                                ),
+                            ),
                             timeout=GMS_SCREENING_TIMEOUT,
                         )
                         target_date = fallback_date_str
@@ -1115,9 +1140,14 @@ async def get_gms_strategy(
         if not selection_results:
             msg = f"所选日期 {target_date} 暂无指标数据" if user_specified_date else ""
             return JSONResponse({
-                "success": True, "data": [], "total": 0,
-                "search_date": target_date, "strategy_name": "GMS均值引力动量策略",
+                "success": True,
+                "data": [],
+                "total": 0,
+                "search_date": target_date,
+                "strategy_name": "GMS均值引力动量策略",
                 "message": msg,
+                "gms_trace_meta": gms_meta,
+                "trace_only": trace_only,
             })
 
         from backend_api.models import StockBasicInfo, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK
@@ -1303,6 +1333,8 @@ async def get_gms_strategy(
             "search_date": target_date,
             "strategy_name": "GMS均值引力动量策略",
             "parameters": {"limit": limit or "无限制", "min_score": min_score, "scope": scope, "stock_pool_size": stock_pool_size},
+            "gms_trace_meta": gms_meta,
+            "trace_only": trace_only,
         }
         if fallback_used and user_specified_date:
             resp["message"] = f"所选日期无指标数据，已使用最新可用日期 {target_date}"

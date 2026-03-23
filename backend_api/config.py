@@ -3,6 +3,7 @@ backend_api 配置文件，参数均从项目根目录 .env 读取。
 """
 
 import os
+import re
 from pathlib import Path
 
 try:
@@ -34,16 +35,35 @@ def _env_bool(key: str, default: bool = False) -> bool:
     return v in ("true", "1", "yes")
 
 
+def _sanitize_database_url(url: str, default_port: str = "5432") -> str:
+    """
+    修复常见错误：端口留空导致 SQLAlchemy 报 ValueError: invalid literal for int() with base 10: ''
+    例如 postgresql://user:pw@localhost:/dbname 或 DB_PORT= 拼接结果。
+    """
+    if not url:
+        return url
+    # @host:/path -> @host:5432/path（仅当 host 与 / 之间无端口数字时）
+
+    def _repl(m):
+        return f"{m.group(1)}:{default_port}/{m.group(2)}"
+
+    fixed = re.sub(r"(@[^/@]+):/([^/])", _repl, url, count=1)
+    return fixed
+
+
 # 数据库配置（与 backend_core/database/db.py 共用 DB_* 或 DATABASE_URL）
 _db_url = _env("DATABASE_URL")
 if not _db_url:
+    _db_port = _env("DB_PORT") or "5432"
     _db_url = "postgresql+psycopg2://{user}:{pw}@{host}:{port}/{name}".format(
         user=_env("DB_USER"),
         pw=_env("DB_PASSWORD"),
         host=_env("DB_HOST"),
-        port=_env("DB_PORT"),
+        port=_db_port,
         name=_env("DB_NAME"),
     )
+else:
+    _db_url = _sanitize_database_url(_db_url, default_port=_env("DB_PORT") or "5432")
 DATABASE_CONFIG = {
     "url": _db_url,
     "pool_size": _env_int("DB_POOL_SIZE", 5),
