@@ -122,6 +122,10 @@ class GMSDataLoader:
 
         except Exception as e:
             logger.error(f"GMS 加载指标失败: {e}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise
 
     def load_indicators_multi_day(
@@ -230,4 +234,8 @@ class GMSDataLoader:
 
         except Exception as e:
             logger.error(f"GMS 多日加载指标失败: {e}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             raise

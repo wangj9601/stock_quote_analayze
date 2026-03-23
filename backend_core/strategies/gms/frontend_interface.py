@@ -291,6 +291,11 @@ class GMSFrontendInterface:
                             done,
                             e,
                         )
+                        # 发生 DB 异常后当前事务会进入 failed 状态，需回滚后再继续后续批次
+                        try:
+                            self.db.rollback()
+                        except Exception:
+                            pass
             if computed:
                 try:
                     self.db.commit()
