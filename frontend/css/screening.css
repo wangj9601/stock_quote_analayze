@@ -815,3 +815,26 @@
     color: #2e7d32;
     font-weight: 500;
 }
+
+/* GMS 信号列表列较多：启用横向滚动，避免操作列被压缩导致“得分明细”不可见 */
+#resultsContainer-gms .results-table {
+    min-width: 1720px;
+}
+
+/* 固定操作列可读宽度，防止链接/按钮逐字换行 */
+#resultsContainer-gms .results-table th:last-child,
+#resultsContainer-gms .results-table td:last-child {
+    min-width: 170px;
+    white-space: nowrap;
+}
+
+#resultsContainer-gms .action-links {
+    gap: 10px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+#resultsContainer-gms .action-link,
+#resultsContainer-gms .gms-score-detail-toggle {
+    white-space: nowrap;
+}

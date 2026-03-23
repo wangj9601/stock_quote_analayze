@@ -489,6 +489,31 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                             self.logger.debug(f"{func.__name__} 耗时: {time.time() - item_start:.2f}s")
                         except Exception as e:
                             self.logger.warning(f"{func.__name__} 失败: {e}")
+                    # MAVOL 完成后打印当日 mavol20>0 记录数，便于与异动榜口径对账
+                    try:
+                        mavol_total = session.execute(text("""
+                            SELECT COUNT(1)
+                            FROM mavol_indicators
+                            WHERE market_type = 'HK' AND date = :target_date
+                        """), {"target_date": target_date}).scalar()
+                        mavol20_gt0 = session.execute(text("""
+                            SELECT COUNT(1)
+                            FROM mavol_indicators
+                            WHERE market_type = 'HK' AND date = :target_date
+                              AND mavol20 IS NOT NULL AND mavol20 > 0
+                        """), {"target_date": target_date}).scalar()
+                        mavol20_null = session.execute(text("""
+                            SELECT COUNT(1)
+                            FROM mavol_indicators
+                            WHERE market_type = 'HK' AND date = :target_date
+                              AND mavol20 IS NULL
+                        """), {"target_date": target_date}).scalar()
+                        self.logger.info(
+                            f"港股MAVOL统计 目标日期={target_date} "
+                            f"总记录={mavol_total or 0}, mavol20>0={mavol20_gt0 or 0}, mavol20为空={mavol20_null or 0}"
+                        )
+                    except Exception as count_e:
+                        self.logger.warning(f"港股MAVOL统计打印失败: {count_e}")
                     self.logger.info(f"指标计算总耗时: {time.time() - indicators_start:.2f}s")
 
             # 操作日志记录

@@ -6,6 +6,7 @@
 from typing import List, Optional, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from dataclasses import dataclass
 import logging
 
@@ -277,6 +278,15 @@ class ConfigService:
             config = self.get_config_by_id(config_id)
             if not config:
                 return None
+            target_report_type = config_update.report_type if config_update.report_type is not None else config.report_type
+            # 防止同一用户出现重复 report_type 配置
+            conflict = self.db.query(UserPushConfig).filter(
+                UserPushConfig.user_id == config.user_id,
+                UserPushConfig.report_type == target_report_type,
+                UserPushConfig.id != config.id,
+            ).first()
+            if conflict:
+                raise ValueError(f"该用户已存在 report_type={target_report_type} 的推送配置")
             if config_update.enabled is not None:
                 config.enabled = config_update.enabled
             if config_update.channels is not None:
@@ -292,6 +302,8 @@ class ConfigService:
             self.db.refresh(config)
             logger.info(f"更新推送配置成功: config_id={config_id}")
             return config
+        except ValueError:
+            raise
         except Exception as e:
             self.db.rollback()
             logger.error(f"更新推送配置失败: config_id={config_id}, error={str(e)}", exc_info=True)
@@ -307,11 +319,28 @@ class ConfigService:
         report_type: str = "summary",
         stock_codes: Optional[List[str]] = None,
     ) -> UserPushConfig:
-        """为指定用户新增一条推送任务（同一用户可有多条）。"""
+        """为指定用户创建配置；同一用户同一 report_type 已存在则更新。"""
         try:
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise ValueError(f"用户不存在: user_id={user_id}")
+
+            existing = self.db.query(UserPushConfig).filter(
+                UserPushConfig.user_id == user_id,
+                UserPushConfig.report_type == report_type,
+            ).first()
+            if existing:
+                existing.enabled = enabled
+                existing.channels = channels or ["email"]
+                existing.push_times = push_times or ["09:00", "15:00"]
+                existing.report_type = report_type
+                existing.stock_codes = stock_codes
+                existing.updated_at = datetime.now()
+                self.db.commit()
+                self.db.refresh(existing)
+                logger.info(f"推送配置已存在，执行更新: user_id={user_id}, config_id={existing.id}")
+                return existing
+
             config = UserPushConfig(
                 user_id=user_id,
                 enabled=enabled,
@@ -326,6 +355,25 @@ class ConfigService:
             logger.info(f"创建推送任务成功: user_id={user_id}, config_id={config.id}")
             return config
         except ValueError:
+            raise
+        except IntegrityError:
+            # 极端并发下可能在查询后被其他事务插入；回滚后转为更新，确保接口幂等
+            self.db.rollback()
+            existing = self.db.query(UserPushConfig).filter(
+                UserPushConfig.user_id == user_id,
+                UserPushConfig.report_type == report_type,
+            ).first()
+            if existing:
+                existing.enabled = enabled
+                existing.channels = channels or ["email"]
+                existing.push_times = push_times or ["09:00", "15:00"]
+                existing.report_type = report_type
+                existing.stock_codes = stock_codes
+                existing.updated_at = datetime.now()
+                self.db.commit()
+                self.db.refresh(existing)
+                logger.info(f"并发写入冲突后改为更新成功: user_id={user_id}, config_id={existing.id}")
+                return existing
             raise
         except Exception as e:
             self.db.rollback()

@@ -674,7 +674,7 @@ def admin_create_push_config(
     current_admin: User = Depends(get_current_admin),
     config_service: ConfigService = Depends(get_config_service),
 ):
-    """管理员为指定用户新建一条推送任务（同一用户可有多条，不同 report_type/时间等）"""
+    """管理员创建推送配置（同一用户可有多条，按 report_type 区分）。"""
     if body.report_type is not None and body.report_type not in ("summary", "detailed", "gms_daily", "volume_aberration"):
         raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily, volume_aberration")
     try:
@@ -717,6 +717,8 @@ def admin_update_push_config_by_id(
         return updated
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"管理员更新推送配置 {config_id} 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
