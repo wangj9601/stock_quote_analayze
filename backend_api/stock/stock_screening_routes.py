@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
 import asyncio
+import math
 import os
 from typing import Optional, Dict, Any
 
@@ -934,6 +935,12 @@ async def get_gms_strategy(
         False,
         description="为 true 时仅从 gms_signal_trace 读缓存，不触发缺失股票的实时计算（前端可先快显再二次请求全量）",
     ),
+    use_pagination: bool = Query(
+        False,
+        description="为 true 时对返回列表分页（仍先完成全量选股与组装，再截取当前页）；默认 false 保持与其它客户端兼容",
+    ),
+    page: int = Query(1, ge=1, description="分页页码，从 1 开始"),
+    page_size: int = Query(50, ge=1, le=500, description="每页条数，默认 50"),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
@@ -1008,6 +1015,13 @@ async def get_gms_strategy(
                         "success": True, "data": [], "total": 0,
                         "search_date": target_date, "strategy_name": "GMS均值引力动量策略",
                         "scope": "watchlist", "message": "您的自选股列表为空",
+                        "paging": {
+                            "enabled": use_pagination,
+                            "page": 1,
+                            "page_size": page_size if use_pagination else 0,
+                            "total": 0,
+                            "total_pages": 0,
+                        },
                     })
                 # 自选股代码归一化：与指标表一致（A 股 6 位、港股 5 位），便于匹配 mean_frequency_resonance_indicators
                 def _normalize_code_for_gms(c: str) -> str:
@@ -1148,6 +1162,13 @@ async def get_gms_strategy(
                 "message": msg,
                 "gms_trace_meta": gms_meta,
                 "trace_only": trace_only,
+                "paging": {
+                    "enabled": use_pagination,
+                    "page": 1,
+                    "page_size": page_size if use_pagination else 0,
+                    "total": 0,
+                    "total_pages": 0,
+                },
             })
 
         from backend_api.models import StockBasicInfo, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK
@@ -1194,7 +1215,12 @@ async def get_gms_strategy(
                 return "左侧"
             if s in ("右侧", "right", "right_buy", "rightbuy"):
                 return "右侧"
-            return "观望"
+            # 兼容历史值：如“左侧买入/右侧买入/left entry/right entry”等
+            if ("左侧" in s) or ("left" in s):
+                return "左侧"
+            if ("右侧" in s) or ("right" in s):
+                return "右侧"
+            return "--"
 
         for r in selection_results:
             code = r["symbol"]
@@ -1326,15 +1352,42 @@ async def get_gms_strategy(
             return (float(st) / 100.0) if st is not None else 0.0
         results_data.sort(key=_gms_signal_sort_key, reverse=True)
 
+        total_all = len(results_data)
+        page_eff = 1
+        total_pages = 0
+        if use_pagination:
+            total_pages = max(1, math.ceil(total_all / page_size)) if page_size and total_all > 0 else (0 if total_all == 0 else 1)
+            page_eff = min(max(1, page), total_pages) if total_pages > 0 else 1
+            start_idx = (page_eff - 1) * page_size
+            results_data = results_data[start_idx : start_idx + page_size]
+        else:
+            total_pages = 1 if total_all > 0 else 0
+            page_eff = 1
+
         resp = {
             "success": True,
             "data": results_data,
-            "total": len(results_data),
+            "total": total_all,
             "search_date": target_date,
             "strategy_name": "GMS均值引力动量策略",
-            "parameters": {"limit": limit or "无限制", "min_score": min_score, "scope": scope, "stock_pool_size": stock_pool_size},
+            "parameters": {
+                "limit": limit or "无限制",
+                "min_score": min_score,
+                "scope": scope,
+                "stock_pool_size": stock_pool_size,
+                "use_pagination": use_pagination,
+                "page": page_eff,
+                "page_size": page_size if use_pagination else total_all,
+            },
             "gms_trace_meta": gms_meta,
             "trace_only": trace_only,
+            "paging": {
+                "enabled": use_pagination,
+                "page": page_eff,
+                "page_size": page_size if use_pagination else total_all,
+                "total": total_all,
+                "total_pages": total_pages,
+            },
         }
         if fallback_used and user_specified_date:
             resp["message"] = f"所选日期无指标数据，已使用最新可用日期 {target_date}"

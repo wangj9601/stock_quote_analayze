@@ -929,26 +929,31 @@
                 <div class="results-header">
                     <span id="resultsCount-gms" class="results-count">共找到 0 只符合条件的股票</span>
                 </div>
+                <div id="gmsPaginationBar" class="gms-pagination-bar" style="display:none;" data-total-pages="0">
+                    <button type="button" id="gmsPaginationPrev" class="gms-pagination-btn" disabled>上一页</button>
+                    <span id="gmsPaginationLabel" class="gms-pagination-label"></span>
+                    <button type="button" id="gmsPaginationNext" class="gms-pagination-btn" disabled>下一页</button>
+                </div>
                 <div id="resultsTable-gms" class="results-table-wrapper">
                     <table class="results-table">
                         <thead>
                             <tr>
-                                <th>股票代码</th>
-                                <th>股票名称</th>
+                                <th class="gms-col-code">股票代码</th>
+                                <th class="gms-col-name">股票名称</th>
                                 <th style="display:none;">总分</th>
-                                <th>信号强度</th>
-                                <th>买点类型</th>
-                                <th>当前价格</th>
-                                <th>Δ (20日位移)</th>
-                                <th>F (下跌天)</th>
-                                <th>Z (上涨天)</th>
-                                <th>d (20日均价)</th>
-                                <th>Δ/d (位移/均价)</th>
-                                <th>Δ/d₂₀</th>
-                                <th>Δ/d₁</th>
-                                <th>F/Z</th>
-                                <th>当前涨跌幅</th>
-                                <th>操作</th>
+                                <th class="gms-col-narrow">信号强度</th>
+                                <th class="gms-col-narrow">买点类型</th>
+                                <th class="gms-col-price">当前价格</th>
+                                <th class="gms-th-stack"><span class="gms-th-main">Δ</span><span class="gms-th-sub">(20日位移)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">F</span><span class="gms-th-sub">(下跌天)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">Z</span><span class="gms-th-sub">(上涨天)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">d</span><span class="gms-th-sub">(20日均价)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">Δ/d</span><span class="gms-th-sub">(位移/均价)</span></th>
+                                <th class="gms-col-pct">Δ/d₂₀</th>
+                                <th class="gms-col-pct">Δ/d₁</th>
+                                <th class="gms-col-narrow">F/Z</th>
+                                <th class="gms-col-pct">当前涨跌幅</th>
+                                <th class="gms-col-actions">操作</th>
                             </tr>
                         </thead>
                         <tbody id="resultsTableBody-gms">

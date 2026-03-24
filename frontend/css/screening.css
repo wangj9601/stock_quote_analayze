@@ -816,20 +816,171 @@
     font-weight: 500;
 }
 
-/* GMS 信号列表列较多：启用横向滚动，避免操作列被压缩导致“得分明细”不可见 */
-#resultsContainer-gms .results-table {
-    min-width: 1720px;
+/* GMS 列表分页 */
+.gms-pagination-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 10px 0 12px;
+    padding: 8px 12px;
+    background: var(--card-bg, #f8f9fa);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #e0e0e0);
+}
+.gms-pagination-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+}
+.gms-pagination-btn:hover:not(:disabled) {
+    background: #eef1f5;
+}
+.gms-pagination-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.gms-pagination-label {
+    font-size: 14px;
+    color: #444;
 }
 
-/* 固定操作列可读宽度，防止链接/按钮逐字换行 */
-#resultsContainer-gms .results-table th:last-child,
-#resultsContainer-gms .results-table td:last-child {
-    min-width: 170px;
+/* GMS 信号列表：略压缩列宽 + 表头两行 + 名称列限宽 + 操作列 sticky 贴右（横向滚动仍可见） */
+#resultsContainer-gms .results-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#resultsContainer-gms .results-table {
+    min-width: 1040px;
+    width: max(100%, 1040px);
+}
+
+#resultsContainer-gms .results-table th,
+#resultsContainer-gms .results-table td {
+    padding: 8px 6px;
+    vertical-align: middle;
+}
+
+/* 双行表头：主符号 + 副标题 */
+#resultsContainer-gms .results-table th.gms-th-stack {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+    max-width: 3.2rem;
+    min-width: 2.8rem;
+    font-weight: 600;
+}
+
+#resultsContainer-gms .results-table th.gms-th-stack .gms-th-main {
+    display: block;
+    font-size: 13px;
+}
+
+#resultsContainer-gms .results-table th.gms-th-stack .gms-th-sub {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #666;
+    margin-top: 2px;
+}
+
+/* Δ/d 表头略宽，避免两字折行难看 */
+#resultsContainer-gms .results-table thead th.gms-th-stack:nth-child(11) {
+    max-width: 4.5rem;
+    min-width: 3.8rem;
+}
+
+#resultsContainer-gms .gms-col-code {
+    width: 4.5rem;
+    max-width: 5rem;
     white-space: nowrap;
 }
 
+/* GMS：代码列点击进入详情（原「详情」链接已移除） */
+#resultsContainer-gms a.gms-stock-code-link {
+    text-decoration: none;
+    cursor: pointer;
+}
+
+#resultsContainer-gms a.gms-stock-code-link:hover {
+    text-decoration: underline;
+    color: #0d47a1;
+}
+
+/* 股票名称：限制宽度，过长省略，悬停 title 看全名 */
+#resultsContainer-gms .gms-col-name {
+    max-width: 6.5rem;
+    width: 6.5rem;
+    overflow: hidden;
+}
+
+#resultsContainer-gms .gms-col-name .stock-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#resultsContainer-gms .gms-col-narrow {
+    max-width: 4.2rem;
+    white-space: nowrap;
+    text-align: center;
+}
+
+#resultsContainer-gms .gms-col-price,
+#resultsContainer-gms .gms-col-num,
+#resultsContainer-gms .gms-col-pct {
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+#resultsContainer-gms .gms-col-price {
+    max-width: 4.5rem;
+}
+
+#resultsContainer-gms .gms-col-num {
+    max-width: 4.2rem;
+}
+
+#resultsContainer-gms .gms-col-pct {
+    max-width: 4rem;
+}
+
+/* 操作列：固定右侧，横向滚动时始终可见 */
+#resultsContainer-gms .results-table th.gms-col-actions,
+#resultsContainer-gms .results-table td.gms-col-actions {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    min-width: 220px;
+    width: 220px;
+    max-width: 240px;
+    white-space: nowrap;
+    text-align: center;
+    background: #fff;
+    box-shadow: -6px 0 12px -6px rgba(0, 0, 0, 0.12);
+    border-left: 1px solid #eee;
+}
+
+#resultsContainer-gms .results-table thead th.gms-col-actions {
+    z-index: 4;
+    background: #f8f9fa;
+}
+
+#resultsContainer-gms .results-table tbody tr:hover td.gms-col-actions {
+    background: #f8f9fa;
+}
+
 #resultsContainer-gms .action-links {
-    gap: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
     flex-wrap: nowrap;
     white-space: nowrap;
 }
@@ -837,4 +988,20 @@
 #resultsContainer-gms .action-link,
 #resultsContainer-gms .gms-score-detail-toggle {
     white-space: nowrap;
+}
+
+#resultsContainer-gms .gms-watchlist-add {
+    background: none;
+    border: none;
+    color: #2e7d32;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+}
+
+#resultsContainer-gms .gms-watchlist-add:disabled,
+#resultsContainer-gms .gms-watchlist-add.is-added {
+    color: #888;
+    text-decoration: none;
+    cursor: not-allowed;
 }

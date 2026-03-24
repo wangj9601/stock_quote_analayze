@@ -3,6 +3,9 @@ const ScreeningPage = {
     API_BASE_URL: Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000',
     currentStrategy: 'cyb-midline', // 当前选中的策略
     lastResults: {}, // 存储最近一次筛选结果，用于导出
+    /** GMS 列表分页（选股页） */
+    gmsPage: 1,
+    GMS_PAGE_SIZE: 50,
 
     // 初始化
     async init() {
@@ -135,12 +138,35 @@ const ScreeningPage = {
             if (btn.id === 'exportExcelBtn-gms') return; // GMS Excel 单独绑定
             btn.addEventListener('click', () => {
                 const strategy = btn.id.replace('exportBtn-', '');
-                this.exportToCSV(strategy);
+                if (strategy === 'gms') {
+                    void this.exportGmsCsvFull();
+                } else {
+                    this.exportToCSV(strategy);
+                }
             });
         });
         const exportExcelBtnGms = document.getElementById('exportExcelBtn-gms');
         if (exportExcelBtnGms) {
-            exportExcelBtnGms.addEventListener('click', () => this.exportToExcelGms());
+            exportExcelBtnGms.addEventListener('click', () => void this.exportToExcelGms());
+        }
+
+        const gmsPrev = document.getElementById('gmsPaginationPrev');
+        const gmsNext = document.getElementById('gmsPaginationNext');
+        if (gmsPrev) {
+            gmsPrev.addEventListener('click', () => {
+                if (this.gmsPage <= 1) return;
+                this.gmsPage -= 1;
+                void this.loadScreeningResults('gms', { resetGmsPage: false });
+            });
+        }
+        if (gmsNext) {
+            gmsNext.addEventListener('click', () => {
+                const bar = document.getElementById('gmsPaginationBar');
+                const maxP = bar ? parseInt(bar.getAttribute('data-total-pages') || '0', 10) : 0;
+                if (maxP <= 0 || this.gmsPage >= maxP) return;
+                this.gmsPage += 1;
+                void this.loadScreeningResults('gms', { resetGmsPage: false });
+            });
         }
 
         // 绑定PVFARS策略范围切换事件
@@ -167,6 +193,14 @@ const ScreeningPage = {
         const gmsContainer = document.getElementById('resultsContainer-gms');
         if (gmsContainer) {
             gmsContainer.addEventListener('click', (e) => {
+                const addBtn = e.target.closest('.gms-watchlist-add');
+                if (addBtn) {
+                    e.preventDefault();
+                    const code = addBtn.getAttribute('data-code') || '';
+                    const name = addBtn.getAttribute('data-name') || '';
+                    void this.addGmsRowToWatchlist(code, name, addBtn);
+                    return;
+                }
                 const btn = e.target.closest('.gms-score-detail-toggle');
                 if (!btn) return;
                 e.preventDefault();
@@ -204,10 +238,211 @@ const ScreeningPage = {
         }
     },
 
+    getAuthFetchFn() {
+        return (typeof authFetch === 'function')
+            ? authFetch
+            : async (url, options) => {
+                const token = localStorage.getItem('access_token');
+                const headers = options?.headers || {};
+                if (token) {
+                    headers['Authorization'] = 'Bearer ' + token;
+                }
+                return fetch(url, { ...options, headers });
+            };
+    },
+
+    async handleHttpAndParseScreening(strategy, response) {
+        const contentType = response.headers.get('Content-Type') || '';
+        const text = await response.text();
+        const gateway502Msg =
+            strategy === 'gms'
+                ? '网关502/503：全A股 GMS 耗时常达数分钟。请确认 Nginx 已用 location ^~ /api/screening/gms-strategy 且 proxy_read_timeout≥600s，并已 nginx -t 与 reload；若经 Cloudflare 等 CDN，免费版约 100s 也会断连。也可改用「港股」或「自选股」。'
+                : '服务暂时不可用，请稍后重试';
+        if (!response.ok) {
+            if (response.status === 504) {
+                throw new Error(
+                    strategy === 'gms'
+                        ? '请求超时(504)，全A股 GMS 计算耗时较长，请稍后重试或缩小股票范围'
+                        : '请求超时(504)，选股计算耗时较长，请稍后重试'
+                );
+            }
+            if (response.status === 502 || response.status === 503) {
+                throw new Error(gateway502Msg);
+            }
+            let errMsg = `请求失败(${response.status})`;
+            if (contentType.includes('application/json') && text && text.trim().startsWith('{')) {
+                try {
+                    const errBody = JSON.parse(text);
+                    errMsg = errBody.detail || errBody.message || errMsg;
+                    if (typeof errMsg !== 'string') {
+                        errMsg = JSON.stringify(errMsg);
+                    }
+                } catch (_) {
+                    if (text.length < 200) errMsg = text;
+                }
+            } else if (text && text.length < 200) {
+                errMsg = text;
+            }
+            throw new Error(errMsg);
+        }
+        let parsed;
+        try {
+            if (!contentType.includes('application/json') || !text || !text.trim().startsWith('{')) {
+                throw new Error('服务器返回了非 JSON 数据，请稍后重试');
+            }
+            parsed = JSON.parse(text);
+        } catch (parseError) {
+            if (parseError instanceof SyntaxError) {
+                throw new Error('服务返回异常，请稍后重试');
+            }
+            throw parseError;
+        }
+        return parsed;
+    },
+
+    /**
+     * 构建 GMS 接口查询串（不含 trace_only）
+     * @param {{ page?: number, includePagination?: boolean }} options
+     */
+    getGmsQuerySearchParams(options = {}) {
+        const includePagination = options.includePagination !== false;
+        const page = options.page != null ? options.page : this.gmsPage;
+        const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
+        const scope = scopeElement ? scopeElement.value : 'all';
+        const gmsParams = this.getGmsParams();
+        const q = new URLSearchParams();
+        q.set('scope', scope);
+        if (gmsParams.start_date) q.set('date', gmsParams.start_date);
+        if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
+        if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);
+        if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
+        if (gmsParams.ratio_d20_max != null) q.set('ratio_d20_max', gmsParams.ratio_d20_max);
+        if (gmsParams.volume_ratio_max != null) q.set('volume_ratio_max', gmsParams.volume_ratio_max);
+        if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
+        if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
+        if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
+        if (gmsParams.accumulation_s_threshold != null) q.set('accumulation_s_threshold', gmsParams.accumulation_s_threshold);
+        if (gmsParams.accumulation_a_threshold != null) q.set('accumulation_a_threshold', gmsParams.accumulation_a_threshold);
+        if (gmsParams.momentum_full_threshold != null) q.set('momentum_full_threshold', gmsParams.momentum_full_threshold);
+        if (gmsParams.momentum_batch_threshold != null) q.set('momentum_batch_threshold', gmsParams.momentum_batch_threshold);
+        if (gmsParams.instant_deviation_stable_days != null) q.set('instant_deviation_stable_days', gmsParams.instant_deviation_stable_days);
+        if (gmsParams.weight_acc_fz != null) q.set('weight_acc_fz', gmsParams.weight_acc_fz);
+        if (gmsParams.weight_acc_balance != null) q.set('weight_acc_balance', gmsParams.weight_acc_balance);
+        if (gmsParams.weight_acc_volume != null) q.set('weight_acc_volume', gmsParams.weight_acc_volume);
+        if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
+        if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
+        if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
+        if (includePagination) {
+            q.set('use_pagination', 'true');
+            q.set('page', String(page));
+            q.set('page_size', String(this.GMS_PAGE_SIZE));
+        } else {
+            q.set('use_pagination', 'false');
+        }
+        return q;
+    },
+
+    /** GMS：先 trace_only 再按需全量，queryString 已含分页或全量参数 */
+    async fetchGmsStrategyResult(queryString) {
+        const apiBaseUrl = this.API_BASE_URL;
+        const fetchFn = this.getAuthFetchFn();
+        const traceUrl = `${apiBaseUrl}/api/screening/gms-strategy?${queryString}&trace_only=true`;
+        let result = await this.handleHttpAndParseScreening('gms', await fetchFn(traceUrl));
+        const meta = result.gms_trace_meta || {};
+        if (meta.trace_complete !== true) {
+            const fullUrl = `${apiBaseUrl}/api/screening/gms-strategy?${queryString}`;
+            result = await this.handleHttpAndParseScreening('gms', await fetchFn(fullUrl));
+        }
+        return result;
+    },
+
+    updateGmsPaginationUi(paging) {
+        const bar = document.getElementById('gmsPaginationBar');
+        const label = document.getElementById('gmsPaginationLabel');
+        const prev = document.getElementById('gmsPaginationPrev');
+        const next = document.getElementById('gmsPaginationNext');
+        if (!bar || !label) return;
+        if (!paging || !paging.enabled) {
+            bar.style.display = 'none';
+            return;
+        }
+        const total = paging.total != null ? paging.total : 0;
+        const totalPages = paging.total_pages != null ? paging.total_pages : 0;
+        const page = paging.page != null ? paging.page : this.gmsPage;
+        this.gmsPage = page;
+        bar.style.display = 'flex';
+        bar.setAttribute('data-total-pages', String(Math.max(0, totalPages)));
+        label.textContent = totalPages > 0
+            ? `第 ${page} / ${totalPages} 页（每页 ${paging.page_size || this.GMS_PAGE_SIZE} 条，共 ${total} 条）`
+            : `共 ${total} 条`;
+        if (prev) prev.disabled = page <= 1 || total <= 0;
+        if (next) next.disabled = totalPages <= 0 || page >= totalPages;
+    },
+
+    /** GMS 列表行：加入自选股 */
+    async addGmsRowToWatchlist(stockCode, stockName, btnEl) {
+        const code = String(stockCode || '').trim();
+        const name = String(stockName || '').trim() || code;
+        if (!code) {
+            if (window.CommonUtils) CommonUtils.showToast('股票代码无效，无法加入自选', 'warning');
+            return;
+        }
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (window.CommonUtils) CommonUtils.showToast('请先登录后再操作自选股', 'warning');
+            window.location.href = 'login.html';
+            return;
+        }
+
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.textContent = '处理中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/watchlist`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    stock_code: code,
+                    stock_name: name,
+                    group_name: 'default',
+                }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (res.ok && result.success) {
+                if (window.CommonUtils) CommonUtils.showToast(`已添加 ${name} 到自选股`, 'success');
+                if (btnEl) {
+                    btnEl.textContent = '已自选';
+                    btnEl.classList.add('is-added');
+                    btnEl.disabled = true;
+                }
+                return;
+            }
+            const msg = result.message || `添加失败(${res.status})`;
+            if (window.CommonUtils) CommonUtils.showToast(msg, 'warning');
+            if (btnEl) {
+                btnEl.textContent = '+自选';
+                btnEl.disabled = false;
+            }
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast('网络错误，添加自选失败', 'error');
+            if (btnEl) {
+                btnEl.textContent = '+自选';
+                btnEl.disabled = false;
+            }
+        }
+    },
+
     // 加载选股结果
-    async loadScreeningResults(strategy = null) {
+    async loadScreeningResults(strategy = null, options = {}) {
+        const resetGmsPage = options.resetGmsPage !== false;
         if (!strategy) {
             strategy = this.currentStrategy;
+        }
+        if (strategy === 'gms' && resetGmsPage) {
+            this.gmsPage = 1;
         }
 
         let suffix;
@@ -318,117 +553,35 @@ const ScreeningPage = {
 
                 url = `${apiBaseUrl}/api/screening/pvfrs-strategy?scope=${scope}`;
             } else if (strategy === 'gms') {
-                const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
-                let scope = scopeElement ? scopeElement.value : 'all';
-                const gmsParams = this.getGmsParams();
-                const q = new URLSearchParams();
-                q.set('scope', scope);
-                if (gmsParams.start_date) q.set('date', gmsParams.start_date);
-                // 策略参数：以前端页面设置为准，传给后端
-                if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
-                if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);
-                if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
-                if (gmsParams.ratio_d20_max != null) q.set('ratio_d20_max', gmsParams.ratio_d20_max);
-                if (gmsParams.volume_ratio_max != null) q.set('volume_ratio_max', gmsParams.volume_ratio_max);
-                if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
-                if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
-                if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
-                if (gmsParams.accumulation_s_threshold != null) q.set('accumulation_s_threshold', gmsParams.accumulation_s_threshold);
-                if (gmsParams.accumulation_a_threshold != null) q.set('accumulation_a_threshold', gmsParams.accumulation_a_threshold);
-                if (gmsParams.momentum_full_threshold != null) q.set('momentum_full_threshold', gmsParams.momentum_full_threshold);
-                if (gmsParams.momentum_batch_threshold != null) q.set('momentum_batch_threshold', gmsParams.momentum_batch_threshold);
-                if (gmsParams.instant_deviation_stable_days != null) q.set('instant_deviation_stable_days', gmsParams.instant_deviation_stable_days);
-                if (gmsParams.weight_acc_fz != null) q.set('weight_acc_fz', gmsParams.weight_acc_fz);
-                if (gmsParams.weight_acc_balance != null) q.set('weight_acc_balance', gmsParams.weight_acc_balance);
-                if (gmsParams.weight_acc_volume != null) q.set('weight_acc_volume', gmsParams.weight_acc_volume);
-                if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
-                if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
-                if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
-                gmsQueryString = q.toString();
+                gmsQueryString = this.getGmsQuerySearchParams({
+                    page: this.gmsPage,
+                    includePagination: true,
+                }).toString();
             } else {
                 throw new Error('未知的策略类型');
             }
 
-            // 使用authFetch或fetch
-            const fetchFn = (typeof authFetch === 'function')
-                ? authFetch
-                : async (url, options) => {
-                    const token = localStorage.getItem('access_token');
-                    const headers = options?.headers || {};
-                    if (token) {
-                        headers['Authorization'] = 'Bearer ' + token;
-                    }
-                    return fetch(url, { ...options, headers });
-                };
-
-            // 全 A 股 GMS 计算耗时长，生产环境若网关超时短于后端，易出现 502（Bad Gateway）
-            const gateway502Msg =
-                strategy === 'gms'
-                    ? '网关502/503：全A股 GMS 耗时常达数分钟。请确认 Nginx 已用 location ^~ /api/screening/gms-strategy 且 proxy_read_timeout≥600s，并已 nginx -t 与 reload；若经 Cloudflare 等 CDN，免费版约 100s 也会断连。也可改用「港股」或「自选股」。'
-                    : '服务暂时不可用，请稍后重试';
-
-            const handleHttpAndParse = async (response) => {
-                const contentType = response.headers.get('Content-Type') || '';
-                const text = await response.text();
-                if (!response.ok) {
-                    if (response.status === 504) {
-                        throw new Error(
-                            strategy === 'gms'
-                                ? '请求超时(504)，全A股 GMS 计算耗时较长，请稍后重试或缩小股票范围'
-                                : '请求超时(504)，选股计算耗时较长，请稍后重试'
-                        );
-                    }
-                    if (response.status === 502 || response.status === 503) {
-                        throw new Error(gateway502Msg);
-                    }
-                    let errMsg = `请求失败(${response.status})`;
-                    if (contentType.includes('application/json') && text && text.trim().startsWith('{')) {
-                        try {
-                            const errBody = JSON.parse(text);
-                            errMsg = errBody.detail || errBody.message || errMsg;
-                            if (typeof errMsg !== 'string') {
-                                errMsg = JSON.stringify(errMsg);
-                            }
-                        } catch (_) {
-                            if (text.length < 200) errMsg = text;
-                        }
-                    } else if (text && text.length < 200) {
-                        errMsg = text;
-                    }
-                    throw new Error(errMsg);
-                }
-                let parsed;
-                try {
-                    if (!contentType.includes('application/json') || !text || !text.trim().startsWith('{')) {
-                        throw new Error('服务器返回了非 JSON 数据，请稍后重试');
-                    }
-                    parsed = JSON.parse(text);
-                } catch (parseError) {
-                    if (parseError instanceof SyntaxError) {
-                        throw new Error('服务返回异常，请稍后重试');
-                    }
-                    throw parseError;
-                }
-                return parsed;
-            };
+            const fetchFn = this.getAuthFetchFn();
 
             let result;
             if (strategy === 'gms' && gmsQueryString != null) {
-                const traceUrl = `${apiBaseUrl}/api/screening/gms-strategy?${gmsQueryString}&trace_only=true`;
-                result = await handleHttpAndParse(await fetchFn(traceUrl));
-                const meta = result.gms_trace_meta || {};
-                if (meta.trace_complete !== true) {
-                    const fullUrl = `${apiBaseUrl}/api/screening/gms-strategy?${gmsQueryString}`;
-                    result = await handleHttpAndParse(await fetchFn(fullUrl));
-                }
+                result = await this.fetchGmsStrategyResult(gmsQueryString);
             } else {
-                result = await handleHttpAndParse(await fetchFn(url));
+                result = await this.handleHttpAndParseScreening(strategy, await fetchFn(url));
             }
 
             if (result.success && result.data) {
                 this.lastResults[strategy] = result.data;
                 const emptyMsg = (result.data.length === 0 && result.message) ? result.message : null;
-                this.renderResults(result.data, result.search_date, strategy, emptyMsg);
+                const gmsPaging = strategy === 'gms' ? result.paging : null;
+                this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
+                if (strategy === 'gms') {
+                    if (result.paging) {
+                        this.updateGmsPaginationUi(result.paging);
+                    } else {
+                        this.updateGmsPaginationUi({ enabled: false });
+                    }
+                }
                 if (searchDate) {
                     let dateText = `筛选时间: ${result.search_date}`;
                     if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;
@@ -503,6 +656,9 @@ const ScreeningPage = {
             }
             if (resultsCount) {
                 resultsCount.textContent = '共找到 0 只符合条件的股票';
+            }
+            if (strategy === 'gms') {
+                this.updateGmsPaginationUi({ enabled: false });
             }
         } finally {
             // 隐藏加载状态
@@ -700,7 +856,7 @@ const ScreeningPage = {
     },
 
     // 渲染结果
-    renderResults(data, searchDate, strategy = 'cyb-midline', emptyMessage = null) {
+    renderResults(data, searchDate, strategy = 'cyb-midline', emptyMessage = null, gmsPaging = null) {
         let suffix;
         if (strategy === 'cyb-midline') {
             suffix = 'cyb';
@@ -762,12 +918,20 @@ const ScreeningPage = {
             if (resultsCount) {
                 resultsCount.textContent = '共找到 0 只符合条件的股票';
             }
+            if (strategy === 'gms') {
+                const bar = document.getElementById('gmsPaginationBar');
+                if (bar) bar.style.display = 'none';
+            }
             return;
         }
 
         // 更新计数
         if (resultsCount) {
-            resultsCount.textContent = `共找到 ${data.length} 只符合条件的股票`;
+            if (strategy === 'gms' && gmsPaging && gmsPaging.enabled && gmsPaging.total != null) {
+                resultsCount.textContent = `本页 ${data.length} 条，合计 ${gmsPaging.total} 条（每页 ${gmsPaging.page_size || this.GMS_PAGE_SIZE} 条）`;
+            } else {
+                resultsCount.textContent = `共找到 ${data.length} 只符合条件的股票`;
+            }
         }
 
         // 渲染表格
@@ -1204,27 +1368,35 @@ const ScreeningPage = {
                 let strengthClass = 'strength-low';
                 if (signalStrength >= 0.8) strengthClass = 'strength-high';
                 else if (signalStrength >= 0.6) strengthClass = 'strength-mid';
+                const gmsName = stock.name || '--';
+                const gmsTitleAttr = String(gmsName)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/</g, '&lt;');
+                const gmsCode = String(stock.symbol || stock.code || '');
+                const gmsDetailHref = `stock.html?code=${encodeURIComponent(gmsCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 html += `
                     <tr data-gms-row="${index}">
-                        <td><span class="stock-code">${stock.symbol || stock.code}</span></td>
-                        <td><span class="stock-name">${stock.name || '--'}</span></td>
+                        <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${gmsDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${gmsCode}</a></td>
+                        <td class="gms-col-name"><span class="stock-name" title="${gmsTitleAttr}">${gmsName}</span></td>
                         <td style="display:none;"><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
-                        <td><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
-                        <td><span class="${buyTypeClass}">${buyType}</span></td>
-                        <td>${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
-                        <td>${stock.delta != null ? stock.delta.toFixed(4) : '--'}</td>
-                        <td>${stock.falling_days != null ? stock.falling_days : '--'}</td>
-                        <td>${stock.rising_days != null ? stock.rising_days : '--'}</td>
-                        <td>${stock.d_ma20 != null ? stock.d_ma20.toFixed(2) : '--'}</td>
-                        <td>${stock.ratio_relative != null ? (stock.ratio_relative * 100).toFixed(2) + '%' : '--'}</td>
-                        <td>${stock.ratio_d20 != null ? fmtPct(stock.ratio_d20) : '--'}</td>
-                        <td>${stock.ratio_d1 != null ? fmtPct(stock.ratio_d1) : '--'}</td>
-                        <td>${stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '--'}</td>
-                        <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
-                        <td>
+                        <td class="gms-col-narrow"><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
+                        <td class="gms-col-narrow"><span class="${buyTypeClass}">${buyType}</span></td>
+                        <td class="gms-col-price">${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td class="gms-col-num">${stock.delta != null ? stock.delta.toFixed(4) : '--'}</td>
+                        <td class="gms-col-num">${stock.falling_days != null ? stock.falling_days : '--'}</td>
+                        <td class="gms-col-num">${stock.rising_days != null ? stock.rising_days : '--'}</td>
+                        <td class="gms-col-num">${stock.d_ma20 != null ? stock.d_ma20.toFixed(2) : '--'}</td>
+                        <td class="gms-col-num">${stock.ratio_relative != null ? (stock.ratio_relative * 100).toFixed(2) + '%' : '--'}</td>
+                        <td class="gms-col-pct">${stock.ratio_d20 != null ? fmtPct(stock.ratio_d20) : '--'}</td>
+                        <td class="gms-col-pct">${stock.ratio_d1 != null ? fmtPct(stock.ratio_d1) : '--'}</td>
+                        <td class="gms-col-narrow">${stock.fz_ratio != null ? stock.fz_ratio.toFixed(2) : '--'}</td>
+                        <td class="gms-col-pct ${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
+                        <td class="gms-col-actions">
                             <div class="action-links">
                                 <a href="stock_gms_trace.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">历史</a>
-                                <a href="stock.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
+                                <button type="button" class="action-link gms-watchlist-add" data-code="${gmsCode}" data-name="${gmsTitleAttr}" title="加入自选股">+自选</button>
                                 <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
                             </div>
                         </td>
@@ -1319,6 +1491,27 @@ const ScreeningPage = {
             } catch (e) {
                 console.error('加载参数失败:', e);
             }
+        }
+    },
+
+    /** GMS：导出 CSV 前拉取全量（不分页） */
+    async exportGmsCsvFull() {
+        try {
+            const q = this.getGmsQuerySearchParams({ includePagination: false });
+            const result = await this.fetchGmsStrategyResult(q.toString());
+            if (!result.success || !result.data) {
+                if (window.CommonUtils) CommonUtils.showToast(result.message || '没有可导出的数据', 'warning');
+                else alert(result.message || '没有可导出的数据');
+                return;
+            }
+            const prev = this.lastResults.gms;
+            this.lastResults.gms = result.data;
+            this.exportToCSV('gms');
+            this.lastResults.gms = prev;
+        } catch (e) {
+            const msg = (e && e.message) ? e.message : String(e);
+            if (window.CommonUtils) CommonUtils.showToast(`导出失败: ${msg}`, 'warning');
+            else alert(`导出失败: ${msg}`);
         }
     },
 
@@ -1619,11 +1812,21 @@ const ScreeningPage = {
     /**
      * GMS 策略导出 Excel：每只股票占两行（数据行 + 得分明细行），明细行用 Excel 行分组默认折叠，点击行首 +/- 可展开/收起
      */
-    exportToExcelGms() {
-        const data = this.lastResults['gms'];
-        if (!data || data.length === 0) {
-            if (window.CommonUtils) CommonUtils.showToast('没有可导出的数据', 'warning');
-            else alert('没有可导出的数据');
+    async exportToExcelGms() {
+        let data;
+        try {
+            const q = this.getGmsQuerySearchParams({ includePagination: false });
+            const result = await this.fetchGmsStrategyResult(q.toString());
+            if (!result.success || !result.data || result.data.length === 0) {
+                if (window.CommonUtils) CommonUtils.showToast(result.message || '没有可导出的数据', 'warning');
+                else alert(result.message || '没有可导出的数据');
+                return;
+            }
+            data = result.data;
+        } catch (e) {
+            const msg = (e && e.message) ? e.message : String(e);
+            if (window.CommonUtils) CommonUtils.showToast(`导出失败: ${msg}`, 'warning');
+            else alert(`导出失败: ${msg}`);
             return;
         }
         if (typeof XLSX === 'undefined') {
