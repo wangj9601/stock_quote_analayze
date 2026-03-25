@@ -74,7 +74,6 @@ class StockBasicInfo(Base):
     code = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     industry = Column(Text, nullable=True)
-    listing_date = Column(Text, nullable=True)
     total_shares = Column(Float, nullable=True)
     free_float_shares = Column(Float, nullable=True)
     shares_updated_at = Column(DateTime, nullable=True)

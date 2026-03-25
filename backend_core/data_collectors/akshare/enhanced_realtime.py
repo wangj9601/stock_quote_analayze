@@ -70,6 +70,20 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
         '''))
         session.commit()
 
+        # 确保 stock_basic_info 存在行业字段（部分环境可能缺列，导致 ORM 查询报 UndefinedColumn）
+        cursor = session.execute(text('''
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_basic_info'
+                               AND column_name='industry') THEN
+                    ALTER TABLE stock_basic_info ADD COLUMN industry TEXT;
+                END IF;
+            END
+            $$;
+        '''))
+        session.commit()
+
         cursor = session.execute(text('''
             CREATE TABLE IF NOT EXISTS realtime_collect_operation_logs (
                 id SERIAL PRIMARY KEY,

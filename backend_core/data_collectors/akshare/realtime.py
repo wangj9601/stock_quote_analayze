@@ -115,6 +115,13 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                                AND column_name='shares_updated_at') THEN
                     ALTER TABLE stock_basic_info ADD COLUMN shares_updated_at TIMESTAMP;
                 END IF;
+
+                -- GMS/其它策略会用到行业字段。历史上部分库可能缺少该列，需保证兜底存在。
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_basic_info'
+                               AND column_name='industry') THEN
+                    ALTER TABLE stock_basic_info ADD COLUMN industry TEXT;
+                END IF;
             END
             $$;
         '''))

@@ -53,14 +53,22 @@ def is_hk_stock(code: str, db: Session) -> bool:
     
     code_str = str(code).strip()
     
-    # 先查询港股表
-    hk_stock = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code_str).first()
-    if hk_stock:
+    # 先查询港股表（港股基础信息表通常不依赖 A 股 stock_basic_info.industry 列）
+    hk_exists = db.execute(
+        text("SELECT 1 FROM stock_basic_info_hk WHERE code = :code LIMIT 1"),
+        {"code": code_str},
+    ).fetchone()
+    if hk_exists:
         return True
-    
-    # 再查询A股表
-    a_stock = db.query(StockBasicInfo).filter(StockBasicInfo.code == code_str).first()
-    if a_stock:
+
+    # 再查询 A 股表
+    # 注意：stock_basic_info 可能缺少 industry 列时，直接 query(StockBasicInfo).first() 会触发 UndefinedColumn
+    # 因此此处仅做 exists 查询（不选择所有列），避免 ORM 报错导致事务终止
+    a_exists = db.execute(
+        text("SELECT 1 FROM stock_basic_info WHERE code = :code LIMIT 1"),
+        {"code": code_str},
+    ).fetchone()
+    if a_exists:
         return False
     
     # 如果两个表都没有，默认返回False（A股）
