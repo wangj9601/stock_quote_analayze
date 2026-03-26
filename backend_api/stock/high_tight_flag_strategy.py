@@ -131,6 +131,7 @@ class HighTightFlagStrategy:
                 SELECT DISTINCT code, name 
                 FROM stock_basic_info 
                 WHERE LENGTH(code) = 6
+                AND COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             

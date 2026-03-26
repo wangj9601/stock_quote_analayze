@@ -628,27 +628,11 @@ const WatchlistPage = {
 
     // 开始数据更新
     startDataUpdate() {
-        const getNextInterval = () => {
-            const now = new Date();
-            const hour = now.getHours();
-            const minute = now.getMinutes();
-            // 早盘 9:00-11:30
-            const inMorning = (hour === 9 && minute >= 0) || (hour === 10) || (hour === 11 && minute <= 30);
-            // 午盘 13:30-15:30
-            const inAfternoon = (hour === 13 && minute >= 30) || (hour === 14) || (hour === 15 && minute <= 30);
-            if (inMorning || inAfternoon) {
-                return 300000; // 300秒
-            } else {
-                return 600000; // 600秒
-            }
-        };
-        const scheduleUpdate = () => {
-            this.updateStockPrices();
-            const interval = getNextInterval();
-            this._dataUpdateTimer = setTimeout(scheduleUpdate, interval);
-        };
-        if (this._dataUpdateTimer) clearTimeout(this._dataUpdateTimer);
-        scheduleUpdate();
+        // 已按需求关闭该模块自动刷新：仅手动触发更新，不再定时请求 /api/stock/quote
+        if (this._dataUpdateTimer) {
+            clearTimeout(this._dataUpdateTimer);
+            this._dataUpdateTimer = null;
+        }
     },
 
     // 更新股票价格

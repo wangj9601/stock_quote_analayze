@@ -80,6 +80,7 @@ class WeeklyDataGenerator:
             result = self.session.execute(text("""
                 SELECT code, name 
                 FROM stock_basic_info 
+                WHERE COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             

@@ -139,6 +139,11 @@ def _ensure_columns(session, logger: logging.Logger) -> None:
                            AND column_name='listing_date') THEN
                 ALTER TABLE stock_basic_info ADD COLUMN listing_date TEXT;
             END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_name='stock_basic_info'
+                           AND column_name='collect_enabled') THEN
+                ALTER TABLE stock_basic_info ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
+            END IF;
         END
         $$;
     """
@@ -155,13 +160,23 @@ def _get_stocks_to_update(
     stale_days: int,
 ) -> List[Tuple[Any, Optional[str]]]:
     if mode == "full":
-        query = "SELECT code, name FROM stock_basic_info ORDER BY code"
+        query = "SELECT code, name FROM stock_basic_info WHERE COALESCE(collect_enabled, TRUE) = TRUE ORDER BY code"
+    elif mode == "missing":
+        query = """
+            SELECT code, name FROM stock_basic_info
+            WHERE COALESCE(collect_enabled, TRUE) = TRUE
+              AND (total_shares IS NULL OR free_float_shares IS NULL)
+            ORDER BY code
+        """
     else:
         # stale_days 由调用方保证为 int
         query = f"""
             SELECT code, name FROM stock_basic_info
-            WHERE shares_updated_at IS NULL
-               OR shares_updated_at < NOW() - INTERVAL '{stale_days} days'
+            WHERE COALESCE(collect_enabled, TRUE) = TRUE
+              AND (
+                   shares_updated_at IS NULL
+                   OR shares_updated_at < NOW() - INTERVAL '{stale_days} days'
+              )
             ORDER BY shares_updated_at ASC NULLS FIRST, code
         """
     if max_stocks:
@@ -317,9 +332,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["full", "incremental"],
+        choices=["full", "incremental", "missing"],
         default="incremental",
-        help="full=全表；incremental=仅未更新或超过 stale_days（默认）",
+        help="full=全表；incremental=仅未更新或超过 stale_days（默认）；missing=仅补缺股本",
     )
     parser.add_argument("--max", type=int, default=None, dest="max_stocks", help="最多处理条数")
     parser.add_argument(

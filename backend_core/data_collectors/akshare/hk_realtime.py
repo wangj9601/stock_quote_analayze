@@ -45,6 +45,14 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                 )
             '''))
             session.commit()
+            try:
+                session.execute(text('''
+                    ALTER TABLE stock_basic_info_hk
+                    ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE
+                '''))
+                session.commit()
+            except Exception:
+                session.rollback()
 
             session.execute(text('''
                 CREATE TABLE IF NOT EXISTS stock_realtime_quote_hk (

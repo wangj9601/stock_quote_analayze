@@ -283,6 +283,7 @@ class StockScreeningStrategy:
                 FROM stock_basic_info 
                 WHERE code LIKE '3%' AND LENGTH(code) = 6
                 AND name NOT LIKE '%ST%'
+                AND COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             
@@ -597,6 +598,7 @@ class StockScreeningStrategy:
                 SELECT DISTINCT code, name 
                 FROM stock_basic_info 
                 WHERE LENGTH(code) = 6 AND code NOT LIKE '3%'
+                AND COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             
@@ -903,6 +905,7 @@ class StockScreeningStrategy:
                 SELECT DISTINCT code, name 
                 FROM stock_basic_info 
                 WHERE LENGTH(code) = 6
+                AND COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             

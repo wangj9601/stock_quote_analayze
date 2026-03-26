@@ -468,6 +468,14 @@ except ImportError as e:
     print(f"❌ admin_quotes_router 导入失败: {e}")
     admin_quotes_router = None
 
+# 尝试导入股票基本信息管理路由
+try:
+    from .admin.stock_basic_admin import router as admin_stock_basic_router
+    print("✅ admin_stock_basic_router 导入成功")
+except ImportError as e:
+    print(f"❌ admin_stock_basic_router 导入失败: {e}")
+    admin_stock_basic_router = None
+
 # 注册admin路由
 if admin_auth_router is not None:
     app.include_router(admin_auth_router)
@@ -511,6 +519,11 @@ if admin_operation_logs_router is not None:
 if admin_quotes_router is not None:
     app.include_router(admin_quotes_router)
     print("✅ admin quotes路由注册成功")
+
+# 注册股票基本信息管理路由
+if admin_stock_basic_router is not None:
+    app.include_router(admin_stock_basic_router)
+    print("✅ admin stock basic路由注册成功")
 
 # 尝试导入PVFRS admin路由
 try:

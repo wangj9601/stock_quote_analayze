@@ -70,7 +70,7 @@ class QuarterlyDataGenerator:
 
     def get_stock_list(self) -> List[Dict[str, str]]:
         try:
-            result = self.session.execute(text("SELECT code, name FROM stock_basic_info ORDER BY code"))
+            result = self.session.execute(text("SELECT code, name FROM stock_basic_info WHERE COALESCE(collect_enabled, TRUE) = TRUE ORDER BY code"))
             stocks = [{'code': row[0], 'name': row[1] if row[1] else ''} for row in result.fetchall()]
             logger.info(f"从数据库获取到 {len(stocks)} 只A股")
             return stocks

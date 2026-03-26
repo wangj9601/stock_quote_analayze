@@ -38,6 +38,11 @@ const routes = [
         component: () => import('@/views/QuotesView.vue')
       },
       {
+        path: 'stock-basic',
+        name: 'StockBasic',
+        component: () => import('@/views/StockBasicInfoView.vue')
+      },
+      {
         path: 'indicators',
         name: 'Indicators',
         component: () => import('@/views/IndicatorsView.vue')

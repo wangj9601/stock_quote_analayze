@@ -42,13 +42,16 @@ class StockSharesCollector(AKShareCollector):
             list: [(code, name), ...]
         """
         if mode == 'full':
-            query = "SELECT code, name FROM stock_basic_info ORDER BY code"
+            query = "SELECT code, name FROM stock_basic_info WHERE COALESCE(collect_enabled, TRUE) = TRUE ORDER BY code"
         else:
             # 增量模式：只更新 shares_updated_at 为 NULL 或超过 7 天的
             query = """
                 SELECT code, name FROM stock_basic_info
-                WHERE shares_updated_at IS NULL
+                WHERE COALESCE(collect_enabled, TRUE) = TRUE
+                  AND (
+                       shares_updated_at IS NULL
                    OR shares_updated_at < NOW() - INTERVAL '7 days'
+                  )
                 ORDER BY shares_updated_at ASC NULLS FIRST, code
             """
 
@@ -136,6 +139,11 @@ class StockSharesCollector(AKShareCollector):
                                    WHERE table_name='stock_basic_info'
                                    AND column_name='shares_updated_at') THEN
                         ALTER TABLE stock_basic_info ADD COLUMN shares_updated_at TIMESTAMP;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info'
+                                   AND column_name='collect_enabled') THEN
+                        ALTER TABLE stock_basic_info ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
                     END IF;
                 END
                 $$;

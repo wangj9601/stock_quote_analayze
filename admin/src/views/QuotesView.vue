@@ -70,6 +70,11 @@
                         刷新
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="primary" plain @click="openTurnoverImportDialog" :style="{ width: '100%' }">
+                        换手率导入
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -867,6 +872,65 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <el-dialog v-model="turnoverImportDialogVisible" title="A股实时行情换手率导入" width="640px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="支持 CSV/XLSX，必须包含 code(代码)、turnover_rate(换手率) 列；trade_date 可在文件列提供，或在下方统一指定。"
+        class="mb-4"
+      />
+      <div class="mb-4">
+        <el-button @click="downloadTurnoverTemplate('csv')">下载CSV模板</el-button>
+        <el-button @click="downloadTurnoverTemplate('xlsx')">下载XLSX模板</el-button>
+      </div>
+      <el-form label-width="120px">
+        <el-form-item label="统一交易日期">
+          <el-date-picker
+            v-model="turnoverImportTradeDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            format="YYYY-MM-DD"
+            placeholder="可选，不填则读取文件中的trade_date列"
+          />
+        </el-form-item>
+        <el-form-item label="文件上传">
+          <el-upload
+            :auto-upload="false"
+            :limit="1"
+            accept=".csv,.xlsx,.xls"
+            :show-file-list="true"
+            :on-change="onTurnoverImportFileChange"
+          >
+            <template #trigger>
+              <el-button>选择文件</el-button>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="Dry Run">
+          <el-switch v-model="turnoverImportDryRun" />
+        </el-form-item>
+      </el-form>
+
+      <el-card v-if="turnoverImportResult" class="mt-2">
+        <template #header>导入结果</template>
+        <div>
+          总行数 {{ turnoverImportResult.total_rows }}，成功 {{ turnoverImportResult.success }}，
+          跳过 {{ turnoverImportResult.skipped }}，失败 {{ turnoverImportResult.failed }}
+        </div>
+        <el-table :data="turnoverImportResult.failed_sample || []" size="small" class="mt-3">
+          <el-table-column prop="row_no" label="行号" width="80" />
+          <el-table-column prop="code" label="代码" width="120" />
+          <el-table-column prop="message" label="错误信息" min-width="220" />
+        </el-table>
+      </el-card>
+
+      <template #footer>
+        <el-button @click="turnoverImportDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="turnoverImportLoading" @click="submitTurnoverImport">开始导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -891,6 +955,12 @@ const stockTotal = ref(0)
 const stockSearchKeyword = ref('')
 const stockMarketFilter = ref('')
 const stockSortBy = ref('update_time')
+const turnoverImportDialogVisible = ref(false)
+const turnoverImportTradeDate = ref('')
+const turnoverImportFile = ref<File | null>(null)
+const turnoverImportLoading = ref(false)
+const turnoverImportDryRun = ref(false)
+const turnoverImportResult = ref<any>(null)
 
 // A股指数数据
 const indexData = ref<any[]>([])
@@ -1116,6 +1186,57 @@ const handleStockPageChange = () => fetchStockData()
 const handleStockPageSizeChange = () => {
   stockCurrentPage.value = 1
   fetchStockData()
+}
+
+const openTurnoverImportDialog = () => {
+  turnoverImportDialogVisible.value = true
+  turnoverImportResult.value = null
+}
+
+const onTurnoverImportFileChange = (uploadFile: any) => {
+  turnoverImportFile.value = uploadFile.raw || null
+}
+
+const submitTurnoverImport = async () => {
+  if (!turnoverImportFile.value) {
+    ElMessage.warning('请先选择导入文件')
+    return
+  }
+  turnoverImportLoading.value = true
+  try {
+    const res = await quotesService.importTurnoverRate(
+      turnoverImportFile.value,
+      turnoverImportTradeDate.value || undefined,
+      turnoverImportDryRun.value,
+      200
+    )
+    turnoverImportResult.value = res.data
+    if (res.success) {
+      ElMessage.success(turnoverImportDryRun.value ? 'Dry Run完成' : '导入完成，请手动点击“刷新”查看最新换手率')
+    } else {
+      ElMessage.warning('导入完成，但存在失败项')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '换手率导入失败')
+  } finally {
+    turnoverImportLoading.value = false
+  }
+}
+
+const downloadTurnoverTemplate = async (format: 'csv' | 'xlsx') => {
+  try {
+    const blob = await quotesService.downloadTurnoverTemplate(format)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `turnover_rate_import_template.${format}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('模板下载失败')
+  }
 }
 
 // A股指数数据获取

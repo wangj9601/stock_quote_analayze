@@ -68,7 +68,8 @@ import {
   Monitor,
   Cpu,
   DocumentCopy,
-  Bell
+  Bell,
+  Tickets
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -80,6 +81,7 @@ const menuItems = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
   { path: '/users', name: '用户管理', icon: User },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
+  { path: '/stock-basic', name: '股票基本信息管理', icon: Tickets },
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/pvfrs-strategy', name: 'PVFARS交易策略', icon: TrendCharts },
   { path: '/pvfrs-management', name: 'PVFARS策略管理', icon: DataAnalysis },

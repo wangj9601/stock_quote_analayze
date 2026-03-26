@@ -122,6 +122,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                                AND column_name='industry') THEN
                     ALTER TABLE stock_basic_info ADD COLUMN industry TEXT;
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_basic_info'
+                               AND column_name='collect_enabled') THEN
+                    ALTER TABLE stock_basic_info ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
+                END IF;
             END
             $$;
         '''))

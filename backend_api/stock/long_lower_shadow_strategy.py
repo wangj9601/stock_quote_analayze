@@ -270,6 +270,7 @@ class LongLowerShadowStrategy:
                 AND code NOT LIKE '3%'      -- 排除创业板
                 AND code NOT LIKE '688%'    -- 排除科创板
                 AND code NOT LIKE '9%'      -- 排除北证A股
+                AND COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             

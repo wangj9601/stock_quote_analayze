@@ -78,6 +78,7 @@ class HKMonthlyDataGenerator:
             result = self.session.execute(text("""
                 SELECT code, name 
                 FROM stock_basic_info_hk 
+                WHERE COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             

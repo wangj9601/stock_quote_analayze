@@ -77,14 +77,18 @@ class RSIBackfillProcessor:
         try:
             if market_type == 'CN':
                 result = self.session.execute(text("""
-                    SELECT DISTINCT code 
-                    FROM historical_quotes 
+                    SELECT DISTINCT h.code
+                    FROM historical_quotes h
+                    JOIN stock_basic_info s ON CAST(s.code AS TEXT) = CAST(h.code AS TEXT)
+                    WHERE COALESCE(s.collect_enabled, TRUE) = TRUE
                     ORDER BY code
                 """))   
             elif market_type == 'HK':
                 result = self.session.execute(text("""
-                    SELECT DISTINCT code 
-                    FROM historical_quotes_hk 
+                    SELECT DISTINCT h.code
+                    FROM historical_quotes_hk h
+                    JOIN stock_basic_info_hk s ON s.code = h.code
+                    WHERE COALESCE(s.collect_enabled, TRUE) = TRUE
                     ORDER BY code
                 """))
             else:

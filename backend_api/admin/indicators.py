@@ -6,7 +6,7 @@
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc, or_
+from sqlalchemy import desc, asc, or_, text
 from datetime import datetime
 import asyncio
 import traceback
@@ -797,8 +797,10 @@ async def generate_batch_all_a_shares_indicators(
         }
     
     try:
-        # 获取全部A股（从 stock_basic_info 表）
-        all_a_stocks = db.query(StockBasicInfo).all()
+        # 获取全部A股（过滤 collect_enabled=false 的股票）
+        all_a_stocks = db.query(StockBasicInfo).filter(
+            text("COALESCE(collect_enabled, TRUE) = TRUE")
+        ).all()
         logger.info(f"[批量生成指标-全部A股] 找到 {len(all_a_stocks)} 只A股")
         
         if not all_a_stocks:

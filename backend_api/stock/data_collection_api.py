@@ -152,12 +152,24 @@ class AkshareDataCollector:
     def get_stock_list(self, only_uncompleted: bool = False) -> List[Dict[str, str]]:
         """从stock_basic_info表获取股票列表"""
         try:
+            self.session.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info' AND column_name='collect_enabled') THEN
+                        ALTER TABLE stock_basic_info ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
+                    END IF;
+                END
+                $$;
+            """))
+            self.session.commit()
             if only_uncompleted:
                 # 只返回未完成全量采集的股票
                 result = self.session.execute(text("""
                     SELECT code, name, full_collection_completed, full_collection_date
                     FROM stock_basic_info 
-                    WHERE full_collection_completed = FALSE OR full_collection_completed IS NULL
+                    WHERE COALESCE(collect_enabled, TRUE) = TRUE
+                      AND (full_collection_completed = FALSE OR full_collection_completed IS NULL)
                     ORDER BY code
                 """))
             else:
@@ -165,6 +177,7 @@ class AkshareDataCollector:
                 result = self.session.execute(text("""
                     SELECT code, name, full_collection_completed, full_collection_date
                     FROM stock_basic_info 
+                    WHERE COALESCE(collect_enabled, TRUE) = TRUE
                     ORDER BY code
                 """))
             
@@ -208,6 +221,17 @@ class AkshareDataCollector:
     def get_hk_stock_list(self, only_uncompleted: bool = False) -> List[Dict[str, str]]:
         """从stock_basic_info_hk表获取港股列表"""
         try:
+            self.session.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info_hk' AND column_name='collect_enabled') THEN
+                        ALTER TABLE stock_basic_info_hk ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
+                    END IF;
+                END
+                $$;
+            """))
+            self.session.commit()
             # 检查是否有数据
             count_result = self.session.execute(text("SELECT count(*) FROM stock_basic_info_hk"))
             count = count_result.scalar()
@@ -242,7 +266,8 @@ class AkshareDataCollector:
                 result = self.session.execute(text("""
                     SELECT code, name
                     FROM stock_basic_info_hk 
-                    WHERE full_collection_completed IS NULL OR full_collection_completed = FALSE
+                    WHERE COALESCE(collect_enabled, TRUE) = TRUE
+                      AND (full_collection_completed IS NULL OR full_collection_completed = FALSE)
                     ORDER BY code
                 """))
             else:
@@ -250,6 +275,7 @@ class AkshareDataCollector:
                 result = self.session.execute(text("""
                     SELECT code, name
                     FROM stock_basic_info_hk 
+                    WHERE COALESCE(collect_enabled, TRUE) = TRUE
                     ORDER BY code
                 """))
             

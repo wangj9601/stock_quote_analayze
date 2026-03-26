@@ -144,7 +144,7 @@ async def get_stock_basic_info_all(db: Session = Depends(get_db)):
     print(f"[stock_basic_info_all] 收到请求: 获取所有股票信息")
     try:
         from models import StockBasicInfo
-        stocks = db.query(StockBasicInfo).all()
+        stocks = db.query(StockBasicInfo).filter(text("COALESCE(collect_enabled, TRUE) = TRUE")).all()
         result = [{'code': str(s.code), 'name': s.name} for s in stocks]
         print(f"[stock_basic_info_all] 返回数据: 共{len(result)}条股票信息")
         return JSONResponse({'success': True, 'data': result, 'total': len(result)})
@@ -164,7 +164,7 @@ async def get_stocks_list(request: Request, db: Session = Depends(get_db)):
         seen_codes = set()  # 用于去重
         
         # 1. 先查询A股基础信息表
-        q_a = db.query(StockBasicInfo)
+        q_a = db.query(StockBasicInfo).filter(text("COALESCE(collect_enabled, TRUE) = TRUE"))
         if query:
             q_a = q_a.filter(
                 (StockBasicInfo.code.like(f"%{query}%")) |

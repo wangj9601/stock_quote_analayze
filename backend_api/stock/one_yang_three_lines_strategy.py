@@ -717,6 +717,7 @@ class OneYangThreeLinesStrategy:
                 FROM stock_basic_info 
                 WHERE LENGTH(code) = 6
                 AND name NOT LIKE '%ST%'
+                AND COALESCE(collect_enabled, TRUE) = TRUE
                 ORDER BY code
             """))
             

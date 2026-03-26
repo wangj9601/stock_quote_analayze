@@ -559,8 +559,4 @@ function switchMarketTab(tabId) {
     }
 }
 
-// 定时刷新数据
-setInterval(function() {
-    console.log('定时刷新数据...');
-    loadRealData();
-}, 1800000); // 每1800 秒刷新一次（30分钟）
+// 已按需求关闭该模块自动刷新：仅在用户手动操作时刷新
