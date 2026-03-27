@@ -257,9 +257,9 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                         'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }
 
-                    # 如果现价、开盘、最高、最低中有为空的，跳过不采集
-                    if not data['current_price'] or not data['open'] or \
-                       not data['high'] or not data['low']:
+                    # 现价为空/0/非正数时跳过，不写入数据库
+                    if data['current_price'] is None or float(data['current_price']) <= 0:
+                        self.logger.debug(f"跳过无效港股现价数据: code={code}, name={name}, current_price={data['current_price']}")
                         continue
 
                     # --- 重试机制插入 stock_basic_info_hk ---

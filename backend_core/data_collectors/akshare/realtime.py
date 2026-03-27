@@ -216,6 +216,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                     'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
 
+                # 现价为空/0/非正数时跳过，不写入数据库
+                if data['current_price'] is None or float(data['current_price']) <= 0:
+                    self.logger.debug(f"跳过无效现价数据: code={code}, name={name}, current_price={data['current_price']}")
+                    continue
+
                 # --- 重试机制插入 stock_basic_info ---
                 max_retries = 3
                 retry_count = 0

@@ -50,12 +50,13 @@ logger = logging.getLogger(__name__)
 
 def _normalize_code(raw: Any) -> str:
     s = str(raw or "").strip().upper()
+    # 兼容 Excel 文本格式常见前缀，如 'SZ300668 或 ’SZ300668
+    s = s.lstrip("'").lstrip("’").strip()
     if not s:
         return ""
-    for prefix in ("SH", "SZ", "BJ"):
-        if s.startswith(prefix):
-            s = s[len(prefix):]
-            break
+    # 兼容 SH600000 / SZ000001 / BJ430047 等前缀；以及其它字母前缀场景
+    while s and s[0].isalpha():
+        s = s[1:]
     if "." in s:
         s = s.split(".")[0]
     if s.isdigit() and len(s) < 6:
@@ -83,31 +84,113 @@ async def import_turnover_rate(
 ):
     """导入A股实时行情换手率（CSV/XLSX）。"""
     name = (file.filename or "").lower()
-    if not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls")):
-        raise HTTPException(status_code=400, detail="仅支持 csv/xlsx 文件")
-
     content = await file.read()
+
+    # 文件名后缀在浏览器上传时可能不可靠（如 Table-0...），按内容兜底探测
+    df = None
+    parse_errors: List[str] = []
+
+    # 1) 明确是 csv 时优先按 csv 解析
     if name.endswith(".csv"):
-        df = None
         for enc in ("utf-8-sig", "utf-8", "gbk"):
             try:
                 df = pd.read_csv(BytesIO(content), encoding=enc)
                 break
-            except Exception:
-                continue
+            except Exception as e:
+                parse_errors.append(f"csv({enc}): {e}")
+
+    # 2) 明确是 excel 时优先按 excel 解析（xlsx/xls）
+    if df is None and (name.endswith(".xlsx") or name.endswith(".xls")):
+        for engine in ("openpyxl", "xlrd"):
+            try:
+                df = pd.read_excel(BytesIO(content), engine=engine)
+                break
+            except Exception as e:
+                parse_errors.append(f"excel({engine}): {e}")
+
+    # 3) 后缀不可靠时：先尝试 csv，再尝试 excel
+    if df is None and not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls")):
+        for enc in ("utf-8-sig", "utf-8", "gbk"):
+            try:
+                trial = pd.read_csv(BytesIO(content), encoding=enc)
+                if trial is not None and not trial.empty and len(trial.columns) >= 2:
+                    df = trial
+                    break
+            except Exception as e:
+                parse_errors.append(f"probe-csv({enc}): {e}")
         if df is None:
-            raise HTTPException(status_code=400, detail="CSV 解析失败")
-    else:
-        df = pd.read_excel(BytesIO(content))
+            for engine in ("openpyxl", "xlrd"):
+                try:
+                    df = pd.read_excel(BytesIO(content), engine=engine)
+                    break
+                except Exception as e:
+                    parse_errors.append(f"probe-excel({engine}): {e}")
+
+    # 4) 兜底：有些“xls”实际是GBK/GB18030编码的文本（常见为制表符分隔）
+    if df is None:
+        for enc in ("gb18030", "gbk", "utf-8-sig", "utf-8"):
+            try:
+                txt = content.decode(enc, errors="strict")
+                # 优先按制表符读取；若不是制表符，交给 python 引擎自动探测分隔符
+                if "\t" in txt:
+                    trial = pd.read_csv(StringIO(txt), sep="\t")
+                else:
+                    trial = pd.read_csv(StringIO(txt), sep=None, engine="python")
+                if trial is not None and not trial.empty and len(trial.columns) >= 2:
+                    df = trial
+                    break
+            except Exception as e:
+                parse_errors.append(f"probe-text({enc}): {e}")
+
+    # 5) 兜底：有些“xls”实际是HTML表格，尝试 read_html
+    if df is None:
+        for enc in ("utf-8", "gbk", "gb18030"):
+            try:
+                html_tables = pd.read_html(BytesIO(content), encoding=enc)
+                if html_tables:
+                    df = html_tables[0]
+                    break
+            except Exception as e:
+                parse_errors.append(f"probe-html({enc}): {e}")
+
+    if df is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "文件解析失败，请上传标准 CSV/XLSX/XLS 文件（包含 code/代码 与 "
+                "turnover_rate/换手率/还手 列）。解析尝试信息："
+                + " | ".join(parse_errors[:3])
+            ),
+        )
 
     if df is None or df.empty:
         raise HTTPException(status_code=400, detail="文件为空")
 
+    # 统一清洗列名，兼容前后空格、全角空格、换行等
+    df.columns = [
+        str(c).replace("\u3000", " ").replace("\n", " ").replace("\r", " ").strip()
+        for c in df.columns
+    ]
+
     code_col = _pick_col(list(df.columns), ["code", "代码", "股票代码", "证券代码"])
-    rate_col = _pick_col(list(df.columns), ["turnover_rate", "换手率"])
+    # 兼容用户当前文件列名“还手/还手率”
+    rate_col = _pick_col(list(df.columns), ["turnover_rate", "换手率", "换手", "还手", "还手率"])
     date_col = _pick_col(list(df.columns), ["trade_date", "日期", "交易日期"])
     if not code_col or not rate_col:
-        raise HTTPException(status_code=400, detail="缺少必要列：code/换手率")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "缺少必要列：code/代码 与 turnover_rate/换手率/还手。"
+                "（说明：换手 也支持）"
+                f"当前识别到列: {list(df.columns)}"
+            ),
+        )
+
+    # 仅保留导入所需列，其它业务列全部忽略
+    needed_cols = [code_col, rate_col]
+    if date_col:
+        needed_cols.append(date_col)
+    df = df[needed_cols].copy()
 
     success = 0
     skipped = 0
