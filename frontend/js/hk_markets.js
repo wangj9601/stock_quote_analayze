@@ -423,7 +423,8 @@ const HKMarketsPage = {
 
     // 开始数据更新
     startDataUpdate() {
-        // 定期更新数据
+        // 定期更新数据已按需求关闭
+        /*
         setInterval(() => {
             if (this.currentTab === 'rankings') {
                 this.loadHKRankingData(this.currentPage);
@@ -434,6 +435,7 @@ const HKMarketsPage = {
         setInterval(() => {
             this.loadHKIndices();
         }, 30000); // 每30秒更新指数数据
+        */
     },
 
     // 格式化价格

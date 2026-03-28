@@ -1131,7 +1131,8 @@ const MarketsPage = {
 
     // 开始数据更新
     startDataUpdate() {
-        // 定期更新数据
+        // 定期更新数据已按需求关闭
+        /*
         setInterval(() => {
             if (this.currentTab === 'rankings') {
                 //this.updateRankingPrices();
@@ -1156,6 +1157,7 @@ const MarketsPage = {
         setInterval(() => {
             this.loadIndexCharts();
         }, 30000); // 每30秒更新图表
+        */
     },
 
     // 渲染分页

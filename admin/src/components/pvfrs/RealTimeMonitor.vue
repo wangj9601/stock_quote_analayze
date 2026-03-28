@@ -178,11 +178,13 @@ const startMonitoring = async () => {
   initChart()
   
   // 开始定时刷新（增加间隔，减少频繁提示）
+  /*
   monitorTimer = setInterval(() => {
     refreshMonitorData()
     refreshAlerts()
     updateChart()
   }, 30000) // 每30秒刷新一次，减少频繁提示
+  */
 }
 
 const stopMonitoring = () => {

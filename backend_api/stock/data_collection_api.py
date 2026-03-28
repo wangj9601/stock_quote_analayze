@@ -1450,6 +1450,10 @@ class AkshareDataCollector:
                 group['ten_day_change_percent'] = group['close'].pct_change(periods=10, fill_method=None) * 100
                 group['thirty_day_change_percent'] = group['close'].pct_change(periods=30, fill_method=None) * 100
                 group['sixty_day_change_percent'] = group['close'].pct_change(periods=60, fill_method=None) * 100
+                
+                # 处理由于价格为 0 导致的无穷大数值 (inf)，数据库 numeric 字段无法存储
+                import numpy as np
+                group = group.replace([np.inf, -np.inf], np.nan)
                 return group
 
             df = df.groupby('code', group_keys=False).apply(_calc_changes)

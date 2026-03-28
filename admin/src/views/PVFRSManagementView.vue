@@ -275,11 +275,13 @@ const handleGuideClose = () => {
   showStrategyGuide.value = false
 }
 
+/*
 const startStatusPolling = () => {
   statusTimer = setInterval(() => {
     refreshSystemStatus()
   }, 30000) // 每30秒刷新一次
 }
+*/
 
 const stopStatusPolling = () => {
   if (statusTimer) {
@@ -292,7 +294,7 @@ const stopStatusPolling = () => {
 onMounted(async () => {
   console.log('PVFRS管理中心已挂载')
   await refreshSystemStatus()
-  startStatusPolling()
+  // startStatusPolling() // 根据需求取消定时刷新功能
 })
 
 onUnmounted(() => {

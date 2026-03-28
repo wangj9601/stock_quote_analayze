@@ -2560,10 +2560,12 @@ const StockPage = {
     },
 
     startDataUpdate() {
-        // 定期更新股价数据
+        // 定期更新股价数据已按要求关闭
+        /*
         setInterval(() => {
             this.updateRealTimeData();
         }, 1800000); // 每30分钟更新一次
+        */
 
         // 监听窗口大小变化
         window.addEventListener('resize', () => {

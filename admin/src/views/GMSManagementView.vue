@@ -179,9 +179,11 @@ const showNotification = (type: string, title: string, message: string) => {
   notification.show = true
 }
 
+/*
 const startStatusPolling = () => {
   statusTimer = setInterval(() => refreshSystemStatus(), 30000)
 }
+*/
 
 const stopStatusPolling = () => {
   if (statusTimer) {
@@ -192,7 +194,7 @@ const stopStatusPolling = () => {
 
 onMounted(async () => {
   await refreshSystemStatus()
-  startStatusPolling()
+  // startStatusPolling()
 })
 
 onUnmounted(() => {

@@ -1620,7 +1620,7 @@ const stopPolling = () => {
 onMounted(() => {
   loadTasks()
   loadCurrentTask()
-  startPolling()
+  // startPolling() // 根据要求取消定时刷新功能
 })
 
 onUnmounted(() => {

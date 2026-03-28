@@ -512,6 +512,8 @@ const AnalysisPage = {
 
     // 开始数据更新
     startDataUpdate() {
+        // 定期更新数据已按需求关闭
+        /*
         // 定期更新市场分析数据
         setInterval(() => {
             if (this.currentTab === 'market-analysis') {
@@ -524,6 +526,7 @@ const AnalysisPage = {
         setInterval(() => {
             this.drawFundFlowChart();
         }, 60000); // 每分钟更新一次
+        */
     }
 };
 

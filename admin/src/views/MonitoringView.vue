@@ -571,9 +571,9 @@ onMounted(async () => {
   }, 100)
   
   // 设置定时刷新
-  refreshTimer = setInterval(() => {
-    refreshData()
-  }, 30000) // 30秒刷新一次
+  // refreshTimer = setInterval(() => {
+  //   refreshData()
+  // }, 30000) // 30秒刷新一次
 })
 
 onUnmounted(() => {
