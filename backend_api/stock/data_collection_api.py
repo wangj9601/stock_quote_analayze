@@ -1662,7 +1662,7 @@ def run_file_historical_collection_task(
                 logger.info(f"[{i+1}/{total_dates}] 正在从文件同步A股历史数据: {date_str}")
                 
                 try:
-                    if collector.collect_historical_quotes(date_str, file_type):
+                    if collector.collect_historical_quotes(date_str, file_type, force_update):
                         success_dates += 1
                 except Exception as e:
                     logger.error(f"同步日期 {date_str} 失败: {e}")

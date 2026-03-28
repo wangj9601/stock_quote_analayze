@@ -38,7 +38,7 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                 return file_path
         return None
     
-    def collect_historical_quotes(self, date_str: str, file_type: str) -> bool:
+    def collect_historical_quotes(self, date_str: str, file_type: str, force_update: bool = False) -> bool:
         session = SessionLocal()  # 新建 session
         try:
             input_params = {'date': date_str}
@@ -81,6 +81,18 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                 self.logger.error(f"重建表MKT_STK_BASICINFO失败: {e}")
                 session.rollback()
                 return False
+
+            # 如果启用强制更新，在正式采集前清理 historical_quotes 对应日期的数据
+            if force_update:
+                try:
+                    iso_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                    # 删除 A 股历史行情表中该日期的存量数据，如果是跨多个日期同步则会依次循环执行删除
+                    session.execute(text("DELETE FROM historical_quotes WHERE date = :t_date"), {"t_date": iso_date})
+                    session.commit()
+                    self.logger.info(f"强制更新模式已启用：已预先清理 historical_quotes 表中日期为 {iso_date} 的数据")
+                except Exception as e:
+                    self.logger.error(f"强制预清理 historical_quotes 数据报错: {e}")
+                    session.rollback()
 
             # 2. 读取文件并插入数据
             if file_type == 'txt':
@@ -305,18 +317,18 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                             total_share = float(res[1]) if res and res[1] else None
                         
                         market = row.get('market', '')
-                        # 历史行情表成交量按「手」存；文件 vol 一般为股，÷100 转为手
+                        # 历史行情表成交量按「手」存；用户反馈文件 vol 已经是手，直接保存
                         vol_raw = self._safe_value(row.get('vol'))
-                        volume = (vol_raw / 100) if vol_raw is not None else None
+                        volume = vol_raw
                         pre_close = self._safe_value(row.get('pre_close'))
                         high = self._safe_value(row.get('high'))
                         low = self._safe_value(row.get('low'))
                         
-                        turnover_rate = None
-                        if total_share and vol_raw is not None and total_share > 0:
-                            # 注意：total_share 目前在 A 股表中单位是「股」（akshare同步时处理后的结果）
-                            # 如果 vol_raw 也是股，直接算出的是百分比的数值部分
-                            turnover_rate = vol_raw / total_share * 100
+                        # 优先使用文件中的换手率，如果没有则计算
+                        turnover_rate = self._safe_value(row.get('turnover_rate'))
+                        if turnover_rate is None and total_share and vol_raw is not None and total_share > 0:
+                            # 注意：total_share 通常为股，vol_raw 为手，需换算：(手*100)/股 * 100
+                            turnover_rate = (vol_raw * 100) / total_share * 100
                         amplitude = None
                         if pre_close and pre_close > 0 and high is not None and low is not None:
                             amplitude = (high - low) / pre_close * 100
@@ -326,14 +338,14 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                             'name': name,
                             'market': market,
                             'date': datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
-                            'collected_source': 'tushare',
+                            'collected_source': 'file',
                             'collected_date': datetime.datetime.now().isoformat(),
                             'open': self._safe_value(row.get('open')),
                             'high': high,
                             'low': low,
                             'close': self._safe_value(row.get('close')),
                             'volume': volume,
-                            'amount': self._safe_value(row.get('amount')) * 1000 if self._safe_value(row.get('amount')) is not None else None,
+                            'amount': self._safe_value(row.get('amount')),
                             'change_percent': self._safe_value(row.get('pct_chg')),
                             'pre_close': pre_close,
                             'change': self._safe_value(row.get('change')),
