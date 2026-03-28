@@ -801,6 +801,14 @@ class RealtimeHistoricalCollectionRequest(BaseModel):
     end_date: str
     indicators: Optional[List[str]] = None  # 可选：同步后生成的技术指标列表
 
+class FileHistoricalCollectionRequest(BaseModel):
+    """从本地文件采集A股历史数据请求模型"""
+    start_date: str
+    end_date: str
+    force_update: bool = False
+    indicators: Optional[List[str]] = None
+    file_type: str = 'txt'
+
 class DataCollectionResponse(BaseModel):
     """数据采集响应模型"""
     task_id: str

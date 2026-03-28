@@ -313,6 +313,128 @@
               </div>
             </el-card>
           </el-tab-pane>
+
+          <!-- 历史数据采集-文件标签页 -->
+          <el-tab-pane label="历史数据采集-文件" name="file">
+            <el-card>
+              <div class="text-center mb-8">
+                <el-icon class="text-6xl text-gray-400 mb-4"><DataAnalysis /></el-icon>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">历史数据采集-文件</h2>
+                <p class="text-gray-600">从本地文件（TXT/CSV）采集A股历史行情数据并入库</p>
+              </div>
+
+              <!-- 文件采集配置表单 -->
+              <div class="max-w-2xl mx-auto">
+                <el-form @submit.prevent="startFileCollection" :model="fileForm" label-width="120px">
+                  <!-- 日期范围 -->
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="开始日期" required>
+                        <el-date-picker
+                          v-model="fileForm.start_date"
+                          type="date"
+                          placeholder="选择开始日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="结束日期" required>
+                        <el-date-picker
+                          v-model="fileForm.end_date"
+                          type="date"
+                          placeholder="选择结束日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+
+                  <!-- 文件类型选择 -->
+                  <el-form-item label="文件类型" required>
+                    <el-radio-group v-model="fileForm.file_type">
+                      <el-radio label="txt">TXT (SQL脚本)</el-radio>
+                      <el-radio label="csv">CSV (通用格式)</el-radio>
+                      <el-radio label="xlsx">XLSX (Excel格式)</el-radio>
+                    </el-radio-group>
+                    <div class="text-sm text-gray-500 mt-1">
+                      TXT 格式应包含 SQL INSERT/REPLACE 语句；CSV/XLSX 格式应包含代码和行情字段
+                    </div>
+                  </el-form-item>
+
+                  <!-- 文件上传 -->
+                  <el-form-item label="上传文件" required>
+                    <el-upload
+                      class="upload-demo"
+                      :action="`${API_BASE}/api/data-collection/upload-historical-file`"
+                      :on-success="handleFileUploadSuccess"
+                      :on-error="handleFileUploadError"
+                      :before-upload="beforeFileUpload"
+                      multiple
+                      drag
+                    >
+                      <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                      <div class="el-upload__text">
+                        将文件拖到此处，或<em>点击上传</em>
+                      </div>
+                      <template #tip>
+                        <div class="el-upload__tip">
+                          请上传 daily_YYYYMMDD.txt、.csv 或 .xlsx 格式的文件
+                        </div>
+                      </template>
+                    </el-upload>
+                  </el-form-item>
+
+                  <!-- 强制更新选项 -->
+                  <el-form-item>
+                    <el-checkbox v-model="fileForm.force_update">
+                      强制更新（目前对于重叠日期采用替换策略）
+                    </el-checkbox>
+                  </el-form-item>
+
+                  <!-- 指标数据生成选项 -->
+                  <el-form-item label="指标数据生成">
+                    <div class="flex items-center mb-2">
+                      <el-checkbox 
+                        v-model="isAllFileIndicatorsSelected" 
+                        :indeterminate="isFileIndicatorsIndeterminate"
+                        @change="handleSelectAllFileIndicators"
+                      >
+                        全选
+                      </el-checkbox>
+                    </div>
+                    <el-checkbox-group v-model="safeFileIndicators">
+                      <el-checkbox value="ma">MA移动平均线</el-checkbox>
+                      <el-checkbox value="mavol">MAVOL成交量移动平均线</el-checkbox>
+                      <el-checkbox value="kdj">KDJ随机指标</el-checkbox>
+                      <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
+                      <el-checkbox value="boll">BOLL布林带</el-checkbox>
+                      <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                    </el-checkbox-group>
+                    <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
+                  </el-form-item>
+
+                  <!-- 操作按钮 -->
+                  <el-form-item>
+                    <el-button
+                      type="primary"
+                      :loading="fileLoading"
+                      :disabled="!!currentTask"
+                      @click="startFileCollection"
+                    >
+                      <el-icon v-if="fileLoading" class="mr-2"><Loading /></el-icon>
+                      {{ fileLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                    </el-button>
+                    <el-button @click="resetFileForm">重置</el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-card>
+          </el-tab-pane>
         </el-tabs>
       </el-tab-pane>
 
@@ -646,7 +768,8 @@ import {
   DataAnalysis, 
   Warning, 
   Loading, 
-  Refresh
+  Refresh,
+  UploadFilled
 } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { API_BASE } from '@/config/api'
@@ -779,12 +902,30 @@ const realtimeHistForm = ref<RealtimeHistFormData>({
   indicators: []
 })
 
+// 文件数据采集表单
+interface FileFormData {
+  start_date: string
+  end_date: string
+  force_update: boolean
+  indicators: string[]
+  file_type: string
+}
+
+const fileForm = ref<FileFormData>({
+  start_date: '',
+  end_date: '',
+  force_update: false,
+  indicators: [],
+  file_type: 'txt'
+})
+
 // 状态数据
 const tasks = ref<Task[]>([])
 const currentTask = ref<CurrentTask | null>(null)
 const loading = ref(false)
 const hkLoading = ref(false)
 const tushareLoading = ref(false)
+const fileLoading = ref(false)
 const ashareRealtimeLoading = ref(false)
 const hkRealtimeLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
@@ -893,6 +1034,42 @@ const handleSelectAllRealtimeIndicators = (checked: boolean | string | number | 
     safeRealtimeIndicators.value = [...allIndicators]
   } else {
     safeRealtimeIndicators.value = []
+  }
+}
+
+// 文件表单指标选择
+const safeFileIndicators = computed<string[]>({
+  get: () => {
+    const indicators = fileForm.value.indicators
+    return Array.isArray(indicators) ? indicators : []
+  },
+  set: (val: string[]) => {
+    fileForm.value.indicators = Array.isArray(val) ? val : []
+  }
+})
+
+const isFileIndicatorsIndeterminate = computed(() => {
+  const indicators = safeFileIndicators.value
+  const selectedCount = indicators.length
+  if (selectedCount === 0) {
+    return false
+  } else if (selectedCount === allIndicators.length) {
+    return false
+  } else {
+    return true
+  }
+})
+
+const isAllFileIndicatorsSelected = computed(() => {
+  return safeFileIndicators.value.length === allIndicators.length
+})
+
+const handleSelectAllFileIndicators = (checked: boolean | string | number | boolean[] | undefined) => {
+  const isChecked = typeof checked === 'boolean' ? checked : Boolean(checked)
+  if (isChecked) {
+    safeFileIndicators.value = [...allIndicators]
+  } else {
+    safeFileIndicators.value = []
   }
 }
 
@@ -1193,6 +1370,16 @@ const resetTushareForm = () => {
   }
 }
 
+const resetFileForm = () => {
+  fileForm.value = {
+    start_date: '',
+    end_date: '',
+    force_update: false,
+    indicators: [],
+    file_type: 'txt'
+  }
+}
+
 const startTushareCollection = async () => {
   try {
     tushareLoading.value = true
@@ -1243,6 +1430,88 @@ const startTushareCollection = async () => {
     ElMessage.error(errorMsg)
   } finally {
     tushareLoading.value = false
+  }
+}
+
+const beforeFileUpload = (file: File) => {
+  const isTxt = file.name.endsWith('.txt')
+  const isCsv = file.name.endsWith('.csv')
+  const isXlsx = file.name.endsWith('.xlsx')
+  if (!isTxt && !isCsv && !isXlsx) {
+    ElMessage.error('只能上传 TXT、CSV 或 XLSX 文件!')
+    return false
+  }
+  // 校验文件名格式 daily_YYYYMMDD 或 historical_quotes_YYYY-MM-DD 等
+  const namePattern = /^(daily_|historical_quotes_)\d{4}-?\d{2}-?\d{2}\.(txt|csv|xlsx)$/
+  if (!namePattern.test(file.name)) {
+    ElMessage.warning(`文件名 ${file.name} 不符合建议格式 (如 daily_20231027 或 historical_quotes_2023-10-27)，采集任务可能无法自动匹配。`)
+  }
+  return true
+}
+
+const handleFileUploadSuccess = (response: any) => {
+  if (response.success) {
+    ElMessage.success(response.message || '文件上传成功')
+  } else {
+    ElMessage.error(response.message || '文件上传失败')
+  }
+}
+
+const handleFileUploadError = (error: any) => {
+  console.error('文件上传失败:', error)
+  ElMessage.error('文件上传过程出错，请检查网络或后端接口')
+}
+
+const startFileCollection = async () => {
+  try {
+    fileLoading.value = true
+    
+    // 验证表单
+    if (!fileForm.value.start_date || !fileForm.value.end_date) {
+      ElMessage.error('请选择开始日期和结束日期')
+      return
+    }
+    
+    // 检查当前任务状态
+    if (currentTask.value) {
+      ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
+      return
+    }
+
+    console.log('发送文件采集请求:', fileForm.value)
+    
+    // 指标
+    const indicatorsToRun = safeFileIndicators.value
+
+    const response = await axios.post(`${API_BASE}/api/data-collection/file-historical`, {
+      start_date: fileForm.value.start_date,
+      end_date: fileForm.value.end_date,
+      force_update: fileForm.value.force_update,
+      indicators: indicatorsToRun,
+      file_type: fileForm.value.file_type
+    })
+    
+    if (response.data.status === 'started') {
+      ElMessage.success('历史数据采集(文件)任务已启动')
+      loadTasks()
+      loadCurrentTask()
+    }
+    
+  } catch (error: any) {
+    console.error('启动历史数据采集(文件)任务失败:', error)
+    let errorMsg = '启动历史数据采集(文件)任务失败'
+    
+    if (error.response) {
+      errorMsg = error.response.data?.detail || `服务器错误 (${error.response.status})`
+    } else if (error.request) {
+      errorMsg = '无法连接到服务器，请检查网络连接'
+    } else {
+      errorMsg = error.message || '未知错误'
+    }
+    
+    ElMessage.error(errorMsg)
+  } finally {
+    fileLoading.value = false
   }
 }
 

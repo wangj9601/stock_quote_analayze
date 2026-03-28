@@ -279,10 +279,16 @@
                         :style="{ width: '100%' }"
                       />
                     </el-col>
-                    <el-col :xs="24" :sm="12" :md="4" :lg="4" :xl="4">
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
                       <el-button @click="refreshHistoricalData" :loading="historicalLoading" :style="{ width: '100%' }">
                         <el-icon><Refresh /></el-icon>
                         刷新
+                      </el-button>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button type="success" plain @click="openExportDialog" :style="{ width: '100%' }">
+                        <el-icon><Download /></el-icon>
+                        导出
                       </el-button>
                     </el-col>
                   </el-row>
@@ -328,36 +334,6 @@
                       <span :class="getChangeClass(scope.row.change_percent)">
                         {{ formatPercent(scope.row.change_percent) }}
                       </span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="k" label="K" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.k !== null && scope.row.k !== undefined ? Number(scope.row.k).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="d" label="D" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.d !== null && scope.row.d !== undefined ? Number(scope.row.d).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="j" label="J" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.j !== null && scope.row.j !== undefined ? Number(scope.row.j).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="rsi6" label="RSI6" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.rsi6 !== null && scope.row.rsi6 !== undefined ? Number(scope.row.rsi6).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="rsi12" label="RSI12" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.rsi12 !== null && scope.row.rsi12 !== undefined ? Number(scope.row.rsi12).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="rsi24" label="RSI24" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.rsi24 !== null && scope.row.rsi24 !== undefined ? Number(scope.row.rsi24).toFixed(2) : '-' }}
                     </template>
                   </el-table-column>
                 </el-table>
@@ -631,36 +607,6 @@
                       </span>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="k" label="K" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.k !== null && scope.row.k !== undefined ? Number(scope.row.k).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="d" label="D" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.d !== null && scope.row.d !== undefined ? Number(scope.row.d).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="j" label="J" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.j !== null && scope.row.j !== undefined ? Number(scope.row.j).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="rsi6" label="RSI6" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.rsi6 !== null && scope.row.rsi6 !== undefined ? Number(scope.row.rsi6).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="rsi12" label="RSI12" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.rsi12 !== null && scope.row.rsi12 !== undefined ? Number(scope.row.rsi12).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="rsi24" label="RSI24" min-width="60" show-overflow-tooltip>
-                    <template #default="scope">
-                        {{ scope.row.rsi24 !== null && scope.row.rsi24 !== undefined ? Number(scope.row.rsi24).toFixed(2) : '-' }}
-                    </template>
-                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -931,13 +877,84 @@
         <el-button type="primary" :loading="turnoverImportLoading" @click="submitTurnoverImport">开始导入</el-button>
       </template>
     </el-dialog>
+
+    <!-- 历史数据导出对话框 -->
+    <el-dialog
+      v-model="exportDialogVisible"
+      title="导出A股历史行情数据"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="exportFormRef"
+        :model="exportForm"
+        :rules="exportRules"
+        label-width="100px"
+      >
+        <el-form-item label="日期选择">
+          <el-radio-group v-model="exportForm.dateType">
+            <el-radio value="single">指定单日</el-radio>
+            <el-radio value="range">指定区间</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        
+        <el-form-item v-if="exportForm.dateType === 'single'" label="选择日期" prop="date">
+          <el-date-picker
+            v-model="exportForm.date"
+            type="date"
+            placeholder="选择日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item v-if="exportForm.dateType === 'range'" label="开始日期" prop="startDate">
+          <el-date-picker
+            v-model="exportForm.startDate"
+            type="date"
+            placeholder="开始日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item v-if="exportForm.dateType === 'range'" label="结束日期" prop="endDate">
+          <el-date-picker
+            v-model="exportForm.endDate"
+            type="date"
+            placeholder="结束日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="导出格式" prop="format">
+          <el-radio-group v-model="exportForm.format">
+            <el-radio value="xlsx">Excel (.xlsx)</el-radio>
+            <el-radio value="txt">文本 (.txt)</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="exportDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitExport" :loading="exportLoading">
+            确定导出
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElLoading } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search, Download } from '@element-plus/icons-vue'
 import { quotesService } from '@/services/quotes.service'
 
 // 主标签和子标签
@@ -980,6 +997,53 @@ const historicalSearchKeyword = ref('')
 const historicalStartDate = ref('')
 const historicalEndDate = ref('')
 const historicalPeriod = ref('daily')
+
+// 导出功能状态
+const exportDialogVisible = ref(false)
+const exportLoading = ref(false)
+const exportFormRef = ref<FormInstance>()
+const exportForm = reactive({
+  dateType: 'single', // 'single' | 'range'
+  date: '',
+  startDate: '',
+  endDate: '',
+  format: 'xlsx' as 'txt' | 'xlsx'
+})
+const exportRules = reactive<FormRules>({
+  date: [
+    { 
+      required: true, 
+      message: '请选择指定日期', 
+      trigger: 'change',
+      validator: (_rule, value, callback) => {
+        if (exportForm.dateType === 'single' && !value) callback(new Error('请选择指定日期'))
+        else callback()
+      }
+    }
+  ],
+  startDate: [
+    { 
+      required: true, 
+      message: '请选择开始日期', 
+      trigger: 'change',
+      validator: (_rule, value, callback) => {
+        if (exportForm.dateType === 'range' && !value) callback(new Error('请选择开始日期'))
+        else callback()
+      }
+    }
+  ],
+  endDate: [
+    { 
+      required: true, 
+      message: '请选择结束日期', 
+      trigger: 'change',
+      validator: (_rule, value, callback) => {
+        if (exportForm.dateType === 'range' && !value) callback(new Error('请选择结束日期'))
+        else callback()
+      }
+    }
+  ]
+})
 
 // A股行业板块数据
 const industryData = ref<any[]>([])
@@ -1318,6 +1382,63 @@ const handleHistoricalPageChange = () => fetchHistoricalData()
 const handleHistoricalPageSizeChange = () => {
   historicalCurrentPage.value = 1
   fetchHistoricalData()
+}
+
+// 导出历史数据
+const openExportDialog = () => {
+  exportForm.dateType = 'single'
+  exportForm.date = ''
+  exportForm.startDate = ''
+  exportForm.endDate = ''
+  exportForm.format = 'xlsx'
+  if (exportFormRef.value) exportFormRef.value.resetFields()
+  exportDialogVisible.value = true
+}
+
+const submitExport = async () => {
+  if (!exportFormRef.value) return
+  await exportFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        exportLoading.value = true
+        const params: any = { format: exportForm.format }
+        if (exportForm.dateType === 'single') {
+          params.date = exportForm.date
+        } else {
+          params.startDate = exportForm.startDate
+          params.endDate = exportForm.endDate
+        }
+        
+        const blob = await quotesService.exportHistoricalQuotes(params)
+        
+        // 创建下载链接
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        let filename = 'historical_quotes'
+        if (exportForm.dateType === 'single') {
+          filename += `_${exportForm.date}`
+        } else {
+          filename += `_${exportForm.startDate}_to_${exportForm.endDate}`
+        }
+        filename += `.${exportForm.format}`
+        
+        link.setAttribute('download', filename)
+        document.body.appendChild(link)
+        link.click()
+        link.parentNode?.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        
+        ElMessage.success('导出历史行情数据成功')
+        exportDialogVisible.value = false
+      } catch (error) {
+        console.error('导出历史行情数据失败:', error)
+        ElMessage.error('导出失败，请重试')
+      } finally {
+        exportLoading.value = false
+      }
+    }
+  })
 }
 
 // A股行业板块数据获取

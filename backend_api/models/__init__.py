@@ -77,6 +77,7 @@ try:
         DataCollectionStatus = getattr(models_module, 'DataCollectionStatus', None)
         TushareHistoricalCollectionRequest = getattr(models_module, 'TushareHistoricalCollectionRequest', None)
         RealtimeHistoricalCollectionRequest = getattr(models_module, 'RealtimeHistoricalCollectionRequest', None)
+        FileHistoricalCollectionRequest = getattr(models_module, 'FileHistoricalCollectionRequest', None)
         RealtimeCollectionRequest = getattr(models_module, 'RealtimeCollectionRequest', None)
         RealtimeCollectionResponse = getattr(models_module, 'RealtimeCollectionResponse', None)
         Base = getattr(models_module, 'Base', None)
@@ -153,6 +154,7 @@ except Exception as e:
     DataCollectionStatus = None
     TushareHistoricalCollectionRequest = None
     RealtimeHistoricalCollectionRequest = None
+    FileHistoricalCollectionRequest = None
     RealtimeCollectionRequest = None
     RealtimeCollectionResponse = None
     Base = None
@@ -231,6 +233,7 @@ __all__ = [
     'DataCollectionStatus',
     'TushareHistoricalCollectionRequest',
     'RealtimeHistoricalCollectionRequest',
+    'FileHistoricalCollectionRequest',
     'RealtimeCollectionRequest',
     'RealtimeCollectionResponse',
     'SystemMonitorMetric',

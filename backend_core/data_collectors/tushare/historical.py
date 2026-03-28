@@ -1139,6 +1139,28 @@ class HistoricalQuoteCollector(TushareCollector):
             ts.set_token(self.config['token'])
             pro = ts.pro_api()
             df = pro.daily(trade_date=date_str)  # 这里需要根据tushare实际API替换
+            if df is None or (hasattr(df, "empty") and df.empty):
+                self.logger.warning(
+                    "tushare daily 返回空数据 (trade_date=%s)，不写入历史表，不执行 MA 等指标计算",
+                    date_str,
+                )
+                try:
+                    session.execute(text('''
+                        INSERT INTO historical_collect_operation_logs
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+                    '''), {
+                        'operation_type': 'historical_quote_collect',
+                        'operation_desc': f'采集日期: {collect_date}\n输入参数: {input_params}\ntushare daily 返回空',
+                        'affected_rows': 0,
+                        'status': 'error',
+                        'error_message': 'tushare返回空数据',
+                        'collect_source': 'tushare'
+                    })
+                    session.commit()
+                except Exception as log_e:
+                    self.logger.error("记录空数据日志失败: %s", log_e)
+                return False
             self.logger.info("采集到 %d 条历史行情数据", len(df))
             try:
                 for _, row in df.iterrows():

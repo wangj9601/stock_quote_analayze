@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from backend_api.database import get_db
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import logging
+import pandas as pd
+import io
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 logger = logging.getLogger(__name__)
@@ -127,3 +129,76 @@ def get_historical_quotes_multi_period(
             {'success': False, 'message': f'查询失败: {str(e)}'},
             status_code=500
         )
+
+@router.get("/historical/export")
+def export_historical_quotes(
+    target_date: Optional[str] = Query(None, description="指定日期 YYYY-MM-DD"),
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    format: str = Query('xlsx', description="导出格式: txt, xlsx"),
+    db: Session = Depends(get_db)
+):
+    """
+    导出A股历史行情数据
+    """
+    try:
+        where_conditions = []
+        params = {}
+        
+        if target_date:
+            where_conditions.append("date = :target_date")
+            params['target_date'] = target_date
+        else:
+            if start_date:
+                where_conditions.append("date >= :start_date")
+                params['start_date'] = start_date
+            if end_date:
+                where_conditions.append("date <= :end_date")
+                params['end_date'] = end_date
+                
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        
+        data_query = text(f"""
+            SELECT code, name, date, open, high, low, close, pre_close, volume, amount, change_percent, turnover_rate
+            FROM historical_quotes
+            WHERE {where_clause}
+            ORDER BY date DESC, code ASC
+        """)
+        
+        result = db.execute(data_query, params)
+        rows = result.fetchall()
+        
+        df = pd.DataFrame(rows, columns=['code', 'name', 'date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'change_percent', 'turnover_rate'])
+        
+        if format == 'xlsx':
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Historical Quotes')
+            output.seek(0)
+            return Response(
+                content=output.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={
+                    "Content-Disposition": f"attachment; filename=historical_quotes.{format}"
+                }
+            )
+        else:
+            # txt
+            output = io.StringIO()
+            df.to_csv(output, index=False, sep='\\t')
+            return Response(
+                content=output.getvalue().encode('utf-8'),
+                media_type="text/plain",
+                headers={
+                    "Content-Disposition": f"attachment; filename=historical_quotes.{format}"
+                }
+            )
+    except Exception as e:
+        logger.error(f"导出历史数据失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            {'success': False, 'message': f'导出失败: {str(e)}'},
+            status_code=500
+        )
+

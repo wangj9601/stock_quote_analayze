@@ -4,10 +4,12 @@
 历史数据采集API服务
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+import os
+import shutil
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +28,7 @@ from backend_api.models import (
     RealtimeCollectionRequest,
     RealtimeCollectionResponse,
     RealtimeHistoricalCollectionRequest,
+    FileHistoricalCollectionRequest,
 )
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
@@ -1622,6 +1625,203 @@ async def start_realtime_historical_collection(
         logger.error(f"启动实时行情表历史采集任务失败: {e}")
         raise HTTPException(status_code=500, detail=f"启动采集任务失败: {str(e)}")
 
+def run_file_historical_collection_task(
+    task_id: str,
+    start_date: str,
+    end_date: str,
+    force_update: bool = False,
+    indicators: Optional[List[str]] = None,
+    file_type: str = 'txt',
+):
+    """从本地文件采集A股历史数据（后台任务）"""
+    global current_task_id
+    try:
+        logger.info(f"开始执行历史数据采集-文件任务: {task_id}")
+        
+        from backend_core.data_collectors.tushare.historical_import_from_file import HistoricalQuoteImportFromFileCollector
+        collector = HistoricalQuoteImportFromFileCollector()
+        from backend_api.database import SessionLocal
+        db = SessionLocal()
+        
+        try:
+            # 文件采集按天循环
+            import pandas as pd
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            date_range = pd.date_range(start, end)
+            
+            total_dates = len(date_range)
+            success_dates = 0
+            
+            with task_lock:
+                if task_id in collection_tasks:
+                    collection_tasks[task_id]["total_stocks"] = total_dates # 这里使用天数代替股票数作为进度
+            
+            for i, current_date in enumerate(date_range):
+                date_str = current_date.strftime('%Y%m%d')
+                logger.info(f"[{i+1}/{total_dates}] 正在从文件同步A股历史数据: {date_str}")
+                
+                try:
+                    if collector.collect_historical_quotes(date_str, file_type):
+                        success_dates += 1
+                except Exception as e:
+                    logger.error(f"同步日期 {date_str} 失败: {e}")
+                
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id]["processed_stocks"] = i + 1
+            
+            # 生成技术指标
+            indicator_result = {'total': 0, 'success': 0, 'failed': 0}
+            if indicators:
+                ak_collector = AkshareDataCollector(db)
+                logger.info(f"历史数据(文件)采集完成，开始生成指标: {indicators}（扩展历史以计算 MA200 等）")
+                indicator_result = ak_collector.generate_indicators_for_date_range(
+                    start_date, end_date, indicators, extended_start_days=300
+                )
+            
+                # 计算 5/10/30/60 天涨跌百分比
+                ak_collector.update_multi_day_change_for_date_range(start_date, end_date)
+            
+            # 汇总结果
+            with task_lock:
+                if task_id in collection_tasks:
+                    collection_tasks[task_id].update({
+                        "status": "completed",
+                        "progress": 100,
+                        "success_count": success_dates,
+                        "failed_count": total_dates - success_dates,
+                        "end_time": datetime.now(),
+                    })
+            
+            logger.info(f"历史数据采集-文件任务完成: {task_id}")
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"历史数据采集-文件任务执行失败: {task_id}, 错误: {e}")
+        with task_lock:
+            if task_id in collection_tasks:
+                collection_tasks[task_id].update({
+                    "status": "failed",
+                    "end_time": datetime.now(),
+                    "error_message": str(e)
+                })
+    finally:
+        with task_execution_lock:
+            if current_task_id == task_id:
+                current_task_id = None
+                logger.info(f"已清除当前任务ID: {task_id}")
+
+@router.post("/file-historical", response_model=DataCollectionResponse)
+async def start_file_historical_collection(
+    request: FileHistoricalCollectionRequest,
+    background_tasks: BackgroundTasks,
+):
+    """启动从本地文件读入A股历史数据的任务"""
+    global current_task_id
+    try:
+        # 验证日期格式
+        try:
+            datetime.strptime(request.start_date, '%Y-%m-%d')
+            datetime.strptime(request.end_date, '%Y-%m-%d')
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+
+        # 检查是否有其他任务正在运行
+        with task_execution_lock:
+            if current_task_id is not None:
+                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
+
+        # 生成任务ID
+        task_id = f"file_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
+
+        # 初始化任务状态
+        with task_lock:
+            collection_tasks[task_id] = {
+                "status": "running",
+                "progress": 0,
+                "total_stocks": 0,
+                "processed_stocks": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "collected_count": 0,
+                "skipped_count": 0,
+                "start_time": datetime.now(),
+                "end_time": None,
+                "error_message": None,
+                "failed_details": []
+            }
+
+        # 设置当前任务ID
+        with task_execution_lock:
+            current_task_id = task_id
+
+        # 启动后台任务
+        background_tasks.add_task(
+            run_file_historical_collection_task,
+            task_id,
+            request.start_date,
+            request.end_date,
+            request.force_update,
+            request.indicators,
+            request.file_type,
+        )
+
+        logger.info(f"启动历史数据采集-文件任务: {task_id}")
+
+        return DataCollectionResponse(
+            task_id=task_id,
+            status="started",
+            message="历史数据采集-文件任务已启动",
+            start_date=request.start_date,
+            end_date=request.end_date,
+            market="CN",
+        )
+
+    except Exception as e:
+        logger.error(f"启动历史数据采集-文件任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动任务失败: {str(e)}")
+
+@router.post("/upload-historical-file")
+async def upload_historical_file(
+    file: UploadFile = File(...)
+):
+    """上传A股历史行情数据文件 (用于历史数据采集-文件功能)"""
+    try:
+        # 确保目录存在
+        upload_dir = os.path.join("backend_core", "data")
+        if not os.path.exists(upload_dir):
+            os.makedirs(upload_dir)
+            
+        # 校验文件名格式 (建议为 daily_YYYYMMDD 或 historical_quotes_YYYY-MM-DD 等)
+        filename = file.filename
+        is_valid_prefix = filename.startswith("daily_") or filename.startswith("historical_quotes_")
+        is_valid_ext = filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".xlsx")
+        
+        if not (is_valid_prefix and is_valid_ext):
+             # 虽然不做严格限制，但打印警告
+             logger.warning(f"上传的文件名 {filename} 不符合建议格式 (daily_或historical_quotes_前缀)")
+             
+        file_path = os.path.join(upload_dir, filename)
+        
+        # 保存文件
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        logger.info(f"文件上传成功: {filename} 到 {file_path}")
+        
+        return {
+            "success": True,
+            "message": f"文件 {filename} 上传成功",
+            "filename": filename,
+            "path": file_path
+        }
+    except Exception as e:
+        logger.error(f"文件上传失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
+
     def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
         """记录采集结果到日志表"""
         try:
@@ -2736,7 +2936,12 @@ class TushareDataCollector:
                 })
 
             if not rows:
-                return {'success': True, 'collected': 0, 'skipped': 0, 'error': None}
+                return {
+                    'success': False,
+                    'collected': 0,
+                    'skipped': 0,
+                    'error': 'tushare返回数据经筛选后无有效行（可能均为退市等）',
+                }
 
             upsert_sql = text("""
                 INSERT INTO historical_quotes
@@ -2879,14 +3084,21 @@ def run_tushare_historical_collection_task(
                 force_update
             )
             
-            # 采集完成后，按选定日期范围进行全量 MA、MAVOL、PVFRS(GMS) 指标计算并入库（至少此三项，可与请求的其它指标合并）
-            indicators_to_run = list(set((indicators or []) + ['ma', 'mavol', 'pvfrs']))
-            logger.info(f"开始为采集日期范围 [{start_date}, {end_date}] 生成指标: {indicators_to_run}")
-            akshare_collector = AkshareDataCollector(db)
-            indicator_result = akshare_collector.generate_indicators_for_date_range(
-                start_date, end_date, indicators_to_run, extended_start_days=300
-            )
-            logger.info(f"TuShare采集后指标生成完成: {indicator_result}")
+            # 仅当至少有一个交易日从 tushare 成功落库（或视为成功跳过）时才生成指标；若全部为空/报错则跳过，避免用旧数据误算 MA 等
+            indicator_result = None
+            if result.get("success_dates", 0) > 0:
+                indicators_to_run = list(set((indicators or []) + ['ma', 'mavol', 'pvfrs']))
+                logger.info(f"开始为采集日期范围 [{start_date}, {end_date}] 生成指标: {indicators_to_run}")
+                akshare_collector = AkshareDataCollector(db)
+                indicator_result = akshare_collector.generate_indicators_for_date_range(
+                    start_date, end_date, indicators_to_run, extended_start_days=300
+                )
+                logger.info(f"TuShare采集后指标生成完成: {indicator_result}")
+            else:
+                logger.warning(
+                    "Tushare 历史采集无任何成功交易日（接口返回空或全部失败），跳过 MA/MAVOL/PVFRS 等指标计算。采集结果: %s",
+                    result,
+                )
             
             # 更新任务状态
             with task_lock:

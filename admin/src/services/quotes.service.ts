@@ -170,15 +170,6 @@ class QuotesService {
   }
 
   /**
-   * 下载换手率导入模板（CSV/XLSX）
-   */
-  async downloadTurnoverTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {
-    return apiService.get(`/quotes/turnover/import/template?format=${format}`, {
-      responseType: 'blob'
-    })
-  }
-
-  /**
    * 刷新所有行情数据
    */
   async refreshAllQuotes(): Promise<{ success: boolean; message: string }> {
@@ -222,6 +213,27 @@ class QuotesService {
       page: params.page,
       pageSize: params.pageSize
     }
+  }
+
+  /**
+   * 导出历史行情数据
+   */
+  async exportHistoricalQuotes(params: { date?: string, startDate?: string, endDate?: string, format: 'txt' | 'xlsx' }): Promise<Blob> {
+    const queryParams = new URLSearchParams()
+    if (params.date) {
+      queryParams.append('target_date', params.date)
+    }
+    if (params.startDate) {
+      queryParams.append('start_date', params.startDate)
+    }
+    if (params.endDate) {
+      queryParams.append('end_date', params.endDate)
+    }
+    queryParams.append('format', params.format)
+
+    return apiService.get(this.getQuotesApiUrl(`/historical/export?${queryParams}`), {
+      responseType: 'blob'
+    })
   }
 
   /**
