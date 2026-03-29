@@ -36,7 +36,7 @@ from backend_core.utils.mavol_calculator import MAVOLCalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.boll_calculator import BOLLCalculator
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 
 router = APIRouter(prefix="/api/data-collection", tags=["数据采集"])
 
@@ -469,15 +469,39 @@ class AkshareDataCollector:
             logger.error(f"更新股票 {stock_code} 全量采集标志失败: {e}")
             # 不抛出异常，避免影响主流程
     
+    def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
+        """记录采集结果到日志表"""
+        try:
+            self.session.execute(text("""
+                INSERT INTO historical_collect_operation_logs 
+                (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
+                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
+            """), {
+                'operation_type': 'akshare_historical_collect',
+                'operation_desc': f'采集日期范围: {start_date} 到 {end_date}\n总计股票: {total_stocks}\n成功采集: {success_stocks}\n新增数据: {self.collected_count}\n跳过数据: {self.skipped_count}',
+                'affected_rows': self.collected_count,
+                'status': 'success' if self.failed_count == 0 else 'partial_success',
+                'error_message': '\n'.join(self.failed_stocks) if self.failed_stocks else None,
+                'collect_source': 'akshare'
+            })
+            self.session.commit()
+            
+        except Exception as e:
+            logger.error(f"记录采集日志失败: {e}")
+    
     # 增量生成指标时向前取历史的天数（满足 MA200 等长周期计算）
     INDICATOR_LOOKBACK_DAYS = 300
 
-    def _generate_indicators(self, stock_code: str, start_date: str, end_date: str, indicators: List[str], do_commit: bool = True, incremental_dates: Optional[List[str]] = None):
+    def _generate_indicators(self, stock_code: str, start_date: str, end_date: str, indicators: List[str], do_commit: bool = True, incremental_dates: Optional[List[str]] = None, market: str = 'CN'):
         """为指定股票生成技术指标数据。do_commit=False 时由调用方批量提交以提升性能。
         incremental_dates: 若指定，则仅写入这些日期的指标（增量模式，用于每日同步后只更新当日）。"""
         try:
             if do_commit:
-                logger.info(f"开始为股票 {stock_code} 生成指标: {', '.join(indicators)}" + (" [增量]" if incremental_dates else ""))
+                logger.info(f"开始为股票 {stock_code} ({market}) 生成指标: {', '.join(indicators)}" + (" [增量]" if incremental_dates else ""))
+            
+            # 端口历史行情表切换
+            source_table = "historical_quotes_hk" if market == 'HK' else "historical_quotes"
+            market_type_val = 'HK' if market == 'HK' else 'CN'
             
             query_start = start_date
             if incremental_dates:
@@ -489,9 +513,9 @@ class AkshareDataCollector:
                 if lookback_start < query_start:
                     query_start = lookback_start
 
-            result = self.session.execute(text("""
+            result = self.session.execute(text(f"""
                 SELECT date, open, high, low, close, volume
-                FROM historical_quotes 
+                FROM {source_table} 
                 WHERE code = :stock_code 
                 AND date >= :start_date 
                 AND date <= :end_date
@@ -514,19 +538,19 @@ class AkshareDataCollector:
             only_dates = set(incremental_dates) if incremental_dates else None
 
             if 'ma' in indicators:
-                self._generate_ma_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates)
+                self._generate_ma_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'mavol' in indicators:
-                self._generate_mavol_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates)
+                self._generate_mavol_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'macd' in indicators:
-                self._generate_macd_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates)
+                self._generate_macd_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'kdj' in indicators:
-                self._generate_kdj_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates)
+                self._generate_kdj_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'rsi' in indicators:
-                self._generate_rsi_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates)
+                self._generate_rsi_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'boll' in indicators:
-                self._generate_boll_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates)
+                self._generate_boll_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'pvfrs' in indicators:
-                self._generate_pvfrs_indicators(stock_code, query_start, end_date, do_commit=do_commit, only_dates=only_dates)
+                self._generate_pvfrs_indicators(stock_code, query_start, end_date, do_commit=do_commit, only_dates=only_dates, market=market)
             
             if do_commit:
                 logger.info(f"股票 {stock_code} 指标生成完成")
@@ -535,9 +559,18 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def generate_indicators_for_date_range(self, start_date: str, end_date: str, indicators: List[str], extended_start_days: int = 0) -> Dict[str, Any]:
+    def generate_indicators_for_date_range(
+        self,
+        start_date: str,
+        end_date: str,
+        indicators: List[str],
+        extended_start_days: int = 0,
+        market: str = 'CN',
+        only_write_dates: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """为指定日期范围内有历史数据的股票批量生成技术指标。
-        extended_start_days: 向前扩展查询历史的天数，便于 MA200 等长周期指标有足够数据（如 300）。"""
+        extended_start_days: 向前扩展查询历史的天数，便于 MA200 等长周期指标有足够数据（如 300）。
+        only_write_dates: 若指定（如港股文件导入成功的交易日），仅对这些日期写入指标行；计算仍会用更早历史，但不写入其它日期。"""
         if not indicators:
             return {'total': 0, 'success': 0, 'failed': 0}
         try:
@@ -547,12 +580,34 @@ class AkshareDataCollector:
                 start_dt = dt.strptime(start_date, '%Y-%m-%d').date()
                 query_start = (start_dt - timedelta(days=extended_start_days)).strftime('%Y-%m-%d')
                 logger.info(f"指标计算使用扩展历史: 查询起始 {query_start}（向前 {extended_start_days} 天）")
-            result = self.session.execute(text("""
-                SELECT DISTINCT code FROM historical_quotes 
-                WHERE date >= :start_date AND date <= :end_date
-                ORDER BY code
-            """), {'start_date': query_start, 'end_date': end_date})
-            codes = [row[0] for row in result.fetchall()]
+            # 端口历史行情表切换
+            source_table = "historical_quotes_hk" if market == 'HK' else "historical_quotes"
+            if only_write_dates:
+                uniq_days = sorted(set(only_write_dates))
+                logger.info(
+                    f"指标写入仅限以下导入成功的交易日（共 {len(uniq_days)} 天）: {uniq_days[:15]}"
+                    f"{'...' if len(uniq_days) > 15 else ''}"
+                )
+                seen_codes = set()
+                codes = []
+                for d in uniq_days:
+                    r = self.session.execute(
+                        text(f"SELECT DISTINCT code FROM {source_table} WHERE date = :d ORDER BY code"),
+                        {'d': d},
+                    )
+                    for row in r.fetchall():
+                        c = row[0]
+                        if c not in seen_codes:
+                            seen_codes.add(c)
+                            codes.append(c)
+            else:
+                result = self.session.execute(text(f"""
+                    SELECT DISTINCT code FROM {source_table} 
+                    WHERE date >= :start_date AND date <= :end_date
+                    ORDER BY code
+                """), {'start_date': query_start, 'end_date': end_date})
+                codes = [row[0] for row in result.fetchall()]
+            incremental = only_write_dates if only_write_dates else None
             BATCH_SIZE = 50  # 每 50 只股票批量提交一次，减少 commit 次数
             logger.info(f"指标数据生成: 共 {len(codes)} 只股票，每 {BATCH_SIZE} 只批量提交，每 100 条打印进度")
             success = 0
@@ -561,7 +616,10 @@ class AkshareDataCollector:
                 if (idx + 1) % 100 == 0:
                     logger.info(f"指标生成进度: {idx + 1}/{len(codes)}（成功 {success}，失败 {failed}）")
                 try:
-                    self._generate_indicators(str(code), query_start, end_date, indicators, do_commit=False)
+                    self._generate_indicators(
+                        str(code), query_start, end_date, indicators,
+                        do_commit=False, incremental_dates=incremental, market=market,
+                    )
                     success += 1
                 except Exception as e:
                     logger.error(f"为股票 {code} 生成指标失败: {e}")
@@ -576,8 +634,92 @@ class AkshareDataCollector:
         except Exception as e:
             logger.error(f"批量生成指标失败: {e}")
             return {'total': 0, 'success': 0, 'failed': 0}
+
+    def compute_indicator_query_start(self, start_date: str, extended_start_days: int) -> str:
+        """与 generate_indicators_for_date_range 一致：向前扩展查询起点（用于删除旧指标区间）。"""
+        if extended_start_days <= 0:
+            return start_date
+        from datetime import datetime as dt, timedelta
+        start_dt = dt.strptime(start_date, '%Y-%m-%d').date()
+        return (start_dt - timedelta(days=extended_start_days)).strftime('%Y-%m-%d')
+
+    def delete_indicator_rows_for_range(
+        self,
+        range_start: str,
+        range_end: str,
+        indicators: List[str],
+        market: str = 'CN',
+    ) -> None:
+        """在重新写入前删除指定日期区间、市场类型的指标行（与本次要生成的指标类型一致）。"""
+        if not indicators:
+            return
+        market_type = 'HK' if market == 'HK' else 'CN'
+        table_map = {
+            'ma': 'ma_indicators',
+            'mavol': 'mavol_indicators',
+            'macd': 'macd_indicators',
+            'kdj': 'kdj_indicators',
+            'rsi': 'rsi_indicators',
+            'boll': 'boll_indicators',
+            'pvfrs': 'mean_frequency_resonance_indicators',
+        }
+        for key in indicators:
+            tbl = table_map.get(key)
+            if not tbl:
+                continue
+            try:
+                self.session.execute(text(f"""
+                    DELETE FROM {tbl}
+                    WHERE market_type = :mt AND date >= :ds AND date <= :de
+                """), {'mt': market_type, 'ds': range_start, 'de': range_end})
+                logger.info(
+                    f"已删除 {tbl} 中 market_type={market_type}、日期 [{range_start}, {range_end}] 的旧指标数据"
+                )
+            except Exception as e:
+                logger.error(f"删除 {tbl} 旧指标失败: {e}")
+                self.session.rollback()
+                raise
+        self.session.commit()
+
+    def delete_indicator_rows_for_dates(
+        self,
+        dates: List[str],
+        indicators: List[str],
+        market: str = 'CN',
+    ) -> None:
+        """删除指定若干交易日的指标行（用于港股文件导入：只清本次导入日，不扫整段扩展区间）。"""
+        if not indicators or not dates:
+            return
+        market_type = 'HK' if market == 'HK' else 'CN'
+        table_map = {
+            'ma': 'ma_indicators',
+            'mavol': 'mavol_indicators',
+            'macd': 'macd_indicators',
+            'kdj': 'kdj_indicators',
+            'rsi': 'rsi_indicators',
+            'boll': 'boll_indicators',
+            'pvfrs': 'mean_frequency_resonance_indicators',
+        }
+        uniq_days = sorted(set(dates))
+        for key in indicators:
+            tbl = table_map.get(key)
+            if not tbl:
+                continue
+            try:
+                stmt = text(
+                    f"DELETE FROM {tbl} WHERE market_type = :mt AND date IN :ds"
+                ).bindparams(bindparam('ds', expanding=True))
+                self.session.execute(stmt, {'mt': market_type, 'ds': uniq_days})
+                logger.info(
+                    f"已删除 {tbl} 中 market_type={market_type}、日期 IN ({len(uniq_days)} 天) 的旧指标数据"
+                )
+            except Exception as e:
+                logger.error(f"按日期删除 {tbl} 旧指标失败: {e}")
+                self.session.rollback()
+                raise
+        self.session.commit()
     
-    def _generate_ma_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None):
+    def _generate_ma_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成MA指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             ma_calc = MACalculator()
@@ -591,7 +733,7 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': d,
-                    'market_type': 'CN',
+                    'market_type': market_type,
                     'ma5': row.get('ma5'), 'ma10': row.get('ma10'), 'ma20': row.get('ma20'),
                     'ma30': row.get('ma30'), 'ma60': row.get('ma60'), 'ma120': row.get('ma120'), 'ma200': row.get('ma200')
                 }
@@ -611,7 +753,7 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def _generate_mavol_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None):
+    def _generate_mavol_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成MAVOL指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             mavol_calc = MAVOLCalculator()
@@ -623,7 +765,7 @@ class AkshareDataCollector:
                 if only_dates is not None and d not in only_dates:
                     continue
                 data = {
-                    'code': stock_code, 'date': d, 'market_type': 'CN',
+                    'code': stock_code, 'date': d, 'market_type': market_type,
                     'mavol5': row.get('mavol5'), 'mavol10': row.get('mavol10'), 'mavol20': row.get('mavol20'),
                     'mavol30': row.get('mavol30'), 'mavol60': row.get('mavol60'), 'mavol120': row.get('mavol120'), 'mavol200': row.get('mavol200')
                 }
@@ -643,7 +785,7 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def _generate_macd_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None):
+    def _generate_macd_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成MACD指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             from backend_core.utils.macd_calculator import MACDCalculator
@@ -656,7 +798,7 @@ class AkshareDataCollector:
                 if only_dates is not None and d not in only_dates:
                     continue
                 data = {
-                    'code': stock_code, 'date': d, 'market_type': 'CN',
+                    'code': stock_code, 'date': d, 'market_type': market_type,
                     'dif': macd_row.get('dif'), 'dea': macd_row.get('dea'), 'macd': macd_row.get('macd'),
                     'ema12': macd_row.get('ema12'), 'ema26': macd_row.get('ema26')
                 }
@@ -673,7 +815,7 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def _generate_kdj_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None):
+    def _generate_kdj_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成KDJ指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             kdj_calc = KDJCalculator()
@@ -685,7 +827,7 @@ class AkshareDataCollector:
                 if only_dates is not None and d not in only_dates:
                     continue
                 kdj = kdj_data[i]
-                data = {'code': stock_code, 'date': d, 'market_type': 'CN', 'k': kdj.get('k'), 'd': kdj.get('d'), 'j': kdj.get('j'), 'rsv': kdj.get('rsv')}
+                data = {'code': stock_code, 'date': d, 'market_type': market_type, 'k': kdj.get('k'), 'd': kdj.get('d'), 'j': kdj.get('j'), 'rsv': kdj.get('rsv')}
                 self.session.execute(text("""
                     INSERT INTO kdj_indicators (code, date, market_type, k, d, j, rsv)
                     VALUES (:code, :date, :market_type, :k, :d, :j, :rsv)
@@ -699,7 +841,7 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def _generate_rsi_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None):
+    def _generate_rsi_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成RSI指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             rsi_calc = RSICalculator()
@@ -711,7 +853,7 @@ class AkshareDataCollector:
                 if only_dates is not None and d not in only_dates:
                     continue
                 rsi = rsi_data[i]
-                data = {'code': stock_code, 'date': d, 'market_type': 'CN', 'rsi6': rsi.get('rsi6'), 'rsi12': rsi.get('rsi12'), 'rsi24': rsi.get('rsi24')}
+                data = {'code': stock_code, 'date': d, 'market_type': market_type, 'rsi6': rsi.get('rsi6'), 'rsi12': rsi.get('rsi12'), 'rsi24': rsi.get('rsi24')}
                 self.session.execute(text("""
                     INSERT INTO rsi_indicators (code, date, market_type, rsi6, rsi12, rsi24)
                     VALUES (:code, :date, :market_type, :rsi6, :rsi12, :rsi24)
@@ -725,7 +867,7 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def _generate_boll_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None):
+    def _generate_boll_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成BOLL指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             boll_calc = BOLLCalculator()
@@ -737,7 +879,7 @@ class AkshareDataCollector:
                 if only_dates is not None and d not in only_dates:
                     continue
                 boll = boll_data[i]
-                data = {'code': stock_code, 'date': d, 'market_type': 'CN', 'mid': boll.get('mid'), 'upper': boll.get('upper'), 'lower': boll.get('lower')}
+                data = {'code': stock_code, 'date': d, 'market_type': market_type, 'mid': boll.get('mid'), 'upper': boll.get('upper'), 'lower': boll.get('lower')}
                 self.session.execute(text("""
                     INSERT INTO boll_indicators (code, date, market_type, mid, upper, lower)
                     VALUES (:code, :date, :market_type, :mid, :upper, :lower)
@@ -751,17 +893,25 @@ class AkshareDataCollector:
             if do_commit:
                 self.session.rollback()
     
-    def _generate_pvfrs_indicators(self, stock_code: str, start_date: str, end_date: str, do_commit: bool = True, only_dates: Optional[set] = None):
+    # PVFRS 至少需要约 21 个交易日；回退查询最多取这么多条以防单表过大
+    PVFRS_MIN_ROWS = 21
+    PVFRS_MAX_LOOKBACK_ROWS = 400
+
+    def _generate_pvfrs_indicators(self, stock_code: str, start_date: str, end_date: str, do_commit: bool = True, only_dates: Optional[set] = None, market: str = 'CN'):
         """生成PVFRS指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
             from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
             
             if do_commit:
-                logger.info(f"开始为股票 {stock_code} 生成PVFRS指标")
+                logger.info(f"开始为股票 {stock_code} ({market}) 生成PVFRS指标")
+
+            # 端口历史行情表切换
+            source_table = "historical_quotes_hk" if market == 'HK' else "historical_quotes"
+            market_type = 'HK' if market == 'HK' else 'CN'
             
-            result = self.session.execute(text("""
+            result = self.session.execute(text(f"""
                 SELECT date, close, volume
-                FROM historical_quotes 
+                FROM {source_table} 
                 WHERE code = :stock_code 
                 AND date >= :start_date 
                 AND date <= :end_date
@@ -773,8 +923,30 @@ class AkshareDataCollector:
             })
             
             history_rows = result.fetchall()
-            if not history_rows or len(history_rows) < 21:  # PVFRS需要至少21天数据
-                logger.warning(f"股票 {stock_code} 历史数据不足，无法生成PVFRS指标（需要至少21天）")
+            # 窗口内不足 21 条时：回退为取 end_date 及之前的全部可用行情（最多 PVFRS_MAX_LOOKBACK_ROWS），
+            # 避免「扩展起点」之后数据稀疏但库中更早仍有足够日线时仍无法计算。
+            if len(history_rows) < self.PVFRS_MIN_ROWS:
+                result_fb = self.session.execute(text(f"""
+                    SELECT date, close, volume FROM (
+                        SELECT date, close, volume
+                        FROM {source_table}
+                        WHERE code = :stock_code AND date <= :end_date
+                        ORDER BY date DESC
+                        LIMIT :lim
+                    ) AS pvfrs_hist
+                    ORDER BY date ASC
+                """), {
+                    'stock_code': stock_code,
+                    'end_date': end_date,
+                    'lim': self.PVFRS_MAX_LOOKBACK_ROWS,
+                })
+                history_rows = result_fb.fetchall()
+
+            if not history_rows or len(history_rows) < self.PVFRS_MIN_ROWS:
+                logger.debug(
+                    f"股票 {stock_code} 历史数据不足（当前 {len(history_rows or [])} 条），"
+                    f"跳过 PVFRS（需至少 {self.PVFRS_MIN_ROWS} 个交易日）"
+                )
                 return
             
             class HistoryRow:
@@ -798,7 +970,7 @@ class AkshareDataCollector:
                 data = {
                     'code': stock_code,
                     'date': d,
-                    'market_type': 'CN',
+                    'market_type': market_type,
                     'macro_displacement_delta': row.get('macro_displacement_delta'),
                     'amplitude': row.get('amplitude'),
                     'ratio_d20': row.get('ratio_d20'),
@@ -1746,6 +1918,7 @@ def run_hk_file_historical_collection_task(
             
             total_dates = len(date_range)
             success_dates = 0
+            imported_dates: List[str] = []  # 采集成功的交易日 YYYY-MM-DD，指标仅写入这些日期
             
             with task_lock:
                 if task_id in collection_tasks:
@@ -1758,6 +1931,7 @@ def run_hk_file_historical_collection_task(
                 try:
                     if collector.collect_historical_quotes(date_str, file_type, force_update):
                         success_dates += 1
+                        imported_dates.append(current_date.strftime('%Y-%m-%d'))
                 except Exception as e:
                     logger.error(f"同步日期 {date_str} 失败: {e}")
                 
@@ -1765,7 +1939,22 @@ def run_hk_file_historical_collection_task(
                     if task_id in collection_tasks:
                         collection_tasks[task_id]["processed_stocks"] = i + 1
             
-            # 目前暂未支持文件方式采集后的自动化港股指标重算，后续可根据需求扩展
+            # 文件采集完成后生成指标：仅删除并写入「本次导入成功」的交易日，扩展历史仅用于计算（MA200 等）
+            if indicators and imported_dates:
+                logger.info(
+                    f"正在为导入的港股历史数据生成指标: {', '.join(indicators)}；写入日期仅限: {imported_dates}"
+                )
+                hk_collector = AkshareDataCollector(db)
+                ext_days = 300
+                hk_collector.delete_indicator_rows_for_dates(imported_dates, indicators, market='HK')
+                hk_collector.generate_indicators_for_date_range(
+                    start_date,
+                    end_date,
+                    indicators,
+                    extended_start_days=ext_days,
+                    market='HK',
+                    only_write_dates=imported_dates,
+                )
             
             # 汇总结果
             with task_lock:
@@ -1874,6 +2063,7 @@ async def start_hk_file_historical_collection(
     background_tasks: BackgroundTasks
 ):
     """启动港股历史数据采集-文件后台任务"""
+    global current_task_id
     try:
         # 验证日期格式
         try:
@@ -1941,21 +2131,28 @@ async def start_hk_file_historical_collection(
 async def upload_historical_file(
     file: UploadFile = File(...)
 ):
-    """上传A股历史行情数据文件 (用于历史数据采集-文件功能)"""
+    """上传历史行情数据文件（A股/港股「历史数据采集-文件」共用）"""
     try:
         # 确保目录存在
         upload_dir = os.path.join("backend_core", "data")
         if not os.path.exists(upload_dir):
             os.makedirs(upload_dir)
             
-        # 校验文件名格式 (建议为 daily_YYYYMMDD 或 historical_quotes_YYYY-MM-DD 等)
-        filename = file.filename
-        is_valid_prefix = filename.startswith("daily_") or filename.startswith("historical_quotes_")
+        # 校验文件名格式（与 backend_core 下文件采集器查找规则一致）
+        filename = file.filename or ""
+        valid_prefixes = (
+            "daily_", "historical_quotes_",
+            "hk_daily_", "hk_historical_quotes_",
+        )
+        is_valid_prefix = filename.startswith(valid_prefixes)
         is_valid_ext = filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".xlsx")
         
         if not (is_valid_prefix and is_valid_ext):
              # 虽然不做严格限制，但打印警告
-             logger.warning(f"上传的文件名 {filename} 不符合建议格式 (daily_或historical_quotes_前缀)")
+             logger.warning(
+                 f"上传的文件名 {filename} 不符合建议格式 "
+                 f"（前缀可为 daily_、historical_quotes_、hk_daily_、hk_historical_quotes_ 之一，扩展名 txt/csv/xlsx）"
+             )
              
         file_path = os.path.join(upload_dir, filename)
         
@@ -1974,26 +2171,6 @@ async def upload_historical_file(
     except Exception as e:
         logger.error(f"文件上传失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
-
-    def _log_collection_result(self, start_date: str, end_date: str, total_stocks: int, success_stocks: int):
-        """记录采集结果到日志表"""
-        try:
-            self.session.execute(text("""
-                INSERT INTO historical_collect_operation_logs 
-                (operation_type, operation_desc, affected_rows, status, error_message, collect_source)
-                VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source)
-            """), {
-                'operation_type': 'akshare_historical_collect',
-                'operation_desc': f'采集日期范围: {start_date} 到 {end_date}\n总计股票: {total_stocks}\n成功采集: {success_stocks}\n新增数据: {self.collected_count}\n跳过数据: {self.skipped_count}',
-                'affected_rows': self.collected_count,
-                'status': 'success' if self.failed_count == 0 else 'partial_success',
-                'error_message': '\n'.join(self.failed_stocks) if self.failed_stocks else None,
-                'collect_source': 'akshare'
-            })
-            self.session.commit()
-            
-        except Exception as e:
-            logger.error(f"记录采集日志失败: {e}")
 
 @router.post("/historical", response_model=DataCollectionResponse)
 async def start_historical_collection(

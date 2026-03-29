@@ -601,6 +601,18 @@
                       {{ formatPrice(scope.row.low) }}
                     </template>
                   </el-table-column>
+                  <el-table-column prop="pre_close" label="昨收" min-width="80" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatPrice(scope.row.pre_close) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="change_amount" label="涨跌额" min-width="88" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.change_amount)">
+                        {{ formatPrice(scope.row.change_amount) }}
+                      </span>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="volume" label="成交量" min-width="90" show-overflow-tooltip>
                     <template #default="scope">
                       {{ formatVolume(scope.row.volume) }}
@@ -1132,7 +1144,7 @@ const getPriceClass = (current: any, preClose: any) => {
 }
 
 const getChangeClass = (value: any) => {
-  if (!value) return ''
+  if (value === null || value === undefined || value === '') return ''
   const num = Number(value)
   if (num > 0) return 'price-up'
   if (num < 0) return 'price-down'

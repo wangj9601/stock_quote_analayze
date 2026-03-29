@@ -361,6 +361,7 @@ const initChart = async () => {
   }
 }
 
+/*
 const updateChart = async () => {
   if (!chart) return
   
@@ -392,6 +393,7 @@ const updateChart = async () => {
     console.error('更新图表失败:', error)
   }
 }
+*/
 
 // 辅助方法
 type ElTagType = 'info' | 'primary' | 'success' | 'warning' | 'danger'

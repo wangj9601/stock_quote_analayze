@@ -16,8 +16,37 @@ from models import (
     HistoricalQuotes, StockRealtimeQuoteHK, HKIndexRealtimeQuotes,
     HistoricalQuotesHK
 )
+from backend_core.data_collectors.akshare.hk_historical_import_from_file import complete_hk_change_fields
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
+
+
+def _historical_quotes_hk_to_api(row: HistoricalQuotesHK) -> dict:
+    """序列化港股历史行情 ORM，避免 __dict__ 混入 _sa_instance_state；缺失时补算涨跌额/涨跌幅。"""
+    keys = (
+        'code', 'ts_code', 'name', 'english_name', 'date', 'open', 'high', 'low', 'close',
+        'pre_close', 'volume', 'amount', 'change_amount', 'amplitude', 'turnover_rate',
+        'change_percent', 'five_day_change_percent', 'ten_day_change_percent',
+        'thirty_day_change_percent', 'sixty_day_change_percent',
+        'collected_source', 'collected_date',
+    )
+    out = {}
+    for k in keys:
+        v = getattr(row, k, None)
+        if v is not None and hasattr(v, 'isoformat'):
+            v = v.isoformat()
+        out[k] = v
+    pc, cl, ca, cp = complete_hk_change_fields(
+        out.get('pre_close'), out.get('close'), out.get('change_amount'), out.get('change_percent')
+    )
+    out['pre_close'] = pc
+    out['close'] = cl
+    out['change_amount'] = ca
+    out['change_percent'] = cp
+    # 与 A 股 historical_quotes.change（涨跌额）字段对齐，便于导出/联表
+    out['change'] = ca
+    return out
+
 
 # 通用分页响应模型
 def paginate_query(query, page, page_size):
@@ -248,7 +277,7 @@ def get_hk_historical_quotes(
     result = paginate_query(query, page, size)
     
     return {
-        "items": [item.__dict__ for item in result["items"]],
+        "items": [_historical_quotes_hk_to_api(item) for item in result["items"]],
         "total": result["total"],
         "page": page,
         "size": size

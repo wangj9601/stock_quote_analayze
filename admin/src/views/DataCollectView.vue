@@ -1,7 +1,7 @@
 <template>
   <div class="datacollect-view">
-    <!-- 当前任务状态 -->
-    <div v-if="currentTask" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+    <!-- 当前任务状态（仅运行中显示；完成后依赖轮询清空，避免仍显示「等待任务完成」） -->
+    <div v-if="currentTaskIsRunning" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div class="flex items-center">
         <el-icon class="text-yellow-600 mr-3"><Warning /></el-icon>
         <div>
@@ -133,11 +133,11 @@
                     <el-button
                       type="primary"
                       :loading="loading"
-                      :disabled="!!currentTask"
+                      :disabled="currentTaskIsRunning"
                       @click="startCollection"
                     >
                       <el-icon v-if="loading" class="mr-2"><Loading /></el-icon>
-                      {{ loading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ loading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                     <el-button @click="resetForm">重置</el-button>
                   </el-form-item>
@@ -223,11 +223,11 @@
                     <el-button
                       type="primary"
                       :loading="tushareLoading"
-                      :disabled="!!currentTask"
+                      :disabled="currentTaskIsRunning"
                       @click="startTushareCollection"
                     >
                       <el-icon v-if="tushareLoading" class="mr-2"><Loading /></el-icon>
-                      {{ tushareLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ tushareLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                     <el-button @click="resetTushareForm">重置</el-button>
                   </el-form-item>
@@ -302,11 +302,11 @@
                     <el-button
                       type="primary"
                       :loading="loading"
-                      :disabled="!!currentTask"
+                      :disabled="currentTaskIsRunning"
                       @click="startRealtimeHistoricalCollection"
                     >
                       <el-icon v-if="loading" class="mr-2"><Loading /></el-icon>
-                      {{ loading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ loading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                   </el-form-item>
                 </el-form>
@@ -423,11 +423,11 @@
                     <el-button
                       type="primary"
                       :loading="fileLoading"
-                      :disabled="!!currentTask"
+                      :disabled="currentTaskIsRunning"
                       @click="startFileCollection"
                     >
                       <el-icon v-if="fileLoading" class="mr-2"><Loading /></el-icon>
-                      {{ fileLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ fileLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                     <el-button @click="resetFileForm">重置</el-button>
                   </el-form-item>
@@ -479,11 +479,11 @@
                 <el-button
                   type="primary"
                   :loading="ashareRealtimeLoading"
-                  :disabled="!!currentTask"
+                  :disabled="currentTaskIsRunning"
                   @click="startAShareRealtimeCollection"
                 >
                   <el-icon v-if="ashareRealtimeLoading" class="mr-2"><Loading /></el-icon>
-                  {{ ashareRealtimeLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                  {{ ashareRealtimeLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                 </el-button>
                 <el-button @click="resetAShareRealtimeForm">重置</el-button>
               </el-form-item>
@@ -592,11 +592,11 @@
                     <el-button
                       type="primary"
                       :loading="hkLoading"
-                      :disabled="!!currentTask"
+                      :disabled="currentTaskIsRunning"
                       @click="startHKCollection"
                     >
                       <el-icon v-if="hkLoading" class="mr-2"><Loading /></el-icon>
-                      {{ hkLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ hkLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                     <el-button @click="resetHKForm">重置</el-button>
                   </el-form-item>
@@ -624,9 +624,9 @@
                   </template>
                   <div class="text-sm text-blue-600 space-y-2">
                     <p>1. 请先将港股行情数据文件（.txt、.csv 或 .xlsx）上传到服务器指定的目录：<code class="bg-blue-100 px-1 rounded">backend_core/data/</code></p>
-                    <p>2. 文件名需包含日期，格式支持：<code class="bg-blue-100 px-1 rounded">hk_daily_YYYYMMDD.txt</code> 或 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_YYYY-MM-DD.csv</code> 等。</p>
-                    <p>3. 系统将根据您选择的日期范围，自动在指定目录中匹配并读取对应的文件进行采集。</p>
-                    <p>4. 采集逻辑：系统将逐步读取文件内容，并将其批量同步到港股历史行情数据库表中。</p>
+                    <p>2. 文件名可为<strong>单日</strong>（如 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_20260205.xlsx</code>）或<strong>日期区间</strong>（如 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_2026-02-10_to_2026-02-13.xlsx</code>）；区间内每个交易日会匹配同一文件。</p>
+                    <p>3. <strong>CSV/XLSX</strong> 多日期合并文件须含「日期 / trade_date / date」列；系统按<strong>当前循环日</strong>只导入该日行，不会把其它交易日写入当天。</p>
+                    <p>4. 若目录下仅有<strong>一个</strong> <code class="bg-blue-100 px-1 rounded">hk_historical_quotes*</code> 文件且无单日名匹配时，会作为汇总表按行内日期拆分导入。</p>
                   </div>
                   <div class="mt-4 flex justify-center">
                     <el-upload
@@ -686,6 +686,36 @@
                     </el-radio-group>
                   </el-form-item>
 
+                  <el-form-item label="技术指标">
+                    <div class="border rounded p-4 bg-gray-50 w-full">
+                      <div class="flex items-center mb-3 pb-2 border-b border-gray-200">
+                        <el-checkbox
+                          v-model="isAllHKFileIndicatorsSelected"
+                          :indeterminate="isHKFileIndicatorsIndeterminate"
+                          @change="handleSelectAllHKFileIndicators"
+                        >
+                          <span class="font-bold">全选指标</span>
+                        </el-checkbox>
+                      </div>
+                      <el-checkbox-group v-model="safeHKFileIndicators">
+                        <el-row :gutter="20">
+                          <el-col :span="8"><el-checkbox value="ma">MA (均线)</el-checkbox></el-col>
+                          <el-col :span="8"><el-checkbox value="mavol">MAVOL (成交量均线)</el-checkbox></el-col>
+                          <el-col :span="8"><el-checkbox value="pvfrs">PVFRS (GMS 策略指标)</el-checkbox></el-col>
+                        </el-row>
+                        <el-row :gutter="20" class="mt-2">
+                          <el-col :span="8"><el-checkbox value="kdj">KDJ (随机指标)</el-checkbox></el-col>
+                          <el-col :span="8"><el-checkbox value="rsi">RSI (相对强弱指标)</el-checkbox></el-col>
+                          <el-col :span="8"><el-checkbox value="boll">BOLL (布林线)</el-checkbox></el-col>
+                        </el-row>
+                      </el-checkbox-group>
+                    </div>
+                    <div class="text-xs text-gray-400 mt-1">
+                      <el-icon class="mr-1"><InfoFilled /></el-icon>
+                      采集完成后将自动计算选中的技术指标
+                    </div>
+                  </el-form-item>
+
                   <el-form-item>
                     <el-checkbox v-model="hkFileForm.force_update">
                       强制更新（如果已存在此日期的数据，将重新插入）
@@ -697,11 +727,11 @@
                     <el-button
                       type="primary"
                       :loading="hkFileLoading"
-                      :disabled="!!currentTask"
+                      :disabled="currentTaskIsRunning"
                       @click="startHKFileHistoricalCollection"
                     >
                       <el-icon v-if="hkFileLoading" class="mr-2"><Loading /></el-icon>
-                      {{ hkFileLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                      {{ hkFileLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                     <el-button @click="resetHKFileForm">重置</el-button>
                   </el-form-item>
@@ -753,11 +783,11 @@
                 <el-button
                   type="primary"
                   :loading="hkRealtimeLoading"
-                  :disabled="!!currentTask"
+                  :disabled="currentTaskIsRunning"
                   @click="startHKRealtimeCollection"
                 >
                   <el-icon v-if="hkRealtimeLoading" class="mr-2"><Loading /></el-icon>
-                  {{ hkRealtimeLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                  {{ hkRealtimeLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                 </el-button>
                 <el-button @click="resetHKRealtimeForm">重置</el-button>
               </el-form-item>
@@ -858,7 +888,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { 
   ElMessage, 
   ElMessageBox,
@@ -1033,6 +1063,8 @@ const hkFileForm = ref<FileFormData>({
 // 状态数据
 const tasks = ref<Task[]>([])
 const currentTask = ref<CurrentTask | null>(null)
+/** 仅 status===running 视为占用；避免任务结束后未刷新接口时仍误判为「有任务」 */
+const currentTaskIsRunning = computed(() => currentTask.value?.status === 'running')
 const loading = ref(false)
 const hkLoading = ref(false)
 const tushareLoading = ref(false)
@@ -1185,6 +1217,42 @@ const handleSelectAllFileIndicators = (checked: boolean | string | number | bool
   }
 }
 
+// 港股文件表单指标选择
+const safeHKFileIndicators = computed<string[]>({
+  get: () => {
+    const indicators = hkFileForm.value.indicators
+    return Array.isArray(indicators) ? indicators : []
+  },
+  set: (val: string[]) => {
+    hkFileForm.value.indicators = Array.isArray(val) ? val : []
+  }
+})
+
+const isHKFileIndicatorsIndeterminate = computed(() => {
+  const indicators = safeHKFileIndicators.value
+  const selectedCount = indicators.length
+  if (selectedCount === 0) {
+    return false
+  } else if (selectedCount === allIndicators.length) {
+    return false
+  } else {
+    return true
+  }
+})
+
+const isAllHKFileIndicatorsSelected = computed(() => {
+  return safeHKFileIndicators.value.length === allIndicators.length
+})
+
+const handleSelectAllHKFileIndicators = (checked: boolean | string | number | boolean[] | undefined) => {
+  const isChecked = typeof checked === 'boolean' ? checked : Boolean(checked)
+  if (isChecked) {
+    safeHKFileIndicators.value = [...allIndicators]
+  } else {
+    safeHKFileIndicators.value = []
+  }
+}
+
 // 方法
 const startCollection = async () => {
   try {
@@ -1197,7 +1265,7 @@ const startCollection = async () => {
     }
     
     // 检查当前任务状态
-    if (currentTask.value) {
+    if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
@@ -1274,7 +1342,7 @@ const startRealtimeHistoricalCollection = async () => {
       return
     }
 
-    if (currentTask.value) {
+    if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
@@ -1327,7 +1395,7 @@ const startHKCollection = async () => {
     }
     
     // 检查当前任务状态
-    if (currentTask.value) {
+    if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
@@ -1503,7 +1571,7 @@ const startTushareCollection = async () => {
     }
     
     // 检查当前任务状态
-    if (currentTask.value) {
+    if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
@@ -1585,7 +1653,7 @@ const startFileCollection = async () => {
     }
     
     // 检查当前任务状态
-    if (currentTask.value) {
+    if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
@@ -1638,7 +1706,7 @@ const startHKFileHistoricalCollection = async () => {
     }
     
     // 检查当前任务状态
-    if (currentTask.value) {
+    if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
@@ -1649,7 +1717,7 @@ const startHKFileHistoricalCollection = async () => {
       start_date: hkFileForm.value.start_date,
       end_date: hkFileForm.value.end_date,
       force_update: hkFileForm.value.force_update,
-      indicators: hkFileForm.value.indicators,
+      indicators: safeHKFileIndicators.value,
       file_type: hkFileForm.value.file_type
     })
     
@@ -1757,6 +1825,7 @@ const formatTime = (timeStr: string): string => {
   return date.toLocaleString('zh-CN')
 }
 
+/*
 const startPolling = () => {
   // 仅在任务运行时轮询 current-task，避免频繁刷接口导致日志/网络压力过大
   const tick = async () => {
@@ -1770,6 +1839,7 @@ const startPolling = () => {
   // 每 15 秒刷新一次（生产环境建议更长轮询间隔）
   pollingInterval.value = setInterval(tick, 15000)
 }
+*/
 
 const stopPolling = () => {
   if (pollingInterval.value) {
@@ -1778,11 +1848,25 @@ const stopPolling = () => {
   }
 }
 
+// 有运行中任务时定时同步 current-task / 任务列表，结束后自动清空界面状态
+watch(
+  currentTaskIsRunning,
+  (running) => {
+    stopPolling()
+    if (running) {
+      pollingInterval.value = setInterval(async () => {
+        await loadCurrentTask()
+        await loadTasks()
+      }, 12000)
+    }
+  },
+  { immediate: true }
+)
+
 // 生命周期
 onMounted(() => {
   loadTasks()
   loadCurrentTask()
-  // startPolling() // 根据要求取消定时刷新功能
 })
 
 onUnmounted(() => {
