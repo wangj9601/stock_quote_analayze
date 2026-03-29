@@ -29,6 +29,7 @@ from backend_api.models import (
     RealtimeCollectionResponse,
     RealtimeHistoricalCollectionRequest,
     FileHistoricalCollectionRequest,
+    HKFileHistoricalCollectionRequest,
 )
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
@@ -1718,6 +1719,85 @@ def run_file_historical_collection_task(
                 current_task_id = None
                 logger.info(f"已清除当前任务ID: {task_id}")
 
+def run_hk_file_historical_collection_task(
+    task_id: str,
+    start_date: str,
+    end_date: str,
+    force_update: bool = False,
+    indicators: Optional[List[str]] = None,
+    file_type: str = 'txt',
+):
+    """从本地文件采集港股历史数据（后台任务）"""
+    global current_task_id
+    try:
+        logger.info(f"开始执行港股历史数据采集-文件任务: {task_id}")
+        
+        from backend_core.data_collectors.akshare.hk_historical_import_from_file import HKHistoricalQuoteImportFromFileCollector
+        collector = HKHistoricalQuoteImportFromFileCollector()
+        from backend_api.database import SessionLocal
+        db = SessionLocal()
+        
+        try:
+            # 文件采集按天循环
+            import pandas as pd
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            date_range = pd.date_range(start, end)
+            
+            total_dates = len(date_range)
+            success_dates = 0
+            
+            with task_lock:
+                if task_id in collection_tasks:
+                    collection_tasks[task_id]["total_stocks"] = total_dates # 这里使用天数代替股票数作为进度
+            
+            for i, current_date in enumerate(date_range):
+                date_str = current_date.strftime('%Y%m%d')
+                logger.info(f"[{i+1}/{total_dates}] 正在从文件同步港股历史数据: {date_str}")
+                
+                try:
+                    if collector.collect_historical_quotes(date_str, file_type, force_update):
+                        success_dates += 1
+                except Exception as e:
+                    logger.error(f"同步日期 {date_str} 失败: {e}")
+                
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id]["processed_stocks"] = i + 1
+            
+            # 目前暂未支持文件方式采集后的自动化港股指标重算，后续可根据需求扩展
+            
+            # 汇总结果
+            with task_lock:
+                if task_id in collection_tasks:
+                    collection_tasks[task_id].update({
+                        "status": "completed",
+                        "progress": 100,
+                        "success_count": success_dates,
+                        "failed_count": total_dates - success_dates,
+                        "end_time": datetime.now(),
+                    })
+            
+            logger.info(f"港股历史数据采集-文件任务完成: {task_id}")
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"港股历史数据采集-文件任务执行失败: {task_id}, 错误: {e}")
+        with task_lock:
+            if task_id in collection_tasks:
+                collection_tasks[task_id].update({
+                    "status": "failed",
+                    "end_time": datetime.now(),
+                    "error_message": str(e)
+                })
+    finally:
+        with task_execution_lock:
+            if current_task_id == task_id:
+                current_task_id = None
+                logger.info(f"已清除当前任务ID: {task_id}")
+
 @router.post("/file-historical", response_model=DataCollectionResponse)
 async def start_file_historical_collection(
     request: FileHistoricalCollectionRequest,
@@ -1786,6 +1866,75 @@ async def start_file_historical_collection(
 
     except Exception as e:
         logger.error(f"启动历史数据采集-文件任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动任务失败: {str(e)}")
+
+@router.post("/historical/hk-file", response_model=DataCollectionResponse)
+async def start_hk_file_historical_collection(
+    request: HKFileHistoricalCollectionRequest,
+    background_tasks: BackgroundTasks
+):
+    """启动港股历史数据采集-文件后台任务"""
+    try:
+        # 验证日期格式
+        try:
+            datetime.strptime(request.start_date, '%Y-%m-%d')
+            datetime.strptime(request.end_date, '%Y-%m-%d')
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+
+        # 检查是否有其他任务正在运行
+        with task_execution_lock:
+            if current_task_id is not None:
+                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
+
+        # 生成任务ID
+        task_id = f"hk_file_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
+
+        # 初始化任务状态
+        with task_lock:
+            collection_tasks[task_id] = {
+                "status": "running",
+                "progress": 0,
+                "total_stocks": 0,
+                "processed_stocks": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "collected_count": 0,
+                "skipped_count": 0,
+                "start_time": datetime.now(),
+                "end_time": None,
+                "error_message": None,
+                "failed_details": []
+            }
+
+        # 设置当前任务ID
+        with task_execution_lock:
+            current_task_id = task_id
+
+        # 启动后台任务
+        background_tasks.add_task(
+            run_hk_file_historical_collection_task,
+            task_id,
+            request.start_date,
+            request.end_date,
+            request.force_update,
+            request.indicators,
+            request.file_type,
+        )
+
+        logger.info(f"启动港股历史数据采集-文件任务: {task_id}")
+
+        return DataCollectionResponse(
+            task_id=task_id,
+            status="started",
+            message="港股历史数据采集-文件任务已启动",
+            start_date=request.start_date,
+            end_date=request.end_date,
+            market="HK",
+        )
+
+    except Exception as e:
+        logger.error(f"启动港股历史数据采集-文件任务失败: {e}")
         raise HTTPException(status_code=500, detail=f"启动任务失败: {str(e)}")
 
 @router.post("/upload-historical-file")

@@ -218,7 +218,7 @@ class QuotesService {
   /**
    * 导出历史行情数据
    */
-  async exportHistoricalQuotes(params: { date?: string, startDate?: string, endDate?: string, format: 'txt' | 'xlsx' }): Promise<Blob> {
+  async exportHistoricalQuotes(params: { date?: string, startDate?: string, endDate?: string, format: 'txt' | 'xlsx', market?: string }): Promise<Blob> {
     const queryParams = new URLSearchParams()
     if (params.date) {
       queryParams.append('target_date', params.date)
@@ -228,6 +228,9 @@ class QuotesService {
     }
     if (params.endDate) {
       queryParams.append('end_date', params.endDate)
+    }
+    if (params.market) {
+      queryParams.append('market', params.market)
     }
     queryParams.append('format', params.format)
 

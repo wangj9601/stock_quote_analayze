@@ -556,10 +556,16 @@
                         :style="{ width: '100%' }"
                       />
                     </el-col>
-                    <el-col :xs="24" :sm="12" :md="4" :lg="4" :xl="4">
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
                       <el-button @click="refreshHKHistoricalData" :loading="hkHistoricalLoading" :style="{ width: '100%' }">
                         <el-icon><Refresh /></el-icon>
                         刷新
+                      </el-button>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button type="success" plain @click="openHKExportDialog" :style="{ width: '100%' }">
+                        <el-icon><Download /></el-icon>
+                        导出
                       </el-button>
                     </el-col>
                   </el-row>
@@ -878,10 +884,9 @@
       </template>
     </el-dialog>
 
-    <!-- 历史数据导出对话框 -->
     <el-dialog
       v-model="exportDialogVisible"
-      title="导出A股历史行情数据"
+      :title="exportForm.market === 'CN' ? '导出A股历史行情数据' : '导出港股历史行情数据'"
       width="500px"
       :close-on-click-modal="false"
     >
@@ -1007,7 +1012,8 @@ const exportForm = reactive({
   date: '',
   startDate: '',
   endDate: '',
-  format: 'xlsx' as 'txt' | 'xlsx'
+  format: 'xlsx' as 'txt' | 'xlsx',
+  market: 'CN' as 'CN' | 'HK'
 })
 const exportRules = reactive<FormRules>({
   date: [
@@ -1386,6 +1392,18 @@ const handleHistoricalPageSizeChange = () => {
 
 // 导出历史数据
 const openExportDialog = () => {
+  exportForm.market = 'CN'
+  exportForm.dateType = 'single'
+  exportForm.date = ''
+  exportForm.startDate = ''
+  exportForm.endDate = ''
+  exportForm.format = 'xlsx'
+  if (exportFormRef.value) exportFormRef.value.resetFields()
+  exportDialogVisible.value = true
+}
+
+const openHKExportDialog = () => {
+  exportForm.market = 'HK'
   exportForm.dateType = 'single'
   exportForm.date = ''
   exportForm.startDate = ''
@@ -1401,7 +1419,10 @@ const submitExport = async () => {
     if (valid) {
       try {
         exportLoading.value = true
-        const params: any = { format: exportForm.format }
+        const params: any = { 
+          format: exportForm.format,
+          market: exportForm.market
+        }
         if (exportForm.dateType === 'single') {
           params.date = exportForm.date
         } else {
@@ -1415,7 +1436,7 @@ const submitExport = async () => {
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        let filename = 'historical_quotes'
+        let filename = exportForm.market === 'CN' ? 'historical_quotes' : 'hk_historical_quotes'
         if (exportForm.dateType === 'single') {
           filename += `_${exportForm.date}`
         } else {

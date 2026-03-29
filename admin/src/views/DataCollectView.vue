@@ -604,6 +604,111 @@
               </div>
             </el-card>
           </el-tab-pane>
+
+          <el-tab-pane label="港股历史数据采集-文件" name="hk_file">
+            <el-card>
+              <div class="text-center mb-8">
+                <el-icon class="text-6xl text-gray-400 mb-4"><DocumentCopy /></el-icon>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">港股历史数据采集-文件</h2>
+                <p class="text-gray-600">从本地TXT/CSV/XLSX文件批量导入港股历史行情数据</p>
+              </div>
+
+              <!-- 文件上传区域 -->
+              <div class="max-w-2xl mx-auto mb-8">
+                <el-card shadow="never" class="bg-blue-50 border-blue-100">
+                  <template #header>
+                    <div class="flex items-center">
+                      <el-icon class="text-blue-500 mr-2"><Upload /></el-icon>
+                      <span class="font-bold text-blue-700">文件上传说明</span>
+                    </div>
+                  </template>
+                  <div class="text-sm text-blue-600 space-y-2">
+                    <p>1. 请先将港股行情数据文件（.txt、.csv 或 .xlsx）上传到服务器指定的目录：<code class="bg-blue-100 px-1 rounded">backend_core/data/</code></p>
+                    <p>2. 文件名需包含日期，格式支持：<code class="bg-blue-100 px-1 rounded">hk_daily_YYYYMMDD.txt</code> 或 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_YYYY-MM-DD.csv</code> 等。</p>
+                    <p>3. 系统将根据您选择的日期范围，自动在指定目录中匹配并读取对应的文件进行采集。</p>
+                    <p>4. 采集逻辑：系统将逐步读取文件内容，并将其批量同步到港股历史行情数据库表中。</p>
+                  </div>
+                  <div class="mt-4 flex justify-center">
+                    <el-upload
+                      class="upload-demo"
+                      :action="API_BASE + '/api/data-collection/upload-historical-file'"
+                      multiple
+                      :limit="50"
+                      :show-file-list="true"
+                      :on-success="handleFileUploadSuccess"
+                      :on-error="handleFileUploadError"
+                    >
+                      <el-button type="primary" plain>
+                        <el-icon class="mr-1"><UploadFilled /></el-icon>
+                        上传文件到服务器
+                      </el-button>
+                    </el-upload>
+                  </div>
+                </el-card>
+              </div>
+
+              <!-- 港股文件采集表单 -->
+              <div class="max-w-2xl mx-auto">
+                <el-form label-width="120px">
+                  <!-- 日期范围 -->
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="开始日期" required>
+                        <el-date-picker
+                          v-model="hkFileForm.start_date"
+                          type="date"
+                          placeholder="选择开始日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="结束日期" required>
+                        <el-date-picker
+                          v-model="hkFileForm.end_date"
+                          type="date"
+                          placeholder="选择结束日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+
+                  <el-form-item label="文件类型" required>
+                    <el-radio-group v-model="hkFileForm.file_type">
+                      <el-radio value="txt">TXT 文件</el-radio>
+                      <el-radio value="csv">CSV 文件</el-radio>
+                      <el-radio value="xlsx">Excel (.xlsx) 文件</el-radio>
+                    </el-radio-group>
+                  </el-form-item>
+
+                  <el-form-item>
+                    <el-checkbox v-model="hkFileForm.force_update">
+                      强制更新（如果已存在此日期的数据，将重新插入）
+                    </el-checkbox>
+                  </el-form-item>
+
+                  <!-- 操作按钮 -->
+                  <el-form-item>
+                    <el-button
+                      type="primary"
+                      :loading="hkFileLoading"
+                      :disabled="!!currentTask"
+                      @click="startHKFileHistoricalCollection"
+                    >
+                      <el-icon v-if="hkFileLoading" class="mr-2"><Loading /></el-icon>
+                      {{ hkFileLoading ? '启动中...' : (currentTask ? '等待当前任务完成' : '开始采集') }}
+                    </el-button>
+                    <el-button @click="resetHKFileForm">重置</el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-card>
+          </el-tab-pane>
         </el-tabs>
       </el-tab-pane>
 
@@ -837,8 +942,6 @@ interface RealtimeHistRequest {
   end_date: string
   indicators?: string[]
 }
-
-// 标签页状态
 const activeMainTab = ref('ashare')
 const activeAShareTab = ref('akshare')
 const activeHKShareTab = ref('hk_akshare')
@@ -919,6 +1022,14 @@ const fileForm = ref<FileFormData>({
   file_type: 'txt'
 })
 
+const hkFileForm = ref<FileFormData>({
+  start_date: '',
+  end_date: '',
+  force_update: false,
+  indicators: [],
+  file_type: 'txt'
+})
+
 // 状态数据
 const tasks = ref<Task[]>([])
 const currentTask = ref<CurrentTask | null>(null)
@@ -928,6 +1039,7 @@ const tushareLoading = ref(false)
 const fileLoading = ref(false)
 const ashareRealtimeLoading = ref(false)
 const hkRealtimeLoading = ref(false)
+const hkFileLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
 // 计算属性
@@ -1512,6 +1624,56 @@ const startFileCollection = async () => {
     ElMessage.error(errorMsg)
   } finally {
     fileLoading.value = false
+  }
+}
+
+const startHKFileHistoricalCollection = async () => {
+  try {
+    hkFileLoading.value = true
+    
+    // 验证表单
+    if (!hkFileForm.value.start_date || !hkFileForm.value.end_date) {
+      ElMessage.error('请选择开始日期和结束日期')
+      return
+    }
+    
+    // 检查当前任务状态
+    if (currentTask.value) {
+      ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
+      return
+    }
+
+    console.log('发送港股文件采集请求:', hkFileForm.value)
+    
+    const response = await axios.post(`${API_BASE}/api/data-collection/historical/hk-file`, {
+      start_date: hkFileForm.value.start_date,
+      end_date: hkFileForm.value.end_date,
+      force_update: hkFileForm.value.force_update,
+      indicators: hkFileForm.value.indicators,
+      file_type: hkFileForm.value.file_type
+    })
+    
+    if (response.data.status === 'started') {
+      ElMessage.success('港股历史数据采集(文件)任务已启动')
+      loadTasks()
+      loadCurrentTask()
+    }
+    
+  } catch (error: any) {
+    console.error('启动港股历史数据采集(文件)任务失败:', error)
+    ElMessage.error(error.response?.data?.detail || '启动港股历史数据采集(文件)任务失败')
+  } finally {
+    hkFileLoading.value = false
+  }
+}
+
+const resetHKFileForm = () => {
+  hkFileForm.value = {
+    start_date: '',
+    end_date: '',
+    file_type: 'txt',
+    force_update: false,
+    indicators: []
   }
 }
 

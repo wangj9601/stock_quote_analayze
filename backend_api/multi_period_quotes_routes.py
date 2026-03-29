@@ -136,10 +136,11 @@ def export_historical_quotes(
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     format: str = Query('xlsx', description="导出格式: txt, xlsx"),
+    market: str = Query('CN', description="市场: CN, HK"),
     db: Session = Depends(get_db)
 ):
     """
-    导出A股历史行情数据
+    导出历史行情数据
     """
     try:
         where_conditions = []
@@ -158,9 +159,10 @@ def export_historical_quotes(
                 
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
+        table_name = "historical_quotes" if market == 'CN' else "historical_quotes_hk"
         data_query = text(f"""
             SELECT code, name, date, open, high, low, close, pre_close, volume, amount, change_percent, turnover_rate
-            FROM historical_quotes
+            FROM {table_name}
             WHERE {where_clause}
             ORDER BY date DESC, code ASC
         """)

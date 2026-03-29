@@ -809,6 +809,14 @@ class FileHistoricalCollectionRequest(BaseModel):
     indicators: Optional[List[str]] = None
     file_type: str = 'txt'
 
+class HKFileHistoricalCollectionRequest(BaseModel):
+    """从本地文件采集港股历史数据请求模型"""
+    start_date: str
+    end_date: str
+    force_update: bool = False
+    indicators: Optional[List[str]] = None
+    file_type: str = 'txt'
+
 class DataCollectionResponse(BaseModel):
     """数据采集响应模型"""
     task_id: str
