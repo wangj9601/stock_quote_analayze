@@ -291,6 +291,11 @@
                         导出
                       </el-button>
                     </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button type="primary" plain @click="openHistoricalTurnoverImportDialog" :style="{ width: '100%' }">
+                        换手率更新
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -896,6 +901,65 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="historicalTurnoverImportDialogVisible" title="A股历史行情换手率更新" width="640px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="支持 CSV/XLSX，必须包含 code(代码)、turnover_rate(换手率) 列；trade_date 可在文件列提供，或在下方统一指定。"
+        class="mb-4"
+      />
+      <div class="mb-4">
+        <el-button @click="downloadTurnoverTemplate('csv')">下载CSV模板</el-button>
+        <el-button @click="downloadTurnoverTemplate('xlsx')">下载XLSX模板</el-button>
+      </div>
+      <el-form label-width="120px">
+        <el-form-item label="统一交易日期">
+          <el-date-picker
+            v-model="historicalTurnoverImportTradeDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            format="YYYY-MM-DD"
+            placeholder="可选，不填则读取文件中的trade_date列"
+          />
+        </el-form-item>
+        <el-form-item label="文件上传">
+          <el-upload
+            :auto-upload="false"
+            :limit="1"
+            accept=".csv,.xlsx,.xls"
+            :show-file-list="true"
+            :on-change="onHistoricalTurnoverImportFileChange"
+          >
+            <template #trigger>
+              <el-button>选择文件</el-button>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="Dry Run">
+          <el-switch v-model="historicalTurnoverImportDryRun" />
+        </el-form-item>
+      </el-form>
+
+      <el-card v-if="historicalTurnoverImportResult" class="mt-2">
+        <template #header>导入结果</template>
+        <div>
+          总行数 {{ historicalTurnoverImportResult.total_rows }}，成功 {{ historicalTurnoverImportResult.success }}，
+          跳过 {{ historicalTurnoverImportResult.skipped }}，失败 {{ historicalTurnoverImportResult.failed }}
+        </div>
+        <el-table :data="historicalTurnoverImportResult.failed_sample || []" size="small" class="mt-3">
+          <el-table-column prop="row_no" label="行号" width="80" />
+          <el-table-column prop="code" label="代码" width="120" />
+          <el-table-column prop="message" label="错误信息" min-width="220" />
+        </el-table>
+      </el-card>
+
+      <template #footer>
+        <el-button @click="historicalTurnoverImportDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="historicalTurnoverImportLoading" @click="submitHistoricalTurnoverImport">开始更新</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog
       v-model="exportDialogVisible"
       :title="exportForm.market === 'CN' ? '导出A股历史行情数据' : '导出港股历史行情数据'"
@@ -995,6 +1059,12 @@ const turnoverImportFile = ref<File | null>(null)
 const turnoverImportLoading = ref(false)
 const turnoverImportDryRun = ref(false)
 const turnoverImportResult = ref<any>(null)
+const historicalTurnoverImportDialogVisible = ref(false)
+const historicalTurnoverImportTradeDate = ref('')
+const historicalTurnoverImportFile = ref<File | null>(null)
+const historicalTurnoverImportLoading = ref(false)
+const historicalTurnoverImportDryRun = ref(false)
+const historicalTurnoverImportResult = ref<any>(null)
 
 // A股指数数据
 const indexData = ref<any[]>([])
@@ -1318,6 +1388,41 @@ const downloadTurnoverTemplate = async (format: 'csv' | 'xlsx') => {
     URL.revokeObjectURL(url)
   } catch {
     ElMessage.error('模板下载失败')
+  }
+}
+
+const openHistoricalTurnoverImportDialog = () => {
+  historicalTurnoverImportDialogVisible.value = true
+  historicalTurnoverImportResult.value = null
+}
+
+const onHistoricalTurnoverImportFileChange = (uploadFile: any) => {
+  historicalTurnoverImportFile.value = uploadFile.raw || null
+}
+
+const submitHistoricalTurnoverImport = async () => {
+  if (!historicalTurnoverImportFile.value) {
+    ElMessage.warning('请先选择导入文件')
+    return
+  }
+  historicalTurnoverImportLoading.value = true
+  try {
+    const res = await quotesService.importHistoricalTurnoverRate(
+      historicalTurnoverImportFile.value,
+      historicalTurnoverImportTradeDate.value || undefined,
+      historicalTurnoverImportDryRun.value,
+      200
+    )
+    historicalTurnoverImportResult.value = res.data
+    if (res.success) {
+      ElMessage.success(historicalTurnoverImportDryRun.value ? 'Dry Run完成' : '历史换手率更新完成，请手动点击“刷新”查看结果')
+    } else {
+      ElMessage.warning('更新完成，但存在失败项')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '历史换手率更新失败')
+  } finally {
+    historicalTurnoverImportLoading.value = false
   }
 }
 

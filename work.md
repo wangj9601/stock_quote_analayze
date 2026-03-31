@@ -17,7 +17,6 @@ AIzaSyD1PSWLXbmZM2mfXPXjQ5iPMv0hiaNUdg8
 ## git 强制以远程的文件为准。
 git reset --hard origin/main
 
-![1772892760684](image/work/1772892760684.png)
 ## 安装 Git LFS：
 
     - git lfs install

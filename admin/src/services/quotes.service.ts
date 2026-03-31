@@ -161,6 +161,21 @@ class QuotesService {
   }
 
   /**
+   * 导入A股历史行情换手率（管理端）
+   */
+  async importHistoricalTurnoverRate(file: File, tradeDate?: string, dryRun = false, maxErrors = 200): Promise<any> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const params = new URLSearchParams()
+    if (tradeDate) params.append('trade_date', tradeDate)
+    params.append('dry_run', String(dryRun))
+    params.append('max_errors', String(maxErrors))
+    return apiService.post(`/quotes/turnover/import-historical?${params.toString()}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+
+  /**
    * 下载换手率导入模板（CSV/XLSX）
    */
   async downloadTurnoverTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {

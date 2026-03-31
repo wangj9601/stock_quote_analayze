@@ -288,6 +288,207 @@ async def import_turnover_rate(
     }
 
 
+@router.post("/turnover/import-historical")
+async def import_turnover_rate_historical(
+    file: UploadFile = File(...),
+    trade_date: Optional[str] = Query(None, description="可选，统一交易日 YYYY-MM-DD"),
+    dry_run: bool = Query(False),
+    max_errors: int = Query(200, ge=1, le=5000),
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """导入A股历史行情换手率（CSV/XLSX/XLS）。"""
+    name = (file.filename or "").lower()
+    content = await file.read()
+
+    df = None
+    parse_errors: List[str] = []
+
+    if name.endswith(".csv"):
+        for enc in ("utf-8-sig", "utf-8", "gbk"):
+            try:
+                df = pd.read_csv(BytesIO(content), encoding=enc)
+                break
+            except Exception as e:
+                parse_errors.append(f"csv({enc}): {e}")
+
+    if df is None and (name.endswith(".xlsx") or name.endswith(".xls")):
+        for engine in ("openpyxl", "xlrd"):
+            try:
+                df = pd.read_excel(BytesIO(content), engine=engine)
+                break
+            except Exception as e:
+                parse_errors.append(f"excel({engine}): {e}")
+
+    if df is None and not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls")):
+        for enc in ("utf-8-sig", "utf-8", "gbk"):
+            try:
+                trial = pd.read_csv(BytesIO(content), encoding=enc)
+                if trial is not None and not trial.empty and len(trial.columns) >= 2:
+                    df = trial
+                    break
+            except Exception as e:
+                parse_errors.append(f"probe-csv({enc}): {e}")
+        if df is None:
+            for engine in ("openpyxl", "xlrd"):
+                try:
+                    df = pd.read_excel(BytesIO(content), engine=engine)
+                    break
+                except Exception as e:
+                    parse_errors.append(f"probe-excel({engine}): {e}")
+
+    if df is None:
+        for enc in ("gb18030", "gbk", "utf-8-sig", "utf-8"):
+            try:
+                txt = content.decode(enc, errors="strict")
+                if "\t" in txt:
+                    trial = pd.read_csv(StringIO(txt), sep="\t")
+                else:
+                    trial = pd.read_csv(StringIO(txt), sep=None, engine="python")
+                if trial is not None and not trial.empty and len(trial.columns) >= 2:
+                    df = trial
+                    break
+            except Exception as e:
+                parse_errors.append(f"probe-text({enc}): {e}")
+
+    if df is None:
+        for enc in ("utf-8", "gbk", "gb18030"):
+            try:
+                html_tables = pd.read_html(BytesIO(content), encoding=enc)
+                if html_tables:
+                    df = html_tables[0]
+                    break
+            except Exception as e:
+                parse_errors.append(f"probe-html({enc}): {e}")
+
+    if df is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "文件解析失败，请上传标准 CSV/XLSX/XLS 文件（包含 code/代码 与 "
+                "turnover_rate/换手率/还手 列）。解析尝试信息："
+                + " | ".join(parse_errors[:3])
+            ),
+        )
+    if df is None or df.empty:
+        raise HTTPException(status_code=400, detail="文件为空")
+
+    df.columns = [
+        str(c).replace("\u3000", " ").replace("\n", " ").replace("\r", " ").strip()
+        for c in df.columns
+    ]
+    code_col = _pick_col(list(df.columns), ["code", "代码", "股票代码", "证券代码"])
+    rate_col = _pick_col(list(df.columns), ["turnover_rate", "换手率", "换手", "还手", "还手率"])
+    date_col = _pick_col(list(df.columns), ["trade_date", "日期", "交易日期"])
+    if not code_col or not rate_col:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "缺少必要列：code/代码 与 turnover_rate/换手率/还手。"
+                "（说明：换手 也支持）"
+                f"当前识别到列: {list(df.columns)}"
+            ),
+        )
+
+    needed_cols = [code_col, rate_col]
+    if date_col:
+        needed_cols.append(date_col)
+    df = df[needed_cols].copy()
+
+    success = 0
+    skipped = 0
+    failed = 0
+    failures: List[Dict[str, Any]] = []
+
+    for idx, row in df.iterrows():
+        row_no = int(idx) + 2
+        code = _normalize_code(row.get(code_col))
+        raw_rate = row.get(rate_col)
+        row_date = trade_date or (str(row.get(date_col)).strip() if date_col else "")
+        if not code:
+            failed += 1
+            failures.append({"row_no": row_no, "code": "", "message": "代码为空"})
+            if failed >= max_errors:
+                break
+            continue
+        if not row_date:
+            failed += 1
+            failures.append({"row_no": row_no, "code": code, "message": "缺少 trade_date（可传 query 或文件列）"})
+            if failed >= max_errors:
+                break
+            continue
+        try:
+            rate = float(str(raw_rate).replace("%", "").strip())
+            if rate < 0:
+                raise ValueError("换手率不能为负")
+        except Exception:
+            failed += 1
+            failures.append({"row_no": row_no, "code": code, "message": f"换手率非法: {raw_rate}"})
+            if failed >= max_errors:
+                break
+            continue
+        try:
+            if dry_run:
+                success += 1
+                continue
+            res = db.execute(
+                text(
+                    """
+                    UPDATE historical_quotes
+                    SET turnover_rate = :turnover_rate
+                    WHERE code = :code AND date = :trade_date
+                    """
+                ),
+                {"turnover_rate": rate, "code": code, "trade_date": row_date},
+            )
+            if (res.rowcount or 0) > 0:
+                success += 1
+            else:
+                skipped += 1
+        except Exception as e:
+            failed += 1
+            failures.append({"row_no": row_no, "code": code, "message": str(e)})
+            if failed >= max_errors:
+                break
+
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
+        try:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO operation_logs (log_type, log_message, affected_count, log_status, error_info, log_time)
+                    VALUES (:log_type, :log_message, :affected_count, :log_status, :error_info, NOW())
+                    """
+                ),
+                {
+                    "log_type": "turnover_rate_import_historical",
+                    "log_message": f"导入A股历史行情换手率 by {getattr(current_user, 'username', 'admin')}",
+                    "affected_count": success,
+                    "log_status": "成功" if failed == 0 else "部分失败",
+                    "error_info": None if failed == 0 else f"failed={failed}",
+                },
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    return {
+        "success": failed == 0,
+        "data": {
+            "filename": file.filename,
+            "total_rows": int(len(df)),
+            "success": success,
+            "skipped": skipped,
+            "failed": failed,
+            "dry_run": dry_run,
+            "failed_sample": failures[:100],
+        },
+    }
+
+
 @router.get("/turnover/import/template")
 async def download_turnover_import_template(
     format: str = Query("csv", pattern="^(csv|xlsx)$"),
