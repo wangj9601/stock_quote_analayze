@@ -1375,6 +1375,9 @@ const ScreeningPage = {
                     .replace(/'/g, '&#39;')
                     .replace(/</g, '&lt;');
                 const gmsCode = String(stock.symbol || stock.code || '');
+                const gmsScopeElement = document.querySelector('input[name="gmsScope"]:checked');
+                const gmsScope = gmsScopeElement ? gmsScopeElement.value : 'all';
+                const canShowWatchlistAction = gmsScope !== 'watchlist';
                 const gmsDetailHref = `stock.html?code=${encodeURIComponent(gmsCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 html += `
                     <tr data-gms-row="${index}">
@@ -1396,7 +1399,7 @@ const ScreeningPage = {
                         <td class="gms-col-actions">
                             <div class="action-links">
                                 <a href="stock_gms_trace.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">历史</a>
-                                <button type="button" class="action-link gms-watchlist-add" data-code="${gmsCode}" data-name="${gmsTitleAttr}" title="加入自选股">+自选</button>
+                                ${canShowWatchlistAction ? `<button type="button" class="action-link gms-watchlist-add" data-code="${gmsCode}" data-name="${gmsTitleAttr}" title="加入自选股">+自选</button>` : ''}
                                 <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
                             </div>
                         </td>
