@@ -15,6 +15,8 @@ from backend_core.data_collectors.akshare.base import AKShareCollector
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
+A_SHARE_LOT_SIZE = 100  # A股1手=100股
+
 class AkshareRealtimeQuoteCollector(AKShareCollector):
     """沪深京A股实时行情数据采集器"""
     
@@ -146,6 +148,57 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
             Optional[float]: 转换后的浮点数，如果转换失败则返回None
         """
         return None if pd.isna(val) else float(val)
+
+    def _calculate_turnover_rate_from_shares(
+        self,
+        session,
+        code: str,
+        volume_hand: Optional[float],
+        current_price: Optional[float],
+        circulating_market_value: Optional[float],
+    ) -> Optional[float]:
+        """
+        当上游未提供换手率时，按股本口径回退计算。
+
+        口径：
+        - 实时表 volume 单位为「手」
+        - stock_basic_info.free_float_shares 单位为「股」
+        - 换手率(%) = (volume_hand * 100) / free_float_shares * 100
+        """
+        try:
+            if volume_hand is None or float(volume_hand) <= 0:
+                return None
+
+            free_float_shares = None
+            row = session.execute(
+                text(
+                    """
+                    SELECT free_float_shares
+                    FROM stock_basic_info
+                    WHERE code = :code
+                    """
+                ),
+                {"code": code},
+            ).fetchone()
+            if row and row[0] is not None and float(row[0]) > 0:
+                free_float_shares = float(row[0])
+            elif (
+                circulating_market_value is not None
+                and current_price is not None
+                and float(circulating_market_value) > 0
+                and float(current_price) > 0
+            ):
+                # 回退：用流通市值 / 现价 推算流通股本（股）
+                free_float_shares = float(circulating_market_value) / float(current_price)
+
+            if free_float_shares is None or free_float_shares <= 0:
+                return None
+
+            volume_shares = float(volume_hand) * A_SHARE_LOT_SIZE
+            return round(volume_shares / free_float_shares * 100, 4)
+        except Exception as e:
+            self.logger.debug(f"换手率回退计算失败: code={code}, err={e}")
+            return None
     
     def collect_quotes(self) -> bool:
         """
@@ -220,6 +273,16 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 if data['current_price'] is None or float(data['current_price']) <= 0:
                     self.logger.debug(f"跳过无效现价数据: code={code}, name={name}, current_price={data['current_price']}")
                     continue
+
+                # 新浪源通常不提供换手率：按手->股口径回退计算
+                if data_source == "sina" and (data['turnover_rate'] is None):
+                    data['turnover_rate'] = self._calculate_turnover_rate_from_shares(
+                        session=session,
+                        code=str(code),
+                        volume_hand=data['volume'],
+                        current_price=data['current_price'],
+                        circulating_market_value=data['circulating_market_value'],
+                    )
 
                 # --- 重试机制插入 stock_basic_info ---
                 max_retries = 3

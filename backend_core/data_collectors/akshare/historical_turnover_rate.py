@@ -195,12 +195,13 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
 
         return None, 0
 
-    def collect_turnover_rate_for_date(self, date_str: str) -> bool:
+    def collect_turnover_rate_for_date(self, date_str: str, progress_every: int = 0) -> bool:
         """
         为指定日期采集所有股票的历史换手率数据
 
         Args:
             date_str: 日期字符串 (YYYY-MM-DD)
+            progress_every: 每成功更新 N 条打印一次进度日志；<=0 表示不打印
 
         Returns:
             bool: 是否成功
@@ -251,6 +252,13 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
                                 success_count += 1
                                 level_counts[level] = level_counts.get(level, 0) + 1
                                 self.logger.debug(f"成功更新 {code}({name}) 换手率: {turnover_rate} (Level {level})")
+                                if progress_every > 0 and success_count % progress_every == 0:
+                                    processed = success_count + fail_count
+                                    total = len(stocks_to_update)
+                                    self.logger.info(
+                                        f"{date_str} 换手率回填进度: 已成功更新 {success_count} 条，"
+                                        f"失败 {fail_count} 条，处理 {processed}/{total}"
+                                    )
                             else:
                                 fail_count += 1
                         else:
@@ -279,13 +287,14 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
             self.logger.error(f"采集 {date_str} 历史换手率数据时异常: {e}")
             return False
 
-    def collect_turnover_rate_for_period(self, start_date: str, end_date: str) -> bool:
+    def collect_turnover_rate_for_period(self, start_date: str, end_date: str, progress_every: int = 0) -> bool:
         """
         为指定时间段采集历史换手率数据
 
         Args:
             start_date: 开始日期 (YYYY-MM-DD)
             end_date: 结束日期 (YYYY-MM-DD)
+            progress_every: 传递给单日回填的进度日志阈值
 
         Returns:
             bool: 是否成功
@@ -305,7 +314,7 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
 
                 # 跳过周末
                 if current_dt.weekday() < 5:
-                    if self.collect_turnover_rate_for_date(current_date_str):
+                    if self.collect_turnover_rate_for_date(current_date_str, progress_every=progress_every):
                         total_success += 1
                     else:
                         total_fail += 1
@@ -321,12 +330,13 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
             self.logger.error(f"采集时间段 {start_date} 到 {end_date} 历史换手率数据时异常: {e}")
             return False
 
-    def collect_missing_turnover_rate(self, days_back: int = 30) -> bool:
+    def collect_missing_turnover_rate(self, days_back: int = 30, progress_every: int = 0) -> bool:
         """
         采集最近N天缺失的换手率数据
 
         Args:
             days_back: 往前追溯的天数
+            progress_every: 传递给按区间回填的进度日志阈值
 
         Returns:
             bool: 是否成功
@@ -349,7 +359,8 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
 
             return self.collect_turnover_rate_for_period(
                 start_date.strftime('%Y-%m-%d'),
-                end_date.strftime('%Y-%m-%d')
+                end_date.strftime('%Y-%m-%d'),
+                progress_every=progress_every,
             )
 
         except Exception as e:
