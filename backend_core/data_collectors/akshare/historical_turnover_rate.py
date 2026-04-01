@@ -18,6 +18,8 @@ from backend_core.data_collectors.akshare.base import AKShareCollector
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
+A_SHARE_LOT_SIZE = 100  # A股1手=100股
+
 
 class HistoricalTurnoverRateCollector(AKShareCollector):
     """历史换手率数据采集器（多级回退）"""
@@ -64,7 +66,8 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
         """
         Level 2: 从 stock_basic_info.free_float_shares + historical_quotes.volume 计算换手率
 
-        换手率 = 成交量 / 流通股本 * 100
+        historical_quotes.volume 单位为「手」，free_float_shares 单位为「股」。
+        换手率 = (成交量(手) * 100) / 流通股本(股) * 100
 
         Args:
             session: 数据库会话
@@ -97,8 +100,9 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
                 return None
 
             volume = float(vol_row[0])
-            turnover_rate = round(volume / free_float_shares * 100, 4)
-            self.logger.debug(f"Level 2 - 通过流通股本计算 {code} 换手率: volume={volume}, "
+            volume_shares = volume * A_SHARE_LOT_SIZE
+            turnover_rate = round(volume_shares / free_float_shares * 100, 4)
+            self.logger.debug(f"Level 2 - 通过流通股本计算 {code} 换手率: volume_hand={volume}, volume_shares={volume_shares}, "
                               f"free_float={free_float_shares}, rate={turnover_rate}")
             return turnover_rate
 
@@ -111,7 +115,8 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
         Level 3: 从实时表的 circulating_market_value / current_price 推算流通股本后计算换手率
 
         流通股本 = 流通市值 / 最新价
-        换手率 = 成交量 / 流通股本 * 100
+        historical_quotes.volume 单位为「手」，推算的流通股本单位为「股」。
+        换手率 = (成交量(手) * 100) / 流通股本(股) * 100
 
         Args:
             session: 数据库会话
@@ -155,8 +160,9 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
                 return None
 
             volume = float(vol_row[0])
-            turnover_rate = round(volume / free_float_shares * 100, 4)
-            self.logger.debug(f"Level 3 - 通过流通市值推算 {code} 换手率: volume={volume}, "
+            volume_shares = volume * A_SHARE_LOT_SIZE
+            turnover_rate = round(volume_shares / free_float_shares * 100, 4)
+            self.logger.debug(f"Level 3 - 通过流通市值推算 {code} 换手率: volume_hand={volume}, volume_shares={volume_shares}, "
                               f"circ_mv={circ_market_value}, price={current_price}, rate={turnover_rate}")
             return turnover_rate
 

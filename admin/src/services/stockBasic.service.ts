@@ -1,7 +1,9 @@
 import { apiService } from './api'
 
+export type StockBasicMarket = 'CN' | 'HK'
+
 export interface StockBasicQueryParams {
-  market: 'ALL' | 'CN' | 'HK'
+  market: 'ALL' | StockBasicMarket
   keyword?: string
   empty_shares?: boolean
   collect_enabled?: boolean | null
@@ -45,7 +47,7 @@ class StockBasicService {
     return apiService.get(`/stock-basic/list?${q.toString()}`)
   }
 
-  async updateCollectFlag(market: 'CN' | 'HK', code: string, collectEnabled: boolean): Promise<any> {
+  async updateCollectFlag(market: StockBasicMarket, code: string, collectEnabled: boolean): Promise<any> {
     const q = new URLSearchParams()
     q.set('market', market)
     q.set('code', code)
@@ -59,26 +61,53 @@ class StockBasicService {
     })
   }
 
-  async validateImport(file: File): Promise<any> {
+  async validateImport(file: File, scopeMarket?: StockBasicMarket): Promise<any> {
     const fd = new FormData()
     fd.append('file', file)
-    return apiService.post('/stock-basic/import/validate', fd, {
+    const q = new URLSearchParams()
+    if (scopeMarket) q.set('scope_market', scopeMarket)
+    const qs = q.toString()
+    return apiService.post(`/stock-basic/import/validate${qs ? `?${qs}` : ''}`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   }
 
-  async executeImport(file: File, dryRun = false, maxErrors = 100): Promise<any> {
+  async executeImport(
+    file: File,
+    dryRun = false,
+    maxErrors = 100,
+    scopeMarket?: StockBasicMarket
+  ): Promise<any> {
     const fd = new FormData()
     fd.append('file', file)
     const q = new URLSearchParams()
     q.set('mode', 'only_fill_empty')
     q.set('dry_run', String(dryRun))
     q.set('max_errors', String(maxErrors))
+    if (scopeMarket) q.set('scope_market', scopeMarket)
     return apiService.post(`/stock-basic/import/execute?${q.toString()}`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+
+  /** 股本导出（单市场） */
+  async exportShares(
+    market: StockBasicMarket,
+    format: 'csv' | 'xlsx',
+    opts?: { keyword?: string; empty_shares?: boolean; collect_enabled?: boolean | null }
+  ): Promise<Blob> {
+    const q = new URLSearchParams()
+    q.set('market', market)
+    q.set('format', format)
+    if (opts?.keyword) q.set('keyword', opts.keyword)
+    if (opts?.empty_shares) q.set('empty_shares', 'true')
+    if (opts?.collect_enabled !== undefined && opts?.collect_enabled !== null) {
+      q.set('collect_enabled', String(opts.collect_enabled))
+    }
+    return apiService.get(`/stock-basic/export/shares?${q.toString()}`, {
+      responseType: 'blob'
     })
   }
 }
 
 export const stockBasicService = new StockBasicService()
-

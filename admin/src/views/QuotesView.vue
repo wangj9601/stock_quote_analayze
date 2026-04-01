@@ -121,6 +121,11 @@
                       {{ formatVolume(scope.row.volume) }}
                     </template>
                   </el-table-column>
+                  <el-table-column prop="turnover_rate" label="换手率" min-width="90" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatPercent(scope.row.turnover_rate) }}
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="amount" label="成交额" min-width="90" show-overflow-tooltip>
                     <template #default="scope">
                       {{ formatAmount(scope.row.amount) }}
@@ -332,6 +337,11 @@
                   <el-table-column prop="volume" label="成交量" min-width="90" show-overflow-tooltip>
                     <template #default="scope">
                       {{ formatVolume(scope.row.volume) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="turnover_rate" label="换手率" min-width="90" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatPercent(scope.row.turnover_rate) }}
                     </template>
                   </el-table-column>
                   <el-table-column prop="change_percent" label="涨跌幅" min-width="80" show-overflow-tooltip>

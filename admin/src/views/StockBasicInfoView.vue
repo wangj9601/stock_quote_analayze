@@ -4,49 +4,54 @@
       <h1>股票基本信息管理</h1>
     </div>
 
-    <el-tabs v-model="activeTab">
+    <el-radio-group v-model="mainTab" class="mb-4" @change="onMainTabChange">
+      <el-radio-button label="CN">A股</el-radio-button>
+      <el-radio-button label="HK">港股</el-radio-button>
+    </el-radio-group>
+
+    <el-tabs v-model="subTab" type="card">
       <el-tab-pane label="基本信息查询" name="query">
         <el-card>
           <el-row :gutter="12" class="mb-4">
-            <el-col :span="4">
-              <el-select v-model="query.market" style="width: 100%">
-                <el-option label="全部" value="ALL" />
-                <el-option label="A股" value="CN" />
-                <el-option label="港股" value="HK" />
-              </el-select>
-            </el-col>
-            <el-col :span="6">
-              <el-input v-model="query.keyword" placeholder="代码/名称" clearable />
+            <el-col :span="8">
+              <el-input v-model="currentQuery.keyword" placeholder="代码/名称" clearable />
             </el-col>
             <el-col :span="4">
-              <el-checkbox v-model="query.empty_shares">仅缺股本</el-checkbox>
+              <el-checkbox v-model="currentQuery.empty_shares">仅缺股本</el-checkbox>
             </el-col>
-            <el-col :span="4">
-              <el-select v-model="collectEnabledFilter" style="width: 100%" placeholder="采集标志">
+            <el-col :span="5">
+              <el-select v-model="currentCollectFilter" style="width: 100%" placeholder="采集标志">
                 <el-option label="全部" value="all" />
                 <el-option label="启用" value="enabled" />
                 <el-option label="停用" value="disabled" />
               </el-select>
             </el-col>
-            <el-col :span="6">
+            <el-col :span="7">
               <el-button type="primary" :loading="loading" @click="loadList">查询</el-button>
             </el-col>
           </el-row>
 
           <el-table :data="rows" :loading="loading" stripe>
-            <el-table-column prop="market" label="市场" width="70" />
             <el-table-column prop="code" label="代码" width="100" />
             <el-table-column prop="name" label="名称" min-width="120" />
             <el-table-column prop="total_shares" label="总股本" min-width="110" />
             <el-table-column prop="free_float_shares" label="流通股本" min-width="110" />
-            <el-table-column prop="industry" label="行业" min-width="110" />
-            <el-table-column prop="listing_date" label="上市日期" min-width="100" />
+            <el-table-column prop="industry" label="行业" min-width="110">
+              <template #default="scope">
+                {{ displayOptionalText(scope.row.industry) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="listing_date" label="上市日期" min-width="100">
+              <template #default="scope">
+                {{ displayOptionalText(scope.row.listing_date) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="shares_updated_at" label="更新时间" min-width="170" />
             <el-table-column label="采集/处理" min-width="120">
               <template #default="scope">
                 <el-switch
                   :model-value="scope.row.collect_enabled"
-                  @change="(v:boolean)=>toggleCollectFlag(scope.row, v)"
+                  @change="(v: boolean) => toggleCollectFlag(scope.row, v)"
                 />
               </template>
             </el-table-column>
@@ -54,8 +59,8 @@
 
           <div class="mt-4 flex justify-end">
             <el-pagination
-              v-model:current-page="query.page"
-              v-model:page-size="query.page_size"
+              v-model:current-page="currentQuery.page"
+              v-model:page-size="currentQuery.page_size"
               :total="total"
               :page-sizes="[20, 50, 100]"
               layout="total, sizes, prev, pager, next, jumper"
@@ -83,6 +88,10 @@
             <el-button @click="loadPipelineStatus">刷新链路状态</el-button>
           </div>
 
+          <el-alert class="mb-4" type="info" :closable="false" show-icon
+            :title="`当前为【${mainTab === 'CN' ? 'A股' : '港股'}】导入：仅处理文件中市场为 ${mainTab} 的行；策略为仅补空值。`"
+          />
+
           <el-upload
             :auto-upload="false"
             :show-file-list="true"
@@ -96,33 +105,29 @@
           </el-upload>
 
           <div class="mt-4">
-            <el-button :disabled="!selectedFile" :loading="validating" @click="validateFile">预校验</el-button>
-            <el-button :disabled="!selectedFile" :loading="executing" @click="executeImport(false)">执行导入</el-button>
-            <el-button :disabled="!selectedFile" :loading="executing" @click="executeImport(true)">Dry Run</el-button>
+            <el-button :disabled="!currentImportFile" :loading="validating" @click="validateFile">预校验</el-button>
+            <el-button :disabled="!currentImportFile" :loading="executing" @click="executeImport(false)">执行导入</el-button>
+            <el-button :disabled="!currentImportFile" :loading="executing" @click="executeImport(true)">Dry Run</el-button>
           </div>
 
-          <el-alert class="mt-4" type="info" :closable="false" show-icon
-            title="导入策略：仅补空值（默认不覆盖已有非空字段），支持 A股+港股，支持 CSV/XLSX。"
-          />
-
-          <el-card v-if="validateResult" class="mt-4">
+          <el-card v-if="currentValidateResult" class="mt-4">
             <template #header>预校验结果</template>
-            <div>有效行：{{ validateResult.valid_rows }}，无效行：{{ validateResult.invalid_rows }}</div>
-            <div>市场分布：A股 {{ validateResult.market_count?.CN || 0 }}，港股 {{ validateResult.market_count?.HK || 0 }}</div>
-            <el-table :data="validateResult.issues || []" size="small" class="mt-3">
+            <div>有效行：{{ currentValidateResult.valid_rows }}，无效行：{{ currentValidateResult.invalid_rows }}</div>
+            <div>市场分布：A股 {{ currentValidateResult.market_count?.CN || 0 }}，港股 {{ currentValidateResult.market_count?.HK || 0 }}</div>
+            <el-table :data="currentValidateResult.issues || []" size="small" class="mt-3">
               <el-table-column prop="row_no" label="行号" width="80" />
               <el-table-column prop="code" label="代码" width="120" />
               <el-table-column prop="message" label="错误信息" min-width="220" />
             </el-table>
           </el-card>
 
-          <el-card v-if="executeResult" class="mt-4">
+          <el-card v-if="currentExecuteResult" class="mt-4">
             <template #header>导入结果</template>
             <div>
-              总行数 {{ executeResult.total_rows }}，成功 {{ executeResult.success }}，
-              跳过 {{ executeResult.skipped }}，失败 {{ executeResult.failed }}
+              总行数 {{ currentExecuteResult.total_rows }}，成功 {{ currentExecuteResult.success }}，
+              跳过 {{ currentExecuteResult.skipped }}，失败 {{ currentExecuteResult.failed }}
             </div>
-            <el-table :data="executeResult.failed_sample || []" size="small" class="mt-3">
+            <el-table :data="currentExecuteResult.failed_sample || []" size="small" class="mt-3">
               <el-table-column prop="row_no" label="行号" width="80" />
               <el-table-column prop="code" label="代码" width="120" />
               <el-table-column prop="message" label="错误信息" min-width="220" />
@@ -130,47 +135,135 @@
           </el-card>
         </el-card>
       </el-tab-pane>
+
+      <el-tab-pane label="股本导出" name="export">
+        <el-card>
+          <el-alert
+            class="mb-4"
+            type="info"
+            :closable="false"
+            show-icon
+            title="导出列含：code、name、market、total_shares、free_float_shares、listing_date、industry、shares_updated_at、collect_enabled。可按下方条件筛选后导出全部匹配行（不分页）。"
+          />
+          <el-row :gutter="12" class="mb-4">
+            <el-col :span="8">
+              <el-input v-model="currentExportFilters.keyword" placeholder="代码/名称（可选）" clearable />
+            </el-col>
+            <el-col :span="5">
+              <el-checkbox v-model="currentExportFilters.empty_shares">仅缺股本</el-checkbox>
+            </el-col>
+            <el-col :span="6">
+              <el-select v-model="currentExportCollectFilter" style="width: 100%" placeholder="采集标志">
+                <el-option label="全部" value="all" />
+                <el-option label="启用" value="enabled" />
+                <el-option label="停用" value="disabled" />
+              </el-select>
+            </el-col>
+          </el-row>
+          <div class="mb-2">
+            <el-button type="primary" :loading="exporting" @click="doExport('csv')">导出 CSV</el-button>
+            <el-button type="primary" :loading="exporting" @click="doExport('xlsx')">导出 XLSX</el-button>
+          </div>
+        </el-card>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { stockBasicService } from '@/services/stockBasic.service'
+import { stockBasicService, type StockBasicMarket } from '@/services/stockBasic.service'
 
-const activeTab = ref('query')
+const mainTab = ref<StockBasicMarket>('CN')
+const subTab = ref('query')
 const loading = ref(false)
 const validating = ref(false)
 const executing = ref(false)
+const exporting = ref(false)
 const rows = ref<any[]>([])
 const total = ref(0)
-const selectedFile = ref<File | null>(null)
-const validateResult = ref<any>(null)
-const executeResult = ref<any>(null)
 const pipelineStatus = ref<any>(null)
-const collectEnabledFilter = ref<'all' | 'enabled' | 'disabled'>('all')
 
-const query = reactive({
-  market: 'ALL' as 'ALL' | 'CN' | 'HK',
+type CollectFilter = 'all' | 'enabled' | 'disabled'
+
+const queryCN = reactive({
   keyword: '',
   empty_shares: false,
   page: 1,
   page_size: 20
 })
+const queryHK = reactive({
+  keyword: '',
+  empty_shares: false,
+  page: 1,
+  page_size: 20
+})
+const collectFilterCN = ref<CollectFilter>('all')
+const collectFilterHK = ref<CollectFilter>('all')
+
+const currentQuery = computed(() => (mainTab.value === 'CN' ? queryCN : queryHK))
+const currentCollectFilter = computed({
+  get: () => (mainTab.value === 'CN' ? collectFilterCN.value : collectFilterHK.value),
+  set: (v: CollectFilter) => {
+    if (mainTab.value === 'CN') collectFilterCN.value = v
+    else collectFilterHK.value = v
+  }
+})
+
+const fileCN = ref<File | null>(null)
+const fileHK = ref<File | null>(null)
+const validateCN = ref<any>(null)
+const validateHK = ref<any>(null)
+const executeCN = ref<any>(null)
+const executeHK = ref<any>(null)
+
+const currentImportFile = computed(() => (mainTab.value === 'CN' ? fileCN.value : fileHK.value))
+const currentValidateResult = computed(() => (mainTab.value === 'CN' ? validateCN.value : validateHK.value))
+const currentExecuteResult = computed(() => (mainTab.value === 'CN' ? executeCN.value : executeHK.value))
+
+const exportFiltersCN = reactive({ keyword: '', empty_shares: false })
+const exportFiltersHK = reactive({ keyword: '', empty_shares: false })
+const exportCollectFilterCN = ref<CollectFilter>('all')
+const exportCollectFilterHK = ref<CollectFilter>('all')
+
+const currentExportFilters = computed(() => (mainTab.value === 'CN' ? exportFiltersCN : exportFiltersHK))
+const currentExportCollectFilter = computed({
+  get: () => (mainTab.value === 'CN' ? exportCollectFilterCN.value : exportCollectFilterHK.value),
+  set: (v: CollectFilter) => {
+    if (mainTab.value === 'CN') exportCollectFilterCN.value = v
+    else exportCollectFilterHK.value = v
+  }
+})
+
+function collectEnabledFromFilter(cf: CollectFilter): boolean | null {
+  if (cf === 'all') return null
+  return cf === 'enabled'
+}
+
+/** 行业、上市日期：不展示 nan / 无效占位 */
+function displayOptionalText(v: unknown): string {
+  if (v === null || v === undefined) return ''
+  const s = String(v).trim()
+  if (!s) return ''
+  const low = s.toLowerCase()
+  if (low === 'nan' || low === 'none' || low === 'null' || low === '<na>' || low === 'nat') return ''
+  return s
+}
 
 const loadList = async () => {
   loading.value = true
   try {
-    const collectEnabled =
-      collectEnabledFilter.value === 'all'
-        ? null
-        : collectEnabledFilter.value === 'enabled'
-          ? true
-          : false
+    const m = mainTab.value
+    const q = m === 'CN' ? queryCN : queryHK
+    const cf = m === 'CN' ? collectFilterCN.value : collectFilterHK.value
     const res = await stockBasicService.getList({
-      ...query,
-      collect_enabled: collectEnabled
+      market: m,
+      keyword: q.keyword,
+      empty_shares: q.empty_shares,
+      collect_enabled: collectEnabledFromFilter(cf),
+      page: q.page,
+      page_size: q.page_size
     })
     rows.value = res.data || []
     total.value = res.total || 0
@@ -218,17 +311,26 @@ const downloadTemplate = async (format: 'csv' | 'xlsx') => {
 }
 
 const onFileChange = (uploadFile: any) => {
-  selectedFile.value = uploadFile.raw || null
-  validateResult.value = null
-  executeResult.value = null
+  const f = uploadFile.raw || null
+  if (mainTab.value === 'CN') {
+    fileCN.value = f
+    validateCN.value = null
+    executeCN.value = null
+  } else {
+    fileHK.value = f
+    validateHK.value = null
+    executeHK.value = null
+  }
 }
 
 const validateFile = async () => {
-  if (!selectedFile.value) return
+  const f = currentImportFile.value
+  if (!f) return
   validating.value = true
   try {
-    const res = await stockBasicService.validateImport(selectedFile.value)
-    validateResult.value = res.data
+    const res = await stockBasicService.validateImport(f, mainTab.value)
+    if (mainTab.value === 'CN') validateCN.value = res.data
+    else validateHK.value = res.data
     ElMessage.success('预校验完成')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '预校验失败')
@@ -238,11 +340,13 @@ const validateFile = async () => {
 }
 
 const executeImport = async (dryRun: boolean) => {
-  if (!selectedFile.value) return
+  const f = currentImportFile.value
+  if (!f) return
   executing.value = true
   try {
-    const res = await stockBasicService.executeImport(selectedFile.value, dryRun, 100)
-    executeResult.value = res.data
+    const res = await stockBasicService.executeImport(f, dryRun, 100, mainTab.value)
+    if (mainTab.value === 'CN') executeCN.value = res.data
+    else executeHK.value = res.data
     if (res.success) {
       ElMessage.success(dryRun ? 'Dry Run完成' : '导入完成')
       if (!dryRun) loadList()
@@ -256,8 +360,44 @@ const executeImport = async (dryRun: boolean) => {
   }
 }
 
-onMounted(loadList)
-onMounted(loadPipelineStatus)
+const doExport = async (format: 'csv' | 'xlsx') => {
+  exporting.value = true
+  try {
+    const ef = mainTab.value === 'CN' ? exportFiltersCN : exportFiltersHK
+    const ecf = mainTab.value === 'CN' ? exportCollectFilterCN.value : exportCollectFilterHK.value
+    const blob = await stockBasicService.exportShares(mainTab.value, format, {
+      keyword: ef.keyword || undefined,
+      empty_shares: ef.empty_shares,
+      collect_enabled: collectEnabledFromFilter(ecf)
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `stock_basic_shares_${mainTab.value.toLowerCase()}.${format}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出已开始')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+function onMainTabChange() {
+  if (subTab.value === 'query') loadList()
+}
+
+watch(subTab, (t) => {
+  if (t === 'query') loadList()
+})
+
+onMounted(() => {
+  loadList()
+  loadPipelineStatus()
+})
 </script>
 
 <style scoped>
@@ -265,4 +405,3 @@ onMounted(loadPipelineStatus)
   margin-bottom: 12px;
 }
 </style>
-

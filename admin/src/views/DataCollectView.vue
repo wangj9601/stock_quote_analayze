@@ -1,13 +1,13 @@
 <template>
   <div class="datacollect-view">
     <!-- 当前任务状态（仅运行中显示；完成后依赖轮询清空，避免仍显示「等待任务完成」） -->
-    <div v-if="currentTaskIsRunning" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+    <div v-if="currentTaskIsRunning && currentTask" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div class="flex items-center">
         <el-icon class="text-yellow-600 mr-3"><Warning /></el-icon>
         <div>
           <h3 class="text-sm font-medium text-yellow-800">当前有任务正在运行</h3>
           <p class="text-sm text-yellow-700 mt-1">
-            任务ID: {{ currentTask.task_id }} | 
+            任务ID: {{ currentTask.task_id }} |
             开始时间: {{ formatTime(currentTask.start_time) }}
           </p>
         </div>

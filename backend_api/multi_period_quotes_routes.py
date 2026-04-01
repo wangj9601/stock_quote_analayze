@@ -84,7 +84,7 @@ def get_historical_quotes_multi_period(
         params['offset'] = offset
         
         data_query = text(f"""
-            SELECT code, name, date, open, high, low, close, volume, amount, change_percent
+            SELECT code, name, date, open, high, low, close, volume, amount, change_percent, turnover_rate
             FROM {table_name}
             WHERE {where_clause}
             ORDER BY date DESC, code ASC
@@ -107,7 +107,8 @@ def get_historical_quotes_multi_period(
                 'close': round(float(row[6]), 2) if row[6] else None,
                 'volume': round(float(row[7]), 2) if row[7] else None,
                 'amount': round(float(row[8]), 2) if row[8] else None,
-                'change_percent': round(float(row[9]), 2) if row[9] else None
+                'change_percent': round(float(row[9]), 2) if row[9] else None,
+                'turnover_rate': round(float(row[10]), 4) if row[10] is not None else None,
             })
         
         logger.info(f"查询{period}数据成功: 共{total}条, 返回{len(data)}条")
