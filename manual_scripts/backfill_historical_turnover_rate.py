@@ -5,12 +5,13 @@
 
 说明：
 - 计算逻辑使用系统内 HistoricalTurnoverRateCollector（已按 A 股 1手=100股 修正）。
-- 仅补缺失换手率（collector 内部条件：turnover_rate IS NULL OR turnover_rate = 0）。
+- 默认仅补缺失换手率（turnover_rate IS NULL OR turnover_rate = 0）。
+- 加 --force 时对该日期/区间内每日的全部历史行情记录重新计算并强制 UPDATE。
 
 示例：
   python manual_scripts/backfill_historical_turnover_rate.py --days 30
-  python manual_scripts/backfill_historical_turnover_rate.py --date 2026-03-31
-  python manual_scripts/backfill_historical_turnover_rate.py --start-date 2026-01-01 --end-date 2026-03-31
+  python manual_scripts/backfill_historical_turnover_rate.py --date 2026-03-31 --force
+  python manual_scripts/backfill_historical_turnover_rate.py --start-date 2026-01-01 --end-date 2026-03-31 --force
 """
 
 from __future__ import annotations
@@ -34,6 +35,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start-date", type=str, default=None, help="区间开始日期 YYYY-MM-DD")
     parser.add_argument("--end-date", type=str, default=None, help="区间结束日期 YYYY-MM-DD")
     parser.add_argument("--progress-every", type=int, default=200, help="每成功更新N条打印一次进度日志（默认 200）")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="强制重算并覆盖：处理该日/区间内所有 historical_quotes 记录（不限于缺省换手率）",
+    )
     return parser
 
 
@@ -47,8 +53,17 @@ def main() -> None:
 
     # 优先级：date > start/end > days
     if args.date:
-        ok = collector.collect_turnover_rate_for_date(args.date, progress_every=args.progress_every)
-        print(json.dumps({"mode": "date", "date": args.date, "success": bool(ok)}, ensure_ascii=False))
+        ok = collector.collect_turnover_rate_for_date(
+            args.date,
+            progress_every=args.progress_every,
+            force_update=args.force,
+        )
+        print(
+            json.dumps(
+                {"mode": "date", "date": args.date, "force": args.force, "success": bool(ok)},
+                ensure_ascii=False,
+            )
+        )
         sys.exit(0 if ok else 2)
 
     if args.start_date or args.end_date:
@@ -58,6 +73,7 @@ def main() -> None:
             args.start_date,
             args.end_date,
             progress_every=args.progress_every,
+            force_update=args.force,
         )
         print(
             json.dumps(
@@ -65,6 +81,7 @@ def main() -> None:
                     "mode": "period",
                     "start_date": args.start_date,
                     "end_date": args.end_date,
+                    "force": args.force,
                     "success": bool(ok),
                 },
                 ensure_ascii=False,
@@ -75,8 +92,15 @@ def main() -> None:
     days = args.days if args.days is not None else 30
     if days <= 0:
         parser.error("--days 必须为正整数")
-    ok = collector.collect_missing_turnover_rate(days, progress_every=args.progress_every)
-    print(json.dumps({"mode": "days", "days": days, "success": bool(ok)}, ensure_ascii=False))
+    ok = collector.collect_missing_turnover_rate(
+        days, progress_every=args.progress_every, force_update=args.force
+    )
+    print(
+        json.dumps(
+            {"mode": "days", "days": days, "force": args.force, "success": bool(ok)},
+            ensure_ascii=False,
+        )
+    )
     sys.exit(0 if ok else 2)
 
 

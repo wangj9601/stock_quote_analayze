@@ -195,33 +195,57 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
 
         return None, 0
 
-    def collect_turnover_rate_for_date(self, date_str: str, progress_every: int = 0) -> bool:
+    def collect_turnover_rate_for_date(
+        self, date_str: str, progress_every: int = 0, force_update: bool = False
+    ) -> bool:
         """
         为指定日期采集所有股票的历史换手率数据
 
         Args:
             date_str: 日期字符串 (YYYY-MM-DD)
             progress_every: 每成功更新 N 条打印一次进度日志；<=0 表示不打印
+            force_update: True 时对该日所有历史行情记录重新计算并强制 UPDATE（不限于缺省/0）
 
         Returns:
             bool: 是否成功
         """
         try:
-            self.logger.info(f"开始采集 {date_str} 的历史换手率数据...")
+            mode = "强制重算并覆盖" if force_update else "仅补缺失"
+            self.logger.info(f"开始采集 {date_str} 的历史换手率数据（{mode}）...")
 
             session = SessionLocal()
             try:
-                # 查询该日期已有的股票数据，但缺少换手率
-                result = session.execute(text('''
+                if force_update:
+                    result = session.execute(
+                        text(
+                            """
+                    SELECT DISTINCT code, name
+                    FROM historical_quotes
+                    WHERE date = :date
+                    """
+                        ),
+                        {"date": date_str},
+                    )
+                else:
+                    # 仅缺换手率或为 0 的记录
+                    result = session.execute(
+                        text(
+                            """
                     SELECT DISTINCT code, name
                     FROM historical_quotes
                     WHERE date = :date AND (turnover_rate IS NULL OR turnover_rate = 0)
-                '''), {'date': date_str})
+                    """
+                        ),
+                        {"date": date_str},
+                    )
 
                 stocks_to_update = result.fetchall()
 
                 if not stocks_to_update:
-                    self.logger.info(f"{date_str} 的所有股票换手率数据已完整，无需更新")
+                    if force_update:
+                        self.logger.info(f"{date_str} 在 historical_quotes 中无数据，跳过")
+                    else:
+                        self.logger.info(f"{date_str} 的所有股票换手率数据已完整，无需更新")
                     return True
 
                 self.logger.info(f"需要更新换手率数据的股票数量: {len(stocks_to_update)}")
@@ -287,7 +311,13 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
             self.logger.error(f"采集 {date_str} 历史换手率数据时异常: {e}")
             return False
 
-    def collect_turnover_rate_for_period(self, start_date: str, end_date: str, progress_every: int = 0) -> bool:
+    def collect_turnover_rate_for_period(
+        self,
+        start_date: str,
+        end_date: str,
+        progress_every: int = 0,
+        force_update: bool = False,
+    ) -> bool:
         """
         为指定时间段采集历史换手率数据
 
@@ -295,6 +325,7 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
             start_date: 开始日期 (YYYY-MM-DD)
             end_date: 结束日期 (YYYY-MM-DD)
             progress_every: 传递给单日回填的进度日志阈值
+            force_update: 是否对该区间内每个交易日强制重算并覆盖
 
         Returns:
             bool: 是否成功
@@ -314,7 +345,11 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
 
                 # 跳过周末
                 if current_dt.weekday() < 5:
-                    if self.collect_turnover_rate_for_date(current_date_str, progress_every=progress_every):
+                    if self.collect_turnover_rate_for_date(
+                        current_date_str,
+                        progress_every=progress_every,
+                        force_update=force_update,
+                    ):
                         total_success += 1
                     else:
                         total_fail += 1
@@ -330,13 +365,16 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
             self.logger.error(f"采集时间段 {start_date} 到 {end_date} 历史换手率数据时异常: {e}")
             return False
 
-    def collect_missing_turnover_rate(self, days_back: int = 30, progress_every: int = 0) -> bool:
+    def collect_missing_turnover_rate(
+        self, days_back: int = 30, progress_every: int = 0, force_update: bool = False
+    ) -> bool:
         """
         采集最近N天缺失的换手率数据
 
         Args:
             days_back: 往前追溯的天数
             progress_every: 传递给按区间回填的进度日志阈值
+            force_update: 是否对该区间内每个交易日强制重算并覆盖
 
         Returns:
             bool: 是否成功
@@ -361,6 +399,7 @@ class HistoricalTurnoverRateCollector(AKShareCollector):
                 start_date.strftime('%Y-%m-%d'),
                 end_date.strftime('%Y-%m-%d'),
                 progress_every=progress_every,
+                force_update=force_update,
             )
 
         except Exception as e:
