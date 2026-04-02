@@ -71,6 +71,7 @@
             <el-form-item label="股票池">
               <el-select v-model="form.stock_pool_mode" class="w-full" placeholder="选择股票池范围">
                 <el-option label="全市场" value="all" />
+                <el-option label="自选股" value="watchlist" />
                 <el-option label="单股回测" value="single" />
                 <el-option label="自定义列表" value="custom" />
               </el-select>

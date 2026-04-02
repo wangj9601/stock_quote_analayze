@@ -76,6 +76,7 @@ backend_core (策略与任务执行)
 | 选项       | 含义         | 前端传参               | 后端行为 |
 |------------|--------------|------------------------|----------|
 | 全市场     | 按市场取全量 | 不传 `stock_code`/`stock_pool` | `stock_pool=None`，由 `GMSFrontendInterface._get_stock_pool(date, market)` 从 `stock_basic_info` / `stock_basic_info_hk` 取码 |
+| 自选股     | 库内全部自选股代码（去重） | `stock_pool_mode=watchlist`，不传 `stock_code`/`stock_pool` | 从 `watchlist` 表查询不重复的 `stock_code`，写入 `config.stock_pool`；若无任何自选股则返回 400 |
 | 单股回测   | 仅一只股票   | `stock_code`：如 000001、00700 | config 带 `stock_code`，worker 转为 `stock_pool=[code]`，每日只对该股做 GMS 选股与命中统计 |
 | 自定义列表 | 多只股票     | `stock_pool`：代码数组 | config 带 `stock_pool`，每日只对列表中股票做选股与命中统计 |
 
@@ -87,9 +88,9 @@ backend_core (策略与任务执行)
     - `target_pct`：如 `0.05`
     - `horizon_days`：默认 20
     - `min_score`：默认 0
-    - `stock_pool_mode`：`all`（全市场）/ `single`（单股回测）/ `custom`（自定义列表）
+    - `stock_pool_mode`：`all`（全市场）/ `watchlist`（自选股）/ `single`（单股回测）/ `custom`（自定义列表）
     - `stock_code?`：单股回测时的股票代码（如 000001、00700）
-    - `stock_pool?`：自定义列表时的代码数组
+    - `stock_pool?`：自定义列表时的代码数组（`watchlist` 模式下由服务端从 `watchlist` 表填充，请求中的 `stock_code`/`stock_pool` 会被忽略）
   - 返回：`task_id`
 
 - **GET** `/api/admin/gms/backtests?status=&limit=&offset=`

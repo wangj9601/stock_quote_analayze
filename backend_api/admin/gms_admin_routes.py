@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
-from backend_api.models import StockBasicInfo, StockBasicInfoHK
+from backend_api.models import StockBasicInfo, StockBasicInfoHK, Watchlist
 from backend_core.strategies.gms import admin_interface
 from backend_core.strategies.gms.config import GMSConfigManager
 
@@ -47,9 +47,16 @@ def _get_stock_name(db: Session, code: str) -> str:
     return ""
 
 
+def _distinct_watchlist_codes(db: Session) -> List[str]:
+    """全库 watchlist 表中去重后的股票代码，排序以保证稳定。"""
+    rows = db.query(Watchlist.stock_code).distinct().all()
+    codes = {str(r[0]).strip() for r in rows if r[0] is not None and str(r[0]).strip()}
+    return sorted(codes)
+
+
 def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
     """
-    当股票池为单股或自定义时，生成包含股票名称和代码的任务名称。
+    当股票池为单股、自定义或自选股时，生成包含股票名称和代码的任务名称。
     全市场时返回 None，由 backtest_storage 使用默认命名。
     """
     mode = config.get("stock_pool_mode") or "all"
@@ -59,7 +66,7 @@ def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
             return None
         name = _get_stock_name(db, code)
         return f"GMS回测_{code}_{name}" if name else f"GMS回测_{code}"
-    if mode == "custom":
+    if mode in ("custom", "watchlist"):
         pool = config.get("stock_pool") or []
         codes = [str(c).strip() for c in pool if str(c).strip()][:5]  # 最多5只
         if not codes:
@@ -81,7 +88,7 @@ class BacktestCreateBody(BaseModel):
     target_pct: float = Field(0.05, description="目标涨幅，如 0.05 表示 5%")
     horizon_days: int = Field(20, description="持有窗口交易日数")
     min_score: float = Field(0, description="最低总分")
-    stock_pool_mode: Optional[str] = Field("all", description="股票池: all / single / custom")
+    stock_pool_mode: Optional[str] = Field("all", description="股票池: all / single / custom / watchlist")
     stock_code: Optional[str] = Field(None, description="单股回测时的股票代码，如 000001、00700")
     stock_pool: Optional[List[str]] = Field(None, description="自定义股票池代码列表")
 
@@ -111,8 +118,9 @@ async def get_system_status():
 # ---------- backtests ----------
 @router.post("/backtests")
 async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db)):
-    """创建回测任务，返回 task_id。任务名称未填写时，单股/自定义股票池时自动包含股票名称和代码。"""
+    """创建回测任务，返回 task_id。任务名称未填写时，单股/自定义/自选股股票池时自动包含股票名称和代码。"""
     try:
+        mode = (body.stock_pool_mode or "all").strip()
         config = {
             "task_name": body.task_name,
             "market": body.market,
@@ -121,18 +129,26 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             "target_pct": body.target_pct,
             "horizon_days": body.horizon_days,
             "min_score": body.min_score,
-            "stock_pool_mode": body.stock_pool_mode or "all",
+            "stock_pool_mode": mode,
         }
-        if body.stock_code:
-            config["stock_code"] = body.stock_code.strip()
-        if body.stock_pool:
-            config["stock_pool"] = [str(c).strip() for c in body.stock_pool if str(c).strip()]
-        # 任务名称：用户填写则用用户的；否则单股/自定义时生成含股票代码和名称的默认名
+        if mode == "watchlist":
+            codes = _distinct_watchlist_codes(db)
+            if not codes:
+                raise HTTPException(status_code=400, detail="当前无自选股，无法创建回测任务")
+            config["stock_pool"] = codes
+        else:
+            if body.stock_code:
+                config["stock_code"] = body.stock_code.strip()
+            if body.stock_pool:
+                config["stock_pool"] = [str(c).strip() for c in body.stock_pool if str(c).strip()]
+        # 任务名称：用户填写则用用户的；否则单股/自定义/自选股时生成含股票代码和名称的默认名
         task_name = (body.task_name or "").strip()
         if not task_name:
             task_name = _build_task_name_with_stocks(db, config)
         task_id = admin_interface.create_backtest(config, name=task_name or None)
         return {"success": True, "data": {"task_id": task_id}}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("创建 GMS 回测任务失败")
         raise HTTPException(status_code=500, detail=str(e))

@@ -40,6 +40,8 @@ class GMSApiService {
     horizon_days?: number
     min_score?: number
     stock_pool_mode?: string
+    stock_code?: string
+    stock_pool?: string[]
   }) {
     const res = await this.request<{ success: boolean; data: { task_id: string } }>(`${PREFIX}/backtests`, {
       method: 'POST',
