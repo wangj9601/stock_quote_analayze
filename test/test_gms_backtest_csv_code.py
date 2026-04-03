@@ -10,9 +10,17 @@ if project_root not in sys.path:
 
 from backend_core.strategies.gms.backtest_storage import (
     normalize_gms_stock_code,
+    normalize_gms_task_id,
     format_code_for_csv_cell,
     save_details_csv,
 )
+
+
+def test_normalize_task_id_unicode_hyphens():
+    good = "cfaa27e6-d72a-4751-9e5a-a76224e4ea21"
+    bad = good.replace("-", "\u2011")  # 非断行连字符，常见于复制粘贴
+    assert normalize_gms_task_id(bad) == good
+    assert normalize_gms_task_id("  " + good + "  ") == good
 
 
 def test_normalize_hk_short_code():

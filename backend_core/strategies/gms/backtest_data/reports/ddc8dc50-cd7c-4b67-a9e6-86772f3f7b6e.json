@@ -1,0 +1,42 @@
+{
+  "report_id": "ddc8dc50-cd7c-4b67-a9e6-86772f3f7b6e",
+  "task_id": "ddc8dc50-cd7c-4b67-a9e6-86772f3f7b6e",
+  "name": "GMS回测_002155_湖南黄金",
+  "created_at": "2026-04-03T08:46:30.889246Z",
+  "summary": {
+    "total_samples": 11,
+    "hit_count": 2,
+    "hit_rate": 0.1818,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2023-01-03",
+    "end_date": "2026-04-03",
+    "market": "cn",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "左侧": {
+        "total": 7,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "右侧": {
+        "total": 4,
+        "hit": 2,
+        "hit_rate": 0.5
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 7,
+        "hit": 2,
+        "hit_rate": 0.2857142857142857
+      },
+      "[90,100]": {
+        "total": 4,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    }
+  },
+  "details_path": "ddc8dc50-cd7c-4b67-a9e6-86772f3f7b6e.csv"
+}

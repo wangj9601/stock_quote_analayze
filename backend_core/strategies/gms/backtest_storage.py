@@ -24,6 +24,21 @@ _INDEX_FILE = os.path.join(_BASE_DIR, "task_index.json")
 _INDEX_LOCK = threading.Lock()
 
 
+def normalize_gms_task_id(task_id: Optional[str]) -> str:
+    """
+    规范化 URL/参数中的 task_id：去首尾空白，并将各类 Unicode 连字符统一为 ASCII '-'。
+    复制粘贴或富文本中的 “假横线” 会导致与磁盘上 `{uuid}.json` 文件名不一致，从而查询 404。
+    """
+    if task_id is None:
+        return ""
+    s = str(task_id).strip()
+    if not s:
+        return ""
+    for ch in ("\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212", "\uff0d"):
+        s = s.replace(ch, "-")
+    return s
+
+
 def _ensure_dirs():
     for d in (_BASE_DIR, _TASKS_DIR, _REPORTS_DIR, _DETAILS_DIR):
         os.makedirs(d, exist_ok=True)
@@ -121,20 +136,28 @@ def create_task(config: Dict[str, Any], name: Optional[str] = None) -> str:
 
 def get_task(task_id: str) -> Optional[Dict[str, Any]]:
     """获取任务详情。"""
-    path = os.path.join(_TASKS_DIR, f"{task_id}.json")
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return None
+    path = os.path.join(_TASKS_DIR, f"{tid}.json")
     if not os.path.isfile(path):
+        # 轮询时可能短暂缺失或 id 非法，避免刷 warning；需要排查可看 debug
+        logger.debug("任务文件不存在: %s (原始 task_id=%r)", path, task_id)
         return None
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        logger.warning("读取任务 %s 失败: %s", task_id, e)
+        logger.warning("读取任务 %s 失败: %s", tid, e)
         return None
 
 
 def update_task_progress(task_id: str, progress: int, message: str = "", log_line: Optional[str] = None) -> bool:
     """更新任务进度与可选日志。"""
-    task = get_task(task_id)
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return False
+    task = get_task(tid)
     if not task:
         return False
     task["progress"] = progress
@@ -145,36 +168,42 @@ def update_task_progress(task_id: str, progress: int, message: str = "", log_lin
         task["status"] = "running"
         if not task.get("started_at"):
             task["started_at"] = datetime.utcnow().isoformat() + "Z"
-    path = os.path.join(_TASKS_DIR, f"{task_id}.json")
+    path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(task, f, ensure_ascii=False, indent=2)
-        _set_index_entry(task_id, status=task["status"])
+        _set_index_entry(tid, status=task["status"])
         return True
     except Exception as e:
-        logger.warning("更新任务进度失败 %s: %s", task_id, e)
+        logger.warning("更新任务进度失败 %s: %s", tid, e)
         return False
 
 
 def append_task_log(task_id: str, log_line: str) -> bool:
     """仅追加一条日志。"""
-    task = get_task(task_id)
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return False
+    task = get_task(tid)
     if not task:
         return False
     task.setdefault("logs", []).append({"ts": datetime.utcnow().isoformat(), "text": log_line})
-    path = os.path.join(_TASKS_DIR, f"{task_id}.json")
+    path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(task, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        logger.warning("追加任务日志失败 %s: %s", task_id, e)
+        logger.warning("追加任务日志失败 %s: %s", tid, e)
         return False
 
 
 def complete_task(task_id: str, summary: Dict[str, Any], details_path: Optional[str] = None) -> bool:
     """标记任务完成并写入汇总与明细路径。"""
-    task = get_task(task_id)
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return False
+    task = get_task(tid)
     if not task:
         return False
     task["status"] = "completed"
@@ -183,16 +212,16 @@ def complete_task(task_id: str, summary: Dict[str, Any], details_path: Optional[
     task["summary"] = summary
     task["details_path"] = details_path
     task["error"] = None
-    path = os.path.join(_TASKS_DIR, f"{task_id}.json")
+    path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(task, f, ensure_ascii=False, indent=2)
-        _set_index_entry(task_id, status="completed")
+        _set_index_entry(tid, status="completed")
         # 报告与任务一一对应，report_id = task_id
-        report_path = os.path.join(_REPORTS_DIR, f"{task_id}.json")
+        report_path = os.path.join(_REPORTS_DIR, f"{tid}.json")
         report = {
-            "report_id": task_id,
-            "task_id": task_id,
+            "report_id": tid,
+            "task_id": tid,
             "name": task.get("name"),
             "created_at": task.get("completed_at"),
             "summary": summary,
@@ -202,53 +231,62 @@ def complete_task(task_id: str, summary: Dict[str, Any], details_path: Optional[
             json.dump(report, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        logger.warning("完成任务写入失败 %s: %s", task_id, e)
+        logger.warning("完成任务写入失败 %s: %s", tid, e)
         return False
 
 
 def fail_task(task_id: str, error: str) -> bool:
     """标记任务失败。"""
-    task = get_task(task_id)
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return False
+    task = get_task(tid)
     if not task:
         return False
     task["status"] = "failed"
     task["error"] = error
     task["completed_at"] = datetime.utcnow().isoformat() + "Z"
-    path = os.path.join(_TASKS_DIR, f"{task_id}.json")
+    path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(task, f, ensure_ascii=False, indent=2)
-        _set_index_entry(task_id, status="failed")
+        _set_index_entry(tid, status="failed")
         return True
     except Exception as e:
-        logger.warning("失败任务写入失败 %s: %s", task_id, e)
+        logger.warning("失败任务写入失败 %s: %s", tid, e)
         return False
 
 
 def cancel_task(task_id: str) -> bool:
     """标记任务已取消。"""
-    task = get_task(task_id)
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return False
+    task = get_task(tid)
     if not task:
         return False
     if task.get("status") in ("completed", "failed"):
         return False
     task["status"] = "cancelled"
     task["completed_at"] = datetime.utcnow().isoformat() + "Z"
-    path = os.path.join(_TASKS_DIR, f"{task_id}.json")
+    path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(task, f, ensure_ascii=False, indent=2)
-        _set_index_entry(task_id, status="cancelled")
+        _set_index_entry(tid, status="cancelled")
         return True
     except Exception as e:
-        logger.warning("取消任务写入失败 %s: %s", task_id, e)
+        logger.warning("取消任务写入失败 %s: %s", tid, e)
         return False
 
 
 def delete_task(task_id: str) -> bool:
     """删除任务及对应报告与明细文件。"""
+    tid = normalize_gms_task_id(task_id)
+    if not tid:
+        return False
     for subdir, ext in ((_TASKS_DIR, ".json"), (_REPORTS_DIR, ".json"), (_DETAILS_DIR, ".csv")):
-        p = os.path.join(subdir, f"{task_id}{ext}")
+        p = os.path.join(subdir, f"{tid}{ext}")
         if os.path.isfile(p):
             try:
                 os.remove(p)
@@ -256,8 +294,8 @@ def delete_task(task_id: str) -> bool:
                 logger.warning("删除文件 %s 失败: %s", p, e)
     with _INDEX_LOCK:
         index = _load_index()
-        if task_id in index:
-            del index[task_id]
+        if tid in index:
+            del index[tid]
             _save_index(index)
     return True
 
@@ -304,14 +342,17 @@ def list_reports(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
 
 def get_report(report_id: str) -> Optional[Dict[str, Any]]:
     """报告详情。"""
-    path = os.path.join(_REPORTS_DIR, f"{report_id}.json")
+    rid = normalize_gms_task_id(report_id)
+    if not rid:
+        return None
+    path = os.path.join(_REPORTS_DIR, f"{rid}.json")
     if not os.path.isfile(path):
         return None
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        logger.warning("读取报告 %s 失败: %s", report_id, e)
+        logger.warning("读取报告 %s 失败: %s", rid, e)
         return None
 
 
@@ -372,7 +413,8 @@ def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
     """将明细写入 CSV，返回相对路径（文件名）。code 列固定为字符串，避免 Excel 将前导零当作数字。"""
     import csv
     _ensure_dirs()
-    fname = f"{task_id}.csv"
+    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
+    fname = f"{tid}.csv"
     path = os.path.join(_DETAILS_DIR, fname)
     default_fields = [
         "code",
