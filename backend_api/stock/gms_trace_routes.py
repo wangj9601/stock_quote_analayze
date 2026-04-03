@@ -4,12 +4,14 @@ GMS 信号追溯 API 路由
 """
 
 import logging
+import os
 from typing import Optional, List
 from datetime import datetime
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
@@ -401,3 +403,99 @@ async def get_gms_signal_trace(
             status_code=500,
             content={"success": False, "message": str(e), "data": [], "total": 0},
         )
+
+
+# ---------- 用户端：单股 GMS 策略回测（复用 admin_interface 任务队列） ----------
+try:
+    from backend_core.strategies.gms import admin_interface as _gms_admin_if
+    from backend_api.admin.gms_admin_routes import _build_task_name_with_stocks as _gms_build_task_name
+
+    _GMS_BACKTEST_AVAILABLE = True
+except Exception as _e:
+    logger.warning("GMS 回测接口依赖导入失败: %s", _e)
+    _gms_admin_if = None  # type: ignore
+    _gms_build_task_name = None  # type: ignore
+    _GMS_BACKTEST_AVAILABLE = False
+
+
+class GMSStockBacktestBody(BaseModel):
+    """信号追溯页发起的单股回测参数（与管理端 GMS 回测一致，仅允许 single）"""
+
+    code: str = Field(..., description="股票代码")
+    start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
+    end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
+    market: str = Field("all", description="市场: cn / hk / all")
+    target_pct: float = Field(0.05, description="目标涨幅，如 0.05 表示 5%")
+    horizon_days: int = Field(20, ge=10, le=30, description="持有窗口交易日数")
+    min_score: float = Field(0, ge=0, le=100, description="最低总分（与 GMSFrontendInterface 一致，管理端回测相同）")
+
+
+@router.post("/gms-backtest")
+async def create_gms_stock_backtest(body: GMSStockBacktestBody, db: Session = Depends(get_db)):
+    """
+    创建单股 GMS 回测任务，返回 task_id。
+    与 POST /api/admin/gms/backtests（stock_pool_mode=single）等价，供前端信号追溯页使用。
+    """
+    if not _GMS_BACKTEST_AVAILABLE or _gms_admin_if is None:
+        raise HTTPException(status_code=503, detail="GMS 回测服务暂不可用")
+    code = str(body.code).strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+    try:
+        config = {
+            "task_name": None,
+            "market": body.market,
+            "start_date": str(body.start_date).strip()[:10],
+            "end_date": str(body.end_date).strip()[:10],
+            "target_pct": float(body.target_pct),
+            "horizon_days": int(body.horizon_days),
+            "min_score": float(body.min_score),
+            "stock_pool_mode": "single",
+            "stock_code": code,
+        }
+        task_name = _gms_build_task_name(db, config) if _gms_build_task_name else None
+        task_id = _gms_admin_if.create_backtest(config, name=task_name or None)
+        return {"success": True, "data": {"task_id": task_id}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("创建 GMS 单股回测任务失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/gms-backtest/{task_id}")
+async def get_gms_stock_backtest(task_id: str):
+    """查询回测任务状态与结果（与 admin 任务详情一致）。"""
+    if not _GMS_BACKTEST_AVAILABLE or _gms_admin_if is None:
+        raise HTTPException(status_code=503, detail="GMS 回测服务暂不可用")
+    task = _gms_admin_if.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"success": True, "data": task}
+
+
+@router.post("/gms-backtest/{task_id}/cancel")
+async def cancel_gms_stock_backtest(task_id: str):
+    """取消回测任务。"""
+    if not _GMS_BACKTEST_AVAILABLE or _gms_admin_if is None:
+        raise HTTPException(status_code=503, detail="GMS 回测服务暂不可用")
+    ok = _gms_admin_if.cancel_task(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="任务不存在或无法取消")
+    return {"success": True}
+
+
+@router.get("/gms-backtest/{task_id}/export")
+async def export_gms_stock_backtest_csv(task_id: str):
+    """导出该回测任务明细 CSV（与管理端报告明细一致）。"""
+    if not _GMS_BACKTEST_AVAILABLE or _gms_admin_if is None:
+        raise HTTPException(status_code=503, detail="GMS 回测服务暂不可用")
+    path = _gms_admin_if.download_report(task_id)
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="明细不存在或任务未完成")
+    safe = "".join(c for c in task_id[:36] if c.isalnum() or c in "-_")
+    return FileResponse(
+        path,
+        media_type="text/csv; charset=utf-8",
+        filename=f"gms_backtest_{safe or 'export'}.csv",
+    )

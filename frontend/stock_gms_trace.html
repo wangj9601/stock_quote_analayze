@@ -46,9 +46,6 @@
                             <th>Δ/d₁</th>
                             <th>F/Z</th>
                             <th>量比</th>
-                            <th>左侧</th>
-                            <th>右侧</th>
-                            <th>卖出</th>
                             <th>得分明细</th>
                         </tr>
                     </thead>
@@ -62,6 +59,39 @@
                 <button id="nextPage">下一页</button>
                 <button id="lastPage">最后一页</button>
             </div>
+        </div>
+
+        <div class="gms-trace-card gms-backtest-wrap">
+            <div class="gms-trace-title">策略回测（单股）</div>
+            <p class="gms-backtest-hint">与<strong>管理端 → GMS 回测管理</strong>中任务规则一致：区间内按<strong>全部交易日</strong>扫描（非本表分页）；样本为 GMS <strong>左/右侧买点</strong>，并受<strong>最低总分</strong>筛选。完成后可查看报告并导出明细 CSV（code 列为文本格式）。</p>
+            <div class="gms-backtest-toolbar">
+                <label>市场
+                    <select id="btMarket" class="gms-backtest-select">
+                        <option value="all">A股+港股</option>
+                        <option value="cn">A股</option>
+                        <option value="hk">港股</option>
+                    </select>
+                </label>
+                <label>目标阈值
+                    <select id="btTargetPct" class="gms-backtest-select">
+                        <option value="0.03">+3%</option>
+                        <option value="0.05" selected>+5%</option>
+                        <option value="0.1">+10%</option>
+                    </select>
+                </label>
+                <label>持有窗口(日)
+                    <input type="number" id="btHorizon" class="gms-backtest-input-num" min="10" max="30" value="20" />
+                </label>
+                <label>最低总分
+                    <input type="number" id="btMinScore" class="gms-backtest-input-num" min="0" max="100" step="5" value="0" />
+                </label>
+            </div>
+            <div class="gms-backtest-actions">
+                <button type="button" id="btStartBtn">开始回测</button>
+                <button type="button" id="btCancelBtn" class="btn-secondary" disabled>取消任务</button>
+            </div>
+            <div id="btStatusArea" class="gms-backtest-status" style="display:none;"></div>
+            <div id="btResultArea" class="gms-backtest-result" style="display:none;"></div>
         </div>
     </div>
 

@@ -9,6 +9,10 @@ class StockGMSTracePage {
         this.currentStockCode = '';
         this.currentStockName = '';
         this.allData = [];
+        this.backtestPollTimer = null;
+        this.backtestPollCount = 0;
+        this.backtestTaskId = '';
+        this.maxBacktestPolls = 900;
         this.init();
     }
 
@@ -47,6 +51,10 @@ class StockGMSTracePage {
                 if (detailRow) detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
             });
         }
+        const startBt = document.getElementById('btStartBtn');
+        const cancelBt = document.getElementById('btCancelBtn');
+        if (startBt) startBt.addEventListener('click', () => this.startBacktest());
+        if (cancelBt) cancelBt.addEventListener('click', () => this.cancelBacktest());
     }
 
     setDefaultDates() {
@@ -61,7 +69,18 @@ class StockGMSTracePage {
     }
 
     getApiBase() {
-        return (typeof Config !== 'undefined' && Config.getApiBaseUrl) ? Config.getApiBaseUrl() : 'http://localhost:5000';
+        let base = (typeof Config !== 'undefined' && Config.getApiBaseUrl)
+            ? (Config.getApiBaseUrl() || '')
+            : 'http://localhost:5000';
+        base = String(base).trim();
+        // 兼容异常配置 ":5000" 这类不完整地址，自动补全为当前协议+主机
+        if (base.startsWith(':')) {
+            const protocol = window.location.protocol || 'http:';
+            const host = window.location.hostname || 'localhost';
+            base = `${protocol}//${host}${base}`;
+        }
+        if (!base) return '';
+        return base.replace(/\/+$/, '');
     }
 
     async fetchData(forceCompute = false) {
@@ -88,7 +107,7 @@ class StockGMSTracePage {
             if (!json.success) {
                 this.allData = [];
                 document.getElementById('traceTable').querySelector('tbody').innerHTML =
-                    '<tr><td colspan="16">加载失败: ' + (json.message || '未知错误') + '</td></tr>';
+                    '<tr><td colspan="13">加载失败: ' + (json.message || '未知错误') + '</td></tr>';
                 return;
             }
             this.allData = json.data || [];
@@ -105,7 +124,7 @@ class StockGMSTracePage {
         } catch (e) {
             loading.style.display = 'none';
             document.getElementById('traceTable').querySelector('tbody').innerHTML =
-                '<tr><td colspan="16">请求失败: ' + e.message + '</td></tr>';
+                '<tr><td colspan="13">请求失败: ' + e.message + '</td></tr>';
         }
     }
 
@@ -198,7 +217,7 @@ class StockGMSTracePage {
         const tbody = document.getElementById('traceTable').querySelector('tbody');
 
         if (pageData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="16">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13">暂无数据</td></tr>';
             return;
         }
 
@@ -229,15 +248,12 @@ class StockGMSTracePage {
                 <td>${this.fmtPct(r.ratio_d1)}</td>
                 <td>${r.fz_ratio != null ? r.fz_ratio.toFixed(2) : '--'}</td>
                 <td>${r.volume_ratio != null ? r.volume_ratio.toFixed(2) : '--'}</td>
-                <td>${r.left_buy_signal ? '是' : '否'}</td>
-                <td>${r.right_buy_signal ? '是' : '否'}</td>
-                <td>${r.sell_signal ? '是' : '否'}</td>
                 <td>
                     <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
                 </td>
             </tr>
             <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                <td colspan="16" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                <td colspan="13" class="gms-score-detail-cell">${scoreDetailHtml}</td>
             </tr>`;
         });
         tbody.innerHTML = html;
@@ -258,6 +274,260 @@ class StockGMSTracePage {
         this.renderTable();
         this.updatePagination();
     }
+
+    clearBacktestPoll() {
+        if (this.backtestPollTimer) {
+            clearInterval(this.backtestPollTimer);
+            this.backtestPollTimer = null;
+        }
+        this.backtestPollCount = 0;
+    }
+
+    setBacktestRunning(running) {
+        const startBtn = document.getElementById('btStartBtn');
+        const cancelBtn = document.getElementById('btCancelBtn');
+        if (startBtn) startBtn.disabled = !!running;
+        if (cancelBtn) cancelBtn.disabled = !running;
+    }
+
+    async startBacktest() {
+        if (!this.currentStockCode) {
+            alert('请先通过链接带股票代码进入本页面');
+            return;
+        }
+        const startDate = document.getElementById('startDate')?.value;
+        const endDate = document.getElementById('endDate')?.value;
+        if (!startDate || !endDate) {
+            alert('请填写回测区间的开始日期与结束日期');
+            return;
+        }
+        const market = document.getElementById('btMarket')?.value || 'all';
+        const targetPct = parseFloat(document.getElementById('btTargetPct')?.value || '0.05', 10);
+        const horizon = parseInt(document.getElementById('btHorizon')?.value || '20', 10);
+        const minScore = parseFloat(document.getElementById('btMinScore')?.value || '0', 10);
+        if (horizon < 10 || horizon > 30) {
+            alert('持有窗口应在 10～30 个交易日之间');
+            return;
+        }
+        this.clearBacktestPoll();
+        const resultArea = document.getElementById('btResultArea');
+        const statusArea = document.getElementById('btStatusArea');
+        if (resultArea) {
+            resultArea.style.display = 'none';
+            resultArea.innerHTML = '';
+        }
+        if (statusArea) {
+            statusArea.style.display = 'block';
+            statusArea.innerHTML = '正在提交回测任务…';
+        }
+        this.setBacktestRunning(true);
+        const base = this.getApiBase();
+        const url = `${base}/api/stock/gms-backtest`;
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: this.currentStockCode,
+                    start_date: startDate,
+                    end_date: endDate,
+                    market,
+                    target_pct: targetPct,
+                    horizon_days: horizon,
+                    min_score: minScore
+                })
+            });
+            const json = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                const detail = json.detail || json.message || resp.statusText;
+                throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+            }
+            if (!json.success || !json.data) {
+                throw new Error(json.message || '创建任务失败');
+            }
+            this.backtestTaskId = json.data.task_id;
+            this.pollBacktestOnce();
+            this.backtestPollTimer = setInterval(() => this.pollBacktestOnce(), 2000);
+        } catch (e) {
+            if (statusArea) {
+                statusArea.innerHTML = `<span class="gms-backtest-error">提交失败: ${e.message || e}</span>`;
+            }
+            this.setBacktestRunning(false);
+        }
+    }
+
+    async pollBacktestOnce() {
+        this.backtestPollCount += 1;
+        if (this.backtestPollCount > this.maxBacktestPolls) {
+            this.clearBacktestPoll();
+            this.setBacktestRunning(false);
+            const statusArea = document.getElementById('btStatusArea');
+            if (statusArea) {
+                statusArea.style.display = 'block';
+                statusArea.innerHTML = '<span class="gms-backtest-error">等待超时，请稍后在管理端查看任务或重试</span>';
+            }
+            return;
+        }
+        const base = this.getApiBase();
+        const url = `${base}/api/stock/gms-backtest/${encodeURIComponent(this.backtestTaskId)}`;
+        try {
+            const resp = await fetch(url);
+            const json = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                this.clearBacktestPoll();
+                this.setBacktestRunning(false);
+                const statusArea = document.getElementById('btStatusArea');
+                if (statusArea) {
+                    statusArea.style.display = 'block';
+                    statusArea.innerHTML = `<span class="gms-backtest-error">查询失败: ${json.detail || resp.statusText}</span>`;
+                }
+                return;
+            }
+            const task = json.data;
+            if (!task) return;
+            this.renderBacktestStatus(task);
+            const st = task.status;
+            if (st === 'completed' || st === 'failed' || st === 'cancelled') {
+                this.clearBacktestPoll();
+                this.setBacktestRunning(false);
+                if (st === 'completed') {
+                    this.renderBacktestSummary(task);
+                } else if (st === 'failed') {
+                    const err = task.error || '回测失败';
+                    const resultArea = document.getElementById('btResultArea');
+                    if (resultArea) {
+                        resultArea.style.display = 'block';
+                        resultArea.innerHTML = `<p class="gms-backtest-error">${escapeHtml(String(err))}</p>`;
+                    }
+                } else if (st === 'cancelled') {
+                    const resultArea = document.getElementById('btResultArea');
+                    if (resultArea) {
+                        resultArea.style.display = 'block';
+                        resultArea.innerHTML = '<p>任务已取消</p>';
+                    }
+                }
+            }
+        } catch (e) {
+            this.clearBacktestPoll();
+            this.setBacktestRunning(false);
+            const statusArea = document.getElementById('btStatusArea');
+            if (statusArea) {
+                statusArea.style.display = 'block';
+                statusArea.innerHTML = `<span class="gms-backtest-error">轮询异常: ${e.message || e}</span>`;
+            }
+        }
+    }
+
+    renderBacktestStatus(task) {
+        const statusArea = document.getElementById('btStatusArea');
+        if (!statusArea) return;
+        statusArea.style.display = 'block';
+        const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
+        const msg = task.message || task.status || '';
+        statusArea.innerHTML = `
+            <div>状态: <strong>${escapeHtml(String(task.status || ''))}</strong>${msg ? ` · ${escapeHtml(String(msg))}` : ''}</div>
+            <div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>
+        `;
+    }
+
+    renderBacktestSummary(task) {
+        const resultArea = document.getElementById('btResultArea');
+        if (!resultArea) return;
+        const summary = task.summary;
+        const cfg = task.config || {};
+        resultArea.style.display = 'block';
+        if (!summary || typeof summary !== 'object') {
+            resultArea.innerHTML = '<p>回测已完成，暂无汇总数据</p>';
+            return;
+        }
+        const hr = summary.hit_rate != null ? (Number(summary.hit_rate) * 100).toFixed(2) + '%' : '--';
+        const samples = summary.total_samples != null ? String(summary.total_samples) : '--';
+        const hits = summary.hit_count != null ? String(summary.hit_count) : '--';
+        const tp = cfg.target_pct != null ? (Number(cfg.target_pct) * 100).toFixed(1) : '--';
+        const hz = cfg.horizon_days != null ? String(cfg.horizon_days) : '--';
+        const ms = cfg.min_score != null ? String(cfg.min_score) : '--';
+        let html = '';
+        html += '<div class="gms-bt-report-block">';
+        html += '<h4>回测报告</h4>';
+        html += `<p class="gms-bt-report-meta">任务名称：${escapeHtml(String(task.name || task.task_id || ''))}</p>`;
+        html += '<ul class="gms-bt-report-params">';
+        html += `<li>区间：${escapeHtml(String(cfg.start_date || ''))} ～ ${escapeHtml(String(cfg.end_date || ''))}</li>`;
+        html += `<li>目标涨幅 ${tp}% · 持有窗口 ${hz} 个交易日 · 最低总分 ${ms}</li>`;
+        if (summary.buy_signal_rule) {
+            html += `<li>${escapeHtml(String(summary.buy_signal_rule))}</li>`;
+        }
+        html += '</ul></div>';
+        html += '<h4 class="gms-bt-summary-h4">结果摘要</h4>';
+        html += '<div class="gms-backtest-summary-grid">';
+        html += `<div class="gms-backtest-summary-item"><strong>命中率</strong><span>${hr}</span></div>`;
+        html += `<div class="gms-backtest-summary-item"><strong>样本数</strong><span>${escapeHtml(samples)}</span></div>`;
+        html += `<div class="gms-backtest-summary-item"><strong>命中次数</strong><span>${escapeHtml(hits)}</span></div>`;
+        html += '</div>';
+        html += this.renderBacktestBuckets('按买点类型', summary.by_buy_type);
+        html += this.renderBacktestBuckets('按总分区间', summary.by_score_bucket);
+        const tid = task.task_id;
+        if (tid) {
+            const exportUrl = `${this.getApiBase()}/api/stock/gms-backtest/${encodeURIComponent(tid)}/export`;
+            html += `<p class="gms-bt-export-wrap"><a class="gms-bt-export-link" href="${exportUrl}" download>下载明细 CSV</a></p>`;
+        }
+        resultArea.innerHTML = html;
+    }
+
+    renderBacktestBuckets(title, buckets) {
+        if (!buckets || typeof buckets !== 'object') return '';
+        const keys = Object.keys(buckets);
+        if (!keys.length) return '';
+        let rows = '';
+        keys.forEach((k) => {
+            const v = buckets[k];
+            if (!v || typeof v !== 'object') return;
+            const t = v.total != null ? v.total : 0;
+            const h = v.hit != null ? v.hit : 0;
+            const rate = v.hit_rate != null ? (Number(v.hit_rate) * 100).toFixed(2) + '%' : '--';
+            rows += `<tr><td>${escapeHtml(k)}</td><td>${t}</td><td>${h}</td><td>${rate}</td></tr>`;
+        });
+        if (!rows) return '';
+        return `
+            <div class="gms-backtest-buckets">
+                <strong>${escapeHtml(title)}</strong>
+                <table>
+                    <thead><tr><th>分组</th><th>样本</th><th>命中</th><th>命中率</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    async cancelBacktest() {
+        if (!this.backtestTaskId) return;
+        const base = this.getApiBase();
+        const url = `${base}/api/stock/gms-backtest/${encodeURIComponent(this.backtestTaskId)}/cancel`;
+        try {
+            const resp = await fetch(url, { method: 'POST' });
+            if (!resp.ok) {
+                const j = await resp.json().catch(() => ({}));
+                alert(j.detail || '取消失败');
+                return;
+            }
+            this.clearBacktestPoll();
+            this.setBacktestRunning(false);
+            const statusArea = document.getElementById('btStatusArea');
+            if (statusArea) {
+                statusArea.style.display = 'block';
+                statusArea.innerHTML = '<span>已请求取消</span>';
+            }
+        } catch (e) {
+            alert(e.message || '取消失败');
+        }
+    }
+}
+
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 document.addEventListener('DOMContentLoaded', () => {

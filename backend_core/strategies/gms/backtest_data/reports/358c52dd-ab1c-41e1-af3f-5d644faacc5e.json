@@ -1,0 +1,47 @@
+{
+  "report_id": "358c52dd-ab1c-41e1-af3f-5d644faacc5e",
+  "task_id": "358c52dd-ab1c-41e1-af3f-5d644faacc5e",
+  "name": "GMS回测_000983_山西焦煤",
+  "created_at": "2026-04-03T06:20:21.441107Z",
+  "summary": {
+    "total_samples": 12,
+    "hit_count": 2,
+    "hit_rate": 0.1667,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2024-01-03",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 7,
+        "hit": 1,
+        "hit_rate": 0.14285714285714285
+      },
+      "左侧": {
+        "total": 5,
+        "hit": 1,
+        "hit_rate": 0.2
+      }
+    },
+    "by_score_bucket": {
+      "[90,100]": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "[80,90)": {
+        "total": 4,
+        "hit": 1,
+        "hit_rate": 0.25
+      },
+      "[70,80)": {
+        "total": 7,
+        "hit": 1,
+        "hit_rate": 0.14285714285714285
+      }
+    }
+  },
+  "details_path": "358c52dd-ab1c-41e1-af3f-5d644faacc5e.csv"
+}

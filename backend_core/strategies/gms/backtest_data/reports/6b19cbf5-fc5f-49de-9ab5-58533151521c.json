@@ -1,0 +1,47 @@
+{
+  "report_id": "6b19cbf5-fc5f-49de-9ab5-58533151521c",
+  "task_id": "6b19cbf5-fc5f-49de-9ab5-58533151521c",
+  "name": "GMS回测_688498_源杰科技",
+  "created_at": "2026-04-03T06:55:28.964850Z",
+  "summary": {
+    "total_samples": 5,
+    "hit_count": 3,
+    "hit_rate": 0.6,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2023-01-03",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 2,
+        "hit": 1,
+        "hit_rate": 0.5
+      },
+      "左侧": {
+        "total": 3,
+        "hit": 2,
+        "hit_rate": 0.6666666666666666
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 2,
+        "hit": 1,
+        "hit_rate": 0.5
+      },
+      "[80,90)": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "[90,100]": {
+        "total": 2,
+        "hit": 2,
+        "hit_rate": 1.0
+      }
+    }
+  },
+  "details_path": "6b19cbf5-fc5f-49de-9ab5-58533151521c.csv"
+}

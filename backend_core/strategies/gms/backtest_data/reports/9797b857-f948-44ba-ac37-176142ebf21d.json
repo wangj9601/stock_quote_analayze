@@ -1,0 +1,47 @@
+{
+  "report_id": "9797b857-f948-44ba-ac37-176142ebf21d",
+  "task_id": "9797b857-f948-44ba-ac37-176142ebf21d",
+  "name": "GMS回测_000035_中国天楹",
+  "created_at": "2026-04-03T08:18:36.420675Z",
+  "summary": {
+    "total_samples": 101,
+    "hit_count": 46,
+    "hit_rate": 0.4554,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2000-01-03",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 77,
+        "hit": 36,
+        "hit_rate": 0.4675324675324675
+      },
+      "左侧": {
+        "total": 24,
+        "hit": 10,
+        "hit_rate": 0.4166666666666667
+      }
+    },
+    "by_score_bucket": {
+      "[90,100]": {
+        "total": 63,
+        "hit": 29,
+        "hit_rate": 0.4603174603174603
+      },
+      "[80,90)": {
+        "total": 19,
+        "hit": 7,
+        "hit_rate": 0.3684210526315789
+      },
+      "[70,80)": {
+        "total": 19,
+        "hit": 10,
+        "hit_rate": 0.5263157894736842
+      }
+    }
+  },
+  "details_path": "9797b857-f948-44ba-ac37-176142ebf21d.csv"
+}

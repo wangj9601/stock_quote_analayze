@@ -1,0 +1,32 @@
+{
+  "report_id": "fb57a62d-fbb4-4e04-b42f-c6e8aeb941d1",
+  "task_id": "fb57a62d-fbb4-4e04-b42f-c6e8aeb941d1",
+  "name": "GMS回测_00981_中芯国际",
+  "created_at": "2026-04-03T06:35:28.599076Z",
+  "summary": {
+    "total_samples": 9,
+    "hit_count": 1,
+    "hit_rate": 0.1111,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2024-01-03",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "左侧": {
+        "total": 9,
+        "hit": 1,
+        "hit_rate": 0.1111111111111111
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 9,
+        "hit": 1,
+        "hit_rate": 0.1111111111111111
+      }
+    }
+  },
+  "details_path": "fb57a62d-fbb4-4e04-b42f-c6e8aeb941d1.csv"
+}

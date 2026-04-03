@@ -1,0 +1,36 @@
+{
+  "report_id": "3e0c77af-5a37-492f-b3f7-444e8e2bbc80",
+  "task_id": "3e0c77af-5a37-492f-b3f7-444e8e2bbc80",
+  "name": "GMS回测_000983_山西焦煤",
+  "created_at": "2026-04-03T03:34:37.842590Z",
+  "summary": {
+    "total_samples": 2,
+    "hit_count": 0,
+    "hit_rate": 0.0,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2026-01-03",
+    "end_date": "2026-04-03",
+    "market": "cn",
+    "by_buy_type": {
+      "右侧": {
+        "total": 2,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    },
+    "by_score_bucket": {
+      "[80,90)": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "[70,80)": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    }
+  },
+  "details_path": "3e0c77af-5a37-492f-b3f7-444e8e2bbc80.csv"
+}

@@ -1,0 +1,47 @@
+{
+  "report_id": "e162cb5c-a505-433e-8972-a826949ac3df",
+  "task_id": "e162cb5c-a505-433e-8972-a826949ac3df",
+  "name": "GMS回测_000983_山西焦煤",
+  "created_at": "2026-04-03T05:33:11.423738Z",
+  "summary": {
+    "total_samples": 54,
+    "hit_count": 11,
+    "hit_rate": 0.2037,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2026-01-03",
+    "end_date": "2026-04-03",
+    "market": "cn",
+    "buy_signal_rule": "单股：信号总分≥最低总分且总分>0 视为买入意见；样本覆盖区间内全部交易日（非页面分页）。",
+    "by_buy_type": {
+      "得分买入": {
+        "total": 54,
+        "hit": 11,
+        "hit_rate": 0.2037037037037037
+      }
+    },
+    "by_score_bucket": {
+      "[0,60)": {
+        "total": 43,
+        "hit": 8,
+        "hit_rate": 0.18604651162790697
+      },
+      "[60,70)": {
+        "total": 5,
+        "hit": 1,
+        "hit_rate": 0.2
+      },
+      "[70,80)": {
+        "total": 5,
+        "hit": 2,
+        "hit_rate": 0.4
+      },
+      "[80,90)": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    }
+  },
+  "details_path": "e162cb5c-a505-433e-8972-a826949ac3df.csv"
+}

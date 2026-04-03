@@ -5,6 +5,7 @@ GMS 回测任务与报告持久化（文件存储）
 
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -327,19 +328,78 @@ def get_details_path(report_id: str) -> Optional[str]:
     return os.path.join(_DETAILS_DIR, os.path.basename(rel))
 
 
+def normalize_gms_stock_code(code: Any, market: Any = None) -> str:
+    """
+    将股票代码规范为字符串：港股纯数字不足 5 位前补零，A 股不足 6 位前补零。
+    兼容 int/float（如 JSON 中 981.0）以免丢失前导零。
+    """
+    if code is None:
+        return ""
+    if isinstance(code, float):
+        if math.isnan(code):
+            return ""
+        if code.is_integer():
+            code = int(code)
+    s = str(code).strip()
+    if not s:
+        return ""
+    if not s.isdigit():
+        return s
+    mt = str(market or "").upper()
+    if "HK" in mt:
+        if len(s) < 5:
+            return s.zfill(5)
+    elif "CN" in mt:
+        if len(s) < 6:
+            return s.zfill(6)
+    else:
+        if len(s) < 5:
+            return s.zfill(5)
+    return s
+
+
+def format_code_for_csv_cell(code: Any, market: Any = None) -> str:
+    """
+    CSV 中 code 列写入值：规范化后前置制表符，Excel 直接打开时按文本显示，避免 00981 变成 981。
+    """
+    norm = normalize_gms_stock_code(code, market)
+    if not norm:
+        return ""
+    return "\t" + norm
+
+
 def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
-    """将明细写入 CSV，返回相对路径（文件名）。"""
+    """将明细写入 CSV，返回相对路径（文件名）。code 列固定为字符串，避免 Excel 将前导零当作数字。"""
     import csv
     _ensure_dirs()
     fname = f"{task_id}.csv"
     path = os.path.join(_DETAILS_DIR, fname)
+    default_fields = [
+        "code",
+        "date",
+        "market",
+        "buy_type",
+        "score_total",
+        "entry_close",
+        "max_high_20d",
+        "max_gain_20d",
+        "hit",
+    ]
+
     if not details:
         with open(path, "w", encoding="utf-8-sig", newline="") as f:
-            f.write("code,date,market,buy_type,score_total,entry_close,max_high_20d,max_gain_20d,hit\n")
+            w = csv.DictWriter(f, fieldnames=default_fields, quoting=csv.QUOTE_ALL)
+            w.writeheader()
         return fname
     keys = list(details[0].keys())
+    rows_out = []
+    for raw in details:
+        r = dict(raw)
+        if "code" in r:
+            r["code"] = format_code_for_csv_cell(r.get("code"), r.get("market"))
+        rows_out.append(r)
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=keys)
+        w = csv.DictWriter(f, fieldnames=keys, quoting=csv.QUOTE_ALL)
         w.writeheader()
-        w.writerows(details)
+        w.writerows(rows_out)
     return fname

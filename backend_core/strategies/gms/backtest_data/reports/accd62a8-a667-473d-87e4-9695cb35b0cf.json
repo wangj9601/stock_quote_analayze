@@ -1,0 +1,46 @@
+{
+  "report_id": "accd62a8-a667-473d-87e4-9695cb35b0cf",
+  "task_id": "accd62a8-a667-473d-87e4-9695cb35b0cf",
+  "name": "GMS回测_000035中国天楹_000333美的集团_000533顺钠股份_000547航天发展_000558天府文旅",
+  "created_at": "2026-04-02T08:52:51.671520Z",
+  "summary": {
+    "total_samples": 800,
+    "hit_count": 272,
+    "hit_rate": 0.34,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2023-04-03",
+    "end_date": "2026-04-01",
+    "market": "all",
+    "by_buy_type": {
+      "左侧": {
+        "total": 306,
+        "hit": 73,
+        "hit_rate": 0.238562091503268
+      },
+      "右侧": {
+        "total": 494,
+        "hit": 199,
+        "hit_rate": 0.402834008097166
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 333,
+        "hit": 113,
+        "hit_rate": 0.33933933933933935
+      },
+      "[90,100]": {
+        "total": 349,
+        "hit": 117,
+        "hit_rate": 0.335243553008596
+      },
+      "[80,90)": {
+        "total": 118,
+        "hit": 42,
+        "hit_rate": 0.3559322033898305
+      }
+    }
+  },
+  "details_path": "accd62a8-a667-473d-87e4-9695cb35b0cf.csv"
+}
