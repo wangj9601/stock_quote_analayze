@@ -44,6 +44,37 @@ def _ensure_dirs():
         os.makedirs(d, exist_ok=True)
 
 
+def _dump_json_atomic(path: str, data: Dict[str, Any]) -> None:
+    """原子写入 JSON 文件，避免读到半写入内容。"""
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    tmp = path + ".tmp"
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+    for attempt in range(3):
+        try:
+            os.replace(tmp, path)
+            return
+        except OSError as e:
+            if attempt < 2:
+                time.sleep(0.05 * (attempt + 1))
+            else:
+                # 最后回退为直接覆盖，尽量保证可用
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
+                try:
+                    if os.path.isfile(tmp):
+                        os.remove(tmp)
+                except OSError:
+                    pass
+                logger.debug("JSON 原子替换失败，回退直接写入: %s", e)
+
+
 def _load_index() -> Dict[str, Dict[str, Any]]:
     _ensure_dirs()
     if not os.path.isfile(_INDEX_FILE):
@@ -128,8 +159,7 @@ def create_task(config: Dict[str, Any], name: Optional[str] = None) -> str:
         "error": None,
     }
     path = os.path.join(_TASKS_DIR, f"{task_id}.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(task, f, ensure_ascii=False, indent=2)
+    _dump_json_atomic(path, task)
     _set_index_entry(task_id, created_at=now, status="pending")
     return task_id
 
@@ -144,12 +174,28 @@ def get_task(task_id: str) -> Optional[Dict[str, Any]]:
         # 轮询时可能短暂缺失或 id 非法，避免刷 warning；需要排查可看 debug
         logger.debug("任务文件不存在: %s (原始 task_id=%r)", path, task_id)
         return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning("读取任务 %s 失败: %s", tid, e)
-        return None
+    for attempt in range(2):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            # 长任务轮询期间可能撞上写入瞬间，短暂重试一次
+            if attempt == 0:
+                time.sleep(0.03)
+                continue
+            tmp_path = path + ".tmp"
+            if os.path.isfile(tmp_path):
+                try:
+                    with open(tmp_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+            logger.warning("读取任务 %s JSON 解析失败: %s", tid, e)
+            return None
+        except Exception as e:
+            logger.warning("读取任务 %s 失败: %s", tid, e)
+            return None
+    return None
 
 
 def update_task_progress(task_id: str, progress: int, message: str = "", log_line: Optional[str] = None) -> bool:
@@ -170,8 +216,7 @@ def update_task_progress(task_id: str, progress: int, message: str = "", log_lin
             task["started_at"] = datetime.utcnow().isoformat() + "Z"
     path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(task, f, ensure_ascii=False, indent=2)
+        _dump_json_atomic(path, task)
         _set_index_entry(tid, status=task["status"])
         return True
     except Exception as e:
@@ -190,8 +235,7 @@ def append_task_log(task_id: str, log_line: str) -> bool:
     task.setdefault("logs", []).append({"ts": datetime.utcnow().isoformat(), "text": log_line})
     path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(task, f, ensure_ascii=False, indent=2)
+        _dump_json_atomic(path, task)
         return True
     except Exception as e:
         logger.warning("追加任务日志失败 %s: %s", tid, e)
@@ -214,8 +258,7 @@ def complete_task(task_id: str, summary: Dict[str, Any], details_path: Optional[
     task["error"] = None
     path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(task, f, ensure_ascii=False, indent=2)
+        _dump_json_atomic(path, task)
         _set_index_entry(tid, status="completed")
         # 报告与任务一一对应，report_id = task_id
         report_path = os.path.join(_REPORTS_DIR, f"{tid}.json")
@@ -227,8 +270,7 @@ def complete_task(task_id: str, summary: Dict[str, Any], details_path: Optional[
             "summary": summary,
             "details_path": details_path,
         }
-        with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
+        _dump_json_atomic(report_path, report)
         return True
     except Exception as e:
         logger.warning("完成任务写入失败 %s: %s", tid, e)
@@ -248,8 +290,7 @@ def fail_task(task_id: str, error: str) -> bool:
     task["completed_at"] = datetime.utcnow().isoformat() + "Z"
     path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(task, f, ensure_ascii=False, indent=2)
+        _dump_json_atomic(path, task)
         _set_index_entry(tid, status="failed")
         return True
     except Exception as e:
@@ -271,8 +312,7 @@ def cancel_task(task_id: str) -> bool:
     task["completed_at"] = datetime.utcnow().isoformat() + "Z"
     path = os.path.join(_TASKS_DIR, f"{tid}.json")
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(task, f, ensure_ascii=False, indent=2)
+        _dump_json_atomic(path, task)
         _set_index_entry(tid, status="cancelled")
         return True
     except Exception as e:
