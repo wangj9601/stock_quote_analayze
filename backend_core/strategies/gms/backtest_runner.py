@@ -7,6 +7,7 @@ GMS 策略回测执行器
 与管理端 GMS 回测任务共用同一套逻辑：每个交易日取 GMS 左/右侧买入信号，
 经 GMSFrontendInterface 按最低总分筛选后计入样本（单股仅股票池缩为该代码）。
 同一标的在上一笔的观察期（horizon_days 根 K 线，与命中率统计一致）结束后才允许再次开仓。
+股票池不少于 2 只时：每个交易日、每个市场一次批量拉取该池在该市场的全部代码（与单市场按日扫描同量级调用）；全市场无固定池时按交易日扫描。
 """
 
 import logging
@@ -17,6 +18,13 @@ from .frontend_interface import GMSFrontendInterface
 from .backtest_storage import normalize_gms_stock_code
 
 logger = logging.getLogger(__name__)
+
+
+def _progress_pct(processed: int, total_steps: int) -> int:
+    """按步数换算进度百分比，限制在 0–100。"""
+    if total_steps <= 0:
+        return 0
+    return min(100, max(0, int(100 * processed / total_steps)))
 
 
 def _get_trading_dates_cn(db: Session, start: str, end: str) -> List[str]:
@@ -240,6 +248,97 @@ def _parse_score(r: dict) -> Optional[float]:
         return None
 
 
+def _sort_details_for_export(details: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """市场（A股优先）→ 股票代码 → 信号日期，便于导出分组。"""
+    return sorted(
+        details,
+        key=lambda d: (
+            0 if (d.get("market") or "") == "CN" else 1,
+            str(d.get("code") or ""),
+            str(d.get("date") or ""),
+        ),
+    )
+
+
+def _codes_for_market_from_pool(stock_pool: List[str], market_key: str) -> List[str]:
+    """股票池内属于指定市场的代码，规范化后升序去重。"""
+
+    def _is_a_share(c: str) -> bool:
+        s = str(c).strip()
+        return len(s) >= 6 and s.isdigit() and s[0] in "6039"
+
+    mt_key = "CN" if market_key == "cn" else "HK"
+    out: List[str] = []
+    for c in stock_pool:
+        if market_key == "cn" and _is_a_share(c):
+            nc = normalize_gms_stock_code(c, "CN")
+            if nc:
+                out.append(nc)
+        elif market_key == "hk" and not _is_a_share(c):
+            nc = normalize_gms_stock_code(c, "HK")
+            if nc:
+                out.append(nc)
+    return sorted(set(out))
+
+
+def _gms_evaluate_one_signal(
+    db: Session,
+    r: dict,
+    trade_date: str,
+    market_key: str,
+    horizon_days: int,
+    target_pct: float,
+    block_until_obs_end: Dict[Tuple[str, str], str],
+) -> Optional[Dict[str, Any]]:
+    """单条选股结果：若计入样本则返回明细 dict 并更新观察期锁；否则 None。"""
+    if not (r.get("left_buy_signal") or r.get("right_buy_signal")):
+        return None
+    code = r.get("code") or r.get("symbol") or ""
+    code = str(code).strip()
+    if not code:
+        return None
+    mt_key = "CN" if market_key == "cn" else "HK"
+    code = normalize_gms_stock_code(code, mt_key)
+    if not code:
+        return None
+    once_key = (mt_key, code)
+    obs_end_prev = block_until_obs_end.get(once_key)
+    if obs_end_prev is not None and trade_date <= obs_end_prev:
+        return None
+    buy_type = r.get("buy_type") or ("左侧" if r.get("left_buy_signal") else "右侧")
+    score_total = _parse_score(r)
+
+    if market_key == "cn":
+        entry_open = _get_entry_open_next_day_cn(db, code, trade_date)
+        future_highs = _get_future_highs_cn(db, code, trade_date, horizon_days)
+    else:
+        entry_open = _get_entry_open_next_day_hk(db, code, trade_date)
+        future_highs = _get_future_highs_hk(db, code, trade_date, horizon_days)
+
+    if entry_open is None or entry_open <= 0:
+        return None
+    if market_key == "cn":
+        obs_end = _get_observation_window_end_cn(db, code, trade_date, horizon_days)
+    else:
+        obs_end = _get_observation_window_end_hk(db, code, trade_date, horizon_days)
+    block_until_obs_end[once_key] = obs_end if obs_end else trade_date
+    max_high = max(future_highs) if future_highs else entry_open
+    max_gain = (max_high / entry_open - 1.0) if entry_open else 0.0
+    hit = max_high >= entry_open * (1.0 + target_pct)
+
+    return {
+        "code": code,
+        "date": trade_date,
+        "market": mt_key,
+        "buy_type": buy_type,
+        "score_total": score_total,
+        "entry_open": round(entry_open, 4),
+        "max_high_20d": round(max_high, 4),
+        "max_gain_20d": round(max_gain, 4),
+        "hit": hit,
+    }
+
+
 def run_gms_backtest(
     db: Session,
     start_date: str,
@@ -257,6 +356,7 @@ def run_gms_backtest(
     每交易日取左/右侧买入信号，GMSFrontendInterface 按最低总分筛选；单股时股票池仅含该代码，
     仍按区间内全部交易日扫描，与页面表格是否分页无关。
     同一标的在上一笔的观察期（horizon_days 根 K 线）结束后才允许再次计入样本。
+    股票池不少于 2 只时：按市场、按交易日批量拉取整池选股结果（再逐条评估信号）；否则（含全市场）按交易日遍历。
     """
     start_str = str(start_date).strip()[:10]
     end_str = str(end_date).strip()[:10]
@@ -265,6 +365,7 @@ def run_gms_backtest(
         "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；"
         "买入价为信号日之后下一交易日开盘价；"
         "同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。"
+        "多只股票同批回测时，每个交易日、每个市场仅批量拉取一次该池在该市场的选股结果（性能优化）；全市场无固定池时仍按交易日扫描。"
     )
 
     # 单股/自定义股票池时只跑该池所属市场，避免“选单股仍跑全市场”
@@ -291,7 +392,17 @@ def run_gms_backtest(
     else:
         markets_to_run = [("hk", _get_trading_dates_hk(db, start_str, end_str))]
 
-    total_steps = sum(len(dl) for _, dl in markets_to_run)
+    use_stock_first = stock_pool is not None and len(stock_pool) >= 2
+    # 多股模式：仅统计「该市场池内确有代码」时的交易日数，与循环内 processed 次数一致；否则分母过小会导致进度超 100%
+    if use_stock_first:
+        total_steps = sum(
+            len(dl)
+            for mk, dl in markets_to_run
+            if _codes_for_market_from_pool(stock_pool, mk)
+        )
+    else:
+        total_steps = sum(len(dl) for _, dl in markets_to_run)
+
     if total_steps == 0:
         return _aggregate_details_to_summary(
             [], start_str, end_str, market, target_pct, horizon_days, buy_signal_rule
@@ -305,71 +416,79 @@ def run_gms_backtest(
     # (市场, 规范化代码) -> 上一笔样本的观察期最后交易日；新信号须 trade_date > 该日
     block_until_obs_end: Dict[Tuple[str, str], str] = {}
 
-    for market_key, date_list in markets_to_run:
-        for i, trade_date in enumerate(date_list):
-            if cancel_check and cancel_check():
-                logger.info("GMS 回测被取消")
+    if use_stock_first:
+        stop = False
+        for market_key, date_list in markets_to_run:
+            if stop:
                 break
-            try:
-                results = interface.get_selection_results(date=trade_date, stock_pool=stock_pool, market=market_key)
-            except Exception as e:
-                logger.warning("GMS 选股失败 %s: %s", trade_date, e)
+            codes_m = _codes_for_market_from_pool(stock_pool, market_key)
+            if not codes_m or not date_list:
                 continue
-
-            for r in results:
-                if not (r.get("left_buy_signal") or r.get("right_buy_signal")):
+            for trade_date in date_list:
+                if cancel_check and cancel_check():
+                    logger.info("GMS 回测被取消")
+                    stop = True
+                    break
+                try:
+                    results = interface.get_selection_results(
+                        date=trade_date, stock_pool=codes_m, market=market_key
+                    )
+                except Exception as e:
+                    logger.warning("GMS 选股失败 %s %s: %s", market_key, trade_date, e)
+                    processed += 1
+                    if progress_callback and total_steps > 0:
+                        pct = min(99, _progress_pct(processed, total_steps))
+                        progress_callback(pct, f"{market_key} {trade_date}")
                     continue
-                code = r.get("code") or r.get("symbol") or ""
-                code = str(code).strip()
-                if not code:
+                results_sorted = sorted(
+                    results,
+                    key=lambda r: str((r.get("code") or r.get("symbol") or "")).strip(),
+                )
+                for r in results_sorted:
+                    row = _gms_evaluate_one_signal(
+                        db, r, trade_date, market_key, horizon_days, target_pct, block_until_obs_end
+                    )
+                    if row:
+                        details.append(row)
+                processed += 1
+                if progress_callback and total_steps > 0:
+                    pct = _progress_pct(processed, total_steps)
+                    progress_callback(pct, f"{market_key} {trade_date}")
+            if stop:
+                break
+    else:
+        stop = False
+        for market_key, date_list in markets_to_run:
+            if stop:
+                break
+            for trade_date in date_list:
+                if cancel_check and cancel_check():
+                    logger.info("GMS 回测被取消")
+                    stop = True
+                    break
+                try:
+                    results = interface.get_selection_results(
+                        date=trade_date, stock_pool=stock_pool, market=market_key
+                    )
+                except Exception as e:
+                    logger.warning("GMS 选股失败 %s: %s", trade_date, e)
                     continue
-                mt_key = "CN" if market_key == "cn" else "HK"
-                code = normalize_gms_stock_code(code, mt_key)
-                if not code:
-                    continue
-                once_key = (mt_key, code)
-                obs_end_prev = block_until_obs_end.get(once_key)
-                if obs_end_prev is not None and trade_date <= obs_end_prev:
-                    continue
-                buy_type = r.get("buy_type") or ("左侧" if r.get("left_buy_signal") else "右侧")
-                score_total = _parse_score(r)
 
-                if market_key == "cn":
-                    entry_open = _get_entry_open_next_day_cn(db, code, trade_date)
-                    future_highs = _get_future_highs_cn(db, code, trade_date, horizon_days)
-                else:
-                    entry_open = _get_entry_open_next_day_hk(db, code, trade_date)
-                    future_highs = _get_future_highs_hk(db, code, trade_date, horizon_days)
+                for r in results:
+                    row = _gms_evaluate_one_signal(
+                        db, r, trade_date, market_key, horizon_days, target_pct, block_until_obs_end
+                    )
+                    if row:
+                        details.append(row)
 
-                if entry_open is None or entry_open <= 0:
-                    continue
-                if market_key == "cn":
-                    obs_end = _get_observation_window_end_cn(db, code, trade_date, horizon_days)
-                else:
-                    obs_end = _get_observation_window_end_hk(db, code, trade_date, horizon_days)
-                # 若不足 horizon_days 根 K 线，以实际最后一根日记观察期结束，避免永久锁死
-                block_until_obs_end[once_key] = obs_end if obs_end else trade_date
-                max_high = max(future_highs) if future_highs else entry_open
-                max_gain = (max_high / entry_open - 1.0) if entry_open else 0.0
-                hit = max_high >= entry_open * (1.0 + target_pct)
+                processed += 1
+                if progress_callback and total_steps > 0:
+                    pct = _progress_pct(processed, total_steps)
+                    progress_callback(pct, f"已处理 {trade_date}")
+            if stop:
+                break
 
-                details.append({
-                    "code": code,
-                    "date": trade_date,
-                    "market": mt_key,
-                    "buy_type": buy_type,
-                    "score_total": score_total,
-                    "entry_open": round(entry_open, 4),
-                    "max_high_20d": round(max_high, 4),
-                    "max_gain_20d": round(max_gain, 4),
-                    "hit": hit,
-                })
-
-            processed += 1
-            if progress_callback and total_steps > 0:
-                pct = int(100 * (processed / total_steps))
-                progress_callback(pct, f"已处理 {trade_date}")
-
+    details = _sort_details_for_export(details)
     return _aggregate_details_to_summary(
         details, start_str, end_str, market, target_pct, horizon_days, buy_signal_rule
     )

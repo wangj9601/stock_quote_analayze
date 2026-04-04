@@ -104,11 +104,14 @@ def test_save_details_xlsx_chinese_headers_and_code_text(monkeypatch):
         assert fname == f"{tid}.xlsx"
         path = os.path.join(d, fname)
         wb = load_workbook(path, data_only=True)
-        ws = wb.active
-        assert ws["A1"].value == "股票代码"
-        assert ws["A2"].value == "00981"
-        assert ws.cell(row=2, column=ws.max_column).value == "是"
-        dim = ws.column_dimensions["A"]
+        assert "A股" in wb.sheetnames and "港股" in wb.sheetnames
+        ws_cn = wb["A股"]
+        assert ws_cn["A1"].value == "股票代码"
+        assert ws_cn.max_row == 1
+        ws_hk = wb["港股"]
+        assert ws_hk["A2"].value == "00981"
+        assert ws_hk.cell(row=2, column=ws_hk.max_column).value == "是"
+        dim = ws_hk.column_dimensions["A"]
         assert dim.width is not None and dim.width >= 10
         wb.close()
     finally:

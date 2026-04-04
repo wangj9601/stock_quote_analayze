@@ -77,6 +77,15 @@ class GMSApiService {
     await this.request(`${PREFIX}/backtests/${taskId}/cancel`, { method: 'POST' })
   }
 
+  /** 重新执行：相同参数创建新任务 */
+  async rerunBacktestTask(taskId: string): Promise<string> {
+    const res = await this.request<{ success: boolean; data: { task_id: string } }>(
+      `${PREFIX}/backtests/${taskId}/rerun`,
+      { method: 'POST' }
+    )
+    return res.data.task_id
+  }
+
   /** 删除任务 */
   async deleteBacktestTask(taskId: string) {
     await this.request(`${PREFIX}/backtests/${taskId}`, { method: 'DELETE' })

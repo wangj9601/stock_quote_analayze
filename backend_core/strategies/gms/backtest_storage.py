@@ -39,6 +39,16 @@ def normalize_gms_task_id(task_id: Optional[str]) -> str:
     return s
 
 
+def clamp_gms_progress(progress: Any) -> int:
+    """任务进度限制在 0–100，避免计算误差或历史脏数据在界面显示超过 100%。"""
+
+    try:
+        v = int(round(float(progress)))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, v))
+
+
 def _ensure_dirs():
     for d in (_BASE_DIR, _TASKS_DIR, _REPORTS_DIR, _DETAILS_DIR):
         os.makedirs(d, exist_ok=True)
@@ -177,7 +187,10 @@ def get_task(task_id: str) -> Optional[Dict[str, Any]]:
     for attempt in range(2):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                task = json.load(f)
+                if isinstance(task, dict):
+                    task["progress"] = clamp_gms_progress(task.get("progress", 0))
+                return task
         except json.JSONDecodeError as e:
             # 长任务轮询期间可能撞上写入瞬间，短暂重试一次
             if attempt == 0:
@@ -187,7 +200,10 @@ def get_task(task_id: str) -> Optional[Dict[str, Any]]:
             if os.path.isfile(tmp_path):
                 try:
                     with open(tmp_path, "r", encoding="utf-8") as f:
-                        return json.load(f)
+                        task = json.load(f)
+                        if isinstance(task, dict):
+                            task["progress"] = clamp_gms_progress(task.get("progress", 0))
+                        return task
                 except Exception:
                     pass
             logger.warning("读取任务 %s JSON 解析失败: %s", tid, e)
@@ -206,7 +222,7 @@ def update_task_progress(task_id: str, progress: int, message: str = "", log_lin
     task = get_task(tid)
     if not task:
         return False
-    task["progress"] = progress
+    task["progress"] = clamp_gms_progress(progress)
     task["message"] = message
     if log_line is not None:
         task.setdefault("logs", []).append({"ts": datetime.utcnow().isoformat(), "text": log_line})
@@ -545,48 +561,58 @@ def _build_gms_detail_rows(
     return keys, fieldnames_zh, rows_zh
 
 
-def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
-    """将明细写入 CSV，返回相对路径（文件名）。表头为中文；code 列值为文本格式；命中列与 Excel 一致为 是/否。"""
-    import csv
+def _sort_gms_details_for_export(details: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """市场（A股优先）→ 股票代码 → 信号日期。"""
+    if not details:
+        return []
+    return sorted(
+        details,
+        key=lambda d: (
+            0 if (d.get("market") or "") == "CN" else 1,
+            str(d.get("code") or ""),
+            str(d.get("date") or ""),
+        ),
+    )
 
-    _ensure_dirs()
-    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
-    fname = f"{tid}.csv"
-    path = os.path.join(_DETAILS_DIR, fname)
-    _, fieldnames_zh, rows_zh = _build_gms_detail_rows(details, code_csv_format=True)
-    hit_hdr = "是否命中目标"
+
+def _gms_rows_zh_insert_blank_between_codes(
+    fieldnames_zh: List[str], rows_zh: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """同一文件内按股票代码分组，组间插入空行。"""
+    if not rows_zh:
+        return []
+    out: List[Dict[str, Any]] = []
+    prev: Optional[str] = None
     for row in rows_zh:
-        if hit_hdr in row and isinstance(row[hit_hdr], bool):
-            row[hit_hdr] = "是" if row[hit_hdr] else "否"
-    with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames_zh, quoting=csv.QUOTE_ALL)
-        w.writeheader()
-        w.writerows(rows_zh)
-    return fname
+        c = row.get("股票代码")
+        c_cmp = str(c).lstrip("\t") if c is not None else ""
+        if prev is not None and c_cmp != prev:
+            out.append({fn: "" for fn in fieldnames_zh})
+        prev = c_cmp
+        out.append(row)
+    return out
 
 
-def save_details_xlsx(task_id: str, details: List[Dict[str, Any]]) -> str:
-    """将明细写入 Excel（含中文表头与列宽），返回相对路径。供下载主用（CSV 无列宽概念）。"""
-    from openpyxl import Workbook
+def _write_gms_xlsx_sheet(ws: Any, fieldnames_zh: List[str], rows_zh: List[Dict[str, Any]]) -> None:
+    """写入单个工作表：表头、按代码分组空行、列宽、股票代码文本格式。"""
     from openpyxl.styles import Alignment, Font
     from openpyxl.utils import get_column_letter
 
-    _ensure_dirs()
-    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
-    fname = f"{tid}.xlsx"
-    path = os.path.join(_DETAILS_DIR, fname)
-    _, fieldnames_zh, rows_zh = _build_gms_detail_rows(details, code_csv_format=False)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "GMS回测明细"
+    if not fieldnames_zh:
+        return
     ws.append(list(fieldnames_zh))
     for cell in ws[1]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     hit_header = "是否命中目标"
+    prev_code: Optional[str] = None
     for row_dict in rows_zh:
+        c = row_dict.get("股票代码")
+        c_cmp = str(c).lstrip("\t") if c is not None else ""
+        if prev_code is not None and c_cmp != prev_code:
+            ws.append([""] * len(fieldnames_zh))
+        prev_code = c_cmp
         row_vals = []
         for h in fieldnames_zh:
             v = row_dict.get(h)
@@ -610,6 +636,49 @@ def save_details_xlsx(task_id: str, details: List[Dict[str, Any]]) -> str:
     if code_col_idx and ws.max_row >= 2:
         for row in range(2, ws.max_row + 1):
             ws.cell(row=row, column=code_col_idx).number_format = "@"
+
+
+def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
+    """将明细写入 CSV：中文表头、按代码分组空行、A股区块在前、港股在后。"""
+    import csv
+
+    _ensure_dirs()
+    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
+    fname = f"{tid}.csv"
+    path = os.path.join(_DETAILS_DIR, fname)
+    sorted_details = _sort_gms_details_for_export(details)
+    _, fieldnames_zh, rows_zh = _build_gms_detail_rows(sorted_details, code_csv_format=True)
+    hit_hdr = "是否命中目标"
+    for row in rows_zh:
+        if hit_hdr in row and isinstance(row[hit_hdr], bool):
+            row[hit_hdr] = "是" if row[hit_hdr] else "否"
+    rows_out = _gms_rows_zh_insert_blank_between_codes(fieldnames_zh, rows_zh)
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames_zh, quoting=csv.QUOTE_ALL)
+        w.writeheader()
+        w.writerows(rows_out)
+    return fname
+
+
+def save_details_xlsx(task_id: str, details: List[Dict[str, Any]]) -> str:
+    """将明细写入 Excel：「A股」「港股」两个标签页，表内按股票代码分组（空行分隔），含列宽。"""
+    from openpyxl import Workbook
+
+    _ensure_dirs()
+    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
+    fname = f"{tid}.xlsx"
+    path = os.path.join(_DETAILS_DIR, fname)
+    sorted_details = _sort_gms_details_for_export(details)
+    _, fieldnames_zh, rows_zh = _build_gms_detail_rows(sorted_details, code_csv_format=False)
+    cn_rows = [r for r in rows_zh if r.get("市场") == "CN"]
+    hk_rows = [r for r in rows_zh if r.get("市场") == "HK"]
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws_cn = wb.create_sheet("A股", 0)
+    _write_gms_xlsx_sheet(ws_cn, fieldnames_zh, cn_rows)
+    ws_hk = wb.create_sheet("港股", 1)
+    _write_gms_xlsx_sheet(ws_hk, fieldnames_zh, hk_rows)
 
     wb.save(path)
     return fname

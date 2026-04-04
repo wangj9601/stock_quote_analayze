@@ -4,6 +4,7 @@ GMS 回测管理端接口
 """
 
 import logging
+from copy import deepcopy
 from typing import Dict, List, Any, Optional
 
 from backend_api.database import SessionLocal
@@ -23,6 +24,25 @@ def create_backtest(config: Dict[str, Any], name: Optional[str] = None) -> str:
     task_id = backtest_storage.create_task(config, name=name or config.get("task_name"))
     backtest_worker.start_backtest(task_id)
     return task_id
+
+
+def rerun_backtest(task_id: str) -> str:
+    """
+    按已有任务的 config 再创建并启动一个新任务（管理端「重新执行」）。
+    进行中（pending/running）的任务不可重跑。
+    """
+    task = get_task(task_id)
+    if not task:
+        raise ValueError("任务不存在")
+    if task.get("status") in ("pending", "running"):
+        raise ValueError("任务进行中，无法重新执行")
+    cfg = deepcopy(task.get("config") or {})
+    if not cfg:
+        raise ValueError("任务参数缺失")
+    name = (task.get("name") or cfg.get("task_name") or "").strip()
+    new_name = f"{name}（重跑）" if name else None
+    cfg.pop("task_name", None)
+    return create_backtest(cfg, name=new_name)
 
 
 def list_backtest_tasks(

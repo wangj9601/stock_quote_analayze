@@ -1,0 +1,47 @@
+{
+  "report_id": "36f229b4-0e68-4595-902a-fbdf907421ea",
+  "task_id": "36f229b4-0e68-4595-902a-fbdf907421ea",
+  "name": "GMS回测_603667_五洲新春",
+  "created_at": "2026-04-04T11:21:21.544555Z",
+  "summary": {
+    "total_samples": 19,
+    "hit_count": 13,
+    "hit_rate": 0.6842,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2020-04-02",
+    "end_date": "2026-04-02",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；买入价为信号日之后下一交易日开盘价；同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 9,
+        "hit": 7,
+        "hit_rate": 0.7777777777777778
+      },
+      "左侧": {
+        "total": 10,
+        "hit": 6,
+        "hit_rate": 0.6
+      }
+    },
+    "by_score_bucket": {
+      "[80,90)": {
+        "total": 1,
+        "hit": 1,
+        "hit_rate": 1.0
+      },
+      "[70,80)": {
+        "total": 13,
+        "hit": 8,
+        "hit_rate": 0.6153846153846154
+      },
+      "[90,100]": {
+        "total": 5,
+        "hit": 4,
+        "hit_rate": 0.8
+      }
+    }
+  },
+  "details_path": "36f229b4-0e68-4595-902a-fbdf907421ea.xlsx"
+}

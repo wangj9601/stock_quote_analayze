@@ -16,7 +16,7 @@
             {{ task.status }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="进度">{{ task.progress ?? 0 }}%</el-descriptions-item>
+        <el-descriptions-item label="进度">{{ displayProgress(task.progress) }}%</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(task.created_at) }}</el-descriptions-item>
         <template v-if="task.config">
           <el-descriptions-item label="市场">{{ task.config.market }}</el-descriptions-item>
@@ -104,6 +104,12 @@ const scoreBucketRows = computed(() => {
 function formatDate(v: string) {
   if (!v) return '-'
   return v.replace('Z', '').slice(0, 19)
+}
+
+function displayProgress(p: unknown): number {
+  const n = Number(p)
+  if (Number.isNaN(n)) return 0
+  return Math.min(100, Math.max(0, Math.round(n)))
 }
 
 async function load() {

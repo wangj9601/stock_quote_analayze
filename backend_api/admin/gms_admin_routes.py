@@ -197,6 +197,19 @@ async def cancel_backtest(task_id: str):
     return {"success": True}
 
 
+@router.post("/backtests/{task_id}/rerun")
+async def rerun_backtest(task_id: str):
+    """使用与原任务相同的参数创建并启动新回测任务（已完成/失败/已取消时可重跑）。"""
+    try:
+        new_id = admin_interface.rerun_backtest(task_id)
+        return {"success": True, "data": {"task_id": new_id}}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("GMS 重新执行回测失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/backtests/{task_id}")
 async def delete_backtest(task_id: str):
     """删除任务。"""

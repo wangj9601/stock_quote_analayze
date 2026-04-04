@@ -117,14 +117,23 @@
           </template>
         </el-table-column>
         <el-table-column label="进度" width="80">
-          <template #default="scope">{{ scope.row.progress ?? 0 }}%</template>
+          <template #default="scope">{{ displayProgress(scope.row.progress) }}%</template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="170">
           <template #default="scope">{{ formatDate(scope.row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="viewDetail(scope.row)">详情</el-button>
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              @click="rerunTask(scope.row)"
+              :disabled="['pending', 'running'].includes(scope.row.status)"
+            >
+              重新执行
+            </el-button>
             <el-button
               size="small"
               type="warning"
@@ -197,6 +206,13 @@ function statusTagType(s: string): 'info' | 'primary' | 'success' | 'warning' | 
 function formatDate(v: string) {
   if (!v) return '-'
   return v.replace('Z', '').slice(0, 19)
+}
+
+/** 任务进度 0–100，防止异常数据在列表中显示超过 100% */
+function displayProgress(p: unknown): number {
+  const n = Number(p)
+  if (Number.isNaN(n)) return 0
+  return Math.min(100, Math.max(0, Math.round(n)))
 }
 
 async function createTask() {
@@ -288,6 +304,22 @@ async function deleteTask(row: any) {
     await refresh()
   } catch (e) {
     if ((e as string) !== 'cancel') ElMessage.error('删除失败')
+  }
+}
+
+async function rerunTask(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      '将使用与原任务相同的参数创建新的回测任务，是否继续？',
+      '重新执行',
+      { type: 'info' }
+    )
+    const newId = await gmsApi.rerunBacktestTask(row.task_id)
+    ElMessage.success('已创建新任务: ' + newId.slice(0, 8))
+    await refresh()
+    emit('task-created', { id: newId })
+  } catch (e) {
+    if ((e as string) !== 'cancel') ElMessage.error((e as Error)?.message || '重新执行失败')
   }
 }
 
