@@ -229,19 +229,33 @@ async def get_report(report_id: str):
 
 
 @router.get("/reports/{report_id}/download")
-async def download_report(report_id: str):
-    """下载报告明细文件（CSV）。文件名包含任务名称（含股票代码和名称时更易识别）。"""
-    path = admin_interface.download_report(report_id)
+async def download_report(
+    report_id: str,
+    variant: Optional[str] = Query(
+        None,
+        description="不填：报告记录的主文件；csv：UTF-8 中文表头 CSV；xlsx：Excel 含列宽",
+    ),
+):
+    """下载报告明细：默认与报告记录一致；variant=csv / xlsx 可指定格式（与 Excel 列语义一致）。"""
+    path = admin_interface.download_report(report_id, variant=variant)
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="报告或明细文件不存在")
     report = admin_interface.get_report(report_id) or {}
     base_name = (report.get("name") or f"gms_backtest_{report_id[:8]}").strip()
     # 移除文件名非法字符
     safe_name = re.sub(r'[<>:"/\\|?*]', "_", base_name)
-    filename = f"{safe_name}.csv" if safe_name else f"gms_backtest_{report_id[:8]}.csv"
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".xlsx":
+        filename = (
+            f"{safe_name}.xlsx" if safe_name else f"gms_backtest_{report_id[:8]}.xlsx"
+        )
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        filename = f"{safe_name}.csv" if safe_name else f"gms_backtest_{report_id[:8]}.csv"
+        media_type = "text/csv; charset=utf-8"
     return FileResponse(
         path,
-        media_type="text/csv",
+        media_type=media_type,
         filename=filename,
     )
 

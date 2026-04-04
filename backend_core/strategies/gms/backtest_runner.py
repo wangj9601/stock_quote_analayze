@@ -2,12 +2,15 @@
 GMS 策略回测执行器
 按「信号日后 N 个交易日内最高价是否达到 entry*(1+target_pct)」计算目标命中率（准确率）。
 
+买入价 entry：信号日之后的**下一交易日开盘价**（T+1 开盘），非信号日收盘价。
+
 与管理端 GMS 回测任务共用同一套逻辑：每个交易日取 GMS 左/右侧买入信号，
 经 GMSFrontendInterface 按最低总分筛选后计入样本（单股仅股票池缩为该代码）。
+同一标的在上一笔的观察期（horizon_days 根 K 线，与命中率统计一致）结束后才允许再次开仓。
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from sqlalchemy.orm import Session
 
 from .frontend_interface import GMSFrontendInterface
@@ -54,17 +57,19 @@ def _get_trading_dates_hk(db: Session, start: str, end: str) -> List[str]:
     return [str(r[0]).strip()[:10] for r in rows if r[0]]
 
 
-def _get_entry_close_cn(db: Session, code: str, trade_date: str) -> Optional[float]:
+def _get_entry_open_next_day_cn(db: Session, code: str, signal_date: str) -> Optional[float]:
+    """信号日之后首个交易日的开盘价（买入价）。"""
     from sqlalchemy import cast, String
     from backend_api.models import HistoricalQuotes
 
-    date_str = str(trade_date).strip()[:10]
+    after_str = str(signal_date).strip()[:10]
     row = (
-        db.query(HistoricalQuotes.close)
+        db.query(HistoricalQuotes.open)
         .filter(
             HistoricalQuotes.code == code,
-            cast(HistoricalQuotes.date, String) == date_str,
+            cast(HistoricalQuotes.date, String) > after_str,
         )
+        .order_by(HistoricalQuotes.date)
         .first()
     )
     if row and row[0] is not None:
@@ -72,11 +77,15 @@ def _get_entry_close_cn(db: Session, code: str, trade_date: str) -> Optional[flo
     return None
 
 
-def _get_entry_close_hk(db: Session, code: str, trade_date: str) -> Optional[float]:
+def _get_entry_open_next_day_hk(db: Session, code: str, signal_date: str) -> Optional[float]:
+    """信号日之后首个交易日的开盘价（买入价）。"""
     from backend_api.models import HistoricalQuotesHK
+
+    after_str = str(signal_date).strip()[:10]
     row = (
-        db.query(HistoricalQuotesHK.close)
-        .filter(HistoricalQuotesHK.code == code, HistoricalQuotesHK.date == trade_date)
+        db.query(HistoricalQuotesHK.open)
+        .filter(HistoricalQuotesHK.code == code, HistoricalQuotesHK.date > after_str)
+        .order_by(HistoricalQuotesHK.date)
         .first()
     )
     if row and row[0] is not None:
@@ -113,6 +122,48 @@ def _get_future_highs_hk(db: Session, code: str, after_date: str, limit: int) ->
         .all()
     )
     return [float(r[0]) for r in rows if r[0] is not None]
+
+
+def _get_observation_window_end_cn(
+    db: Session, code: str, signal_date: str, horizon_days: int
+) -> Optional[str]:
+    """信号日之后第 horizon_days 根 K 线所在日期（与 _get_future_highs_cn 取数范围一致，观察期最后一根）。"""
+    from sqlalchemy import cast, String
+    from backend_api.models import HistoricalQuotes
+
+    after_str = str(signal_date).strip()[:10]
+    rows = (
+        db.query(HistoricalQuotes.date)
+        .filter(
+            HistoricalQuotes.code == code,
+            cast(HistoricalQuotes.date, String) > after_str,
+        )
+        .order_by(HistoricalQuotes.date)
+        .limit(horizon_days)
+        .all()
+    )
+    if not rows:
+        return None
+    return str(rows[-1][0])[:10]
+
+
+def _get_observation_window_end_hk(
+    db: Session, code: str, signal_date: str, horizon_days: int
+) -> Optional[str]:
+    """信号日之后第 horizon_days 根 K 线所在日期（与 _get_future_highs_hk 一致）。"""
+    from backend_api.models import HistoricalQuotesHK
+
+    after_str = str(signal_date).strip()[:10]
+    rows = (
+        db.query(HistoricalQuotesHK.date)
+        .filter(HistoricalQuotesHK.code == code, HistoricalQuotesHK.date > after_str)
+        .order_by(HistoricalQuotesHK.date)
+        .limit(horizon_days)
+        .all()
+    )
+    if not rows:
+        return None
+    return str(rows[-1][0]).strip()[:10]
 
 
 def _aggregate_details_to_summary(
@@ -205,12 +256,15 @@ def run_gms_backtest(
     执行 GMS 回测（与管理端 create_backtest 任务一致）：
     每交易日取左/右侧买入信号，GMSFrontendInterface 按最低总分筛选；单股时股票池仅含该代码，
     仍按区间内全部交易日扫描，与页面表格是否分页无关。
+    同一标的在上一笔的观察期（horizon_days 根 K 线）结束后才允许再次计入样本。
     """
     start_str = str(start_date).strip()[:10]
     end_str = str(end_date).strip()[:10]
 
     buy_signal_rule = (
-        "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。"
+        "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；"
+        "买入价为信号日之后下一交易日开盘价；"
+        "同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。"
     )
 
     # 单股/自定义股票池时只跑该池所属市场，避免“选单股仍跑全市场”
@@ -248,6 +302,8 @@ def run_gms_backtest(
 
     details: List[Dict[str, Any]] = []
     processed = 0
+    # (市场, 规范化代码) -> 上一笔样本的观察期最后交易日；新信号须 trade_date > 该日
+    block_until_obs_end: Dict[Tuple[str, str], str] = {}
 
     for market_key, date_list in markets_to_run:
         for i, trade_date in enumerate(date_list):
@@ -271,21 +327,31 @@ def run_gms_backtest(
                 code = normalize_gms_stock_code(code, mt_key)
                 if not code:
                     continue
+                once_key = (mt_key, code)
+                obs_end_prev = block_until_obs_end.get(once_key)
+                if obs_end_prev is not None and trade_date <= obs_end_prev:
+                    continue
                 buy_type = r.get("buy_type") or ("左侧" if r.get("left_buy_signal") else "右侧")
                 score_total = _parse_score(r)
 
                 if market_key == "cn":
-                    entry_close = _get_entry_close_cn(db, code, trade_date)
+                    entry_open = _get_entry_open_next_day_cn(db, code, trade_date)
                     future_highs = _get_future_highs_cn(db, code, trade_date, horizon_days)
                 else:
-                    entry_close = _get_entry_close_hk(db, code, trade_date)
+                    entry_open = _get_entry_open_next_day_hk(db, code, trade_date)
                     future_highs = _get_future_highs_hk(db, code, trade_date, horizon_days)
 
-                if entry_close is None or entry_close <= 0:
+                if entry_open is None or entry_open <= 0:
                     continue
-                max_high = max(future_highs) if future_highs else entry_close
-                max_gain = (max_high / entry_close - 1.0) if entry_close else 0.0
-                hit = max_high >= entry_close * (1.0 + target_pct)
+                if market_key == "cn":
+                    obs_end = _get_observation_window_end_cn(db, code, trade_date, horizon_days)
+                else:
+                    obs_end = _get_observation_window_end_hk(db, code, trade_date, horizon_days)
+                # 若不足 horizon_days 根 K 线，以实际最后一根日记观察期结束，避免永久锁死
+                block_until_obs_end[once_key] = obs_end if obs_end else trade_date
+                max_high = max(future_highs) if future_highs else entry_open
+                max_gain = (max_high / entry_open - 1.0) if entry_open else 0.0
+                hit = max_high >= entry_open * (1.0 + target_pct)
 
                 details.append({
                     "code": code,
@@ -293,7 +359,7 @@ def run_gms_backtest(
                     "market": mt_key,
                     "buy_type": buy_type,
                     "score_total": score_total,
-                    "entry_close": round(entry_close, 4),
+                    "entry_open": round(entry_open, 4),
                     "max_high_20d": round(max_high, 4),
                     "max_gain_20d": round(max_gain, 4),
                     "hit": hit,

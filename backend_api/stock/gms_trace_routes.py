@@ -487,15 +487,23 @@ async def cancel_gms_stock_backtest(task_id: str):
 
 @router.get("/gms-backtest/{task_id}/export")
 async def export_gms_stock_backtest_csv(task_id: str):
-    """导出该回测任务明细 CSV（与管理端报告明细一致）。"""
+    """导出该回测任务明细（新任务为带列宽的 Excel；旧任务可能仍为 CSV）。"""
     if not _GMS_BACKTEST_AVAILABLE or _gms_admin_if is None:
         raise HTTPException(status_code=503, detail="GMS 回测服务暂不可用")
     path = _gms_admin_if.download_report(task_id)
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="明细不存在或任务未完成")
     safe = "".join(c for c in task_id[:36] if c.isalnum() or c in "-_")
+    base = f"gms_backtest_{safe or 'export'}"
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".xlsx":
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"{base}.xlsx",
+        )
     return FileResponse(
         path,
         media_type="text/csv; charset=utf-8",
-        filename=f"gms_backtest_{safe or 'export'}.csv",
+        filename=f"{base}.csv",
     )

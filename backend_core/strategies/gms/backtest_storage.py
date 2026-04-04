@@ -10,7 +10,7 @@ import os
 import threading
 import time
 import uuid
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -325,8 +325,15 @@ def delete_task(task_id: str) -> bool:
     tid = normalize_gms_task_id(task_id)
     if not tid:
         return False
-    for subdir, ext in ((_TASKS_DIR, ".json"), (_REPORTS_DIR, ".json"), (_DETAILS_DIR, ".csv")):
+    for subdir, ext in ((_TASKS_DIR, ".json"), (_REPORTS_DIR, ".json")):
         p = os.path.join(subdir, f"{tid}{ext}")
+        if os.path.isfile(p):
+            try:
+                os.remove(p)
+            except Exception as e:
+                logger.warning("删除文件 %s 失败: %s", p, e)
+    for ext in (".csv", ".xlsx"):
+        p = os.path.join(_DETAILS_DIR, f"{tid}{ext}")
         if os.path.isfile(p):
             try:
                 os.remove(p)
@@ -397,7 +404,7 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
 
 
 def get_details_path(report_id: str) -> Optional[str]:
-    """返回明细文件绝对路径（CSV），供下载。"""
+    """返回明细文件绝对路径（优先 xlsx，旧任务可能为 csv），供下载。"""
     report = get_report(report_id)
     if not report:
         return None
@@ -407,6 +414,20 @@ def get_details_path(report_id: str) -> Optional[str]:
     if os.path.isabs(rel):
         return rel if os.path.isfile(rel) else None
     return os.path.join(_DETAILS_DIR, os.path.basename(rel))
+
+
+def get_detail_path_by_ext(report_id: str, ext: str) -> Optional[str]:
+    """按扩展名返回明细文件绝对路径（.csv / .xlsx），文件存在则返回，否则 None。"""
+    rid = normalize_gms_task_id(report_id)
+    if not rid:
+        return None
+    e = ext.lower().strip()
+    if not e.startswith("."):
+        e = "." + e
+    if e not in (".csv", ".xlsx"):
+        return None
+    p = os.path.join(_DETAILS_DIR, f"{rid}{e}")
+    return p if os.path.isfile(p) else None
 
 
 def normalize_gms_stock_code(code: Any, market: Any = None) -> str:
@@ -449,39 +470,146 @@ def format_code_for_csv_cell(code: Any, market: Any = None) -> str:
     return "\t" + norm
 
 
-def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
-    """将明细写入 CSV，返回相对路径（文件名）。code 列固定为字符串，避免 Excel 将前导零当作数字。"""
-    import csv
-    _ensure_dirs()
-    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
-    fname = f"{tid}.csv"
-    path = os.path.join(_DETAILS_DIR, fname)
-    default_fields = [
-        "code",
-        "date",
-        "market",
-        "buy_type",
-        "score_total",
-        "entry_close",
-        "max_high_20d",
-        "max_gain_20d",
-        "hit",
-    ]
+# 下载明细 CSV 表头：内部字段名 -> 中文列名（与 backtest_runner 明细结构一致）
+_GMS_BACKTEST_DETAIL_CSV_HEADER_ZH: Dict[str, str] = {
+    "code": "股票代码",
+    "date": "信号日期",
+    "market": "市场",
+    "buy_type": "买点类型",
+    "score_total": "信号总分",
+    "entry_open": "买入价",
+    "entry_close": "买入价",
+    "max_high_20d": "观察期内最高价",
+    "max_gain_20d": "观察期内最大涨幅",
+    "hit": "是否命中目标",
+}
 
+
+def _gms_detail_csv_fieldnames_zh(keys: List[str]) -> List[str]:
+    return [_GMS_BACKTEST_DETAIL_CSV_HEADER_ZH.get(k, k) for k in keys]
+
+
+def _gms_detail_row_to_zh_row(row: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
+    zh_keys = _gms_detail_csv_fieldnames_zh(keys)
+    return {zh_keys[i]: row.get(keys[i]) for i in range(len(keys))}
+
+
+_GMS_DETAIL_DEFAULT_FIELDS: List[str] = [
+    "code",
+    "date",
+    "market",
+    "buy_type",
+    "score_total",
+    "entry_open",
+    "max_high_20d",
+    "max_gain_20d",
+    "hit",
+]
+
+# Excel 列宽（字符宽度，openpyxl column_dimensions.width）
+_GMS_BACKTEST_XLSX_COL_WIDTH: Dict[str, float] = {
+    "股票代码": 11.0,
+    "信号日期": 12.0,
+    "市场": 8.0,
+    "买点类型": 10.0,
+    "信号总分": 10.0,
+    "买入价": 12.0,
+    "观察期内最高价": 16.0,
+    "观察期内最大涨幅": 18.0,
+    "是否命中目标": 12.0,
+}
+
+
+def _build_gms_detail_rows(
+    details: List[Dict[str, Any]],
+    *,
+    code_csv_format: bool = False,
+) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
+    """返回 (内部 keys, 中文表头列表, 中文键行字典列表)。"""
     if not details:
-        with open(path, "w", encoding="utf-8-sig", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=default_fields, quoting=csv.QUOTE_ALL)
-            w.writeheader()
-        return fname
+        keys = list(_GMS_DETAIL_DEFAULT_FIELDS)
+        fieldnames_zh = _gms_detail_csv_fieldnames_zh(keys)
+        return keys, fieldnames_zh, []
     keys = list(details[0].keys())
+    fieldnames_zh = _gms_detail_csv_fieldnames_zh(keys)
     rows_out = []
     for raw in details:
         r = dict(raw)
         if "code" in r:
-            r["code"] = format_code_for_csv_cell(r.get("code"), r.get("market"))
+            if code_csv_format:
+                r["code"] = format_code_for_csv_cell(r.get("code"), r.get("market"))
+            else:
+                r["code"] = normalize_gms_stock_code(r.get("code"), r.get("market"))
         rows_out.append(r)
+    rows_zh = [_gms_detail_row_to_zh_row(r, keys) for r in rows_out]
+    return keys, fieldnames_zh, rows_zh
+
+
+def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
+    """将明细写入 CSV，返回相对路径（文件名）。表头为中文；code 列值为文本格式；命中列与 Excel 一致为 是/否。"""
+    import csv
+
+    _ensure_dirs()
+    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
+    fname = f"{tid}.csv"
+    path = os.path.join(_DETAILS_DIR, fname)
+    _, fieldnames_zh, rows_zh = _build_gms_detail_rows(details, code_csv_format=True)
+    hit_hdr = "是否命中目标"
+    for row in rows_zh:
+        if hit_hdr in row and isinstance(row[hit_hdr], bool):
+            row[hit_hdr] = "是" if row[hit_hdr] else "否"
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=keys, quoting=csv.QUOTE_ALL)
+        w = csv.DictWriter(f, fieldnames=fieldnames_zh, quoting=csv.QUOTE_ALL)
         w.writeheader()
-        w.writerows(rows_out)
+        w.writerows(rows_zh)
+    return fname
+
+
+def save_details_xlsx(task_id: str, details: List[Dict[str, Any]]) -> str:
+    """将明细写入 Excel（含中文表头与列宽），返回相对路径。供下载主用（CSV 无列宽概念）。"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+    from openpyxl.utils import get_column_letter
+
+    _ensure_dirs()
+    tid = normalize_gms_task_id(task_id) or str(task_id).strip()
+    fname = f"{tid}.xlsx"
+    path = os.path.join(_DETAILS_DIR, fname)
+    _, fieldnames_zh, rows_zh = _build_gms_detail_rows(details, code_csv_format=False)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "GMS回测明细"
+    ws.append(list(fieldnames_zh))
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    hit_header = "是否命中目标"
+    for row_dict in rows_zh:
+        row_vals = []
+        for h in fieldnames_zh:
+            v = row_dict.get(h)
+            if h == hit_header:
+                if v is True:
+                    v = "是"
+                elif v is False:
+                    v = "否"
+            row_vals.append(v)
+        ws.append(row_vals)
+
+    for col_idx, header in enumerate(fieldnames_zh, start=1):
+        w = _GMS_BACKTEST_XLSX_COL_WIDTH.get(header, 14.0)
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+
+    code_col_idx = None
+    for i, h in enumerate(fieldnames_zh, start=1):
+        if h == "股票代码":
+            code_col_idx = i
+            break
+    if code_col_idx and ws.max_row >= 2:
+        for row in range(2, ws.max_row + 1):
+            ws.cell(row=row, column=code_col_idx).number_format = "@"
+
+    wb.save(path)
     return fname

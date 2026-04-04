@@ -468,7 +468,7 @@ class StockGMSTracePage {
         const tid = task.task_id;
         if (tid) {
             const exportUrl = `${this.getApiBase()}/api/stock/gms-backtest/${encodeURIComponent(tid)}/export`;
-            html += `<p class="gms-bt-export-wrap"><a class="gms-bt-export-link" href="${exportUrl}" download>下载明细 CSV</a></p>`;
+            html += `<p class="gms-bt-export-wrap"><a class="gms-bt-export-link" href="${exportUrl}" download>下载明细 Excel</a></p>`;
         }
         resultArea.innerHTML = html;
     }

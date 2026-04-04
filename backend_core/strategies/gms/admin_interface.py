@@ -66,9 +66,14 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
     return backtest_storage.get_report(report_id)
 
 
-def download_report(report_id: str) -> Optional[str]:
+def download_report(report_id: str, variant: Optional[str] = None) -> Optional[str]:
     """
     返回报告明细文件的本地绝对路径，供 API 层 send_file。
-    若不存在则返回 None。
+    variant: None 使用报告记录的主明细文件（一般为 xlsx）；csv / xlsx 则强制对应扩展名。
     """
+    v = (variant or "").strip().lower()
+    if v == "csv":
+        return backtest_storage.get_detail_path_by_ext(report_id, ".csv")
+    if v in ("xlsx", "excel"):
+        return backtest_storage.get_detail_path_by_ext(report_id, ".xlsx")
     return backtest_storage.get_details_path(report_id)

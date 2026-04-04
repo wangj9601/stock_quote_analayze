@@ -97,13 +97,42 @@ class GMSApiService {
     return res.data
   }
 
-  /** 下载报告明细（返回 blob URL） */
-  async downloadReport(reportId: string): Promise<Blob> {
-    const response = await fetch(`${API_BASE}${PREFIX}/reports/${reportId}/download`, {
+  /**
+   * 下载报告明细
+   * @param variant 不传：与报告记录一致（新任务多为 xlsx）；csv / xlsx 强制格式（CSV 为 UTF-8 中文表头，与 Excel 列一致）
+   */
+  async downloadReport(
+    reportId: string,
+    variant?: 'csv' | 'xlsx'
+  ): Promise<{ blob: Blob; filename: string }> {
+    const q =
+      variant === 'csv' || variant === 'xlsx'
+        ? `?variant=${encodeURIComponent(variant)}`
+        : ''
+    const response = await fetch(`${API_BASE}${PREFIX}/reports/${reportId}/download${q}`, {
       headers: this.getAuthHeaders(),
     })
     if (!response.ok) throw new Error('Download failed')
-    return response.blob()
+    let filename = `gms_backtest_${reportId.slice(0, 8)}.xlsx`
+    const cd = response.headers.get('Content-Disposition')
+    if (cd) {
+      const utf8 = /filename\*=UTF-8''([^;\s]+)/i.exec(cd)
+      const quoted = /filename="([^"]+)"/i.exec(cd)
+      const plain = /filename=([^;\s]+)/i.exec(cd)
+      if (utf8) {
+        try {
+          filename = decodeURIComponent(utf8[1])
+        } catch {
+          /* keep default */
+        }
+      } else if (quoted) {
+        filename = quoted[1]
+      } else if (plain) {
+        filename = plain[1].replace(/['"]/g, '')
+      }
+    }
+    const blob = await response.blob()
+    return { blob, filename }
   }
 
   /** 读取 GMS 策略配置 */

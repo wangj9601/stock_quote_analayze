@@ -1,0 +1,47 @@
+{
+  "report_id": "f5197842-2958-432d-ad6e-7be14ed49009",
+  "task_id": "f5197842-2958-432d-ad6e-7be14ed49009",
+  "name": "GMS回测_600998_九州通",
+  "created_at": "2026-04-04T06:12:45.159653Z",
+  "summary": {
+    "total_samples": 17,
+    "hit_count": 5,
+    "hit_rate": 0.2941,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2023-01-04",
+    "end_date": "2026-04-04",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；买入价为信号日之后下一交易日开盘价；同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 9,
+        "hit": 3,
+        "hit_rate": 0.3333333333333333
+      },
+      "左侧": {
+        "total": 8,
+        "hit": 2,
+        "hit_rate": 0.25
+      }
+    },
+    "by_score_bucket": {
+      "[80,90)": {
+        "total": 2,
+        "hit": 2,
+        "hit_rate": 1.0
+      },
+      "[70,80)": {
+        "total": 8,
+        "hit": 3,
+        "hit_rate": 0.375
+      },
+      "[90,100]": {
+        "total": 7,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    }
+  },
+  "details_path": "f5197842-2958-432d-ad6e-7be14ed49009.csv"
+}

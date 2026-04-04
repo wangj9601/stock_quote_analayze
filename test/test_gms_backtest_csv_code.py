@@ -13,6 +13,7 @@ from backend_core.strategies.gms.backtest_storage import (
     normalize_gms_task_id,
     format_code_for_csv_cell,
     save_details_csv,
+    save_details_xlsx,
 )
 
 
@@ -54,7 +55,7 @@ def test_save_details_csv_code_column(monkeypatch):
                 "market": "HK",
                 "buy_type": "左侧",
                 "score_total": 80.0,
-                "entry_close": 10.0,
+                "entry_open": 10.0,
                 "max_high_20d": 11.0,
                 "max_gain_20d": 0.1,
                 "hit": True,
@@ -66,9 +67,53 @@ def test_save_details_csv_code_column(monkeypatch):
             lines = f.readlines()
         assert len(lines) >= 2
         assert "\t00981" in lines[1]
+        assert "是" in lines[1]  # 是否命中目标与 Excel 一致为中文
     finally:
         try:
             os.remove(os.path.join(d, f"{tid}.csv"))
+        except OSError:
+            pass
+        try:
+            os.rmdir(d)
+        except OSError:
+            pass
+
+
+def test_save_details_xlsx_chinese_headers_and_code_text(monkeypatch):
+    from backend_core.strategies.gms import backtest_storage as bs
+    from openpyxl import load_workbook
+
+    d = tempfile.mkdtemp(prefix="gms_xlsx_")
+    try:
+        monkeypatch.setattr(bs, "_DETAILS_DIR", d)
+        tid = "test-task-xlsx-1"
+        details = [
+            {
+                "code": 981,
+                "date": "2024-01-02",
+                "market": "HK",
+                "buy_type": "左侧",
+                "score_total": 80.0,
+                "entry_open": 10.0,
+                "max_high_20d": 11.0,
+                "max_gain_20d": 0.1,
+                "hit": True,
+            }
+        ]
+        fname = save_details_xlsx(tid, details)
+        assert fname == f"{tid}.xlsx"
+        path = os.path.join(d, fname)
+        wb = load_workbook(path, data_only=True)
+        ws = wb.active
+        assert ws["A1"].value == "股票代码"
+        assert ws["A2"].value == "00981"
+        assert ws.cell(row=2, column=ws.max_column).value == "是"
+        dim = ws.column_dimensions["A"]
+        assert dim.width is not None and dim.width >= 10
+        wb.close()
+    finally:
+        try:
+            os.remove(os.path.join(d, f"{tid}.xlsx"))
         except OSError:
             pass
         try:

@@ -1,0 +1,47 @@
+{
+  "report_id": "29acc935-d750-41a1-b69d-d3627b2f714e",
+  "task_id": "29acc935-d750-41a1-b69d-d3627b2f714e",
+  "name": "GMS回测_301008_宏昌科技",
+  "created_at": "2026-04-03T12:53:54.600687Z",
+  "summary": {
+    "total_samples": 20,
+    "hit_count": 5,
+    "hit_rate": 0.25,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2020-01-03",
+    "end_date": "2026-04-03",
+    "market": "cn",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 10,
+        "hit": 2,
+        "hit_rate": 0.2
+      },
+      "左侧": {
+        "total": 10,
+        "hit": 3,
+        "hit_rate": 0.3
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 12,
+        "hit": 3,
+        "hit_rate": 0.25
+      },
+      "[80,90)": {
+        "total": 4,
+        "hit": 1,
+        "hit_rate": 0.25
+      },
+      "[90,100]": {
+        "total": 4,
+        "hit": 1,
+        "hit_rate": 0.25
+      }
+    }
+  },
+  "details_path": "29acc935-d750-41a1-b69d-d3627b2f714e.csv"
+}

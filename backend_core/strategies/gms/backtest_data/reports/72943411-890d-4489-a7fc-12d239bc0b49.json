@@ -1,0 +1,47 @@
+{
+  "report_id": "72943411-890d-4489-a7fc-12d239bc0b49",
+  "task_id": "72943411-890d-4489-a7fc-12d239bc0b49",
+  "name": "GMS回测_688795_摩尔线程",
+  "created_at": "2026-04-03T12:06:51.781231Z",
+  "summary": {
+    "total_samples": 3,
+    "hit_count": 0,
+    "hit_rate": 0.0,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2025-09-03",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）。",
+    "by_buy_type": {
+      "左侧": {
+        "total": 2,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "右侧": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "[90,100]": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "[80,90)": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      }
+    }
+  },
+  "details_path": "72943411-890d-4489-a7fc-12d239bc0b49.csv"
+}

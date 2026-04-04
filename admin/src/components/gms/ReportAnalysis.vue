@@ -24,10 +24,11 @@
         <el-table-column prop="created_at" label="完成时间" width="170">
           <template #default="scope">{{ formatDate(scope.row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="viewReport(scope.row)">查看</el-button>
-            <el-button size="small" type="success" @click="downloadReport(scope.row)">下载CSV</el-button>
+            <el-button size="small" type="success" @click="downloadReport(scope.row)">下载明细</el-button>
+            <el-button size="small" @click="downloadReport(scope.row, 'csv')">下载CSV</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -90,13 +91,13 @@ async function viewReport(row: any) {
   }
 }
 
-async function downloadReport(row: any) {
+async function downloadReport(row: any, variant?: 'csv' | 'xlsx') {
   try {
-    const blob = await gmsApi.downloadReport(row.report_id)
+    const { blob, filename } = await gmsApi.downloadReport(row.report_id, variant)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gms_backtest_${(row.report_id || '').slice(0, 8)}.csv`
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('下载已开始')
