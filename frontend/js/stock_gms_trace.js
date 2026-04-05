@@ -55,6 +55,14 @@ class StockGMSTracePage {
         const cancelBt = document.getElementById('btCancelBtn');
         if (startBt) startBt.addEventListener('click', () => this.startBacktest());
         if (cancelBt) cancelBt.addEventListener('click', () => this.cancelBacktest());
+        const quickSel = document.getElementById('btTargetPctQuick');
+        const pctIn = document.getElementById('btTargetPct');
+        if (quickSel && pctIn) {
+            quickSel.addEventListener('change', () => {
+                const v = quickSel.value;
+                if (v !== '' && v != null) pctIn.value = String(v);
+            });
+        }
     }
 
     setDefaultDates() {
@@ -302,7 +310,12 @@ class StockGMSTracePage {
             return;
         }
         const market = document.getElementById('btMarket')?.value || 'all';
-        const targetPct = parseFloat(document.getElementById('btTargetPct')?.value || '0.05', 10);
+        const pctRaw = parseFloat(String(document.getElementById('btTargetPct')?.value || '5'), 10);
+        if (Number.isNaN(pctRaw) || pctRaw < 0.1 || pctRaw > 100) {
+            alert('目标阈值请在 0.1%～100% 之间（输入数字为百分比，如 5 表示 +5%）');
+            return;
+        }
+        const targetPct = pctRaw / 100;
         const horizon = parseInt(document.getElementById('btHorizon')?.value || '20', 10);
         const minScore = parseFloat(document.getElementById('btMinScore')?.value || '0', 10);
         if (horizon < 10 || horizon > 30) {

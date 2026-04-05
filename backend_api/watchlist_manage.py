@@ -611,7 +611,9 @@ async def import_watchlist(
                     basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == c).first()
                     if not basic_a and c.isdigit():
                         try:
-                            basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == int(c)).first()
+                            basic_a = db.query(StockBasicInfo).filter(
+                                StockBasicInfo.code == f"{int(c):06d}"
+                            ).first()
                         except Exception:
                             pass
                     if basic_a and basic_a.code is not None:
@@ -622,7 +624,9 @@ async def import_watchlist(
                     basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == c).first()
                     if not basic_a and c.isdigit():
                         try:
-                            basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == int(c)).first()
+                            basic_a = db.query(StockBasicInfo).filter(
+                                StockBasicInfo.code == f"{int(c):06d}"
+                            ).first()
                         except Exception:
                             pass
                     if basic_a and basic_a.code is not None:
@@ -689,7 +693,9 @@ async def import_watchlist(
                                 basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == clean_code).first()
                                 if not basic_a and clean_code.isdigit():
                                     try:
-                                        basic_a = db.query(StockBasicInfo).filter(StockBasicInfo.code == int(clean_code)).first()
+                                        basic_a = db.query(StockBasicInfo).filter(
+                                            StockBasicInfo.code == f"{int(clean_code):06d}"
+                                        ).first()
                                     except Exception:
                                         pass
                                 if basic_a:

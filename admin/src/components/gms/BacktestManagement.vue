@@ -47,11 +47,30 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="目标阈值(%)" prop="target_pct">
-              <el-select v-model="form.target_pct" placeholder="信号后20日内最高价达+X%" class="w-full">
-                <el-option label="+3%" :value="0.03" />
-                <el-option label="+5%" :value="0.05" />
-                <el-option label="+10%" :value="0.1" />
-              </el-select>
+              <div class="target-pct-row">
+                <el-select
+                  v-model="targetPctQuick"
+                  placeholder="快捷"
+                  clearable
+                  class="target-pct-quick"
+                  @change="applyTargetPctQuick"
+                >
+                  <el-option label="+3%" :value="3" />
+                  <el-option label="+5%" :value="5" />
+                  <el-option label="+10%" :value="10" />
+                </el-select>
+                <el-input-number
+                  v-model="targetPctPercent"
+                  :min="0.1"
+                  :max="100"
+                  :step="0.5"
+                  :precision="2"
+                  controls-position="right"
+                  class="target-pct-input"
+                  placeholder="输入涨幅，如 7.5"
+                />
+              </div>
+              <div class="text-gray-500 text-sm mt-1">与「信号后持有窗口内最高价相对下一日开盘价」比较；可快捷选常用值或直接输入百分比。</div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -153,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, inject, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import TaskDetail from './TaskDetail.vue'
@@ -178,6 +197,29 @@ const form = reactive({
   stock_code: '',
   stock_list: ''
 })
+
+/** 界面用百分比数字（5 = 5%），与 form.target_pct 同步 */
+const targetPctPercent = computed({
+  get: () => Math.round(form.target_pct * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v === undefined || v === null) return
+    const n = Number(v)
+    if (Number.isNaN(n)) return
+    form.target_pct = Math.min(1, Math.max(0.001, n / 100))
+  }
+})
+
+const targetPctQuick = ref<number | string | undefined>(undefined)
+
+function applyTargetPctQuick(v: number | string | undefined) {
+  if (v === '' || v == null) return
+  const n = Number(v)
+  if (Number.isNaN(n)) return
+  form.target_pct = Math.min(1, Math.max(0.001, n / 100))
+  nextTick(() => {
+    targetPctQuick.value = undefined
+  })
+}
 
 const rules = {
   start_date: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
@@ -223,6 +265,10 @@ async function createTask() {
   }
   if (form.stock_pool_mode === 'custom' && !form.stock_list?.trim()) {
     ElMessage.warning('请填写自定义股票列表（每行一个代码）')
+    return
+  }
+  if (form.target_pct < 0.001 || form.target_pct > 1) {
+    ElMessage.warning('目标阈值请在 0.1%～100% 之间（即 0.001～1）')
     return
   }
   creating.value = true
@@ -332,4 +378,8 @@ onMounted(() => refresh())
 <style scoped>
 .task-list-header { display: flex; gap: 12px; margin-bottom: 12px; }
 .w-full { width: 100%; }
+.target-pct-row { display: flex; gap: 8px; align-items: center; width: 100%; flex-wrap: wrap; }
+.target-pct-quick { width: 110px; flex-shrink: 0; }
+.target-pct-input { flex: 1; min-width: 140px; }
+.mt-1 { margin-top: 4px; }
 </style>

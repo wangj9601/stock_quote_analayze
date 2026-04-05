@@ -1,0 +1,47 @@
+{
+  "report_id": "6aaabb72-1889-4749-b907-7fe3c5c3ac08",
+  "task_id": "6aaabb72-1889-4749-b907-7fe3c5c3ac08",
+  "name": "GMS回测_002156_通富微电",
+  "created_at": "2026-04-05T12:37:14.149382Z",
+  "summary": {
+    "total_samples": 10,
+    "hit_count": 6,
+    "hit_rate": 0.6,
+    "target_pct": 0.08,
+    "horizon_days": 20,
+    "start_date": "2020-01-05",
+    "end_date": "2026-04-05",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；买入价为信号日之后下一交易日开盘价；同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。多只股票同批回测时，每个交易日、每个市场仅批量拉取一次该池在该市场的选股结果（性能优化）；全市场无固定池时仍按交易日扫描。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 6,
+        "hit": 4,
+        "hit_rate": 0.6666666666666666
+      },
+      "左侧": {
+        "total": 4,
+        "hit": 2,
+        "hit_rate": 0.5
+      }
+    },
+    "by_score_bucket": {
+      "[90,100]": {
+        "total": 1,
+        "hit": 0,
+        "hit_rate": 0.0
+      },
+      "[80,90)": {
+        "total": 5,
+        "hit": 4,
+        "hit_rate": 0.8
+      },
+      "[70,80)": {
+        "total": 4,
+        "hit": 2,
+        "hit_rate": 0.5
+      }
+    }
+  },
+  "details_path": "6aaabb72-1889-4749-b907-7fe3c5c3ac08.xlsx"
+}

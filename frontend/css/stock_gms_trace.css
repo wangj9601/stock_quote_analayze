@@ -205,6 +205,19 @@
     font-size: 14px;
 }
 
+.gms-bt-target-label {
+    flex-wrap: wrap;
+}
+
+.gms-bt-target-quick {
+    min-width: 72px;
+}
+
+.gms-bt-target-pct-input {
+    width: 88px;
+    min-width: 72px;
+}
+
 .gms-backtest-select,
 .gms-backtest-input-num {
     padding: 4px 8px;

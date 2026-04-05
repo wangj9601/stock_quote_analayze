@@ -35,13 +35,20 @@ def _get_stock_name(db: Session, code: str) -> str:
         if not info and c.isdigit():
             info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == c.zfill(5)).first()
         return (info.name or "").strip() if info else ""
-    # A股：code 可能存为整数
+    # A股：库中 code 为 text（如 000001）；PostgreSQL 不可与 int 直接比较，只使用字符串形式尝试
     clean = c[2:] if c.startswith(("SZ", "SH")) else c
-    for try_val in [clean, int(clean)] if clean.isdigit() else [clean]:
-        try:
-            info = db.query(StockBasicInfo).filter(StockBasicInfo.code == try_val).first()
-        except (ValueError, TypeError):
-            info = None
+    if clean.isdigit():
+        raw = [clean, clean.zfill(6), f"{int(clean):06d}"]
+        try_vals: List[str] = []
+        seen: set = set()
+        for x in raw:
+            if x not in seen:
+                seen.add(x)
+                try_vals.append(x)
+    else:
+        try_vals = [clean]
+    for try_val in try_vals:
+        info = db.query(StockBasicInfo).filter(StockBasicInfo.code == try_val).first()
         if info and info.name:
             return str(info.name).strip()
     return ""

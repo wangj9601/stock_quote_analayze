@@ -1,0 +1,42 @@
+{
+  "report_id": "365ce18f-f8ca-492e-aff5-cc1714a4687e",
+  "task_id": "365ce18f-f8ca-492e-aff5-cc1714a4687e",
+  "name": "GMS回测_000042_中洲控股",
+  "created_at": "2026-04-05T12:22:43.412004Z",
+  "summary": {
+    "total_samples": 5,
+    "hit_count": 3,
+    "hit_rate": 0.6,
+    "target_pct": 0.06,
+    "horizon_days": 20,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；买入价为信号日之后下一交易日开盘价；同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。多只股票同批回测时，每个交易日、每个市场仅批量拉取一次该池在该市场的选股结果（性能优化）；全市场无固定池时仍按交易日扫描。",
+    "by_buy_type": {
+      "左侧": {
+        "total": 3,
+        "hit": 2,
+        "hit_rate": 0.6666666666666666
+      },
+      "右侧": {
+        "total": 2,
+        "hit": 1,
+        "hit_rate": 0.5
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 3,
+        "hit": 2,
+        "hit_rate": 0.6666666666666666
+      },
+      "[80,90)": {
+        "total": 2,
+        "hit": 1,
+        "hit_rate": 0.5
+      }
+    }
+  },
+  "details_path": "365ce18f-f8ca-492e-aff5-cc1714a4687e.xlsx"
+}

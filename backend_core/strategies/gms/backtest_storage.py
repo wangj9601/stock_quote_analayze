@@ -637,6 +637,20 @@ def _write_gms_xlsx_sheet(ws: Any, fieldnames_zh: List[str], rows_zh: List[Dict[
         for row in range(2, ws.max_row + 1):
             ws.cell(row=row, column=code_col_idx).number_format = "@"
 
+    # 观察期内最大涨幅：存的是小数比例（如 0.0523），按百分比显示、保留两位小数
+    gain_header = "观察期内最大涨幅"
+    gain_col_idx = None
+    for i, h in enumerate(fieldnames_zh, start=1):
+        if h == gain_header:
+            gain_col_idx = i
+            break
+    if gain_col_idx and ws.max_row >= 2:
+        for row in range(2, ws.max_row + 1):
+            cell = ws.cell(row=row, column=gain_col_idx)
+            val = cell.value
+            if val is not None and val != "" and isinstance(val, (int, float)):
+                cell.number_format = "0.00%"
+
 
 def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
     """将明细写入 CSV：中文表头、按代码分组空行、A股区块在前、港股在后。"""
