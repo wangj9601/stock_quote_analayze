@@ -564,7 +564,7 @@ class ReportService:
                 error_message=None,
             )
 
-        def to_rows(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        def to_rows(data: List[Dict[str, Any]], default_trade_date: Optional[str]) -> List[Dict[str, Any]]:
             def format_volume_hand(v: Any) -> str:
                 """成交量/均量展示为手口径数值（不显示“手”字）。"""
                 if v is None or v == "":
@@ -605,11 +605,13 @@ class ReportService:
 
             rows = []
             for item in data:
+                # 日期列以历史行情交易日为准；若行内缺失，回退到该市场实际交易日（date_cn/date_hk），不使用运行当天
+                trade_date = (str(item.get("date", "")).strip()[:10]) or (default_trade_date or "")
                 rows.append({
                     "排名": item.get("rank"),
                     "股票代码": "\u2060" + str(item.get("code", "")),
                     "股票名称": (item.get("name") or "").strip(),
-                    "日期": item.get("date", ""),
+                    "日期": trade_date,
                     "当日成交量(手)": format_volume_hand(item.get("volume")),
                     "成交额(元)": format_amount(item.get("amount")),
                     "MAVOL5(手)": format_volume_hand(item.get("mavol5")),
@@ -623,8 +625,8 @@ class ReportService:
                 })
             return rows
 
-        rows_cn = to_rows(result_cn)
-        rows_hk = to_rows(result_hk)
+        rows_cn = to_rows(result_cn, date_cn)
+        rows_hk = to_rows(result_hk, date_hk)
 
         # 文件名里 report_date 已包含日期信息，避免 timestamp 再附带日期导致重复
         timestamp = datetime.now().strftime("%H%M%S")

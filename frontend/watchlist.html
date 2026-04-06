@@ -372,7 +372,10 @@
             </div>
             <div class="modal-body">
                 <div class="search-section">
-                    <input type="text" placeholder="输入股票代码或名称搜索" class="stock-search-input">
+                    <div class="stock-search-input-wrap">
+                        <input type="text" placeholder="输入股票代码或名称搜索" class="stock-search-input" autocomplete="off">
+                        <span class="add-stock-search-hint" hidden></span>
+                    </div>
                     <div class="search-suggestions">
                         <!-- 搜索建议将在这里显示 -->
                     </div>

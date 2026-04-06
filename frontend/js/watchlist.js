@@ -40,6 +40,8 @@ const WatchlistPage = {
     selectedGroup: 'default',
 
     currentView: 'grid',
+    searchResults: [],
+    activeSuggestionIndex: -1,
 
     // 修改 loadWatchlist 方法
     async loadWatchlist() {
@@ -218,7 +220,13 @@ const WatchlistPage = {
 
         // 搜索输入
         searchInput.addEventListener('input', (e) => {
+            // 输入变化后取消已选择状态，进入重新检索流程
+            this.selectedStock = null;
             this.searchStocks(e.target.value);
+        });
+        // 键盘：上下选择候选，回车两次完成添加
+        searchInput.addEventListener('keydown', async (e) => {
+            await this.handleSearchInputKeydown(e);
         });
 
         // 确认添加
@@ -391,6 +399,11 @@ const WatchlistPage = {
 
         const modal = document.getElementById('addStockModal');
         modal.classList.add('active');
+        const hint = modal.querySelector('.add-stock-search-hint');
+        if (hint) {
+            hint.textContent = '';
+            hint.hidden = true;
+        }
         modal.querySelector('.stock-search-input').focus();
     },
 
@@ -401,13 +414,68 @@ const WatchlistPage = {
         modal.querySelector('.stock-search-input').value = '';
         document.querySelector('.search-suggestions').style.display = 'none';
         this.selectedStock = null;
+        this.searchResults = [];
+        this.activeSuggestionIndex = -1;
         this._adding = false;
+        const hint = modal.querySelector('.add-stock-search-hint');
+        if (hint) {
+            hint.textContent = '';
+            hint.hidden = true;
+        }
+    },
+
+    /** 取输入中用于代码匹配的首段（去空白） */
+    normalizeCodeQueryToken(query) {
+        return String(query || '').trim().split(/\s+/)[0] || '';
+    },
+
+    /** 查询串与股票代码是否视为同一代码（含 A 股前导零与纯数字等价） */
+    codesMatchQueryAndStock(query, stockCode) {
+        const q = this.normalizeCodeQueryToken(query);
+        const c = String(stockCode || '').trim();
+        if (!q || !c) return false;
+        if (q === c) return true;
+        if (/^\d+$/.test(q) && /^\d+$/.test(c)) {
+            try {
+                return BigInt(q) === BigInt(c);
+            } catch {
+                return parseInt(q, 10) === parseInt(c, 10);
+            }
+        }
+        return false;
+    },
+
+    /** 输入框旁提示：完整唯一代码未选中时「按回车选中」，已选中后「再按回车添加」 */
+    updateAddStockSearchHints() {
+        const modal = document.getElementById('addStockModal');
+        const hint = modal && modal.querySelector('.add-stock-search-hint');
+        if (!hint || !modal || !modal.classList.contains('active')) return;
+        const input = modal.querySelector('.stock-search-input');
+        const q = input ? input.value : '';
+        if (this.selectedStock && this.selectedStock.code) {
+            hint.textContent = '再按回车添加';
+            hint.hidden = false;
+            return;
+        }
+        if (this.searchResults && this.searchResults.length === 1) {
+            const one = this.searchResults[0];
+            if (this.codesMatchQueryAndStock(q, one.code)) {
+                hint.textContent = '按回车选中';
+                hint.hidden = false;
+                return;
+            }
+        }
+        hint.textContent = '';
+        hint.hidden = true;
     },
 
     // 搜索股票（后端API）
     async searchStocks(query) {
         if (!query.trim()) {
+            this.searchResults = [];
+            this.activeSuggestionIndex = -1;
             document.querySelector('.search-suggestions').style.display = 'none';
+            this.updateAddStockSearchHints();
             return;
         }
         try {
@@ -426,6 +494,8 @@ const WatchlistPage = {
     // 渲染搜索结果
     renderSearchResults(results) {
         const container = document.querySelector('.search-suggestions');
+        this.searchResults = Array.isArray(results) ? results : [];
+        this.activeSuggestionIndex = this.searchResults.length > 0 ? 0 : -1;
         if (results.length === 0) {
             container.innerHTML = '<div class="suggestion-item">未找到相关股票</div>';
         } else {
@@ -442,10 +512,88 @@ const WatchlistPage = {
                     document.querySelector('.stock-search-input').value = `${item.dataset.code} ${item.dataset.name}`;
                     this.selectedStock = { code: item.dataset.code, name: item.dataset.name };
                     container.style.display = 'none';
+                    this.updateAddStockSearchHints();
+                });
+                item.addEventListener('mouseenter', () => {
+                    const items = Array.from(container.querySelectorAll('.suggestion-item'));
+                    const idx = items.indexOf(item);
+                    this.activeSuggestionIndex = idx;
+                    this.updateSuggestionHighlight();
                 });
             });
+            this.updateSuggestionHighlight();
         }
         container.style.display = 'block';
+        this.updateAddStockSearchHints();
+    },
+
+    updateSuggestionHighlight() {
+        const container = document.querySelector('.search-suggestions');
+        if (!container) return;
+        const items = container.querySelectorAll('.suggestion-item');
+        items.forEach((item, idx) => {
+            if (idx === this.activeSuggestionIndex) {
+                item.classList.add('active');
+                item.style.background = '#f0f7ff';
+            } else {
+                item.classList.remove('active');
+                item.style.background = '';
+            }
+        });
+    },
+
+    selectSuggestionByIndex(index) {
+        if (!Array.isArray(this.searchResults) || this.searchResults.length === 0) return false;
+        if (index < 0 || index >= this.searchResults.length) return false;
+        const stock = this.searchResults[index];
+        const input = document.querySelector('.stock-search-input');
+        const container = document.querySelector('.search-suggestions');
+        if (!stock || !input || !container) return false;
+        input.value = `${stock.code} ${stock.name}`;
+        this.selectedStock = { code: stock.code, name: stock.name };
+        container.style.display = 'none';
+        this.updateAddStockSearchHints();
+        return true;
+    },
+
+    async handleSearchInputKeydown(e) {
+        const container = document.querySelector('.search-suggestions');
+        const hasSuggestions = container && container.style.display !== 'none' && this.searchResults.length > 0;
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (!hasSuggestions) return;
+            e.preventDefault();
+            const total = this.searchResults.length;
+            if (total <= 0) return;
+            if (e.key === 'ArrowDown') {
+                this.activeSuggestionIndex = (this.activeSuggestionIndex + 1 + total) % total;
+            } else {
+                this.activeSuggestionIndex = (this.activeSuggestionIndex - 1 + total) % total;
+            }
+            this.updateSuggestionHighlight();
+            return;
+        }
+
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+
+        // 第一次回车：确认选中；第二次回车：执行添加
+        if (!this.selectedStock || !this.selectedStock.code) {
+            if (hasSuggestions) {
+                // 若仅有一条直接选中；多条优先用光标高亮项
+                let idx = this.activeSuggestionIndex;
+                if (this.searchResults.length === 1) idx = 0;
+                const ok = this.selectSuggestionByIndex(idx);
+                if (!ok && this.searchResults.length > 1) {
+                    CommonUtils.showToast('请先用上下方向键或鼠标选择股票', 'warning');
+                }
+            } else {
+                CommonUtils.showToast('请先选择要添加的股票', 'warning');
+            }
+            return;
+        }
+
+        await this.confirmAddStock();
     },
 
     // 修改 confirmAddStock 方法
