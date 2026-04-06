@@ -167,6 +167,7 @@ class StockGMSTracePage {
             if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
             if (type === 'pct') return (v * 100).toFixed(2) + '%';
             if (type === 'int') return String(Math.round(v));
+            if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
             return typeof v === 'number' ? v.toFixed(4) : String(v);
         };
         return `
@@ -202,7 +203,9 @@ class StockGMSTracePage {
                     <strong>计算指标细项</strong>
                     <table class="gms-weight-table gms-indicators-table">
                         <tbody>
-                            <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'num')}</td><td>周期均价</td></tr>
+                            <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格${sd.d1_date ? '，交易日期 ' + sd.d1_date : ''}</td></tr>
+                            <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格${sd.d20_date ? '，交易日期 ' + sd.d20_date : ''}</td></tr>
+                            <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
                             <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
                             <tr><td>|Δ/d| (引力粘合)</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(Math.abs(sd.delta / sd.d), 'pct') : '--')}</td><td>宏观位移相对均价的绝对值</td></tr>
                             <tr><td>Δ/d₂₀ (偏离率)</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>现价相对周期末价张力</td></tr>

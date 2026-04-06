@@ -1,0 +1,47 @@
+{
+  "report_id": "336bc416-96c2-45c2-9053-f56f02357bbb",
+  "task_id": "336bc416-96c2-45c2-9053-f56f02357bbb",
+  "name": "GMS回测_603966_法兰泰克",
+  "created_at": "2026-04-06T13:03:50.858757Z",
+  "summary": {
+    "total_samples": 12,
+    "hit_count": 6,
+    "hit_rate": 0.5,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2021-04-01",
+    "end_date": "2026-04-03",
+    "market": "cn",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；买入价为信号日之后下一交易日开盘价；同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。多只股票同批回测时，每个交易日、每个市场仅批量拉取一次该池在该市场的选股结果（性能优化）；全市场无固定池时仍按交易日扫描。",
+    "by_buy_type": {
+      "左侧": {
+        "total": 6,
+        "hit": 5,
+        "hit_rate": 0.8333333333333334
+      },
+      "右侧": {
+        "total": 6,
+        "hit": 1,
+        "hit_rate": 0.16666666666666666
+      }
+    },
+    "by_score_bucket": {
+      "[70,80)": {
+        "total": 5,
+        "hit": 3,
+        "hit_rate": 0.6
+      },
+      "[90,100]": {
+        "total": 6,
+        "hit": 2,
+        "hit_rate": 0.3333333333333333
+      },
+      "[80,90)": {
+        "total": 1,
+        "hit": 1,
+        "hit_rate": 1.0
+      }
+    }
+  },
+  "details_path": "336bc416-96c2-45c2-9053-f56f02357bbb.xlsx"
+}

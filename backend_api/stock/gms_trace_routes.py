@@ -21,6 +21,52 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stock", tags=["GMS信号追溯"])
 
+
+def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
+    """从 mean_frequency_resonance_indicators 合并 d1、d20 及对应交易日期，与指标表一致。"""
+    code = row_dict.get("code")
+    date_str = str(row_dict.get("date", ""))[:10]
+    market_type = row_dict.get("market_type", "CN")
+    if not code or not date_str:
+        return row_dict
+    row = (
+        db.query(MeanFrequencyResonanceIndicators)
+        .filter(
+            MeanFrequencyResonanceIndicators.code == code,
+            MeanFrequencyResonanceIndicators.market_type == market_type,
+            MeanFrequencyResonanceIndicators.date == date_str,
+        )
+        .first()
+    )
+    if not row:
+        return row_dict
+
+    out = dict(row_dict)
+
+    def _norm_date(v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s[:10] if len(s) >= 10 else s
+
+    if getattr(row, "d1", None) is not None:
+        try:
+            out["d1"] = float(row.d1)
+        except (TypeError, ValueError):
+            pass
+    if getattr(row, "d20", None) is not None:
+        try:
+            out["d20"] = float(row.d20)
+        except (TypeError, ValueError):
+            pass
+    vd = getattr(row, "d1_date", None)
+    if vd is not None:
+        out["d1_date"] = _norm_date(vd)
+    vd = getattr(row, "d20_date", None)
+    if vd is not None:
+        out["d20_date"] = _norm_date(vd)
+    return out
+
 try:
     from backend_core.strategies.gms.data_loader import GMSDataLoader
     from backend_core.strategies.gms.strategy_engine import GMSStrategyEngine
@@ -389,9 +435,10 @@ async def get_gms_signal_trace(
             }
 
         data = [to_dict(r) for r in rows]
-        # 对缺失得分明细或计算指标的历史记录做 enrichment
+        # 合并指标表中的 d1/d20 与交易日期；再对缺失得分明细的历史记录做 enrichment
         for i, item in enumerate(data):
-            data[i] = _enrich_trace_row_score_detail(db, item, config)
+            merged = _merge_mfr_d1_d20_into_trace_dict(db, item)
+            data[i] = _enrich_trace_row_score_detail(db, merged, config)
         return JSONResponse({
             "success": True,
             "data": data,
