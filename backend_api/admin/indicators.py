@@ -12,14 +12,36 @@ import asyncio
 import traceback
 
 from backend_api.models import (
-    MAIndicators, MACDIndicators, RSIIndicators, KDJIndicators, BOLLIndicators, 
-    MAVOLIndicators, MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK, User,
+    MAIndicators, MACDIndicators, RSIIndicators, KDJIndicators, BOLLIndicators,
+    MAVOLIndicators, InfiniteCostIndicators, MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK, User,
     StockBasicInfo
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_admin, get_current_user
 
 router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
+
+
+def _historical_quotes_to_dataframe(items):
+    """从 ORM 行情列表构造 DataFrame；含 turnover_rate 供无穷成本均线（CYC∞）使用。"""
+    import pandas as pd
+
+    return pd.DataFrame(
+        [
+            {
+                "date": item.date,
+                "open": item.open,
+                "high": item.high,
+                "low": item.low,
+                "close": item.close,
+                "volume": item.volume,
+                "amount": getattr(item, "amount", None),
+                "turnover_rate": getattr(item, "turnover_rate", None),
+            }
+            for item in items
+        ]
+    )
+
 
 def paginate_query(query, page, page_size):
     total = query.count()
@@ -46,6 +68,49 @@ def paginate_query(query, page, page_size):
         "page": page,
         "page_size": page_size
     }
+
+
+def _persist_icost_for_dataframe(
+    db: Session,
+    code: str,
+    market_type: str,
+    historical_df,
+    *,
+    force_replace: bool = False,
+) -> int:
+    """将无穷成本均线计算结果写入 icost_indicators。
+
+    force_replace：为 True 时先删除该股该市场下已有 icost 全历史再写入，避免残留旧日期/旧算法结果（管理端生成建议 True）。
+    """
+    from backend_core.utils.infinite_cost_calculator import calculate_infinite_cost_for_dataframe, icost_rows_for_db
+
+    icost_df = calculate_infinite_cost_for_dataframe(historical_df)
+    if icost_df.empty:
+        return 0
+    rows = icost_rows_for_db(icost_df)
+    if force_replace:
+        db.query(InfiniteCostIndicators).filter(
+            InfiniteCostIndicators.code == code,
+            InfiniteCostIndicators.market_type == market_type,
+        ).delete(synchronize_session=False)
+        db.flush()
+    n = 0
+    for row in rows:
+        if not row.get("date"):
+            continue
+        db_ic = InfiniteCostIndicators(
+            code=code,
+            date=row["date"],
+            market_type=market_type,
+            ic_price=row.get("ic_price"),
+            cum_amount=row.get("cum_amount"),
+            cum_volume=row.get("cum_volume"),
+        )
+        db.merge(db_ic)
+        n += 1
+    db.commit()
+    return n
+
 
 @router.get("/ma")
 async def get_ma_indicators(
@@ -252,6 +317,42 @@ async def get_mavol_indicators(
         "page": page,
         "page_size": page_size
     }
+
+
+@router.get("/icost")
+async def get_icost_indicators(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    code: Optional[str] = None,
+    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """查询无穷成本均线（累计成交均价）指标"""
+    query = db.query(InfiniteCostIndicators)
+
+    if code:
+        query = query.filter(InfiniteCostIndicators.code == code)
+    if market_type:
+        query = query.filter(InfiniteCostIndicators.market_type == market_type)
+    if start_date:
+        query = query.filter(InfiniteCostIndicators.date >= start_date)
+    if end_date:
+        query = query.filter(InfiniteCostIndicators.date <= end_date)
+
+    query = query.order_by(desc(InfiniteCostIndicators.date), InfiniteCostIndicators.code)
+    result = paginate_query(query, page, page_size)
+
+    return {
+        "success": True,
+        "data": result["items"],
+        "total": result["total"],
+        "page": page,
+        "page_size": page_size,
+    }
+
 
 @router.get("/pvfrs")
 async def get_pvfrs_indicators(
@@ -548,15 +649,8 @@ async def generate_batch_watchlist_indicators(
                         HistoricalQuotesHK.code == stock_code
                     ).order_by(HistoricalQuotesHK.date).all()
                 
-                # 转换为DataFrame
-                historical_df = pd.DataFrame([{
-                    'date': item.date,
-                    'open': item.open,
-                    'high': item.high,
-                    'low': item.low,
-                    'close': item.close,
-                    'volume': item.volume
-                } for item in historical_data])
+                # 转换为DataFrame（含成交额、换手率，供 icost 等）
+                historical_df = _historical_quotes_to_dataframe(historical_data)
                 
                 if historical_df.empty:
                     results["failed_stocks"] += 1
@@ -732,6 +826,12 @@ async def generate_batch_watchlist_indicators(
                                     continue
                             db.commit()
                             results["indicator_results"][indicator]["success_count"] += 1
+
+                        elif indicator == "icost":
+                            n = _persist_icost_for_dataframe(
+                                db, stock_code, market_type, historical_df, force_replace=True
+                            )
+                            results["indicator_results"][indicator]["success_count"] += 1
                             
                     except Exception as e:
                         print(f"Error generating {indicator} for {stock_code}: {str(e)}")
@@ -854,15 +954,8 @@ async def generate_batch_all_a_shares_indicators(
                     HistoricalQuotes.code == stock_code
                 ).order_by(HistoricalQuotes.date).all()
                 
-                # 转换为DataFrame
-                historical_df = pd.DataFrame([{
-                    'date': item.date,
-                    'open': item.open,
-                    'high': item.high,
-                    'low': item.low,
-                    'close': item.close,
-                    'volume': item.volume
-                } for item in historical_data])
+                # 转换为DataFrame（含成交额、换手率，供 icost 等）
+                historical_df = _historical_quotes_to_dataframe(historical_data)
                 
                 if historical_df.empty:
                     results["failed_stocks"] += 1
@@ -1033,6 +1126,12 @@ async def generate_batch_all_a_shares_indicators(
                                     continue
                             db.commit()
                             results["indicator_results"][indicator]["success_count"] += 1
+
+                        elif indicator == "icost":
+                            _persist_icost_for_dataframe(
+                                db, stock_code, market_type, historical_df, force_replace=True
+                            )
+                            results["indicator_results"][indicator]["success_count"] += 1
                             
                     except Exception as e:
                         logger.debug(f"Error generating {indicator} for {stock_code}: {str(e)}")
@@ -1116,15 +1215,8 @@ async def generate_indicators(
                 HistoricalQuotesHK.code == code
             ).order_by(HistoricalQuotesHK.date).all()
         
-        # 转换为DataFrame
-        historical_data = pd.DataFrame([{
-            'date': item.date,
-            'open': item.open,
-            'high': item.high,
-            'low': item.low,
-            'close': item.close,
-            'volume': item.volume
-        } for item in historical_data])
+        # 转换为DataFrame（含成交额、换手率，供 icost 等指标使用）
+        historical_data = _historical_quotes_to_dataframe(historical_data)
         
         if historical_data.empty:
             return {
@@ -1294,19 +1386,25 @@ async def generate_indicators(
                             db.merge(db_pvfrs)
                     db.commit()
                     results[indicator] = {"success": True, "count": len([x for x in pvfrs_data if x is not None])}
-                    
+
+                elif indicator == "icost":
+                    n = _persist_icost_for_dataframe(
+                        db, code, market_type, historical_data, force_replace=True
+                    )
+                    results[indicator] = {"success": True, "count": n}
+
             except Exception as e:
                 db.rollback()
                 results[indicator] = {"success": False, "message": str(e)}
                 print(f"Error generating {indicator} for {code}: {str(e)}")
                 print(traceback.format_exc())
-        
+
         return {
             "success": True,
             "message": f"成功为股票 {code} 生成指标数据",
             "data": results
         }
-        
+
     except Exception as e:
         db.rollback()
         print(f"Error in generate_indicators: {str(e)}")

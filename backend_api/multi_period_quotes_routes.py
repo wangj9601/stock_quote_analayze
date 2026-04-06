@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from backend_api.database import get_db
+from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
 from fastapi.responses import JSONResponse, Response
 import logging
 import pandas as pd
@@ -34,7 +35,11 @@ def get_historical_quotes_multi_period(
     keyword: Optional[str] = Query(None, description="搜索关键词(股票代码或名称)"),
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
-    db: Session = Depends(get_db)
+    fill_turnover: bool = Query(
+        True,
+        description="仅日线：对空换手率尝试 akshare 回填 historical_quotes",
+    ),
+    db: Session = Depends(get_db),
 ):
     """
     获取A股多周期历史行情数据
@@ -97,20 +102,39 @@ def get_historical_quotes_multi_period(
         # 格式化数据
         data = []
         for row in rows:
+            # 注意：价量等为 0 时不能用 `if row[i]`，否则会被误判为 None，导致换手率等整列“空”
+            def _f(idx: int, nd: Optional[int] = None):
+                v = row[idx]
+                if v is None:
+                    return None
+                try:
+                    x = float(v)
+                    return round(x, nd) if nd is not None else x
+                except (TypeError, ValueError):
+                    return None
+
+            d = row[2]
+            date_out = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
             data.append({
                 'code': row[0],
                 'name': row[1],
-                'date': row[2],
-                'open': round(float(row[3]), 2) if row[3] else None,
-                'high': round(float(row[4]), 2) if row[4] else None,
-                'low': round(float(row[5]), 2) if row[5] else None,
-                'close': round(float(row[6]), 2) if row[6] else None,
-                'volume': round(float(row[7]), 2) if row[7] else None,
-                'amount': round(float(row[8]), 2) if row[8] else None,
-                'change_percent': round(float(row[9]), 2) if row[9] else None,
-                'turnover_rate': round(float(row[10]), 4) if row[10] is not None else None,
+                'date': date_out,
+                'open': _f(3, 2),
+                'high': _f(4, 2),
+                'low': _f(5, 2),
+                'close': _f(6, 2),
+                'volume': _f(7, 2),
+                'amount': _f(8, 2),
+                'change_percent': _f(9, 2),
+                'turnover_rate': _f(10, 4),
             })
-        
+
+        if period == "daily" and fill_turnover and data:
+            try:
+                backfill_missing_turnover_a_share(data, db, start_date=start_date, end_date=end_date)
+            except Exception as ex:
+                logger.warning("multi-period 日线换手率回填失败: %s", ex)
+
         logger.info(f"查询{period}数据成功: 共{total}条, 返回{len(data)}条")
         
         return JSONResponse({

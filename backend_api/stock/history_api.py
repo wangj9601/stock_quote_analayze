@@ -3,6 +3,10 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from backend_api.database import get_db
+from backend_api.utils.turnover_backfill import (
+    backfill_missing_turnover_a_share,
+    backfill_missing_turnover_hk,
+)
 from typing import List, Optional
 import io
 import csv
@@ -322,103 +326,23 @@ def get_stock_history(
         traceback.print_exc()
         return {"items": [], "total": 0}
 
-    # 遍历items，如果换手率为None，则用akshare查询并回写数据库（支持A股和港股）
-    try:
-        import akshare as ak
-    except ImportError:
-        ak = None  # 如果akshare未安装，后面查询会报错
-
-    # 先判断是否存在换手率为None或0的记录
-    need_fill_items = [item for item in items if item.get("turnover_rate") is None or item.get("turnover_rate") == 0]
-    if ak and need_fill_items and start_date and end_date:
-        # 统一从前台参数获取start_date与end_date，批量查询
-        # start_date, end_date 已在上文Query参数中拿到
+    # 换手率为空或 0 时，用 akshare 回填并写库（与 /api/quotes/history 共用逻辑）
+    need_fill_items = [
+        item for item in items
+        if item.get("turnover_rate") is None or item.get("turnover_rate") == 0
+    ]
+    if need_fill_items:
         try:
-            # akshare日期要求为yyyymmdd字符串
-            code = need_fill_items[0]["code"]
-            
             if is_hk_data:
-                # 港股：使用stock_hk_hist接口
-                hist_df = ak.stock_hk_hist(symbol=code, period='daily', start_date=start_date.replace("-", ""), end_date=end_date.replace("-", ""), adjust="")
-                print(f"[港股] akshare查询结果: {hist_df}")
-                table_name = "historical_quotes_hk"
+                backfill_missing_turnover_hk(
+                    items, db, start_date=start_date_fmt, end_date=end_date_fmt
+                )
             else:
-                # A股：优先使用 stock_zh_a_hist，失败时回退到 stock_zh_a_daily
-                table_name = "historical_quotes"
-                start_ymd = start_date.replace("-", "")
-                end_ymd = end_date.replace("-", "")
-                hist_df = None
-                try:
-                    hist_df = ak.stock_zh_a_hist(symbol=code, start_date=start_ymd, end_date=end_ymd, adjust="")
-                    print(f"[A股] stock_zh_a_hist 查询结果: {hist_df}")
-                except Exception as e_hist:
-                    print(f"[A股] stock_zh_a_hist 失败 ({e_hist})，改用 stock_zh_a_daily")
-                    try:
-                        # stock_zh_a_daily 需要 sh/sz/bj 前缀的 symbol
-                        _c = code.lstrip("0") or "0"
-                        if code.startswith("6"):
-                            _symbol = "sh" + code
-                        elif code.startswith(("0", "3")):
-                            _symbol = "sz" + code
-                        else:
-                            _symbol = "bj" + code
-                        _daily_df = ak.stock_zh_a_daily(symbol=_symbol, start_date=start_ymd, end_date=end_ymd, adjust="")
-                        if _daily_df is not None and not _daily_df.empty and "date" in _daily_df.columns and "turnover" in _daily_df.columns:
-                            hist_df = pd.DataFrame()
-                            hist_df["日期"] = pd.to_datetime(_daily_df["date"]).dt.strftime("%Y-%m-%d")
-                            # 换手率：daily 返回小数(如 0.001465 表示 0.1465%)，转为与 hist 一致的百分比数值
-                            hist_df["换手率"] = _daily_df["turnover"].astype(float) * 100
-                            print(f"[A股] stock_zh_a_daily 查询结果(已统一列名): {hist_df}")
-                        else:
-                            hist_df = _daily_df  # 可能为空，后面会按 empty 处理
-                    except Exception as e_daily:
-                        print(f"[A股] stock_zh_a_daily 也失败: {e_daily}")
-                        hist_df = pd.DataFrame()
-
-            # 将日期设为index，便于查找
-            if not hist_df.empty and "换手率" in hist_df.columns and "日期" in hist_df.columns:
-                # 处理日期格式：akshare返回的日期可能是YYYYMMDD或YYYY-MM-DD格式
-                hist_df["日期"] = hist_df["日期"].astype(str)
-                # 统一转换为YYYY-MM-DD格式
-                date_formatted = []
-                for d in hist_df["日期"]:
-                    if len(d) == 8 and d.isdigit():
-                        date_formatted.append(f"{d[:4]}-{d[4:6]}-{d[6:8]}")
-                    else:
-                        date_formatted.append(d)
-                hist_df["日期"] = date_formatted
-                hist_df.set_index("日期", inplace=True)
-                
-                for item in need_fill_items:
-                    code = item["code"]
-                    date = item["date"]  # 格式已为yyyy-mm-dd
-                    q_date = date  # 结果集日期已经是yyyy-mm-dd, 无需格式化
-                    turnover = None
-                    try:
-                        # 从结果集中查找对应日期
-                        if q_date in hist_df.index and not pd.isna(hist_df.loc[q_date, "换手率"]):
-                            val = hist_df.loc[q_date, "换手率"]
-                            if isinstance(val, str):
-                                val = val.replace("%", "")
-                            turnover = float(val)
-                            item["turnover_rate"] = turnover
-                            # 回写数据库
-                            db.execute(
-                                text(
-                                    f"UPDATE {table_name} SET turnover_rate = :turnover_rate WHERE code = :code AND date = :date"
-                                ),
-                                {"turnover_rate": turnover, "code": code, "date": date}
-                            )
-                            db.commit()
-                            # 记录换手率更新的成功次数
-                            if not hasattr(get_stock_history, "_turnover_update_count"):
-                                get_stock_history._turnover_update_count = 0
-                            get_stock_history._turnover_update_count += 1
-                            print(f"成功更新【换手率】次数：{get_stock_history._turnover_update_count}, code={code}, date={date}, turnover={turnover}")
-                    except Exception as ex:
-                        print(f"通过akshare批量补充换手率失败: code={code}, date={date}, error={str(ex)}")
+                backfill_missing_turnover_a_share(
+                    items, db, start_date=start_date_fmt, end_date=end_date_fmt
+                )
         except Exception as e:
-            print(f"调用akshare接口批量获取数据异常: {e}")
+            print(f"[get_stock_history] 换手率回填异常: {e}")
             import traceback
             traceback.print_exc()
 

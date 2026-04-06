@@ -69,6 +69,7 @@ try:
         RSIIndicators = getattr(models_module, 'RSIIndicators', None)
         BOLLIndicators = getattr(models_module, 'BOLLIndicators', None)
         MAVOLIndicators = getattr(models_module, 'MAVOLIndicators', None)
+        InfiniteCostIndicators = getattr(models_module, 'InfiniteCostIndicators', None)
         QuoteData = getattr(models_module, 'QuoteData', None)
         QuoteDataCreate = getattr(models_module, 'QuoteDataCreate', None)
         QuoteDataInDB = getattr(models_module, 'QuoteDataInDB', None)
@@ -147,6 +148,7 @@ except Exception as e:
     RSIIndicators = None
     BOLLIndicators = None
     MAVOLIndicators = None
+    InfiniteCostIndicators = None
     QuoteData = None
     QuoteDataCreate = None
     QuoteDataInDB = None
@@ -227,6 +229,7 @@ __all__ = [
     'RSIIndicators',
     'BOLLIndicators',
     'MAVOLIndicators',
+    'InfiniteCostIndicators',
     'QuoteData',
     'QuoteDataCreate',
     'QuoteDataInDB',

@@ -590,6 +590,20 @@ class MAVOLIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class InfiniteCostIndicators(Base):
+    """无穷成本均线 ic_price：有换手率时按文档 CYC∞ 递归；否则退化为累计成交额/累计成交量（全历史 VWAP）。
+    cum_amount/cum_volume 为审计用累计额与股数；与通达信筹码 COST 不等价。行情 volume 为手时计算先×100。"""
+
+    __tablename__ = "icost_indicators"
+    code = Column(String, primary_key=True)
+    date = Column(String, primary_key=True)
+    market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
+    ic_price = Column(Float, nullable=True)
+    cum_amount = Column(Float, nullable=True)
+    cum_volume = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class MeanFrequencyResonanceIndicators(Base):
     """均值频率共振量化交易指标数据表（A股和港股共用）"""
     __tablename__ = 'mean_frequency_resonance_indicators'

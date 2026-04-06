@@ -1062,6 +1062,7 @@ async def get_kline_hist(
                     if period_rows:
                         for row in period_rows:
                             date_str = row[1].strftime('%Y-%m-%d') if hasattr(row[1], 'strftime') else str(row[1])
+                            # SELECT: code,date,open,close,high,low,volume,amount,change_percent,change,amplitude,turnover_rate
                             result.append({
                                 "date": date_str,
                                 "code": row[0],
@@ -1071,10 +1072,10 @@ async def get_kline_hist(
                                 "low": fmt(row[5]),
                                 "volume": int(row[6]) if row[6] is not None else None,
                                 "amount": fmt(row[7]),
-                                "amplitude": fmt(row[9]),
                                 "pct_chg": fmt(row[8]),
                                 "change": fmt(row[9]),
-                                "turnover": fmt(row[10]),
+                                "amplitude": fmt(row[10]),
+                                "turnover": fmt(row[11]),
                             })
                         print(f"[kline_hist] 从周期表{table_name}返回{len(result)}条数据")
                         return JSONResponse({"success": True, "data": result})

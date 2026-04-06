@@ -124,6 +124,7 @@
                       <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
                       <el-checkbox value="boll">BOLL布林带</el-checkbox>
                       <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                      <el-checkbox value="icost">无穷成本均线</el-checkbox>
                     </el-checkbox-group>
                     <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
                   </el-form-item>
@@ -214,6 +215,7 @@
                       <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
                       <el-checkbox value="boll">BOLL布林带</el-checkbox>
                       <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                      <el-checkbox value="icost">无穷成本均线</el-checkbox>
                     </el-checkbox-group>
                     <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
                   </el-form-item>
@@ -293,6 +295,7 @@
                       <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
                       <el-checkbox value="boll">BOLL布林带</el-checkbox>
                       <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                      <el-checkbox value="icost">无穷成本均线</el-checkbox>
                     </el-checkbox-group>
                     <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
                   </el-form-item>
@@ -414,6 +417,7 @@
                       <el-checkbox value="rsi">RSI相对强弱指标</el-checkbox>
                       <el-checkbox value="boll">BOLL布林带</el-checkbox>
                       <el-checkbox value="pvfrs">PVFRS指标</el-checkbox>
+                      <el-checkbox value="icost">无穷成本均线</el-checkbox>
                     </el-checkbox-group>
                     <div class="text-sm text-gray-500 mt-1">选择需要同时生成的技术指标数据</div>
                   </el-form-item>
@@ -707,6 +711,7 @@
                           <el-col :span="8"><el-checkbox value="kdj">KDJ (随机指标)</el-checkbox></el-col>
                           <el-col :span="8"><el-checkbox value="rsi">RSI (相对强弱指标)</el-checkbox></el-col>
                           <el-col :span="8"><el-checkbox value="boll">BOLL (布林线)</el-checkbox></el-col>
+                          <el-col :span="8"><el-checkbox value="icost">无穷成本均线</el-checkbox></el-col>
                         </el-row>
                       </el-checkbox-group>
                     </div>
@@ -1075,7 +1080,7 @@ const hkFileLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
 // 计算属性
-const allIndicators = ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'pvfrs']
+const allIndicators = ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'pvfrs', 'icost']
 
 // 确保 indicators 始终是数组的计算属性
 const safeIndicators = computed({

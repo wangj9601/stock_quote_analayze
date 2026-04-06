@@ -527,15 +527,20 @@ class AkshareDataCollector:
             })
             
             data = result.fetchall()
+            only_dates = set(incremental_dates) if incremental_dates else None
+
             if not data:
-                logger.warning(f"股票 {stock_code} 没有历史数据，无法生成指标")
+                if 'icost' in indicators:
+                    self._generate_icost_indicators(
+                        stock_code, end_date, do_commit=do_commit, only_dates=only_dates, market=market
+                    )
+                else:
+                    logger.warning(f"股票 {stock_code} 没有历史数据，无法生成指标")
                 return
             
             df = pd.DataFrame(data, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
             df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
-            
-            only_dates = set(incremental_dates) if incremental_dates else None
 
             if 'ma' in indicators:
                 self._generate_ma_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
@@ -551,6 +556,8 @@ class AkshareDataCollector:
                 self._generate_boll_indicators(stock_code, df, do_commit=do_commit, only_dates=only_dates, market_type=market_type_val)
             if 'pvfrs' in indicators:
                 self._generate_pvfrs_indicators(stock_code, query_start, end_date, do_commit=do_commit, only_dates=only_dates, market=market)
+            if 'icost' in indicators:
+                self._generate_icost_indicators(stock_code, end_date, do_commit=do_commit, only_dates=only_dates, market=market)
             
             if do_commit:
                 logger.info(f"股票 {stock_code} 指标生成完成")
@@ -662,6 +669,7 @@ class AkshareDataCollector:
             'rsi': 'rsi_indicators',
             'boll': 'boll_indicators',
             'pvfrs': 'mean_frequency_resonance_indicators',
+            'icost': 'icost_indicators',
         }
         for key in indicators:
             tbl = table_map.get(key)
@@ -699,6 +707,7 @@ class AkshareDataCollector:
             'rsi': 'rsi_indicators',
             'boll': 'boll_indicators',
             'pvfrs': 'mean_frequency_resonance_indicators',
+            'icost': 'icost_indicators',
         }
         uniq_days = sorted(set(dates))
         for key in indicators:
@@ -890,6 +899,71 @@ class AkshareDataCollector:
                 logger.info(f"股票 {stock_code} BOLL指标生成完成")
         except Exception as e:
             logger.error(f"生成股票 {stock_code} BOLL指标失败: {e}")
+            if do_commit:
+                self.session.rollback()
+
+    def _generate_icost_indicators(
+        self,
+        stock_code: str,
+        end_date: str,
+        do_commit: bool = True,
+        only_dates: Optional[set] = None,
+        market: str = 'CN',
+    ):
+        """无穷成本均线：自该股最早行情至 end_date 的累计成交额/成交量；仅写入 only_dates（增量）或全部。"""
+        try:
+            from backend_core.utils.infinite_cost_calculator import calculate_infinite_cost_for_dataframe, icost_rows_for_db
+
+            source_table = "historical_quotes_hk" if market == 'HK' else "historical_quotes"
+            market_type = 'HK' if market == 'HK' else 'CN'
+
+            result = self.session.execute(
+                text(f"""
+                SELECT date, open, high, low, close, volume, amount, turnover_rate
+                FROM {source_table}
+                WHERE code = :stock_code AND date <= :end_date
+                ORDER BY date
+            """),
+                {'stock_code': stock_code, 'end_date': end_date},
+            )
+            rows = result.fetchall()
+            if not rows:
+                return
+            df = pd.DataFrame(rows, columns=['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'turnover_rate'])
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date')
+            icost_df = calculate_infinite_cost_for_dataframe(df)
+            if icost_df.empty:
+                return
+            db_rows = icost_rows_for_db(icost_df)
+            for row in db_rows:
+                d = row.get('date') or ''
+                if only_dates is not None and d not in only_dates:
+                    continue
+                data = {
+                    'code': stock_code,
+                    'date': d,
+                    'market_type': market_type,
+                    'ic_price': row.get('ic_price'),
+                    'cum_amount': row.get('cum_amount'),
+                    'cum_volume': row.get('cum_volume'),
+                }
+                self.session.execute(
+                    text("""
+                    INSERT INTO icost_indicators (code, date, market_type, ic_price, cum_amount, cum_volume)
+                    VALUES (:code, :date, :market_type, :ic_price, :cum_amount, :cum_volume)
+                    ON CONFLICT (code, date, market_type) DO UPDATE SET
+                        ic_price = EXCLUDED.ic_price,
+                        cum_amount = EXCLUDED.cum_amount,
+                        cum_volume = EXCLUDED.cum_volume
+                """),
+                    data,
+                )
+            if do_commit:
+                self.session.commit()
+                logger.info(f"股票 {stock_code} 无穷成本均线(icost)生成完成")
+        except Exception as e:
+            logger.error(f"生成股票 {stock_code} icost 指标失败: {e}")
             if do_commit:
                 self.session.rollback()
     

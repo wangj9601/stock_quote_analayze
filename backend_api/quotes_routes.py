@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func, or_
@@ -17,8 +18,36 @@ from models import (
     HistoricalQuotesHK
 )
 from backend_core.data_collectors.akshare.hk_historical_import_from_file import complete_hk_change_fields
+from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
+_logger = logging.getLogger(__name__)
+
+
+def _historical_quotes_cn_to_api(row: HistoricalQuotes) -> dict:
+    """A 股 historical_quotes 序列化（显式字段，含 turnover_rate），供管理端/前端与 ORM 一致。"""
+    d = row.date
+    date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+    return {
+        "code": row.code,
+        "ts_code": row.ts_code,
+        "name": row.name,
+        "market": row.market,
+        "date": date_str,
+        "open": row.open,
+        "high": row.high,
+        "low": row.low,
+        "close": row.close,
+        "pre_close": row.pre_close,
+        "volume": row.volume,
+        "amount": row.amount,
+        "amplitude": row.amplitude,
+        "change_percent": row.change_percent,
+        "change": row.change,
+        "turnover_rate": row.turnover_rate,
+        "collected_source": row.collected_source,
+        "collected_date": row.collected_date.isoformat() if row.collected_date and hasattr(row.collected_date, "isoformat") else None,
+    }
 
 
 def _historical_quotes_hk_to_api(row: HistoricalQuotesHK) -> dict:
@@ -146,7 +175,11 @@ def get_historical_quotes(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     keyword: Optional[str] = None,
-    db: Session = Depends(get_db)
+    fill_turnover: bool = Query(
+        True,
+        description="对换手率为空的记录尝试用 akshare 拉取并回写 historical_quotes（与单股历史页一致）",
+    ),
+    db: Session = Depends(get_db),
 ):
     query = db.query(HistoricalQuotes)
     
@@ -171,9 +204,16 @@ def get_historical_quotes(
     query = query.order_by(desc(HistoricalQuotes.date))
     
     result = paginate_query(query, page, size)
-    
+
+    out = [_historical_quotes_cn_to_api(item) for item in result["items"]]
+    if fill_turnover and out:
+        try:
+            backfill_missing_turnover_a_share(out, db, start_date=start_date, end_date=end_date)
+        except Exception as e:
+            _logger.warning("A股历史行情换手率回填失败（仍返回库内数据）: %s", e)
+
     return {
-        "items": [item.__dict__ for item in result["items"]],
+        "items": out,
         "total": result["total"],
         "page": page,
         "size": size

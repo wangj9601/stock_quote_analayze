@@ -456,6 +456,60 @@
             </div>
           </div>
         </el-tab-pane>
+
+        <!-- 无穷成本均线：有换手率为 CYC∞；否则为累计 VWAP（非通达信筹码 COST） -->
+        <el-tab-pane label="无穷成本均线" name="icost">
+          <div class="tab-content">
+            <p class="text-sm text-gray-500 mb-2">
+              口径：自该股最早行情日起的累计成交额÷累计成交量（全历史 VWAP）；缺成交额时用典型价×成交量近似。
+            </p>
+            <div class="filter-section">
+              <el-row :gutter="16" align="middle">
+                <el-col :span="6">
+                  <el-input v-model="filters.code" placeholder="股票代码" clearable @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
+                    <el-option label="A股 (CN)" value="CN" />
+                    <el-option label="港股 (HK)" value="HK" />
+                  </el-select>
+                </el-col>
+                <el-col :span="4">
+                  <el-date-picker v-model="filters.start_date" type="date" placeholder="开始日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-date-picker v-model="filters.end_date" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+              </el-row>
+            </div>
+
+            <el-table :data="tableData" v-loading="loading" stripe style="width: 100%">
+              <el-table-column prop="code" label="代码" width="100" />
+              <el-table-column prop="date" label="日期" width="120" />
+              <el-table-column prop="ic_price" label="无穷成本价" min-width="120">
+                <template #default="scope">{{ scope.row.ic_price != null ? Number(scope.row.ic_price).toFixed(4) : '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="cum_amount" label="累计成交额" min-width="130">
+                <template #default="scope">{{ scope.row.cum_amount != null ? Number(scope.row.cum_amount).toFixed(2) : '-' }}</template>
+              </el-table-column>
+              <el-table-column prop="cum_volume" label="累计成交量" min-width="120">
+                <template #default="scope">{{ scope.row.cum_volume != null ? Number(scope.row.cum_volume).toFixed(2) : '-' }}</template>
+              </el-table-column>
+            </el-table>
+
+            <div class="pagination-section">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :total="total"
+                :page-sizes="[20, 50, 100]"
+                layout="total, sizes, prev, pager, next, jumper"
+                @current-change="handlePageChange"
+                @size-change="handleSizeChange"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
         </el-tab-pane>
 
@@ -553,10 +607,22 @@
                       <el-col :span="6">
                         <el-checkbox label="pvfrs" border>PVFRS</el-checkbox>
                       </el-col>
+                      <el-col :span="6">
+                        <el-checkbox label="icost" border>无穷成本均线（全量覆盖）</el-checkbox>
+                      </el-col>
                     </el-row>
                   </el-checkbox-group>
                 </el-col>
               </el-row>
+              <el-text
+                v-if="generationForm.indicators.includes('icost')"
+                type="info"
+                size="small"
+                class="mt-2"
+                style="display: block"
+              >
+                无穷成本均线：每次生成会先删除该股该市场下已有无穷成本记录，再按当前行情全量重算写入。
+              </el-text>
 
               <el-divider content-position="left">生成结果</el-divider>
               
@@ -637,7 +703,7 @@ const canGenerate = computed(() => {
 })
 
 // 全选相关计算属性
-const allIndicatorTypes = ['ma', 'mavol', 'macd', 'kdj', 'rsi', 'boll', 'pvfrs']
+const allIndicatorTypes = ['ma', 'mavol', 'macd', 'kdj', 'rsi', 'boll', 'pvfrs', 'icost']
 
 const isAllIndicatorsSelected = computed(() => {
   return generationForm.indicators.length === allIndicatorTypes.length
@@ -732,7 +798,8 @@ const getIndicatorLabel = (key: string): string => {
     kdj: 'KDJ',
     rsi: 'RSI',
     boll: 'BOLL (布林带)',
-    pvfrs: 'PVFARS'
+    pvfrs: 'PVFARS',
+    icost: '无穷成本均线'
   }
   return labels[key as keyof typeof labels] || key
 }

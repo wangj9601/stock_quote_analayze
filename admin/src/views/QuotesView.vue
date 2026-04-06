@@ -1471,20 +1471,29 @@ const handleIndexPageSizeChange = () => {
   fetchIndexData()
 }
 
-// A股历史行情数据获取
+// A股历史行情数据获取（日线走 /quotes/history 与 K 线等接口同源 ORM 序列化；多周期仍走 multi-period）
 const fetchHistoricalData = async () => {
   historicalLoading.value = true
   const loadingInstance = showLoading()
   try {
-    const response = await quotesService.getMultiPeriodHistoricalQuotes({
-      period: historicalPeriod.value,
-      page: historicalCurrentPage.value,
-      pageSize: historicalPageSize.value,
-      keyword: historicalSearchKeyword.value,
-      startDate: historicalStartDate.value,
-      endDate: historicalEndDate.value
-    })
-    
+    const response =
+      historicalPeriod.value === 'daily'
+        ? await quotesService.getHistoricalQuotes({
+            page: historicalCurrentPage.value,
+            pageSize: historicalPageSize.value,
+            keyword: historicalSearchKeyword.value,
+            startDate: historicalStartDate.value,
+            endDate: historicalEndDate.value
+          })
+        : await quotesService.getMultiPeriodHistoricalQuotes({
+            period: historicalPeriod.value,
+            page: historicalCurrentPage.value,
+            pageSize: historicalPageSize.value,
+            keyword: historicalSearchKeyword.value,
+            startDate: historicalStartDate.value,
+            endDate: historicalEndDate.value
+          })
+
     if (response.success) {
       historicalData.value = response.data
       historicalTotal.value = response.total
