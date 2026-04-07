@@ -103,6 +103,34 @@
         <el-form-item v-if="form.stock_pool_mode === 'custom'" label="股票列表" prop="stock_list">
           <el-input v-model="form.stock_list" type="textarea" :rows="4" placeholder="每行一个代码，如 000001&#10;600519&#10;00700" />
         </el-form-item>
+        <el-row v-if="form.stock_pool_mode === 'watchlist'" :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="自选股范围">
+              <el-select v-model="watchlistScope" class="w-full">
+                <el-option label="全部自选股（全用户）" value="all" />
+                <el-option label="指定用户的自选股" value="user" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12" v-if="watchlistScope === 'user'">
+            <el-form-item label="选择用户" required>
+              <el-select
+                v-model="watchlistUserId"
+                class="w-full"
+                filterable
+                clearable
+                placeholder="选择有自选股的用户"
+              >
+                <el-option
+                  v-for="u in watchlistUsers"
+                  :key="u.user_id"
+                  :label="`${u.username || '用户'} (ID:${u.user_id}, ${u.watchlist_count}只)`"
+                  :value="u.user_id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item>
           <el-button type="primary" @click="createTask" :loading="creating">创建任务</el-button>
           <el-button @click="resetForm">重置</el-button>
@@ -228,6 +256,9 @@ const rules = {
 
 const tasks = ref<any[]>([])
 const statusFilter = ref('')
+const watchlistScope = ref<'all' | 'user'>('all')
+const watchlistUserId = ref<number | undefined>(undefined)
+const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
 
 const filteredTasks = computed(() => {
   if (!statusFilter.value) return tasks.value
@@ -267,6 +298,10 @@ async function createTask() {
     ElMessage.warning('请填写自定义股票列表（每行一个代码）')
     return
   }
+  if (form.stock_pool_mode === 'watchlist' && watchlistScope.value === 'user' && !watchlistUserId.value) {
+    ElMessage.warning('请选择一个自选股用户')
+    return
+  }
   if (form.target_pct < 0.001 || form.target_pct > 1) {
     ElMessage.warning('目标阈值请在 0.1%～100% 之间（即 0.001～1）')
     return
@@ -286,6 +321,9 @@ async function createTask() {
     if (form.stock_pool_mode === 'single') body.stock_code = form.stock_code.trim()
     if (form.stock_pool_mode === 'custom') {
       body.stock_pool = form.stock_list.split(/\n/).map((s: string) => s.trim()).filter(Boolean)
+    }
+    if (form.stock_pool_mode === 'watchlist' && watchlistScope.value === 'user' && watchlistUserId.value) {
+      body.watchlist_user_id = watchlistUserId.value
     }
     const taskId = await gmsApi.createBacktest(body)
     ElMessage.success('任务已创建: ' + taskId.slice(0, 8))
@@ -310,6 +348,8 @@ function resetForm() {
   form.stock_pool_mode = 'all'
   form.stock_code = ''
   form.stock_list = ''
+  watchlistScope.value = 'all'
+  watchlistUserId.value = undefined
 }
 
 async function refresh() {
@@ -322,6 +362,16 @@ async function refresh() {
     tasks.value = []
   } finally {
     loading.value = false
+  }
+}
+
+async function loadWatchlistUsers() {
+  try {
+    const users = await gmsApi.getWatchlistUsers()
+    watchlistUsers.value = Array.isArray(users) ? users : []
+  } catch (e) {
+    watchlistUsers.value = []
+    ElMessage.error('获取自选股用户列表失败')
   }
 }
 
@@ -372,7 +422,9 @@ async function rerunTask(row: any) {
 const emit = defineEmits<{ (e: 'task-created', task: any): void; (e: 'task-updated', task: any): void }>()
 defineExpose({ refresh })
 
-onMounted(() => refresh())
+onMounted(async () => {
+  await Promise.all([refresh(), loadWatchlistUsers()])
+})
 </script>
 
 <style scoped>

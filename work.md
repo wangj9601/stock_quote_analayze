@@ -59,3 +59,6 @@ admin passwd :  qidianspacetime
 docker run --rm -it -v E:\wangxw\股票分析软件\编码\stock_quote_analayze\database:/database ghcr.io/dimitri/pgloader:latest pgloader /database/stock_analysis.db postgresql://postgres:qidianspacetime@host.docker.internal:5446/stock_analysis
 
 https://github.com/y9nhjy/Proxifier-Keygen
+
+生产环境：
+数据库密码： qidianspacetime$91

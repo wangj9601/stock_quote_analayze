@@ -12,9 +12,10 @@ from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from backend_api.database import get_db
-from backend_api.models import StockBasicInfo, StockBasicInfoHK, Watchlist
+from backend_api.models import StockBasicInfo, StockBasicInfoHK, Watchlist, User
 from backend_core.strategies.gms import admin_interface
 from backend_core.strategies.gms.config import GMSConfigManager
 
@@ -54,9 +55,12 @@ def _get_stock_name(db: Session, code: str) -> str:
     return ""
 
 
-def _distinct_watchlist_codes(db: Session) -> List[str]:
-    """全库 watchlist 表中去重后的股票代码，排序以保证稳定。"""
-    rows = db.query(Watchlist.stock_code).distinct().all()
+def _distinct_watchlist_codes(db: Session, user_id: Optional[int] = None) -> List[str]:
+    """watchlist 表中去重后的股票代码，支持按用户过滤。"""
+    q = db.query(Watchlist.stock_code)
+    if user_id is not None:
+        q = q.filter(Watchlist.user_id == int(user_id))
+    rows = q.distinct().all()
     codes = {str(r[0]).strip() for r in rows if r[0] is not None and str(r[0]).strip()}
     return sorted(codes)
 
@@ -98,6 +102,35 @@ class BacktestCreateBody(BaseModel):
     stock_pool_mode: Optional[str] = Field("all", description="股票池: all / single / custom / watchlist")
     stock_code: Optional[str] = Field(None, description="单股回测时的股票代码，如 000001、00700")
     stock_pool: Optional[List[str]] = Field(None, description="自定义股票池代码列表")
+    watchlist_user_id: Optional[int] = Field(None, description="stock_pool_mode=watchlist 时可选：指定用户ID")
+
+
+@router.get("/watchlist-users")
+async def list_watchlist_users(db: Session = Depends(get_db)):
+    """返回有自选股的用户列表（用于“自选股”按用户筛选）。"""
+    try:
+        rows = (
+            db.query(
+                Watchlist.user_id.label("user_id"),
+                func.count(Watchlist.id).label("watchlist_count"),
+                User.username.label("username"),
+            )
+            .join(User, User.id == Watchlist.user_id)
+            .group_by(Watchlist.user_id, User.username)
+            .order_by(Watchlist.user_id.asc())
+            .all()
+        )
+        users = []
+        for r in rows:
+            users.append({
+                "user_id": int(getattr(r, "user_id", 0) or 0),
+                "username": str(getattr(r, "username", "") or ""),
+                "watchlist_count": int(getattr(r, "watchlist_count", 0) or 0),
+            })
+        return {"success": True, "data": {"users": users}}
+    except Exception as e:
+        logger.exception("GMS watchlist-users 查询失败")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------- system/status ----------
@@ -139,9 +172,14 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             "stock_pool_mode": mode,
         }
         if mode == "watchlist":
-            codes = _distinct_watchlist_codes(db)
+            wl_uid = body.watchlist_user_id
+            if wl_uid is not None:
+                config["watchlist_user_id"] = int(wl_uid)
+            codes = _distinct_watchlist_codes(db, user_id=wl_uid)
             if not codes:
-                raise HTTPException(status_code=400, detail="当前无自选股，无法创建回测任务")
+                if wl_uid is None:
+                    raise HTTPException(status_code=400, detail="当前无自选股，无法创建回测任务")
+                raise HTTPException(status_code=400, detail=f"用户ID={wl_uid}无自选股，无法创建回测任务")
             config["stock_pool"] = codes
         else:
             if body.stock_code:

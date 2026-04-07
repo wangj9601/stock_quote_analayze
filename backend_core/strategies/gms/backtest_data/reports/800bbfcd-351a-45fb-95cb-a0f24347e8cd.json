@@ -1,0 +1,47 @@
+{
+  "report_id": "800bbfcd-351a-45fb-95cb-a0f24347e8cd",
+  "task_id": "800bbfcd-351a-45fb-95cb-a0f24347e8cd",
+  "name": "GMS回测_000035中国天楹_000533顺钠股份_000558天府文旅_000572海马汽车_000651格力电器",
+  "created_at": "2026-04-07T08:19:36.639390Z",
+  "summary": {
+    "total_samples": 207,
+    "hit_count": 85,
+    "hit_rate": 0.4106,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-03",
+    "market": "all",
+    "buy_signal_rule": "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；买入价为信号日之后下一交易日开盘价；同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。多只股票同批回测时，每个交易日、每个市场仅批量拉取一次该池在该市场的选股结果（性能优化）；全市场无固定池时仍按交易日扫描。",
+    "by_buy_type": {
+      "右侧": {
+        "total": 72,
+        "hit": 34,
+        "hit_rate": 0.4722222222222222
+      },
+      "左侧": {
+        "total": 135,
+        "hit": 51,
+        "hit_rate": 0.37777777777777777
+      }
+    },
+    "by_score_bucket": {
+      "[90,100]": {
+        "total": 45,
+        "hit": 17,
+        "hit_rate": 0.37777777777777777
+      },
+      "[70,80)": {
+        "total": 142,
+        "hit": 60,
+        "hit_rate": 0.4225352112676056
+      },
+      "[80,90)": {
+        "total": 20,
+        "hit": 8,
+        "hit_rate": 0.4
+      }
+    }
+  },
+  "details_path": "800bbfcd-351a-45fb-95cb-a0f24347e8cd.xlsx"
+}

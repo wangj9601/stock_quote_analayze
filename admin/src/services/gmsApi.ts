@@ -42,12 +42,21 @@ class GMSApiService {
     stock_pool_mode?: string
     stock_code?: string
     stock_pool?: string[]
+    watchlist_user_id?: number
   }) {
     const res = await this.request<{ success: boolean; data: { task_id: string } }>(`${PREFIX}/backtests`, {
       method: 'POST',
       body: JSON.stringify(body),
     })
     return res.data.task_id
+  }
+
+  /** 有自选股的用户列表（GMS 回测创建页用于按用户筛选） */
+  async getWatchlistUsers(): Promise<Array<{ user_id: number; username: string; watchlist_count: number }>> {
+    const res = await this.request<{ success: boolean; data: { users: Array<{ user_id: number; username: string; watchlist_count: number }> } }>(
+      `${PREFIX}/watchlist-users`
+    )
+    return res.data?.users || []
   }
 
   /** 任务列表 */
