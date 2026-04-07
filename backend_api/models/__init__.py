@@ -106,6 +106,11 @@ try:
         QuoteSyncTask = getattr(models_module, 'QuoteSyncTask', None)
         QuoteSyncTaskCreate = getattr(models_module, 'QuoteSyncTaskCreate', None)
         QuoteSyncTaskInDB = getattr(models_module, 'QuoteSyncTaskInDB', None)
+        
+        # 采集日历模型
+        TradingCalendar = getattr(models_module, 'TradingCalendar', None)
+        TradingCalendarCreate = getattr(models_module, 'TradingCalendarCreate', None)
+        TradingCalendarInDB = getattr(models_module, 'TradingCalendarInDB', None)
     else:
         raise ImportError(f"找不到 models.py 文件: {models_py_path}")
     
@@ -182,6 +187,12 @@ except Exception as e:
     SimTradeAccount = None
     SimTradePosition = None
     SimTradeOrder = None
+    QuoteSyncTask = None
+    QuoteSyncTaskCreate = None
+    QuoteSyncTaskInDB = None
+    TradingCalendar = None
+    TradingCalendarCreate = None
+    TradingCalendarInDB = None
 
 __all__ = [
     'PVFRSStrategyConfig',
@@ -260,5 +271,7 @@ __all__ = [
     'QuoteSyncTask',
     'QuoteSyncTaskCreate',
     'QuoteSyncTaskInDB',
-    'User',
+    'TradingCalendar',
+    'TradingCalendarCreate',
+    'TradingCalendarInDB',
 ]

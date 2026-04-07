@@ -800,6 +800,73 @@
           </div>
         </el-card>
       </el-tab-pane>
+
+      <!-- 采集日历管理 -->
+      <el-tab-pane label="采集日历管理" name="calendar">
+        <el-card>
+          <div class="text-center mb-6">
+            <el-icon class="text-5xl text-indigo-400 mb-3"><Calendar /></el-icon>
+            <h2 class="text-2xl font-bold text-gray-900 mb-1">采集日历管理</h2>
+            <p class="text-gray-500">设置 A 股和港股的节假日，采集任务将自动跳过节假日</p>
+          </div>
+
+          <!-- 工具栏 -->
+          <div class="flex items-center gap-3 mb-4 flex-wrap">
+            <el-radio-group v-model="calendarMarket" @change="loadCalendar">
+              <el-radio-button value="CN">A 股（CN）</el-radio-button>
+              <el-radio-button value="HK">港股（HK）</el-radio-button>
+            </el-radio-group>
+            <el-date-picker
+              v-model="calendarFilterYear"
+              type="year"
+              placeholder="筛选年份"
+              format="YYYY"
+              value-format="YYYY"
+              clearable
+              style="width:120px"
+              @change="loadCalendar"
+            />
+            <el-button type="primary" :icon="Plus" @click="openAddHolidayDialog">新增节假日</el-button>
+            <el-button :icon="Refresh" @click="loadCalendar">刷新</el-button>
+            <el-button type="warning" plain :icon="UploadFilled" @click="openBatchImportDialog">批量导入</el-button>
+            <el-button type="success" plain :icon="Download" @click="exportCalendar">批量导出</el-button>
+          </div>
+
+          <!-- 节假日表格 -->
+          <el-table
+            :data="calendarList"
+            v-loading="calendarLoading"
+            border
+            stripe
+            style="width:100%"
+            empty-text="暂无节假日数据"
+          >
+            <el-table-column label="市场" prop="market" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.market === 'CN' ? 'primary' : 'warning'" size="small">
+                  {{ row.market === 'CN' ? 'A股' : '港股' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="节假日日期" prop="holiday_date" width="150" align="center" />
+            <el-table-column label="说明" prop="description" min-width="200" />
+            <el-table-column label="添加时间" prop="created_at" width="180" align="center">
+              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="130" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="openEditHolidayDialog(row)">编辑</el-button>
+                <el-button type="danger" link size="small" @click="deleteHoliday(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="mt-3 text-gray-400 text-xs">
+            <el-icon class="mr-1"><InfoFilled /></el-icon>
+            共 {{ calendarList.length }} 条节假日记录。采集任务执行时会自动从数据库读取节假日，匹配当时日期则跳过采集。
+          </div>
+        </el-card>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 任务列表 -->
@@ -890,6 +957,82 @@
       </div>
     </el-card>
   </div>
+
+  <!-- 新增/编辑节假日对话框 -->
+  <el-dialog
+    v-model="holidayDialogVisible"
+    :title="holidayDialogMode === 'add' ? '新增节假日' : '编辑节假日'"
+    width="480px"
+    destroy-on-close
+  >
+    <el-form :model="holidayForm" label-width="100px" label-position="right">
+      <el-form-item label="市场" required>
+        <el-radio-group v-model="holidayForm.market">
+          <el-radio value="CN">A股（CN）</el-radio>
+          <el-radio value="HK">港股（HK）</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item label="节假日日期" required>
+        <el-date-picker
+          v-model="holidayForm.holiday_date"
+          type="date"
+          placeholder="选择节假日日期"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          style="width:100%"
+        />
+      </el-form-item>
+      <el-form-item label="说明">
+        <el-input
+          v-model="holidayForm.description"
+          placeholder="例如：春节假期、国庆节等"
+          clearable
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="holidayDialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="holidaySaving" @click="saveHoliday">
+        {{ holidayDialogMode === 'add' ? '添加' : '保存' }}
+      </el-button>
+    </template>
+  </el-dialog>
+
+  <!-- 批量导入对话框 -->
+  <el-dialog v-model="batchImportDialogVisible" title="批量导入节假日" width="560px" destroy-on-close>
+    <div class="mb-4 text-sm text-gray-500">
+      <div class="flex items-end justify-between">
+        <div>
+          <p class="mb-1">请按以下格式填写，或上传CSV/TXT文件（市场,日期,说明）：</p>
+          <pre class="bg-gray-50 border rounded p-2 text-xs mb-0">CN,2026-01-01,元旦
+CN,2026-01-28,春节
+HK,2026-01-01,New Year's Day</pre>
+        </div>
+        <el-upload
+          action=""
+          :auto-upload="false"
+          :show-file-list="false"
+          accept=".csv,.txt"
+          :on-change="handleCalendarFileChange"
+        >
+          <el-button type="success" size="small" plain>导入CSV文件</el-button>
+        </el-upload>
+      </div>
+    </div>
+    <el-input
+      v-model="batchImportText"
+      type="textarea"
+      :rows="10"
+      placeholder="市场,日期,说明&#10;CN,2026-01-01,元旦&#10;HK,2026-01-01,New Year's Day"
+    />
+    <div class="mt-2 text-xs text-gray-400">市场填 CN 或 HK；日期格式 YYYY-MM-DD；说明可选</div>
+    <template #footer>
+      <el-button @click="batchImportDialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="batchImporting" @click="executeBatchImport">
+        开始导入
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -909,7 +1052,11 @@ import {
   Warning, 
   Loading, 
   Refresh,
-  UploadFilled
+  UploadFilled,
+  Calendar,
+  Plus,
+  Download,
+  InfoFilled
 } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { API_BASE } from '@/config/api'
@@ -1872,11 +2019,239 @@ watch(
 onMounted(() => {
   loadTasks()
   loadCurrentTask()
+  loadCalendar()
 })
+
+// ============================================================
+// 采集日历管理
+// ============================================================
+interface CalendarItem {
+  id: number
+  market: string
+  holiday_date: string
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface HolidayForm {
+  market: string
+  holiday_date: string
+  description: string
+}
+
+const calendarMarket = ref<string>('CN')
+const calendarFilterYear = ref<string>('')
+const calendarList = ref<CalendarItem[]>([])
+const calendarLoading = ref(false)
+
+// 对话框状态
+const holidayDialogVisible = ref(false)
+const holidayDialogMode = ref<'add' | 'edit'>('add')
+const holidaySaving = ref(false)
+const editingHolidayId = ref<number | null>(null)
+const holidayForm = ref<HolidayForm>({
+  market: 'CN',
+  holiday_date: '',
+  description: ''
+})
+
+// 批量导入状态
+const batchImportDialogVisible = ref(false)
+const batchImporting = ref(false)
+const batchImportText = ref('')
+
+const getAuthHeader = () => {
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+const loadCalendar = async () => {
+  calendarLoading.value = true
+  try {
+    const params: Record<string, string> = { market: calendarMarket.value }
+    if (calendarFilterYear.value) {
+      params.start_date = `${calendarFilterYear.value}-01-01`
+      params.end_date = `${calendarFilterYear.value}-12-31`
+    }
+    const res = await axios.get(`${API_BASE}/api/admin/trading-calendar/list`, {
+      params,
+      headers: getAuthHeader()
+    })
+    calendarList.value = res.data || []
+  } catch (err: any) {
+    ElMessage.error(`加载采集日历失败: ${err?.response?.data?.detail || err.message}`)
+  } finally {
+    calendarLoading.value = false
+  }
+}
+
+const openAddHolidayDialog = () => {
+  holidayDialogMode.value = 'add'
+  editingHolidayId.value = null
+  holidayForm.value = { market: calendarMarket.value, holiday_date: '', description: '' }
+  holidayDialogVisible.value = true
+}
+
+const openEditHolidayDialog = (row: CalendarItem) => {
+  holidayDialogMode.value = 'edit'
+  editingHolidayId.value = row.id
+  holidayForm.value = {
+    market: row.market,
+    holiday_date: row.holiday_date,
+    description: row.description || ''
+  }
+  holidayDialogVisible.value = true
+}
+
+const saveHoliday = async () => {
+  if (!holidayForm.value.holiday_date) {
+    ElMessage.warning('请选择节假日日期')
+    return
+  }
+  holidaySaving.value = true
+  try {
+    if (holidayDialogMode.value === 'add') {
+      await axios.post(
+        `${API_BASE}/api/admin/trading-calendar/add`,
+        holidayForm.value,
+        { headers: getAuthHeader() }
+      )
+      ElMessage.success('节假日添加成功')
+    } else {
+      await axios.put(
+        `${API_BASE}/api/admin/trading-calendar/update/${editingHolidayId.value}`,
+        holidayForm.value,
+        { headers: getAuthHeader() }
+      )
+      ElMessage.success('节假日更新成功')
+    }
+    holidayDialogVisible.value = false
+    await loadCalendar()
+  } catch (err: any) {
+    ElMessage.error(`操作失败: ${err?.response?.data?.detail || err.message}`)
+  } finally {
+    holidaySaving.value = false
+  }
+}
+
+const deleteHoliday = async (row: CalendarItem) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除 [${row.market}] ${row.holiday_date}${row.description ? ' (' + row.description + ')' : ''} 的节假日设置？`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await axios.delete(
+      `${API_BASE}/api/admin/trading-calendar/delete/${row.id}`,
+      { headers: getAuthHeader() }
+    )
+    ElMessage.success('删除成功')
+    await loadCalendar()
+  } catch (err: any) {
+    ElMessage.error(`删除失败: ${err?.response?.data?.detail || err.message}`)
+  }
+}
+
+const openBatchImportDialog = () => {
+  batchImportText.value = ''
+  batchImportDialogVisible.value = true
+}
+
+const handleCalendarFileChange = (file: any) => {
+  if (!file || !file.raw) return
+  const rawFile = file.raw
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const text = e.target?.result as string
+    if (text) {
+      // 保留原来的内容，追加换行后再附加上传内容
+      batchImportText.value = batchImportText.value 
+        ? batchImportText.value + '\n' + text 
+        : text
+      ElMessage.success('文件读取成功，请确认导入内容')
+    }
+  }
+  reader.onerror = () => {
+    ElMessage.error('文件读取失败')
+  }
+  // 使用 UTF-8 读取通常的逗号分隔 CSV，或者 ANSI 也可以，这里默认 utf-8
+  reader.readAsText(rawFile, 'utf-8')
+}
+
+const executeBatchImport = async () => {
+  const lines = batchImportText.value.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+  if (!lines.length) {
+    ElMessage.warning('请填写至少一行节假日数据')
+    return
+  }
+  const rows: HolidayForm[] = []
+  const errors: string[] = []
+  for (const line of lines) {
+    const parts = line.split(',')
+    const market = (parts[0] || '').trim().toUpperCase()
+    const date = (parts[1] || '').trim()
+    const desc = (parts[2] || '').trim()
+    if (!['CN', 'HK'].includes(market)) { errors.push(`市场无效: ${line}`); continue }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push(`日期格式错误: ${line}`); continue }
+    rows.push({ market, holiday_date: date, description: desc })
+  }
+  if (errors.length) {
+    ElMessage.error(`以下行格式有误:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`)
+    return
+  }
+  batchImporting.value = true
+  let successCount = 0, skipCount = 0, failCount = 0
+  for (const row of rows) {
+    try {
+      await axios.post(`${API_BASE}/api/admin/trading-calendar/add`, row, { headers: getAuthHeader() })
+      successCount++
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || ''
+      if (msg.includes('已存在')) { skipCount++ } else { failCount++ }
+    }
+  }
+  batchImporting.value = false
+  batchImportDialogVisible.value = false
+  ElMessage.success(`批量导入完成: 新增 ${successCount}，跳过已存在 ${skipCount}，失败 ${failCount}`)
+  await loadCalendar()
+}
+
+const exportCalendar = () => {
+  if (calendarList.value.length === 0) {
+    ElMessage.warning('当前列表无节假日数据可导出')
+    return
+  }
+  // 按照 '市场,日期,说明' 的格式拼接
+  const lines = calendarList.value.map(item => {
+    return `${item.market},${item.holiday_date},${item.description || ''}`
+  })
+  const textContent = lines.join('\n')
+  
+  // 创建并触发下载
+  const blob = new Blob([textContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.setAttribute('href', url)
+  
+  const currentDate = new Date().toISOString().split('T')[0]
+  link.setAttribute('download', `trading_calendar_${calendarMarket.value}_${currentDate}.csv`)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  
+  ElMessage.success('导出成功')
+}
 
 onUnmounted(() => {
   stopPolling()
 })
+
 </script>
 
 <style scoped>

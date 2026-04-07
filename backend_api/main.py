@@ -476,6 +476,14 @@ except ImportError as e:
     print(f"❌ admin_stock_basic_router 导入失败: {e}")
     admin_stock_basic_router = None
 
+# 尝试导入采集日历管理路由
+try:
+    from .admin.trading_calendar import router as trading_calendar_router
+    print("✅ trading_calendar_router 导入成功")
+except ImportError as e:
+    print(f"❌ trading_calendar_router 导入失败: {e}")
+    trading_calendar_router = None
+
 # 注册admin路由
 if admin_auth_router is not None:
     app.include_router(admin_auth_router)
@@ -524,6 +532,11 @@ if admin_quotes_router is not None:
 if admin_stock_basic_router is not None:
     app.include_router(admin_stock_basic_router)
     print("✅ admin stock basic路由注册成功")
+
+# 注册采集日历管理路由
+if trading_calendar_router is not None:
+    app.include_router(trading_calendar_router)
+    print("✅ trading calendar路由注册成功")
 
 # 尝试导入PVFRS admin路由
 try:

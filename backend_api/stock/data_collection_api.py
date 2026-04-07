@@ -319,7 +319,55 @@ class AkshareDataCollector:
         except Exception as e:
             logger.error(f"检查股票 {stock_code} 已存在数据失败: {e}")
             return []
-    
+
+    # -----------------------------------------------
+    # 节假日缓存：{ market -> set of date strings }
+    # -----------------------------------------------
+    _holiday_cache: Dict[str, set] = {}
+    _holiday_cache_loaded: bool = False
+
+    def _load_holidays(self):
+        """从 trading_calendar 表加载全部节假日到内存缓存（每次任务只加载一次）"""
+        if self._holiday_cache_loaded:
+            return
+        try:
+            result = self.session.execute(text("""
+                SELECT market, holiday_date::text
+                FROM trading_calendar
+                ORDER BY market, holiday_date
+            """))
+            for row in result.fetchall():
+                mkt, hd = row[0], row[1]
+                if mkt not in self._holiday_cache:
+                    self._holiday_cache[mkt] = set()
+                self._holiday_cache[mkt].add(hd)
+            self._holiday_cache_loaded = True
+            cn_cnt = len(self._holiday_cache.get('CN', set()))
+            hk_cnt = len(self._holiday_cache.get('HK', set()))
+            logger.info(f"已加载采集日历节假日: A股 {cn_cnt} 天, 港股 {hk_cnt} 天")
+        except Exception as e:
+            logger.warning(f"加载节假日失败（将不进行节假日过滤）: {e}")
+            self._holiday_cache_loaded = True  # 防止反复重试
+
+    def is_holiday(self, market: str, date_str: str) -> bool:
+        """判断指定市场的某天是否为节假日（使用内存缓存）"""
+        self._load_holidays()
+        return date_str in self._holiday_cache.get(market, set())
+
+    def get_non_holiday_date_range(self, market: str, start_date: str, end_date: str) -> List[str]:
+        """返回 start_date ~ end_date 之间排除节假日后的日期列表"""
+        self._load_holidays()
+        import pandas as pd
+        dates = pd.date_range(start=start_date, end=end_date, freq='B')  # 仅工作日
+        result = []
+        holidays = self._holiday_cache.get(market, set())
+        for d in dates:
+            ds = d.strftime('%Y-%m-%d')
+            if ds not in holidays:
+                result.append(ds)
+        return result
+
+
     def collect_single_stock_data(self, stock_code: str, stock_name: str, start_date: str, end_date: str, indicators: Optional[List[str]] = None) -> bool:
         """采集单只股票的历史数据"""
         # 名称含「退」的股票（退市等）不再写入历史行情表
@@ -377,6 +425,12 @@ class AkshareDataCollector:
                     
                     # 检查是否已存在
                     if trade_date in existing_dates:
+                        skip_count += 1
+                        continue
+
+                    # 节假日检查：若为 CN 市场节假日则跳过
+                    if self.is_holiday('CN', trade_date):
+                        logger.debug(f"A股节假日跳过: {stock_code} {trade_date}")
                         skip_count += 1
                         continue
                     
@@ -1234,6 +1288,13 @@ class AkshareDataCollector:
                     if not force_update and trade_date in existing_dates:
                         skip_count += 1
                         continue
+
+                    # 节假日检查：若为 HK 市场节假日则跳过
+                    if self.is_holiday('HK', trade_date):
+                        logger.debug(f"港股节假日跳过: {stock_code} {trade_date}")
+                        skip_count += 1
+                        continue
+                        
                     
                     def get_val(row, key, default=None):
                         val = row.get(key)
@@ -2652,6 +2713,22 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
         db = SessionLocal()
         try:
             trade_date = datetime.now().strftime('%Y-%m-%d')
+
+            # --- 节假日检查 ---
+            collector = AkshareDataCollector(db)
+            if collector.is_holiday(market.upper(), trade_date):
+                msg = f"{market}市场今天({trade_date})是节假日，跳过实时采集。"
+                logger.info(msg)
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id].update({
+                            'status': 'completed',
+                            'progress': 100,
+                            'end_time': datetime.now(),
+                            'error_message': msg  # 借用 error_message 在前台展示提示，或只算完成即可
+                        })
+                return
+            # ------------------
 
             if market == 'HK':
                 df = None

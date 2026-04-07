@@ -1,6 +1,5 @@
+import traceback
 try:
-    from backend_api.stock.data_collection_api import router
-    print("SUCCESS")
+    import backend_api.admin.trading_calendar
 except Exception as e:
-    import traceback
     traceback.print_exc()

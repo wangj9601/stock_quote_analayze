@@ -2,7 +2,7 @@
 数据库模型定义
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint, Index, JSON
@@ -1188,3 +1188,38 @@ class EmailSendLog(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", backref="email_send_logs")
+
+# 采集日历模型
+class TradingCalendar(Base):
+    """
+    采集日历表：存储 A 股和港股的节假日。
+    如果在采集时，目标日期属于节假日，则跳过不采集。
+    """
+    __tablename__ = "trading_calendar"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    market = Column(String(10), nullable=False, index=True)  # 'CN' 或 'HK'
+    holiday_date = Column(Date, nullable=False, index=True)
+    description = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        UniqueConstraint('market', 'holiday_date', name='uq_trading_calendar_market_date'),
+    )
+
+class TradingCalendarBase(BaseModel):
+    market: str
+    holiday_date: date
+    description: Optional[str] = None
+
+class TradingCalendarCreate(TradingCalendarBase):
+    pass
+
+class TradingCalendarInDB(TradingCalendarBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
