@@ -854,6 +854,7 @@ class DataCollectionStatus(BaseModel):
     start_time: datetime
     end_time: Optional[datetime] = None
     error_message: Optional[str] = None
+    warning_message: Optional[str] = None
     failed_details: List[str] = []
 
 class RealtimeCollectionRequest(BaseModel):

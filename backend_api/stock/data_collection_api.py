@@ -1906,6 +1906,7 @@ async def start_realtime_historical_collection(
                 "start_time": datetime.now(),
                 "end_time": None,
                 "error_message": None,
+                "warning_message": None,
                 "failed_details": []
             }
 
@@ -2159,6 +2160,7 @@ async def start_file_historical_collection(
                 "start_time": datetime.now(),
                 "end_time": None,
                 "error_message": None,
+                "warning_message": None,
                 "failed_details": []
             }
 
@@ -2229,6 +2231,7 @@ async def start_hk_file_historical_collection(
                 "start_time": datetime.now(),
                 "end_time": None,
                 "error_message": None,
+                "warning_message": None,
                 "failed_details": []
             }
 
@@ -2345,6 +2348,7 @@ async def start_historical_collection(
                 "start_time": datetime.now(),
                 "end_time": None,
                 "error_message": None,
+                "warning_message": None,
                 "failed_details": []
             }
         
@@ -2411,6 +2415,31 @@ def run_historical_collection_task(
         try:
             # 创建采集器
             collector = AkshareDataCollector(db)
+            market_upper = (market or "CN").upper()
+
+            # 节假日优先级最高：若整个区间剔除节假日后为空，直接跳过采集
+            effective_dates = collector.get_non_holiday_date_range(market_upper, start_date, end_date)
+            if not effective_dates:
+                msg = (
+                    f"{market_upper} 市场在区间 {start_date} ~ {end_date} 均为节假日（trading_calendar），"
+                    "跳过历史采集。"
+                )
+                logger.info(msg)
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id].update({
+                            "status": "completed",
+                            "progress": 100,
+                            "processed_stocks": 0,
+                            "success_count": 0,
+                            "failed_count": 0,
+                            "collected_count": 0,
+                            "skipped_count": 0,
+                            "end_time": datetime.now(),
+                            "warning_message": msg,
+                            "failed_details": [],
+                        })
+                return
 
             # 获取股票列表
             if test_mode:
@@ -2517,7 +2546,8 @@ async def get_collection_status(task_id: str):
                 skipped_count=task_info["skipped_count"],
                 start_time=task_info["start_time"],
                 end_time=task_info["end_time"],
-                error_message=task_info["error_message"],
+                error_message=task_info.get("error_message"),
+                warning_message=task_info.get("warning_message"),
                 failed_details=task_info["failed_details"]
             )
             
@@ -2551,7 +2581,8 @@ async def list_collection_tasks():
                     skipped_count=task_info["skipped_count"],
                     start_time=task_info["start_time"],
                     end_time=task_info["end_time"],
-                    error_message=task_info["error_message"],
+                    error_message=task_info.get("error_message"),
+                    warning_message=task_info.get("warning_message"),
                     failed_details=task_info["failed_details"]
                 ))
             
@@ -2725,7 +2756,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             'status': 'completed',
                             'progress': 100,
                             'end_time': datetime.now(),
-                            'error_message': msg  # 借用 error_message 在前台展示提示，或只算完成即可
+                            'warning_message': msg
                         })
                 return
             # ------------------
@@ -3504,6 +3535,7 @@ async def start_tushare_historical_collection(
                 "start_time": datetime.now(),
                 "end_time": None,
                 "error_message": None,
+                "warning_message": None,
                 "failed_details": []
             }
         

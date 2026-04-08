@@ -36,6 +36,8 @@ from backend_core.data_collectors.akshare.hk_semiannual_collector import HKSemiA
 from backend_core.data_collectors.akshare.annual_collector import AnnualDataGenerator
 from backend_core.data_collectors.akshare.hk_annual_collector import HKAnnualDataGenerator
 import time
+from backend_api.database import SessionLocal as ApiSessionLocal
+from sqlalchemy import text
 
 # 加载项目根目录 .env（有 python-dotenv 时；生产环境无则使用系统环境变量）
 _project_root = Path(__file__).resolve().parent.parent.parent
@@ -83,8 +85,41 @@ hk_annual_generator = HKAnnualDataGenerator()
 
 scheduler = BlockingScheduler()
 
+
+def _is_market_holiday(market: str, trade_date: str) -> bool:
+    """
+    按 trading_calendar 判断是否节假日（优先级最高）。
+    market: CN / HK
+    trade_date: YYYY-MM-DD
+    """
+    session = ApiSessionLocal()
+    try:
+        row = session.execute(
+            text(
+                """
+                SELECT 1
+                FROM trading_calendar
+                WHERE market = :market
+                  AND holiday_date = CAST(:trade_date AS DATE)
+                LIMIT 1
+                """
+            ),
+            {"market": str(market).upper(), "trade_date": trade_date},
+        ).fetchone()
+        return row is not None
+    except Exception as e:
+        # 节假日表查询失败时不阻断采集，避免误停全链路。
+        logging.warning(f"查询 trading_calendar 失败，跳过节假日短路: market={market}, date={trade_date}, err={e}")
+        return False
+    finally:
+        session.close()
+
 def collect_akshare_realtime():
     try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _is_market_holiday('CN', today_str):
+            logging.info(f"[定时任务] A股 {today_str} 为节假日（trading_calendar），跳过实时行情采集。")
+            return
         logging.info("[定时任务] AKShare 实时行情采集开始...")
         df = ak_collector.collect_quotes()
     except Exception as e:
@@ -101,6 +136,10 @@ def collect_akshare_index_realtime():
 def collect_tushare_historical():
     try:
         today = datetime.now()
+        today_str_dash = today.strftime('%Y-%m-%d')
+        if _is_market_holiday('CN', today_str_dash):
+            logging.info(f"[定时任务] A股 {today_str_dash} 为节假日（trading_calendar），跳过历史行情采集。")
+            return
         if today.weekday() in (5, 6):
             logging.info("[定时任务] 今天是周末，不执行 A 股历史行情采集。")
             return
@@ -207,6 +246,10 @@ def cleanup_old_news():
 
 def collect_hk_realtime():
     try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _is_market_holiday('HK', today_str):
+            logging.info(f"[定时任务] 港股 {today_str} 为节假日（trading_calendar），跳过实时行情采集。")
+            return
         logging.info("[定时任务] 港股实时行情采集开始...")
         success = hk_realtime_collector.collect_quotes()
         if success:
@@ -219,6 +262,10 @@ def collect_hk_realtime():
 def collect_hk_historical():
     try:
         today = datetime.now()
+        today_str_dash = today.strftime('%Y-%m-%d')
+        if _is_market_holiday('HK', today_str_dash):
+            logging.info(f"[定时任务] 港股 {today_str_dash} 为节假日（trading_calendar），跳过历史行情采集。")
+            return
         if today.weekday() in (5, 6):
             logging.info("[定时任务] 今天是周末，不执行港股历史行情采集。")
             return
