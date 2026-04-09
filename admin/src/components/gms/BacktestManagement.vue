@@ -114,7 +114,7 @@
                   <el-radio-button label="balanced">平衡型（推荐）</el-radio-button>
                   <el-radio-button label="aggressive">进取型</el-radio-button>
                 </el-radio-group>
-                <span class="text-gray-500 text-sm">建议先用平衡型，稳定后再微调。</span>
+                <span class="text-gray-500 text-sm">建议先用平衡型，稳定后再微调（不会修改“最低总分”）。</span>
               </div>
             </el-form-item>
           </el-col>
@@ -415,7 +415,6 @@ const tradePreset = ref<'conservative' | 'balanced' | 'aggressive'>('balanced')
 
 const TRADE_PRESETS: Record<'conservative' | 'balanced' | 'aggressive', Record<string, number | string>> = {
   conservative: {
-    min_score: 20,
     stop_loss_pct: 0.05,
     commission_bps: 3,
     slippage_bps: 5,
@@ -432,7 +431,6 @@ const TRADE_PRESETS: Record<'conservative' | 'balanced' | 'aggressive', Record<s
     time_stop_bars: 10
   },
   balanced: {
-    min_score: 15,
     stop_loss_pct: 0.06,
     commission_bps: 3,
     slippage_bps: 5,
@@ -449,7 +447,6 @@ const TRADE_PRESETS: Record<'conservative' | 'balanced' | 'aggressive', Record<s
     time_stop_bars: 12
   },
   aggressive: {
-    min_score: 10,
     stop_loss_pct: 0.07,
     commission_bps: 3,
     slippage_bps: 5,
@@ -510,7 +507,6 @@ function applyTargetPctQuick(v: number | string | undefined) {
 
 function applyTradePreset(preset: 'conservative' | 'balanced' | 'aggressive') {
   const cfg = TRADE_PRESETS[preset]
-  form.min_score = Number(cfg.min_score ?? form.min_score)
   form.stop_loss_pct = Number(cfg.stop_loss_pct)
   form.commission_bps = Number(cfg.commission_bps)
   form.slippage_bps = Number(cfg.slippage_bps)

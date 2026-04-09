@@ -23,6 +23,7 @@
           <el-descriptions-item label="市场">{{ task.config.market }}</el-descriptions-item>
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
           <el-descriptions-item label="目标阈值">{{ (task.config.target_pct * 100) }}%</el-descriptions-item>
+          <el-descriptions-item label="生效最低总分">{{ effectiveMinScore }}</el-descriptions-item>
           <el-descriptions-item label="持有窗口">{{ task.config.horizon_days }} 日</el-descriptions-item>
           <template v-if="isTradeSimulation">
             <el-descriptions-item label="止损阈值">{{ ((task.config.stop_loss_pct || 0) * 100).toFixed(2) }}%</el-descriptions-item>
@@ -30,6 +31,14 @@
           </template>
         </template>
       </el-descriptions>
+      <el-alert
+        v-if="scoreFilterMismatchCount > 0"
+        class="mt-4"
+        type="warning"
+        show-icon
+        :closable="false"
+        :title="`检测到 ${scoreFilterMismatchCount} 条样本低于最低总分 ${effectiveMinScore}，请确认任务参数或缓存数据。`"
+      />
 
       <template v-if="task.summary && !isTradeSimulation">
         <h4 class="mt-4 mb-2">汇总</h4>
@@ -108,6 +117,10 @@ const isTradeSimulation = computed(() => {
 const backtestTypeLabel = computed(() => {
   return isTradeSimulation.value ? '交易回测' : '策略信号命中率回测'
 })
+const effectiveMinScore = computed(() => {
+  const n = Number(task.value?.config?.min_score ?? 0)
+  return Number.isNaN(n) ? 0 : n
+})
 
 const buyTypeRows = computed(() => {
   const s = task.value?.summary?.by_buy_type
@@ -144,6 +157,18 @@ const exitReasonText = computed(() => {
   return Object.entries(m)
     .map(([k, v]) => `${labelMap[k] || k}:${v}`)
     .join(' / ')
+})
+const scoreFilterMismatchCount = computed(() => {
+  const ms = Number(effectiveMinScore.value || 0)
+  if (!Number.isFinite(ms) || ms <= 0) return 0
+  const details = task.value?.details || task.value?.report?.details || []
+  if (!Array.isArray(details) || details.length === 0) return 0
+  let bad = 0
+  for (const d of details) {
+    const s = Number(d?.score_total)
+    if (Number.isFinite(s) && s < ms) bad += 1
+  }
+  return bad
 })
 
 function formatDate(v: string) {
