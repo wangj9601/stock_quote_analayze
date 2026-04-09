@@ -126,6 +126,7 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
     try:
         from sqlalchemy import desc
         from backend_core.strategies.gms.indicators_calculator import GMSIndicatorsCalculator
+        from backend_core.strategies.gms.signal_detector import GMSSignalDetector
 
         date_str = str(target_date).strip()[:10]
         row = (
@@ -188,6 +189,12 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
         ind = GMSIndicatorsCalculator(config).calculate(calc_row, instant_deviation_series=series if series else None)
         if not ind:
             return None
+
+        detector = GMSSignalDetector(config)
+        left = detector.detect_left_buy(ind)
+        right = detector.detect_right_buy(ind)
+        sell = detector.detect_sell(ind)
+        buy_type_fb = "左侧" if left else ("右侧" if right else "")
 
         # 复用 strategy_engine 的 score_detail 结构（前端得分明细依赖这些 key）
         calculator = GMSIndicatorsCalculator(config)
@@ -253,6 +260,10 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "accumulation_grade": getattr(ind, "accumulation_grade", ""),
             "momentum_grade": getattr(ind, "momentum_grade", ""),
             "score_detail": score_detail,
+            "left_buy_signal": left,
+            "right_buy_signal": right,
+            "sell_signal": sell,
+            "buy_type": buy_type_fb,
             # 同时补齐顶层关键指标，避免表格列仍为 --
             "delta": ind.delta,
             "d_ma20": ind.d,
@@ -1340,8 +1351,21 @@ async def get_gms_strategy(
                             if sd_total is not None:
                                 item["score_total"] = sd_total
                                 item["signal_strength"] = float(sd_total) / 100.0 if float(sd_total) > 0 else 0.0
+                        elif k in (
+                            "left_buy_signal",
+                            "right_buy_signal",
+                            "sell_signal",
+                            "buy_type",
+                        ):
+                            # 得分兜底已按当前配置重算，同步买点/卖点，避免「明细 100 分但标签仍为 trace 旧值」
+                            item[k] = v
                         elif item.get(k) is None:
                             item[k] = v
+                    item["buy_type"] = _normalize_buy_type(
+                        None,
+                        bool(item.get("left_buy_signal")),
+                        bool(item.get("right_buy_signal")),
+                    )
 
         # 按信号强度由高到低排列
         def _gms_signal_sort_key(x):
