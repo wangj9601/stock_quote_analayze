@@ -1,0 +1,2484 @@
+{
+  "report_id": "9942c280-63a2-4037-a60c-1e69fc6eab60",
+  "task_id": "9942c280-63a2-4037-a60c-1e69fc6eab60",
+  "name": "GMS回测_000035中国天楹_000333美的集团_000533顺钠股份_000547航天发展_000558天府文旅",
+  "created_at": "2026-04-09T08:12:41.783457Z",
+  "summary": {
+    "backtest_type": "trade_simulation",
+    "total_trades": 486,
+    "win_count": 73,
+    "loss_count": 324,
+    "win_rate": 0.1502,
+    "avg_win": 0.026306,
+    "avg_loss": -0.055011,
+    "profit_factor": 0.10774,
+    "total_return_compound": -1.0,
+    "max_drawdown": -1.0,
+    "max_drawdown_recovery_bars": 486,
+    "target_pct": 0.05,
+    "horizon_days": 20,
+    "stop_loss_pct": 0.0,
+    "commission_bps": 0.0,
+    "slippage_bps": 0.0,
+    "trail_stop_mode": "atr",
+    "trail_atr_k": 3.0,
+    "trail_pct": 0.08,
+    "breakeven_trigger_r": 1.0,
+    "profit_lock_trigger_r": 2.0,
+    "profit_lock_r": 0.5,
+    "partial_take_profit_r": 2.0,
+    "partial_take_ratio": 0.4,
+    "time_stop_bars": 15,
+    "avg_holding_bars": 5.3272,
+    "avg_win_trade": 0.026306,
+    "max_win_trade": 0.086047,
+    "pnl_p50": -0.033335,
+    "pnl_p80": 0.0,
+    "pnl_p95": 0.02346,
+    "r_multiple_avg": -0.529721,
+    "r_multiple_p50": -0.955164,
+    "r_multiple_p80": 0.0,
+    "r_multiple_p95": 0.5,
+    "start_date": "2024-04-02",
+    "end_date": "2026-04-08",
+    "market": "all",
+    "buy_signal_rule": "交易回测：样本为左/右侧买点，信号总分受最低总分筛选；买入价为信号日后下一交易日开盘价；同一标的在上一笔观察期结束前不重复开仓；出场规则为先止损后止盈（同日同时触发按止损），否则观察期最后一根K线收盘价出场。",
+    "by_exit_reason": {
+      "止损": 471,
+      "时间止损": 15
+    },
+    "equity_curve": [
+      {
+        "step": 1,
+        "equity": 0.937022,
+        "drawdown": -0.062978
+      },
+      {
+        "step": 2,
+        "equity": 0.812143,
+        "drawdown": -0.187857
+      },
+      {
+        "step": 3,
+        "equity": 0.739902,
+        "drawdown": -0.260098
+      },
+      {
+        "step": 4,
+        "equity": 0.739902,
+        "drawdown": -0.260098
+      },
+      {
+        "step": 5,
+        "equity": 0.688856,
+        "drawdown": -0.311144
+      },
+      {
+        "step": 6,
+        "equity": 0.664303,
+        "drawdown": -0.335697
+      },
+      {
+        "step": 7,
+        "equity": 0.615946,
+        "drawdown": -0.384054
+      },
+      {
+        "step": 8,
+        "equity": 0.62996,
+        "drawdown": -0.37004
+      },
+      {
+        "step": 9,
+        "equity": 0.643429,
+        "drawdown": -0.356571
+      },
+      {
+        "step": 10,
+        "equity": 0.656464,
+        "drawdown": -0.343536
+      },
+      {
+        "step": 11,
+        "equity": 0.669879,
+        "drawdown": -0.330121
+      },
+      {
+        "step": 12,
+        "equity": 0.639803,
+        "drawdown": -0.360197
+      },
+      {
+        "step": 13,
+        "equity": 0.618489,
+        "drawdown": -0.381511
+      },
+      {
+        "step": 14,
+        "equity": 0.632343,
+        "drawdown": -0.367657
+      },
+      {
+        "step": 15,
+        "equity": 0.607397,
+        "drawdown": -0.392603
+      },
+      {
+        "step": 16,
+        "equity": 0.607397,
+        "drawdown": -0.392603
+      },
+      {
+        "step": 17,
+        "equity": 0.572508,
+        "drawdown": -0.427492
+      },
+      {
+        "step": 18,
+        "equity": 0.537135,
+        "drawdown": -0.462865
+      },
+      {
+        "step": 19,
+        "equity": 0.511557,
+        "drawdown": -0.488443
+      },
+      {
+        "step": 20,
+        "equity": 0.473647,
+        "drawdown": -0.526353
+      },
+      {
+        "step": 21,
+        "equity": 0.443315,
+        "drawdown": -0.556685
+      },
+      {
+        "step": 22,
+        "equity": 0.410191,
+        "drawdown": -0.589809
+      },
+      {
+        "step": 23,
+        "equity": 0.38296,
+        "drawdown": -0.61704
+      },
+      {
+        "step": 24,
+        "equity": 0.393208,
+        "drawdown": -0.606792
+      },
+      {
+        "step": 25,
+        "equity": 0.368855,
+        "drawdown": -0.631145
+      },
+      {
+        "step": 26,
+        "equity": 0.368855,
+        "drawdown": -0.631145
+      },
+      {
+        "step": 27,
+        "equity": 0.350241,
+        "drawdown": -0.649759
+      },
+      {
+        "step": 28,
+        "equity": 0.325527,
+        "drawdown": -0.674473
+      },
+      {
+        "step": 29,
+        "equity": 0.310345,
+        "drawdown": -0.689655
+      },
+      {
+        "step": 30,
+        "equity": 0.275839,
+        "drawdown": -0.724161
+      },
+      {
+        "step": 31,
+        "equity": 0.259529,
+        "drawdown": -0.740471
+      },
+      {
+        "step": 32,
+        "equity": 0.23828,
+        "drawdown": -0.76172
+      },
+      {
+        "step": 33,
+        "equity": 0.222716,
+        "drawdown": -0.777284
+      },
+      {
+        "step": 34,
+        "equity": 0.209707,
+        "drawdown": -0.790293
+      },
+      {
+        "step": 35,
+        "equity": 0.209707,
+        "drawdown": -0.790293
+      },
+      {
+        "step": 36,
+        "equity": 0.209471,
+        "drawdown": -0.790529
+      },
+      {
+        "step": 37,
+        "equity": 0.196596,
+        "drawdown": -0.803404
+      },
+      {
+        "step": 38,
+        "equity": 0.18419,
+        "drawdown": -0.81581
+      },
+      {
+        "step": 39,
+        "equity": 0.16608,
+        "drawdown": -0.83392
+      },
+      {
+        "step": 40,
+        "equity": 0.153848,
+        "drawdown": -0.846152
+      },
+      {
+        "step": 41,
+        "equity": 0.14255,
+        "drawdown": -0.85745
+      },
+      {
+        "step": 42,
+        "equity": 0.14255,
+        "drawdown": -0.85745
+      },
+      {
+        "step": 43,
+        "equity": 0.132369,
+        "drawdown": -0.867631
+      },
+      {
+        "step": 44,
+        "equity": 0.12437,
+        "drawdown": -0.87563
+      },
+      {
+        "step": 45,
+        "equity": 0.112592,
+        "drawdown": -0.887408
+      },
+      {
+        "step": 46,
+        "equity": 0.111472,
+        "drawdown": -0.888528
+      },
+      {
+        "step": 47,
+        "equity": 0.102858,
+        "drawdown": -0.897142
+      },
+      {
+        "step": 48,
+        "equity": 0.097175,
+        "drawdown": -0.902825
+      },
+      {
+        "step": 49,
+        "equity": 0.097175,
+        "drawdown": -0.902825
+      },
+      {
+        "step": 50,
+        "equity": 0.092663,
+        "drawdown": -0.907337
+      },
+      {
+        "step": 51,
+        "equity": 0.092663,
+        "drawdown": -0.907337
+      },
+      {
+        "step": 52,
+        "equity": 0.085659,
+        "drawdown": -0.914341
+      },
+      {
+        "step": 53,
+        "equity": 0.087494,
+        "drawdown": -0.912506
+      },
+      {
+        "step": 54,
+        "equity": 0.080244,
+        "drawdown": -0.919756
+      },
+      {
+        "step": 55,
+        "equity": 0.07444,
+        "drawdown": -0.92556
+      },
+      {
+        "step": 56,
+        "equity": 0.070887,
+        "drawdown": -0.929113
+      },
+      {
+        "step": 57,
+        "equity": 0.068576,
+        "drawdown": -0.931424
+      },
+      {
+        "step": 58,
+        "equity": 0.066243,
+        "drawdown": -0.933757
+      },
+      {
+        "step": 59,
+        "equity": 0.065182,
+        "drawdown": -0.934818
+      },
+      {
+        "step": 60,
+        "equity": 0.061342,
+        "drawdown": -0.938658
+      },
+      {
+        "step": 61,
+        "equity": 0.059183,
+        "drawdown": -0.940817
+      },
+      {
+        "step": 62,
+        "equity": 0.059183,
+        "drawdown": -0.940817
+      },
+      {
+        "step": 63,
+        "equity": 0.062881,
+        "drawdown": -0.937119
+      },
+      {
+        "step": 64,
+        "equity": 0.061114,
+        "drawdown": -0.938886
+      },
+      {
+        "step": 65,
+        "equity": 0.055827,
+        "drawdown": -0.944173
+      },
+      {
+        "step": 66,
+        "equity": 0.052414,
+        "drawdown": -0.947586
+      },
+      {
+        "step": 67,
+        "equity": 0.049667,
+        "drawdown": -0.950333
+      },
+      {
+        "step": 68,
+        "equity": 0.04845,
+        "drawdown": -0.95155
+      },
+      {
+        "step": 69,
+        "equity": 0.045122,
+        "drawdown": -0.954878
+      },
+      {
+        "step": 70,
+        "equity": 0.041208,
+        "drawdown": -0.958792
+      },
+      {
+        "step": 71,
+        "equity": 0.039845,
+        "drawdown": -0.960155
+      },
+      {
+        "step": 72,
+        "equity": 0.038202,
+        "drawdown": -0.961798
+      },
+      {
+        "step": 73,
+        "equity": 0.036621,
+        "drawdown": -0.963379
+      },
+      {
+        "step": 74,
+        "equity": 0.034992,
+        "drawdown": -0.965008
+      },
+      {
+        "step": 75,
+        "equity": 0.035182,
+        "drawdown": -0.964818
+      },
+      {
+        "step": 76,
+        "equity": 0.034078,
+        "drawdown": -0.965922
+      },
+      {
+        "step": 77,
+        "equity": 0.032328,
+        "drawdown": -0.967672
+      },
+      {
+        "step": 78,
+        "equity": 0.029929,
+        "drawdown": -0.970071
+      },
+      {
+        "step": 79,
+        "equity": 0.028671,
+        "drawdown": -0.971329
+      },
+      {
+        "step": 80,
+        "equity": 0.027174,
+        "drawdown": -0.972826
+      },
+      {
+        "step": 81,
+        "equity": 0.027174,
+        "drawdown": -0.972826
+      },
+      {
+        "step": 82,
+        "equity": 0.026593,
+        "drawdown": -0.973407
+      },
+      {
+        "step": 83,
+        "equity": 0.026303,
+        "drawdown": -0.973697
+      },
+      {
+        "step": 84,
+        "equity": 0.023744,
+        "drawdown": -0.976256
+      },
+      {
+        "step": 85,
+        "equity": 0.021522,
+        "drawdown": -0.978478
+      },
+      {
+        "step": 86,
+        "equity": 0.02036,
+        "drawdown": -0.97964
+      },
+      {
+        "step": 87,
+        "equity": 0.019708,
+        "drawdown": -0.980292
+      },
+      {
+        "step": 88,
+        "equity": 0.018743,
+        "drawdown": -0.981257
+      },
+      {
+        "step": 89,
+        "equity": 0.01741,
+        "drawdown": -0.98259
+      },
+      {
+        "step": 90,
+        "equity": 0.01741,
+        "drawdown": -0.98259
+      },
+      {
+        "step": 91,
+        "equity": 0.016689,
+        "drawdown": -0.983311
+      },
+      {
+        "step": 92,
+        "equity": 0.015437,
+        "drawdown": -0.984563
+      },
+      {
+        "step": 93,
+        "equity": 0.015437,
+        "drawdown": -0.984563
+      },
+      {
+        "step": 94,
+        "equity": 0.014792,
+        "drawdown": -0.985208
+      },
+      {
+        "step": 95,
+        "equity": 0.014205,
+        "drawdown": -0.985795
+      },
+      {
+        "step": 96,
+        "equity": 0.014205,
+        "drawdown": -0.985795
+      },
+      {
+        "step": 97,
+        "equity": 0.012538,
+        "drawdown": -0.987462
+      },
+      {
+        "step": 98,
+        "equity": 0.012791,
+        "drawdown": -0.987209
+      },
+      {
+        "step": 99,
+        "equity": 0.013092,
+        "drawdown": -0.986908
+      },
+      {
+        "step": 100,
+        "equity": 0.012778,
+        "drawdown": -0.987222
+      },
+      {
+        "step": 101,
+        "equity": 0.013052,
+        "drawdown": -0.986948
+      },
+      {
+        "step": 102,
+        "equity": 0.013052,
+        "drawdown": -0.986948
+      },
+      {
+        "step": 103,
+        "equity": 0.013052,
+        "drawdown": -0.986948
+      },
+      {
+        "step": 104,
+        "equity": 0.013364,
+        "drawdown": -0.986636
+      },
+      {
+        "step": 105,
+        "equity": 0.013659,
+        "drawdown": -0.986341
+      },
+      {
+        "step": 106,
+        "equity": 0.013659,
+        "drawdown": -0.986341
+      },
+      {
+        "step": 107,
+        "equity": 0.013954,
+        "drawdown": -0.986046
+      },
+      {
+        "step": 108,
+        "equity": 0.013954,
+        "drawdown": -0.986046
+      },
+      {
+        "step": 109,
+        "equity": 0.014245,
+        "drawdown": -0.985755
+      },
+      {
+        "step": 110,
+        "equity": 0.014245,
+        "drawdown": -0.985755
+      },
+      {
+        "step": 111,
+        "equity": 0.014545,
+        "drawdown": -0.985455
+      },
+      {
+        "step": 112,
+        "equity": 0.014545,
+        "drawdown": -0.985455
+      },
+      {
+        "step": 113,
+        "equity": 0.01488,
+        "drawdown": -0.98512
+      },
+      {
+        "step": 114,
+        "equity": 0.015222,
+        "drawdown": -0.984778
+      },
+      {
+        "step": 115,
+        "equity": 0.01481,
+        "drawdown": -0.98519
+      },
+      {
+        "step": 116,
+        "equity": 0.014612,
+        "drawdown": -0.985388
+      },
+      {
+        "step": 117,
+        "equity": 0.015441,
+        "drawdown": -0.984559
+      },
+      {
+        "step": 118,
+        "equity": 0.01445,
+        "drawdown": -0.98555
+      },
+      {
+        "step": 119,
+        "equity": 0.01445,
+        "drawdown": -0.98555
+      },
+      {
+        "step": 120,
+        "equity": 0.01445,
+        "drawdown": -0.98555
+      },
+      {
+        "step": 121,
+        "equity": 0.01445,
+        "drawdown": -0.98555
+      },
+      {
+        "step": 122,
+        "equity": 0.01445,
+        "drawdown": -0.98555
+      },
+      {
+        "step": 123,
+        "equity": 0.013575,
+        "drawdown": -0.986425
+      },
+      {
+        "step": 124,
+        "equity": 0.013575,
+        "drawdown": -0.986425
+      },
+      {
+        "step": 125,
+        "equity": 0.013194,
+        "drawdown": -0.986806
+      },
+      {
+        "step": 126,
+        "equity": 0.013194,
+        "drawdown": -0.986806
+      },
+      {
+        "step": 127,
+        "equity": 0.0135,
+        "drawdown": -0.9865
+      },
+      {
+        "step": 128,
+        "equity": 0.012935,
+        "drawdown": -0.987065
+      },
+      {
+        "step": 129,
+        "equity": 0.012935,
+        "drawdown": -0.987065
+      },
+      {
+        "step": 130,
+        "equity": 0.012473,
+        "drawdown": -0.987527
+      },
+      {
+        "step": 131,
+        "equity": 0.012473,
+        "drawdown": -0.987527
+      },
+      {
+        "step": 132,
+        "equity": 0.011539,
+        "drawdown": -0.988461
+      },
+      {
+        "step": 133,
+        "equity": 0.010631,
+        "drawdown": -0.989369
+      },
+      {
+        "step": 134,
+        "equity": 0.010631,
+        "drawdown": -0.989369
+      },
+      {
+        "step": 135,
+        "equity": 0.011466,
+        "drawdown": -0.988534
+      },
+      {
+        "step": 136,
+        "equity": 0.010822,
+        "drawdown": -0.989178
+      },
+      {
+        "step": 137,
+        "equity": 0.010646,
+        "drawdown": -0.989354
+      },
+      {
+        "step": 138,
+        "equity": 0.010646,
+        "drawdown": -0.989354
+      },
+      {
+        "step": 139,
+        "equity": 0.010886,
+        "drawdown": -0.989114
+      },
+      {
+        "step": 140,
+        "equity": 0.01115,
+        "drawdown": -0.98885
+      },
+      {
+        "step": 141,
+        "equity": 0.01115,
+        "drawdown": -0.98885
+      },
+      {
+        "step": 142,
+        "equity": 0.010431,
+        "drawdown": -0.989569
+      },
+      {
+        "step": 143,
+        "equity": 0.009743,
+        "drawdown": -0.990257
+      },
+      {
+        "step": 144,
+        "equity": 0.009743,
+        "drawdown": -0.990257
+      },
+      {
+        "step": 145,
+        "equity": 0.009729,
+        "drawdown": -0.990271
+      },
+      {
+        "step": 146,
+        "equity": 0.008917,
+        "drawdown": -0.991083
+      },
+      {
+        "step": 147,
+        "equity": 0.008485,
+        "drawdown": -0.991515
+      },
+      {
+        "step": 148,
+        "equity": 0.007883,
+        "drawdown": -0.992117
+      },
+      {
+        "step": 149,
+        "equity": 0.007229,
+        "drawdown": -0.992771
+      },
+      {
+        "step": 150,
+        "equity": 0.006722,
+        "drawdown": -0.993278
+      },
+      {
+        "step": 151,
+        "equity": 0.006221,
+        "drawdown": -0.993779
+      },
+      {
+        "step": 152,
+        "equity": 0.00557,
+        "drawdown": -0.99443
+      },
+      {
+        "step": 153,
+        "equity": 0.005095,
+        "drawdown": -0.994905
+      },
+      {
+        "step": 154,
+        "equity": 0.00482,
+        "drawdown": -0.99518
+      },
+      {
+        "step": 155,
+        "equity": 0.004582,
+        "drawdown": -0.995418
+      },
+      {
+        "step": 156,
+        "equity": 0.004388,
+        "drawdown": -0.995612
+      },
+      {
+        "step": 157,
+        "equity": 0.004108,
+        "drawdown": -0.995892
+      },
+      {
+        "step": 158,
+        "equity": 0.003965,
+        "drawdown": -0.996035
+      },
+      {
+        "step": 159,
+        "equity": 0.003904,
+        "drawdown": -0.996096
+      },
+      {
+        "step": 160,
+        "equity": 0.00355,
+        "drawdown": -0.99645
+      },
+      {
+        "step": 161,
+        "equity": 0.003368,
+        "drawdown": -0.996632
+      },
+      {
+        "step": 162,
+        "equity": 0.003226,
+        "drawdown": -0.996774
+      },
+      {
+        "step": 163,
+        "equity": 0.003096,
+        "drawdown": -0.996904
+      },
+      {
+        "step": 164,
+        "equity": 0.002883,
+        "drawdown": -0.997117
+      },
+      {
+        "step": 165,
+        "equity": 0.002585,
+        "drawdown": -0.997415
+      },
+      {
+        "step": 166,
+        "equity": 0.00239,
+        "drawdown": -0.99761
+      },
+      {
+        "step": 167,
+        "equity": 0.002447,
+        "drawdown": -0.997553
+      },
+      {
+        "step": 168,
+        "equity": 0.002526,
+        "drawdown": -0.997474
+      },
+      {
+        "step": 169,
+        "equity": 0.002526,
+        "drawdown": -0.997474
+      },
+      {
+        "step": 170,
+        "equity": 0.002526,
+        "drawdown": -0.997474
+      },
+      {
+        "step": 171,
+        "equity": 0.002461,
+        "drawdown": -0.997539
+      },
+      {
+        "step": 172,
+        "equity": 0.002461,
+        "drawdown": -0.997539
+      },
+      {
+        "step": 173,
+        "equity": 0.002294,
+        "drawdown": -0.997706
+      },
+      {
+        "step": 174,
+        "equity": 0.002126,
+        "drawdown": -0.997874
+      },
+      {
+        "step": 175,
+        "equity": 0.002074,
+        "drawdown": -0.997926
+      },
+      {
+        "step": 176,
+        "equity": 0.002074,
+        "drawdown": -0.997926
+      },
+      {
+        "step": 177,
+        "equity": 0.001994,
+        "drawdown": -0.998006
+      },
+      {
+        "step": 178,
+        "equity": 0.002046,
+        "drawdown": -0.997954
+      },
+      {
+        "step": 179,
+        "equity": 0.002046,
+        "drawdown": -0.997954
+      },
+      {
+        "step": 180,
+        "equity": 0.002091,
+        "drawdown": -0.997909
+      },
+      {
+        "step": 181,
+        "equity": 0.002005,
+        "drawdown": -0.997995
+      },
+      {
+        "step": 182,
+        "equity": 0.001918,
+        "drawdown": -0.998082
+      },
+      {
+        "step": 183,
+        "equity": 0.001866,
+        "drawdown": -0.998134
+      },
+      {
+        "step": 184,
+        "equity": 0.00178,
+        "drawdown": -0.99822
+      },
+      {
+        "step": 185,
+        "equity": 0.001724,
+        "drawdown": -0.998276
+      },
+      {
+        "step": 186,
+        "equity": 0.001662,
+        "drawdown": -0.998338
+      },
+      {
+        "step": 187,
+        "equity": 0.001612,
+        "drawdown": -0.998388
+      },
+      {
+        "step": 188,
+        "equity": 0.001495,
+        "drawdown": -0.998505
+      },
+      {
+        "step": 189,
+        "equity": 0.001447,
+        "drawdown": -0.998553
+      },
+      {
+        "step": 190,
+        "equity": 0.001407,
+        "drawdown": -0.998593
+      },
+      {
+        "step": 191,
+        "equity": 0.001365,
+        "drawdown": -0.998635
+      },
+      {
+        "step": 192,
+        "equity": 0.00126,
+        "drawdown": -0.99874
+      },
+      {
+        "step": 193,
+        "equity": 0.001222,
+        "drawdown": -0.998778
+      },
+      {
+        "step": 194,
+        "equity": 0.001134,
+        "drawdown": -0.998866
+      },
+      {
+        "step": 195,
+        "equity": 0.001193,
+        "drawdown": -0.998807
+      },
+      {
+        "step": 196,
+        "equity": 0.001143,
+        "drawdown": -0.998857
+      },
+      {
+        "step": 197,
+        "equity": 0.001138,
+        "drawdown": -0.998862
+      },
+      {
+        "step": 198,
+        "equity": 0.001071,
+        "drawdown": -0.998929
+      },
+      {
+        "step": 199,
+        "equity": 0.001071,
+        "drawdown": -0.998929
+      },
+      {
+        "step": 200,
+        "equity": 0.000962,
+        "drawdown": -0.999038
+      },
+      {
+        "step": 201,
+        "equity": 0.000844,
+        "drawdown": -0.999156
+      },
+      {
+        "step": 202,
+        "equity": 0.000758,
+        "drawdown": -0.999242
+      },
+      {
+        "step": 203,
+        "equity": 0.000727,
+        "drawdown": -0.999273
+      },
+      {
+        "step": 204,
+        "equity": 0.00065,
+        "drawdown": -0.99935
+      },
+      {
+        "step": 205,
+        "equity": 0.000615,
+        "drawdown": -0.999385
+      },
+      {
+        "step": 206,
+        "equity": 0.000572,
+        "drawdown": -0.999428
+      },
+      {
+        "step": 207,
+        "equity": 0.000527,
+        "drawdown": -0.999473
+      },
+      {
+        "step": 208,
+        "equity": 0.000506,
+        "drawdown": -0.999494
+      },
+      {
+        "step": 209,
+        "equity": 0.000464,
+        "drawdown": -0.999536
+      },
+      {
+        "step": 210,
+        "equity": 0.000412,
+        "drawdown": -0.999588
+      },
+      {
+        "step": 211,
+        "equity": 0.000372,
+        "drawdown": -0.999628
+      },
+      {
+        "step": 212,
+        "equity": 0.000333,
+        "drawdown": -0.999667
+      },
+      {
+        "step": 213,
+        "equity": 0.000304,
+        "drawdown": -0.999696
+      },
+      {
+        "step": 214,
+        "equity": 0.000268,
+        "drawdown": -0.999732
+      },
+      {
+        "step": 215,
+        "equity": 0.000255,
+        "drawdown": -0.999745
+      },
+      {
+        "step": 216,
+        "equity": 0.000246,
+        "drawdown": -0.999754
+      },
+      {
+        "step": 217,
+        "equity": 0.000246,
+        "drawdown": -0.999754
+      },
+      {
+        "step": 218,
+        "equity": 0.000246,
+        "drawdown": -0.999754
+      },
+      {
+        "step": 219,
+        "equity": 0.000233,
+        "drawdown": -0.999767
+      },
+      {
+        "step": 220,
+        "equity": 0.000233,
+        "drawdown": -0.999767
+      },
+      {
+        "step": 221,
+        "equity": 0.000225,
+        "drawdown": -0.999775
+      },
+      {
+        "step": 222,
+        "equity": 0.000216,
+        "drawdown": -0.999784
+      },
+      {
+        "step": 223,
+        "equity": 0.000221,
+        "drawdown": -0.999779
+      },
+      {
+        "step": 224,
+        "equity": 0.000201,
+        "drawdown": -0.999799
+      },
+      {
+        "step": 225,
+        "equity": 0.000199,
+        "drawdown": -0.999801
+      },
+      {
+        "step": 226,
+        "equity": 0.000195,
+        "drawdown": -0.999805
+      },
+      {
+        "step": 227,
+        "equity": 0.000195,
+        "drawdown": -0.999805
+      },
+      {
+        "step": 228,
+        "equity": 0.000199,
+        "drawdown": -0.999801
+      },
+      {
+        "step": 229,
+        "equity": 0.000181,
+        "drawdown": -0.999819
+      },
+      {
+        "step": 230,
+        "equity": 0.000181,
+        "drawdown": -0.999819
+      },
+      {
+        "step": 231,
+        "equity": 0.000174,
+        "drawdown": -0.999826
+      },
+      {
+        "step": 232,
+        "equity": 0.000163,
+        "drawdown": -0.999837
+      },
+      {
+        "step": 233,
+        "equity": 0.000155,
+        "drawdown": -0.999845
+      },
+      {
+        "step": 234,
+        "equity": 0.00016,
+        "drawdown": -0.99984
+      },
+      {
+        "step": 235,
+        "equity": 0.00016,
+        "drawdown": -0.99984
+      },
+      {
+        "step": 236,
+        "equity": 0.000154,
+        "drawdown": -0.999846
+      },
+      {
+        "step": 237,
+        "equity": 0.000157,
+        "drawdown": -0.999843
+      },
+      {
+        "step": 238,
+        "equity": 0.00016,
+        "drawdown": -0.99984
+      },
+      {
+        "step": 239,
+        "equity": 0.000149,
+        "drawdown": -0.999851
+      },
+      {
+        "step": 240,
+        "equity": 0.000138,
+        "drawdown": -0.999862
+      },
+      {
+        "step": 241,
+        "equity": 0.000137,
+        "drawdown": -0.999863
+      },
+      {
+        "step": 242,
+        "equity": 0.000132,
+        "drawdown": -0.999868
+      },
+      {
+        "step": 243,
+        "equity": 0.000134,
+        "drawdown": -0.999866
+      },
+      {
+        "step": 244,
+        "equity": 0.000134,
+        "drawdown": -0.999866
+      },
+      {
+        "step": 245,
+        "equity": 0.000134,
+        "drawdown": -0.999866
+      },
+      {
+        "step": 246,
+        "equity": 0.000133,
+        "drawdown": -0.999867
+      },
+      {
+        "step": 247,
+        "equity": 0.000133,
+        "drawdown": -0.999867
+      },
+      {
+        "step": 248,
+        "equity": 0.000133,
+        "drawdown": -0.999867
+      },
+      {
+        "step": 249,
+        "equity": 0.000129,
+        "drawdown": -0.999871
+      },
+      {
+        "step": 250,
+        "equity": 0.000125,
+        "drawdown": -0.999875
+      },
+      {
+        "step": 251,
+        "equity": 0.000125,
+        "drawdown": -0.999875
+      },
+      {
+        "step": 252,
+        "equity": 0.00012,
+        "drawdown": -0.99988
+      },
+      {
+        "step": 253,
+        "equity": 0.000117,
+        "drawdown": -0.999883
+      },
+      {
+        "step": 254,
+        "equity": 0.000113,
+        "drawdown": -0.999887
+      },
+      {
+        "step": 255,
+        "equity": 0.000116,
+        "drawdown": -0.999884
+      },
+      {
+        "step": 256,
+        "equity": 0.000112,
+        "drawdown": -0.999888
+      },
+      {
+        "step": 257,
+        "equity": 0.000108,
+        "drawdown": -0.999892
+      },
+      {
+        "step": 258,
+        "equity": 0.000106,
+        "drawdown": -0.999894
+      },
+      {
+        "step": 259,
+        "equity": 0.000103,
+        "drawdown": -0.999897
+      },
+      {
+        "step": 260,
+        "equity": 9.9e-05,
+        "drawdown": -0.999901
+      },
+      {
+        "step": 261,
+        "equity": 9.7e-05,
+        "drawdown": -0.999903
+      },
+      {
+        "step": 262,
+        "equity": 9e-05,
+        "drawdown": -0.99991
+      },
+      {
+        "step": 263,
+        "equity": 8.5e-05,
+        "drawdown": -0.999915
+      },
+      {
+        "step": 264,
+        "equity": 8.4e-05,
+        "drawdown": -0.999916
+      },
+      {
+        "step": 265,
+        "equity": 8.6e-05,
+        "drawdown": -0.999914
+      },
+      {
+        "step": 266,
+        "equity": 8.8e-05,
+        "drawdown": -0.999912
+      },
+      {
+        "step": 267,
+        "equity": 8.8e-05,
+        "drawdown": -0.999912
+      },
+      {
+        "step": 268,
+        "equity": 8.6e-05,
+        "drawdown": -0.999914
+      },
+      {
+        "step": 269,
+        "equity": 7.7e-05,
+        "drawdown": -0.999923
+      },
+      {
+        "step": 270,
+        "equity": 7.8e-05,
+        "drawdown": -0.999922
+      },
+      {
+        "step": 271,
+        "equity": 7.5e-05,
+        "drawdown": -0.999925
+      },
+      {
+        "step": 272,
+        "equity": 7.2e-05,
+        "drawdown": -0.999928
+      },
+      {
+        "step": 273,
+        "equity": 7.2e-05,
+        "drawdown": -0.999928
+      },
+      {
+        "step": 274,
+        "equity": 7.4e-05,
+        "drawdown": -0.999926
+      },
+      {
+        "step": 275,
+        "equity": 7.4e-05,
+        "drawdown": -0.999926
+      },
+      {
+        "step": 276,
+        "equity": 7.4e-05,
+        "drawdown": -0.999926
+      },
+      {
+        "step": 277,
+        "equity": 7.2e-05,
+        "drawdown": -0.999928
+      },
+      {
+        "step": 278,
+        "equity": 7.4e-05,
+        "drawdown": -0.999926
+      },
+      {
+        "step": 279,
+        "equity": 7.3e-05,
+        "drawdown": -0.999927
+      },
+      {
+        "step": 280,
+        "equity": 7.1e-05,
+        "drawdown": -0.999929
+      },
+      {
+        "step": 281,
+        "equity": 7e-05,
+        "drawdown": -0.99993
+      },
+      {
+        "step": 282,
+        "equity": 7e-05,
+        "drawdown": -0.99993
+      },
+      {
+        "step": 283,
+        "equity": 7e-05,
+        "drawdown": -0.99993
+      },
+      {
+        "step": 284,
+        "equity": 6.7e-05,
+        "drawdown": -0.999933
+      },
+      {
+        "step": 285,
+        "equity": 6.6e-05,
+        "drawdown": -0.999934
+      },
+      {
+        "step": 286,
+        "equity": 6.4e-05,
+        "drawdown": -0.999936
+      },
+      {
+        "step": 287,
+        "equity": 6.3e-05,
+        "drawdown": -0.999937
+      },
+      {
+        "step": 288,
+        "equity": 6e-05,
+        "drawdown": -0.99994
+      },
+      {
+        "step": 289,
+        "equity": 6e-05,
+        "drawdown": -0.99994
+      },
+      {
+        "step": 290,
+        "equity": 5.8e-05,
+        "drawdown": -0.999942
+      },
+      {
+        "step": 291,
+        "equity": 5.9e-05,
+        "drawdown": -0.999941
+      },
+      {
+        "step": 292,
+        "equity": 5.8e-05,
+        "drawdown": -0.999942
+      },
+      {
+        "step": 293,
+        "equity": 5.8e-05,
+        "drawdown": -0.999942
+      },
+      {
+        "step": 294,
+        "equity": 5.8e-05,
+        "drawdown": -0.999942
+      },
+      {
+        "step": 295,
+        "equity": 5.8e-05,
+        "drawdown": -0.999942
+      },
+      {
+        "step": 296,
+        "equity": 5.5e-05,
+        "drawdown": -0.999945
+      },
+      {
+        "step": 297,
+        "equity": 5.4e-05,
+        "drawdown": -0.999946
+      },
+      {
+        "step": 298,
+        "equity": 5.4e-05,
+        "drawdown": -0.999946
+      },
+      {
+        "step": 299,
+        "equity": 5.3e-05,
+        "drawdown": -0.999947
+      },
+      {
+        "step": 300,
+        "equity": 5.3e-05,
+        "drawdown": -0.999947
+      },
+      {
+        "step": 301,
+        "equity": 5e-05,
+        "drawdown": -0.99995
+      },
+      {
+        "step": 302,
+        "equity": 5e-05,
+        "drawdown": -0.99995
+      },
+      {
+        "step": 303,
+        "equity": 5.2e-05,
+        "drawdown": -0.999948
+      },
+      {
+        "step": 304,
+        "equity": 5.3e-05,
+        "drawdown": -0.999947
+      },
+      {
+        "step": 305,
+        "equity": 5.2e-05,
+        "drawdown": -0.999948
+      },
+      {
+        "step": 306,
+        "equity": 5e-05,
+        "drawdown": -0.99995
+      },
+      {
+        "step": 307,
+        "equity": 5e-05,
+        "drawdown": -0.99995
+      },
+      {
+        "step": 308,
+        "equity": 5e-05,
+        "drawdown": -0.99995
+      },
+      {
+        "step": 309,
+        "equity": 4.9e-05,
+        "drawdown": -0.999951
+      },
+      {
+        "step": 310,
+        "equity": 4.7e-05,
+        "drawdown": -0.999953
+      },
+      {
+        "step": 311,
+        "equity": 4.8e-05,
+        "drawdown": -0.999952
+      },
+      {
+        "step": 312,
+        "equity": 4.6e-05,
+        "drawdown": -0.999954
+      },
+      {
+        "step": 313,
+        "equity": 4.6e-05,
+        "drawdown": -0.999954
+      },
+      {
+        "step": 314,
+        "equity": 4.7e-05,
+        "drawdown": -0.999953
+      },
+      {
+        "step": 315,
+        "equity": 4.7e-05,
+        "drawdown": -0.999953
+      },
+      {
+        "step": 316,
+        "equity": 4.7e-05,
+        "drawdown": -0.999953
+      },
+      {
+        "step": 317,
+        "equity": 4.4e-05,
+        "drawdown": -0.999956
+      },
+      {
+        "step": 318,
+        "equity": 4.2e-05,
+        "drawdown": -0.999958
+      },
+      {
+        "step": 319,
+        "equity": 4.2e-05,
+        "drawdown": -0.999958
+      },
+      {
+        "step": 320,
+        "equity": 4e-05,
+        "drawdown": -0.99996
+      },
+      {
+        "step": 321,
+        "equity": 4e-05,
+        "drawdown": -0.99996
+      },
+      {
+        "step": 322,
+        "equity": 3.9e-05,
+        "drawdown": -0.999961
+      },
+      {
+        "step": 323,
+        "equity": 3.7e-05,
+        "drawdown": -0.999963
+      },
+      {
+        "step": 324,
+        "equity": 3.7e-05,
+        "drawdown": -0.999963
+      },
+      {
+        "step": 325,
+        "equity": 3.4e-05,
+        "drawdown": -0.999966
+      },
+      {
+        "step": 326,
+        "equity": 3.2e-05,
+        "drawdown": -0.999968
+      },
+      {
+        "step": 327,
+        "equity": 3e-05,
+        "drawdown": -0.99997
+      },
+      {
+        "step": 328,
+        "equity": 2.9e-05,
+        "drawdown": -0.999971
+      },
+      {
+        "step": 329,
+        "equity": 2.9e-05,
+        "drawdown": -0.999971
+      },
+      {
+        "step": 330,
+        "equity": 2.7e-05,
+        "drawdown": -0.999973
+      },
+      {
+        "step": 331,
+        "equity": 2.5e-05,
+        "drawdown": -0.999975
+      },
+      {
+        "step": 332,
+        "equity": 2.3e-05,
+        "drawdown": -0.999977
+      },
+      {
+        "step": 333,
+        "equity": 2.3e-05,
+        "drawdown": -0.999977
+      },
+      {
+        "step": 334,
+        "equity": 2.2e-05,
+        "drawdown": -0.999978
+      },
+      {
+        "step": 335,
+        "equity": 2.2e-05,
+        "drawdown": -0.999978
+      },
+      {
+        "step": 336,
+        "equity": 2e-05,
+        "drawdown": -0.99998
+      },
+      {
+        "step": 337,
+        "equity": 1.9e-05,
+        "drawdown": -0.999981
+      },
+      {
+        "step": 338,
+        "equity": 1.8e-05,
+        "drawdown": -0.999982
+      },
+      {
+        "step": 339,
+        "equity": 1.8e-05,
+        "drawdown": -0.999982
+      },
+      {
+        "step": 340,
+        "equity": 1.7e-05,
+        "drawdown": -0.999983
+      },
+      {
+        "step": 341,
+        "equity": 1.6e-05,
+        "drawdown": -0.999984
+      },
+      {
+        "step": 342,
+        "equity": 1.5e-05,
+        "drawdown": -0.999985
+      },
+      {
+        "step": 343,
+        "equity": 1.4e-05,
+        "drawdown": -0.999986
+      },
+      {
+        "step": 344,
+        "equity": 1.3e-05,
+        "drawdown": -0.999987
+      },
+      {
+        "step": 345,
+        "equity": 1.3e-05,
+        "drawdown": -0.999987
+      },
+      {
+        "step": 346,
+        "equity": 1.3e-05,
+        "drawdown": -0.999987
+      },
+      {
+        "step": 347,
+        "equity": 1.2e-05,
+        "drawdown": -0.999988
+      },
+      {
+        "step": 348,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 349,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 350,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 351,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 352,
+        "equity": 1.2e-05,
+        "drawdown": -0.999988
+      },
+      {
+        "step": 353,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 354,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 355,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 356,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 357,
+        "equity": 1.1e-05,
+        "drawdown": -0.999989
+      },
+      {
+        "step": 358,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 359,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 360,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 361,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 362,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 363,
+        "equity": 1e-05,
+        "drawdown": -0.99999
+      },
+      {
+        "step": 364,
+        "equity": 9e-06,
+        "drawdown": -0.999991
+      },
+      {
+        "step": 365,
+        "equity": 9e-06,
+        "drawdown": -0.999991
+      },
+      {
+        "step": 366,
+        "equity": 9e-06,
+        "drawdown": -0.999991
+      },
+      {
+        "step": 367,
+        "equity": 9e-06,
+        "drawdown": -0.999991
+      },
+      {
+        "step": 368,
+        "equity": 8e-06,
+        "drawdown": -0.999992
+      },
+      {
+        "step": 369,
+        "equity": 8e-06,
+        "drawdown": -0.999992
+      },
+      {
+        "step": 370,
+        "equity": 8e-06,
+        "drawdown": -0.999992
+      },
+      {
+        "step": 371,
+        "equity": 7e-06,
+        "drawdown": -0.999993
+      },
+      {
+        "step": 372,
+        "equity": 7e-06,
+        "drawdown": -0.999993
+      },
+      {
+        "step": 373,
+        "equity": 6e-06,
+        "drawdown": -0.999994
+      },
+      {
+        "step": 374,
+        "equity": 6e-06,
+        "drawdown": -0.999994
+      },
+      {
+        "step": 375,
+        "equity": 6e-06,
+        "drawdown": -0.999994
+      },
+      {
+        "step": 376,
+        "equity": 6e-06,
+        "drawdown": -0.999994
+      },
+      {
+        "step": 377,
+        "equity": 5e-06,
+        "drawdown": -0.999995
+      },
+      {
+        "step": 378,
+        "equity": 5e-06,
+        "drawdown": -0.999995
+      },
+      {
+        "step": 379,
+        "equity": 5e-06,
+        "drawdown": -0.999995
+      },
+      {
+        "step": 380,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 381,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 382,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 383,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 384,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 385,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 386,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 387,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 388,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 389,
+        "equity": 4e-06,
+        "drawdown": -0.999996
+      },
+      {
+        "step": 390,
+        "equity": 3e-06,
+        "drawdown": -0.999997
+      },
+      {
+        "step": 391,
+        "equity": 3e-06,
+        "drawdown": -0.999997
+      },
+      {
+        "step": 392,
+        "equity": 3e-06,
+        "drawdown": -0.999997
+      },
+      {
+        "step": 393,
+        "equity": 3e-06,
+        "drawdown": -0.999997
+      },
+      {
+        "step": 394,
+        "equity": 3e-06,
+        "drawdown": -0.999997
+      },
+      {
+        "step": 395,
+        "equity": 3e-06,
+        "drawdown": -0.999997
+      },
+      {
+        "step": 396,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 397,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 398,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 399,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 400,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 401,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 402,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 403,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 404,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 405,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 406,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 407,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 408,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 409,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 410,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 411,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 412,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 413,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 414,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 415,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 416,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 417,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 418,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 419,
+        "equity": 2e-06,
+        "drawdown": -0.999998
+      },
+      {
+        "step": 420,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 421,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 422,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 423,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 424,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 425,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 426,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 427,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 428,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 429,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 430,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 431,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 432,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 433,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 434,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 435,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 436,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 437,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 438,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 439,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 440,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 441,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 442,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 443,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 444,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 445,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 446,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 447,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 448,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 449,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 450,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 451,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 452,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 453,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 454,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 455,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 456,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 457,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 458,
+        "equity": 1e-06,
+        "drawdown": -0.999999
+      },
+      {
+        "step": 459,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 460,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 461,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 462,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 463,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 464,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 465,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 466,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 467,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 468,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 469,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 470,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 471,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 472,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 473,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 474,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 475,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 476,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 477,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 478,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 479,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 480,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 481,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 482,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 483,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 484,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 485,
+        "equity": 0.0,
+        "drawdown": -1.0
+      },
+      {
+        "step": 486,
+        "equity": 0.0,
+        "drawdown": -1.0
+      }
+    ]
+  },
+  "details_path": "9942c280-63a2-4037-a60c-1e69fc6eab60.xlsx"
+}

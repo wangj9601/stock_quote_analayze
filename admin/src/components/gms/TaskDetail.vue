@@ -19,14 +19,19 @@
         <el-descriptions-item label="进度">{{ displayProgress(task.progress) }}%</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(task.created_at) }}</el-descriptions-item>
         <template v-if="task.config">
+          <el-descriptions-item label="任务类型">{{ backtestTypeLabel }}</el-descriptions-item>
           <el-descriptions-item label="市场">{{ task.config.market }}</el-descriptions-item>
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
           <el-descriptions-item label="目标阈值">{{ (task.config.target_pct * 100) }}%</el-descriptions-item>
           <el-descriptions-item label="持有窗口">{{ task.config.horizon_days }} 日</el-descriptions-item>
+          <template v-if="isTradeSimulation">
+            <el-descriptions-item label="止损阈值">{{ ((task.config.stop_loss_pct || 0) * 100).toFixed(2) }}%</el-descriptions-item>
+            <el-descriptions-item label="交易费用">{{ `手续费 ${task.config.commission_bps || 0}bps / 滑点 ${task.config.slippage_bps || 0}bps` }}</el-descriptions-item>
+          </template>
         </template>
       </el-descriptions>
 
-      <template v-if="task.summary">
+      <template v-if="task.summary && !isTradeSimulation">
         <h4 class="mt-4 mb-2">汇总</h4>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="样本数">{{ task.summary.total_samples }}</el-descriptions-item>
@@ -51,6 +56,24 @@
             <template #default="scope">{{ (scope.row.hit_rate * 100).toFixed(2) }}%</template>
           </el-table-column>
         </el-table>
+      </template>
+      <template v-if="task.summary && isTradeSimulation">
+        <h4 class="mt-4 mb-2">交易回测汇总</h4>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="交易数">{{ task.summary.total_trades ?? 0 }}</el-descriptions-item>
+          <el-descriptions-item label="胜率">{{ pct(task.summary.win_rate) }}</el-descriptions-item>
+          <el-descriptions-item label="复合收益">{{ pct(task.summary.total_return_compound) }}</el-descriptions-item>
+          <el-descriptions-item label="最大回撤">{{ pct(task.summary.max_drawdown) }}</el-descriptions-item>
+          <el-descriptions-item label="回撤恢复(bar)">{{ task.summary.max_drawdown_recovery_bars ?? 0 }}</el-descriptions-item>
+          <el-descriptions-item label="平均持仓K线">{{ (task.summary.avg_holding_bars ?? 0).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="平均盈利">{{ pct(task.summary.avg_win) }}</el-descriptions-item>
+          <el-descriptions-item label="平均亏损">{{ pct(task.summary.avg_loss) }}</el-descriptions-item>
+          <el-descriptions-item label="最大盈利单">{{ pct(task.summary.max_win_trade) }}</el-descriptions-item>
+          <el-descriptions-item label="P50/P80/P95收益">{{ `${pct(task.summary.pnl_p50)} / ${pct(task.summary.pnl_p80)} / ${pct(task.summary.pnl_p95)}` }}</el-descriptions-item>
+          <el-descriptions-item label="R均值/P50/P80/P95">{{ `${num(task.summary.r_multiple_avg)} / ${num(task.summary.r_multiple_p50)} / ${num(task.summary.r_multiple_p80)} / ${num(task.summary.r_multiple_p95)}` }}</el-descriptions-item>
+          <el-descriptions-item label="盈亏比">{{ displayProfitFactor(task.summary.profit_factor) }}</el-descriptions-item>
+          <el-descriptions-item label="平仓分布">{{ exitReasonText }}</el-descriptions-item>
+        </el-descriptions>
       </template>
 
       <h4 class="mt-4 mb-2">日志</h4>
@@ -78,6 +101,13 @@ const visible = computed({
 const task = ref<any>(null)
 const logs = ref<any[]>([])
 const loading = ref(false)
+const isTradeSimulation = computed(() => {
+  const t = String(task.value?.config?.backtest_type || task.value?.summary?.backtest_type || 'signal_hit_rate')
+  return t === 'trade_simulation'
+})
+const backtestTypeLabel = computed(() => {
+  return isTradeSimulation.value ? '交易回测' : '策略信号命中率回测'
+})
 
 const buyTypeRows = computed(() => {
   const s = task.value?.summary?.by_buy_type
@@ -100,6 +130,21 @@ const scoreBucketRows = computed(() => {
     hit_rate: v.hit_rate ?? 0
   }))
 })
+const exitReasonText = computed(() => {
+  const m = task.value?.summary?.by_exit_reason
+  if (!m || typeof m !== 'object') return '-'
+  const labelMap: Record<string, string> = {
+    止盈: '止盈',
+    止损: '止损',
+    时间出场: '时间出场',
+    take_profit: '止盈',
+    stop_loss: '止损',
+    time_exit: '时间出场'
+  }
+  return Object.entries(m)
+    .map(([k, v]) => `${labelMap[k] || k}:${v}`)
+    .join(' / ')
+})
 
 function formatDate(v: string) {
   if (!v) return '-'
@@ -110,6 +155,21 @@ function displayProgress(p: unknown): number {
   const n = Number(p)
   if (Number.isNaN(n)) return 0
   return Math.min(100, Math.max(0, Math.round(n)))
+}
+function pct(v: unknown): string {
+  const n = Number(v)
+  if (Number.isNaN(n)) return '-'
+  return `${(n * 100).toFixed(2)}%`
+}
+function displayProfitFactor(v: unknown): string {
+  const n = Number(v)
+  if (Number.isNaN(n)) return '-'
+  return n.toFixed(3)
+}
+function num(v: unknown): string {
+  const n = Number(v)
+  if (Number.isNaN(n)) return '-'
+  return n.toFixed(3)
 }
 
 async function load() {

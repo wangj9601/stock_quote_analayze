@@ -498,6 +498,33 @@ _GMS_BACKTEST_DETAIL_CSV_HEADER_ZH: Dict[str, str] = {
     "max_high_20d": "观察期内最高价",
     "max_gain_20d": "观察期内最大涨幅",
     "hit": "是否命中目标",
+    "entry_date": "入场日期",
+    "entry_exec_price": "入场成交价",
+    "exit_date": "出场日期",
+    "exit_price": "出场价格",
+    "exit_exec_price": "出场成交价",
+    "exit_reason": "出场原因",
+    "bars_held": "持有K线数",
+    "pnl_pct": "单笔收益率",
+    "stop_loss_pct": "止损阈值",
+    "commission_bps": "手续费bps",
+    "slippage_bps": "滑点bps",
+    "atr_period": "ATR周期",
+    "init_stop_atr_k": "初始止损ATR倍数",
+    "trail_stop_mode": "移动止损模式",
+    "trail_atr_k": "跟踪ATR倍数",
+    "trail_pct": "回撤止损比例",
+    "breakeven_trigger_r": "保本触发R",
+    "profit_lock_trigger_r": "锁盈触发R",
+    "profit_lock_r": "锁盈保留R",
+    "partial_take_profit_r": "分批止盈触发R",
+    "partial_take_profit_applied": "是否触发分批止盈",
+    "partial_take_ratio": "分批止盈比例",
+    "r_multiple": "R倍数",
+    "initial_risk_pct": "初始风险比例",
+    "initial_stop_price": "初始止损价",
+    "max_favorable_excursion_pct": "最大有利波动",
+    "max_adverse_excursion_pct": "最大不利波动",
 }
 
 
@@ -533,6 +560,33 @@ _GMS_BACKTEST_XLSX_COL_WIDTH: Dict[str, float] = {
     "观察期内最高价": 16.0,
     "观察期内最大涨幅": 18.0,
     "是否命中目标": 12.0,
+    "入场日期": 12.0,
+    "入场成交价": 12.0,
+    "出场日期": 12.0,
+    "出场价格": 12.0,
+    "出场成交价": 12.0,
+    "出场原因": 12.0,
+    "持有K线数": 12.0,
+    "单笔收益率": 12.0,
+    "止损阈值": 12.0,
+    "手续费bps": 12.0,
+    "滑点bps": 12.0,
+    "ATR周期": 10.0,
+    "初始止损ATR倍数": 14.0,
+    "移动止损模式": 14.0,
+    "跟踪ATR倍数": 12.0,
+    "回撤止损比例": 12.0,
+    "保本触发R": 10.0,
+    "锁盈触发R": 10.0,
+    "锁盈保留R": 10.0,
+    "分批止盈触发R": 14.0,
+    "是否触发分批止盈": 14.0,
+    "分批止盈比例": 12.0,
+    "R倍数": 10.0,
+    "初始风险比例": 12.0,
+    "初始止损价": 12.0,
+    "最大有利波动": 12.0,
+    "最大不利波动": 12.0,
 }
 
 
@@ -650,6 +704,18 @@ def _write_gms_xlsx_sheet(ws: Any, fieldnames_zh: List[str], rows_zh: List[Dict[
             val = cell.value
             if val is not None and val != "" and isinstance(val, (int, float)):
                 cell.number_format = "0.00%"
+    for header in ("单笔收益率", "止损阈值"):
+        pct_col_idx = None
+        for i, h in enumerate(fieldnames_zh, start=1):
+            if h == header:
+                pct_col_idx = i
+                break
+        if pct_col_idx and ws.max_row >= 2:
+            for row in range(2, ws.max_row + 1):
+                cell = ws.cell(row=row, column=pct_col_idx)
+                val = cell.value
+                if val is not None and val != "" and isinstance(val, (int, float)):
+                    cell.number_format = "0.00%"
 
 
 def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:

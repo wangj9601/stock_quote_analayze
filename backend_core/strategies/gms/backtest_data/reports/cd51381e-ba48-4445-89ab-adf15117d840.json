@@ -1,0 +1,93 @@
+{
+  "report_id": "cd51381e-ba48-4445-89ab-adf15117d840",
+  "task_id": "cd51381e-ba48-4445-89ab-adf15117d840",
+  "name": "GMS回测_603667_五洲新春",
+  "created_at": "2026-04-09T07:24:37.792871Z",
+  "summary": {
+    "backtest_type": "trade_simulation",
+    "total_trades": 8,
+    "win_count": 1,
+    "loss_count": 4,
+    "win_rate": 0.125,
+    "avg_win": 0.020732,
+    "avg_loss": -0.072532,
+    "profit_factor": 0.071458,
+    "total_return_compound": -0.245209,
+    "max_drawdown": -0.260539,
+    "max_drawdown_recovery_bars": 8,
+    "target_pct": 0.05,
+    "horizon_days": 20,
+    "stop_loss_pct": 0.1,
+    "commission_bps": 0.0,
+    "slippage_bps": 0.0,
+    "trail_stop_mode": "atr",
+    "trail_atr_k": 3.0,
+    "trail_pct": 0.08,
+    "breakeven_trigger_r": 1.0,
+    "profit_lock_trigger_r": 2.0,
+    "profit_lock_r": 0.5,
+    "partial_take_profit_r": 2.0,
+    "partial_take_ratio": 0.4,
+    "time_stop_bars": 15,
+    "avg_holding_bars": 4.375,
+    "avg_win_trade": 0.020732,
+    "max_win_trade": 0.020732,
+    "pnl_p50": -0.02381,
+    "pnl_p80": 0.0,
+    "pnl_p95": 0.013476,
+    "r_multiple_avg": -0.420971,
+    "r_multiple_p50": -0.433885,
+    "r_multiple_p80": 0.0,
+    "r_multiple_p95": 0.325,
+    "start_date": "2024-04-02",
+    "end_date": "2026-04-02",
+    "market": "all",
+    "buy_signal_rule": "交易回测：样本为左/右侧买点，信号总分受最低总分筛选；买入价为信号日后下一交易日开盘价；同一标的在上一笔观察期结束前不重复开仓；出场规则为先止损后止盈（同日同时触发按止损），否则观察期最后一根K线收盘价出场。",
+    "by_exit_reason": {
+      "止损": 8
+    },
+    "equity_curve": [
+      {
+        "step": 1,
+        "equity": 0.952381,
+        "drawdown": -0.047619
+      },
+      {
+        "step": 2,
+        "equity": 0.862191,
+        "drawdown": -0.137809
+      },
+      {
+        "step": 3,
+        "equity": 0.798213,
+        "drawdown": -0.201787
+      },
+      {
+        "step": 4,
+        "equity": 0.798213,
+        "drawdown": -0.201787
+      },
+      {
+        "step": 5,
+        "equity": 0.798213,
+        "drawdown": -0.201787
+      },
+      {
+        "step": 6,
+        "equity": 0.739461,
+        "drawdown": -0.260539
+      },
+      {
+        "step": 7,
+        "equity": 0.739461,
+        "drawdown": -0.260539
+      },
+      {
+        "step": 8,
+        "equity": 0.754791,
+        "drawdown": -0.245209
+      }
+    ]
+  },
+  "details_path": "cd51381e-ba48-4445-89ab-adf15117d840.xlsx"
+}

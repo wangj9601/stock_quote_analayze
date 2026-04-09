@@ -39,6 +39,21 @@ class GMSApiService {
     target_pct?: number
     horizon_days?: number
     min_score?: number
+    backtest_type?: 'signal_hit_rate' | 'trade_simulation'
+    stop_loss_pct?: number
+    commission_bps?: number
+    slippage_bps?: number
+    atr_period?: number
+    init_stop_atr_k?: number
+    trail_stop_mode?: 'atr' | 'percent'
+    trail_atr_k?: number
+    trail_pct?: number
+    breakeven_trigger_r?: number
+    profit_lock_trigger_r?: number
+    profit_lock_r?: number
+    partial_take_profit_r?: number
+    partial_take_ratio?: number
+    time_stop_bars?: number
     stock_pool_mode?: string
     stock_code?: string
     stock_pool?: string[]

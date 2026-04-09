@@ -11,6 +11,7 @@ GMS 策略回测执行器
 """
 
 import logging
+import math
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from sqlalchemy.orm import Session
 
@@ -101,14 +102,14 @@ def _get_entry_open_next_day_hk(db: Session, code: str, signal_date: str) -> Opt
     return None
 
 
-def _get_future_highs_cn(db: Session, code: str, after_date: str, limit: int) -> List[float]:
-    """信号日之后 limit 个交易日的 high，按日期升序。"""
+def _get_future_ohlc_cn(db: Session, code: str, after_date: str, limit: int) -> List[Dict[str, Any]]:
+    """信号日之后 limit 个交易日 OHLC（含 date），按日期升序。"""
     from sqlalchemy import cast, String
     from backend_api.models import HistoricalQuotes
 
     after_str = str(after_date).strip()[:10]
     rows = (
-        db.query(HistoricalQuotes.high)
+        db.query(HistoricalQuotes.date, HistoricalQuotes.open, HistoricalQuotes.high, HistoricalQuotes.low, HistoricalQuotes.close)
         .filter(
             HistoricalQuotes.code == code,
             cast(HistoricalQuotes.date, String) > after_str,
@@ -117,19 +118,47 @@ def _get_future_highs_cn(db: Session, code: str, after_date: str, limit: int) ->
         .limit(limit)
         .all()
     )
-    return [float(r[0]) for r in rows if r[0] is not None]
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        dt = str(r[0])[:10] if r[0] is not None else ""
+        if not dt:
+            continue
+        out.append(
+            {
+                "date": dt,
+                "open": float(r[1]) if r[1] is not None else None,
+                "high": float(r[2]) if r[2] is not None else None,
+                "low": float(r[3]) if r[3] is not None else None,
+                "close": float(r[4]) if r[4] is not None else None,
+            }
+        )
+    return out
 
 
-def _get_future_highs_hk(db: Session, code: str, after_date: str, limit: int) -> List[float]:
+def _get_future_ohlc_hk(db: Session, code: str, after_date: str, limit: int) -> List[Dict[str, Any]]:
     from backend_api.models import HistoricalQuotesHK
     rows = (
-        db.query(HistoricalQuotesHK.high)
+        db.query(HistoricalQuotesHK.date, HistoricalQuotesHK.open, HistoricalQuotesHK.high, HistoricalQuotesHK.low, HistoricalQuotesHK.close)
         .filter(HistoricalQuotesHK.code == code, HistoricalQuotesHK.date > after_date)
         .order_by(HistoricalQuotesHK.date)
         .limit(limit)
         .all()
     )
-    return [float(r[0]) for r in rows if r[0] is not None]
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        dt = str(r[0]).strip()[:10] if r[0] is not None else ""
+        if not dt:
+            continue
+        out.append(
+            {
+                "date": dt,
+                "open": float(r[1]) if r[1] is not None else None,
+                "high": float(r[2]) if r[2] is not None else None,
+                "low": float(r[3]) if r[3] is not None else None,
+                "close": float(r[4]) if r[4] is not None else None,
+            }
+        )
+    return out
 
 
 def _get_observation_window_end_cn(
@@ -238,6 +267,283 @@ def _aggregate_details_to_summary(
     return {"summary": summary, "details": details}
 
 
+def _simulate_trade_exit(
+    entry_open: float,
+    bars: List[Dict[str, Any]],
+    target_pct: float,
+    stop_loss_pct: float,
+    commission_bps: float,
+    slippage_bps: float,
+    atr_period: int,
+    init_stop_atr_k: float,
+    trail_stop_mode: str,
+    trail_atr_k: float,
+    trail_pct: float,
+    breakeven_trigger_r: float,
+    profit_lock_trigger_r: float,
+    profit_lock_r: float,
+    partial_take_profit_r: float,
+    partial_take_ratio: float,
+    time_stop_bars: int,
+) -> Dict[str, Any]:
+    """
+    利润最大化 + 移动止损：
+    1) 初始止损（仅百分比）
+    2) 达到 breakeven_trigger_r 后抬保本
+    3) 达到 profit_lock_trigger_r 后锁盈到 +profit_lock_r * R
+    4) 启用百分比跟踪止损（不使用 ATR）
+    5) 可选分批止盈（在 partial_take_profit_r 处）
+    6) 时间止损：超过 time_stop_bars 且未达到 +1R，按收盘离场
+    """
+    if not bars:
+        comm = float(commission_bps or 0) / 10000.0
+        slip = float(slippage_bps or 0) / 10000.0
+        entry_exec = entry_open * (1.0 + slip + comm)
+        exit_exec = entry_open * (1.0 - slip - comm)
+        pnl_pct = (exit_exec / entry_exec - 1.0) if entry_exec > 0 else 0.0
+        return {
+            "exit_price": round(float(entry_open), 4),
+            "exit_date": "",
+            "exit_reason": "时间出场",
+            "bars_held": 0,
+            "entry_exec_price": round(entry_exec, 4),
+            "exit_exec_price": round(exit_exec, 4),
+            "pnl_pct": round(pnl_pct, 6),
+            "partial_take_profit_applied": False,
+            "partial_take_ratio": 0.0,
+            "r_multiple": 0.0,
+            "initial_risk_pct": 0.0,
+            "initial_stop_price": round(float(entry_open), 4),
+            "max_favorable_excursion_pct": 0.0,
+            "max_adverse_excursion_pct": 0.0,
+        }
+
+    highs = [float(b["high"]) for b in bars if b.get("high") is not None]
+    if not highs:
+        highs = [entry_open]
+    pct_stop = entry_open * (1.0 - float(stop_loss_pct or 0)) if float(stop_loss_pct or 0) > 0 else None
+    # 简化交易策略：仅使用百分比止损，不再使用 ATR/结构止损
+    initial_stop = pct_stop if pct_stop is not None else entry_open * 0.95
+    if initial_stop >= entry_open:
+        initial_stop = entry_open * 0.99
+
+    initial_risk = max(1e-8, entry_open - initial_stop)
+    tp_price = entry_open * (1.0 + target_pct)
+    highest = entry_open
+    stop_line = initial_stop
+    partial_hit = False
+    final_pnl = None
+    exit_price: Optional[float] = None
+    exit_date: Optional[str] = None
+    exit_reason = "时间出场"
+    bars_held = 0
+    mfe = 0.0
+    mae = 0.0
+
+    for i, b in enumerate(bars, start=1):
+        bars_held = i
+        high = float(b.get("high")) if b.get("high") is not None else entry_open
+        low = float(b.get("low")) if b.get("low") is not None else entry_open
+        close = float(b.get("close")) if b.get("close") is not None else entry_open
+        d = str(b.get("date") or "")
+        highest = max(highest, high)
+        mfe = max(mfe, highest / entry_open - 1.0)
+        mae = min(mae, low / entry_open - 1.0)
+
+        r_now = (highest - entry_open) / initial_risk if initial_risk > 0 else 0.0
+        if r_now >= float(breakeven_trigger_r or 0):
+            stop_line = max(stop_line, entry_open)
+        if r_now >= float(profit_lock_trigger_r or 0):
+            stop_line = max(stop_line, entry_open + float(profit_lock_r or 0) * initial_risk)
+        trail_line = highest * (1.0 - float(trail_pct or 0))
+        stop_line = max(stop_line, trail_line)
+
+        if (not partial_hit) and r_now >= float(partial_take_profit_r or 0):
+            partial_hit = True
+
+        if low <= stop_line:
+            exit_price = float(stop_line)
+            exit_date = d
+            exit_reason = "止损"
+            break
+        if high >= tp_price and float(partial_take_ratio or 0) <= 0:
+            exit_price = float(tp_price)
+            exit_date = d
+            exit_reason = "止盈"
+            break
+        if int(time_stop_bars or 0) > 0 and i >= int(time_stop_bars or 0) and r_now < 1.0:
+            exit_price = close
+            exit_date = d
+            exit_reason = "时间止损"
+            break
+
+    if exit_price is None:
+        last = bars[-1]
+        close_v = last.get("close")
+        exit_price = float(close_v) if close_v is not None and float(close_v) > 0 else entry_open
+        exit_date = str(last.get("date") or "")
+        bars_held = len(bars)
+        exit_reason = "时间出场"
+
+    comm = float(commission_bps or 0) / 10000.0
+    slip = float(slippage_bps or 0) / 10000.0
+    entry_exec = float(entry_open) * (1.0 + slip + comm)
+    exit_exec_total = float(exit_price) * (1.0 - slip - comm)
+
+    part_ratio = min(1.0, max(0.0, float(partial_take_ratio or 0)))
+    if partial_hit and part_ratio > 0:
+        partial_exec = tp_price * (1.0 - slip - comm)
+        remain = 1.0 - part_ratio
+        blended_exit_exec = part_ratio * partial_exec + remain * exit_exec_total
+    else:
+        blended_exit_exec = exit_exec_total
+        part_ratio = 0.0
+    pnl_pct = (blended_exit_exec / entry_exec - 1.0) if entry_exec > 0 else 0.0
+    r_multiple = ((float(exit_price) - entry_open) / initial_risk) if initial_risk > 0 else 0.0
+
+    return {
+        "exit_price": round(float(exit_price), 4),
+        "exit_date": exit_date,
+        "exit_reason": exit_reason,
+        "bars_held": int(max(0, bars_held)),
+        "entry_exec_price": round(entry_exec, 4),
+        "exit_exec_price": round(blended_exit_exec, 4),
+        "pnl_pct": round(pnl_pct, 6),
+        "partial_take_profit_applied": bool(partial_hit and part_ratio > 0),
+        "partial_take_ratio": round(part_ratio, 4),
+        "r_multiple": round(r_multiple, 6),
+        "initial_risk_pct": round(initial_risk / entry_open, 6) if entry_open > 0 else 0.0,
+        "initial_stop_price": round(initial_stop, 4),
+        "max_favorable_excursion_pct": round(mfe, 6),
+        "max_adverse_excursion_pct": round(mae, 6),
+    }
+
+
+def _aggregate_trade_summary(
+    details: List[Dict[str, Any]],
+    start_str: str,
+    end_str: str,
+    market: str,
+    target_pct: float,
+    horizon_days: int,
+    buy_signal_rule: str,
+    stop_loss_pct: float,
+    commission_bps: float,
+    slippage_bps: float,
+    trail_stop_mode: str,
+    trail_atr_k: float,
+    trail_pct: float,
+    breakeven_trigger_r: float,
+    profit_lock_trigger_r: float,
+    profit_lock_r: float,
+    partial_take_profit_r: float,
+    partial_take_ratio: float,
+    time_stop_bars: int,
+) -> Dict[str, Any]:
+    def _quantile(vals: List[float], q: float) -> float:
+        if not vals:
+            return 0.0
+        arr = sorted(vals)
+        pos = (len(arr) - 1) * q
+        lo = int(math.floor(pos))
+        hi = int(math.ceil(pos))
+        if lo == hi:
+            return float(arr[lo])
+        w = pos - lo
+        return float(arr[lo] * (1 - w) + arr[hi] * w)
+
+    total_trades = len(details)
+    wins = [float(d.get("pnl_pct") or 0) for d in details if float(d.get("pnl_pct") or 0) > 0]
+    losses = [float(d.get("pnl_pct") or 0) for d in details if float(d.get("pnl_pct") or 0) < 0]
+    win_rate = (len(wins) / total_trades) if total_trades else 0.0
+    avg_win = (sum(wins) / len(wins)) if wins else 0.0
+    avg_loss = (sum(losses) / len(losses)) if losses else 0.0
+    gross_profit = sum(wins)
+    gross_loss_abs = abs(sum(losses))
+    profit_factor = (gross_profit / gross_loss_abs) if gross_loss_abs > 0 else (math.inf if gross_profit > 0 else 0.0)
+    avg_hold_bars = (sum(int(d.get("bars_held") or 0) for d in details) / total_trades) if total_trades else 0.0
+    max_win = max(wins) if wins else 0.0
+    pnl_all = [float(d.get("pnl_pct") or 0) for d in details]
+    r_all = [float(d.get("r_multiple") or 0) for d in details]
+
+    eq = 1.0
+    peak = 1.0
+    max_dd = 0.0
+    dd_recovery_bars = 0
+    in_recovery = False
+    cur_recovery = 0
+    equity_curve: List[Dict[str, Any]] = []
+    ordered = sorted(details, key=lambda d: (str(d.get("entry_date") or d.get("date") or ""), str(d.get("code") or "")))
+    for i, d in enumerate(ordered, start=1):
+        r = float(d.get("pnl_pct") or 0)
+        eq *= (1.0 + r)
+        if eq > peak:
+            peak = eq
+            if in_recovery:
+                dd_recovery_bars = max(dd_recovery_bars, cur_recovery)
+                in_recovery = False
+                cur_recovery = 0
+        dd = (eq / peak - 1.0) if peak > 0 else 0.0
+        if dd < max_dd:
+            max_dd = dd
+        if dd < 0:
+            in_recovery = True
+            cur_recovery += 1
+        equity_curve.append({"step": i, "equity": round(eq, 6), "drawdown": round(dd, 6)})
+    if in_recovery:
+        dd_recovery_bars = max(dd_recovery_bars, cur_recovery)
+
+    by_exit_reason: Dict[str, int] = {}
+    for d in details:
+        rs = str(d.get("exit_reason") or "unknown")
+        by_exit_reason[rs] = by_exit_reason.get(rs, 0) + 1
+
+    summary: Dict[str, Any] = {
+        "backtest_type": "trade_simulation",
+        "total_trades": total_trades,
+        "win_count": len(wins),
+        "loss_count": len(losses),
+        "win_rate": round(win_rate, 4),
+        "avg_win": round(avg_win, 6),
+        "avg_loss": round(avg_loss, 6),
+        "profit_factor": (round(profit_factor, 6) if math.isfinite(profit_factor) else None),
+        "total_return_compound": round(eq - 1.0, 6),
+        "max_drawdown": round(max_dd, 6),
+        "max_drawdown_recovery_bars": int(dd_recovery_bars),
+        "target_pct": target_pct,
+        "horizon_days": horizon_days,
+        "stop_loss_pct": float(stop_loss_pct or 0),
+        "commission_bps": float(commission_bps or 0),
+        "slippage_bps": float(slippage_bps or 0),
+        "trail_stop_mode": "percent",
+        "trail_atr_k": float(trail_atr_k or 0),
+        "trail_pct": float(trail_pct or 0),
+        "breakeven_trigger_r": float(breakeven_trigger_r or 0),
+        "profit_lock_trigger_r": float(profit_lock_trigger_r or 0),
+        "profit_lock_r": float(profit_lock_r or 0),
+        "partial_take_profit_r": float(partial_take_profit_r or 0),
+        "partial_take_ratio": float(partial_take_ratio or 0),
+        "time_stop_bars": int(time_stop_bars or 0),
+        "avg_holding_bars": round(avg_hold_bars, 4),
+        "avg_win_trade": round(avg_win, 6),
+        "max_win_trade": round(max_win, 6),
+        "pnl_p50": round(_quantile(pnl_all, 0.5), 6) if pnl_all else 0.0,
+        "pnl_p80": round(_quantile(pnl_all, 0.8), 6) if pnl_all else 0.0,
+        "pnl_p95": round(_quantile(pnl_all, 0.95), 6) if pnl_all else 0.0,
+        "r_multiple_avg": round(sum(r_all) / len(r_all), 6) if r_all else 0.0,
+        "r_multiple_p50": round(_quantile(r_all, 0.5), 6) if r_all else 0.0,
+        "r_multiple_p80": round(_quantile(r_all, 0.8), 6) if r_all else 0.0,
+        "r_multiple_p95": round(_quantile(r_all, 0.95), 6) if r_all else 0.0,
+        "start_date": start_str,
+        "end_date": end_str,
+        "market": market,
+        "buy_signal_rule": buy_signal_rule,
+        "by_exit_reason": by_exit_reason,
+        "equity_curve": equity_curve,
+    }
+    return {"summary": summary, "details": details}
+
+
 def _parse_score(r: dict) -> Optional[float]:
     st = r.get("score_total")
     if st is None:
@@ -288,6 +594,21 @@ def _gms_evaluate_one_signal(
     market_key: str,
     horizon_days: int,
     target_pct: float,
+    backtest_type: str,
+    stop_loss_pct: float,
+    commission_bps: float,
+    slippage_bps: float,
+    atr_period: int,
+    init_stop_atr_k: float,
+    trail_stop_mode: str,
+    trail_atr_k: float,
+    trail_pct: float,
+    breakeven_trigger_r: float,
+    profit_lock_trigger_r: float,
+    profit_lock_r: float,
+    partial_take_profit_r: float,
+    partial_take_ratio: float,
+    time_stop_bars: int,
     block_until_obs_end: Dict[Tuple[str, str], str],
 ) -> Optional[Dict[str, Any]]:
     """单条选股结果：若计入样本则返回明细 dict 并更新观察期锁；否则 None。"""
@@ -310,10 +631,10 @@ def _gms_evaluate_one_signal(
 
     if market_key == "cn":
         entry_open = _get_entry_open_next_day_cn(db, code, trade_date)
-        future_highs = _get_future_highs_cn(db, code, trade_date, horizon_days)
+        future_bars = _get_future_ohlc_cn(db, code, trade_date, horizon_days)
     else:
         entry_open = _get_entry_open_next_day_hk(db, code, trade_date)
-        future_highs = _get_future_highs_hk(db, code, trade_date, horizon_days)
+        future_bars = _get_future_ohlc_hk(db, code, trade_date, horizon_days)
 
     if entry_open is None or entry_open <= 0:
         return None
@@ -322,11 +643,11 @@ def _gms_evaluate_one_signal(
     else:
         obs_end = _get_observation_window_end_hk(db, code, trade_date, horizon_days)
     block_until_obs_end[once_key] = obs_end if obs_end else trade_date
+    future_highs = [float(b.get("high")) for b in future_bars if b.get("high") is not None]
     max_high = max(future_highs) if future_highs else entry_open
     max_gain = (max_high / entry_open - 1.0) if entry_open else 0.0
     hit = max_high >= entry_open * (1.0 + target_pct)
-
-    return {
+    base_row = {
         "code": code,
         "date": trade_date,
         "market": mt_key,
@@ -337,6 +658,49 @@ def _gms_evaluate_one_signal(
         "max_gain_20d": round(max_gain, 4),
         "hit": hit,
     }
+    if backtest_type != "trade_simulation":
+        return base_row
+
+    trade_row = _simulate_trade_exit(
+        entry_open=entry_open,
+        bars=future_bars,
+        target_pct=target_pct,
+        stop_loss_pct=stop_loss_pct,
+        commission_bps=commission_bps,
+        slippage_bps=slippage_bps,
+        atr_period=atr_period,
+        init_stop_atr_k=init_stop_atr_k,
+        trail_stop_mode=trail_stop_mode,
+        trail_atr_k=trail_atr_k,
+        trail_pct=trail_pct,
+        breakeven_trigger_r=breakeven_trigger_r,
+        profit_lock_trigger_r=profit_lock_trigger_r,
+        profit_lock_r=profit_lock_r,
+        partial_take_profit_r=partial_take_profit_r,
+        partial_take_ratio=partial_take_ratio,
+        time_stop_bars=time_stop_bars,
+    )
+    base_row.update(
+        {
+            "entry_date": future_bars[0]["date"] if future_bars else "",
+            "stop_loss_pct": float(stop_loss_pct or 0),
+            "commission_bps": float(commission_bps or 0),
+            "slippage_bps": float(slippage_bps or 0),
+            "atr_period": int(atr_period or 14),
+            "init_stop_atr_k": float(init_stop_atr_k or 0),
+            "trail_stop_mode": "percent",
+            "trail_atr_k": float(trail_atr_k or 0),
+            "trail_pct": float(trail_pct or 0),
+            "breakeven_trigger_r": float(breakeven_trigger_r or 0),
+            "profit_lock_trigger_r": float(profit_lock_trigger_r or 0),
+            "profit_lock_r": float(profit_lock_r or 0),
+            "partial_take_profit_r": float(partial_take_profit_r or 0),
+            "partial_take_ratio": float(partial_take_ratio or 0),
+            "time_stop_bars": int(time_stop_bars or 0),
+        }
+    )
+    base_row.update(trade_row)
+    return base_row
 
 
 def run_gms_backtest(
@@ -347,6 +711,21 @@ def run_gms_backtest(
     target_pct: float = 0.05,
     horizon_days: int = 20,
     min_score: float = 0,
+    backtest_type: str = "signal_hit_rate",
+    stop_loss_pct: float = 0,
+    commission_bps: float = 0,
+    slippage_bps: float = 0,
+    atr_period: int = 14,
+    init_stop_atr_k: float = 2.2,
+    trail_stop_mode: str = "atr",
+    trail_atr_k: float = 3.0,
+    trail_pct: float = 0.08,
+    breakeven_trigger_r: float = 1.0,
+    profit_lock_trigger_r: float = 2.0,
+    profit_lock_r: float = 0.5,
+    partial_take_profit_r: float = 2.0,
+    partial_take_ratio: float = 0.4,
+    time_stop_bars: int = 15,
     stock_pool: Optional[List[str]] = None,
     progress_callback: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
@@ -361,12 +740,23 @@ def run_gms_backtest(
     start_str = str(start_date).strip()[:10]
     end_str = str(end_date).strip()[:10]
 
-    buy_signal_rule = (
-        "与管理端 GMS 回测一致：样本为左/右侧买点，信号总分受「最低总分」参数筛选（GMSFrontendInterface）；"
-        "买入价为信号日之后下一交易日开盘价；"
-        "同一标的须待上一笔观察期（horizon_days 根 K 线）结束后才接受下一笔信号。"
-        "多只股票同批回测时，每个交易日、每个市场仅批量拉取一次该池在该市场的选股结果（性能优化）；全市场无固定池时仍按交易日扫描。"
-    )
+    bt = str(backtest_type or "signal_hit_rate").strip().lower()
+    if bt not in ("signal_hit_rate", "trade_simulation"):
+        bt = "signal_hit_rate"
+    if bt == "trade_simulation":
+        buy_signal_rule = (
+            "交易回测：样本为左/右侧买点，信号总分受最低总分筛选；"
+            "买入价为信号日后下一交易日开盘价；"
+            "同一标的在上一笔观察期结束前不重复开仓；"
+            "出场规则为先止损后止盈（同日同时触发按止损），否则观察期最后一根K线收盘价出场。"
+        )
+    else:
+        buy_signal_rule = (
+            "命中率回测：样本为左/右侧买点，信号总分受最低总分筛选；"
+            "买入价为信号日后下一交易日开盘价；"
+            "统计观察期内最高价是否触达目标涨幅；"
+            "同一标的在上一笔观察期结束前不重复计入样本。"
+        )
 
     # 单股/自定义股票池时只跑该池所属市场，避免“选单股仍跑全市场”
     def _is_a_share(c: str) -> bool:
@@ -404,9 +794,29 @@ def run_gms_backtest(
         total_steps = sum(len(dl) for _, dl in markets_to_run)
 
     if total_steps == 0:
-        return _aggregate_details_to_summary(
-            [], start_str, end_str, market, target_pct, horizon_days, buy_signal_rule
-        )
+        if bt == "trade_simulation":
+            return _aggregate_trade_summary(
+                [],
+                start_str,
+                end_str,
+                market,
+                target_pct,
+                horizon_days,
+                buy_signal_rule,
+                stop_loss_pct=stop_loss_pct,
+                commission_bps=commission_bps,
+                slippage_bps=slippage_bps,
+                trail_stop_mode=trail_stop_mode,
+                trail_atr_k=trail_atr_k,
+                trail_pct=trail_pct,
+                breakeven_trigger_r=breakeven_trigger_r,
+                profit_lock_trigger_r=profit_lock_trigger_r,
+                profit_lock_r=profit_lock_r,
+                partial_take_profit_r=partial_take_profit_r,
+                partial_take_ratio=partial_take_ratio,
+                time_stop_bars=time_stop_bars,
+            )
+        return _aggregate_details_to_summary([], start_str, end_str, market, target_pct, horizon_days, buy_signal_rule)
 
     interface = GMSFrontendInterface(db)
     interface.set_selection_config(min_score=min_score, max_results=10000)
@@ -446,7 +856,28 @@ def run_gms_backtest(
                 )
                 for r in results_sorted:
                     row = _gms_evaluate_one_signal(
-                        db, r, trade_date, market_key, horizon_days, target_pct, block_until_obs_end
+                        db,
+                        r,
+                        trade_date,
+                        market_key,
+                        horizon_days,
+                        target_pct,
+                        bt,
+                        stop_loss_pct,
+                        commission_bps,
+                        slippage_bps,
+                        atr_period,
+                        init_stop_atr_k,
+                        trail_stop_mode,
+                        trail_atr_k,
+                        trail_pct,
+                        breakeven_trigger_r,
+                        profit_lock_trigger_r,
+                        profit_lock_r,
+                        partial_take_profit_r,
+                        partial_take_ratio,
+                        time_stop_bars,
+                        block_until_obs_end,
                     )
                     if row:
                         details.append(row)
@@ -476,7 +907,28 @@ def run_gms_backtest(
 
                 for r in results:
                     row = _gms_evaluate_one_signal(
-                        db, r, trade_date, market_key, horizon_days, target_pct, block_until_obs_end
+                        db,
+                        r,
+                        trade_date,
+                        market_key,
+                        horizon_days,
+                        target_pct,
+                        bt,
+                        stop_loss_pct,
+                        commission_bps,
+                        slippage_bps,
+                        atr_period,
+                        init_stop_atr_k,
+                        trail_stop_mode,
+                        trail_atr_k,
+                        trail_pct,
+                        breakeven_trigger_r,
+                        profit_lock_trigger_r,
+                        profit_lock_r,
+                        partial_take_profit_r,
+                        partial_take_ratio,
+                        time_stop_bars,
+                        block_until_obs_end,
                     )
                     if row:
                         details.append(row)
@@ -489,6 +941,26 @@ def run_gms_backtest(
                 break
 
     details = _sort_details_for_export(details)
-    return _aggregate_details_to_summary(
-        details, start_str, end_str, market, target_pct, horizon_days, buy_signal_rule
-    )
+    if bt == "trade_simulation":
+        return _aggregate_trade_summary(
+            details,
+            start_str,
+            end_str,
+            market,
+            target_pct,
+            horizon_days,
+            buy_signal_rule,
+            stop_loss_pct=stop_loss_pct,
+            commission_bps=commission_bps,
+            slippage_bps=slippage_bps,
+            trail_stop_mode=trail_stop_mode,
+            trail_atr_k=trail_atr_k,
+            trail_pct=trail_pct,
+            breakeven_trigger_r=breakeven_trigger_r,
+            profit_lock_trigger_r=profit_lock_trigger_r,
+            profit_lock_r=profit_lock_r,
+            partial_take_profit_r=partial_take_profit_r,
+            partial_take_ratio=partial_take_ratio,
+            time_stop_bars=time_stop_bars,
+        )
+    return _aggregate_details_to_summary(details, start_str, end_str, market, target_pct, horizon_days, buy_signal_rule)

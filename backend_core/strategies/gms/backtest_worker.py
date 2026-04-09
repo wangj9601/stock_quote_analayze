@@ -37,6 +37,21 @@ def _run_task(task_id: str) -> None:
         target_pct = float(config.get("target_pct", 0.05))
         horizon_days = int(config.get("horizon_days", 20))
         min_score = float(config.get("min_score", 0))
+        backtest_type = str(config.get("backtest_type", "signal_hit_rate") or "signal_hit_rate")
+        stop_loss_pct = float(config.get("stop_loss_pct", 0) or 0)
+        commission_bps = float(config.get("commission_bps", 0) or 0)
+        slippage_bps = float(config.get("slippage_bps", 0) or 0)
+        atr_period = int(config.get("atr_period", 14) or 14)
+        init_stop_atr_k = float(config.get("init_stop_atr_k", 2.2) or 2.2)
+        trail_stop_mode = str(config.get("trail_stop_mode", "atr") or "atr")
+        trail_atr_k = float(config.get("trail_atr_k", 3.0) or 3.0)
+        trail_pct = float(config.get("trail_pct", 0.08) or 0.08)
+        breakeven_trigger_r = float(config.get("breakeven_trigger_r", 1.0) or 1.0)
+        profit_lock_trigger_r = float(config.get("profit_lock_trigger_r", 2.0) or 2.0)
+        profit_lock_r = float(config.get("profit_lock_r", 0.5) or 0.5)
+        partial_take_profit_r = float(config.get("partial_take_profit_r", 2.0) or 2.0)
+        partial_take_ratio = float(config.get("partial_take_ratio", 0.4) or 0.4)
+        time_stop_bars = int(config.get("time_stop_bars", 15) or 15)
         # 股票池：单股(stock_code) -> [code]；自定义(stock_pool) -> 列表；全市场 -> None
         stock_pool = config.get("stock_pool")
         if stock_pool is None and config.get("stock_code"):
@@ -73,6 +88,21 @@ def _run_task(task_id: str) -> None:
             target_pct=target_pct,
             horizon_days=horizon_days,
             min_score=min_score,
+            backtest_type=backtest_type,
+            stop_loss_pct=stop_loss_pct,
+            commission_bps=commission_bps,
+            slippage_bps=slippage_bps,
+            atr_period=atr_period,
+            init_stop_atr_k=init_stop_atr_k,
+            trail_stop_mode=trail_stop_mode,
+            trail_atr_k=trail_atr_k,
+            trail_pct=trail_pct,
+            breakeven_trigger_r=breakeven_trigger_r,
+            profit_lock_trigger_r=profit_lock_trigger_r,
+            profit_lock_r=profit_lock_r,
+            partial_take_profit_r=partial_take_profit_r,
+            partial_take_ratio=partial_take_ratio,
+            time_stop_bars=time_stop_bars,
             stock_pool=stock_pool,
             progress_callback=progress_cb,
             cancel_check=cancel_check,

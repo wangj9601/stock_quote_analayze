@@ -6,7 +6,7 @@ GMS 回测管理端 API 路由
 import logging
 import os
 import re
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from fastapi.responses import FileResponse
@@ -99,6 +99,42 @@ class BacktestCreateBody(BaseModel):
     target_pct: float = Field(0.05, description="目标涨幅，如 0.05 表示 5%")
     horizon_days: int = Field(20, description="持有窗口交易日数")
     min_score: float = Field(0, description="最低总分")
+    backtest_type: Literal["signal_hit_rate", "trade_simulation"] = Field(
+        "signal_hit_rate",
+        description="回测类型: signal_hit_rate(策略信号命中率) / trade_simulation(交易回测)",
+    )
+    stop_loss_pct: float = Field(
+        0,
+        ge=0,
+        le=1,
+        description="止损比例，仅 trade_simulation 生效；0 表示不启用",
+    )
+    commission_bps: float = Field(
+        0,
+        ge=0,
+        le=1000,
+        description="单边手续费（bps），仅 trade_simulation 生效",
+    )
+    slippage_bps: float = Field(
+        0,
+        ge=0,
+        le=1000,
+        description="单边滑点（bps），仅 trade_simulation 生效",
+    )
+    atr_period: int = Field(14, ge=5, le=120, description="ATR周期，仅 trade_simulation 生效")
+    init_stop_atr_k: float = Field(2.2, ge=0, le=20, description="初始ATR止损倍数，仅 trade_simulation 生效")
+    trail_stop_mode: Literal["atr", "percent"] = Field(
+        "atr",
+        description="移动止损模式：atr/percent，仅 trade_simulation 生效",
+    )
+    trail_atr_k: float = Field(3.0, ge=0, le=20, description="ATR移动止损倍数，仅 trade_simulation 生效")
+    trail_pct: float = Field(0.08, ge=0, le=1, description="百分比回撤止损比例，仅 trade_simulation 生效")
+    breakeven_trigger_r: float = Field(1.0, ge=0, le=20, description="保本触发R倍数，仅 trade_simulation 生效")
+    profit_lock_trigger_r: float = Field(2.0, ge=0, le=20, description="锁盈触发R倍数，仅 trade_simulation 生效")
+    profit_lock_r: float = Field(0.5, ge=0, le=20, description="锁盈后保留R倍数，仅 trade_simulation 生效")
+    partial_take_profit_r: float = Field(2.0, ge=0, le=20, description="分批止盈触发R倍数，仅 trade_simulation 生效")
+    partial_take_ratio: float = Field(0.4, ge=0, le=1, description="分批止盈比例，仅 trade_simulation 生效")
+    time_stop_bars: int = Field(15, ge=1, le=500, description="时间止损K线数，仅 trade_simulation 生效")
     stock_pool_mode: Optional[str] = Field("all", description="股票池: all / single / custom / watchlist")
     stock_code: Optional[str] = Field(None, description="单股回测时的股票代码，如 000001、00700")
     stock_pool: Optional[List[str]] = Field(None, description="自定义股票池代码列表")
@@ -169,6 +205,21 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             "target_pct": body.target_pct,
             "horizon_days": body.horizon_days,
             "min_score": body.min_score,
+            "backtest_type": body.backtest_type,
+            "stop_loss_pct": body.stop_loss_pct,
+            "commission_bps": body.commission_bps,
+            "slippage_bps": body.slippage_bps,
+            "atr_period": body.atr_period,
+            "init_stop_atr_k": body.init_stop_atr_k,
+            "trail_stop_mode": body.trail_stop_mode,
+            "trail_atr_k": body.trail_atr_k,
+            "trail_pct": body.trail_pct,
+            "breakeven_trigger_r": body.breakeven_trigger_r,
+            "profit_lock_trigger_r": body.profit_lock_trigger_r,
+            "profit_lock_r": body.profit_lock_r,
+            "partial_take_profit_r": body.partial_take_profit_r,
+            "partial_take_ratio": body.partial_take_ratio,
+            "time_stop_bars": body.time_stop_bars,
             "stock_pool_mode": mode,
         }
         if mode == "watchlist":

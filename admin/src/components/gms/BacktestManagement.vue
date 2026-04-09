@@ -82,6 +82,14 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
+            <el-form-item label="任务类型" prop="backtest_type">
+              <el-radio-group v-model="form.backtest_type">
+                <el-radio label="signal_hit_rate">策略信号命中率回测</el-radio>
+                <el-radio label="trade_simulation">交易回测</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="最低总分" prop="min_score">
               <el-input-number v-model="form.min_score" :min="0" :max="100" :step="5" class="w-full" />
             </el-form-item>
@@ -94,6 +102,169 @@
                 <el-option label="单股回测" value="single" />
                 <el-option label="自定义列表" value="custom" />
               </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.backtest_type === 'trade_simulation'" :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="策略预设">
+              <div class="preset-row">
+                <el-radio-group v-model="tradePreset" @change="applyTradePreset">
+                  <el-radio-button label="conservative">稳健型</el-radio-button>
+                  <el-radio-button label="balanced">平衡型（推荐）</el-radio-button>
+                  <el-radio-button label="aggressive">进取型</el-radio-button>
+                </el-radio-group>
+                <span class="text-gray-500 text-sm">建议先用平衡型，稳定后再微调。</span>
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  止损(%)
+                  <el-tooltip content="固定百分比止损阈值。0 表示不启用固定止损，仅使用ATR等动态止损。建议先用 3%~8% 观察回撤变化。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number
+                v-model="stopLossPctPercent"
+                :min="0"
+                :max="100"
+                :step="0.5"
+                :precision="2"
+                controls-position="right"
+                class="w-full"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  手续费(bps)
+                  <el-tooltip content="单边手续费，1 bps = 0.01%。买入和卖出都会计入。用于让回测更贴近实盘成本。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.commission_bps" :min="0" :max="1000" :step="0.5" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  滑点(bps)
+                  <el-tooltip content="单边成交滑点，反映买卖价差与冲击成本。波动较大或流动性较差标的可适当调高。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.slippage_bps" :min="0" :max="1000" :step="0.5" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.backtest_type === 'trade_simulation'" :gutter="20">
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  移动止损(%)
+                  <el-tooltip content="按价格回撤比例触发止损，例如 8% 表示从阶段高点回撤 8% 离场。数值越小越保守，越大越能让利润奔跑。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="trailPctPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  保本触发(R)
+                  <el-tooltip content="当浮盈达到该R倍数后，将止损抬到保本附近。R 为初始风险单位。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.breakeven_trigger_r" :min="0" :max="20" :step="0.1" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  锁盈触发(R)
+                  <el-tooltip content="当浮盈达到该R倍数后，进入锁盈阶段，避免盈利回吐过多。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.profit_lock_trigger_r" :min="0" :max="20" :step="0.1" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.backtest_type === 'trade_simulation'" :gutter="20">
+          <el-col :span="24">
+            <div class="text-gray-500 text-sm mb-2">已隐藏 ATR 高级参数，系统自动使用默认值，保持策略简单易懂。</div>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.backtest_type === 'trade_simulation'" :gutter="20">
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  锁盈保留(R)
+                  <el-tooltip content="进入锁盈后，至少保留的R收益。值越大，保护利润越强，但也可能更早离场。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.profit_lock_r" :min="0" :max="20" :step="0.1" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  分批止盈触发(R)
+                  <el-tooltip content="浮盈达到该R倍数时触发第一次部分减仓。设为较大值可近似关闭该功能。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.partial_take_profit_r" :min="0" :max="20" :step="0.1" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  分批止盈比例
+                  <el-tooltip content="触发分批止盈时减仓比例，0.4 表示卖出 40% 仓位，剩余仓位继续用移动止损跟踪。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.partial_take_ratio" :min="0" :max="1" :step="0.05" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.backtest_type === 'trade_simulation'" :gutter="20">
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  时间止损K线数
+                  <el-tooltip content="持仓超过该K线数量仍未走强时按规则离场，用于避免资金长期占用。常见 10~30。" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number v-model="form.time_stop_bars" :min="1" :max="500" :step="1" class="w-full" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -202,7 +373,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, inject, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
 import TaskDetail from './TaskDetail.vue'
 
 const gmsApi = inject<any>('gmsApi')
@@ -221,10 +392,80 @@ const form = reactive({
   target_pct: 0.05,
   horizon_days: 20,
   min_score: 0,
+  backtest_type: 'signal_hit_rate',
+  stop_loss_pct: 0,
+  commission_bps: 0,
+  slippage_bps: 0,
+  atr_period: 14,
+  init_stop_atr_k: 2.2,
+  trail_stop_mode: 'atr',
+  trail_atr_k: 3.0,
+  trail_pct: 0.08,
+  breakeven_trigger_r: 1.0,
+  profit_lock_trigger_r: 2.0,
+  profit_lock_r: 0.5,
+  partial_take_profit_r: 2.0,
+  partial_take_ratio: 0.4,
+  time_stop_bars: 15,
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: ''
 })
+const tradePreset = ref<'conservative' | 'balanced' | 'aggressive'>('balanced')
+
+const TRADE_PRESETS: Record<'conservative' | 'balanced' | 'aggressive', Record<string, number | string>> = {
+  conservative: {
+    min_score: 20,
+    stop_loss_pct: 0.05,
+    commission_bps: 3,
+    slippage_bps: 5,
+    atr_period: 14,
+    init_stop_atr_k: 2.6,
+    trail_stop_mode: 'percent',
+    trail_atr_k: 3.4,
+    trail_pct: 0.08,
+    breakeven_trigger_r: 1.1,
+    profit_lock_trigger_r: 2.2,
+    profit_lock_r: 0.6,
+    partial_take_profit_r: 999,
+    partial_take_ratio: 0,
+    time_stop_bars: 10
+  },
+  balanced: {
+    min_score: 15,
+    stop_loss_pct: 0.06,
+    commission_bps: 3,
+    slippage_bps: 5,
+    atr_period: 14,
+    init_stop_atr_k: 2.6,
+    trail_stop_mode: 'percent',
+    trail_atr_k: 3.4,
+    trail_pct: 0.08,
+    breakeven_trigger_r: 1.3,
+    profit_lock_trigger_r: 2.5,
+    profit_lock_r: 0.5,
+    partial_take_profit_r: 999,
+    partial_take_ratio: 0,
+    time_stop_bars: 12
+  },
+  aggressive: {
+    min_score: 10,
+    stop_loss_pct: 0.07,
+    commission_bps: 3,
+    slippage_bps: 5,
+    atr_period: 14,
+    init_stop_atr_k: 2.6,
+    trail_stop_mode: 'percent',
+    trail_atr_k: 3.4,
+    trail_pct: 0.1,
+    breakeven_trigger_r: 1.6,
+    profit_lock_trigger_r: 3.2,
+    profit_lock_r: 0.4,
+    partial_take_profit_r: 999,
+    partial_take_ratio: 0,
+    time_stop_bars: 16
+  }
+}
 
 /** 界面用百分比数字（5 = 5%），与 form.target_pct 同步 */
 const targetPctPercent = computed({
@@ -238,6 +479,24 @@ const targetPctPercent = computed({
 })
 
 const targetPctQuick = ref<number | string | undefined>(undefined)
+const stopLossPctPercent = computed({
+  get: () => Math.round(form.stop_loss_pct * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v === undefined || v === null) return
+    const n = Number(v)
+    if (Number.isNaN(n)) return
+    form.stop_loss_pct = Math.min(1, Math.max(0, n / 100))
+  }
+})
+const trailPctPercent = computed({
+  get: () => Math.round(form.trail_pct * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v === undefined || v === null) return
+    const n = Number(v)
+    if (Number.isNaN(n)) return
+    form.trail_pct = Math.min(1, Math.max(0, n / 100))
+  }
+})
 
 function applyTargetPctQuick(v: number | string | undefined) {
   if (v === '' || v == null) return
@@ -247,6 +506,26 @@ function applyTargetPctQuick(v: number | string | undefined) {
   nextTick(() => {
     targetPctQuick.value = undefined
   })
+}
+
+function applyTradePreset(preset: 'conservative' | 'balanced' | 'aggressive') {
+  const cfg = TRADE_PRESETS[preset]
+  form.min_score = Number(cfg.min_score ?? form.min_score)
+  form.stop_loss_pct = Number(cfg.stop_loss_pct)
+  form.commission_bps = Number(cfg.commission_bps)
+  form.slippage_bps = Number(cfg.slippage_bps)
+  // ATR 高级参数固定为系统默认，不在前端暴露给用户
+  form.atr_period = Number(cfg.atr_period ?? 14)
+  form.init_stop_atr_k = Number(cfg.init_stop_atr_k ?? 2.6)
+  form.trail_stop_mode = String(cfg.trail_stop_mode ?? 'percent')
+  form.trail_atr_k = Number(cfg.trail_atr_k ?? 3.4)
+  form.trail_pct = Number(cfg.trail_pct)
+  form.breakeven_trigger_r = Number(cfg.breakeven_trigger_r)
+  form.profit_lock_trigger_r = Number(cfg.profit_lock_trigger_r)
+  form.profit_lock_r = Number(cfg.profit_lock_r)
+  form.partial_take_profit_r = Number(cfg.partial_take_profit_r)
+  form.partial_take_ratio = Number(cfg.partial_take_ratio)
+  form.time_stop_bars = Number(cfg.time_stop_bars)
 }
 
 const rules = {
@@ -316,7 +595,24 @@ async function createTask() {
       target_pct: form.target_pct,
       horizon_days: form.horizon_days,
       min_score: form.min_score,
+      backtest_type: form.backtest_type,
       stock_pool_mode: form.stock_pool_mode
+    }
+    if (form.backtest_type === 'trade_simulation') {
+      body.stop_loss_pct = form.stop_loss_pct
+      body.commission_bps = form.commission_bps
+      body.slippage_bps = form.slippage_bps
+      body.atr_period = form.atr_period
+      body.init_stop_atr_k = form.init_stop_atr_k
+      body.trail_stop_mode = form.trail_stop_mode
+      body.trail_atr_k = form.trail_atr_k
+      body.trail_pct = form.trail_pct
+      body.breakeven_trigger_r = form.breakeven_trigger_r
+      body.profit_lock_trigger_r = form.profit_lock_trigger_r
+      body.profit_lock_r = form.profit_lock_r
+      body.partial_take_profit_r = form.partial_take_profit_r
+      body.partial_take_ratio = form.partial_take_ratio
+      body.time_stop_bars = form.time_stop_bars
     }
     if (form.stock_pool_mode === 'single') body.stock_code = form.stock_code.trim()
     if (form.stock_pool_mode === 'custom') {
@@ -345,6 +641,9 @@ function resetForm() {
   form.target_pct = 0.05
   form.horizon_days = 20
   form.min_score = 0
+  form.backtest_type = 'signal_hit_rate'
+  tradePreset.value = 'balanced'
+  applyTradePreset('balanced')
   form.stock_pool_mode = 'all'
   form.stock_code = ''
   form.stock_list = ''
@@ -433,5 +732,8 @@ onMounted(async () => {
 .target-pct-row { display: flex; gap: 8px; align-items: center; width: 100%; flex-wrap: wrap; }
 .target-pct-quick { width: 110px; flex-shrink: 0; }
 .target-pct-input { flex: 1; min-width: 140px; }
+.preset-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .mt-1 { margin-top: 4px; }
+.label-with-tip { display: inline-flex; align-items: center; gap: 4px; }
+.tip-icon { color: var(--el-text-color-secondary); cursor: help; font-size: 14px; vertical-align: middle; }
 </style>

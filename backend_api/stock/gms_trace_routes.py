@@ -497,6 +497,10 @@ async def create_gms_stock_backtest(body: GMSStockBacktestBody, db: Session = De
             "target_pct": float(body.target_pct),
             "horizon_days": int(body.horizon_days),
             "min_score": float(body.min_score),
+            "backtest_type": "signal_hit_rate",
+            "stop_loss_pct": 0,
+            "commission_bps": 0,
+            "slippage_bps": 0,
             "stock_pool_mode": "single",
             "stock_code": code,
         }
