@@ -19,7 +19,7 @@ if __name__ == "__main__":
     print("--- FINAL REVIEW GATE ACTIVE ---", flush=True)
     print("AI has completed its primary actions. Awaiting your review or further sub-prompts.", flush=True)
     print("Type your sub-prompt, or one of: 'TASK_COMPLETE', 'Done', 'Quit', 'q' to signal completion.", flush=True) # MODIFIED
-
+    
     active_session = True
     while active_session:
         try:
@@ -29,7 +29,7 @@ if __name__ == "__main__":
             
             line = sys.stdin.readline()
             
-            if not line:  # EOF
+            if not line: # EOF
                 print("--- REVIEW GATE: STDIN CLOSED (EOF), EXITING SCRIPT ---", flush=True)
                 active_session = False
                 break
@@ -55,5 +55,5 @@ if __name__ == "__main__":
             print(f"--- REVIEW GATE SCRIPT ERROR: {e} ---", flush=True)
             active_session = False
             break
-            
+    
     print("--- FINAL REVIEW GATE SCRIPT EXITED ---", flush=True)

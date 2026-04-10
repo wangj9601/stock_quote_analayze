@@ -6,7 +6,7 @@ GMS 回测管理端 API 路由
 import logging
 import os
 import re
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from fastapi.responses import FileResponse
@@ -15,7 +15,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from backend_api.database import get_db
-from backend_api.models import StockBasicInfo, StockBasicInfoHK, Watchlist, User
+from backend_api.models import (
+    StockBasicInfo,
+    StockBasicInfoHK,
+    Watchlist,
+    User,
+    GMSStrategyVersion,
+    GMSStrategyVersionStock,
+)
 from backend_core.strategies.gms import admin_interface
 from backend_core.strategies.gms.config import GMSConfigManager
 
@@ -410,3 +417,486 @@ async def update_config(body: ConfigUpdateBody):
     except Exception as e:
         logger.exception("GMS config put 失败")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------- GMS 策略版本与观察股管理 ----------
+class StrategyVersionCreateBody(BaseModel):
+    strategy_code: str = Field("GMS", description="策略编码")
+    version_name: str = Field(..., description="版本名称")
+    version_no: int = Field(..., ge=1, description="版本号")
+    description: Optional[str] = Field(None, description="版本描述")
+    is_active: bool = Field(True, description="是否启用")
+    created_by: Optional[str] = Field(None, description="创建人")
+
+
+class StrategyVersionUpdateBody(BaseModel):
+    strategy_code: Optional[str] = Field(None, description="策略编码")
+    version_name: Optional[str] = Field(None, description="版本名称")
+    version_no: Optional[int] = Field(None, ge=1, description="版本号")
+    description: Optional[str] = Field(None, description="版本描述")
+    is_active: Optional[bool] = Field(None, description="是否启用")
+    created_by: Optional[str] = Field(None, description="创建人")
+
+
+class StrategyVersionStockCreateBody(BaseModel):
+    version_id: int = Field(..., ge=1, description="策略版本ID")
+    market: str = Field(..., description="市场类型：A 或 HK")
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称（可不传，后端自动补齐）")
+    sort_order: int = Field(0, description="排序")
+    status: str = Field("active", description="状态 active/inactive")
+    remark: Optional[str] = Field(None, description="备注")
+
+
+class StrategyVersionStockUpdateBody(BaseModel):
+    market: Optional[str] = Field(None, description="市场类型：A 或 HK")
+    stock_code: Optional[str] = Field(None, description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    sort_order: Optional[int] = Field(None, description="排序")
+    status: Optional[str] = Field(None, description="状态 active/inactive")
+    remark: Optional[str] = Field(None, description="备注")
+
+
+class BatchDeleteStocksBody(BaseModel):
+    ids: Optional[List[int]] = Field(None, description="观察股关系ID列表")
+    stock_codes: Optional[List[str]] = Field(None, description="股票代码列表（需配合 version_id）")
+    version_id: Optional[int] = Field(None, description="策略版本ID（按股票代码删除时必填）")
+    market: Optional[str] = Field(None, description="可选市场过滤：A/HK")
+
+
+class BatchImportItem(BaseModel):
+    market: str = Field(..., description="市场类型：A/HK")
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    sort_order: int = Field(0, description="排序")
+    status: str = Field("active", description="状态 active/inactive")
+    remark: Optional[str] = Field(None, description="备注")
+
+
+class BatchImportStocksBody(BaseModel):
+    version_id: int = Field(..., ge=1, description="策略版本ID")
+    items: List[BatchImportItem] = Field(default_factory=list, description="批量导入观察股条目")
+
+
+def _normalize_market(market: str) -> str:
+    raw = (market or "").strip().upper()
+    if raw in ("A", "CN", "A股"):
+        return "A"
+    if raw in ("HK", "H", "港股"):
+        return "HK"
+    raise HTTPException(status_code=400, detail=f"不支持的市场类型: {market}")
+
+
+def _normalize_stock_code(market: str, stock_code: str) -> str:
+    code = str(stock_code or "").strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+    if market == "A":
+        code = code.replace("SZ", "").replace("SH", "")
+        if not code.isdigit():
+            raise HTTPException(status_code=400, detail=f"A股代码格式不合法: {stock_code}")
+        return code.zfill(6)
+    digits = "".join(ch for ch in code if ch.isdigit())
+    if not digits:
+        raise HTTPException(status_code=400, detail=f"港股代码格式不合法: {stock_code}")
+    return digits.zfill(5)
+
+
+def _resolve_stock_name(db: Session, market: str, stock_code: str) -> Tuple[bool, str]:
+    """校验股票是否存在，并返回标准名称。"""
+    if market == "A":
+        try:
+            numeric_code = int(stock_code)
+        except ValueError:
+            return False, ""
+        row = db.query(StockBasicInfo).filter(StockBasicInfo.code == numeric_code).first()
+        return (row is not None), (str(row.name).strip() if row and row.name else "")
+    row = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == stock_code).first()
+    return (row is not None), (str(row.name).strip() if row and row.name else "")
+
+
+def _serialize_strategy_version(row: GMSStrategyVersion) -> dict:
+    return {
+        "id": row.id,
+        "strategy_code": row.strategy_code,
+        "version_name": row.version_name,
+        "version_no": row.version_no,
+        "description": row.description,
+        "is_active": bool(row.is_active),
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _serialize_strategy_version_stock(row: GMSStrategyVersionStock) -> dict:
+    return {
+        "id": row.id,
+        "version_id": row.version_id,
+        "market": row.market,
+        "stock_code": row.stock_code,
+        "stock_name": row.stock_name,
+        "sort_order": row.sort_order,
+        "status": row.status,
+        "remark": row.remark,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@router.get("/strategy-versions")
+async def list_strategy_versions(
+    strategy_code: Optional[str] = Query(None, description="策略编码"),
+    is_active: Optional[bool] = Query(None, description="是否启用"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    query = db.query(GMSStrategyVersion)
+    if strategy_code:
+        query = query.filter(GMSStrategyVersion.strategy_code == strategy_code.strip().upper())
+    if is_active is not None:
+        query = query.filter(GMSStrategyVersion.is_active == bool(is_active))
+    total = query.count()
+    rows = (
+        query.order_by(GMSStrategyVersion.strategy_code.asc(), GMSStrategyVersion.version_no.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "success": True,
+        "data": [_serialize_strategy_version(r) for r in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get("/strategy-versions/{version_id}")
+async def get_strategy_version(version_id: int, db: Session = Depends(get_db)):
+    row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+    return {"success": True, "data": _serialize_strategy_version(row)}
+
+
+@router.post("/strategy-versions")
+async def create_strategy_version(body: StrategyVersionCreateBody, db: Session = Depends(get_db)):
+    strategy_code = body.strategy_code.strip().upper()
+    dup = (
+        db.query(GMSStrategyVersion)
+        .filter(
+            GMSStrategyVersion.strategy_code == strategy_code,
+            GMSStrategyVersion.version_no == body.version_no,
+        )
+        .first()
+    )
+    if dup:
+        raise HTTPException(status_code=400, detail="同策略下版本号已存在")
+    row = GMSStrategyVersion(
+        strategy_code=strategy_code,
+        version_name=body.version_name.strip(),
+        version_no=body.version_no,
+        description=body.description,
+        is_active=body.is_active,
+        created_by=(body.created_by or "").strip() or None,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "data": _serialize_strategy_version(row)}
+
+
+@router.put("/strategy-versions/{version_id}")
+async def update_strategy_version(version_id: int, body: StrategyVersionUpdateBody, db: Session = Depends(get_db)):
+    row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+
+    if body.strategy_code is not None:
+        row.strategy_code = body.strategy_code.strip().upper()
+    if body.version_name is not None:
+        row.version_name = body.version_name.strip()
+    if body.version_no is not None:
+        row.version_no = body.version_no
+    if body.description is not None:
+        row.description = body.description
+    if body.is_active is not None:
+        row.is_active = bool(body.is_active)
+    if body.created_by is not None:
+        row.created_by = (body.created_by or "").strip() or None
+
+    dup = (
+        db.query(GMSStrategyVersion)
+        .filter(
+            GMSStrategyVersion.id != version_id,
+            GMSStrategyVersion.strategy_code == row.strategy_code,
+            GMSStrategyVersion.version_no == row.version_no,
+        )
+        .first()
+    )
+    if dup:
+        raise HTTPException(status_code=400, detail="同策略下版本号已存在")
+
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "data": _serialize_strategy_version(row)}
+
+
+@router.patch("/strategy-versions/{version_id}/active")
+async def set_strategy_version_active(
+    version_id: int,
+    is_active: bool = Body(..., embed=True, description="是否启用"),
+    db: Session = Depends(get_db),
+):
+    row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+    row.is_active = bool(is_active)
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "data": _serialize_strategy_version(row)}
+
+
+@router.delete("/strategy-versions/{version_id}")
+async def delete_strategy_version(version_id: int, db: Session = Depends(get_db)):
+    row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+    db.delete(row)
+    db.commit()
+    return {"success": True}
+
+
+@router.get("/strategy-version-stocks")
+async def list_strategy_version_stocks(
+    version_id: int = Query(..., ge=1),
+    market: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    exists = db.query(GMSStrategyVersion.id).filter(GMSStrategyVersion.id == version_id).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+
+    query = db.query(GMSStrategyVersionStock).filter(GMSStrategyVersionStock.version_id == version_id)
+    if market:
+        query = query.filter(GMSStrategyVersionStock.market == _normalize_market(market))
+    if status:
+        query = query.filter(GMSStrategyVersionStock.status == status.strip())
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        query = query.filter(
+            (GMSStrategyVersionStock.stock_code.ilike(kw))
+            | (GMSStrategyVersionStock.stock_name.ilike(kw))
+        )
+    total = query.count()
+    rows = (
+        query.order_by(GMSStrategyVersionStock.sort_order.asc(), GMSStrategyVersionStock.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "success": True,
+        "data": [_serialize_strategy_version_stock(r) for r in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.post("/strategy-version-stocks")
+async def create_strategy_version_stock(body: StrategyVersionStockCreateBody, db: Session = Depends(get_db)):
+    version = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == body.version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+
+    market = _normalize_market(body.market)
+    stock_code = _normalize_stock_code(market, body.stock_code)
+    exists, resolved_name = _resolve_stock_name(db, market, stock_code)
+    if not exists:
+        raise HTTPException(status_code=400, detail=f"股票不存在: {stock_code}")
+
+    dup = (
+        db.query(GMSStrategyVersionStock)
+        .filter(
+            GMSStrategyVersionStock.version_id == body.version_id,
+            GMSStrategyVersionStock.market == market,
+            GMSStrategyVersionStock.stock_code == stock_code,
+        )
+        .first()
+    )
+    if dup:
+        raise HTTPException(status_code=400, detail="该观察股已存在于当前策略版本")
+
+    row = GMSStrategyVersionStock(
+        version_id=body.version_id,
+        market=market,
+        stock_code=stock_code,
+        stock_name=(body.stock_name or resolved_name or "").strip() or resolved_name,
+        sort_order=body.sort_order,
+        status=(body.status or "active").strip(),
+        remark=body.remark,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "data": _serialize_strategy_version_stock(row)}
+
+
+@router.put("/strategy-version-stocks/{stock_id}")
+async def update_strategy_version_stock(
+    stock_id: int,
+    body: StrategyVersionStockUpdateBody,
+    db: Session = Depends(get_db),
+):
+    row = db.query(GMSStrategyVersionStock).filter(GMSStrategyVersionStock.id == stock_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="观察股记录不存在")
+
+    market = _normalize_market(body.market) if body.market is not None else row.market
+    stock_code = _normalize_stock_code(market, body.stock_code) if body.stock_code is not None else row.stock_code
+
+    exists, resolved_name = _resolve_stock_name(db, market, stock_code)
+    if not exists:
+        raise HTTPException(status_code=400, detail=f"股票不存在: {stock_code}")
+
+    dup = (
+        db.query(GMSStrategyVersionStock)
+        .filter(
+            GMSStrategyVersionStock.id != stock_id,
+            GMSStrategyVersionStock.version_id == row.version_id,
+            GMSStrategyVersionStock.market == market,
+            GMSStrategyVersionStock.stock_code == stock_code,
+        )
+        .first()
+    )
+    if dup:
+        raise HTTPException(status_code=400, detail="该观察股已存在于当前策略版本")
+
+    row.market = market
+    row.stock_code = stock_code
+    if body.stock_name is not None:
+        row.stock_name = (body.stock_name or "").strip() or resolved_name
+    elif not row.stock_name:
+        row.stock_name = resolved_name
+    if body.sort_order is not None:
+        row.sort_order = body.sort_order
+    if body.status is not None:
+        row.status = body.status.strip()
+    if body.remark is not None:
+        row.remark = body.remark
+
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "data": _serialize_strategy_version_stock(row)}
+
+
+@router.delete("/strategy-version-stocks/{stock_id}")
+async def delete_strategy_version_stock(stock_id: int, db: Session = Depends(get_db)):
+    row = db.query(GMSStrategyVersionStock).filter(GMSStrategyVersionStock.id == stock_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="观察股记录不存在")
+    db.delete(row)
+    db.commit()
+    return {"success": True}
+
+
+@router.post("/strategy-version-stocks/batch-delete")
+async def batch_delete_strategy_version_stocks(body: BatchDeleteStocksBody, db: Session = Depends(get_db)):
+    if body.ids:
+        deleted = (
+            db.query(GMSStrategyVersionStock)
+            .filter(GMSStrategyVersionStock.id.in_(body.ids))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        return {"success": True, "data": {"deleted": deleted}}
+
+    if body.stock_codes:
+        if not body.version_id:
+            raise HTTPException(status_code=400, detail="按股票代码批量删除时 version_id 必填")
+        query = db.query(GMSStrategyVersionStock).filter(
+            GMSStrategyVersionStock.version_id == body.version_id,
+            GMSStrategyVersionStock.stock_code.in_([str(c).strip() for c in body.stock_codes if str(c).strip()]),
+        )
+        if body.market:
+            query = query.filter(GMSStrategyVersionStock.market == _normalize_market(body.market))
+        deleted = query.delete(synchronize_session=False)
+        db.commit()
+        return {"success": True, "data": {"deleted": deleted}}
+
+    raise HTTPException(status_code=400, detail="请提供 ids 或 stock_codes 进行批量删除")
+
+
+@router.post("/strategy-version-stocks/batch-import")
+async def batch_import_strategy_version_stocks(body: BatchImportStocksBody, db: Session = Depends(get_db)):
+    version = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == body.version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+
+    success_count = 0
+    skip_count = 0
+    fail_count = 0
+    fail_details: List[dict] = []
+    created_items: List[dict] = []
+
+    for idx, item in enumerate(body.items):
+        try:
+            market = _normalize_market(item.market)
+            stock_code = _normalize_stock_code(market, item.stock_code)
+            exists, resolved_name = _resolve_stock_name(db, market, stock_code)
+            if not exists:
+                raise HTTPException(status_code=400, detail=f"股票不存在: {stock_code}")
+
+            dup = (
+                db.query(GMSStrategyVersionStock)
+                .filter(
+                    GMSStrategyVersionStock.version_id == body.version_id,
+                    GMSStrategyVersionStock.market == market,
+                    GMSStrategyVersionStock.stock_code == stock_code,
+                )
+                .first()
+            )
+            if dup:
+                skip_count += 1
+                continue
+
+            row = GMSStrategyVersionStock(
+                version_id=body.version_id,
+                market=market,
+                stock_code=stock_code,
+                stock_name=(item.stock_name or resolved_name or "").strip() or resolved_name,
+                sort_order=item.sort_order,
+                status=(item.status or "active").strip(),
+                remark=item.remark,
+            )
+            db.add(row)
+            db.flush()
+            created_items.append(_serialize_strategy_version_stock(row))
+            success_count += 1
+        except Exception as e:
+            fail_count += 1
+            fail_details.append({
+                "index": idx,
+                "market": item.market,
+                "stock_code": item.stock_code,
+                "reason": str(e),
+            })
+
+    db.commit()
+    return {
+        "success": True,
+        "data": {
+            "success_count": success_count,
+            "skip_count": skip_count,
+            "fail_count": fail_count,
+            "fail_details": fail_details,
+            "created_items": created_items,
+        },
+    }

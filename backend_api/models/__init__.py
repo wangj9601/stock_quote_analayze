@@ -51,6 +51,8 @@ try:
         UserUpdate = getattr(models_module, 'UserUpdate', None)
         MeanFrequencyResonanceIndicators = getattr(models_module, 'MeanFrequencyResonanceIndicators', None)
         GMSSignalTrace = getattr(models_module, 'GMSSignalTrace', None)
+        GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
+        GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
         StockPriceData = getattr(models_module, 'StockPriceData', None)
@@ -135,6 +137,8 @@ except Exception as e:
     UserUpdate = None
     MeanFrequencyResonanceIndicators = None
     GMSSignalTrace = None
+    GMSStrategyVersion = None
+    GMSStrategyVersionStock = None
     StockBasicInfo = None
     StockBasicInfoHK = None
     StockPriceData = None
@@ -222,6 +226,8 @@ __all__ = [
     'UserUpdate',
     'MeanFrequencyResonanceIndicators',
     'GMSSignalTrace',
+    'GMSStrategyVersion',
+    'GMSStrategyVersionStock',
     'StockBasicInfo',
     'StockBasicInfoHK',
     'StockPriceData',

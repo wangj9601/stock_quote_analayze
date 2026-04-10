@@ -673,6 +673,46 @@ class GMSSignalTrace(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class GMSStrategyVersion(Base):
+    """GMS策略版本表：用于管理不同策略配置版本。"""
+    __tablename__ = "gms_strategy_versions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    strategy_code = Column(String(50), nullable=False, index=True)
+    version_name = Column(String(100), nullable=False)
+    version_no = Column(Integer, nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("strategy_code", "version_no", name="uq_gms_strategy_code_version_no"),
+    )
+
+
+class GMSStrategyVersionStock(Base):
+    """GMS策略版本观察股关系表。"""
+    __tablename__ = "gms_strategy_version_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version_id = Column(Integer, ForeignKey("gms_strategy_versions.id", ondelete="CASCADE"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, index=True)  # A/HK
+    stock_code = Column(String(20), nullable=False, index=True)
+    stock_name = Column(String(100), nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="active")
+    remark = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("version_id", "market", "stock_code", name="uq_gms_version_market_code"),
+        Index("idx_gms_version_status", "version_id", "status"),
+    )
+
+
 class TradingNotes(Base):
     __tablename__ = 'trading_notes'
     id = Column(Integer, primary_key=True, autoincrement=True)
