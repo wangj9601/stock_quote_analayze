@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
-import { getCurrentEnvConfig, logEnvironmentInfo } from '@/config/environment'
+import { getCurrentEnvConfig, getResolvedApiBaseUrl, logEnvironmentInfo } from '@/config/environment'
 import { getApiConfig } from '@/config/api'
 
 class ApiService {
@@ -13,7 +13,7 @@ class ApiService {
     const apiConfig = getApiConfig()
     
     this.api = axios.create({
-      baseURL: import.meta.env.VITE_API_BASE_URL || getCurrentEnvConfig().apiBaseUrl,
+      baseURL: getResolvedApiBaseUrl(),
       timeout: apiConfig.timeout,
       headers: {
         'Content-Type': 'application/json'

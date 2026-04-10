@@ -1,5 +1,5 @@
 import { apiService } from './api'
-import { getCurrentEnvConfig } from '@/config/environment'
+import { getResolvedApiBaseUrl } from '@/config/environment'
 
 export interface StockQuoteParams {
   page: number
@@ -75,9 +75,8 @@ export interface QuotesStats {
 
 class QuotesService {
   private getQuotesApiUrl(endpoint: string): string {
-    // 使用独立的API基础URL来访问行情数据
-    const config = getCurrentEnvConfig()
-    const baseUrl = config.apiBaseUrl.replace('/api/admin', '/api')
+    const adminBase = getResolvedApiBaseUrl().replace(/\/+$/, '')
+    const baseUrl = adminBase.replace(/\/api\/admin\/?$/, '/api')
     return `${baseUrl}/quotes${endpoint}`
   }
 

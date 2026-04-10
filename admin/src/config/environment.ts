@@ -42,11 +42,41 @@ export const getCurrentEnvConfig = () => {
   return ENV_CONFIG[ENVIRONMENT.current as keyof typeof ENV_CONFIG] || ENV_CONFIG.development
 }
 
+/**
+ * 实际用于 Axios 的 API 根路径。
+ * 若 .env 中 VITE_API_BASE_URL 指向 localhost，但通过局域网 IP 访问 Vite（如 http://192.168.x.x:8001），
+ * 浏览器会把 localhost 当成「用户本机」，导致 ERR_CONNECTION_REFUSED；此时忽略该环境变量，改用相对路径走当前页的 dev server 代理。
+ */
+export function getResolvedApiBaseUrl(): string {
+  const fallback = getCurrentEnvConfig().apiBaseUrl
+  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
+  if (!raw) return fallback
+
+  try {
+    const url = new URL(raw.includes('://') ? raw : `http://${raw}`)
+    const apiIsLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+    if (typeof window !== 'undefined' && apiIsLoopback) {
+      const pageHost = window.location.hostname
+      const pageIsLoopback = pageHost === 'localhost' || pageHost === '127.0.0.1'
+      if (!pageIsLoopback) {
+        return fallback
+      }
+    }
+  } catch {
+    return raw || fallback
+  }
+
+  return raw
+}
+
 // 打印环境信息（仅开发环境）
 export const logEnvironmentInfo = () => {
   if (ENVIRONMENT.isDevelopment) {
     console.log('🌍 当前环境:', ENVIRONMENT.current)
-    console.log('🔗 API地址:', getCurrentEnvConfig().apiBaseUrl)
+    console.log('🔗 API地址(解析后):', getResolvedApiBaseUrl())
+    if ((import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()) {
+      console.log('📎 VITE_API_BASE_URL(原始):', import.meta.env.VITE_API_BASE_URL)
+    }
     console.log('🐛 调试模式:', getCurrentEnvConfig().enableDebug)
   }
 }
