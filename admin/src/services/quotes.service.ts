@@ -77,7 +77,14 @@ class QuotesService {
   private getQuotesApiUrl(endpoint: string): string {
     const adminBase = getResolvedApiBaseUrl().replace(/\/+$/, '')
     const baseUrl = adminBase.replace(/\/api\/admin\/?$/, '/api')
-    return `${baseUrl}/quotes${endpoint}`
+    const path = `${baseUrl}/quotes${endpoint}`
+
+    // apiService 使用了 baseURL=/api/admin；对于以 /api 开头的路径，需转为绝对 URL，避免被错误拼接为 /api/admin/api/...
+    if (path.startsWith('/') && typeof window !== 'undefined') {
+      return `${window.location.origin}${path}`
+    }
+
+    return path
   }
 
   /**

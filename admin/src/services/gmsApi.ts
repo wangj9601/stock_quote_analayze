@@ -2,6 +2,31 @@ import { API_BASE } from '@/config/api'
 
 const PREFIX = '/api/admin/gms'
 
+export interface GMSStrategyVersion {
+  id: number
+  strategy_code: string
+  version_name: string
+  version_no: number
+  description?: string
+  is_active: boolean
+  created_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface GMSStrategyVersionStock {
+  id: number
+  version_id: number
+  market: 'A' | 'HK'
+  stock_code: string
+  stock_name?: string
+  sort_order: number
+  status: string
+  remark?: string
+  created_at?: string
+  updated_at?: string
+}
+
 class GMSApiService {
   private getAuthHeaders(): Record<string, string> {
     const token = localStorage.getItem('admin_token')
@@ -179,6 +204,134 @@ class GMSApiService {
     const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/config`, {
       method: 'PUT',
       body: JSON.stringify({ config }),
+    })
+    return res.data
+  }
+
+  /** 策略版本列表 */
+  async getStrategyVersions(params?: { strategy_code?: string; is_active?: boolean; page?: number; page_size?: number }) {
+    const q = new URLSearchParams()
+    if (params?.strategy_code) q.set('strategy_code', params.strategy_code)
+    if (params?.is_active !== undefined) q.set('is_active', String(params.is_active))
+    if (params?.page) q.set('page', String(params.page))
+    if (params?.page_size) q.set('page_size', String(params.page_size))
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersion[]; total: number; page: number; page_size: number }>(
+      `${PREFIX}/strategy-versions?${q.toString()}`
+    )
+    return res
+  }
+
+  async createStrategyVersion(body: {
+    strategy_code: string
+    version_name: string
+    version_no: number
+    description?: string
+    is_active?: boolean
+    created_by?: string
+  }) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersion }>(`${PREFIX}/strategy-versions`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    return res.data
+  }
+
+  async updateStrategyVersion(versionId: number, body: Partial<GMSStrategyVersion>) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersion }>(`${PREFIX}/strategy-versions/${versionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+    return res.data
+  }
+
+  async deleteStrategyVersion(versionId: number) {
+    await this.request(`${PREFIX}/strategy-versions/${versionId}`, { method: 'DELETE' })
+  }
+
+  /** 观察股列表 */
+  async getStrategyVersionStocks(params: {
+    version_id: number
+    market?: string
+    keyword?: string
+    status?: string
+    page?: number
+    page_size?: number
+  }) {
+    const q = new URLSearchParams()
+    q.set('version_id', String(params.version_id))
+    if (params.market) q.set('market', params.market)
+    if (params.keyword) q.set('keyword', params.keyword)
+    if (params.status) q.set('status', params.status)
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    const res = await this.request<{
+      success: boolean
+      data: GMSStrategyVersionStock[]
+      total: number
+      page: number
+      page_size: number
+    }>(`${PREFIX}/strategy-version-stocks?${q.toString()}`)
+    return res
+  }
+
+  async createStrategyVersionStock(body: {
+    version_id: number
+    market: string
+    stock_code: string
+    stock_name?: string
+    sort_order?: number
+    status?: string
+    remark?: string
+  }) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersionStock }>(`${PREFIX}/strategy-version-stocks`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    return res.data
+  }
+
+  async updateStrategyVersionStock(stockId: number, body: Partial<GMSStrategyVersionStock>) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersionStock }>(`${PREFIX}/strategy-version-stocks/${stockId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+    return res.data
+  }
+
+  async deleteStrategyVersionStock(stockId: number) {
+    await this.request(`${PREFIX}/strategy-version-stocks/${stockId}`, { method: 'DELETE' })
+  }
+
+  async batchDeleteStrategyVersionStocks(payload: { ids?: number[]; stock_codes?: string[]; version_id?: number; market?: string }) {
+    const res = await this.request<{ success: boolean; data: { deleted: number } }>(`${PREFIX}/strategy-version-stocks/batch-delete`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return res.data
+  }
+
+  async batchImportStrategyVersionStocks(payload: {
+    version_id: number
+    items: Array<{
+      market: string
+      stock_code: string
+      stock_name?: string
+      sort_order?: number
+      status?: string
+      remark?: string
+    }>
+  }) {
+    const res = await this.request<{
+      success: boolean
+      data: {
+        success_count: number
+        skip_count: number
+        fail_count: number
+        fail_details: Array<{ index: number; market: string; stock_code: string; reason: string }>
+      }
+    }>(`${PREFIX}/strategy-version-stocks/batch-import`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     })
     return res.data
   }

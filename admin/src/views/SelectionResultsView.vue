@@ -3,7 +3,7 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <h1>GMS策略管理</h1>
-      <div class="header-actions">
+      <div v-if="activeMainTab === 'selection'" class="header-actions">
         <el-button type="primary" @click="loadSelectionResults" :loading="loading">
           <el-icon><Refresh /></el-icon>
           刷新数据
@@ -15,6 +15,8 @@
       </div>
     </div>
 
+    <el-tabs v-model="activeMainTab" class="gms-strategy-tabs" @tab-change="handleMainTabChange">
+      <el-tab-pane label="选股结果" name="selection">
     <!-- 统计概览 -->
     <el-row :gutter="20" class="stats-overview">
       <el-col :span="6">
@@ -155,6 +157,12 @@
         </el-table-column>
       </el-table>
     </el-card>
+      </el-tab-pane>
+
+      <el-tab-pane label="观察股管理" name="watchlist">
+        <WatchlistManagement ref="watchlistRef" />
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 详情对话框 -->
     <el-dialog 
@@ -368,8 +376,11 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Filter } from '@element-plus/icons-vue'
 import { pvfrsApiService } from '@/services/pvfrsApi'
+import WatchlistManagement from '@/components/gms/WatchlistManagement.vue'
 
 // 响应式数据
+const activeMainTab = ref<'selection' | 'watchlist'>('selection')
+const watchlistRef = ref<{ refresh?: () => void } | null>(null)
 const loading = ref(false)
 const selectionData = ref<any>({
   data: [],
@@ -492,6 +503,10 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString('zh-CN')
 }
 
+const handleMainTabChange = (name: string | number) => {
+  if (name === 'watchlist') watchlistRef.value?.refresh?.()
+}
+
 // 生命周期
 onMounted(() => {
   // 设置默认日期为今天
@@ -505,6 +520,10 @@ onMounted(() => {
 <style scoped lang="postcss">
 .selection-results {
   @apply space-y-6;
+}
+
+.gms-strategy-tabs {
+  @apply bg-white rounded-lg shadow p-4;
 }
 
 .page-header {
