@@ -1,18 +1,15 @@
 // API配置文件
 export const API_CONFIG = {
-  // 开发环境
   development: {
-    baseURL: 'http://localhost:5000/api/admin',
+    baseURL: '/api/admin',
     timeout: 30000
   },
-  // 生产环境
   production: {
-    baseURL: 'https://www.icemaplecity.com/api/admin',
+    baseURL: '/api/admin',
     timeout: 30000
   },
-  // 测试环境
   test: {
-    baseURL: 'http://localhost:5000/api/admin',
+    baseURL: '/api/admin',
     timeout: 30000
   }
 }

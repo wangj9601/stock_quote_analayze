@@ -1,4 +1,4 @@
-//const API_BASE_URL = window.API_BASE_URL || 'http://192.168.31.237:5000';
+//const API_BASE_URL = window.API_BASE_URL || '';
 
 // 首页数据管理
 document.addEventListener('DOMContentLoaded', function() {

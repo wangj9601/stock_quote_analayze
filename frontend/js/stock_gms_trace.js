@@ -79,7 +79,7 @@ class StockGMSTracePage {
     getApiBase() {
         let base = (typeof Config !== 'undefined' && Config.getApiBaseUrl)
             ? (Config.getApiBaseUrl() || '')
-            : 'http://localhost:5000';
+            : '';
         base = String(base).trim();
         // 兼容异常配置 ":5000" 这类不完整地址，自动补全为当前协议+主机
         if (base.startsWith(':')) {

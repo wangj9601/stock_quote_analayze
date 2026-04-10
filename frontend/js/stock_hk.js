@@ -58,7 +58,7 @@ const StockPage = {
     subIndicator1: 'vol', // 副图1选中的指标
     subIndicator2: 'macd', // 副图2选中的指标
     currentMainIndicator: 'ma', // 当前选中的主图指标
-    //API_BASE_URL: 'http://192.168.31.237:5000',
+    //API_BASE_URL: '',
 
     // 初始化
     async init() {

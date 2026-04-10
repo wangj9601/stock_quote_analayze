@@ -1,5 +1,5 @@
 // API配置 - 使用环境检测
-const API_BASE_URL = Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000';
+const API_BASE_URL = Config ? Config.getApiBaseUrl() : '';
 
 // 全局带token的fetch，自动处理登录失效
 // 全局带token的fetch，自动处理登录失效
@@ -597,7 +597,7 @@ const CommonUtils = {
                     ? window.API_BASE_URL
                     : (typeof Config !== 'undefined' && Config.getApiBaseUrl)
                         ? Config.getApiBaseUrl()
-                        : 'http://192.168.31.237:5000';
+                        : '';
 
                 const url = `${API_BASE_URL}/api/stock/list?query=${encodeURIComponent(keyword)}&limit=${limit}`;
                 const response = await fetch(url);

@@ -1,18 +1,16 @@
 // API配置文件
 export const API_CONFIG = {
-  // 开发环境
   development: {
-    baseURL: 'http://localhost:5000',
+    baseURL: '',
     timeout: 300000
   },
-  // 生产环境 - 移除 /api 前缀，因为后端路由已统一包含
+  // 生产环境：空字符串，由 gmsApi 等使用「/api/admin/...」绝对路径，请求发往当前站点
   production: {
-    baseURL: 'https://www.icemaplecity.com',
+    baseURL: '',
     timeout: 300000
   },
-  // 测试环境
   test: {
-    baseURL: 'http://localhost:5000',
+    baseURL: '',
     timeout: 300000
   }
 }

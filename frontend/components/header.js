@@ -622,7 +622,7 @@ async function performStockSearch(keyword) {
                 ? window.API_BASE_URL 
                 : (typeof Config !== 'undefined' && Config.getApiBaseUrl) 
                     ? Config.getApiBaseUrl() 
-                    : 'http://192.168.31.237:5000';
+                    : '';
             
             const url = `${API_BASE_URL}/api/stock/list?query=${encodeURIComponent(keyword)}&limit=20`;
             const response = await fetch(url);

@@ -30,7 +30,7 @@ const MarketsPage = {
     initialized: false, // 是否已经初始化过
 
     // 全局API前缀
-    API_BASE_URL: Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000',
+    API_BASE_URL: Config ? Config.getApiBaseUrl() : '',
 
     // 初始化
     async init() {

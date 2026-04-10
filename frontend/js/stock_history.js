@@ -1,6 +1,6 @@
 
 // 全局API前缀
-//const API_BASE_URL = Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000';
+//const API_BASE_URL = Config ? Config.getApiBaseUrl() : '';
 
 // 股票历史行情页面JavaScript
 class StockHistoryPage {

@@ -409,7 +409,7 @@
             if (typeof API_BASE_URL === 'undefined') {
                 const apiUrl = (typeof Config !== 'undefined' && Config && Config.getApiBaseUrl)
                     ? Config.getApiBaseUrl()
-                    : 'http://192.168.31.237:5000';
+                    : '';
                 window.API_BASE_URL = apiUrl;
             }
         })();
@@ -441,7 +441,7 @@
                 ? API_BASE_URL
                 : ((typeof window.API_BASE_URL !== 'undefined' && window.API_BASE_URL)
                     ? window.API_BASE_URL
-                    : 'http://192.168.31.237:5000');
+                    : '');
 
             try {
                 // 调用判断接口

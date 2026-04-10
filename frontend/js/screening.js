@@ -1,6 +1,6 @@
 // 选股页面功能模块
 const ScreeningPage = {
-    API_BASE_URL: Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000',
+    API_BASE_URL: Config ? Config.getApiBaseUrl() : '',
     currentStrategy: 'cyb-midline', // 当前选中的策略
     lastResults: {}, // 存储最近一次筛选结果，用于导出
     /** GMS 列表分页（选股页） */

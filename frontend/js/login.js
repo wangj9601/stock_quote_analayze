@@ -2,7 +2,7 @@
 const LoginPage = {
     // 获取API基础URL
     getApiBaseUrl() {
-        return Config ? Config.getApiBaseUrl() : 'http://192.168.31.237:5000';
+        return Config ? Config.getApiBaseUrl() : '';
     },
     
     // 初始化

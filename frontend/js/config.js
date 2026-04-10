@@ -1,61 +1,89 @@
-// 环境配置
+// API 地址策略：本地开发通常「静态页一个端口 + 后端 5000、无 Nginx」；生产经 Nginx 与页面同域，用相对路径 /api/...
+// 强制覆盖：在加载本文件之后设置 window.API_BASE_URL = 'http://...'
+
+function _isPrivateLanHostname(hostname) {
+    if (!hostname) return false;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+    if (hostname.startsWith('192.168.')) return true;
+    if (hostname.startsWith('10.')) return true;
+    return /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname);
+}
+
+/** 页面是否落在 80/443（或协议默认端口），多用于生产 Nginx */
+function _isNginxLikeSitePort(port) {
+    const p = String(port || '');
+    return p === '' || p === '80' || p === '443';
+}
+
 const Config = {
-    // 检测当前环境
     getEnvironment() {
         const hostname = window.location.hostname;
-        const protocol = window.location.protocol;
-        
-        // 生产环境检测
+
         if (hostname === 'www.icemaplecity.com' || hostname === 'icemaplecity.com' || hostname === 'erp.icemaplecity.com') {
             return 'production';
         }
-        
-        // 开发环境检测
+
         if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
             return 'development';
         }
-        
-        // 默认返回开发环境
+
         return 'development';
     },
-    
-    // 获取API基础URL
+
+    /**
+     * API 根地址（不含 /api 路径）。
+     * - 空字符串：与页面同源，由 Nginx 反代 /api（生产或内网 80/443）。
+     * - http(s)://host:5000：本地无 Nginx、前端与后端不同端口时使用。
+     */
     getApiBaseUrl() {
-        const environment = this.getEnvironment();
-        
-        switch (environment) {
-            case 'production':
-                // 生产环境使用相对路径，让浏览器自动处理协议和域名
-                return '';
-            case 'development':
-            default:
-                // 开发环境：如果访问地址是IP地址，使用相同的IP；否则使用localhost
-                const hostname = window.location.hostname;
-                const protocol = window.location.protocol;
-                if (hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)) {
-                    // 如果是内网IP地址，使用相同的IP地址
-                    return `${protocol}//${hostname}:5000`;
-                } else {
-                    // 否则使用localhost
-                    return 'http://localhost:5000';
-                }
+        if (typeof window !== 'undefined' && typeof window.API_BASE_URL === 'string' && window.API_BASE_URL.length) {
+            return window.API_BASE_URL.replace(/\/+$/, '');
         }
+
+        const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
+        const port = window.location.port;
+
+        // 已知公网生产域名：一律走 Nginx，与页面同域
+        if (hostname === 'www.icemaplecity.com' || hostname === 'icemaplecity.com' || hostname === 'erp.icemaplecity.com') {
+            return '';
+        }
+
+        // 前端与后端同端口（例如后端托管静态页）
+        if (String(port) === '5000') {
+            return '';
+        }
+
+        // 本机：无 Nginx 时常见为 localhost:8000 + 后端 :5000
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            if (!_isNginxLikeSitePort(port)) {
+                return `${protocol}//${hostname}:5000`;
+            }
+            return '';
+        }
+
+        // 内网 IP：80/443（或默认端口）视为前面有 Nginx；其它端口视为本地静态服务直连后端
+        if (_isPrivateLanHostname(hostname)) {
+            if (_isNginxLikeSitePort(port)) {
+                return '';
+            }
+            return `${protocol}//${hostname}:5000`;
+        }
+
+        // 其它公网域名：默认生产同域 + Nginx
+        return '';
     },
-    
-    // 获取完整的API URL
+
     getApiUrl(path) {
         const baseUrl = this.getApiBaseUrl();
         const apiPath = path.startsWith('/') ? path : `/${path}`;
-        
+
         if (baseUrl) {
             return `${baseUrl}${apiPath}`;
-        } else {
-            // 生产环境使用相对路径
-            return apiPath;
         }
+        return apiPath;
     },
-    
-    // 获取当前环境信息
+
     getEnvironmentInfo() {
         return {
             environment: this.getEnvironment(),
@@ -66,5 +94,4 @@ const Config = {
     }
 };
 
-// 导出配置
 window.Config = Config;

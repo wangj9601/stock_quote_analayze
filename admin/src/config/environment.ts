@@ -19,18 +19,19 @@ export const ENVIRONMENT = {
 // 环境特定的配置
 export const ENV_CONFIG = {
   development: {
-    apiBaseUrl: 'http://localhost:5000/api/admin',
+    // 与 Vite server.proxy 配合，请求发往当前 dev 主机再由代理转到后端
+    apiBaseUrl: '/api/admin',
     enableDebug: true,
     logLevel: 'debug'
   },
   production: {
-    // 生产环境使用HTTPS域名
-    apiBaseUrl: 'https://www.icemaplecity.com/api/admin',
+    // 与页面同域，由 Nginx 反代到后端；需固定域名时可设 VITE_API_BASE_URL 覆盖
+    apiBaseUrl: '/api/admin',
     enableDebug: false,
     logLevel: 'info'
   },
   test: {
-    apiBaseUrl: 'http://localhost:5000/api/admin',
+    apiBaseUrl: '/api/admin',
     enableDebug: true,
     logLevel: 'debug'
   }

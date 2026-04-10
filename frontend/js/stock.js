@@ -58,7 +58,7 @@ const StockPage = {
     currentMainIndicator: 'ma', // 当前选中的主图指标
     analysisDataLoaded: false, // 添加标志跟踪智能分析数据是否已加载
     isInWatchlist: false, // 跟踪股票是否已在自选股中
-    //API_BASE_URL: 'http://192.168.31.237:5000',
+    //API_BASE_URL: '',
 
     // 初始化
     async init() {
