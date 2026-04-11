@@ -5,7 +5,7 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="任务名称" prop="task_name">
-              <el-input v-model="form.task_name" placeholder="可选，默认自动生成" clearable />
+              <el-input v-model="form.task_name" placeholder="可选，默认自动生成" clearable @keyup.enter="createTask" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -269,7 +269,7 @@
           </el-col>
         </el-row>
         <el-form-item v-if="form.stock_pool_mode === 'single'" label="股票代码" prop="stock_code">
-          <el-input v-model="form.stock_code" placeholder="如 000001（A股）、00700（港股）" clearable style="max-width: 280px" />
+          <el-input v-model="form.stock_code" placeholder="如 000001（A股）、00700（港股）" clearable style="max-width: 280px" @keyup.enter="createTask" />
         </el-form-item>
         <el-form-item v-if="form.stock_pool_mode === 'custom'" label="股票列表" prop="stock_list">
           <el-input v-model="form.stock_list" type="textarea" :rows="4" placeholder="每行一个代码，如 000001&#10;600519&#10;00700" />

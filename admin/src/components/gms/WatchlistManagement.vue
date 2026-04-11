@@ -31,6 +31,14 @@
       <el-table-column prop="market" label="市场" width="80" />
       <el-table-column prop="stock_code" label="代码" width="120" />
       <el-table-column prop="stock_name" label="名称" min-width="140" />
+      <el-table-column label="当前价格" width="100">
+        <template #default="scope">
+          <span v-if="scope.row.current_price != null">
+            {{ scope.row.market === 'HK' ? '$' : '¥' }}{{ scope.row.current_price.toFixed(2) }}
+          </span>
+          <span v-else class="text-gray-400">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="status" label="状态" width="100" />
       <el-table-column prop="sort_order" label="排序" width="90" />
       <el-table-column prop="remark" label="备注" min-width="140" />
@@ -52,11 +60,11 @@
       @size-change="refresh"
     />
 
-    <el-dialog v-model="versionDialogVisible" title="策略版本">
+    <el-dialog v-model="versionDialogVisible" title="策略版本" @opened="() => versionStrategyCodeRef?.focus()">
       <el-form :model="versionForm" label-width="90px">
-        <el-form-item label="策略编码"><el-input v-model="versionForm.strategy_code" /></el-form-item>
-        <el-form-item label="版本名称"><el-input v-model="versionForm.version_name" /></el-form-item>
-        <el-form-item label="版本号"><el-input-number v-model="versionForm.version_no" :min="1" /></el-form-item>
+        <el-form-item label="策略编码"><el-input ref="versionStrategyCodeRef" v-model="versionForm.strategy_code" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="版本名称"><el-input v-model="versionForm.version_name" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="版本号"><el-input-number v-model="versionForm.version_no" :min="1" @keyup.enter="saveVersion" /></el-form-item>
         <el-form-item label="启用"><el-switch v-model="versionForm.is_active" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="versionForm.description" type="textarea" /></el-form-item>
       </el-form>
@@ -66,15 +74,15 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="stockDialogVisible" title="观察股">
+    <el-dialog v-model="stockDialogVisible" title="观察股" @opened="() => stockCodeRef?.focus()">
       <el-form :model="stockForm" label-width="90px">
         <el-form-item label="市场">
           <el-select v-model="stockForm.market"><el-option label="A股" value="A" /><el-option label="港股" value="HK" /></el-select>
         </el-form-item>
-        <el-form-item label="代码"><el-input v-model="stockForm.stock_code" /></el-form-item>
-        <el-form-item label="名称"><el-input v-model="stockForm.stock_name" /></el-form-item>
+        <el-form-item label="代码"><el-input ref="stockCodeRef" v-model="stockForm.stock_code" @keyup.enter="saveStock" /></el-form-item>
+        <el-form-item label="名称"><el-input v-model="stockForm.stock_name" @keyup.enter="saveStock" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="stockForm.status"><el-option label="active" value="active" /><el-option label="inactive" value="inactive" /></el-select></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="stockForm.sort_order" /></el-form-item>
+        <el-form-item label="排序"><el-input-number v-model="stockForm.sort_order" @keyup.enter="saveStock" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="stockForm.remark" type="textarea" /></el-form-item>
       </el-form>
       <template #footer>
@@ -99,9 +107,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { gmsApiService, type GMSStrategyVersionStock, type GMSStrategyVersion } from '@/services/gmsApi'
+
+const stockCodeRef = ref<any>(null)
+const versionStrategyCodeRef = ref<any>(null)
 
 const loading = ref(false)
 const versions = ref<GMSStrategyVersion[]>([])
@@ -128,7 +139,11 @@ const importText = ref('')
 const loadVersions = async () => {
   const res = await gmsApiService.getStrategyVersions({ page: 1, page_size: 200 })
   versions.value = res.data || []
-  if (!selectedVersionId.value && versions.value.length) selectedVersionId.value = versions.value[0].id
+  if (!selectedVersionId.value && versions.value.length) {
+    // 优先寻找版本号为 1 的版本
+    const v1 = versions.value.find(v => v.version_no === 1)
+    selectedVersionId.value = v1 ? v1.id : versions.value[0].id
+  }
 }
 
 const refresh = async () => {
@@ -165,14 +180,19 @@ const openVersionDialog = () => {
 }
 
 const saveVersion = async () => {
-  if (editingVersionId.value) {
-    await gmsApiService.updateStrategyVersion(editingVersionId.value, versionForm.value)
-  } else {
-    await gmsApiService.createStrategyVersion(versionForm.value)
+  try {
+    if (editingVersionId.value) {
+      await gmsApiService.updateStrategyVersion(editingVersionId.value, versionForm.value)
+    } else {
+      await gmsApiService.createStrategyVersion(versionForm.value)
+    }
+    ElMessage.success('版本保存成功')
+    versionDialogVisible.value = false
+    await loadVersions()
+  } catch (e: any) {
+    await ElMessageBox.alert(e.message || '保存失败', '错误', { type: 'error' })
+    nextTick(() => strategyCodeInput.value?.focus())
   }
-  ElMessage.success('版本保存成功')
-  versionDialogVisible.value = false
-  await loadVersions()
 }
 
 const openStockDialog = (row?: GMSStrategyVersionStock) => {
@@ -194,14 +214,19 @@ const saveStock = async () => {
   if (!selectedVersionId.value) return
   const codeStr = String(stockForm.value.stock_code ?? '').trim()
   const payload = { ...stockForm.value, stock_code: codeStr }
-  if (editingStockId.value) {
-    await gmsApiService.updateStrategyVersionStock(editingStockId.value, payload)
-  } else {
-    await gmsApiService.createStrategyVersionStock({ version_id: selectedVersionId.value, ...payload })
+  try {
+    if (editingStockId.value) {
+      await gmsApiService.updateStrategyVersionStock(editingStockId.value, payload)
+    } else {
+      await gmsApiService.createStrategyVersionStock({ version_id: selectedVersionId.value, ...payload })
+    }
+    ElMessage.success('观察股保存成功')
+    stockDialogVisible.value = false
+    await refresh()
+  } catch (e: any) {
+    await ElMessageBox.alert(e.message || '保存失败', '录入错误', { type: 'error' })
+    nextTick(() => stockCodeInput.value?.focus())
   }
-  ElMessage.success('观察股保存成功')
-  stockDialogVisible.value = false
-  await refresh()
 }
 
 const removeStock = async (row: GMSStrategyVersionStock) => {
@@ -234,10 +259,21 @@ const submitImport = async () => {
       const [market, stock_code, stock_name] = line.split(',').map((x) => (x || '').trim())
       return { market, stock_code, stock_name }
     })
-  const data = await gmsApiService.batchImportStrategyVersionStocks({ version_id: selectedVersionId.value, items })
-  ElMessage.success(`导入完成：成功${data.success_count}，跳过${data.skip_count}，失败${data.fail_count}`)
-  importDialogVisible.value = false
-  await refresh()
+  try {
+    const data = await gmsApiService.batchImportStrategyVersionStocks({ version_id: selectedVersionId.value, items })
+    if (data.fail_count > 0) {
+      const reasons = data.fail_details.map(f => `${f.stock_code}: ${f.reason}`).join('\n')
+      await ElMessageBox.alert(`导入完成：成功${data.success_count}，失败${data.fail_count}，跳过${data.skip_count}\n失败详情：\n${reasons}`, '导入结果', { type: 'warning' })
+      // 存在失败时不关闭弹窗，方便用户修改后重试
+      await refresh()
+    } else {
+      ElMessage.success(`导入完成：成功${data.success_count}，跳过${data.skip_count}`)
+      importDialogVisible.value = false
+      await refresh()
+    }
+  } catch (e: any) {
+    await ElMessageBox.alert(e.message || '导入失败', '错误', { type: 'error' })
+  }
 }
 
 defineExpose({ refresh })

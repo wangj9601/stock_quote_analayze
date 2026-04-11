@@ -21,6 +21,8 @@ from backend_api.models import (
     User,
     GMSStrategyVersion,
     GMSStrategyVersionStock,
+    StockRealtimeQuote,
+    StockRealtimeQuoteHK,
 )
 from backend_api.services.gms_signal_trace_selection import query_gms_signal_trace_selection
 from backend_core.strategies.gms import admin_interface
@@ -648,7 +650,7 @@ def _serialize_strategy_version(row: GMSStrategyVersion) -> dict:
     }
 
 
-def _serialize_strategy_version_stock(row: GMSStrategyVersionStock) -> dict:
+def _serialize_strategy_version_stock(row: GMSStrategyVersionStock, price: Optional[float] = None) -> dict:
     return {
         "id": row.id,
         "version_id": row.version_id,
@@ -658,6 +660,7 @@ def _serialize_strategy_version_stock(row: GMSStrategyVersionStock) -> dict:
         "sort_order": row.sort_order,
         "status": row.status,
         "remark": row.remark,
+        "current_price": price,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -820,9 +823,39 @@ async def list_strategy_version_stocks(
         .limit(page_size)
         .all()
     )
+
+    # 获取实时价格
+    a_prices = {}
+    hk_prices = {}
+    
+    a_codes = [r.stock_code for r in rows if r.market == 'A']
+    if a_codes:
+        latest_a = db.query(func.max(StockRealtimeQuote.trade_date)).filter(StockRealtimeQuote.code.in_(a_codes)).scalar()
+        if latest_a:
+            p_rows = db.query(StockRealtimeQuote.code, StockRealtimeQuote.current_price).filter(
+                StockRealtimeQuote.code.in_(a_codes),
+                StockRealtimeQuote.trade_date == latest_a
+            ).all()
+            a_prices = {r[0]: r[1] for r in p_rows}
+            
+    hk_codes = [r.stock_code for r in rows if r.market == 'HK']
+    if hk_codes:
+        latest_hk = db.query(func.max(StockRealtimeQuoteHK.trade_date)).filter(StockRealtimeQuoteHK.code.in_(hk_codes)).scalar()
+        if latest_hk:
+            p_rows = db.query(StockRealtimeQuoteHK.code, StockRealtimeQuoteHK.current_price).filter(
+                StockRealtimeQuoteHK.code.in_(hk_codes),
+                StockRealtimeQuoteHK.trade_date == latest_hk
+            ).all()
+            hk_prices = {r[0]: r[1] for r in p_rows}
+
     return {
         "success": True,
-        "data": [_serialize_strategy_version_stock(r) for r in rows],
+        "data": [
+            _serialize_strategy_version_stock(
+                r, 
+                a_prices.get(r.stock_code) if r.market == 'A' else hk_prices.get(r.stock_code)
+            ) for r in rows
+        ],
         "total": total,
         "page": page,
         "page_size": page_size,

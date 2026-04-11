@@ -365,6 +365,7 @@
             :min="1"
             :max="100"
             placeholder="限制返回数量"
+            @keyup.enter="applyFilter"
           />
         </el-form-item>
       </el-form>
