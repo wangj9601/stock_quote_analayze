@@ -178,17 +178,26 @@ const saveVersion = async () => {
 const openStockDialog = (row?: GMSStrategyVersionStock) => {
   editingStockId.value = row?.id ?? null
   stockForm.value = row
-    ? { market: row.market, stock_code: row.stock_code, stock_name: row.stock_name || '', status: row.status, sort_order: row.sort_order, remark: row.remark || '' }
+    ? {
+        market: row.market,
+        stock_code: row.stock_code != null && row.stock_code !== '' ? String(row.stock_code) : '',
+        stock_name: row.stock_name || '',
+        status: row.status,
+        sort_order: row.sort_order,
+        remark: row.remark || '',
+      }
     : { market: 'A', stock_code: '', stock_name: '', status: 'active', sort_order: 0, remark: '' }
   stockDialogVisible.value = true
 }
 
 const saveStock = async () => {
   if (!selectedVersionId.value) return
+  const codeStr = String(stockForm.value.stock_code ?? '').trim()
+  const payload = { ...stockForm.value, stock_code: codeStr }
   if (editingStockId.value) {
-    await gmsApiService.updateStrategyVersionStock(editingStockId.value, stockForm.value)
+    await gmsApiService.updateStrategyVersionStock(editingStockId.value, payload)
   } else {
-    await gmsApiService.createStrategyVersionStock({ version_id: selectedVersionId.value, ...stockForm.value })
+    await gmsApiService.createStrategyVersionStock({ version_id: selectedVersionId.value, ...payload })
   }
   ElMessage.success('观察股保存成功')
   stockDialogVisible.value = false

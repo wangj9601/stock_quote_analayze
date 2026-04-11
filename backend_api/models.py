@@ -3,13 +3,86 @@
 """
 
 from datetime import datetime, date
-from typing import Optional, List
+import numbers
+from typing import Optional, List, Any
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint, Index, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint, Index, JSON, TypeDecorator, cast
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import operators as sa_operators
+from sqlalchemy.sql.elements import ClauseElement, BindParameter
 
 Base = declarative_base()
+
+
+class _StockCodeTextPKComparator(TypeDecorator.Comparator):
+    """对比较右侧生成 CAST(... AS VARCHAR)，避免 PostgreSQL 报 text = integer。
+
+    纯标量（如 2709）会先变成 BindParameter；若仅处理「非 ClauseElement」会漏掉 BindParameter，
+    仍会按 integer 绑定，故 BindParameter 也需包一层 CAST。
+    """
+
+    def operate(self, op, *other, **kwargs):
+        if other and op in (sa_operators.eq, sa_operators.ne):
+            o = other[0]
+            impl = self.expr.type
+            length = 32
+            inner = getattr(impl, "impl", None)
+            if inner is not None and getattr(inner, "length", None):
+                length = inner.length
+            elif getattr(impl, "length", None):
+                length = impl.length
+            str_type = String(length)
+            if isinstance(o, BindParameter):
+                return super().operate(op, cast(o, str_type), **kwargs)
+            if not isinstance(o, ClauseElement):
+                return super().operate(op, cast(o, str_type), **kwargs)
+        return super().operate(op, *other, **kwargs)
+
+
+class StockCodeTextPK(TypeDecorator):
+    """
+    stock_basic_info / stock_basic_info_hk 主键 code 在库中为文本。
+    ORM 比较 `StockBasicInfo.code == 688114` 时，底层 String 的 TypeEngine.coerce_compared_value
+    会把右侧推断成 Integer，导致 PostgreSQL 出现 text = integer。
+    此处显式固定比较类型为本装饰器（字符串语义），并统一 bind/result 为 str。
+    """
+
+    impl = String(32)
+    cache_ok = True
+    comparator_factory = _StockCodeTextPKComparator
+
+    def coerce_compared_value(self, op, value: Any):
+        """保证与 int/float/numpy 标量比较时右侧类型为本装饰器，不委托为 Integer。
+
+        SQLAlchemy 2.x 中若将 ``coerce_compared_value`` 完全交给 ``String.impl``，
+        对 Python ``int`` 可能解析为 ``Integer()``，绑定参数按整数下发，触发 PG ``text = integer``。
+        """
+        if value is None:
+            return self.impl.coerce_compared_value(op, value)
+        if isinstance(value, bool):
+            return self.impl.coerce_compared_value(op, value)
+        if isinstance(value, (int, float, numbers.Integral, numbers.Real)):
+            return self
+        try:
+            import numpy as np
+
+            if isinstance(value, np.generic):
+                return self
+        except ImportError:
+            pass
+        return self.impl.coerce_compared_value(op, value)
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        # 统一转为字符串，并移除首尾空格
+        return str(value).strip()
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return str(value).strip()
 
 # SQLAlchemy 模型
 class User(Base):
@@ -49,7 +122,7 @@ class Watchlist(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    stock_code = Column(String, nullable=False)
+    stock_code = Column(StockCodeTextPK(), nullable=False)
     stock_name = Column(String, nullable=False)
     group_name = Column(String, default="default")
     created_at = Column(DateTime, default=datetime.now)
@@ -71,7 +144,8 @@ class StockBasicInfo(Base):
     
     #id = Column(Integer, primary_key=True, index=True)
     #code = Column(String, unique=True, nullable=False)
-    code = Column(Integer, primary_key=True, index=True)
+    # PostgreSQL 等库中 code 多为 text/varchar，与 Integer 绑定会导致 text=integer 比较错误
+    code = Column(StockCodeTextPK(), primary_key=True, index=True)
     name = Column(String, nullable=False)
     industry = Column(Text, nullable=True)
     listing_date = Column(Text, nullable=True)
@@ -86,7 +160,7 @@ class StockBasicInfo(Base):
 class StockBasicInfoHK(Base):
     __tablename__ = "stock_basic_info_hk"
     
-    code = Column(String, primary_key=True, index=True)
+    code = Column(StockCodeTextPK(), primary_key=True, index=True)
     name = Column(String, nullable=False)
     create_date = Column(DateTime)
     industry = Column(Text, nullable=True)
@@ -200,7 +274,7 @@ class QuoteData(Base):
     __tablename__ = "quote_data"
     
     id = Column(Integer, primary_key=True, index=True)
-    stock_code = Column(String(10), nullable=False, index=True)
+    stock_code = Column(StockCodeTextPK(), nullable=False, index=True)
     stock_name = Column(String(50), nullable=False)
     trade_date = Column(Date, nullable=False, index=True)
     open = Column(Float, nullable=False)
@@ -276,7 +350,7 @@ class QuoteSyncTaskInDB(QuoteSyncTaskCreate):
 
 class StockRealtimeQuote(Base):
     __tablename__ = "stock_realtime_quote"
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     trade_date = Column(String, primary_key=True)
     name = Column(String)
     current_price = Column(Float)
@@ -300,7 +374,7 @@ class StockRealtimeQuote(Base):
 
 class StockRealtimeQuoteHK(Base):
     __tablename__ = "stock_realtime_quote_hk"
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     trade_date = Column(String, primary_key=True)
     name = Column(String)
     english_name = Column(String)
@@ -457,7 +531,7 @@ class HKIndexHistoricalQuotes(Base):
 
 class HistoricalQuotes(Base):
     __tablename__ = 'historical_quotes'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     ts_code = Column(String)
     name = Column(String)
     market = Column(String)
@@ -485,7 +559,7 @@ class HistoricalQuotes(Base):
 
 class HistoricalQuotesHK(Base):
     __tablename__ = 'historical_quotes_hk'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     ts_code = Column(String)
     name = Column(String)
     english_name = Column(String)
@@ -511,7 +585,7 @@ class HistoricalQuotesHK(Base):
 class MACDIndicators(Base):
     """MACD指标数据表（A股和港股共用）"""
     __tablename__ = 'macd_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'A股' 或 '港股'
     dif = Column(Float)  # DIF值（快线EMA12 - 慢线EMA26）
@@ -525,7 +599,7 @@ class MACDIndicators(Base):
 class KDJIndicators(Base):
     """KDJ指标数据表（A股和港股共用）"""
     __tablename__ = 'kdj_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     k = Column(Float)
@@ -537,7 +611,7 @@ class KDJIndicators(Base):
 class RSIIndicators(Base):
     """RSI指标数据表（A股和港股共用）"""
     __tablename__ = 'rsi_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     rsi6 = Column(Float)
@@ -548,7 +622,7 @@ class RSIIndicators(Base):
 class MAIndicators(Base):
     """MA移动平均线指标数据表（A股和港股共用）"""
     __tablename__ = 'ma_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     ma5 = Column(Float)  # 5日移动平均
@@ -564,7 +638,7 @@ class MAIndicators(Base):
 class BOLLIndicators(Base):
     """BOLL指标数据表（A股和港股共用）"""
     __tablename__ = 'boll_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     mid = Column(Float)  # 中轨线 (通常为20日收盘价简单平均线)
@@ -577,7 +651,7 @@ class BOLLIndicators(Base):
 class MAVOLIndicators(Base):
     """MAVOL成交量移动平均线指标数据表（A股和港股共用）"""
     __tablename__ = 'mavol_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     mavol5 = Column(Float)  # 5日成交量移动平均
@@ -595,7 +669,7 @@ class InfiniteCostIndicators(Base):
     cum_amount/cum_volume 为审计用累计额与股数；与通达信筹码 COST 不等价。行情 volume 为手时计算先×100。"""
 
     __tablename__ = "icost_indicators"
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     ic_price = Column(Float, nullable=True)
@@ -607,7 +681,7 @@ class InfiniteCostIndicators(Base):
 class MeanFrequencyResonanceIndicators(Base):
     """均值频率共振量化交易指标数据表（A股和港股共用）"""
     __tablename__ = 'mean_frequency_resonance_indicators'
-    code = Column(String, primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String, primary_key=True)  # 使用String类型以兼容A股Date和港股String
     market_type = Column(String, primary_key=True)  # 'CN' 或 'HK'
     
@@ -635,7 +709,7 @@ class MeanFrequencyResonanceIndicators(Base):
 class GMSSignalTrace(Base):
     """GMS 信号追溯记录表：存储每只股票每日的 GMS 策略指标与信号"""
     __tablename__ = 'gms_signal_trace'
-    code = Column(String(20), primary_key=True)
+    code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String(20), primary_key=True)
     market_type = Column(String(10), primary_key=True)
 
@@ -699,7 +773,7 @@ class GMSStrategyVersionStock(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     version_id = Column(Integer, ForeignKey("gms_strategy_versions.id", ondelete="CASCADE"), nullable=False, index=True)
     market = Column(String(10), nullable=False, index=True)  # A/HK
-    stock_code = Column(String(20), nullable=False, index=True)
+    stock_code = Column(StockCodeTextPK(), nullable=False, index=True)
     stock_name = Column(String(100), nullable=True)
     sort_order = Column(Integer, nullable=False, default=0)
     status = Column(String(20), nullable=False, default="active")
@@ -945,7 +1019,7 @@ class PVFRSBacktestResult(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(String(50), ForeignKey("pvfrs_backtest_tasks.task_id"), nullable=False, index=True)
-    stock_code = Column(String(20), nullable=False, index=True)
+    stock_code = Column(StockCodeTextPK(), nullable=False, index=True)
     market = Column(String(10), nullable=False)
     backtest_date = Column(Date, nullable=False)
     start_date = Column(Date, nullable=False)
@@ -971,7 +1045,7 @@ class PVFRSTradeRecord(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     result_id = Column(Integer, ForeignKey("pvfrs_backtest_results.id"), nullable=False)
-    stock_code = Column(String(20), nullable=False)
+    stock_code = Column(StockCodeTextPK(), nullable=False)
     market = Column(String(10), nullable=False)
     entry_date = Column(Date, nullable=False)
     exit_date = Column(Date, nullable=False)
@@ -1010,7 +1084,7 @@ class OneYangThreeLinesSignal(Base):
     __tablename__ = "one_yang_three_lines_signals"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    code = Column(String(20), nullable=False, index=True)
+    code = Column(StockCodeTextPK(), nullable=False, index=True)
     name = Column(String(50), nullable=False)
     signal_date = Column(Date, nullable=False, index=True)
     current_price = Column(Float)

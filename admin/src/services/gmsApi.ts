@@ -283,17 +283,27 @@ class GMSApiService {
     status?: string
     remark?: string
   }) {
+    const safe = {
+      ...body,
+      // JSON 中必须为字符串，否则纯数字代码会变成 number，后端易与整型混淆
+      stock_code: body.stock_code != null && body.stock_code !== '' ? String(body.stock_code).trim() : '',
+    }
     const res = await this.request<{ success: boolean; data: GMSStrategyVersionStock }>(`${PREFIX}/strategy-version-stocks`, {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(safe),
     })
     return res.data
   }
 
   async updateStrategyVersionStock(stockId: number, body: Partial<GMSStrategyVersionStock>) {
+    const sc = body.stock_code
+    const safe =
+      sc !== undefined && sc !== null && sc !== ''
+        ? { ...body, stock_code: String(sc).trim() }
+        : body
     const res = await this.request<{ success: boolean; data: GMSStrategyVersionStock }>(`${PREFIX}/strategy-version-stocks/${stockId}`, {
       method: 'PUT',
-      body: JSON.stringify(body),
+      body: JSON.stringify(safe),
     })
     return res.data
   }
@@ -334,6 +344,27 @@ class GMSApiService {
       body: JSON.stringify(payload),
     })
     return res.data
+  }
+
+  /**
+   * 选股结果列表，数据来自 **gms_signal_trace**（与前端网站 GMS 选股同源缓存表）。
+   */
+  async getSelectionResults(params?: { date?: string; limit?: number; min_strength?: number }) {
+    const q = new URLSearchParams()
+    if (params?.date) q.set('date', params.date)
+    if (params?.limit != null) q.set('limit', String(params.limit))
+    if (params?.min_strength != null) q.set('min_strength', String(params.min_strength))
+    const qs = q.toString()
+    return this.request<{
+      success: boolean
+      data: any[]
+      total: number
+      search_date?: string
+      timestamp?: string
+      message?: string
+      data_source?: string
+      strategy_name?: string
+    }>(`${PREFIX}/selection-results${qs ? `?${qs}` : ''}`)
   }
 }
 

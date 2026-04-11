@@ -712,6 +712,7 @@ class StockAnalysisService:
     def _is_hk_stock(self, stock_code: str) -> bool:
         """判断是否为港股"""
         try:
+            stock_code = str(stock_code).strip()
             # 先查询港股表
             hk_stock = self.db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == stock_code).first()
             if hk_stock:

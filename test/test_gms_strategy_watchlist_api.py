@@ -24,7 +24,8 @@ def _build_client():
     Base.metadata.create_all(bind=engine)
 
     db = TestingSessionLocal()
-    db.add(StockBasicInfo(code=1, name="平安银行"))
+    db.add(StockBasicInfo(code="000001", name="平安银行"))
+    db.add(StockBasicInfo(code="600000", name="浦发银行"))
     db.add(StockBasicInfoHK(code="00700", name="腾讯控股"))
     db.commit()
     db.close()
@@ -72,9 +73,23 @@ def test_gms_strategy_version_and_stock_crud():
     assert create_stock_resp.status_code == 200
     stock_id = create_stock_resp.json()["data"]["id"]
 
+    # JSON 中股票代码为数字时也应能写入（库表 code 为字符串，后端须绑定 str）
+    create_num = client.post(
+        "/api/admin/gms/strategy-version-stocks",
+        json={
+            "version_id": version_id,
+            "market": "A",
+            "stock_code": 600000,
+            "status": "active",
+            "sort_order": 2,
+        },
+    )
+    assert create_num.status_code == 200
+    assert create_num.json()["data"]["stock_code"] == "600000"
+
     list_resp = client.get(f"/api/admin/gms/strategy-version-stocks?version_id={version_id}&page=1&page_size=20")
     assert list_resp.status_code == 200
-    assert list_resp.json()["total"] == 1
+    assert list_resp.json()["total"] == 2
 
     update_resp = client.put(
         f"/api/admin/gms/strategy-version-stocks/{stock_id}",

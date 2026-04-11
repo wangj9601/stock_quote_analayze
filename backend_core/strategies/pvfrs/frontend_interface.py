@@ -314,7 +314,7 @@ class FrontendInterface:
                 'low': {'count': low_strength_count, 'threshold': '<0.5'}
             }
             
-            # 平均指标
+            # 平均指标（indicators 可能为 dict 或 PVFRSIndicators 对象）
             avg_indicators = {}
             if selection_results:
                 indicators_sum = {
@@ -322,12 +322,26 @@ class FrontendInterface:
                     'amplitude_ratio': 0,
                     'efficiency_ratio': 0
                 }
-                
+
+                def _triple(ind: Any) -> tuple:
+                    if isinstance(ind, dict):
+                        return (
+                            float(ind.get('resonance_strength') or 0),
+                            float(ind.get('amplitude_ratio') or 0),
+                            float(ind.get('efficiency_ratio') or 0),
+                        )
+                    return (
+                        float(getattr(ind, 'resonance_strength', 0) or 0),
+                        float(getattr(ind, 'amplitude_ratio', 0) or 0),
+                        float(getattr(ind, 'efficiency_ratio', 0) or 0),
+                    )
+
                 for result in selection_results:
-                    indicators_sum['resonance_strength'] += result.indicators.resonance_strength
-                    indicators_sum['amplitude_ratio'] += result.indicators.amplitude_ratio
-                    indicators_sum['efficiency_ratio'] += result.indicators.efficiency_ratio
-                
+                    rs, ar, er = _triple(result.indicators)
+                    indicators_sum['resonance_strength'] += rs
+                    indicators_sum['amplitude_ratio'] += ar
+                    indicators_sum['efficiency_ratio'] += er
+
                 avg_indicators = {
                     key: value / total_count for key, value in indicators_sum.items()
                 }

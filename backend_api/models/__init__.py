@@ -280,4 +280,5 @@ __all__ = [
     'TradingCalendar',
     'TradingCalendarCreate',
     'TradingCalendarInDB',
+    'StockCodeTextPK',
 ]

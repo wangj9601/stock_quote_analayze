@@ -1,0 +1,18 @@
+"""
+FastAPI主应用
+"""
+print(f"Loading main.py from: {__file__}")
+
+
+import sys
+import os
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+sys.path.insert(0, current_dir)
+
+# 在导入任何路由之前：猴子补丁 JSONResponse.render，将 nan/inf 转为 null，避免 ValueError: Out of range float values are not JSON compliant
+# 直接补丁原始类的方法，这样无论 FastAPI/Starlette 用哪一个 JSONResponse 引用都会生效
+import json
+import math

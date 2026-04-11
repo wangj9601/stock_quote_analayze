@@ -815,9 +815,12 @@ class ReportService:
         # 报告日期：优先使用 GMS 结果中的 date 字段（YYYY-MM-DD），否则为今天
         report_date = str(results[0].get("date", "")[:10]) if results else datetime.now().strftime("%Y-%m-%d")
 
-        codes = [r.get("code") or r.get("symbol") or "" for r in results]
-        cn_codes = [c for c in codes if len(c) >= 6 and c.isdigit() and c[0] in "6039"]
-        hk_codes = [c for c in codes if c not in cn_codes]
+        codes = [
+            str(r.get("code") or r.get("symbol") or "").strip()
+            for r in results
+        ]
+        cn_codes = [c for c in codes if c and len(c) >= 6 and c.isdigit() and c[0] in "6039"]
+        hk_codes = [c for c in codes if c and c not in cn_codes]
 
         # 与前端选股一致：从历史行情表取最近交易日收盘价、涨跌幅，用于「当前价格」「当前涨跌幅」
         hist_quotes_a: Dict[str, Any] = {}

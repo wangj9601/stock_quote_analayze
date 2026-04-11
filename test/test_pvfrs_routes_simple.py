@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from datetime import datetime
 
 # 测试前端路由函数
-@patch('backend_api.stock.pvfrs_frontend_routes.get_frontend_interface')
+@patch('backend_api.stock.pvfrs_frontend_routes.get_pvfrs_frontend_interface')
 def test_frontend_route_creation(mock_get_interface):
     """测试前端路由创建"""
     # 模拟前端接口

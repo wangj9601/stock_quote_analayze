@@ -1185,10 +1185,10 @@ async def get_gms_strategy(
         from backend_api.models import StockBasicInfo, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK
         from sqlalchemy import func
 
-        stock_codes = [r["symbol"] for r in selection_results]
+        stock_codes = [str(r["symbol"]).strip() for r in selection_results]
         # 6 位：6/0/3 为 A 股，9 为沪市 B 股，均从 A 股行情/基本信息表取数
-        cn_codes = [c for c in stock_codes if len(c) >= 6 and c.isdigit() and c[0] in "6039"]
-        hk_codes = [c for c in stock_codes if c not in cn_codes]
+        cn_codes = [c for c in stock_codes if c and len(c) >= 6 and c.isdigit() and c[0] in "6039"]
+        hk_codes = [c for c in stock_codes if c and c not in cn_codes]
 
         # 从历史行情表获取最近交易日收盘价（A股、港股分别查）
         hist_quotes_a = {}
@@ -1234,7 +1234,7 @@ async def get_gms_strategy(
             return "--"
 
         for r in selection_results:
-            code = r["symbol"]
+            code = str(r["symbol"]).strip()
             name = ""
             is_hk = code in hk_codes
             if is_hk:

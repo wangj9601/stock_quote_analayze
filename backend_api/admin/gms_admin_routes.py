@@ -6,29 +6,90 @@ GMS 回测管理端 API 路由
 import logging
 import os
 import re
-from typing import Optional, List, Literal, Tuple
+import sys
+from typing import Optional, List, Literal, Tuple, Any
 
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import String as SAString, bindparam, func, text
 
 from backend_api.database import get_db
 from backend_api.models import (
-    StockBasicInfo,
-    StockBasicInfoHK,
     Watchlist,
     User,
     GMSStrategyVersion,
     GMSStrategyVersionStock,
 )
+from backend_api.services.gms_signal_trace_selection import query_gms_signal_trace_selection
 from backend_core.strategies.gms import admin_interface
 from backend_core.strategies.gms.config import GMSConfigManager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/gms", tags=["GMS回测管理"])
+
+
+@router.get("/health/stock-code-orm-check")
+async def health_stock_code_orm_check():
+    """自检：当前进程里 StockBasicInfo.code == 2709 编译出的 PG SQL 是否含 CAST（用于确认是否已重启、是否旧 worker）。"""
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+
+    from backend_api.models import StockBasicInfo
+
+    stmt = select(StockBasicInfo).where(StockBasicInfo.code == 2709).limit(1)
+    compiled = stmt.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    upper = sql.upper()
+    return {
+        "stock_code_type": type(StockBasicInfo.code.type).__name__,
+        "postgresql_sql_contains_cast": "CAST(" in upper and "VARCHAR" in upper,
+        "sample_sql": sql,
+    }
+
+
+def _txt_select_name_cn():
+    """PostgreSQL 上 :code 若被推断为 integer 会与 text 列比较失败；显式按字符串绑定。"""
+    return text("SELECT name FROM stock_basic_info WHERE code = :code LIMIT 1").bindparams(
+        bindparam("code", type_=SAString())
+    )
+
+
+def _txt_select_name_hk():
+    return text("SELECT name FROM stock_basic_info_hk WHERE code = :code LIMIT 1").bindparams(
+        bindparam("code", type_=SAString())
+    )
+
+
+def _txt_dup_version_stock():
+    return text(
+        """
+        SELECT 1 FROM gms_strategy_version_stocks
+        WHERE version_id = :vid AND market = :m AND stock_code = :sc
+        LIMIT 1
+        """
+    ).bindparams(
+        bindparam("vid"),
+        bindparam("m", type_=SAString()),
+        bindparam("sc", type_=SAString()),
+    )
+
+
+def _txt_dup_version_stock_exclude_row():
+    return text(
+        """
+        SELECT 1 FROM gms_strategy_version_stocks
+        WHERE id <> :sid AND version_id = :vid AND market = :m AND stock_code = :sc
+        LIMIT 1
+        """
+    ).bindparams(
+        bindparam("sid"),
+        bindparam("vid"),
+        bindparam("m", type_=SAString()),
+        bindparam("sc", type_=SAString()),
+    )
 
 
 def _get_stock_name(db: Session, code: str) -> str:
@@ -39,10 +100,10 @@ def _get_stock_name(db: Session, code: str) -> str:
     # 港股：5位数字或字母开头
     is_hk = len(c) < 6 or not (c.isdigit() and c[0] in "6039")
     if is_hk:
-        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == c).first()
-        if not info and c.isdigit():
-            info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == c.zfill(5)).first()
-        return (info.name or "").strip() if info else ""
+        row = db.execute(_txt_select_name_hk(), {"code": str(c)}).fetchone()
+        if not row and c.isdigit():
+            row = db.execute(_txt_select_name_hk(), {"code": str(c.zfill(5))}).fetchone()
+        return str(row[0]).strip() if row and row[0] else ""
     # A股：库中 code 为 text（如 000001）；PostgreSQL 不可与 int 直接比较，只使用字符串形式尝试
     clean = c[2:] if c.startswith(("SZ", "SH")) else c
     if clean.isdigit():
@@ -56,9 +117,9 @@ def _get_stock_name(db: Session, code: str) -> str:
     else:
         try_vals = [clean]
     for try_val in try_vals:
-        info = db.query(StockBasicInfo).filter(StockBasicInfo.code == try_val).first()
-        if info and info.name:
-            return str(info.name).strip()
+        row = db.execute(_txt_select_name_cn(), {"code": str(try_val)}).fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
     return ""
 
 
@@ -195,6 +256,27 @@ async def get_system_status():
         }
     except Exception as e:
         logger.exception("GMS system/status 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/selection-results")
+async def get_gms_selection_results_from_trace(
+    date: Optional[str] = Query(None, description="目标日期 YYYY-MM-DD，不传则使用 gms_signal_trace 表内最新日期"),
+    limit: Optional[int] = Query(None, ge=1, description="最大返回条数"),
+    min_strength: float = Query(0.3, ge=0.0, le=1.0, description="最低信号强度 0~1（对应总分 ×100）"),
+    db: Session = Depends(get_db),
+):
+    """
+    管理端「GMS策略管理 → 选股结果」数据源：**gms_signal_trace** 表。
+    数据来自 **gms_signal_trace**；公开接口见 `GET /api/frontend/gms/selection-results`（同源逻辑）。
+    """
+    try:
+        payload, fallback_message = query_gms_signal_trace_selection(db, date, min_strength, limit)
+        if fallback_message:
+            payload["message"] = fallback_message
+        return JSONResponse(payload)
+    except Exception as e:
+        logger.exception("GMS 管理端选股结果（gms_signal_trace）查询失败")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -447,6 +529,13 @@ class StrategyVersionStockCreateBody(BaseModel):
     status: str = Field("active", description="状态 active/inactive")
     remark: Optional[str] = Field(None, description="备注")
 
+    @field_validator("stock_code", mode="before")
+    @classmethod
+    def _stock_code_always_str(cls, v):
+        if v is None:
+            return v
+        return str(v).strip()
+
 
 class StrategyVersionStockUpdateBody(BaseModel):
     market: Optional[str] = Field(None, description="市场类型：A 或 HK")
@@ -455,6 +544,13 @@ class StrategyVersionStockUpdateBody(BaseModel):
     sort_order: Optional[int] = Field(None, description="排序")
     status: Optional[str] = Field(None, description="状态 active/inactive")
     remark: Optional[str] = Field(None, description="备注")
+
+    @field_validator("stock_code", mode="before")
+    @classmethod
+    def _stock_code_always_str(cls, v):
+        if v is None:
+            return v
+        return str(v).strip()
 
 
 class BatchDeleteStocksBody(BaseModel):
@@ -472,10 +568,24 @@ class BatchImportItem(BaseModel):
     status: str = Field("active", description="状态 active/inactive")
     remark: Optional[str] = Field(None, description="备注")
 
+    @field_validator("stock_code", mode="before")
+    @classmethod
+    def _stock_code_always_str(cls, v):
+        if v is None:
+            return v
+        return str(v).strip()
+
 
 class BatchImportStocksBody(BaseModel):
     version_id: int = Field(..., ge=1, description="策略版本ID")
     items: List[BatchImportItem] = Field(default_factory=list, description="批量导入观察股条目")
+
+
+def _as_text_stock_code(code: Any) -> str:
+    """将股票代码规范为 str，供 text/varchar 列查询绑定（PostgreSQL 禁止 text 与 integer 直接比较）。"""
+    if code is None:
+        return ""
+    return str(code).strip()
 
 
 def _normalize_market(market: str) -> str:
@@ -488,7 +598,7 @@ def _normalize_market(market: str) -> str:
 
 
 def _normalize_stock_code(market: str, stock_code: str) -> str:
-    code = str(stock_code or "").strip().upper()
+    code = _as_text_stock_code(stock_code).upper()
     if not code:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
     if market == "A":
@@ -503,16 +613,25 @@ def _normalize_stock_code(market: str, stock_code: str) -> str:
 
 
 def _resolve_stock_name(db: Session, market: str, stock_code: str) -> Tuple[bool, str]:
-    """校验股票是否存在，并返回标准名称。"""
+    """校验股票是否存在，并返回标准名称。用 text + 显式字符串 bindparam，避免 PostgreSQL text=integer。"""
+    code_s = _as_text_stock_code(stock_code)
+    if not code_s:
+        return False, ""
+    q_cn = _txt_select_name_cn()
+    q_hk = _txt_select_name_hk()
     if market == "A":
-        try:
-            numeric_code = int(stock_code)
-        except ValueError:
+        row = db.execute(q_cn, {"code": code_s}).fetchone()
+        if row is None and code_s.isdigit():
+            alt = code_s.zfill(6)
+            if alt != code_s:
+                row = db.execute(q_cn, {"code": alt}).fetchone()
+        if row is None:
             return False, ""
-        row = db.query(StockBasicInfo).filter(StockBasicInfo.code == numeric_code).first()
-        return (row is not None), (str(row.name).strip() if row and row.name else "")
-    row = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == stock_code).first()
-    return (row is not None), (str(row.name).strip() if row and row.name else "")
+        return True, (str(row[0]).strip() if row[0] else "")
+    row = db.execute(q_hk, {"code": code_s}).fetchone()
+    if row is None:
+        return False, ""
+    return True, (str(row[0]).strip() if row[0] else "")
 
 
 def _serialize_strategy_version(row: GMSStrategyVersion) -> dict:
@@ -534,7 +653,7 @@ def _serialize_strategy_version_stock(row: GMSStrategyVersionStock) -> dict:
         "id": row.id,
         "version_id": row.version_id,
         "market": row.market,
-        "stock_code": row.stock_code,
+        "stock_code": _as_text_stock_code(row.stock_code),
         "stock_name": row.stock_name,
         "sort_order": row.sort_order,
         "status": row.status,
@@ -712,25 +831,35 @@ async def list_strategy_version_stocks(
 
 @router.post("/strategy-version-stocks")
 async def create_strategy_version_stock(body: StrategyVersionStockCreateBody, db: Session = Depends(get_db)):
+    print("[GMS] create_strategy_version_stock ENTER", flush=True, file=sys.stderr)
     version = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == body.version_id).first()
     if not version:
         raise HTTPException(status_code=404, detail="策略版本不存在")
 
     market = _normalize_market(body.market)
-    stock_code = _normalize_stock_code(market, body.stock_code)
+    # 显式转 str，避免任何路径上残留 int（JSON/前端数字）进入后续逻辑
+    stock_code = _normalize_stock_code(market, str(body.stock_code))
+    _log_create = (
+        f"[GMS] create_strategy_version_stock version_id={body.version_id} market={market} "
+        f"raw_code={body.stock_code!r} type={type(body.stock_code).__name__} normalized={stock_code!r}"
+    )
+    print(_log_create, flush=True)
+    logger.info(
+        "GMS create_strategy_version_stock: version_id=%s market=%s raw_code=%r type=%s normalized=%r",
+        body.version_id,
+        market,
+        body.stock_code,
+        type(body.stock_code).__name__,
+        stock_code,
+    )
     exists, resolved_name = _resolve_stock_name(db, market, stock_code)
     if not exists:
         raise HTTPException(status_code=400, detail=f"股票不存在: {stock_code}")
 
-    dup = (
-        db.query(GMSStrategyVersionStock)
-        .filter(
-            GMSStrategyVersionStock.version_id == body.version_id,
-            GMSStrategyVersionStock.market == market,
-            GMSStrategyVersionStock.stock_code == stock_code,
-        )
-        .first()
-    )
+    dup = db.execute(
+        _txt_dup_version_stock(),
+        {"vid": body.version_id, "m": market, "sc": str(stock_code)},
+    ).fetchone()
     if dup:
         raise HTTPException(status_code=400, detail="该观察股已存在于当前策略版本")
 
@@ -746,6 +875,16 @@ async def create_strategy_version_stock(body: StrategyVersionStockCreateBody, db
     db.add(row)
     db.commit()
     db.refresh(row)
+    _log_ok = (
+        f"[GMS] create_strategy_version_stock OK id={row.id} stock_code={row.stock_code!r} stock_name={row.stock_name!r}"
+    )
+    print(_log_ok, flush=True)
+    logger.info(
+        "GMS create_strategy_version_stock ok: id=%s stock_code=%r stock_name=%r",
+        row.id,
+        row.stock_code,
+        row.stock_name,
+    )
     return {"success": True, "data": _serialize_strategy_version_stock(row)}
 
 
@@ -760,22 +899,20 @@ async def update_strategy_version_stock(
         raise HTTPException(status_code=404, detail="观察股记录不存在")
 
     market = _normalize_market(body.market) if body.market is not None else row.market
-    stock_code = _normalize_stock_code(market, body.stock_code) if body.stock_code is not None else row.stock_code
+    stock_code = (
+        _normalize_stock_code(market, str(body.stock_code))
+        if body.stock_code is not None
+        else _as_text_stock_code(row.stock_code)
+    )
 
     exists, resolved_name = _resolve_stock_name(db, market, stock_code)
     if not exists:
         raise HTTPException(status_code=400, detail=f"股票不存在: {stock_code}")
 
-    dup = (
-        db.query(GMSStrategyVersionStock)
-        .filter(
-            GMSStrategyVersionStock.id != stock_id,
-            GMSStrategyVersionStock.version_id == row.version_id,
-            GMSStrategyVersionStock.market == market,
-            GMSStrategyVersionStock.stock_code == stock_code,
-        )
-        .first()
-    )
+    dup = db.execute(
+        _txt_dup_version_stock_exclude_row(),
+        {"sid": stock_id, "vid": row.version_id, "m": market, "sc": str(stock_code)},
+    ).fetchone()
     if dup:
         raise HTTPException(status_code=400, detail="该观察股已存在于当前策略版本")
 
@@ -849,20 +986,15 @@ async def batch_import_strategy_version_stocks(body: BatchImportStocksBody, db: 
     for idx, item in enumerate(body.items):
         try:
             market = _normalize_market(item.market)
-            stock_code = _normalize_stock_code(market, item.stock_code)
+            stock_code = _normalize_stock_code(market, str(item.stock_code))
             exists, resolved_name = _resolve_stock_name(db, market, stock_code)
             if not exists:
                 raise HTTPException(status_code=400, detail=f"股票不存在: {stock_code}")
 
-            dup = (
-                db.query(GMSStrategyVersionStock)
-                .filter(
-                    GMSStrategyVersionStock.version_id == body.version_id,
-                    GMSStrategyVersionStock.market == market,
-                    GMSStrategyVersionStock.stock_code == stock_code,
-                )
-                .first()
-            )
+            dup = db.execute(
+                _txt_dup_version_stock(),
+                {"vid": body.version_id, "m": market, "sc": str(stock_code)},
+            ).fetchone()
             if dup:
                 skip_count += 1
                 continue

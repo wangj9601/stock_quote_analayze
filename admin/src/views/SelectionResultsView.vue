@@ -2,7 +2,10 @@
   <div class="selection-results">
     <!-- 页面头部 -->
     <div class="page-header">
-      <h1>GMS策略管理</h1>
+      <div>
+        <h1>GMS策略管理</h1>
+        <p class="page-subtitle">选股结果数据来自 <code>gms_signal_trace</code>（GMS 策略信号跟踪表），与网站端选股缓存一致。</p>
+      </div>
       <div v-if="activeMainTab === 'selection'" class="header-actions">
         <el-button type="primary" @click="loadSelectionResults" :loading="loading">
           <el-icon><Refresh /></el-icon>
@@ -88,51 +91,53 @@
             <span class="signal-text">{{ (scope.row.signal_strength * 100).toFixed(1) }}%</span>
           </template>
         </el-table-column>
+
+        <el-table-column prop="buy_type" label="买点类型" width="90">
+          <template #default="scope">
+            <span>{{ scope.row.buy_type || '--' }}</span>
+          </template>
+        </el-table-column>
         
-        <!-- 吸筹维度 -->
-        <el-table-column label="吸筹维度" width="120">
+        <el-table-column label="均值收敛" width="110">
           <template #default="scope">
             <div class="dimension-info">
               <div class="dimension-value">
-                {{ scope.row.indicators?.price_dimension?.macro_displacement || '-' }}
+                {{ scope.row.score_accumulation != null ? Number(scope.row.score_accumulation).toFixed(1) : '-' }}
               </div>
-              <div class="dimension-label">吸筹得分</div>
+              <div class="dimension-label">收敛态得分</div>
             </div>
           </template>
         </el-table-column>
         
-        <!-- 动量维度 -->
-        <el-table-column label="动量维度" width="120">
+        <el-table-column label="动量溢出" width="110">
           <template #default="scope">
             <div class="dimension-info">
               <div class="dimension-value">
-                {{ scope.row.indicators?.frequency_dimension?.rising_days || '-' }}
+                {{ scope.row.score_momentum != null ? Number(scope.row.score_momentum).toFixed(1) : '-' }}
               </div>
-              <div class="dimension-label">动量得分</div>
+              <div class="dimension-label">溢出态得分</div>
             </div>
           </template>
         </el-table-column>
         
-        <!-- 均衡维度 -->
-        <el-table-column label="均衡维度" width="120">
+        <el-table-column label="F/Z" width="90">
           <template #default="scope">
             <div class="dimension-info">
               <div class="dimension-value">
-                {{ scope.row.indicators?.volume_dimension?.efficiency_ratio || '-' }}
+                {{ scope.row.fz_ratio != null ? Number(scope.row.fz_ratio).toFixed(2) : '-' }}
               </div>
-              <div class="dimension-label">均衡得分</div>
+              <div class="dimension-label">数方比</div>
             </div>
           </template>
         </el-table-column>
         
-        <!-- 入场时机 -->
-        <el-table-column label="入场时机" width="120">
+        <el-table-column label="宏观位移 Δ" width="110">
           <template #default="scope">
             <div class="timing-info">
               <div class="timing-score">
-                {{ scope.row.indicators?.entry_timing_analysis?.comprehensive_assessment?.score?.toFixed(2) || '-' }}
+                {{ scope.row.delta != null ? Number(scope.row.delta).toFixed(4) : '-' }}
               </div>
-              <div class="timing-label">综合评分</div>
+              <div class="timing-label">d₂₀−d₁</div>
             </div>
           </template>
         </el-table-column>
@@ -140,7 +145,7 @@
         <el-table-column prop="investment_advice" label="投资建议" width="100">
           <template #default="scope">
             <el-tag 
-              :type="scope.row.investment_advice === 'BUY' ? 'success' : 'info'"
+              :type="adviceTagType(scope.row.investment_advice)"
               size="small"
             >
               {{ scope.row.investment_advice }}
@@ -182,12 +187,13 @@
               :stroke-width="10"
             />
           </el-descriptions-item>
+          <el-descriptions-item label="买点类型">{{ selectedStock.buy_type || '--' }}</el-descriptions-item>
           <el-descriptions-item label="投资建议">
-            <el-tag :type="selectedStock.investment_advice === 'BUY' ? 'success' : 'info'">
+            <el-tag :type="adviceTagType(selectedStock.investment_advice)">
               {{ selectedStock.investment_advice }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="分析时间">{{ formatDate(selectedStock.analysis_time) }}</el-descriptions-item>
+          <el-descriptions-item label="分析时间">{{ formatDate(selectedStock.analysis_time || selectedStock.timestamp) }}</el-descriptions-item>
         </el-descriptions>
 
         <!-- 维度分析详情 -->
@@ -375,7 +381,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Filter } from '@element-plus/icons-vue'
-import { pvfrsApiService } from '@/services/pvfrsApi'
+import { gmsApiService } from '@/services/gmsApi'
 import WatchlistManagement from '@/components/gms/WatchlistManagement.vue'
 
 // 响应式数据
@@ -419,22 +425,27 @@ const highQualityCount = computed(() => {
 })
 
 // 方法
+const adviceTagType = (advice: string | undefined) => {
+  if (!advice) return 'info'
+  if (advice === '强烈推荐' || advice === '推荐') return 'success'
+  if (advice === '关注') return 'warning'
+  return 'info'
+}
+
 const loadSelectionResults = async () => {
   try {
     loading.value = true
-    const params: any = {}
-    
+    const params: { date?: string; limit?: number; min_strength?: number } = {
+      min_strength: filterForm.value.min_strength,
+    }
     if (filterForm.value.date) {
       params.date = filterForm.value.date
     }
-    if (filterForm.value.min_strength > 0.3) {
-      params.min_strength = filterForm.value.min_strength
-    }
-    if (filterForm.value.limit !== 50) {
+    if (filterForm.value.limit != null && filterForm.value.limit > 0) {
       params.limit = filterForm.value.limit
     }
-    
-    const response = await pvfrsApiService.getSelectionResults(params)
+
+    const response = await gmsApiService.getSelectionResults(params)
     
     // 确保 data 字段始终是数组
     if (response && typeof response === 'object') {
@@ -531,6 +542,13 @@ onMounted(() => {
   
   h1 {
     @apply text-2xl font-bold text-gray-900;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm text-gray-500 max-w-2xl;
+    code {
+      @apply text-xs bg-gray-100 px-1 rounded;
+    }
   }
   
   .header-actions {

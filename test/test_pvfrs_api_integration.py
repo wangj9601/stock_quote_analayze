@@ -80,28 +80,24 @@ class TestPVFRSFrontendAPI:
     
     @patch('backend_core.strategies.pvfrs.frontend_interface.FrontendInterface.get_stock_detail')
     def test_get_stock_detail_success(self, mock_get_detail):
-        """测试获取股票详情成功"""
-        # 模拟返回数据
-        mock_detail = {
-            "symbol": "000001",
-            "name": "平安银行",
-            "current_price": 10.2,
-            "analysis_date": "2024-01-15",
-            "price_dimension": {"macro_displacement": 0.5},
-            "frequency_dimension": {"rising_days": 12},
-            "volume_dimension": {"efficiency_ratio": 1.5},
-            "resonance_analysis": {"resonance_strength": 0.8},
-            "signal_analysis": {"signals": []},
-            "strategy_assessment": {"overall_score": 0.8},
-            "investment_advice": {"recommendation": "买入"},
-            "risk_assessment": {"risk_level": "中等"}
-        }
-        
-        # 创建Mock对象
-        mock_stock_detail = Mock()
-        mock_stock_detail.to_dict.return_value = mock_detail
-        mock_get_detail.return_value = mock_stock_detail
-        
+        """测试获取股票详情成功（PVFRS，返回 StockDetail dataclass）"""
+        from backend_core.strategies.pvfrs.models import StockDetail
+
+        mock_get_detail.return_value = StockDetail(
+            symbol="000001",
+            name="平安银行",
+            current_price=10.2,
+            analysis_date="2024-01-15",
+            price_dimension={"macro_displacement": 0.5},
+            frequency_dimension={"rising_days": 12},
+            volume_dimension={"efficiency_ratio": 1.5},
+            resonance_analysis={"resonance_strength": 0.8},
+            signal_analysis={"signals": []},
+            strategy_assessment={"overall_score": 0.8},
+            investment_advice="买入",
+            risk_assessment={"risk_level": "中等"},
+        )
+
         # 发送请求
         response = client.get("/api/frontend/pvfrs/stock-detail/000001")
         
