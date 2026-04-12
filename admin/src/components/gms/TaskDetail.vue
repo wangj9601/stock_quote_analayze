@@ -17,7 +17,7 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="进度">{{ displayProgress(task.progress) }}%</el-descriptions-item>
-        <el-descriptions-item label="创建时间" :span="2">{{ formatDate(task.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间" :span="2">{{ formatDateTimeBeijing(task.created_at) }}</el-descriptions-item>
         <template v-if="task.config">
           <el-descriptions-item label="任务类型">{{ backtestTypeLabel }}</el-descriptions-item>
           <el-descriptions-item label="市场">{{ task.config.market }}</el-descriptions-item>
@@ -26,6 +26,9 @@
           <el-descriptions-item label="生效最低总分">{{ effectiveMinScore }}</el-descriptions-item>
           <el-descriptions-item label="持有窗口">{{ task.config.horizon_days }} 日</el-descriptions-item>
           <template v-if="isTradeSimulation">
+            <el-descriptions-item label="单笔仓位">
+              {{ ((Number(task.config.position_fraction) || 1) * 100).toFixed(0) }}%
+            </el-descriptions-item>
             <el-descriptions-item label="止损阈值">{{ ((task.config.stop_loss_pct || 0) * 100).toFixed(2) }}%</el-descriptions-item>
             <el-descriptions-item label="交易费用">{{ `手续费 ${task.config.commission_bps || 0}bps / 滑点 ${task.config.slippage_bps || 0}bps` }}</el-descriptions-item>
           </template>
@@ -68,10 +71,24 @@
       </template>
       <template v-if="task.summary && isTradeSimulation">
         <h4 class="mt-4 mb-2">交易回测汇总</h4>
+        <el-alert
+          class="mb-3"
+          type="info"
+          :closable="false"
+          show-icon
+        >
+          <template #title>
+            <span class="text-sm">收益指标说明：优先参考「近似年化、算术累计、笔均组合贡献」。链条复利按成交顺序连乘，笔数多时易被极端放大，仅作对照。</span>
+          </template>
+        </el-alert>
         <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="近似年化（简单折算）">{{ pct(task.summary.approx_annual_return_simple) }}</el-descriptions-item>
+          <el-descriptions-item label="算术累计收益">{{ pct(task.summary.total_return_arithmetic) }}</el-descriptions-item>
+          <el-descriptions-item label="笔均组合贡献">{{ pct(task.summary.avg_portfolio_pnl_per_trade) }}</el-descriptions-item>
+          <el-descriptions-item label="回测自然日">{{ task.summary.backtest_calendar_days ?? '-' }} 天</el-descriptions-item>
           <el-descriptions-item label="交易数">{{ task.summary.total_trades ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="胜率">{{ pct(task.summary.win_rate) }}</el-descriptions-item>
-          <el-descriptions-item label="复合收益">{{ pct(task.summary.total_return_compound) }}</el-descriptions-item>
+          <el-descriptions-item label="链条复利（参考）">{{ pct(task.summary.total_return_compound) }}</el-descriptions-item>
           <el-descriptions-item label="最大回撤">{{ pct(task.summary.max_drawdown) }}</el-descriptions-item>
           <el-descriptions-item label="回撤恢复(bar)">{{ task.summary.max_drawdown_recovery_bars ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="平均持仓K线">{{ (task.summary.avg_holding_bars ?? 0).toFixed(2) }}</el-descriptions-item>
@@ -97,6 +114,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, inject } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
+import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
 
 const props = defineProps<{ modelValue: boolean; taskId: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'closed'): void }>()
@@ -170,11 +188,6 @@ const scoreFilterMismatchCount = computed(() => {
   }
   return bad
 })
-
-function formatDate(v: string) {
-  if (!v) return '-'
-  return v.replace('Z', '').slice(0, 19)
-}
 
 function displayProgress(p: unknown): number {
   const n = Number(p)

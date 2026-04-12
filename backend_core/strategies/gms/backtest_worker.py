@@ -52,6 +52,7 @@ def _run_task(task_id: str) -> None:
         partial_take_profit_r = float(config.get("partial_take_profit_r", 2.0) or 2.0)
         partial_take_ratio = float(config.get("partial_take_ratio", 0.4) or 0.4)
         time_stop_bars = int(config.get("time_stop_bars", 15) or 15)
+        position_fraction = float(config.get("position_fraction", 1) or 1)
         # 股票池：单股(stock_code) -> [code]；自定义(stock_pool) -> 列表；全市场 -> None
         stock_pool = config.get("stock_pool")
         if stock_pool is None and config.get("stock_code"):
@@ -103,6 +104,7 @@ def _run_task(task_id: str) -> None:
             partial_take_profit_r=partial_take_profit_r,
             partial_take_ratio=partial_take_ratio,
             time_stop_bars=time_stop_bars,
+            position_fraction=position_fraction,
             stock_pool=stock_pool,
             progress_callback=progress_cb,
             cancel_check=cancel_check,

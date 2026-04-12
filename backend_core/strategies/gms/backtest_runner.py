@@ -12,6 +12,7 @@ GMS 策略回测执行器
 
 import logging
 import math
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from sqlalchemy.orm import Session
 
@@ -419,6 +420,36 @@ def _simulate_trade_exit(
     }
 
 
+def _clamp_position_fraction(raw: Any) -> float:
+    """单笔仓位占组合权益比例，(0,1]；非法或不在范围内时按 1（全仓）。"""
+    try:
+        f = float(raw)
+    except (TypeError, ValueError):
+        return 1.0
+    if f <= 0 or f > 1:
+        return 1.0
+    return f
+
+
+def _calendar_days_inclusive(start_str: str, end_str: str) -> int:
+    """回测区间自然日天数（含首尾），至少为 1。"""
+    try:
+        da = datetime.strptime(str(start_str).strip()[:10], "%Y-%m-%d").date()
+        db = datetime.strptime(str(end_str).strip()[:10], "%Y-%m-%d").date()
+        return max(1, (db - da).days + 1)
+    except Exception:
+        return 1
+
+
+def _annotate_trade_position_pnl(details: List[Dict[str, Any]], position_fraction: float) -> None:
+    """写入 position_fraction 与 portfolio_pnl_pct（单笔收益率×仓位），供净值与导出。"""
+    f = _clamp_position_fraction(position_fraction)
+    for d in details:
+        r = float(d.get("pnl_pct") or 0)
+        d["position_fraction"] = round(f, 6)
+        d["portfolio_pnl_pct"] = round(f * r, 6)
+
+
 def _aggregate_trade_summary(
     details: List[Dict[str, Any]],
     start_str: str,
@@ -439,6 +470,7 @@ def _aggregate_trade_summary(
     partial_take_profit_r: float,
     partial_take_ratio: float,
     time_stop_bars: int,
+    position_fraction: float = 1.0,
 ) -> Dict[str, Any]:
     def _quantile(vals: List[float], q: float) -> float:
         if not vals:
@@ -460,6 +492,15 @@ def _aggregate_trade_summary(
     avg_loss = (sum(losses) / len(losses)) if losses else 0.0
     gross_profit = sum(wins)
     gross_loss_abs = abs(sum(losses))
+    pf = _clamp_position_fraction(position_fraction)
+    total_return_arithmetic = sum(
+        float(d.get("portfolio_pnl_pct")) if d.get("portfolio_pnl_pct") is not None else pf * float(d.get("pnl_pct") or 0)
+        for d in details
+    )
+    cal_days = _calendar_days_inclusive(start_str, end_str)
+    # 近似年化：算术累计按自然日线性折算到 365 天（不假设收益时间分布，仅供参考）
+    approx_annual_return_simple = total_return_arithmetic * (365.0 / float(cal_days))
+    avg_portfolio_pnl_per_trade = (total_return_arithmetic / total_trades) if total_trades else 0.0
     profit_factor = (gross_profit / gross_loss_abs) if gross_loss_abs > 0 else (math.inf if gross_profit > 0 else 0.0)
     avg_hold_bars = (sum(int(d.get("bars_held") or 0) for d in details) / total_trades) if total_trades else 0.0
     max_win = max(wins) if wins else 0.0
@@ -475,8 +516,12 @@ def _aggregate_trade_summary(
     equity_curve: List[Dict[str, Any]] = []
     ordered = sorted(details, key=lambda d: (str(d.get("entry_date") or d.get("date") or ""), str(d.get("code") or "")))
     for i, d in enumerate(ordered, start=1):
-        r = float(d.get("pnl_pct") or 0)
-        eq *= (1.0 + r)
+        r_port = (
+            float(d.get("portfolio_pnl_pct"))
+            if d.get("portfolio_pnl_pct") is not None
+            else pf * float(d.get("pnl_pct") or 0)
+        )
+        eq *= (1.0 + r_port)
         if eq > peak:
             peak = eq
             if in_recovery:
@@ -500,6 +545,7 @@ def _aggregate_trade_summary(
 
     summary: Dict[str, Any] = {
         "backtest_type": "trade_simulation",
+        "position_fraction": round(pf, 6),
         "total_trades": total_trades,
         "win_count": len(wins),
         "loss_count": len(losses),
@@ -508,6 +554,10 @@ def _aggregate_trade_summary(
         "avg_loss": round(avg_loss, 6),
         "profit_factor": (round(profit_factor, 6) if math.isfinite(profit_factor) else None),
         "total_return_compound": round(eq - 1.0, 6),
+        "total_return_arithmetic": round(total_return_arithmetic, 6),
+        "backtest_calendar_days": int(cal_days),
+        "approx_annual_return_simple": round(approx_annual_return_simple, 6),
+        "avg_portfolio_pnl_per_trade": round(avg_portfolio_pnl_per_trade, 6),
         "max_drawdown": round(max_dd, 6),
         "max_drawdown_recovery_bars": int(dd_recovery_bars),
         "target_pct": target_pct,
@@ -726,6 +776,7 @@ def run_gms_backtest(
     partial_take_profit_r: float = 2.0,
     partial_take_ratio: float = 0.4,
     time_stop_bars: int = 15,
+    position_fraction: float = 1.0,
     stock_pool: Optional[List[str]] = None,
     progress_callback: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
@@ -739,6 +790,7 @@ def run_gms_backtest(
     """
     start_str = str(start_date).strip()[:10]
     end_str = str(end_date).strip()[:10]
+    pos_f = _clamp_position_fraction(position_fraction)
 
     bt = str(backtest_type or "signal_hit_rate").strip().lower()
     if bt not in ("signal_hit_rate", "trade_simulation"):
@@ -748,7 +800,8 @@ def run_gms_backtest(
             "交易回测：样本为左/右侧买点，信号总分受最低总分筛选；"
             "买入价为信号日后下一交易日开盘价；"
             "同一标的在上一笔观察期结束前不重复开仓；"
-            "出场规则为先止损后止盈（同日同时触发按止损），否则观察期最后一根K线收盘价出场。"
+            "出场规则为先止损后止盈（同日同时触发按止损），否则观察期最后一根K线收盘价出场；"
+            "净值与最终盈利按「单笔仓位」比例复利计入（其余资金视为现金、无收益）。"
         )
     else:
         buy_signal_rule = (
@@ -815,6 +868,7 @@ def run_gms_backtest(
                 partial_take_profit_r=partial_take_profit_r,
                 partial_take_ratio=partial_take_ratio,
                 time_stop_bars=time_stop_bars,
+                position_fraction=pos_f,
             )
         return _aggregate_details_to_summary([], start_str, end_str, market, target_pct, horizon_days, buy_signal_rule)
 
@@ -942,6 +996,7 @@ def run_gms_backtest(
 
     details = _sort_details_for_export(details)
     if bt == "trade_simulation":
+        _annotate_trade_position_pnl(details, pos_f)
         return _aggregate_trade_summary(
             details,
             start_str,
@@ -962,5 +1017,6 @@ def run_gms_backtest(
             partial_take_profit_r=partial_take_profit_r,
             partial_take_ratio=partial_take_ratio,
             time_stop_bars=time_stop_bars,
+            position_fraction=pos_f,
         )
     return _aggregate_details_to_summary(details, start_str, end_str, market, target_pct, horizon_days, buy_signal_rule)

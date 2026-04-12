@@ -2,6 +2,8 @@
 
 import os
 import sys
+
+import pytest
 from unittest.mock import MagicMock
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -138,3 +140,51 @@ def test_default_backtest_type_keeps_hit_rate_logic(monkeypatch):
     assert "total_trades" not in summary
     assert summary["hit_count"] == 1
     assert summary["hit_rate"] == 1.0
+
+
+def test_trade_simulation_position_fraction(monkeypatch):
+    """单笔仓位：明细 portfolio_pnl_pct = 仓位 × 单笔收益率；summary 记录仓位比例。"""
+    db = MagicMock()
+    monkeypatch.setattr(br, "_get_trading_dates_cn", lambda _db, _s, _e: ["2024-01-02"])
+    monkeypatch.setattr(br, "_get_entry_open_next_day_cn", lambda _db, _c, _d: 100.0)
+    monkeypatch.setattr(
+        br,
+        "_get_future_ohlc_cn",
+        lambda _db, _c, _d, _n: [
+            {"date": "2024-01-03", "open": 100.0, "high": 106.0, "low": 99.0, "close": 104.0},
+        ],
+    )
+    monkeypatch.setattr(br, "_get_observation_window_end_cn", lambda _db, _c, _d, _n: "2024-01-03")
+
+    def fake_get_selection_results(self, date=None, stock_pool=None, market=None, **kwargs):
+        return [{"code": "000001", "left_buy_signal": True, "score_total": 75}]
+
+    monkeypatch.setattr(br.GMSFrontendInterface, "get_selection_results", fake_get_selection_results)
+
+    r = br.run_gms_backtest(
+        db,
+        "2024-01-01",
+        "2024-01-31",
+        market="cn",
+        backtest_type="trade_simulation",
+        position_fraction=0.4,
+        target_pct=0.05,
+        trail_stop_mode="percent",
+        trail_pct=1.0,
+        breakeven_trigger_r=999,
+        profit_lock_trigger_r=999,
+        partial_take_profit_r=999,
+        partial_take_ratio=0,
+    )
+    row = r["details"][0]
+    assert row["position_fraction"] == 0.4
+    assert row["portfolio_pnl_pct"] == pytest.approx(0.4 * row["pnl_pct"], rel=1e-5)
+    assert r["summary"]["position_fraction"] == 0.4
+    s = r["summary"]
+    assert "approx_annual_return_simple" in s
+    assert "avg_portfolio_pnl_per_trade" in s
+    assert "backtest_calendar_days" in s
+    assert s["avg_portfolio_pnl_per_trade"] == pytest.approx(s["total_return_arithmetic"], rel=1e-6)
+    assert s["approx_annual_return_simple"] == pytest.approx(
+        s["total_return_arithmetic"] * (365.0 / float(s["backtest_calendar_days"])), rel=1e-5
+    )

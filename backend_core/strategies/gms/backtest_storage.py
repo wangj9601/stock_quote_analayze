@@ -506,6 +506,8 @@ _GMS_BACKTEST_DETAIL_CSV_HEADER_ZH: Dict[str, str] = {
     "exit_reason": "出场原因",
     "bars_held": "持有K线数",
     "pnl_pct": "单笔收益率",
+    "position_fraction": "单笔仓位比例",
+    "portfolio_pnl_pct": "按仓位计收益率",
     "stop_loss_pct": "止损阈值",
     "commission_bps": "手续费bps",
     "slippage_bps": "滑点bps",
@@ -568,6 +570,8 @@ _GMS_BACKTEST_XLSX_COL_WIDTH: Dict[str, float] = {
     "出场原因": 12.0,
     "持有K线数": 12.0,
     "单笔收益率": 12.0,
+    "单笔仓位比例": 12.0,
+    "按仓位计收益率": 14.0,
     "止损阈值": 12.0,
     "手续费bps": 12.0,
     "滑点bps": 12.0,
@@ -704,7 +708,7 @@ def _write_gms_xlsx_sheet(ws: Any, fieldnames_zh: List[str], rows_zh: List[Dict[
             val = cell.value
             if val is not None and val != "" and isinstance(val, (int, float)):
                 cell.number_format = "0.00%"
-    for header in ("单笔收益率", "止损阈值"):
+    for header in ("单笔收益率", "按仓位计收益率", "止损阈值", "单笔仓位比例"):
         pct_col_idx = None
         for i, h in enumerate(fieldnames_zh, start=1):
             if h == header:

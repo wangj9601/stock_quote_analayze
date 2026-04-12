@@ -81,6 +81,8 @@ class GMSApiService {
     partial_take_profit_r?: number
     partial_take_ratio?: number
     time_stop_bars?: number
+    /** 单笔仓位 0~1，仅 trade_simulation */
+    position_fraction?: number
     stock_pool_mode?: string
     stock_code?: string
     stock_pool?: string[]
@@ -139,7 +141,8 @@ class GMSApiService {
 
   /** 删除任务 */
   async deleteBacktestTask(taskId: string) {
-    await this.request(`${PREFIX}/backtests/${taskId}`, { method: 'DELETE' })
+    // 兼容生产环境，优先使用 POST /delete
+    await this.request(`${PREFIX}/backtests/${taskId}/delete`, { method: 'POST' })
   }
 
   /** 报告列表 */
@@ -203,8 +206,9 @@ class GMSApiService {
 
   /** 更新 GMS 策略配置 */
   async saveConfig(config: Record<string, any>) {
-    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/config`, {
-      method: 'PUT',
+    // 兼容生产环境，优先使用 POST /update
+    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/config/update`, {
+      method: 'POST',
       body: JSON.stringify({ config }),
     })
     return res.data
@@ -239,15 +243,17 @@ class GMSApiService {
   }
 
   async updateStrategyVersion(versionId: number, body: Partial<GMSStrategyVersion>) {
-    const res = await this.request<{ success: boolean; data: GMSStrategyVersion }>(`${PREFIX}/strategy-versions/${versionId}`, {
-      method: 'PUT',
+    // 兼容生产环境，优先使用 POST /update
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersion }>(`${PREFIX}/strategy-versions/${versionId}/update`, {
+      method: 'POST',
       body: JSON.stringify(body),
     })
     return res.data
   }
 
   async deleteStrategyVersion(versionId: number) {
-    await this.request(`${PREFIX}/strategy-versions/${versionId}`, { method: 'DELETE' })
+    // 兼容生产环境，优先使用 POST /delete
+    await this.request(`${PREFIX}/strategy-versions/${versionId}/delete`, { method: 'POST' })
   }
 
   /** 观察股列表 */
@@ -304,15 +310,17 @@ class GMSApiService {
       sc !== undefined && sc !== null && sc !== ''
         ? { ...body, stock_code: String(sc).trim() }
         : body
-    const res = await this.request<{ success: boolean; data: GMSStrategyVersionStock }>(`${PREFIX}/strategy-version-stocks/${stockId}`, {
-      method: 'PUT',
+    // 兼容生产环境，优先使用 POST /update
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersionStock }>(`${PREFIX}/strategy-version-stocks/${stockId}/update`, {
+      method: 'POST',
       body: JSON.stringify(safe),
     })
     return res.data
   }
 
   async deleteStrategyVersionStock(stockId: number) {
-    await this.request(`${PREFIX}/strategy-version-stocks/${stockId}`, { method: 'DELETE' })
+    // 兼容生产环境，优先使用 POST /delete
+    await this.request(`${PREFIX}/strategy-version-stocks/${stockId}/delete`, { method: 'POST' })
   }
 
   async batchDeleteStrategyVersionStocks(payload: { ids?: number[]; stock_codes?: string[]; version_id?: number; market?: string }) {

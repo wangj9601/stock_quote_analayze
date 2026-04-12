@@ -135,6 +135,22 @@ def _distinct_watchlist_codes(db: Session, user_id: Optional[int] = None) -> Lis
     return sorted(codes)
 
 
+def _distinct_gms_strategy_stock_codes(db: Session, market: Optional[str] = None) -> List[str]:
+    """从 GMSStrategyVersionStock 表中读取对应市场、且所属版本已启用且股票状态为 active 的代码。"""
+    q = db.query(GMSStrategyVersionStock.stock_code).join(
+        GMSStrategyVersion, GMSStrategyVersion.id == GMSStrategyVersionStock.version_id
+    ).filter(
+        GMSStrategyVersion.is_active == True,
+        GMSStrategyVersionStock.status == "active"
+    )
+    if market and market != "all":
+        norm_m = _normalize_market(market)
+        q = q.filter(GMSStrategyVersionStock.market == norm_m)
+    rows = q.distinct().all()
+    codes = {str(r[0]).strip() for r in rows if r[0] is not None and str(r[0]).strip()}
+    return sorted(codes)
+
+
 def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
     """
     当股票池为单股、自定义或自选股时，生成包含股票名称和代码的任务名称。
@@ -147,7 +163,7 @@ def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
             return None
         name = _get_stock_name(db, code)
         return f"GMS回测_{code}_{name}" if name else f"GMS回测_{code}"
-    if mode in ("custom", "watchlist"):
+    if mode in ("custom", "watchlist", "gms_watchlist"):
         pool = config.get("stock_pool") or []
         codes = [str(c).strip() for c in pool if str(c).strip()][:5]  # 最多5只
         if not codes:
@@ -205,6 +221,12 @@ class BacktestCreateBody(BaseModel):
     partial_take_profit_r: float = Field(2.0, ge=0, le=20, description="分批止盈触发R倍数，仅 trade_simulation 生效")
     partial_take_ratio: float = Field(0.4, ge=0, le=1, description="分批止盈比例，仅 trade_simulation 生效")
     time_stop_bars: int = Field(15, ge=1, le=500, description="时间止损K线数，仅 trade_simulation 生效")
+    position_fraction: float = Field(
+        1.0,
+        gt=0,
+        le=1,
+        description="单笔仓位：每笔投入占组合权益的比例(0~1]，仅 trade_simulation；1 为全仓",
+    )
     stock_pool_mode: Optional[str] = Field("all", description="股票池: all / single / custom / watchlist")
     stock_code: Optional[str] = Field(None, description="单股回测时的股票代码，如 000001、00700")
     stock_pool: Optional[List[str]] = Field(None, description="自定义股票池代码列表")
@@ -311,6 +333,7 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             "partial_take_profit_r": body.partial_take_profit_r,
             "partial_take_ratio": body.partial_take_ratio,
             "time_stop_bars": body.time_stop_bars,
+            "position_fraction": body.position_fraction,
             "stock_pool_mode": mode,
         }
         if mode == "watchlist":
@@ -322,6 +345,12 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
                 if wl_uid is None:
                     raise HTTPException(status_code=400, detail="当前无自选股，无法创建回测任务")
                 raise HTTPException(status_code=400, detail=f"用户ID={wl_uid}无自选股，无法创建回测任务")
+            config["stock_pool"] = codes
+        elif mode == "gms_watchlist":
+            codes = _distinct_gms_strategy_stock_codes(db, market=body.market)
+            if not codes:
+                m_desc = "全部市场" if body.market == "all" else ("A股" if body.market == "cn" else "港股")
+                raise HTTPException(status_code=400, detail=f"GMS观察股({m_desc})中无有效状态数据，无法创建回测任务")
             config["stock_pool"] = codes
         else:
             if body.stock_code:
@@ -398,8 +427,9 @@ async def rerun_backtest(task_id: str):
 
 
 @router.delete("/backtests/{task_id}")
+@router.post("/backtests/{task_id}/delete")
 async def delete_backtest(task_id: str):
-    """删除任务。"""
+    """删除任务。同时支持 DELETE 和 POST /delete 兼容生产环境。"""
     admin_interface.delete_task(task_id)
     return {"success": True}
 
@@ -477,8 +507,9 @@ class ConfigUpdateBody(BaseModel):
 
 
 @router.put("/config")
+@router.post("/config/update")
 async def update_config(body: ConfigUpdateBody):
-    """更新 GMS 策略配置。"""
+    """更新 GMS 策略配置。同时支持 PUT 和 POST /update 兼容生产环境。"""
     try:
         mgr = GMSConfigManager()
         current = mgr.get_config()
@@ -735,7 +766,9 @@ async def create_strategy_version(body: StrategyVersionCreateBody, db: Session =
 
 
 @router.put("/strategy-versions/{version_id}")
+@router.post("/strategy-versions/{version_id}/update")
 async def update_strategy_version(version_id: int, body: StrategyVersionUpdateBody, db: Session = Depends(get_db)):
+    """更新策略版本。同时支持 PUT 和 POST /update 兼容生产环境。"""
     row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="策略版本不存在")
@@ -786,7 +819,9 @@ async def set_strategy_version_active(
 
 
 @router.delete("/strategy-versions/{version_id}")
+@router.post("/strategy-versions/{version_id}/delete")
 async def delete_strategy_version(version_id: int, db: Session = Depends(get_db)):
+    """删除策略版本。同时支持 DELETE 和 POST /delete 兼容生产环境。"""
     row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="策略版本不存在")
@@ -927,11 +962,13 @@ async def create_strategy_version_stock(body: StrategyVersionStockCreateBody, db
 
 
 @router.put("/strategy-version-stocks/{stock_id}")
+@router.post("/strategy-version-stocks/{stock_id}/update")
 async def update_strategy_version_stock(
     stock_id: int,
     body: StrategyVersionStockUpdateBody,
     db: Session = Depends(get_db),
 ):
+    """更新观察股。同时支持 PUT 和 POST /update 兼容生产环境。"""
     row = db.query(GMSStrategyVersionStock).filter(GMSStrategyVersionStock.id == stock_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="观察股记录不存在")
@@ -975,7 +1012,9 @@ async def update_strategy_version_stock(
 
 
 @router.delete("/strategy-version-stocks/{stock_id}")
+@router.post("/strategy-version-stocks/{stock_id}/delete")
 async def delete_strategy_version_stock(stock_id: int, db: Session = Depends(get_db)):
+    """删除观察股。同时支持 DELETE 和 POST /delete 兼容生产环境。"""
     row = db.query(GMSStrategyVersionStock).filter(GMSStrategyVersionStock.id == stock_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="观察股记录不存在")

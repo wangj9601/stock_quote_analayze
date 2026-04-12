@@ -146,11 +146,13 @@ async def get_strategy_config(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/strategy-configs/{config_id}", response_model=Dict)
+@router.post("/strategy-configs/{config_id}/update", response_model=Dict)
 async def update_strategy_config(
     config_id: int,
     config_update: StrategyConfigUpdate,
     service: PVFRSAdminService = Depends(get_admin_service)
 ):
+    """更新策略配置（支持 PUT 与 POST /update 兼容生产环境）。"""
     """更新策略配置"""
     try:
         update_data = config_update.dict(exclude_unset=True)
@@ -170,10 +172,12 @@ async def update_strategy_config(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/strategy-configs/{config_id}", response_model=Dict)
+@router.post("/strategy-configs/{config_id}/delete", response_model=Dict)
 async def delete_strategy_config(
     config_id: int,
     service: PVFRSAdminService = Depends(get_admin_service)
 ):
+    """删除策略配置（支持 DELETE 与 POST /delete 兼容生产环境）。"""
     """删除策略配置"""
     try:
         success = service.delete_strategy_config(config_id)
@@ -245,11 +249,13 @@ async def get_task_progress(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/backtests/{task_id}/progress", response_model=Dict)
+@router.post("/backtests/{task_id}/progress/update", response_model=Dict)
 async def update_task_progress(
     task_id: str,
     progress_update: TaskProgressUpdate,
     admin: AdminInterfaceEnhanced = Depends(get_admin_interface)
 ):
+    """更新任务进度（支持 PUT 与 POST /update 兼容生产环境）。"""
     """更新任务进度"""
     try:
         success = admin.update_task_progress(

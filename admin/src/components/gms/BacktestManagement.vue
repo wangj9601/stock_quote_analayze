@@ -98,6 +98,7 @@
             <el-form-item label="股票池">
               <el-select v-model="form.stock_pool_mode" class="w-full" placeholder="选择股票池范围">
                 <el-option label="全市场" value="all" />
+                <el-option label="GMS观察股" value="gms_watchlist" />
                 <el-option label="自选股" value="watchlist" />
                 <el-option label="单股回测" value="single" />
                 <el-option label="自定义列表" value="custom" />
@@ -163,6 +164,32 @@
                 </span>
               </template>
               <el-input-number v-model="form.slippage_bps" :min="0" :max="1000" :step="0.5" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.backtest_type === 'trade_simulation'" :gutter="20">
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  单笔仓位(%)
+                  <el-tooltip
+                    content="每笔建仓资金占当前组合权益的比例；余下为现金（不计收益）。最终盈利、净值曲线与导出列「按仓位计收益率」均按此折算。"
+                    placement="top"
+                  >
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-input-number
+                v-model="positionFractionPercent"
+                :min="1"
+                :max="100"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+                class="w-full"
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -337,8 +364,8 @@
         <el-table-column label="进度" width="80">
           <template #default="scope">{{ displayProgress(scope.row.progress) }}%</template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="170">
-          <template #default="scope">{{ formatDate(scope.row.created_at) }}</template>
+        <el-table-column prop="created_at" label="创建时间" width="180">
+          <template #default="scope">{{ formatDateTimeBeijing(scope.row.created_at) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="scope">
@@ -375,6 +402,7 @@ import { ref, reactive, computed, onMounted, inject, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
 import TaskDetail from './TaskDetail.vue'
+import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
 
 const gmsApi = inject<any>('gmsApi')
 
@@ -407,6 +435,7 @@ const form = reactive({
   partial_take_profit_r: 2.0,
   partial_take_ratio: 0.4,
   time_stop_bars: 15,
+  position_fraction: 1,
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: ''
@@ -495,6 +524,17 @@ const trailPctPercent = computed({
   }
 })
 
+/** 单笔仓位：界面 1~100，对应 form.position_fraction 0.01~1 */
+const positionFractionPercent = computed({
+  get: () => Math.round(form.position_fraction * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v === undefined || v === null) return
+    const n = Number(v)
+    if (Number.isNaN(n)) return
+    form.position_fraction = Math.min(1, Math.max(0.01, n / 100))
+  }
+})
+
 function applyTargetPctQuick(v: number | string | undefined) {
   if (v === '' || v == null) return
   const n = Number(v)
@@ -522,6 +562,7 @@ function applyTradePreset(preset: 'conservative' | 'balanced' | 'aggressive') {
   form.partial_take_profit_r = Number(cfg.partial_take_profit_r)
   form.partial_take_ratio = Number(cfg.partial_take_ratio)
   form.time_stop_bars = Number(cfg.time_stop_bars)
+  // 单笔仓位不随预设切换，避免覆盖用户意图
 }
 
 const rules = {
@@ -549,11 +590,6 @@ function statusTagType(s: string): 'info' | 'primary' | 'success' | 'warning' | 
     cancelled: 'info'
   }
   return map[s] || 'info'
-}
-
-function formatDate(v: string) {
-  if (!v) return '-'
-  return v.replace('Z', '').slice(0, 19)
 }
 
 /** 任务进度 0–100，防止异常数据在列表中显示超过 100% */
@@ -609,6 +645,7 @@ async function createTask() {
       body.partial_take_profit_r = form.partial_take_profit_r
       body.partial_take_ratio = form.partial_take_ratio
       body.time_stop_bars = form.time_stop_bars
+      body.position_fraction = form.position_fraction
     }
     if (form.stock_pool_mode === 'single') body.stock_code = form.stock_code.trim()
     if (form.stock_pool_mode === 'custom') {
@@ -640,6 +677,7 @@ function resetForm() {
   form.backtest_type = 'signal_hit_rate'
   tradePreset.value = 'balanced'
   applyTradePreset('balanced')
+  form.position_fraction = 1
   form.stock_pool_mode = 'all'
   form.stock_code = ''
   form.stock_list = ''
