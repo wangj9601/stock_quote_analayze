@@ -95,7 +95,9 @@
           <el-descriptions-item label="平均盈利">{{ pct(task.summary.avg_win) }}</el-descriptions-item>
           <el-descriptions-item label="平均亏损">{{ pct(task.summary.avg_loss) }}</el-descriptions-item>
           <el-descriptions-item label="最大盈利单">{{ pct(task.summary.max_win_trade) }}</el-descriptions-item>
-          <el-descriptions-item label="P50/P80/P95收益">{{ `${pct(task.summary.pnl_p50)} / ${pct(task.summary.pnl_p80)} / ${pct(task.summary.pnl_p95)}` }}</el-descriptions-item>
+          <el-descriptions-item label="P50/P80/P95收益">
+            {{ `${pctFine(task.summary.pnl_p50)} / ${pctFine(task.summary.pnl_p80)} / ${pctFine(task.summary.pnl_p95)}` }}
+          </el-descriptions-item>
           <el-descriptions-item label="R均值/P50/P80/P95">{{ `${num(task.summary.r_multiple_avg)} / ${num(task.summary.r_multiple_p50)} / ${num(task.summary.r_multiple_p80)} / ${num(task.summary.r_multiple_p95)}` }}</el-descriptions-item>
           <el-descriptions-item label="盈亏比">{{ displayProfitFactor(task.summary.profit_factor) }}</el-descriptions-item>
           <el-descriptions-item label="平仓分布">{{ exitReasonText }}</el-descriptions-item>
@@ -198,6 +200,12 @@ function pct(v: unknown): string {
   const n = Number(v)
   if (Number.isNaN(n)) return '-'
   return `${(n * 100).toFixed(2)}%`
+}
+/** 分位数等需区分细微差异时用，避免与「最大盈利单」等同宽 2 位小数时被合并成同一显示 */
+function pctFine(v: unknown, fractionDigits = 4): string {
+  const n = Number(v)
+  if (Number.isNaN(n)) return '-'
+  return `${(n * 100).toFixed(fractionDigits)}%`
 }
 function displayProfitFactor(v: unknown): string {
   const n = Number(v)

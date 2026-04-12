@@ -1,0 +1,4935 @@
+{
+  "report_id": "a81dbfba-4371-4543-a39b-cff56379705e",
+  "task_id": "a81dbfba-4371-4543-a39b-cff56379705e",
+  "name": "GMS回测_000301东方盛虹_000338潍柴动力_000400许继电气_000401金隅冀东_000407胜利股份",
+  "created_at": "2026-04-12T12:17:45.255007Z",
+  "summary": {
+    "backtest_type": "trade_simulation",
+    "position_fraction": 0.1,
+    "total_trades": 975,
+    "win_count": 587,
+    "loss_count": 388,
+    "win_rate": 0.6021,
+    "avg_win": 0.086245,
+    "avg_loss": -0.043329,
+    "profit_factor": 3.011375,
+    "total_return_compound": 27.589651,
+    "total_return_arithmetic": 3.381436,
+    "backtest_calendar_days": 366,
+    "approx_annual_return_simple": 3.372197,
+    "avg_portfolio_pnl_per_trade": 0.003468,
+    "max_drawdown": -0.141019,
+    "max_drawdown_recovery_bars": 69,
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "stop_loss_pct": 0.06,
+    "commission_bps": 3.0,
+    "slippage_bps": 5.0,
+    "trail_stop_mode": "percent",
+    "trail_atr_k": 3.4,
+    "trail_pct": 0.08,
+    "breakeven_trigger_r": 1.2,
+    "profit_lock_trigger_r": 2.0,
+    "profit_lock_r": 0.5,
+    "partial_take_profit_r": 1.2,
+    "partial_take_ratio": 1.0,
+    "time_stop_bars": 12,
+    "avg_holding_bars": 8.721,
+    "avg_win_trade": 0.086245,
+    "max_win_trade": 0.098241,
+    "pnl_p50": 0.098241,
+    "pnl_p80": 0.098241,
+    "pnl_p95": 0.098241,
+    "r_multiple_avg": 0.275635,
+    "r_multiple_p50": 0.060606,
+    "r_multiple_p80": 0.983213,
+    "r_multiple_p95": 2.426369,
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "market": "all",
+    "buy_signal_rule": "交易回测：样本为左/右侧买点，信号总分受最低总分筛选；买入价为信号日后下一交易日开盘价；同一标的在上一笔观察期结束前不重复开仓；出场规则为先止损后止盈（同日同时触发按止损），否则观察期最后一根K线收盘价出场；净值与最终盈利按「单笔仓位」比例复利计入（其余资金视为现金、无收益）。",
+    "by_exit_reason": {
+      "时间止损": 162,
+      "止损": 731,
+      "时间出场": 82
+    },
+    "equity_curve": [
+      {
+        "step": 1,
+        "equity": 0.99385,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 2,
+        "equity": 0.989952,
+        "drawdown": -0.010048
+      },
+      {
+        "step": 3,
+        "equity": 0.983864,
+        "drawdown": -0.016136
+      },
+      {
+        "step": 4,
+        "equity": 0.977813,
+        "drawdown": -0.022187
+      },
+      {
+        "step": 5,
+        "equity": 0.9718,
+        "drawdown": -0.0282
+      },
+      {
+        "step": 6,
+        "equity": 0.966063,
+        "drawdown": -0.033937
+      },
+      {
+        "step": 7,
+        "equity": 0.964016,
+        "drawdown": -0.035984
+      },
+      {
+        "step": 8,
+        "equity": 0.958087,
+        "drawdown": -0.041913
+      },
+      {
+        "step": 9,
+        "equity": 0.9675,
+        "drawdown": -0.0325
+      },
+      {
+        "step": 10,
+        "equity": 0.961549,
+        "drawdown": -0.038451
+      },
+      {
+        "step": 11,
+        "equity": 0.955636,
+        "drawdown": -0.044364
+      },
+      {
+        "step": 12,
+        "equity": 0.949954,
+        "drawdown": -0.050046
+      },
+      {
+        "step": 13,
+        "equity": 0.944111,
+        "drawdown": -0.055889
+      },
+      {
+        "step": 14,
+        "equity": 0.938399,
+        "drawdown": -0.061601
+      },
+      {
+        "step": 15,
+        "equity": 0.93443,
+        "drawdown": -0.06557
+      },
+      {
+        "step": 16,
+        "equity": 0.929944,
+        "drawdown": -0.070056
+      },
+      {
+        "step": 17,
+        "equity": 0.924225,
+        "drawdown": -0.075775
+      },
+      {
+        "step": 18,
+        "equity": 0.918541,
+        "drawdown": -0.081459
+      },
+      {
+        "step": 19,
+        "equity": 0.912892,
+        "drawdown": -0.087108
+      },
+      {
+        "step": 20,
+        "equity": 0.907278,
+        "drawdown": -0.092722
+      },
+      {
+        "step": 21,
+        "equity": 0.90296,
+        "drawdown": -0.09704
+      },
+      {
+        "step": 22,
+        "equity": 0.897489,
+        "drawdown": -0.102511
+      },
+      {
+        "step": 23,
+        "equity": 0.891969,
+        "drawdown": -0.108031
+      },
+      {
+        "step": 24,
+        "equity": 0.886963,
+        "drawdown": -0.113037
+      },
+      {
+        "step": 25,
+        "equity": 0.881509,
+        "drawdown": -0.118491
+      },
+      {
+        "step": 26,
+        "equity": 0.876087,
+        "drawdown": -0.123913
+      },
+      {
+        "step": 27,
+        "equity": 0.871335,
+        "drawdown": -0.128665
+      },
+      {
+        "step": 28,
+        "equity": 0.865976,
+        "drawdown": -0.134024
+      },
+      {
+        "step": 29,
+        "equity": 0.86065,
+        "drawdown": -0.13935
+      },
+      {
+        "step": 30,
+        "equity": 0.869105,
+        "drawdown": -0.130895
+      },
+      {
+        "step": 31,
+        "equity": 0.877643,
+        "drawdown": -0.122357
+      },
+      {
+        "step": 32,
+        "equity": 0.872943,
+        "drawdown": -0.127057
+      },
+      {
+        "step": 33,
+        "equity": 0.867575,
+        "drawdown": -0.132425
+      },
+      {
+        "step": 34,
+        "equity": 0.862474,
+        "drawdown": -0.137526
+      },
+      {
+        "step": 35,
+        "equity": 0.870946,
+        "drawdown": -0.129054
+      },
+      {
+        "step": 36,
+        "equity": 0.873649,
+        "drawdown": -0.126351
+      },
+      {
+        "step": 37,
+        "equity": 0.87343,
+        "drawdown": -0.12657
+      },
+      {
+        "step": 38,
+        "equity": 0.868462,
+        "drawdown": -0.131538
+      },
+      {
+        "step": 39,
+        "equity": 0.863121,
+        "drawdown": -0.136879
+      },
+      {
+        "step": 40,
+        "equity": 0.860782,
+        "drawdown": -0.139218
+      },
+      {
+        "step": 41,
+        "equity": 0.858981,
+        "drawdown": -0.141019
+      },
+      {
+        "step": 42,
+        "equity": 0.867419,
+        "drawdown": -0.132581
+      },
+      {
+        "step": 43,
+        "equity": 0.875941,
+        "drawdown": -0.124059
+      },
+      {
+        "step": 44,
+        "equity": 0.884546,
+        "drawdown": -0.115454
+      },
+      {
+        "step": 45,
+        "equity": 0.887787,
+        "drawdown": -0.112213
+      },
+      {
+        "step": 46,
+        "equity": 0.883229,
+        "drawdown": -0.116771
+      },
+      {
+        "step": 47,
+        "equity": 0.891906,
+        "drawdown": -0.108094
+      },
+      {
+        "step": 48,
+        "equity": 0.890725,
+        "drawdown": -0.109275
+      },
+      {
+        "step": 49,
+        "equity": 0.886575,
+        "drawdown": -0.113425
+      },
+      {
+        "step": 50,
+        "equity": 0.881123,
+        "drawdown": -0.118877
+      },
+      {
+        "step": 51,
+        "equity": 0.889779,
+        "drawdown": -0.110221
+      },
+      {
+        "step": 52,
+        "equity": 0.89852,
+        "drawdown": -0.10148
+      },
+      {
+        "step": 53,
+        "equity": 0.894144,
+        "drawdown": -0.105856
+      },
+      {
+        "step": 54,
+        "equity": 0.888645,
+        "drawdown": -0.111355
+      },
+      {
+        "step": 55,
+        "equity": 0.897376,
+        "drawdown": -0.102624
+      },
+      {
+        "step": 56,
+        "equity": 0.906191,
+        "drawdown": -0.093809
+      },
+      {
+        "step": 57,
+        "equity": 0.907838,
+        "drawdown": -0.092162
+      },
+      {
+        "step": 58,
+        "equity": 0.911598,
+        "drawdown": -0.088402
+      },
+      {
+        "step": 59,
+        "equity": 0.916361,
+        "drawdown": -0.083639
+      },
+      {
+        "step": 60,
+        "equity": 0.925364,
+        "drawdown": -0.074636
+      },
+      {
+        "step": 61,
+        "equity": 0.934454,
+        "drawdown": -0.065546
+      },
+      {
+        "step": 62,
+        "equity": 0.943634,
+        "drawdown": -0.056366
+      },
+      {
+        "step": 63,
+        "equity": 0.952905,
+        "drawdown": -0.047095
+      },
+      {
+        "step": 64,
+        "equity": 0.950805,
+        "drawdown": -0.049195
+      },
+      {
+        "step": 65,
+        "equity": 0.960146,
+        "drawdown": -0.039854
+      },
+      {
+        "step": 66,
+        "equity": 0.969579,
+        "drawdown": -0.030421
+      },
+      {
+        "step": 67,
+        "equity": 0.979104,
+        "drawdown": -0.020896
+      },
+      {
+        "step": 68,
+        "equity": 0.988722,
+        "drawdown": -0.011278
+      },
+      {
+        "step": 69,
+        "equity": 0.998436,
+        "drawdown": -0.001564
+      },
+      {
+        "step": 70,
+        "equity": 1.008244,
+        "drawdown": 0.0
+      },
+      {
+        "step": 71,
+        "equity": 1.018149,
+        "drawdown": 0.0
+      },
+      {
+        "step": 72,
+        "equity": 1.012708,
+        "drawdown": -0.005344
+      },
+      {
+        "step": 73,
+        "equity": 1.022657,
+        "drawdown": 0.0
+      },
+      {
+        "step": 74,
+        "equity": 1.022701,
+        "drawdown": 0.0
+      },
+      {
+        "step": 75,
+        "equity": 1.018367,
+        "drawdown": -0.004238
+      },
+      {
+        "step": 76,
+        "equity": 1.028371,
+        "drawdown": 0.0
+      },
+      {
+        "step": 77,
+        "equity": 1.038474,
+        "drawdown": 0.0
+      },
+      {
+        "step": 78,
+        "equity": 1.048676,
+        "drawdown": 0.0
+      },
+      {
+        "step": 79,
+        "equity": 1.048162,
+        "drawdown": -0.00049
+      },
+      {
+        "step": 80,
+        "equity": 1.058459,
+        "drawdown": 0.0
+      },
+      {
+        "step": 81,
+        "equity": 1.058841,
+        "drawdown": 0.0
+      },
+      {
+        "step": 82,
+        "equity": 1.055968,
+        "drawdown": -0.002714
+      },
+      {
+        "step": 83,
+        "equity": 1.055271,
+        "drawdown": -0.003372
+      },
+      {
+        "step": 84,
+        "equity": 1.048781,
+        "drawdown": -0.009501
+      },
+      {
+        "step": 85,
+        "equity": 1.042331,
+        "drawdown": -0.015593
+      },
+      {
+        "step": 86,
+        "equity": 1.03739,
+        "drawdown": -0.020259
+      },
+      {
+        "step": 87,
+        "equity": 1.03101,
+        "drawdown": -0.026285
+      },
+      {
+        "step": 88,
+        "equity": 1.041139,
+        "drawdown": -0.016719
+      },
+      {
+        "step": 89,
+        "equity": 1.035796,
+        "drawdown": -0.021765
+      },
+      {
+        "step": 90,
+        "equity": 1.029426,
+        "drawdown": -0.027781
+      },
+      {
+        "step": 91,
+        "equity": 1.023095,
+        "drawdown": -0.03376
+      },
+      {
+        "step": 92,
+        "equity": 1.022055,
+        "drawdown": -0.034742
+      },
+      {
+        "step": 93,
+        "equity": 1.018538,
+        "drawdown": -0.038063
+      },
+      {
+        "step": 94,
+        "equity": 1.028544,
+        "drawdown": -0.028613
+      },
+      {
+        "step": 95,
+        "equity": 1.026666,
+        "drawdown": -0.030387
+      },
+      {
+        "step": 96,
+        "equity": 1.028605,
+        "drawdown": -0.028556
+      },
+      {
+        "step": 97,
+        "equity": 1.026666,
+        "drawdown": -0.030388
+      },
+      {
+        "step": 98,
+        "equity": 1.036752,
+        "drawdown": -0.020862
+      },
+      {
+        "step": 99,
+        "equity": 1.031609,
+        "drawdown": -0.025719
+      },
+      {
+        "step": 100,
+        "equity": 1.029549,
+        "drawdown": -0.027664
+      },
+      {
+        "step": 101,
+        "equity": 1.039664,
+        "drawdown": -0.018112
+      },
+      {
+        "step": 102,
+        "equity": 1.03416,
+        "drawdown": -0.02331
+      },
+      {
+        "step": 103,
+        "equity": 1.032113,
+        "drawdown": -0.025243
+      },
+      {
+        "step": 104,
+        "equity": 1.029414,
+        "drawdown": -0.027792
+      },
+      {
+        "step": 105,
+        "equity": 1.03181,
+        "drawdown": -0.02553
+      },
+      {
+        "step": 106,
+        "equity": 1.034927,
+        "drawdown": -0.022586
+      },
+      {
+        "step": 107,
+        "equity": 1.032448,
+        "drawdown": -0.024927
+      },
+      {
+        "step": 108,
+        "equity": 1.042591,
+        "drawdown": -0.015348
+      },
+      {
+        "step": 109,
+        "equity": 1.043844,
+        "drawdown": -0.014164
+      },
+      {
+        "step": 110,
+        "equity": 1.054099,
+        "drawdown": -0.004479
+      },
+      {
+        "step": 111,
+        "equity": 1.052657,
+        "drawdown": -0.005841
+      },
+      {
+        "step": 112,
+        "equity": 1.05304,
+        "drawdown": -0.005479
+      },
+      {
+        "step": 113,
+        "equity": 1.063385,
+        "drawdown": 0.0
+      },
+      {
+        "step": 114,
+        "equity": 1.056845,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 115,
+        "equity": 1.059151,
+        "drawdown": -0.003981
+      },
+      {
+        "step": 116,
+        "equity": 1.060014,
+        "drawdown": -0.00317
+      },
+      {
+        "step": 117,
+        "equity": 1.059361,
+        "drawdown": -0.003784
+      },
+      {
+        "step": 118,
+        "equity": 1.058814,
+        "drawdown": -0.004299
+      },
+      {
+        "step": 119,
+        "equity": 1.056034,
+        "drawdown": -0.006912
+      },
+      {
+        "step": 120,
+        "equity": 1.055555,
+        "drawdown": -0.007363
+      },
+      {
+        "step": 121,
+        "equity": 1.050938,
+        "drawdown": -0.011705
+      },
+      {
+        "step": 122,
+        "equity": 1.049279,
+        "drawdown": -0.013265
+      },
+      {
+        "step": 123,
+        "equity": 1.054592,
+        "drawdown": -0.008269
+      },
+      {
+        "step": 124,
+        "equity": 1.054795,
+        "drawdown": -0.008077
+      },
+      {
+        "step": 125,
+        "equity": 1.049896,
+        "drawdown": -0.012685
+      },
+      {
+        "step": 126,
+        "equity": 1.06021,
+        "drawdown": -0.002986
+      },
+      {
+        "step": 127,
+        "equity": 1.058355,
+        "drawdown": -0.00473
+      },
+      {
+        "step": 128,
+        "equity": 1.051846,
+        "drawdown": -0.010851
+      },
+      {
+        "step": 129,
+        "equity": 1.045377,
+        "drawdown": -0.016934
+      },
+      {
+        "step": 130,
+        "equity": 1.038948,
+        "drawdown": -0.02298
+      },
+      {
+        "step": 131,
+        "equity": 1.037856,
+        "drawdown": -0.024007
+      },
+      {
+        "step": 132,
+        "equity": 1.042641,
+        "drawdown": -0.019508
+      },
+      {
+        "step": 133,
+        "equity": 1.052883,
+        "drawdown": -0.009875
+      },
+      {
+        "step": 134,
+        "equity": 1.056525,
+        "drawdown": -0.006451
+      },
+      {
+        "step": 135,
+        "equity": 1.066905,
+        "drawdown": 0.0
+      },
+      {
+        "step": 136,
+        "equity": 1.064326,
+        "drawdown": -0.002417
+      },
+      {
+        "step": 137,
+        "equity": 1.05778,
+        "drawdown": -0.008552
+      },
+      {
+        "step": 138,
+        "equity": 1.055767,
+        "drawdown": -0.010439
+      },
+      {
+        "step": 139,
+        "equity": 1.050912,
+        "drawdown": -0.01499
+      },
+      {
+        "step": 140,
+        "equity": 1.050409,
+        "drawdown": -0.015462
+      },
+      {
+        "step": 141,
+        "equity": 1.047847,
+        "drawdown": -0.017863
+      },
+      {
+        "step": 142,
+        "equity": 1.047679,
+        "drawdown": -0.01802
+      },
+      {
+        "step": 143,
+        "equity": 1.049398,
+        "drawdown": -0.016409
+      },
+      {
+        "step": 144,
+        "equity": 1.059707,
+        "drawdown": -0.006746
+      },
+      {
+        "step": 145,
+        "equity": 1.070118,
+        "drawdown": 0.0
+      },
+      {
+        "step": 146,
+        "equity": 1.063537,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 147,
+        "equity": 1.073985,
+        "drawdown": 0.0
+      },
+      {
+        "step": 148,
+        "equity": 1.079306,
+        "drawdown": 0.0
+      },
+      {
+        "step": 149,
+        "equity": 1.083148,
+        "drawdown": 0.0
+      },
+      {
+        "step": 150,
+        "equity": 1.093789,
+        "drawdown": 0.0
+      },
+      {
+        "step": 151,
+        "equity": 1.104534,
+        "drawdown": 0.0
+      },
+      {
+        "step": 152,
+        "equity": 1.115385,
+        "drawdown": 0.0
+      },
+      {
+        "step": 153,
+        "equity": 1.126343,
+        "drawdown": 0.0
+      },
+      {
+        "step": 154,
+        "equity": 1.137408,
+        "drawdown": 0.0
+      },
+      {
+        "step": 155,
+        "equity": 1.148582,
+        "drawdown": 0.0
+      },
+      {
+        "step": 156,
+        "equity": 1.159865,
+        "drawdown": 0.0
+      },
+      {
+        "step": 157,
+        "equity": 1.17126,
+        "drawdown": 0.0
+      },
+      {
+        "step": 158,
+        "equity": 1.168448,
+        "drawdown": -0.002401
+      },
+      {
+        "step": 159,
+        "equity": 1.179926,
+        "drawdown": 0.0
+      },
+      {
+        "step": 160,
+        "equity": 1.175014,
+        "drawdown": -0.004163
+      },
+      {
+        "step": 161,
+        "equity": 1.186558,
+        "drawdown": 0.0
+      },
+      {
+        "step": 162,
+        "equity": 1.186956,
+        "drawdown": 0.0
+      },
+      {
+        "step": 163,
+        "equity": 1.182469,
+        "drawdown": -0.003781
+      },
+      {
+        "step": 164,
+        "equity": 1.183958,
+        "drawdown": -0.002526
+      },
+      {
+        "step": 165,
+        "equity": 1.179514,
+        "drawdown": -0.00627
+      },
+      {
+        "step": 166,
+        "equity": 1.175723,
+        "drawdown": -0.009464
+      },
+      {
+        "step": 167,
+        "equity": 1.17181,
+        "drawdown": -0.012761
+      },
+      {
+        "step": 168,
+        "equity": 1.169632,
+        "drawdown": -0.014596
+      },
+      {
+        "step": 169,
+        "equity": 1.162439,
+        "drawdown": -0.020656
+      },
+      {
+        "step": 170,
+        "equity": 1.159329,
+        "drawdown": -0.023276
+      },
+      {
+        "step": 171,
+        "equity": 1.156736,
+        "drawdown": -0.025461
+      },
+      {
+        "step": 172,
+        "equity": 1.156212,
+        "drawdown": -0.025902
+      },
+      {
+        "step": 173,
+        "equity": 1.16757,
+        "drawdown": -0.016333
+      },
+      {
+        "step": 174,
+        "equity": 1.17904,
+        "drawdown": -0.006669
+      },
+      {
+        "step": 175,
+        "equity": 1.171789,
+        "drawdown": -0.012778
+      },
+      {
+        "step": 176,
+        "equity": 1.164953,
+        "drawdown": -0.018538
+      },
+      {
+        "step": 177,
+        "equity": 1.176398,
+        "drawdown": -0.008896
+      },
+      {
+        "step": 178,
+        "equity": 1.171533,
+        "drawdown": -0.012994
+      },
+      {
+        "step": 179,
+        "equity": 1.164328,
+        "drawdown": -0.019064
+      },
+      {
+        "step": 180,
+        "equity": 1.175767,
+        "drawdown": -0.009427
+      },
+      {
+        "step": 181,
+        "equity": 1.168846,
+        "drawdown": -0.015258
+      },
+      {
+        "step": 182,
+        "equity": 1.161658,
+        "drawdown": -0.021314
+      },
+      {
+        "step": 183,
+        "equity": 1.17307,
+        "drawdown": -0.011699
+      },
+      {
+        "step": 184,
+        "equity": 1.175946,
+        "drawdown": -0.009276
+      },
+      {
+        "step": 185,
+        "equity": 1.168714,
+        "drawdown": -0.015369
+      },
+      {
+        "step": 186,
+        "equity": 1.161526,
+        "drawdown": -0.021425
+      },
+      {
+        "step": 187,
+        "equity": 1.154639,
+        "drawdown": -0.027227
+      },
+      {
+        "step": 188,
+        "equity": 1.150084,
+        "drawdown": -0.031065
+      },
+      {
+        "step": 189,
+        "equity": 1.143011,
+        "drawdown": -0.037024
+      },
+      {
+        "step": 190,
+        "equity": 1.135981,
+        "drawdown": -0.042946
+      },
+      {
+        "step": 191,
+        "equity": 1.128995,
+        "drawdown": -0.048832
+      },
+      {
+        "step": 192,
+        "equity": 1.140086,
+        "drawdown": -0.039488
+      },
+      {
+        "step": 193,
+        "equity": 1.133074,
+        "drawdown": -0.045395
+      },
+      {
+        "step": 194,
+        "equity": 1.126106,
+        "drawdown": -0.051266
+      },
+      {
+        "step": 195,
+        "equity": 1.137169,
+        "drawdown": -0.041946
+      },
+      {
+        "step": 196,
+        "equity": 1.135248,
+        "drawdown": -0.043564
+      },
+      {
+        "step": 197,
+        "equity": 1.146401,
+        "drawdown": -0.034168
+      },
+      {
+        "step": 198,
+        "equity": 1.157663,
+        "drawdown": -0.024679
+      },
+      {
+        "step": 199,
+        "equity": 1.152224,
+        "drawdown": -0.029261
+      },
+      {
+        "step": 200,
+        "equity": 1.153288,
+        "drawdown": -0.028365
+      },
+      {
+        "step": 201,
+        "equity": 1.154871,
+        "drawdown": -0.027031
+      },
+      {
+        "step": 202,
+        "equity": 1.149363,
+        "drawdown": -0.031672
+      },
+      {
+        "step": 203,
+        "equity": 1.160654,
+        "drawdown": -0.02216
+      },
+      {
+        "step": 204,
+        "equity": 1.1603,
+        "drawdown": -0.022458
+      },
+      {
+        "step": 205,
+        "equity": 1.157771,
+        "drawdown": -0.024589
+      },
+      {
+        "step": 206,
+        "equity": 1.169145,
+        "drawdown": -0.015006
+      },
+      {
+        "step": 207,
+        "equity": 1.161961,
+        "drawdown": -0.021058
+      },
+      {
+        "step": 208,
+        "equity": 1.173376,
+        "drawdown": -0.011441
+      },
+      {
+        "step": 209,
+        "equity": 1.184904,
+        "drawdown": -0.001729
+      },
+      {
+        "step": 210,
+        "equity": 1.196544,
+        "drawdown": 0.0
+      },
+      {
+        "step": 211,
+        "equity": 1.208299,
+        "drawdown": 0.0
+      },
+      {
+        "step": 212,
+        "equity": 1.220169,
+        "drawdown": 0.0
+      },
+      {
+        "step": 213,
+        "equity": 1.232156,
+        "drawdown": 0.0
+      },
+      {
+        "step": 214,
+        "equity": 1.237586,
+        "drawdown": 0.0
+      },
+      {
+        "step": 215,
+        "equity": 1.242808,
+        "drawdown": 0.0
+      },
+      {
+        "step": 216,
+        "equity": 1.236281,
+        "drawdown": -0.005252
+      },
+      {
+        "step": 217,
+        "equity": 1.233744,
+        "drawdown": -0.007293
+      },
+      {
+        "step": 218,
+        "equity": 1.233546,
+        "drawdown": -0.007452
+      },
+      {
+        "step": 219,
+        "equity": 1.245665,
+        "drawdown": 0.0
+      },
+      {
+        "step": 220,
+        "equity": 1.257902,
+        "drawdown": 0.0
+      },
+      {
+        "step": 221,
+        "equity": 1.27026,
+        "drawdown": 0.0
+      },
+      {
+        "step": 222,
+        "equity": 1.282739,
+        "drawdown": 0.0
+      },
+      {
+        "step": 223,
+        "equity": 1.29534,
+        "drawdown": 0.0
+      },
+      {
+        "step": 224,
+        "equity": 1.308066,
+        "drawdown": 0.0
+      },
+      {
+        "step": 225,
+        "equity": 1.311469,
+        "drawdown": 0.0
+      },
+      {
+        "step": 226,
+        "equity": 1.324353,
+        "drawdown": 0.0
+      },
+      {
+        "step": 227,
+        "equity": 1.337364,
+        "drawdown": 0.0
+      },
+      {
+        "step": 228,
+        "equity": 1.343235,
+        "drawdown": 0.0
+      },
+      {
+        "step": 229,
+        "equity": 1.345814,
+        "drawdown": 0.0
+      },
+      {
+        "step": 230,
+        "equity": 1.347703,
+        "drawdown": 0.0
+      },
+      {
+        "step": 231,
+        "equity": 1.349726,
+        "drawdown": 0.0
+      },
+      {
+        "step": 232,
+        "equity": 1.348719,
+        "drawdown": -0.000746
+      },
+      {
+        "step": 233,
+        "equity": 1.344788,
+        "drawdown": -0.003659
+      },
+      {
+        "step": 234,
+        "equity": 1.357999,
+        "drawdown": 0.0
+      },
+      {
+        "step": 235,
+        "equity": 1.37134,
+        "drawdown": 0.0
+      },
+      {
+        "step": 236,
+        "equity": 1.374188,
+        "drawdown": 0.0
+      },
+      {
+        "step": 237,
+        "equity": 1.374074,
+        "drawdown": -8.3e-05
+      },
+      {
+        "step": 238,
+        "equity": 1.387573,
+        "drawdown": 0.0
+      },
+      {
+        "step": 239,
+        "equity": 1.401205,
+        "drawdown": 0.0
+      },
+      {
+        "step": 240,
+        "equity": 1.41497,
+        "drawdown": 0.0
+      },
+      {
+        "step": 241,
+        "equity": 1.428871,
+        "drawdown": 0.0
+      },
+      {
+        "step": 242,
+        "equity": 1.430414,
+        "drawdown": 0.0
+      },
+      {
+        "step": 243,
+        "equity": 1.431834,
+        "drawdown": 0.0
+      },
+      {
+        "step": 244,
+        "equity": 1.432666,
+        "drawdown": 0.0
+      },
+      {
+        "step": 245,
+        "equity": 1.436202,
+        "drawdown": 0.0
+      },
+      {
+        "step": 246,
+        "equity": 1.441525,
+        "drawdown": 0.0
+      },
+      {
+        "step": 247,
+        "equity": 1.439885,
+        "drawdown": -0.001137
+      },
+      {
+        "step": 248,
+        "equity": 1.43103,
+        "drawdown": -0.00728
+      },
+      {
+        "step": 249,
+        "equity": 1.43773,
+        "drawdown": -0.002632
+      },
+      {
+        "step": 250,
+        "equity": 1.438681,
+        "drawdown": -0.001973
+      },
+      {
+        "step": 251,
+        "equity": 1.452814,
+        "drawdown": 0.0
+      },
+      {
+        "step": 252,
+        "equity": 1.467087,
+        "drawdown": 0.0
+      },
+      {
+        "step": 253,
+        "equity": 1.481499,
+        "drawdown": 0.0
+      },
+      {
+        "step": 254,
+        "equity": 1.496054,
+        "drawdown": 0.0
+      },
+      {
+        "step": 255,
+        "equity": 1.510751,
+        "drawdown": 0.0
+      },
+      {
+        "step": 256,
+        "equity": 1.525592,
+        "drawdown": 0.0
+      },
+      {
+        "step": 257,
+        "equity": 1.54058,
+        "drawdown": 0.0
+      },
+      {
+        "step": 258,
+        "equity": 1.54335,
+        "drawdown": 0.0
+      },
+      {
+        "step": 259,
+        "equity": 1.558512,
+        "drawdown": 0.0
+      },
+      {
+        "step": 260,
+        "equity": 1.573822,
+        "drawdown": 0.0
+      },
+      {
+        "step": 261,
+        "equity": 1.57745,
+        "drawdown": 0.0
+      },
+      {
+        "step": 262,
+        "equity": 1.592947,
+        "drawdown": 0.0
+      },
+      {
+        "step": 263,
+        "equity": 1.608596,
+        "drawdown": 0.0
+      },
+      {
+        "step": 264,
+        "equity": 1.624399,
+        "drawdown": 0.0
+      },
+      {
+        "step": 265,
+        "equity": 1.640357,
+        "drawdown": 0.0
+      },
+      {
+        "step": 266,
+        "equity": 1.640095,
+        "drawdown": -0.00016
+      },
+      {
+        "step": 267,
+        "equity": 1.639407,
+        "drawdown": -0.000579
+      },
+      {
+        "step": 268,
+        "equity": 1.655513,
+        "drawdown": 0.0
+      },
+      {
+        "step": 269,
+        "equity": 1.654506,
+        "drawdown": -0.000608
+      },
+      {
+        "step": 270,
+        "equity": 1.67076,
+        "drawdown": 0.0
+      },
+      {
+        "step": 271,
+        "equity": 1.687174,
+        "drawdown": 0.0
+      },
+      {
+        "step": 272,
+        "equity": 1.703749,
+        "drawdown": 0.0
+      },
+      {
+        "step": 273,
+        "equity": 1.720486,
+        "drawdown": 0.0
+      },
+      {
+        "step": 274,
+        "equity": 1.721534,
+        "drawdown": 0.0
+      },
+      {
+        "step": 275,
+        "equity": 1.738446,
+        "drawdown": 0.0
+      },
+      {
+        "step": 276,
+        "equity": 1.739032,
+        "drawdown": 0.0
+      },
+      {
+        "step": 277,
+        "equity": 1.756116,
+        "drawdown": 0.0
+      },
+      {
+        "step": 278,
+        "equity": 1.773369,
+        "drawdown": 0.0
+      },
+      {
+        "step": 279,
+        "equity": 1.79079,
+        "drawdown": 0.0
+      },
+      {
+        "step": 280,
+        "equity": 1.808383,
+        "drawdown": 0.0
+      },
+      {
+        "step": 281,
+        "equity": 1.826148,
+        "drawdown": 0.0
+      },
+      {
+        "step": 282,
+        "equity": 1.844089,
+        "drawdown": 0.0
+      },
+      {
+        "step": 283,
+        "equity": 1.862205,
+        "drawdown": 0.0
+      },
+      {
+        "step": 284,
+        "equity": 1.880499,
+        "drawdown": 0.0
+      },
+      {
+        "step": 285,
+        "equity": 1.898973,
+        "drawdown": 0.0
+      },
+      {
+        "step": 286,
+        "equity": 1.917629,
+        "drawdown": 0.0
+      },
+      {
+        "step": 287,
+        "equity": 1.910206,
+        "drawdown": -0.003871
+      },
+      {
+        "step": 288,
+        "equity": 1.928971,
+        "drawdown": 0.0
+      },
+      {
+        "step": 289,
+        "equity": 1.947922,
+        "drawdown": 0.0
+      },
+      {
+        "step": 290,
+        "equity": 1.94462,
+        "drawdown": -0.001695
+      },
+      {
+        "step": 291,
+        "equity": 1.942331,
+        "drawdown": -0.00287
+      },
+      {
+        "step": 292,
+        "equity": 1.961413,
+        "drawdown": 0.0
+      },
+      {
+        "step": 293,
+        "equity": 1.980681,
+        "drawdown": 0.0
+      },
+      {
+        "step": 294,
+        "equity": 1.986091,
+        "drawdown": 0.0
+      },
+      {
+        "step": 295,
+        "equity": 1.988816,
+        "drawdown": 0.0
+      },
+      {
+        "step": 296,
+        "equity": 2.008354,
+        "drawdown": 0.0
+      },
+      {
+        "step": 297,
+        "equity": 2.007683,
+        "drawdown": -0.000334
+      },
+      {
+        "step": 298,
+        "equity": 2.027406,
+        "drawdown": 0.0
+      },
+      {
+        "step": 299,
+        "equity": 2.047324,
+        "drawdown": 0.0
+      },
+      {
+        "step": 300,
+        "equity": 2.034733,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 301,
+        "equity": 2.043091,
+        "drawdown": -0.002067
+      },
+      {
+        "step": 302,
+        "equity": 2.063163,
+        "drawdown": 0.0
+      },
+      {
+        "step": 303,
+        "equity": 2.083431,
+        "drawdown": 0.0
+      },
+      {
+        "step": 304,
+        "equity": 2.103899,
+        "drawdown": 0.0
+      },
+      {
+        "step": 305,
+        "equity": 2.09096,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 306,
+        "equity": 2.097149,
+        "drawdown": -0.003208
+      },
+      {
+        "step": 307,
+        "equity": 2.117751,
+        "drawdown": 0.0
+      },
+      {
+        "step": 308,
+        "equity": 2.138556,
+        "drawdown": 0.0
+      },
+      {
+        "step": 309,
+        "equity": 2.159565,
+        "drawdown": 0.0
+      },
+      {
+        "step": 310,
+        "equity": 2.180781,
+        "drawdown": 0.0
+      },
+      {
+        "step": 311,
+        "equity": 2.202205,
+        "drawdown": 0.0
+      },
+      {
+        "step": 312,
+        "equity": 2.223839,
+        "drawdown": 0.0
+      },
+      {
+        "step": 313,
+        "equity": 2.245686,
+        "drawdown": 0.0
+      },
+      {
+        "step": 314,
+        "equity": 2.255718,
+        "drawdown": 0.0
+      },
+      {
+        "step": 315,
+        "equity": 2.249095,
+        "drawdown": -0.002936
+      },
+      {
+        "step": 316,
+        "equity": 2.27119,
+        "drawdown": 0.0
+      },
+      {
+        "step": 317,
+        "equity": 2.293502,
+        "drawdown": 0.0
+      },
+      {
+        "step": 318,
+        "equity": 2.316034,
+        "drawdown": 0.0
+      },
+      {
+        "step": 319,
+        "equity": 2.338786,
+        "drawdown": 0.0
+      },
+      {
+        "step": 320,
+        "equity": 2.343429,
+        "drawdown": 0.0
+      },
+      {
+        "step": 321,
+        "equity": 2.353864,
+        "drawdown": 0.0
+      },
+      {
+        "step": 322,
+        "equity": 2.351025,
+        "drawdown": -0.001206
+      },
+      {
+        "step": 323,
+        "equity": 2.374122,
+        "drawdown": 0.0
+      },
+      {
+        "step": 324,
+        "equity": 2.372315,
+        "drawdown": -0.000761
+      },
+      {
+        "step": 325,
+        "equity": 2.372289,
+        "drawdown": -0.000772
+      },
+      {
+        "step": 326,
+        "equity": 2.395595,
+        "drawdown": 0.0
+      },
+      {
+        "step": 327,
+        "equity": 2.419129,
+        "drawdown": 0.0
+      },
+      {
+        "step": 328,
+        "equity": 2.41347,
+        "drawdown": -0.002339
+      },
+      {
+        "step": 329,
+        "equity": 2.415256,
+        "drawdown": -0.001601
+      },
+      {
+        "step": 330,
+        "equity": 2.438984,
+        "drawdown": 0.0
+      },
+      {
+        "step": 331,
+        "equity": 2.462945,
+        "drawdown": 0.0
+      },
+      {
+        "step": 332,
+        "equity": 2.46092,
+        "drawdown": -0.000822
+      },
+      {
+        "step": 333,
+        "equity": 2.485096,
+        "drawdown": 0.0
+      },
+      {
+        "step": 334,
+        "equity": 2.47813,
+        "drawdown": -0.002803
+      },
+      {
+        "step": 335,
+        "equity": 2.468651,
+        "drawdown": -0.006617
+      },
+      {
+        "step": 336,
+        "equity": 2.492904,
+        "drawdown": 0.0
+      },
+      {
+        "step": 337,
+        "equity": 2.517394,
+        "drawdown": 0.0
+      },
+      {
+        "step": 338,
+        "equity": 2.542125,
+        "drawdown": 0.0
+      },
+      {
+        "step": 339,
+        "equity": 2.541718,
+        "drawdown": -0.00016
+      },
+      {
+        "step": 340,
+        "equity": 2.526086,
+        "drawdown": -0.006309
+      },
+      {
+        "step": 341,
+        "equity": 2.521741,
+        "drawdown": -0.008018
+      },
+      {
+        "step": 342,
+        "equity": 2.546515,
+        "drawdown": 0.0
+      },
+      {
+        "step": 343,
+        "equity": 2.571532,
+        "drawdown": 0.0
+      },
+      {
+        "step": 344,
+        "equity": 2.557949,
+        "drawdown": -0.005282
+      },
+      {
+        "step": 345,
+        "equity": 2.583079,
+        "drawdown": 0.0
+      },
+      {
+        "step": 346,
+        "equity": 2.608455,
+        "drawdown": 0.0
+      },
+      {
+        "step": 347,
+        "equity": 2.63408,
+        "drawdown": 0.0
+      },
+      {
+        "step": 348,
+        "equity": 2.659957,
+        "drawdown": 0.0
+      },
+      {
+        "step": 349,
+        "equity": 2.662764,
+        "drawdown": 0.0
+      },
+      {
+        "step": 350,
+        "equity": 2.688923,
+        "drawdown": 0.0
+      },
+      {
+        "step": 351,
+        "equity": 2.693962,
+        "drawdown": 0.0
+      },
+      {
+        "step": 352,
+        "equity": 2.720427,
+        "drawdown": 0.0
+      },
+      {
+        "step": 353,
+        "equity": 2.747153,
+        "drawdown": 0.0
+      },
+      {
+        "step": 354,
+        "equity": 2.774141,
+        "drawdown": 0.0
+      },
+      {
+        "step": 355,
+        "equity": 2.801394,
+        "drawdown": 0.0
+      },
+      {
+        "step": 356,
+        "equity": 2.802968,
+        "drawdown": 0.0
+      },
+      {
+        "step": 357,
+        "equity": 2.830505,
+        "drawdown": 0.0
+      },
+      {
+        "step": 358,
+        "equity": 2.858311,
+        "drawdown": 0.0
+      },
+      {
+        "step": 359,
+        "equity": 2.886391,
+        "drawdown": 0.0
+      },
+      {
+        "step": 360,
+        "equity": 2.897337,
+        "drawdown": 0.0
+      },
+      {
+        "step": 361,
+        "equity": 2.881028,
+        "drawdown": -0.005629
+      },
+      {
+        "step": 362,
+        "equity": 2.909331,
+        "drawdown": 0.0
+      },
+      {
+        "step": 363,
+        "equity": 2.937912,
+        "drawdown": 0.0
+      },
+      {
+        "step": 364,
+        "equity": 2.966774,
+        "drawdown": 0.0
+      },
+      {
+        "step": 365,
+        "equity": 2.99592,
+        "drawdown": 0.0
+      },
+      {
+        "step": 366,
+        "equity": 2.981276,
+        "drawdown": -0.004888
+      },
+      {
+        "step": 367,
+        "equity": 3.010564,
+        "drawdown": 0.0
+      },
+      {
+        "step": 368,
+        "equity": 3.020477,
+        "drawdown": 0.0
+      },
+      {
+        "step": 369,
+        "equity": 3.050151,
+        "drawdown": 0.0
+      },
+      {
+        "step": 370,
+        "equity": 3.080115,
+        "drawdown": 0.0
+      },
+      {
+        "step": 371,
+        "equity": 3.110374,
+        "drawdown": 0.0
+      },
+      {
+        "step": 372,
+        "equity": 3.140931,
+        "drawdown": 0.0
+      },
+      {
+        "step": 373,
+        "equity": 3.171787,
+        "drawdown": 0.0
+      },
+      {
+        "step": 374,
+        "equity": 3.202947,
+        "drawdown": 0.0
+      },
+      {
+        "step": 375,
+        "equity": 3.219698,
+        "drawdown": 0.0
+      },
+      {
+        "step": 376,
+        "equity": 3.251328,
+        "drawdown": 0.0
+      },
+      {
+        "step": 377,
+        "equity": 3.253039,
+        "drawdown": 0.0
+      },
+      {
+        "step": 378,
+        "equity": 3.284997,
+        "drawdown": 0.0
+      },
+      {
+        "step": 379,
+        "equity": 3.317268,
+        "drawdown": 0.0
+      },
+      {
+        "step": 380,
+        "equity": 3.349857,
+        "drawdown": 0.0
+      },
+      {
+        "step": 381,
+        "equity": 3.382766,
+        "drawdown": 0.0
+      },
+      {
+        "step": 382,
+        "equity": 3.415998,
+        "drawdown": 0.0
+      },
+      {
+        "step": 383,
+        "equity": 3.449557,
+        "drawdown": 0.0
+      },
+      {
+        "step": 384,
+        "equity": 3.452969,
+        "drawdown": 0.0
+      },
+      {
+        "step": 385,
+        "equity": 3.486891,
+        "drawdown": 0.0
+      },
+      {
+        "step": 386,
+        "equity": 3.494443,
+        "drawdown": 0.0
+      },
+      {
+        "step": 387,
+        "equity": 3.528773,
+        "drawdown": 0.0
+      },
+      {
+        "step": 388,
+        "equity": 3.56344,
+        "drawdown": 0.0
+      },
+      {
+        "step": 389,
+        "equity": 3.598447,
+        "drawdown": 0.0
+      },
+      {
+        "step": 390,
+        "equity": 3.633798,
+        "drawdown": 0.0
+      },
+      {
+        "step": 391,
+        "equity": 3.669496,
+        "drawdown": 0.0
+      },
+      {
+        "step": 392,
+        "equity": 3.705545,
+        "drawdown": 0.0
+      },
+      {
+        "step": 393,
+        "equity": 3.741949,
+        "drawdown": 0.0
+      },
+      {
+        "step": 394,
+        "equity": 3.77871,
+        "drawdown": 0.0
+      },
+      {
+        "step": 395,
+        "equity": 3.815832,
+        "drawdown": 0.0
+      },
+      {
+        "step": 396,
+        "equity": 3.853318,
+        "drawdown": 0.0
+      },
+      {
+        "step": 397,
+        "equity": 3.849384,
+        "drawdown": -0.001021
+      },
+      {
+        "step": 398,
+        "equity": 3.887201,
+        "drawdown": 0.0
+      },
+      {
+        "step": 399,
+        "equity": 3.925388,
+        "drawdown": 0.0
+      },
+      {
+        "step": 400,
+        "equity": 3.963951,
+        "drawdown": 0.0
+      },
+      {
+        "step": 401,
+        "equity": 4.002893,
+        "drawdown": 0.0
+      },
+      {
+        "step": 402,
+        "equity": 4.042218,
+        "drawdown": 0.0
+      },
+      {
+        "step": 403,
+        "equity": 4.031126,
+        "drawdown": -0.002744
+      },
+      {
+        "step": 404,
+        "equity": 4.070728,
+        "drawdown": 0.0
+      },
+      {
+        "step": 405,
+        "equity": 4.110718,
+        "drawdown": 0.0
+      },
+      {
+        "step": 406,
+        "equity": 4.095936,
+        "drawdown": -0.003596
+      },
+      {
+        "step": 407,
+        "equity": 4.136175,
+        "drawdown": 0.0
+      },
+      {
+        "step": 408,
+        "equity": 4.176809,
+        "drawdown": 0.0
+      },
+      {
+        "step": 409,
+        "equity": 4.217842,
+        "drawdown": 0.0
+      },
+      {
+        "step": 410,
+        "equity": 4.259278,
+        "drawdown": 0.0
+      },
+      {
+        "step": 411,
+        "equity": 4.301121,
+        "drawdown": 0.0
+      },
+      {
+        "step": 412,
+        "equity": 4.343375,
+        "drawdown": 0.0
+      },
+      {
+        "step": 413,
+        "equity": 4.386044,
+        "drawdown": 0.0
+      },
+      {
+        "step": 414,
+        "equity": 4.429133,
+        "drawdown": 0.0
+      },
+      {
+        "step": 415,
+        "equity": 4.472645,
+        "drawdown": 0.0
+      },
+      {
+        "step": 416,
+        "equity": 4.516584,
+        "drawdown": 0.0
+      },
+      {
+        "step": 417,
+        "equity": 4.500554,
+        "drawdown": -0.003549
+      },
+      {
+        "step": 418,
+        "equity": 4.544768,
+        "drawdown": 0.0
+      },
+      {
+        "step": 419,
+        "equity": 4.589416,
+        "drawdown": 0.0
+      },
+      {
+        "step": 420,
+        "equity": 4.581637,
+        "drawdown": -0.001695
+      },
+      {
+        "step": 421,
+        "equity": 4.626647,
+        "drawdown": 0.0
+      },
+      {
+        "step": 422,
+        "equity": 4.672099,
+        "drawdown": 0.0
+      },
+      {
+        "step": 423,
+        "equity": 4.643365,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 424,
+        "equity": 4.688982,
+        "drawdown": 0.0
+      },
+      {
+        "step": 425,
+        "equity": 4.735046,
+        "drawdown": 0.0
+      },
+      {
+        "step": 426,
+        "equity": 4.781564,
+        "drawdown": 0.0
+      },
+      {
+        "step": 427,
+        "equity": 4.828538,
+        "drawdown": 0.0
+      },
+      {
+        "step": 428,
+        "equity": 4.875973,
+        "drawdown": 0.0
+      },
+      {
+        "step": 429,
+        "equity": 4.923875,
+        "drawdown": 0.0
+      },
+      {
+        "step": 430,
+        "equity": 4.972247,
+        "drawdown": 0.0
+      },
+      {
+        "step": 431,
+        "equity": 5.021094,
+        "drawdown": 0.0
+      },
+      {
+        "step": 432,
+        "equity": 5.070421,
+        "drawdown": 0.0
+      },
+      {
+        "step": 433,
+        "equity": 5.120233,
+        "drawdown": 0.0
+      },
+      {
+        "step": 434,
+        "equity": 5.170534,
+        "drawdown": 0.0
+      },
+      {
+        "step": 435,
+        "equity": 5.22133,
+        "drawdown": 0.0
+      },
+      {
+        "step": 436,
+        "equity": 5.189219,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 437,
+        "equity": 5.240197,
+        "drawdown": 0.0
+      },
+      {
+        "step": 438,
+        "equity": 5.291677,
+        "drawdown": 0.0
+      },
+      {
+        "step": 439,
+        "equity": 5.323808,
+        "drawdown": 0.0
+      },
+      {
+        "step": 440,
+        "equity": 5.317846,
+        "drawdown": -0.00112
+      },
+      {
+        "step": 441,
+        "equity": 5.285891,
+        "drawdown": -0.007122
+      },
+      {
+        "step": 442,
+        "equity": 5.337819,
+        "drawdown": 0.0
+      },
+      {
+        "step": 443,
+        "equity": 5.390258,
+        "drawdown": 0.0
+      },
+      {
+        "step": 444,
+        "equity": 5.357108,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 445,
+        "equity": 5.325319,
+        "drawdown": -0.012048
+      },
+      {
+        "step": 446,
+        "equity": 5.313353,
+        "drawdown": -0.014267
+      },
+      {
+        "step": 447,
+        "equity": 5.307811,
+        "drawdown": -0.015296
+      },
+      {
+        "step": 448,
+        "equity": 5.28106,
+        "drawdown": -0.020258
+      },
+      {
+        "step": 449,
+        "equity": 5.248581,
+        "drawdown": -0.026284
+      },
+      {
+        "step": 450,
+        "equity": 5.222154,
+        "drawdown": -0.031187
+      },
+      {
+        "step": 451,
+        "equity": 5.190038,
+        "drawdown": -0.037145
+      },
+      {
+        "step": 452,
+        "equity": 5.241025,
+        "drawdown": -0.027686
+      },
+      {
+        "step": 453,
+        "equity": 5.292513,
+        "drawdown": -0.018134
+      },
+      {
+        "step": 454,
+        "equity": 5.344507,
+        "drawdown": -0.008488
+      },
+      {
+        "step": 455,
+        "equity": 5.311638,
+        "drawdown": -0.014586
+      },
+      {
+        "step": 456,
+        "equity": 5.278971,
+        "drawdown": -0.020646
+      },
+      {
+        "step": 457,
+        "equity": 5.330832,
+        "drawdown": -0.011025
+      },
+      {
+        "step": 458,
+        "equity": 5.383202,
+        "drawdown": -0.001309
+      },
+      {
+        "step": 459,
+        "equity": 5.366191,
+        "drawdown": -0.004465
+      },
+      {
+        "step": 460,
+        "equity": 5.333189,
+        "drawdown": -0.010587
+      },
+      {
+        "step": 461,
+        "equity": 5.385582,
+        "drawdown": -0.000867
+      },
+      {
+        "step": 462,
+        "equity": 5.363033,
+        "drawdown": -0.005051
+      },
+      {
+        "step": 463,
+        "equity": 5.341833,
+        "drawdown": -0.008984
+      },
+      {
+        "step": 464,
+        "equity": 5.394311,
+        "drawdown": 0.0
+      },
+      {
+        "step": 465,
+        "equity": 5.447305,
+        "drawdown": 0.0
+      },
+      {
+        "step": 466,
+        "equity": 5.428604,
+        "drawdown": -0.003433
+      },
+      {
+        "step": 467,
+        "equity": 5.419538,
+        "drawdown": -0.005097
+      },
+      {
+        "step": 468,
+        "equity": 5.393313,
+        "drawdown": -0.009912
+      },
+      {
+        "step": 469,
+        "equity": 5.36811,
+        "drawdown": -0.014538
+      },
+      {
+        "step": 470,
+        "equity": 5.420847,
+        "drawdown": -0.004857
+      },
+      {
+        "step": 471,
+        "equity": 5.474101,
+        "drawdown": 0.0
+      },
+      {
+        "step": 472,
+        "equity": 5.527878,
+        "drawdown": 0.0
+      },
+      {
+        "step": 473,
+        "equity": 5.498448,
+        "drawdown": -0.005324
+      },
+      {
+        "step": 474,
+        "equity": 5.552465,
+        "drawdown": 0.0
+      },
+      {
+        "step": 475,
+        "equity": 5.540355,
+        "drawdown": -0.002181
+      },
+      {
+        "step": 476,
+        "equity": 5.594783,
+        "drawdown": 0.0
+      },
+      {
+        "step": 477,
+        "equity": 5.560375,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 478,
+        "equity": 5.540158,
+        "drawdown": -0.009764
+      },
+      {
+        "step": 479,
+        "equity": 5.594584,
+        "drawdown": -3.6e-05
+      },
+      {
+        "step": 480,
+        "equity": 5.584425,
+        "drawdown": -0.001851
+      },
+      {
+        "step": 481,
+        "equity": 5.639286,
+        "drawdown": 0.0
+      },
+      {
+        "step": 482,
+        "equity": 5.624421,
+        "drawdown": -0.002636
+      },
+      {
+        "step": 483,
+        "equity": 5.679675,
+        "drawdown": 0.0
+      },
+      {
+        "step": 484,
+        "equity": 5.735472,
+        "drawdown": 0.0
+      },
+      {
+        "step": 485,
+        "equity": 5.791818,
+        "drawdown": 0.0
+      },
+      {
+        "step": 486,
+        "equity": 5.768766,
+        "drawdown": -0.00398
+      },
+      {
+        "step": 487,
+        "equity": 5.733288,
+        "drawdown": -0.010106
+      },
+      {
+        "step": 488,
+        "equity": 5.722739,
+        "drawdown": -0.011927
+      },
+      {
+        "step": 489,
+        "equity": 5.720456,
+        "drawdown": -0.012321
+      },
+      {
+        "step": 490,
+        "equity": 5.685275,
+        "drawdown": -0.018395
+      },
+      {
+        "step": 491,
+        "equity": 5.695196,
+        "drawdown": -0.016682
+      },
+      {
+        "step": 492,
+        "equity": 5.751145,
+        "drawdown": -0.007022
+      },
+      {
+        "step": 493,
+        "equity": 5.715776,
+        "drawdown": -0.013129
+      },
+      {
+        "step": 494,
+        "equity": 5.721777,
+        "drawdown": -0.012093
+      },
+      {
+        "step": 495,
+        "equity": 5.704274,
+        "drawdown": -0.015115
+      },
+      {
+        "step": 496,
+        "equity": 5.760313,
+        "drawdown": -0.005439
+      },
+      {
+        "step": 497,
+        "equity": 5.739098,
+        "drawdown": -0.009102
+      },
+      {
+        "step": 498,
+        "equity": 5.703802,
+        "drawdown": -0.015196
+      },
+      {
+        "step": 499,
+        "equity": 5.690889,
+        "drawdown": -0.017426
+      },
+      {
+        "step": 500,
+        "equity": 5.746796,
+        "drawdown": -0.007773
+      },
+      {
+        "step": 501,
+        "equity": 5.803253,
+        "drawdown": 0.0
+      },
+      {
+        "step": 502,
+        "equity": 5.860264,
+        "drawdown": 0.0
+      },
+      {
+        "step": 503,
+        "equity": 5.885205,
+        "drawdown": 0.0
+      },
+      {
+        "step": 504,
+        "equity": 5.868115,
+        "drawdown": -0.002904
+      },
+      {
+        "step": 505,
+        "equity": 5.852171,
+        "drawdown": -0.005613
+      },
+      {
+        "step": 506,
+        "equity": 5.857245,
+        "drawdown": -0.004751
+      },
+      {
+        "step": 507,
+        "equity": 5.914786,
+        "drawdown": 0.0
+      },
+      {
+        "step": 508,
+        "equity": 5.897379,
+        "drawdown": -0.002943
+      },
+      {
+        "step": 509,
+        "equity": 5.864619,
+        "drawdown": -0.008482
+      },
+      {
+        "step": 510,
+        "equity": 5.922233,
+        "drawdown": 0.0
+      },
+      {
+        "step": 511,
+        "equity": 5.885812,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 512,
+        "equity": 5.849614,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 513,
+        "equity": 5.813639,
+        "drawdown": -0.018337
+      },
+      {
+        "step": 514,
+        "equity": 5.870752,
+        "drawdown": -0.008693
+      },
+      {
+        "step": 515,
+        "equity": 5.928426,
+        "drawdown": 0.0
+      },
+      {
+        "step": 516,
+        "equity": 5.986667,
+        "drawdown": 0.0
+      },
+      {
+        "step": 517,
+        "equity": 6.04548,
+        "drawdown": 0.0
+      },
+      {
+        "step": 518,
+        "equity": 6.0083,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 519,
+        "equity": 6.067326,
+        "drawdown": 0.0
+      },
+      {
+        "step": 520,
+        "equity": 6.126931,
+        "drawdown": 0.0
+      },
+      {
+        "step": 521,
+        "equity": 6.104464,
+        "drawdown": -0.003667
+      },
+      {
+        "step": 522,
+        "equity": 6.066921,
+        "drawdown": -0.009794
+      },
+      {
+        "step": 523,
+        "equity": 6.049904,
+        "drawdown": -0.012572
+      },
+      {
+        "step": 524,
+        "equity": 6.109338,
+        "drawdown": -0.002871
+      },
+      {
+        "step": 525,
+        "equity": 6.169356,
+        "drawdown": 0.0
+      },
+      {
+        "step": 526,
+        "equity": 6.131414,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 527,
+        "equity": 6.191649,
+        "drawdown": 0.0
+      },
+      {
+        "step": 528,
+        "equity": 6.252476,
+        "drawdown": 0.0
+      },
+      {
+        "step": 529,
+        "equity": 6.313901,
+        "drawdown": 0.0
+      },
+      {
+        "step": 530,
+        "equity": 6.27507,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 531,
+        "equity": 6.336716,
+        "drawdown": 0.0
+      },
+      {
+        "step": 532,
+        "equity": 6.297746,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 533,
+        "equity": 6.359615,
+        "drawdown": 0.0
+      },
+      {
+        "step": 534,
+        "equity": 6.338418,
+        "drawdown": -0.003333
+      },
+      {
+        "step": 535,
+        "equity": 6.400687,
+        "drawdown": 0.0
+      },
+      {
+        "step": 536,
+        "equity": 6.361322,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 537,
+        "equity": 6.423816,
+        "drawdown": 0.0
+      },
+      {
+        "step": 538,
+        "equity": 6.38431,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 539,
+        "equity": 6.345046,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 540,
+        "equity": 6.306024,
+        "drawdown": -0.018337
+      },
+      {
+        "step": 541,
+        "equity": 6.267242,
+        "drawdown": -0.024374
+      },
+      {
+        "step": 542,
+        "equity": 6.328811,
+        "drawdown": -0.014789
+      },
+      {
+        "step": 543,
+        "equity": 6.338918,
+        "drawdown": -0.013216
+      },
+      {
+        "step": 544,
+        "equity": 6.401192,
+        "drawdown": -0.003522
+      },
+      {
+        "step": 545,
+        "equity": 6.464077,
+        "drawdown": 0.0
+      },
+      {
+        "step": 546,
+        "equity": 6.453573,
+        "drawdown": -0.001625
+      },
+      {
+        "step": 547,
+        "equity": 6.516973,
+        "drawdown": 0.0
+      },
+      {
+        "step": 548,
+        "equity": 6.580996,
+        "drawdown": 0.0
+      },
+      {
+        "step": 549,
+        "equity": 6.61267,
+        "drawdown": 0.0
+      },
+      {
+        "step": 550,
+        "equity": 6.677633,
+        "drawdown": 0.0
+      },
+      {
+        "step": 551,
+        "equity": 6.68992,
+        "drawdown": 0.0
+      },
+      {
+        "step": 552,
+        "equity": 6.648777,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 553,
+        "equity": 6.607887,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 554,
+        "equity": 6.672803,
+        "drawdown": -0.002559
+      },
+      {
+        "step": 555,
+        "equity": 6.738356,
+        "drawdown": 0.0
+      },
+      {
+        "step": 556,
+        "equity": 6.804554,
+        "drawdown": 0.0
+      },
+      {
+        "step": 557,
+        "equity": 6.813522,
+        "drawdown": 0.0
+      },
+      {
+        "step": 558,
+        "equity": 6.880458,
+        "drawdown": 0.0
+      },
+      {
+        "step": 559,
+        "equity": 6.856453,
+        "drawdown": -0.003489
+      },
+      {
+        "step": 560,
+        "equity": 6.92381,
+        "drawdown": 0.0
+      },
+      {
+        "step": 561,
+        "equity": 6.908827,
+        "drawdown": -0.002164
+      },
+      {
+        "step": 562,
+        "equity": 6.9767,
+        "drawdown": 0.0
+      },
+      {
+        "step": 563,
+        "equity": 6.99186,
+        "drawdown": 0.0
+      },
+      {
+        "step": 564,
+        "equity": 6.969269,
+        "drawdown": -0.003231
+      },
+      {
+        "step": 565,
+        "equity": 7.037735,
+        "drawdown": 0.0
+      },
+      {
+        "step": 566,
+        "equity": 7.106874,
+        "drawdown": 0.0
+      },
+      {
+        "step": 567,
+        "equity": 7.176692,
+        "drawdown": 0.0
+      },
+      {
+        "step": 568,
+        "equity": 7.247196,
+        "drawdown": 0.0
+      },
+      {
+        "step": 569,
+        "equity": 7.318392,
+        "drawdown": 0.0
+      },
+      {
+        "step": 570,
+        "equity": 7.300389,
+        "drawdown": -0.00246
+      },
+      {
+        "step": 571,
+        "equity": 7.372108,
+        "drawdown": 0.0
+      },
+      {
+        "step": 572,
+        "equity": 7.444532,
+        "drawdown": 0.0
+      },
+      {
+        "step": 573,
+        "equity": 7.407175,
+        "drawdown": -0.005018
+      },
+      {
+        "step": 574,
+        "equity": 7.361621,
+        "drawdown": -0.011137
+      },
+      {
+        "step": 575,
+        "equity": 7.316347,
+        "drawdown": -0.017219
+      },
+      {
+        "step": 576,
+        "equity": 7.388223,
+        "drawdown": -0.007564
+      },
+      {
+        "step": 577,
+        "equity": 7.460805,
+        "drawdown": 0.0
+      },
+      {
+        "step": 578,
+        "equity": 7.534099,
+        "drawdown": 0.0
+      },
+      {
+        "step": 579,
+        "equity": 7.511512,
+        "drawdown": -0.002998
+      },
+      {
+        "step": 580,
+        "equity": 7.585305,
+        "drawdown": 0.0
+      },
+      {
+        "step": 581,
+        "equity": 7.538656,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 582,
+        "equity": 7.612715,
+        "drawdown": 0.0
+      },
+      {
+        "step": 583,
+        "equity": 7.687503,
+        "drawdown": 0.0
+      },
+      {
+        "step": 584,
+        "equity": 7.763025,
+        "drawdown": 0.0
+      },
+      {
+        "step": 585,
+        "equity": 7.715282,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 586,
+        "equity": 7.791077,
+        "drawdown": 0.0
+      },
+      {
+        "step": 587,
+        "equity": 7.820675,
+        "drawdown": 0.0
+      },
+      {
+        "step": 588,
+        "equity": 7.897506,
+        "drawdown": 0.0
+      },
+      {
+        "step": 589,
+        "equity": 7.882208,
+        "drawdown": -0.001937
+      },
+      {
+        "step": 590,
+        "equity": 7.84182,
+        "drawdown": -0.007051
+      },
+      {
+        "step": 591,
+        "equity": 7.918858,
+        "drawdown": 0.0
+      },
+      {
+        "step": 592,
+        "equity": 7.996653,
+        "drawdown": 0.0
+      },
+      {
+        "step": 593,
+        "equity": 8.075212,
+        "drawdown": 0.0
+      },
+      {
+        "step": 594,
+        "equity": 8.108676,
+        "drawdown": 0.0
+      },
+      {
+        "step": 595,
+        "equity": 8.188335,
+        "drawdown": 0.0
+      },
+      {
+        "step": 596,
+        "equity": 8.268777,
+        "drawdown": 0.0
+      },
+      {
+        "step": 597,
+        "equity": 8.35001,
+        "drawdown": 0.0
+      },
+      {
+        "step": 598,
+        "equity": 8.371102,
+        "drawdown": 0.0
+      },
+      {
+        "step": 599,
+        "equity": 8.45334,
+        "drawdown": 0.0
+      },
+      {
+        "step": 600,
+        "equity": 8.536385,
+        "drawdown": 0.0
+      },
+      {
+        "step": 601,
+        "equity": 8.620247,
+        "drawdown": 0.0
+      },
+      {
+        "step": 602,
+        "equity": 8.704932,
+        "drawdown": 0.0
+      },
+      {
+        "step": 603,
+        "equity": 8.684493,
+        "drawdown": -0.002348
+      },
+      {
+        "step": 604,
+        "equity": 8.631613,
+        "drawdown": -0.008423
+      },
+      {
+        "step": 605,
+        "equity": 8.71641,
+        "drawdown": 0.0
+      },
+      {
+        "step": 606,
+        "equity": 8.80204,
+        "drawdown": 0.0
+      },
+      {
+        "step": 607,
+        "equity": 8.796239,
+        "drawdown": -0.000659
+      },
+      {
+        "step": 608,
+        "equity": 8.783766,
+        "drawdown": -0.002076
+      },
+      {
+        "step": 609,
+        "equity": 8.870058,
+        "drawdown": 0.0
+      },
+      {
+        "step": 610,
+        "equity": 8.957198,
+        "drawdown": 0.0
+      },
+      {
+        "step": 611,
+        "equity": 9.045193,
+        "drawdown": 0.0
+      },
+      {
+        "step": 612,
+        "equity": 9.134053,
+        "drawdown": 0.0
+      },
+      {
+        "step": 613,
+        "equity": 9.130518,
+        "drawdown": -0.000387
+      },
+      {
+        "step": 614,
+        "equity": 9.220216,
+        "drawdown": 0.0
+      },
+      {
+        "step": 615,
+        "equity": 9.310796,
+        "drawdown": 0.0
+      },
+      {
+        "step": 616,
+        "equity": 9.402265,
+        "drawdown": 0.0
+      },
+      {
+        "step": 617,
+        "equity": 9.357773,
+        "drawdown": -0.004732
+      },
+      {
+        "step": 618,
+        "equity": 9.449704,
+        "drawdown": 0.0
+      },
+      {
+        "step": 619,
+        "equity": 9.542538,
+        "drawdown": 0.0
+      },
+      {
+        "step": 620,
+        "equity": 9.636284,
+        "drawdown": 0.0
+      },
+      {
+        "step": 621,
+        "equity": 9.577021,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 622,
+        "equity": 9.518122,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 623,
+        "equity": 9.611628,
+        "drawdown": -0.002559
+      },
+      {
+        "step": 624,
+        "equity": 9.706053,
+        "drawdown": 0.0
+      },
+      {
+        "step": 625,
+        "equity": 9.650379,
+        "drawdown": -0.005736
+      },
+      {
+        "step": 626,
+        "equity": 9.745184,
+        "drawdown": 0.0
+      },
+      {
+        "step": 627,
+        "equity": 9.840921,
+        "drawdown": 0.0
+      },
+      {
+        "step": 628,
+        "equity": 9.780399,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 629,
+        "equity": 9.72025,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 630,
+        "equity": 9.66047,
+        "drawdown": -0.018337
+      },
+      {
+        "step": 631,
+        "equity": 9.616013,
+        "drawdown": -0.022854
+      },
+      {
+        "step": 632,
+        "equity": 9.710481,
+        "drawdown": -0.013255
+      },
+      {
+        "step": 633,
+        "equity": 9.805876,
+        "drawdown": -0.003561
+      },
+      {
+        "step": 634,
+        "equity": 9.755758,
+        "drawdown": -0.008654
+      },
+      {
+        "step": 635,
+        "equity": 9.706619,
+        "drawdown": -0.013647
+      },
+      {
+        "step": 636,
+        "equity": 9.681469,
+        "drawdown": -0.016203
+      },
+      {
+        "step": 637,
+        "equity": 9.77658,
+        "drawdown": -0.006538
+      },
+      {
+        "step": 638,
+        "equity": 9.716454,
+        "drawdown": -0.012648
+      },
+      {
+        "step": 639,
+        "equity": 9.811908,
+        "drawdown": -0.002948
+      },
+      {
+        "step": 640,
+        "equity": 9.751565,
+        "drawdown": -0.00908
+      },
+      {
+        "step": 641,
+        "equity": 9.691593,
+        "drawdown": -0.015174
+      },
+      {
+        "step": 642,
+        "equity": 9.631989,
+        "drawdown": -0.021231
+      },
+      {
+        "step": 643,
+        "equity": 9.572753,
+        "drawdown": -0.02725
+      },
+      {
+        "step": 644,
+        "equity": 9.551913,
+        "drawdown": -0.029368
+      },
+      {
+        "step": 645,
+        "equity": 9.504048,
+        "drawdown": -0.034232
+      },
+      {
+        "step": 646,
+        "equity": 9.445997,
+        "drawdown": -0.040131
+      },
+      {
+        "step": 647,
+        "equity": 9.387905,
+        "drawdown": -0.046034
+      },
+      {
+        "step": 648,
+        "equity": 9.337642,
+        "drawdown": -0.051141
+      },
+      {
+        "step": 649,
+        "equity": 9.280421,
+        "drawdown": -0.056956
+      },
+      {
+        "step": 650,
+        "equity": 9.223346,
+        "drawdown": -0.062756
+      },
+      {
+        "step": 651,
+        "equity": 9.204364,
+        "drawdown": -0.064685
+      },
+      {
+        "step": 652,
+        "equity": 9.294788,
+        "drawdown": -0.055496
+      },
+      {
+        "step": 653,
+        "equity": 9.315869,
+        "drawdown": -0.053354
+      },
+      {
+        "step": 654,
+        "equity": 9.258576,
+        "drawdown": -0.059176
+      },
+      {
+        "step": 655,
+        "equity": 9.349532,
+        "drawdown": -0.049933
+      },
+      {
+        "step": 656,
+        "equity": 9.292033,
+        "drawdown": -0.055776
+      },
+      {
+        "step": 657,
+        "equity": 9.290546,
+        "drawdown": -0.055927
+      },
+      {
+        "step": 658,
+        "equity": 9.233409,
+        "drawdown": -0.061733
+      },
+      {
+        "step": 659,
+        "equity": 9.219088,
+        "drawdown": -0.063188
+      },
+      {
+        "step": 660,
+        "equity": 9.162391,
+        "drawdown": -0.06895
+      },
+      {
+        "step": 661,
+        "equity": 9.106042,
+        "drawdown": -0.074676
+      },
+      {
+        "step": 662,
+        "equity": 9.1955,
+        "drawdown": -0.065585
+      },
+      {
+        "step": 663,
+        "equity": 9.148971,
+        "drawdown": -0.070314
+      },
+      {
+        "step": 664,
+        "equity": 9.151825,
+        "drawdown": -0.070024
+      },
+      {
+        "step": 665,
+        "equity": 9.123244,
+        "drawdown": -0.072928
+      },
+      {
+        "step": 666,
+        "equity": 9.067136,
+        "drawdown": -0.078629
+      },
+      {
+        "step": 667,
+        "equity": 9.011373,
+        "drawdown": -0.084296
+      },
+      {
+        "step": 668,
+        "equity": 8.955953,
+        "drawdown": -0.089927
+      },
+      {
+        "step": 669,
+        "equity": 8.943719,
+        "drawdown": -0.091171
+      },
+      {
+        "step": 670,
+        "equity": 9.031582,
+        "drawdown": -0.082242
+      },
+      {
+        "step": 671,
+        "equity": 8.976038,
+        "drawdown": -0.087886
+      },
+      {
+        "step": 672,
+        "equity": 8.987698,
+        "drawdown": -0.086702
+      },
+      {
+        "step": 673,
+        "equity": 9.016989,
+        "drawdown": -0.083725
+      },
+      {
+        "step": 674,
+        "equity": 9.013653,
+        "drawdown": -0.084064
+      },
+      {
+        "step": 675,
+        "equity": 9.102203,
+        "drawdown": -0.075066
+      },
+      {
+        "step": 676,
+        "equity": 9.191623,
+        "drawdown": -0.065979
+      },
+      {
+        "step": 677,
+        "equity": 9.281921,
+        "drawdown": -0.056804
+      },
+      {
+        "step": 678,
+        "equity": 9.241823,
+        "drawdown": -0.060878
+      },
+      {
+        "step": 679,
+        "equity": 9.332615,
+        "drawdown": -0.051652
+      },
+      {
+        "step": 680,
+        "equity": 9.424299,
+        "drawdown": -0.042336
+      },
+      {
+        "step": 681,
+        "equity": 9.516883,
+        "drawdown": -0.032928
+      },
+      {
+        "step": 682,
+        "equity": 9.610377,
+        "drawdown": -0.023427
+      },
+      {
+        "step": 683,
+        "equity": 9.704789,
+        "drawdown": -0.013833
+      },
+      {
+        "step": 684,
+        "equity": 9.672443,
+        "drawdown": -0.01712
+      },
+      {
+        "step": 685,
+        "equity": 9.767465,
+        "drawdown": -0.007464
+      },
+      {
+        "step": 686,
+        "equity": 9.863421,
+        "drawdown": 0.0
+      },
+      {
+        "step": 687,
+        "equity": 9.960319,
+        "drawdown": 0.0
+      },
+      {
+        "step": 688,
+        "equity": 10.058169,
+        "drawdown": 0.0
+      },
+      {
+        "step": 689,
+        "equity": 10.00988,
+        "drawdown": -0.004801
+      },
+      {
+        "step": 690,
+        "equity": 10.108217,
+        "drawdown": 0.0
+      },
+      {
+        "step": 691,
+        "equity": 10.20752,
+        "drawdown": 0.0
+      },
+      {
+        "step": 692,
+        "equity": 10.219085,
+        "drawdown": 0.0
+      },
+      {
+        "step": 693,
+        "equity": 10.170013,
+        "drawdown": -0.004802
+      },
+      {
+        "step": 694,
+        "equity": 10.142798,
+        "drawdown": -0.007465
+      },
+      {
+        "step": 695,
+        "equity": 10.08042,
+        "drawdown": -0.013569
+      },
+      {
+        "step": 696,
+        "equity": 10.030663,
+        "drawdown": -0.018438
+      },
+      {
+        "step": 697,
+        "equity": 10.129204,
+        "drawdown": -0.008795
+      },
+      {
+        "step": 698,
+        "equity": 10.072886,
+        "drawdown": -0.014306
+      },
+      {
+        "step": 699,
+        "equity": 10.038255,
+        "drawdown": -0.017695
+      },
+      {
+        "step": 700,
+        "equity": 9.97652,
+        "drawdown": -0.023736
+      },
+      {
+        "step": 701,
+        "equity": 9.943099,
+        "drawdown": -0.027007
+      },
+      {
+        "step": 702,
+        "equity": 9.924008,
+        "drawdown": -0.028875
+      },
+      {
+        "step": 703,
+        "equity": 9.862975,
+        "drawdown": -0.034848
+      },
+      {
+        "step": 704,
+        "equity": 9.959869,
+        "drawdown": -0.025366
+      },
+      {
+        "step": 705,
+        "equity": 10.057715,
+        "drawdown": -0.015791
+      },
+      {
+        "step": 706,
+        "equity": 10.156522,
+        "drawdown": -0.006122
+      },
+      {
+        "step": 707,
+        "equity": 10.137753,
+        "drawdown": -0.007959
+      },
+      {
+        "step": 708,
+        "equity": 10.237346,
+        "drawdown": 0.0
+      },
+      {
+        "step": 709,
+        "equity": 10.197001,
+        "drawdown": -0.003941
+      },
+      {
+        "step": 710,
+        "equity": 10.297176,
+        "drawdown": 0.0
+      },
+      {
+        "step": 711,
+        "equity": 10.272164,
+        "drawdown": -0.002429
+      },
+      {
+        "step": 712,
+        "equity": 10.373078,
+        "drawdown": 0.0
+      },
+      {
+        "step": 713,
+        "equity": 10.474983,
+        "drawdown": 0.0
+      },
+      {
+        "step": 714,
+        "equity": 10.577889,
+        "drawdown": 0.0
+      },
+      {
+        "step": 715,
+        "equity": 10.527147,
+        "drawdown": -0.004797
+      },
+      {
+        "step": 716,
+        "equity": 10.463595,
+        "drawdown": -0.010805
+      },
+      {
+        "step": 717,
+        "equity": 10.428123,
+        "drawdown": -0.014158
+      },
+      {
+        "step": 718,
+        "equity": 10.438374,
+        "drawdown": -0.013189
+      },
+      {
+        "step": 719,
+        "equity": 10.374178,
+        "drawdown": -0.019258
+      },
+      {
+        "step": 720,
+        "equity": 10.310377,
+        "drawdown": -0.02529
+      },
+      {
+        "step": 721,
+        "equity": 10.250071,
+        "drawdown": -0.030991
+      },
+      {
+        "step": 722,
+        "equity": 10.350768,
+        "drawdown": -0.021471
+      },
+      {
+        "step": 723,
+        "equity": 10.326154,
+        "drawdown": -0.023798
+      },
+      {
+        "step": 724,
+        "equity": 10.427598,
+        "drawdown": -0.014208
+      },
+      {
+        "step": 725,
+        "equity": 10.462572,
+        "drawdown": -0.010902
+      },
+      {
+        "step": 726,
+        "equity": 10.565357,
+        "drawdown": -0.001185
+      },
+      {
+        "step": 727,
+        "equity": 10.669151,
+        "drawdown": 0.0
+      },
+      {
+        "step": 728,
+        "equity": 10.773964,
+        "drawdown": 0.0
+      },
+      {
+        "step": 729,
+        "equity": 10.798841,
+        "drawdown": 0.0
+      },
+      {
+        "step": 730,
+        "equity": 10.732429,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 731,
+        "equity": 10.837864,
+        "drawdown": 0.0
+      },
+      {
+        "step": 732,
+        "equity": 10.771211,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 733,
+        "equity": 10.877027,
+        "drawdown": 0.0
+      },
+      {
+        "step": 734,
+        "equity": 10.983883,
+        "drawdown": 0.0
+      },
+      {
+        "step": 735,
+        "equity": 11.091789,
+        "drawdown": 0.0
+      },
+      {
+        "step": 736,
+        "equity": 11.200755,
+        "drawdown": 0.0
+      },
+      {
+        "step": 737,
+        "equity": 11.13187,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 738,
+        "equity": 11.083869,
+        "drawdown": -0.010435
+      },
+      {
+        "step": 739,
+        "equity": 11.015704,
+        "drawdown": -0.016521
+      },
+      {
+        "step": 740,
+        "equity": 11.123922,
+        "drawdown": -0.00686
+      },
+      {
+        "step": 741,
+        "equity": 11.233203,
+        "drawdown": 0.0
+      },
+      {
+        "step": 742,
+        "equity": 11.343558,
+        "drawdown": 0.0
+      },
+      {
+        "step": 743,
+        "equity": 11.375695,
+        "drawdown": 0.0
+      },
+      {
+        "step": 744,
+        "equity": 11.305734,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 745,
+        "equity": 11.416802,
+        "drawdown": 0.0
+      },
+      {
+        "step": 746,
+        "equity": 11.52896,
+        "drawdown": 0.0
+      },
+      {
+        "step": 747,
+        "equity": 11.642221,
+        "drawdown": 0.0
+      },
+      {
+        "step": 748,
+        "equity": 11.647274,
+        "drawdown": 0.0
+      },
+      {
+        "step": 749,
+        "equity": 11.673049,
+        "drawdown": 0.0
+      },
+      {
+        "step": 750,
+        "equity": 11.618477,
+        "drawdown": -0.004675
+      },
+      {
+        "step": 751,
+        "equity": 11.732617,
+        "drawdown": 0.0
+      },
+      {
+        "step": 752,
+        "equity": 11.711722,
+        "drawdown": -0.001781
+      },
+      {
+        "step": 753,
+        "equity": 11.826778,
+        "drawdown": 0.0
+      },
+      {
+        "step": 754,
+        "equity": 11.942964,
+        "drawdown": 0.0
+      },
+      {
+        "step": 755,
+        "equity": 12.060291,
+        "drawdown": 0.0
+      },
+      {
+        "step": 756,
+        "equity": 12.178772,
+        "drawdown": 0.0
+      },
+      {
+        "step": 757,
+        "equity": 12.298416,
+        "drawdown": 0.0
+      },
+      {
+        "step": 758,
+        "equity": 12.419236,
+        "drawdown": 0.0
+      },
+      {
+        "step": 759,
+        "equity": 12.541242,
+        "drawdown": 0.0
+      },
+      {
+        "step": 760,
+        "equity": 12.664447,
+        "drawdown": 0.0
+      },
+      {
+        "step": 761,
+        "equity": 12.788863,
+        "drawdown": 0.0
+      },
+      {
+        "step": 762,
+        "equity": 12.914501,
+        "drawdown": 0.0
+      },
+      {
+        "step": 763,
+        "equity": 13.041373,
+        "drawdown": 0.0
+      },
+      {
+        "step": 764,
+        "equity": 13.169491,
+        "drawdown": 0.0
+      },
+      {
+        "step": 765,
+        "equity": 13.127204,
+        "drawdown": -0.003211
+      },
+      {
+        "step": 766,
+        "equity": 13.256166,
+        "drawdown": 0.0
+      },
+      {
+        "step": 767,
+        "equity": 13.386394,
+        "drawdown": 0.0
+      },
+      {
+        "step": 768,
+        "equity": 13.517902,
+        "drawdown": 0.0
+      },
+      {
+        "step": 769,
+        "equity": 13.650702,
+        "drawdown": 0.0
+      },
+      {
+        "step": 770,
+        "equity": 13.784807,
+        "drawdown": 0.0
+      },
+      {
+        "step": 771,
+        "equity": 13.920228,
+        "drawdown": 0.0
+      },
+      {
+        "step": 772,
+        "equity": 14.056981,
+        "drawdown": 0.0
+      },
+      {
+        "step": 773,
+        "equity": 14.195077,
+        "drawdown": 0.0
+      },
+      {
+        "step": 774,
+        "equity": 14.334529,
+        "drawdown": 0.0
+      },
+      {
+        "step": 775,
+        "equity": 14.475351,
+        "drawdown": 0.0
+      },
+      {
+        "step": 776,
+        "equity": 14.617557,
+        "drawdown": 0.0
+      },
+      {
+        "step": 777,
+        "equity": 14.76116,
+        "drawdown": 0.0
+      },
+      {
+        "step": 778,
+        "equity": 14.906174,
+        "drawdown": 0.0
+      },
+      {
+        "step": 779,
+        "equity": 15.052612,
+        "drawdown": 0.0
+      },
+      {
+        "step": 780,
+        "equity": 15.200489,
+        "drawdown": 0.0
+      },
+      {
+        "step": 781,
+        "equity": 15.349819,
+        "drawdown": 0.0
+      },
+      {
+        "step": 782,
+        "equity": 15.500615,
+        "drawdown": 0.0
+      },
+      {
+        "step": 783,
+        "equity": 15.652893,
+        "drawdown": 0.0
+      },
+      {
+        "step": 784,
+        "equity": 15.806667,
+        "drawdown": 0.0
+      },
+      {
+        "step": 785,
+        "equity": 15.961952,
+        "drawdown": 0.0
+      },
+      {
+        "step": 786,
+        "equity": 15.99528,
+        "drawdown": 0.0
+      },
+      {
+        "step": 787,
+        "equity": 16.152418,
+        "drawdown": 0.0
+      },
+      {
+        "step": 788,
+        "equity": 16.311099,
+        "drawdown": 0.0
+      },
+      {
+        "step": 789,
+        "equity": 16.234747,
+        "drawdown": -0.004681
+      },
+      {
+        "step": 790,
+        "equity": 16.134903,
+        "drawdown": -0.010802
+      },
+      {
+        "step": 791,
+        "equity": 16.293413,
+        "drawdown": -0.001084
+      },
+      {
+        "step": 792,
+        "equity": 16.453479,
+        "drawdown": 0.0
+      },
+      {
+        "step": 793,
+        "equity": 16.615118,
+        "drawdown": 0.0
+      },
+      {
+        "step": 794,
+        "equity": 16.591641,
+        "drawdown": -0.001413
+      },
+      {
+        "step": 795,
+        "equity": 16.540307,
+        "drawdown": -0.004503
+      },
+      {
+        "step": 796,
+        "equity": 16.702799,
+        "drawdown": 0.0
+      },
+      {
+        "step": 797,
+        "equity": 16.866887,
+        "drawdown": 0.0
+      },
+      {
+        "step": 798,
+        "equity": 17.032587,
+        "drawdown": 0.0
+      },
+      {
+        "step": 799,
+        "equity": 17.199915,
+        "drawdown": 0.0
+      },
+      {
+        "step": 800,
+        "equity": 17.368887,
+        "drawdown": 0.0
+      },
+      {
+        "step": 801,
+        "equity": 17.539519,
+        "drawdown": 0.0
+      },
+      {
+        "step": 802,
+        "equity": 17.711827,
+        "drawdown": 0.0
+      },
+      {
+        "step": 803,
+        "equity": 17.6029,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 804,
+        "equity": 17.775831,
+        "drawdown": 0.0
+      },
+      {
+        "step": 805,
+        "equity": 17.95046,
+        "drawdown": 0.0
+      },
+      {
+        "step": 806,
+        "equity": 17.994421,
+        "drawdown": 0.0
+      },
+      {
+        "step": 807,
+        "equity": 18.171198,
+        "drawdown": 0.0
+      },
+      {
+        "step": 808,
+        "equity": 18.059445,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 809,
+        "equity": 18.236861,
+        "drawdown": 0.0
+      },
+      {
+        "step": 810,
+        "equity": 18.179014,
+        "drawdown": -0.003172
+      },
+      {
+        "step": 811,
+        "equity": 18.357605,
+        "drawdown": 0.0
+      },
+      {
+        "step": 812,
+        "equity": 18.53795,
+        "drawdown": 0.0
+      },
+      {
+        "step": 813,
+        "equity": 18.720067,
+        "drawdown": 0.0
+      },
+      {
+        "step": 814,
+        "equity": 18.604938,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 815,
+        "equity": 18.546519,
+        "drawdown": -0.009271
+      },
+      {
+        "step": 816,
+        "equity": 18.600433,
+        "drawdown": -0.006391
+      },
+      {
+        "step": 817,
+        "equity": 18.522777,
+        "drawdown": -0.010539
+      },
+      {
+        "step": 818,
+        "equity": 18.477211,
+        "drawdown": -0.012973
+      },
+      {
+        "step": 819,
+        "equity": 18.475123,
+        "drawdown": -0.013085
+      },
+      {
+        "step": 820,
+        "equity": 18.361501,
+        "drawdown": -0.019154
+      },
+      {
+        "step": 821,
+        "equity": 18.541884,
+        "drawdown": -0.009518
+      },
+      {
+        "step": 822,
+        "equity": 18.605835,
+        "drawdown": -0.006102
+      },
+      {
+        "step": 823,
+        "equity": 18.491409,
+        "drawdown": -0.012215
+      },
+      {
+        "step": 824,
+        "equity": 18.673069,
+        "drawdown": -0.002511
+      },
+      {
+        "step": 825,
+        "equity": 18.585455,
+        "drawdown": -0.007191
+      },
+      {
+        "step": 826,
+        "equity": 18.540385,
+        "drawdown": -0.009598
+      },
+      {
+        "step": 827,
+        "equity": 18.722526,
+        "drawdown": 0.0
+      },
+      {
+        "step": 828,
+        "equity": 18.624626,
+        "drawdown": -0.005229
+      },
+      {
+        "step": 829,
+        "equity": 18.807594,
+        "drawdown": 0.0
+      },
+      {
+        "step": 830,
+        "equity": 18.691927,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 831,
+        "equity": 18.576972,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 832,
+        "equity": 18.462723,
+        "drawdown": -0.018337
+      },
+      {
+        "step": 833,
+        "equity": 18.384128,
+        "drawdown": -0.022516
+      },
+      {
+        "step": 834,
+        "equity": 18.564733,
+        "drawdown": -0.012913
+      },
+      {
+        "step": 835,
+        "equity": 18.464929,
+        "drawdown": -0.018219
+      },
+      {
+        "step": 836,
+        "equity": 18.646329,
+        "drawdown": -0.008574
+      },
+      {
+        "step": 837,
+        "equity": 18.531654,
+        "drawdown": -0.014672
+      },
+      {
+        "step": 838,
+        "equity": 18.713709,
+        "drawdown": -0.004992
+      },
+      {
+        "step": 839,
+        "equity": 18.606554,
+        "drawdown": -0.010689
+      },
+      {
+        "step": 840,
+        "equity": 18.51581,
+        "drawdown": -0.015514
+      },
+      {
+        "step": 841,
+        "equity": 18.401938,
+        "drawdown": -0.021569
+      },
+      {
+        "step": 842,
+        "equity": 18.582718,
+        "drawdown": -0.011957
+      },
+      {
+        "step": 843,
+        "equity": 18.509242,
+        "drawdown": -0.015863
+      },
+      {
+        "step": 844,
+        "equity": 18.426636,
+        "drawdown": -0.020256
+      },
+      {
+        "step": 845,
+        "equity": 18.337119,
+        "drawdown": -0.025015
+      },
+      {
+        "step": 846,
+        "equity": 18.517263,
+        "drawdown": -0.015437
+      },
+      {
+        "step": 847,
+        "equity": 18.443249,
+        "drawdown": -0.019372
+      },
+      {
+        "step": 848,
+        "equity": 18.370841,
+        "drawdown": -0.023222
+      },
+      {
+        "step": 849,
+        "equity": 18.551316,
+        "drawdown": -0.013626
+      },
+      {
+        "step": 850,
+        "equity": 18.519167,
+        "drawdown": -0.015336
+      },
+      {
+        "step": 851,
+        "equity": 18.701099,
+        "drawdown": -0.005662
+      },
+      {
+        "step": 852,
+        "equity": 18.610156,
+        "drawdown": -0.010498
+      },
+      {
+        "step": 853,
+        "equity": 18.792982,
+        "drawdown": -0.000777
+      },
+      {
+        "step": 854,
+        "equity": 18.977604,
+        "drawdown": 0.0
+      },
+      {
+        "step": 855,
+        "equity": 19.16404,
+        "drawdown": 0.0
+      },
+      {
+        "step": 856,
+        "equity": 19.129046,
+        "drawdown": -0.001826
+      },
+      {
+        "step": 857,
+        "equity": 19.31697,
+        "drawdown": 0.0
+      },
+      {
+        "step": 858,
+        "equity": 19.50674,
+        "drawdown": 0.0
+      },
+      {
+        "step": 859,
+        "equity": 19.446464,
+        "drawdown": -0.00309
+      },
+      {
+        "step": 860,
+        "equity": 19.483393,
+        "drawdown": -0.001197
+      },
+      {
+        "step": 861,
+        "equity": 19.674798,
+        "drawdown": 0.0
+      },
+      {
+        "step": 862,
+        "equity": 19.868083,
+        "drawdown": 0.0
+      },
+      {
+        "step": 863,
+        "equity": 20.063267,
+        "drawdown": 0.0
+      },
+      {
+        "step": 864,
+        "equity": 19.939878,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 865,
+        "equity": 19.910985,
+        "drawdown": -0.00759
+      },
+      {
+        "step": 866,
+        "equity": 19.815253,
+        "drawdown": -0.012362
+      },
+      {
+        "step": 867,
+        "equity": 20.009918,
+        "drawdown": -0.002659
+      },
+      {
+        "step": 868,
+        "equity": 20.206496,
+        "drawdown": 0.0
+      },
+      {
+        "step": 869,
+        "equity": 20.405004,
+        "drawdown": 0.0
+      },
+      {
+        "step": 870,
+        "equity": 20.345401,
+        "drawdown": -0.002921
+      },
+      {
+        "step": 871,
+        "equity": 20.545275,
+        "drawdown": 0.0
+      },
+      {
+        "step": 872,
+        "equity": 20.747111,
+        "drawdown": 0.0
+      },
+      {
+        "step": 873,
+        "equity": 20.950931,
+        "drawdown": 0.0
+      },
+      {
+        "step": 874,
+        "equity": 21.156753,
+        "drawdown": 0.0
+      },
+      {
+        "step": 875,
+        "equity": 21.364597,
+        "drawdown": 0.0
+      },
+      {
+        "step": 876,
+        "equity": 21.574483,
+        "drawdown": 0.0
+      },
+      {
+        "step": 877,
+        "equity": 21.78643,
+        "drawdown": 0.0
+      },
+      {
+        "step": 878,
+        "equity": 22.00046,
+        "drawdown": 0.0
+      },
+      {
+        "step": 879,
+        "equity": 22.216593,
+        "drawdown": 0.0
+      },
+      {
+        "step": 880,
+        "equity": 22.079961,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 881,
+        "equity": 21.944169,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 882,
+        "equity": 22.159749,
+        "drawdown": -0.002559
+      },
+      {
+        "step": 883,
+        "equity": 22.023466,
+        "drawdown": -0.008693
+      },
+      {
+        "step": 884,
+        "equity": 22.239825,
+        "drawdown": 0.0
+      },
+      {
+        "step": 885,
+        "equity": 22.458309,
+        "drawdown": 0.0
+      },
+      {
+        "step": 886,
+        "equity": 22.678939,
+        "drawdown": 0.0
+      },
+      {
+        "step": 887,
+        "equity": 22.539464,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 888,
+        "equity": 22.400846,
+        "drawdown": -0.012262
+      },
+      {
+        "step": 889,
+        "equity": 22.620912,
+        "drawdown": -0.002559
+      },
+      {
+        "step": 890,
+        "equity": 22.84314,
+        "drawdown": 0.0
+      },
+      {
+        "step": 891,
+        "equity": 23.067551,
+        "drawdown": 0.0
+      },
+      {
+        "step": 892,
+        "equity": 23.026098,
+        "drawdown": -0.001797
+      },
+      {
+        "step": 893,
+        "equity": 23.252307,
+        "drawdown": 0.0
+      },
+      {
+        "step": 894,
+        "equity": 23.109305,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 895,
+        "equity": 23.336331,
+        "drawdown": 0.0
+      },
+      {
+        "step": 896,
+        "equity": 23.565587,
+        "drawdown": 0.0
+      },
+      {
+        "step": 897,
+        "equity": 23.502125,
+        "drawdown": -0.002693
+      },
+      {
+        "step": 898,
+        "equity": 23.73301,
+        "drawdown": 0.0
+      },
+      {
+        "step": 899,
+        "equity": 23.966163,
+        "drawdown": 0.0
+      },
+      {
+        "step": 900,
+        "equity": 24.201606,
+        "drawdown": 0.0
+      },
+      {
+        "step": 901,
+        "equity": 24.439363,
+        "drawdown": 0.0
+      },
+      {
+        "step": 902,
+        "equity": 24.679455,
+        "drawdown": 0.0
+      },
+      {
+        "step": 903,
+        "equity": 24.65981,
+        "drawdown": -0.000796
+      },
+      {
+        "step": 904,
+        "equity": 24.508153,
+        "drawdown": -0.006941
+      },
+      {
+        "step": 905,
+        "equity": 24.748921,
+        "drawdown": 0.0
+      },
+      {
+        "step": 906,
+        "equity": 24.992054,
+        "drawdown": 0.0
+      },
+      {
+        "step": 907,
+        "equity": 25.237576,
+        "drawdown": 0.0
+      },
+      {
+        "step": 908,
+        "equity": 25.48551,
+        "drawdown": 0.0
+      },
+      {
+        "step": 909,
+        "equity": 25.73588,
+        "drawdown": 0.0
+      },
+      {
+        "step": 910,
+        "equity": 25.988709,
+        "drawdown": 0.0
+      },
+      {
+        "step": 911,
+        "equity": 25.828878,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 912,
+        "equity": 26.082621,
+        "drawdown": 0.0
+      },
+      {
+        "step": 913,
+        "equity": 26.338857,
+        "drawdown": 0.0
+      },
+      {
+        "step": 914,
+        "equity": 26.176873,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 915,
+        "equity": 26.434034,
+        "drawdown": 0.0
+      },
+      {
+        "step": 916,
+        "equity": 26.693722,
+        "drawdown": 0.0
+      },
+      {
+        "step": 917,
+        "equity": 26.955962,
+        "drawdown": 0.0
+      },
+      {
+        "step": 918,
+        "equity": 26.851318,
+        "drawdown": -0.003882
+      },
+      {
+        "step": 919,
+        "equity": 27.115106,
+        "drawdown": 0.0
+      },
+      {
+        "step": 920,
+        "equity": 26.950083,
+        "drawdown": -0.006086
+      },
+      {
+        "step": 921,
+        "equity": 27.214841,
+        "drawdown": 0.0
+      },
+      {
+        "step": 922,
+        "equity": 27.137687,
+        "drawdown": -0.002835
+      },
+      {
+        "step": 923,
+        "equity": 27.023491,
+        "drawdown": -0.007031
+      },
+      {
+        "step": 924,
+        "equity": 26.930585,
+        "drawdown": -0.010445
+      },
+      {
+        "step": 925,
+        "equity": 26.765258,
+        "drawdown": -0.01652
+      },
+      {
+        "step": 926,
+        "equity": 27.0282,
+        "drawdown": -0.006858
+      },
+      {
+        "step": 927,
+        "equity": 26.861976,
+        "drawdown": -0.012966
+      },
+      {
+        "step": 928,
+        "equity": 27.125868,
+        "drawdown": -0.003269
+      },
+      {
+        "step": 929,
+        "equity": 26.959044,
+        "drawdown": -0.009399
+      },
+      {
+        "step": 930,
+        "equity": 27.016925,
+        "drawdown": -0.007272
+      },
+      {
+        "step": 931,
+        "equity": 27.28234,
+        "drawdown": 0.0
+      },
+      {
+        "step": 932,
+        "equity": 27.147865,
+        "drawdown": -0.004929
+      },
+      {
+        "step": 933,
+        "equity": 27.414566,
+        "drawdown": 0.0
+      },
+      {
+        "step": 934,
+        "equity": 27.245966,
+        "drawdown": -0.00615
+      },
+      {
+        "step": 935,
+        "equity": 27.51363,
+        "drawdown": 0.0
+      },
+      {
+        "step": 936,
+        "equity": 27.783924,
+        "drawdown": 0.0
+      },
+      {
+        "step": 937,
+        "equity": 28.056874,
+        "drawdown": 0.0
+      },
+      {
+        "step": 938,
+        "equity": 27.908144,
+        "drawdown": -0.005301
+      },
+      {
+        "step": 939,
+        "equity": 27.745774,
+        "drawdown": -0.011088
+      },
+      {
+        "step": 940,
+        "equity": 27.584183,
+        "drawdown": -0.016848
+      },
+      {
+        "step": 941,
+        "equity": 27.528684,
+        "drawdown": -0.018826
+      },
+      {
+        "step": 942,
+        "equity": 27.448906,
+        "drawdown": -0.021669
+      },
+      {
+        "step": 943,
+        "equity": 27.718564,
+        "drawdown": -0.012058
+      },
+      {
+        "step": 944,
+        "equity": 27.990871,
+        "drawdown": -0.002352
+      },
+      {
+        "step": 945,
+        "equity": 27.818727,
+        "drawdown": -0.008488
+      },
+      {
+        "step": 946,
+        "equity": 27.647642,
+        "drawdown": -0.014586
+      },
+      {
+        "step": 947,
+        "equity": 27.919252,
+        "drawdown": -0.004905
+      },
+      {
+        "step": 948,
+        "equity": 27.858975,
+        "drawdown": -0.007053
+      },
+      {
+        "step": 949,
+        "equity": 27.687642,
+        "drawdown": -0.01316
+      },
+      {
+        "step": 950,
+        "equity": 27.517363,
+        "drawdown": -0.019229
+      },
+      {
+        "step": 951,
+        "equity": 27.787693,
+        "drawdown": -0.009594
+      },
+      {
+        "step": 952,
+        "equity": 27.734258,
+        "drawdown": -0.011499
+      },
+      {
+        "step": 953,
+        "equity": 27.563692,
+        "drawdown": -0.017578
+      },
+      {
+        "step": 954,
+        "equity": 27.443294,
+        "drawdown": -0.021869
+      },
+      {
+        "step": 955,
+        "equity": 27.317466,
+        "drawdown": -0.026354
+      },
+      {
+        "step": 956,
+        "equity": 27.149464,
+        "drawdown": -0.032342
+      },
+      {
+        "step": 957,
+        "equity": 27.41618,
+        "drawdown": -0.022836
+      },
+      {
+        "step": 958,
+        "equity": 27.685517,
+        "drawdown": -0.013236
+      },
+      {
+        "step": 959,
+        "equity": 27.627654,
+        "drawdown": -0.015298
+      },
+      {
+        "step": 960,
+        "equity": 27.899068,
+        "drawdown": -0.005624
+      },
+      {
+        "step": 961,
+        "equity": 28.173149,
+        "drawdown": 0.0
+      },
+      {
+        "step": 962,
+        "equity": 28.06271,
+        "drawdown": -0.00392
+      },
+      {
+        "step": 963,
+        "equity": 28.338398,
+        "drawdown": 0.0
+      },
+      {
+        "step": 964,
+        "equity": 28.24797,
+        "drawdown": -0.003191
+      },
+      {
+        "step": 965,
+        "equity": 28.074245,
+        "drawdown": -0.009321
+      },
+      {
+        "step": 966,
+        "equity": 27.901588,
+        "drawdown": -0.015414
+      },
+      {
+        "step": 967,
+        "equity": 27.729994,
+        "drawdown": -0.021469
+      },
+      {
+        "step": 968,
+        "equity": 28.002413,
+        "drawdown": -0.011856
+      },
+      {
+        "step": 969,
+        "equity": 28.034336,
+        "drawdown": -0.01073
+      },
+      {
+        "step": 970,
+        "equity": 28.10801,
+        "drawdown": -0.00813
+      },
+      {
+        "step": 971,
+        "equity": 27.935146,
+        "drawdown": -0.01423
+      },
+      {
+        "step": 972,
+        "equity": 28.209581,
+        "drawdown": -0.004546
+      },
+      {
+        "step": 973,
+        "equity": 28.036092,
+        "drawdown": -0.010668
+      },
+      {
+        "step": 974,
+        "equity": 28.311518,
+        "drawdown": -0.000949
+      },
+      {
+        "step": 975,
+        "equity": 28.589651,
+        "drawdown": 0.0
+      }
+    ]
+  },
+  "details_path": "a81dbfba-4371-4543-a39b-cff56379705e.xlsx"
+}
