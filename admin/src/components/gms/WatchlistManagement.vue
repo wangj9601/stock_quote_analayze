@@ -21,6 +21,7 @@
           <el-button type="success" :disabled="!selectedVersionId" @click="openStockDialog()">新增观察股</el-button>
           <el-button :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
           <el-button :disabled="!selectedVersionId" @click="openImportDialog">批量导入</el-button>
+          <el-button :disabled="!selectedVersionId" @click="handleExport">批量导出</el-button>
           <el-button @click="refresh">刷新</el-button>
         </el-col>
       </el-row>
@@ -40,6 +41,11 @@
         </template>
       </el-table-column>
       <el-table-column prop="status" label="状态" width="100" />
+      <el-table-column label="审核" width="80">
+        <template #default="{ row }">
+          <el-switch v-model="row.is_verified" size="small" @change="(val: boolean) => toggleVerified(row, val)" />
+        </template>
+      </el-table-column>
       <el-table-column prop="sort_order" label="排序" width="90" />
       <el-table-column prop="remark" label="备注" min-width="140" />
       <el-table-column label="操作" width="180" fixed="right">
@@ -82,6 +88,7 @@
         <el-form-item label="代码"><el-input ref="stockCodeRef" v-model="stockForm.stock_code" @keyup.enter="saveStock" /></el-form-item>
         <el-form-item label="名称"><el-input v-model="stockForm.stock_name" @keyup.enter="saveStock" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="stockForm.status"><el-option label="active" value="active" /><el-option label="inactive" value="inactive" /></el-select></el-form-item>
+        <el-form-item label="审核"><el-switch v-model="stockForm.is_verified" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="stockForm.sort_order" @keyup.enter="saveStock" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="stockForm.remark" type="textarea" /></el-form-item>
       </el-form>
@@ -93,6 +100,7 @@
 
     <el-dialog v-model="importDialogVisible" title="批量导入观察股">
       <el-input
+        ref="importInputRef"
         v-model="importText"
         type="textarea"
         :rows="10"
@@ -113,6 +121,7 @@ import { gmsApiService, type GMSStrategyVersionStock, type GMSStrategyVersion } 
 
 const stockCodeRef = ref<any>(null)
 const versionStrategyCodeRef = ref<any>(null)
+const importInputRef = ref<any>(null)
 
 const loading = ref(false)
 const versions = ref<GMSStrategyVersion[]>([])
@@ -131,7 +140,15 @@ const versionForm = ref({ strategy_code: 'GMS', version_name: '', version_no: 1,
 
 const stockDialogVisible = ref(false)
 const editingStockId = ref<number | null>(null)
-const stockForm = ref({ market: 'A', stock_code: '', stock_name: '', status: 'active', sort_order: 0, remark: '' })
+const stockForm = ref({
+  market: 'A' as 'A' | 'HK',
+  stock_code: '',
+  stock_name: '',
+  status: 'active',
+  is_verified: false,
+  sort_order: 0,
+  remark: '',
+})
 
 const importDialogVisible = ref(false)
 const importText = ref('')
@@ -191,7 +208,7 @@ const saveVersion = async () => {
     await loadVersions()
   } catch (e: any) {
     await ElMessageBox.alert(e.message || '保存失败', '错误', { type: 'error' })
-    nextTick(() => strategyCodeInput.value?.focus())
+    setTimeout(() => versionStrategyCodeRef.value?.focus(), 50)
   }
 }
 
@@ -199,14 +216,15 @@ const openStockDialog = (row?: GMSStrategyVersionStock) => {
   editingStockId.value = row?.id ?? null
   stockForm.value = row
     ? {
-        market: row.market,
+        market: row.market as 'A' | 'HK',
         stock_code: row.stock_code != null && row.stock_code !== '' ? String(row.stock_code) : '',
         stock_name: row.stock_name || '',
         status: row.status,
+        is_verified: !!row.is_verified,
         sort_order: row.sort_order,
         remark: row.remark || '',
       }
-    : { market: 'A', stock_code: '', stock_name: '', status: 'active', sort_order: 0, remark: '' }
+    : { market: 'A' as 'A' | 'HK', stock_code: '', stock_name: '', status: 'active', is_verified: false, sort_order: 0, remark: '' }
   stockDialogVisible.value = true
 }
 
@@ -225,7 +243,17 @@ const saveStock = async () => {
     await refresh()
   } catch (e: any) {
     await ElMessageBox.alert(e.message || '保存失败', '录入错误', { type: 'error' })
-    nextTick(() => stockCodeInput.value?.focus())
+    setTimeout(() => stockCodeRef.value?.focus(), 50)
+  }
+}
+
+const toggleVerified = async (row: GMSStrategyVersionStock, verified: boolean) => {
+  try {
+    await gmsApiService.updateStrategyVersionStock(row.id, { is_verified: verified })
+    ElMessage.success(`${row.stock_code} 审核状态已更新`)
+  } catch (e: any) {
+    row.is_verified = !verified // 恢复原状态
+    ElMessage.error('更新失败: ' + (e.message || '未知错误'))
   }
 }
 
@@ -273,6 +301,65 @@ const submitImport = async () => {
     }
   } catch (e: any) {
     await ElMessageBox.alert(e.message || '导入失败', '错误', { type: 'error' })
+    setTimeout(() => importInputRef.value?.focus(), 50)
+  }
+}
+
+const handleExport = async () => {
+  if (!selectedVersionId.value) return
+  
+  try {
+    loading.value = true
+    let allStocks: GMSStrategyVersionStock[] = []
+    let currentPage = 1
+    const size = 200 // 后端 le=200 限制
+    
+    // 循环获取所有数据
+    while (true) {
+      const res = await gmsApiService.getStrategyVersionStocks({
+        version_id: selectedVersionId.value,
+        page: currentPage,
+        page_size: size
+      })
+      
+      const data = res.data || []
+      allStocks = allStocks.concat(data)
+      
+      if (allStocks.length >= (res.total || 0) || data.length < size) {
+        break
+      }
+      currentPage++
+    }
+
+    if (allStocks.length === 0) {
+      ElMessage.info('没有可导出的观察股')
+      return
+    }
+
+    // 生成文本内容
+    const content = allStocks.map(s => `${s.market},${s.stock_code},${s.stock_name || ''}`).join('\n')
+    
+    // 下载文件
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    
+    // 文件名包含版本信息
+    const version = versions.value.find(v => v.id === selectedVersionId.value)
+    const fileName = version 
+      ? `watch_list_${version.strategy_code}_${version.version_no}.txt`
+      : 'watch_list_export.txt'
+      
+    link.href = url
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(url)
+    
+    ElMessage.success(`成功导出 ${allStocks.length} 条记录`)
+  } catch (e: any) {
+    ElMessage.error('导出失败: ' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
   }
 }
 

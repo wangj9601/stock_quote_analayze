@@ -777,6 +777,7 @@ class GMSStrategyVersionStock(Base):
     stock_name = Column(String(100), nullable=True)
     sort_order = Column(Integer, nullable=False, default=0)
     status = Column(String(20), nullable=False, default="active")
+    is_verified = Column(Boolean, nullable=False, default=False)
     remark = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)

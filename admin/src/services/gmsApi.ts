@@ -22,6 +22,7 @@ export interface GMSStrategyVersionStock {
   stock_name?: string
   sort_order: number
   status: string
+  is_verified: boolean
   remark?: string
   current_price?: number
   created_at?: string
@@ -282,6 +283,7 @@ class GMSApiService {
     stock_name?: string
     sort_order?: number
     status?: string
+    is_verified?: boolean
     remark?: string
   }) {
     const safe = {

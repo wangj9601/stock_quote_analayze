@@ -529,6 +529,7 @@ class StrategyVersionStockCreateBody(BaseModel):
     stock_name: Optional[str] = Field(None, description="股票名称（可不传，后端自动补齐）")
     sort_order: int = Field(0, description="排序")
     status: str = Field("active", description="状态 active/inactive")
+    is_verified: bool = Field(False, description="审核标志")
     remark: Optional[str] = Field(None, description="备注")
 
     @field_validator("stock_code", mode="before")
@@ -545,6 +546,7 @@ class StrategyVersionStockUpdateBody(BaseModel):
     stock_name: Optional[str] = Field(None, description="股票名称")
     sort_order: Optional[int] = Field(None, description="排序")
     status: Optional[str] = Field(None, description="状态 active/inactive")
+    is_verified: Optional[bool] = Field(None, description="审核标志")
     remark: Optional[str] = Field(None, description="备注")
 
     @field_validator("stock_code", mode="before")
@@ -568,6 +570,7 @@ class BatchImportItem(BaseModel):
     stock_name: Optional[str] = Field(None, description="股票名称")
     sort_order: int = Field(0, description="排序")
     status: str = Field("active", description="状态 active/inactive")
+    is_verified: bool = Field(False, description="审核标志")
     remark: Optional[str] = Field(None, description="备注")
 
     @field_validator("stock_code", mode="before")
@@ -659,6 +662,7 @@ def _serialize_strategy_version_stock(row: GMSStrategyVersionStock, price: Optio
         "stock_name": row.stock_name,
         "sort_order": row.sort_order,
         "status": row.status,
+        "is_verified": bool(row.is_verified),
         "remark": row.remark,
         "current_price": price,
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -903,6 +907,7 @@ async def create_strategy_version_stock(body: StrategyVersionStockCreateBody, db
         stock_name=(body.stock_name or resolved_name or "").strip() or resolved_name,
         sort_order=body.sort_order,
         status=(body.status or "active").strip(),
+        is_verified=body.is_verified,
         remark=body.remark,
     )
     db.add(row)
@@ -959,6 +964,8 @@ async def update_strategy_version_stock(
         row.sort_order = body.sort_order
     if body.status is not None:
         row.status = body.status.strip()
+    if body.is_verified is not None:
+        row.is_verified = bool(body.is_verified)
     if body.remark is not None:
         row.remark = body.remark
 
@@ -1039,6 +1046,7 @@ async def batch_import_strategy_version_stocks(body: BatchImportStocksBody, db: 
                 stock_name=(item.stock_name or resolved_name or "").strip() or resolved_name,
                 sort_order=item.sort_order,
                 status=(item.status or "active").strip(),
+                is_verified=item.is_verified,
                 remark=item.remark,
             )
             db.add(row)
