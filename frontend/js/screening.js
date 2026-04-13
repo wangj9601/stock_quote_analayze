@@ -67,7 +67,17 @@ const ScreeningPage = {
         // 切换到 GMS 时加载策略参数
         if (strategy === 'gms') {
             this.loadGmsParams();
+            this.syncGmsWatchlistMarketWrap();
         }
+    },
+
+    /** 显示/隐藏「GMS观察股」下的市场筛选行 */
+    syncGmsWatchlistMarketWrap() {
+        const wrap = document.getElementById('gmsWatchlistMarketWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="gmsScope"]:checked');
+        const show = checked && checked.value === 'gms_watchlist';
+        wrap.style.display = show ? 'flex' : 'none';
     },
 
     // 加载头部导航
@@ -179,9 +189,19 @@ const ScreeningPage = {
         // 绑定 GMS 策略范围切换事件
         document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
+                this.syncGmsWatchlistMarketWrap();
                 this.loadScreeningResults('gms');
             });
         });
+        document.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                if (scopeEl && scopeEl.value === 'gms_watchlist') {
+                    this.loadScreeningResults('gms');
+                }
+            });
+        });
+        this.syncGmsWatchlistMarketWrap();
 
         // GMS 策略参数：保存按钮
         const gmsParamsSaveBtn = document.getElementById('gmsParamsSaveBtn');
@@ -312,6 +332,10 @@ const ScreeningPage = {
         const gmsParams = this.getGmsParams();
         const q = new URLSearchParams();
         q.set('scope', scope);
+        if (scope === 'gms_watchlist') {
+            const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
+            q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
+        }
         if (gmsParams.start_date) q.set('date', gmsParams.start_date);
         if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
         if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);

@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { gmsApiService, type GMSStrategyVersionStock, type GMSStrategyVersion } from '@/services/gmsApi'
 

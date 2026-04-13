@@ -912,13 +912,36 @@ async def test_pvfrs():
     })
 
 
+def _normalize_stock_code_for_gms_pool(c: str) -> str:
+    """与自选股池一致：归一化代码以便匹配指标表（A 股 6 位、港股 5 位等）。"""
+    s = str(c).strip()
+    if not s:
+        return s
+    if s.isdigit():
+        if len(s) == 6 and s[0] in "603":
+            return s.zfill(6)
+        if len(s) <= 5:
+            return s.zfill(5)
+        return s.zfill(6)
+    return s
+
+
 # GMS 策略选股路由（以前端页面参数为准，与前端共用同一套参数）
 @router.get("/gms-strategy")
 async def get_gms_strategy(
     date: str = Query(None, description="目标日期 YYYY-MM-DD"),
     limit: int = Query(None, ge=1, description="最大返回数量"),
     min_score: float = Query(0, ge=0, le=100, description="最低总分阈值"),
-    scope: str = Query("all", description="股票范围: all/cn/hk/watchlist"),
+    scope: str = Query("all", description="股票范围: all/cn/hk/watchlist/gms_watchlist"),
+    watchlist_user_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="scope=watchlist 时可选：指定该用户的自选股；需携带管理员 JWT（payload.is_admin=true）",
+    ),
+    gms_watchlist_market: str = Query(
+        "all",
+        description="scope=gms_watchlist 时筛选市场: all(全部) / cn(A股) / hk(港股)，对应表字段 market A/HK",
+    ),
     # 前端传入的策略参数（覆盖 gms_config.json 默认值）
     accumulation_fz_min: Optional[float] = Query(None, description="蓄势 F/Z 下限"),
     balance_ratio_max: Optional[float] = Query(None, description="平衡 |Δ/d₂₀| 上限"),
@@ -957,7 +980,7 @@ async def get_gms_strategy(
 ):
     """
     GMS 均值引力与动量突变策略选股。
-    数据来源由 scope 决定：watchlist=当前用户自选股，cn=A 股基本信息表全部 A 股，hk=港股基本信息表全部港股。
+    数据来源由 scope 决定：watchlist=当前用户自选股；gms_watchlist=管理端 GMS 观察股表（启用版本且 status=active）；cn/hk=全市场。
     """
     if not GMS_AVAILABLE:
         return JSONResponse(
@@ -1013,13 +1036,20 @@ async def get_gms_strategy(
                 raise HTTPException(status_code=401, detail="查看自选股需要登录")
             try:
                 payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-                username = payload.get("sub")
-                if not username:
-                    raise HTTPException(status_code=401, detail="无效的认证凭据")
                 from backend_api.models import User
-                user = db.query(User).filter(User.username == username).first()
-                if not user:
-                    raise HTTPException(status_code=401, detail="用户不存在")
+                if watchlist_user_id is not None:
+                    if not payload.get("is_admin"):
+                        raise HTTPException(status_code=403, detail="仅管理员可指定 watchlist_user_id")
+                    user = db.query(User).filter(User.id == int(watchlist_user_id)).first()
+                    if not user:
+                        raise HTTPException(status_code=404, detail="指定用户不存在")
+                else:
+                    username = payload.get("sub")
+                    if not username:
+                        raise HTTPException(status_code=401, detail="无效的认证凭据")
+                    user = db.query(User).filter(User.username == username).first()
+                    if not user:
+                        raise HTTPException(status_code=401, detail="用户不存在")
                 watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
                 if not watchlist_items:
                     return JSONResponse({
@@ -1035,24 +1065,57 @@ async def get_gms_strategy(
                         },
                     })
                 # 自选股代码归一化：与指标表一致（A 股 6 位、港股 5 位），便于匹配 mean_frequency_resonance_indicators
-                def _normalize_code_for_gms(c: str) -> str:
-                    s = str(c).strip()
-                    if not s:
-                        return s
-                    if s.isdigit():
-                        if len(s) == 6 and s[0] in "603":
-                            return s.zfill(6)
-                        if len(s) <= 5:
-                            return s.zfill(5)
-                        return s.zfill(6)
-                    return s
-                stock_pool = list(dict.fromkeys(_normalize_code_for_gms(item.stock_code) for item in watchlist_items))
+                stock_pool = list(
+                    dict.fromkeys(_normalize_stock_code_for_gms_pool(item.stock_code) for item in watchlist_items)
+                )
                 stock_pool = [c for c in stock_pool if c]
                 stock_pool_size = len(stock_pool)
                 logger.info(f"GMS 数据来源=我的自选, 股票数={len(stock_pool)}")
                 market = "all"
             except JWTError:
                 raise HTTPException(status_code=401, detail="无效的认证凭据")
+        elif scope == "gms_watchlist":
+            from backend_api.models import GMSStrategyVersion, GMSStrategyVersionStock
+
+            mraw = (gms_watchlist_market or "all").strip().lower()
+            q_gms = (
+                db.query(GMSStrategyVersionStock.stock_code)
+                .join(GMSStrategyVersion, GMSStrategyVersion.id == GMSStrategyVersionStock.version_id)
+                .filter(
+                    GMSStrategyVersion.is_active == True,
+                    GMSStrategyVersionStock.status == "active",
+                )
+            )
+            if mraw in ("cn", "a"):
+                q_gms = q_gms.filter(GMSStrategyVersionStock.market == "A")
+            elif mraw in ("hk", "h"):
+                q_gms = q_gms.filter(GMSStrategyVersionStock.market == "HK")
+            rows_gms = q_gms.distinct().all()
+            raw_codes = [str(r[0]).strip() for r in rows_gms if r[0] is not None and str(r[0]).strip()]
+            stock_pool = list(dict.fromkeys(_normalize_stock_code_for_gms_pool(c) for c in raw_codes))
+            stock_pool = [c for c in stock_pool if c]
+            stock_pool_size = len(stock_pool)
+            if not stock_pool:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": target_date,
+                        "strategy_name": "GMS均值引力动量策略",
+                        "scope": "gms_watchlist",
+                        "message": "GMS观察股列表为空（请在管理端「观察股管理」维护启用版本下的股票）",
+                        "paging": {
+                            "enabled": use_pagination,
+                            "page": 1,
+                            "page_size": page_size if use_pagination else 0,
+                            "total": 0,
+                            "total_pages": 0,
+                        },
+                    }
+                )
+            market = "all"
+            logger.info("GMS 数据来源=GMS观察股 market_filter=%s 股票数=%s", mraw, len(stock_pool))
         elif scope == "cn":
             market = "cn"
         elif scope == "hk":

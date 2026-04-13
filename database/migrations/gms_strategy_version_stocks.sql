@@ -1,41 +1,11 @@
 -- ==========================================
--- GMS策略版本与观察股管理表
--- 创建时间：2026-04-10
--- 说明：用于管理 GMS 策略版本及其对应观察股（A股/港股）
+-- 表：gms_strategy_version_stocks（GMS 策略版本观察股）
+-- 与 backend_api.models.GMSStrategyVersionStock 保持一致
+-- 数据库：PostgreSQL
 -- ==========================================
 
--- 1) GMS策略版本主表
-CREATE TABLE IF NOT EXISTS gms_strategy_versions (
-    id SERIAL PRIMARY KEY,
-    strategy_code VARCHAR(50) NOT NULL,
-    version_name VARCHAR(100) NOT NULL,
-    version_no INTEGER NOT NULL,
-    description TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_by VARCHAR(50),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_gms_strategy_code_version_no UNIQUE (strategy_code, version_no)
-);
+-- 依赖：需先存在 gms_strategy_versions 表（见 add_gms_strategy_version_watchlist_tables.sql）
 
-COMMENT ON TABLE gms_strategy_versions IS 'GMS策略版本主表';
-COMMENT ON COLUMN gms_strategy_versions.id IS '主键ID';
-COMMENT ON COLUMN gms_strategy_versions.strategy_code IS '策略编码，例如GMS';
-COMMENT ON COLUMN gms_strategy_versions.version_name IS '版本名称';
-COMMENT ON COLUMN gms_strategy_versions.version_no IS '版本号（同策略内唯一）';
-COMMENT ON COLUMN gms_strategy_versions.description IS '版本描述';
-COMMENT ON COLUMN gms_strategy_versions.is_active IS '是否启用';
-COMMENT ON COLUMN gms_strategy_versions.created_by IS '创建人';
-COMMENT ON COLUMN gms_strategy_versions.created_at IS '创建时间';
-COMMENT ON COLUMN gms_strategy_versions.updated_at IS '更新时间';
-
-CREATE INDEX IF NOT EXISTS idx_gms_strategy_versions_strategy_code
-ON gms_strategy_versions (strategy_code);
-
-COMMENT ON INDEX idx_gms_strategy_versions_strategy_code IS '按策略编码查询策略版本';
-
-
--- 2) GMS策略版本观察股关系表
 CREATE TABLE IF NOT EXISTS gms_strategy_version_stocks (
     id SERIAL PRIMARY KEY,
     version_id INTEGER NOT NULL,
@@ -87,3 +57,11 @@ CREATE INDEX IF NOT EXISTS idx_gms_version_status
 ON gms_strategy_version_stocks (version_id, status);
 COMMENT ON INDEX idx_gms_version_status IS '按策略版本和状态筛选观察股';
 
+
+-- ==========================================
+-- 升级：若表由旧版脚本创建且缺少 is_verified 列，执行以下语句（可重复执行）
+-- ==========================================
+ALTER TABLE gms_strategy_version_stocks
+    ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN gms_strategy_version_stocks.is_verified IS '是否已核对';

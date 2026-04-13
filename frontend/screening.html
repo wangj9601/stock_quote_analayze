@@ -740,7 +740,7 @@
             <div class="strategy-info-card">
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
-                    <li><strong>数据来源：</strong>【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
+                    <li><strong>数据来源：</strong>【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
                         股基本信息表中全部 A 股的 GMS 指标列表。</li>
                     <li><strong>时间范围：</strong>最近 20 个交易日</li>
                     <li><strong>双模块阶梯式评分：</strong></li>
@@ -774,6 +774,17 @@
                             style="margin-right: 5px;">
                         <label for="gmsScopeWatchlist" style="cursor: pointer;">我的自选</label>
                     </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeGmsWatchlist" name="gmsScope" value="gms_watchlist"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeGmsWatchlist" style="cursor: pointer;">GMS观察股</label>
+                    </div>
+                </div>
+                <div id="gmsWatchlistMarketWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">观察股市场：</span>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="all" checked style="margin-right: 5px;">全部</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="cn" style="margin-right: 5px;">仅A股</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="hk" style="margin-right: 5px;">仅港股</label>
                 </div>
             </div>
 

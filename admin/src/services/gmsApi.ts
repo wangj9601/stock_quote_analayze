@@ -2,6 +2,25 @@ import { API_BASE } from '@/config/api'
 
 const PREFIX = '/api/admin/gms'
 
+/** GET /api/screening/gms-strategy 响应（与网站端一致） */
+export interface GmsStrategyScreeningResult {
+  success: boolean
+  data: any[]
+  total?: number
+  search_date?: string
+  strategy_name?: string
+  message?: string
+  gms_trace_meta?: Record<string, unknown>
+  trace_only?: boolean
+  paging?: {
+    enabled: boolean
+    page: number
+    page_size: number
+    total: number
+    total_pages: number
+  }
+}
+
 export interface GMSStrategyVersion {
   id: number
   strategy_code: string
@@ -376,6 +395,42 @@ class GMSApiService {
       data_source?: string
       strategy_name?: string
     }>(`${PREFIX}/selection-results${qs ? `?${qs}` : ''}`)
+  }
+
+  /**
+   * 与网站选股页相同：`GET /api/screening/gms-strategy`（实时计算 + trace 缓存，非仅读 trace 表）。
+   * 使用管理端 Bearer Token；scope=watchlist 时可传 watchlist_user_id（需管理员 JWT）。
+   */
+  async getGmsStrategyScreening(params: URLSearchParams): Promise<GmsStrategyScreeningResult> {
+    const qs = params.toString()
+    const url = `${API_BASE}/api/screening/gms-strategy${qs ? `?${qs}` : ''}`
+    const response = await fetch(url, {
+      headers: {
+        ...this.getAuthHeaders(),
+      },
+    })
+    const text = await response.text()
+    if (!response.ok) {
+      let detail: string = `HTTP ${response.status}`
+      try {
+        const j = JSON.parse(text) as { detail?: unknown; message?: string }
+        const d = j.detail
+        detail =
+          typeof d === 'string'
+            ? d
+            : Array.isArray(d)
+              ? (d as { msg?: string }[]).map((x) => x.msg || '').join('; ') || detail
+              : j.message || detail
+      } catch {
+        if (text && text.length < 300) detail = text
+      }
+      throw new Error(detail)
+    }
+    try {
+      return JSON.parse(text) as GmsStrategyScreeningResult
+    } catch {
+      throw new Error('服务器返回非 JSON')
+    }
   }
 }
 
