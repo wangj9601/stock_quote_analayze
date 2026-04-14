@@ -15,6 +15,18 @@ function _isNginxLikeSitePort(port) {
     return p === '' || p === '80' || p === '443';
 }
 
+/** 归一化 API_BASE_URL，兼容 `:5000` 这类不完整配置 */
+function _normalizeApiBaseUrl(baseUrl) {
+    let base = String(baseUrl || '').trim();
+    if (!base) return '';
+    if (base.startsWith(':')) {
+        const protocol = window.location.protocol || 'http:';
+        const host = window.location.hostname || 'localhost';
+        base = `${protocol}//${host}${base}`;
+    }
+    return base.replace(/\/+$/, '');
+}
+
 const Config = {
     getEnvironment() {
         const hostname = window.location.hostname;
@@ -37,7 +49,7 @@ const Config = {
      */
     getApiBaseUrl() {
         if (typeof window !== 'undefined' && typeof window.API_BASE_URL === 'string' && window.API_BASE_URL.length) {
-            return window.API_BASE_URL.replace(/\/+$/, '');
+            return _normalizeApiBaseUrl(window.API_BASE_URL);
         }
 
         const hostname = window.location.hostname;
@@ -57,7 +69,7 @@ const Config = {
         // 本机：无 Nginx 时常见为 localhost:8000 + 后端 :5000
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
             if (!_isNginxLikeSitePort(port)) {
-                return `${protocol}//${hostname}:5000`;
+                return _normalizeApiBaseUrl(`${protocol}//${hostname}:5000`);
             }
             return '';
         }
@@ -67,7 +79,7 @@ const Config = {
             if (_isNginxLikeSitePort(port)) {
                 return '';
             }
-            return `${protocol}//${hostname}:5000`;
+            return _normalizeApiBaseUrl(`${protocol}//${hostname}:5000`);
         }
 
         // 其它公网域名：默认生产同域 + Nginx
