@@ -546,6 +546,31 @@ class AkshareDataCollector:
     # 增量生成指标时向前取历史的天数（满足 MA200 等长周期计算）
     INDICATOR_LOOKBACK_DAYS = 300
 
+    @staticmethod
+    def compute_dynamic_indicator_lookback_days(indicators: Optional[List[str]]) -> int:
+        """按本次选择的指标动态计算回看天数（自然日）。
+        说明：
+        - 仅用于保证首日指标可计算，不代表写入范围；
+        - 写入范围应由 only_write_dates 或调用方的日期区间控制。
+        """
+        if not indicators:
+            return 0
+        selected = {str(i).strip().lower() for i in indicators if i}
+        # 经验换算：交易日 -> 自然日，约乘 1.5 并留少量缓冲
+        lookback_map = {
+            "ma": 390,      # ~260 交易日（覆盖 MA200 并留缓冲）
+            "mavol": 390,   # 同 MA
+            "macd": 90,     # ~60 交易日
+            "kdj": 90,      # ~60 交易日
+            "rsi": 90,      # ~60 交易日
+            "boll": 90,     # ~60 交易日
+            "pvfrs": 90,    # >=21，保守取 60 交易日窗口
+            # icost 为累计型，内部按“历史至 end_date”计算，此处不额外前扩
+            "icost": 0,
+        }
+        days = max((lookback_map.get(k, 0) for k in selected), default=0)
+        return days
+
     def _generate_indicators(self, stock_code: str, start_date: str, end_date: str, indicators: List[str], do_commit: bool = True, incremental_dates: Optional[List[str]] = None, market: str = 'CN'):
         """为指定股票生成技术指标数据。do_commit=False 时由调用方批量提交以提升性能。
         incremental_dates: 若指定，则仅写入这些日期的指标（增量模式，用于每日同步后只更新当日）。"""
@@ -617,8 +642,9 @@ class AkshareDataCollector:
                 logger.info(f"股票 {stock_code} 指标生成完成")
         except Exception as e:
             logger.error(f"为股票 {stock_code} 生成指标失败: {e}")
-            if do_commit:
-                self.session.rollback()
+            # 无论单只提交还是批量提交，只要当前股票处理抛错，都必须回滚事务。
+            # 否则会让后续 SQL 全部进入 InFailedSqlTransaction 连锁失败。
+            self.session.rollback()
     
     def generate_indicators_for_date_range(
         self,
@@ -628,6 +654,7 @@ class AkshareDataCollector:
         extended_start_days: int = 0,
         market: str = 'CN',
         only_write_dates: Optional[List[str]] = None,
+        task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """为指定日期范围内有历史数据的股票批量生成技术指标。
         extended_start_days: 向前扩展查询历史的天数，便于 MA200 等长周期指标有足够数据（如 300）。
@@ -676,6 +703,14 @@ class AkshareDataCollector:
             for idx, code in enumerate(codes):
                 if (idx + 1) % 100 == 0:
                     logger.info(f"指标生成进度: {idx + 1}/{len(codes)}（成功 {success}，失败 {failed}）")
+                if task_id:
+                    with task_lock:
+                        if task_id in collection_tasks:
+                            indicator_progress = 20 + int(((idx + 1) / max(1, len(codes))) * 79)
+                            collection_tasks[task_id].update({
+                                "progress": min(99, indicator_progress),
+                                "warning_message": f"指标生成中（{idx + 1}/{len(codes)}）",
+                            })
                 try:
                     self._generate_indicators(
                         str(code), query_start, end_date, indicators,
@@ -1965,10 +2000,15 @@ def run_file_historical_collection_task(
             
             total_dates = len(date_range)
             success_dates = 0
+            has_indicators = bool(indicators)
             
             with task_lock:
                 if task_id in collection_tasks:
-                    collection_tasks[task_id]["total_stocks"] = total_dates # 这里使用天数代替股票数作为进度
+                    collection_tasks[task_id].update({
+                        "total_stocks": total_dates,  # 文件导入阶段按天统计
+                        "progress": 0,
+                        "warning_message": "文件导入准备中",
+                    })
             
             for i, current_date in enumerate(date_range):
                 date_str = current_date.strftime('%Y%m%d')
@@ -1982,15 +2022,38 @@ def run_file_historical_collection_task(
                 
                 with task_lock:
                     if task_id in collection_tasks:
-                        collection_tasks[task_id]["processed_stocks"] = i + 1
+                        import_weight = 20 if has_indicators else 100
+                        import_progress = int(((i + 1) / max(1, total_dates)) * import_weight)
+                        collection_tasks[task_id].update({
+                            "processed_stocks": i + 1,
+                            "progress": min(import_weight, import_progress),
+                            "warning_message": f"文件导入中（{i + 1}/{total_dates}）",
+                        })
             
             # 生成技术指标
             indicator_result = {'total': 0, 'success': 0, 'failed': 0}
             if indicators:
                 ak_collector = AkshareDataCollector(db)
-                logger.info(f"历史数据(文件)采集完成，开始生成指标: {indicators}（扩展历史以计算 MA200 等）")
+                from pandas import date_range
+                only_write_dates = [d.strftime("%Y-%m-%d") for d in date_range(start, end)]
+                dynamic_lookback_days = ak_collector.compute_dynamic_indicator_lookback_days(indicators)
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id].update({
+                            "progress": 20,
+                            "warning_message": "文件导入完成，开始生成指标",
+                        })
+                logger.info(
+                    f"历史数据(文件)采集完成，开始生成指标: {indicators}；"
+                    f"动态前扩={dynamic_lookback_days}天；写入仅限区间 {start_date}~{end_date}"
+                )
                 indicator_result = ak_collector.generate_indicators_for_date_range(
-                    start_date, end_date, indicators, extended_start_days=300
+                    start_date,
+                    end_date,
+                    indicators,
+                    extended_start_days=dynamic_lookback_days,
+                    only_write_dates=only_write_dates,
+                    task_id=task_id,
                 )
             
                 # 计算 5/10/30/60 天涨跌百分比
@@ -2005,6 +2068,7 @@ def run_file_historical_collection_task(
                         "success_count": success_dates,
                         "failed_count": total_dates - success_dates,
                         "end_time": datetime.now(),
+                        "warning_message": None,
                     })
             
             logger.info(f"历史数据采集-文件任务完成: {task_id}")
@@ -2055,10 +2119,15 @@ def run_hk_file_historical_collection_task(
             total_dates = len(date_range)
             success_dates = 0
             imported_dates: List[str] = []  # 采集成功的交易日 YYYY-MM-DD，指标仅写入这些日期
+            has_indicators = bool(indicators)
             
             with task_lock:
                 if task_id in collection_tasks:
-                    collection_tasks[task_id]["total_stocks"] = total_dates # 这里使用天数代替股票数作为进度
+                    collection_tasks[task_id].update({
+                        "total_stocks": total_dates,  # 文件导入阶段按天统计
+                        "progress": 0,
+                        "warning_message": "文件导入准备中",
+                    })
             
             for i, current_date in enumerate(date_range):
                 date_str = current_date.strftime('%Y%m%d')
@@ -2073,10 +2142,22 @@ def run_hk_file_historical_collection_task(
                 
                 with task_lock:
                     if task_id in collection_tasks:
-                        collection_tasks[task_id]["processed_stocks"] = i + 1
+                        import_weight = 20 if has_indicators else 100
+                        import_progress = int(((i + 1) / max(1, total_dates)) * import_weight)
+                        collection_tasks[task_id].update({
+                            "processed_stocks": i + 1,
+                            "progress": min(import_weight, import_progress),
+                            "warning_message": f"文件导入中（{i + 1}/{total_dates}）",
+                        })
             
             # 文件采集完成后生成指标：仅删除并写入「本次导入成功」的交易日，扩展历史仅用于计算（MA200 等）
             if indicators and imported_dates:
+                with task_lock:
+                    if task_id in collection_tasks:
+                        collection_tasks[task_id].update({
+                            "progress": 20,
+                            "warning_message": "文件导入完成，开始生成指标",
+                        })
                 logger.info(
                     f"正在为导入的港股历史数据生成指标: {', '.join(indicators)}；写入日期仅限: {imported_dates}"
                 )
@@ -2090,6 +2171,7 @@ def run_hk_file_historical_collection_task(
                     extended_start_days=ext_days,
                     market='HK',
                     only_write_dates=imported_dates,
+                    task_id=task_id,
                 )
             
             # 汇总结果
@@ -2101,6 +2183,7 @@ def run_hk_file_historical_collection_task(
                         "success_count": success_dates,
                         "failed_count": total_dates - success_dates,
                         "end_time": datetime.now(),
+                        "warning_message": None,
                     })
             
             logger.info(f"港股历史数据采集-文件任务完成: {task_id}")
@@ -2564,9 +2647,9 @@ async def list_collection_tasks():
         with task_lock:
             tasks = []
             for task_id, task_info in collection_tasks.items():
-                # 计算进度
-                progress = task_info["progress"]
-                if task_info["total_stocks"] > 0:
+                # 优先使用任务自身维护的阶段化进度，缺失时再按旧逻辑兜底
+                progress = task_info.get("progress", 0)
+                if progress <= 0 and task_info["total_stocks"] > 0:
                     progress = min(100, int((task_info["processed_stocks"] / task_info["total_stocks"]) * 100))
                 
                 tasks.append(DataCollectionStatus(
