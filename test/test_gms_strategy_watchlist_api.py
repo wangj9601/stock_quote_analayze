@@ -10,7 +10,13 @@ from sqlalchemy.pool import StaticPool
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from backend_api.models import Base, StockBasicInfo, StockBasicInfoHK  # noqa: E402
+from backend_api.models import (  # noqa: E402
+    Base,
+    StockBasicInfo,
+    StockBasicInfoHK,
+    GMSRuntimeConfig,
+    GMSBacktestTask,
+)
 from backend_api.admin import gms_admin_routes  # noqa: E402
 
 

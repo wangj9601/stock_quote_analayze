@@ -6,7 +6,7 @@ from datetime import datetime, date
 import numbers
 from typing import Optional, List, Any
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint, Index, JSON, TypeDecorator, cast
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Float, Date, Text, UniqueConstraint, Index, JSON, TypeDecorator, cast, LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import operators as sa_operators
@@ -785,6 +785,43 @@ class GMSStrategyVersionStock(Base):
     __table_args__ = (
         UniqueConstraint("version_id", "market", "stock_code", name="uq_gms_version_market_code"),
         Index("idx_gms_version_status", "version_id", "status"),
+    )
+
+
+class GMSRuntimeConfig(Base):
+    """GMS 运行时策略默认参数（原 gms_config.json），单行 name='default'。"""
+
+    __tablename__ = "gms_runtime_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(64), unique=True, nullable=False, index=True, default="default")
+    config_params = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class GMSBacktestTask(Base):
+    """GMS 回测任务与报告明细（原 backtest_data 目录文件）。"""
+
+    __tablename__ = "gms_backtest_tasks"
+
+    task_id = Column(String(64), primary_key=True)
+    name = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, index=True)
+    progress = Column(Integer, default=0, nullable=False)
+    message = Column(Text, nullable=True)
+    config = Column(JSON, nullable=False)
+    logs = Column(JSON, nullable=True)
+    summary = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    details_path = Column(String(512), nullable=True)
+    details_csv_bytes = Column(LargeBinary, nullable=True)
+    details_xlsx_bytes = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_gms_bt_status_created", "status", "created_at"),
     )
 
 

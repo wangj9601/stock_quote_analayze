@@ -4,13 +4,12 @@ GMS 回测管理端 API 路由
 """
 
 import logging
-import os
-import re
 import sys
 from typing import Optional, List, Literal, Tuple, Any
 
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
+from urllib.parse import quote
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import String as SAString, bindparam, func, text
@@ -26,6 +25,7 @@ from backend_api.models import (
 )
 from backend_api.services.gms_signal_trace_selection import query_gms_signal_trace_selection
 from backend_core.strategies.gms import admin_interface
+from backend_core.strategies.gms import backtest_storage as gms_backtest_storage
 from backend_core.strategies.gms.config import GMSConfigManager
 
 logger = logging.getLogger(__name__)
@@ -266,10 +266,8 @@ async def list_watchlist_users(db: Session = Depends(get_db)):
 async def get_system_status():
     """系统状态：运行中任务数、报告总数、健康度等。"""
     try:
-        tasks = admin_interface.list_backtest_tasks(limit=1000)
-        running = sum(1 for t in tasks if t.get("status") in ("pending", "running"))
-        reports = admin_interface.list_reports(limit=1)
-        total_reports = len(admin_interface.list_reports(limit=10000))
+        running = gms_backtest_storage.count_running_tasks()
+        total_reports = gms_backtest_storage.count_completed_reports()
         return {
             "success": True,
             "data": {
@@ -467,27 +465,12 @@ async def download_report(
     ),
 ):
     """下载报告明细：默认与报告记录一致；variant=csv / xlsx 可指定格式（与 Excel 列语义一致）。"""
-    path = admin_interface.download_report(report_id, variant=variant)
-    if not path or not os.path.isfile(path):
+    payload = admin_interface.download_report(report_id, variant=variant)
+    if not payload:
         raise HTTPException(status_code=404, detail="报告或明细文件不存在")
-    report = admin_interface.get_report(report_id) or {}
-    base_name = (report.get("name") or f"gms_backtest_{report_id[:8]}").strip()
-    # 移除文件名非法字符
-    safe_name = re.sub(r'[<>:"/\\|?*]', "_", base_name)
-    ext = os.path.splitext(path)[1].lower()
-    if ext == ".xlsx":
-        filename = (
-            f"{safe_name}.xlsx" if safe_name else f"gms_backtest_{report_id[:8]}.xlsx"
-        )
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    else:
-        filename = f"{safe_name}.csv" if safe_name else f"gms_backtest_{report_id[:8]}.csv"
-        media_type = "text/csv; charset=utf-8"
-    return FileResponse(
-        path,
-        media_type=media_type,
-        filename=filename,
-    )
+    data, filename, media_type = payload
+    disp = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return Response(content=data, media_type=media_type, headers={"Content-Disposition": disp})
 
 
 # ---------- config ----------

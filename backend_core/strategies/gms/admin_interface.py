@@ -5,9 +5,7 @@ GMS 回测管理端接口
 
 import logging
 from copy import deepcopy
-from typing import Dict, List, Any, Optional
-
-from backend_api.database import SessionLocal
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import backtest_storage
 from . import backtest_worker
@@ -71,7 +69,7 @@ def cancel_task(task_id: str) -> bool:
 
 
 def delete_task(task_id: str) -> bool:
-    """删除任务及报告、明细文件。"""
+    """删除任务及库内报告明细。"""
     backtest_worker.request_cancel(task_id)
     return backtest_storage.delete_task(task_id)
 
@@ -86,14 +84,11 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
     return backtest_storage.get_report(report_id)
 
 
-def download_report(report_id: str, variant: Optional[str] = None) -> Optional[str]:
+def download_report(
+    report_id: str, variant: Optional[str] = None
+) -> Optional[Tuple[bytes, str, str]]:
     """
-    返回报告明细文件的本地绝对路径，供 API 层 send_file。
-    variant: None 使用报告记录的主明细文件（一般为 xlsx）；csv / xlsx 则强制对应扩展名。
+    返回报告明细字节与下载文件名、Content-Type（数据库存储）。
+    variant: None 优先 xlsx；csv / xlsx 强制对应格式。
     """
-    v = (variant or "").strip().lower()
-    if v == "csv":
-        return backtest_storage.get_detail_path_by_ext(report_id, ".csv")
-    if v in ("xlsx", "excel"):
-        return backtest_storage.get_detail_path_by_ext(report_id, ".xlsx")
-    return backtest_storage.get_details_path(report_id)
+    return backtest_storage.get_report_file_bytes(report_id, variant=variant)

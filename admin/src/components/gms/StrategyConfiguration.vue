@@ -1,6 +1,6 @@
 <template>
   <div class="strategy-configuration">
-    <el-card header="GMS 策略配置（gms_config.json）">
+    <el-card header="GMS 策略配置（服务端持久化）">
       <div class="config-actions mb-4">
         <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
         <el-button @click="loadConfig" :loading="loading">重新加载</el-button>

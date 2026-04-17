@@ -1,13 +1,16 @@
 """
-GMS 策略配置管理
+GMS 策略配置管理（PostgreSQL gms_runtime_config，兼容首次从 gms_config.json 引导）
 """
 
 import json
-import os
 import logging
+import os
+from datetime import datetime
 from typing import Dict, Optional, Any
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_ROW_NAME = "default"
 
 
 class GMSConfigManager:
@@ -49,21 +52,77 @@ class GMSConfigManager:
             },
         }
 
-    def load_config(self) -> Dict:
-        """加载配置（文件不存在则返回默认）"""
-        if self._config is not None:
-            return self._config
+    def _load_from_json_file(self) -> Optional[Dict]:
         try:
             if os.path.exists(self.default_config_path):
                 with open(self.default_config_path, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
                 default = self.get_default_config()
-                self._config = self._deep_merge(default, loaded)
-            else:
-                self._config = self.get_default_config()
+                return self._deep_merge(default, loaded)
         except Exception as e:
-            logger.warning(f"加载 GMS 配置失败: {e}，使用默认配置")
-            self._config = self.get_default_config()
+            logger.warning("读取本地 gms_config.json 失败: %s", e)
+        return None
+
+    def _persist_default_row(self, merged: Dict) -> None:
+        from backend_api.database import SessionLocal
+        from backend_api.models import GMSRuntimeConfig
+
+        db = SessionLocal()
+        try:
+            row = db.query(GMSRuntimeConfig).filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME).first()
+            if row is None:
+                db.add(
+                    GMSRuntimeConfig(
+                        name=_DEFAULT_ROW_NAME,
+                        config_params=merged,
+                        updated_at=datetime.now(),
+                    )
+                )
+            else:
+                row.config_params = merged
+                row.updated_at = datetime.now()
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def load_config(self) -> Dict:
+        """加载配置：优先数据库；无记录时合并默认与本地 json（若存在）并写入数据库。"""
+        if self._config is not None:
+            return self._config
+
+        try:
+            from backend_api.database import SessionLocal
+            from backend_api.models import GMSRuntimeConfig
+
+            db = SessionLocal()
+            try:
+                row = db.query(GMSRuntimeConfig).filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME).first()
+                if row and row.config_params is not None:
+                    default = self.get_default_config()
+                    self._config = self._deep_merge(default, dict(row.config_params))
+                    return self._config
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("从数据库加载 GMS 配置失败，尝试本地文件: %s", e)
+
+        file_merged = self._load_from_json_file()
+        if file_merged is not None:
+            self._config = file_merged
+            try:
+                self._persist_default_row(file_merged)
+            except Exception as e:
+                logger.warning("将本地配置写入数据库失败（仍使用内存合并结果）: %s", e)
+            return self._config
+
+        self._config = self.get_default_config()
+        try:
+            self._persist_default_row(self._config)
+        except Exception as e:
+            logger.warning("写入默认 GMS 配置到数据库失败: %s", e)
         return self._config
 
     def _deep_merge(self, base: Dict, override: Dict) -> Dict:
@@ -81,12 +140,33 @@ class GMSConfigManager:
         return self.load_config()
 
     def save_config(self, config: Dict) -> bool:
-        """保存配置到文件，并清除缓存。"""
+        """保存配置到数据库，并清除缓存。"""
         try:
-            with open(self.default_config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
-            self._config = None
-            return True
+            from backend_api.database import SessionLocal
+            from backend_api.models import GMSRuntimeConfig
+
+            db = SessionLocal()
+            try:
+                row = db.query(GMSRuntimeConfig).filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME).first()
+                if row is None:
+                    db.add(
+                        GMSRuntimeConfig(
+                            name=_DEFAULT_ROW_NAME,
+                            config_params=config,
+                            updated_at=datetime.now(),
+                        )
+                    )
+                else:
+                    row.config_params = config
+                    row.updated_at = datetime.now()
+                db.commit()
+                self._config = None
+                return True
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
         except Exception as e:
             logger.warning("保存 GMS 配置失败: %s", e)
             return False
