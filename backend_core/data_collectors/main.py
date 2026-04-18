@@ -29,6 +29,7 @@ from backend_core.data_collectors.akshare.weekly_collector import WeeklyDataGene
 from backend_core.data_collectors.akshare.hk_weekly_collector import HKWeeklyDataGenerator
 from backend_core.data_collectors.akshare.monthly_collector import MonthlyDataGenerator
 from backend_core.data_collectors.akshare.hk_monthly_collector import HKMonthlyDataGenerator
+from backend_core.data_collectors.akshare.etf_collector import ETFCollector
 from backend_core.data_collectors.akshare.quarterly_collector import QuarterlyDataGenerator
 from backend_core.data_collectors.akshare.hk_quarterly_collector import HKQuarterlyDataGenerator
 from backend_core.data_collectors.akshare.semiannual_collector import SemiAnnualDataGenerator
@@ -82,6 +83,7 @@ semiannual_generator = SemiAnnualDataGenerator()
 hk_semiannual_generator = HKSemiAnnualDataGenerator()
 annual_generator = AnnualDataGenerator()
 hk_annual_generator = HKAnnualDataGenerator()
+etf_collector_instance = ETFCollector()
 
 scheduler = BlockingScheduler()
 
@@ -381,6 +383,114 @@ def collect_hk_index_historical():
     except Exception as e:
         logging.error(f"[定时任务] 港股指数历史行情采集异常: {e}")
 
+def collect_etf_realtime():
+    try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _is_market_holiday('CN', today_str):
+            logging.info(f"[定时任务] A股(ETF) {today_str} 为节假日，跳过 ETF 实时行情采集。")
+            return
+        logging.info("[定时任务] ETF 实时行情采集开始...")
+        
+        df = None
+        source = 'em'
+        try:
+            df = __import__('akshare').fund_etf_spot_em()
+        except Exception as em_ex:
+            logging.warning(f"东方财富 ETF 实时接口访问失败: {em_ex}，尝试切换同花顺接口...")
+            
+        if df is None or df.empty:
+            source = 'ths'
+            try:
+                df = __import__('akshare').fund_etf_spot_ths()
+            except Exception as ths_ex:
+                logging.warning(f"同花顺 ETF 实时接口也访问失败: {ths_ex}，尝试切换新浪接口...")
+                df = None
+        
+        if df is None or df.empty:
+            source = 'sina'
+            try:
+                df = __import__('akshare').fund_etf_category_sina(symbol="ETF基金")
+            except Exception as sina_ex:
+                logging.error(f"新浪 ETF 实时接口最后也访问失败: {sina_ex}")
+                return
+                
+        if df is not None and not df.empty:
+            session = etf_collector_instance.session
+            now = datetime.now()
+            count = 0
+            for _, row in df.iterrows():
+                if source == 'em':
+                    code = str(row.get('代码', ''))
+                    if not code: continue
+                    name = str(row.get('名称', ''))
+                    current_price = float(row.get('最新价', 0)) if pd.notna(row.get('最新价')) else None
+                    change_percent = float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None
+                    volume = float(row.get('成交量', 0)) if pd.notna(row.get('成交量')) else None
+                    amount = float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else None
+                    high = float(row.get('最高', 0)) if pd.notna(row.get('最高')) else None
+                    low = float(row.get('最低', 0)) if pd.notna(row.get('最低')) else None
+                    open_price = float(row.get('今开', 0)) if pd.notna(row.get('今开')) else None
+                    pre_close = float(row.get('昨收', 0)) if pd.notna(row.get('昨收')) else None
+                    turnover_rate = float(row.get('换手率', 0)) if pd.notna(row.get('换手率')) else None
+                    total_mv = float(row.get('总市值', 0)) if pd.notna(row.get('总市值')) else None
+                    circulating_mv = float(row.get('流通市值', 0)) if pd.notna(row.get('流通市值')) else None
+                elif source == 'ths':
+                    code = str(row.get('基金代码', ''))
+                    if not code: continue
+                    name = str(row.get('基金名称', ''))
+                    current_price = float(row.get('当前-单位净值', 0)) if pd.notna(row.get('当前-单位净值')) else None
+                    if current_price is None or current_price == 0:
+                        current_price = float(row.get('最新-单位净值', 0)) if pd.notna(row.get('最新-单位净值')) else None
+                    change_percent = float(row.get('增长率', 0)) if pd.notna(row.get('增长率')) else None
+                    pre_close = float(row.get('前一日-单位净值', 0)) if pd.notna(row.get('前一日-单位净值')) else None
+                    volume = amount = high = low = open_price = turnover_rate = total_mv = circulating_mv = None
+                else: # sina
+                    code = str(row.get('代码', ''))
+                    if not code: continue
+                    name = str(row.get('名称', ''))
+                    current_price = float(row.get('最新价', 0)) if pd.notna(row.get('最新价')) else None
+                    change_percent = float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else None
+                    volume = float(row.get('成交量', 0)) if pd.notna(row.get('成交量')) else None
+                    amount = float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else None
+                    high = float(row.get('最高', 0)) if pd.notna(row.get('最高')) else None
+                    low = float(row.get('最低', 0)) if pd.notna(row.get('最低')) else None
+                    open_price = float(row.get('今开', 0)) if pd.notna(row.get('今开')) else None
+                    pre_close = float(row.get('昨收', 0)) if pd.notna(row.get('昨收')) else None
+                    turnover_rate = total_mv = circulating_mv = None
+                
+                session.execute(text("""
+                    INSERT INTO fund_realtime_quote (code, trade_date, name, current_price, change_percent, volume, amount, high, low, open, pre_close, turnover_rate, total_market_value, circulating_market_value, update_time)
+                    VALUES (:code, :trade_date, :name, :current_price, :change_percent, :volume, :amount, :high, :low, :open, :pre_close, :turnover_rate, :total_market_value, :circulating_market_value, :update_time)
+                    ON CONFLICT (code, trade_date) DO UPDATE SET
+                    name = EXCLUDED.name, current_price = EXCLUDED.current_price, change_percent = EXCLUDED.change_percent, volume = EXCLUDED.volume, amount = EXCLUDED.amount, high = EXCLUDED.high, low = EXCLUDED.low, open = EXCLUDED.open, pre_close = EXCLUDED.pre_close, turnover_rate = EXCLUDED.turnover_rate, total_market_value = EXCLUDED.total_market_value, circulating_market_value = EXCLUDED.circulating_market_value, update_time = EXCLUDED.update_time
+                """), {
+                    'code': code, 'trade_date': today_str, 'name': name, 'current_price': current_price, 'change_percent': change_percent, 'volume': volume, 'amount': amount, 'high': high, 'low': low, 'open': open_price, 'pre_close': pre_close, 'turnover_rate': turnover_rate, 'total_market_value': total_mv, 'circulating_market_value': circulating_mv, 'update_time': now
+                })
+                count += 1
+            session.commit()
+            logging.info(f"[定时任务] ETF 实时行情(源: {source})采集完成，更新了 {count} 只ETF")
+    except Exception as e:
+        logging.error(f"[定时任务] ETF 实时行情采集异常: {e}")
+
+def collect_etf_historical():
+    try:
+        today = datetime.now()
+        today_str_dash = today.strftime('%Y-%m-%d')
+        if _is_market_holiday('CN', today_str_dash):
+            logging.info(f"[定时任务] A股(ETF) {today_str_dash} 为节假日，跳过 ETF 历史行情采集。")
+            return
+        if today.weekday() in (5, 6):
+            logging.info("[定时任务] 今天是周末，不执行 ETF 历史行情采集。")
+            return
+        logging.info(f"[定时任务] ETF 历史行情与列表同步采集开始，日期: {today_str_dash}")
+        # 先同步一次列表
+        etf_collector_instance.sync_etf_list()
+        # 全量采集今日收盘数据
+        etf_collector_instance.collect_historical_data(start_date=today_str_dash, end_date=today_str_dash)
+        logging.info("[定时任务] ETF 历史行情采集完成")
+    except Exception as e:
+        logging.error(f"[定时任务] ETF 历史行情采集异常: {e}")
+
 # 定时任务配置：从 .env 读取 cron 参数，未设置则用下方默认值
 def _cron(k: str, default: str) -> str:
     return _env(k, default)
@@ -556,6 +666,18 @@ scheduler.add_job(collect_hk_index_historical, 'cron',
     hour=_cron_int('SCHED_HK_INDEX_HISTORICAL_HOUR', 17),
     minute=_cron_int('SCHED_HK_INDEX_HISTORICAL_MINUTE', 18),
     id='hk_index_historical')
+
+scheduler.add_job(collect_etf_realtime, 'cron',
+    day_of_week=_cron('SCHED_ETF_REALTIME_DOW', 'mon-fri'),
+    hour=_cron('SCHED_ETF_REALTIME_HOUR', '15'),
+    minute=_cron_int('SCHED_ETF_REALTIME_MINUTE', 33),
+    id='etf_realtime')
+
+scheduler.add_job(collect_etf_historical, 'cron',
+    day_of_week=_cron('SCHED_ETF_HISTORICAL_DOW', 'mon-fri'),
+    hour=_cron_int('SCHED_ETF_HISTORICAL_HOUR', 16),
+    minute=_cron_int('SCHED_ETF_HISTORICAL_MINUTE', 5),
+    id='etf_historical')
 
 if __name__ == "__main__":
     enable_sched = os.getenv('ENABLE_SCHEDULED_COLLECTION', 'true').lower() in ('true', '1', 'yes')

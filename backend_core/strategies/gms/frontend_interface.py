@@ -20,8 +20,17 @@ def _is_a_share(code: str) -> bool:
     return len(s) >= 6 and s.isdigit() and s[0] in "6039"
 
 
+def _is_etf(code: str) -> bool:
+    s = str(code).strip()
+    return len(s) >= 6 and s.isdigit() and s[0] in "518"
+
+
 def _infer_market_type(code: str) -> str:
-    return "CN" if _is_a_share(code) else "HK"
+    if _is_a_share(code):
+        return "CN"
+    if _is_etf(code):
+        return "ETF"
+    return "HK"
 
 
 def _trace_row_to_result(row) -> dict:
@@ -250,11 +259,12 @@ class GMSFrontendInterface:
             loader = GMSDataLoader(self.db)
             engine = GMSStrategyEngine(loader, self.config)
             missing_cn = [c for c, mt in missing if mt == "CN"]
+            missing_etf = [c for c, mt in missing if mt == "ETF"]
             missing_hk = [c for c, mt in missing if mt == "HK"]
             # 大批量股票池时每 100 只一批计算并打印进度，避免长时间无日志
             batch_size = 100
-            pool_label = {"CN": "全部A股", "HK": "全部港股"}
-            for codes_sub, mt in [(missing_cn, "CN"), (missing_hk, "HK")]:
+            pool_label = {"CN": "全部A股", "ETF": "全部ETF", "HK": "全部港股"}
+            for codes_sub, mt in [(missing_cn, "CN"), (missing_etf, "ETF"), (missing_hk, "HK")]:
                 if not codes_sub:
                     continue
                 total_missing = len(codes_sub)
@@ -356,8 +366,14 @@ class GMSFrontendInterface:
                         continue
                     c = str(r[0]).strip()
                     hk_codes.append(c.zfill(5) if c.isdigit() else c)
-                codes = cn_codes + hk_codes
-                logger.info(f"GMS 股票池(全部A+港股): {len(codes)} 只")
+                # ETF 基金代码
+                from backend_api.models import FundBasicInfo
+                etf_rows = self.db.query(FundBasicInfo.code).filter(
+                    FundBasicInfo.collect_enabled == True
+                ).all()
+                etf_codes = [str(r[0]).strip() for r in etf_rows if r[0] is not None]
+                codes = cn_codes + etf_codes + hk_codes
+                logger.info(f"GMS 股票池(全部A+ETF+港股): {len(codes)} 只")
             else:
                 return []
 

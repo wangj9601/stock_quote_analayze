@@ -63,10 +63,16 @@ class GMSStrategyEngine:
             # 6 位数字：6/0/3 为 A 股，9 为沪市 B 股（指标表按 CN 存储），均按 CN 查指标
             return len(s) >= 6 and s.isdigit() and s[0] in "6039"
 
+        def _is_etf(c: str) -> bool:
+            s = str(c).strip()
+            # ETF基金代码：5/1/8 开头的 6 位数字
+            return len(s) >= 6 and s.isdigit() and s[0] in "518"
+
         if market == "all":
             cn_codes = [c for c in codes if _is_a_share(c)]
-            hk_codes = [c for c in codes if c not in cn_codes]
-            code_sets = [("CN", cn_codes), ("HK", hk_codes)]
+            etf_codes = [c for c in codes if _is_etf(c)]
+            hk_codes = [c for c in codes if c not in cn_codes and c not in etf_codes]
+            code_sets = [("CN", cn_codes), ("ETF", etf_codes), ("HK", hk_codes)]
         else:
             code_sets = [(market, codes)]
 

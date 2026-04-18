@@ -204,6 +204,70 @@ def _get_observation_window_end_hk(
     return str(rows[-1][0]).strip()[:10]
 
 
+def _get_entry_open_next_day_etf(db: Session, code: str, signal_date: str) -> Optional[float]:
+    """ETF: 信号日之后首个交易日的开盘价（买入价）。"""
+    from backend_api.models import FundHistoricalQuotes
+
+    after_str = str(signal_date).strip()[:10]
+    row = (
+        db.query(FundHistoricalQuotes.open)
+        .filter(FundHistoricalQuotes.code == code, FundHistoricalQuotes.date > after_str)
+        .order_by(FundHistoricalQuotes.date)
+        .first()
+    )
+    if row and row[0] is not None:
+        return float(row[0])
+    return None
+
+
+def _get_future_ohlc_etf(db: Session, code: str, after_date: str, limit: int) -> List[Dict[str, Any]]:
+    """ETF: 信号日之后 limit 个交易日 OHLC（含 date），按日期升序。"""
+    from backend_api.models import FundHistoricalQuotes
+
+    after_str = str(after_date).strip()[:10]
+    rows = (
+        db.query(FundHistoricalQuotes.date, FundHistoricalQuotes.open, FundHistoricalQuotes.high, FundHistoricalQuotes.low, FundHistoricalQuotes.close)
+        .filter(FundHistoricalQuotes.code == code, FundHistoricalQuotes.date > after_str)
+        .order_by(FundHistoricalQuotes.date)
+        .limit(limit)
+        .all()
+    )
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        dt = str(r[0]).strip()[:10] if r[0] is not None else ""
+        if not dt:
+            continue
+        out.append(
+            {
+                "date": dt,
+                "open": float(r[1]) if r[1] is not None else None,
+                "high": float(r[2]) if r[2] is not None else None,
+                "low": float(r[3]) if r[3] is not None else None,
+                "close": float(r[4]) if r[4] is not None else None,
+            }
+        )
+    return out
+
+
+def _get_observation_window_end_etf(
+    db: Session, code: str, signal_date: str, horizon_days: int
+) -> Optional[str]:
+    """ETF: 信号日之后第 horizon_days 根 K 线所在日期。"""
+    from backend_api.models import FundHistoricalQuotes
+
+    after_str = str(signal_date).strip()[:10]
+    rows = (
+        db.query(FundHistoricalQuotes.date)
+        .filter(FundHistoricalQuotes.code == code, FundHistoricalQuotes.date > after_str)
+        .order_by(FundHistoricalQuotes.date)
+        .limit(horizon_days)
+        .all()
+    )
+    if not rows:
+        return None
+    return str(rows[-1][0]).strip()[:10]
+
+
 def _aggregate_details_to_summary(
     details: List[Dict[str, Any]],
     start_str: str,
@@ -623,14 +687,22 @@ def _codes_for_market_from_pool(stock_pool: List[str], market_key: str) -> List[
         s = str(c).strip()
         return len(s) >= 6 and s.isdigit() and s[0] in "6039"
 
-    mt_key = "CN" if market_key == "cn" else "HK"
+    def _is_etf(c: str) -> bool:
+        s = str(c).strip()
+        return len(s) >= 6 and s.isdigit() and s[0] in "518"
+
+    mt_map = {"cn": "CN", "hk": "HK", "etf": "ETF"}
+    mt_key_upper = mt_map.get(market_key, market_key)
     out: List[str] = []
     for c in stock_pool:
         if market_key == "cn" and _is_a_share(c):
             nc = normalize_gms_stock_code(c, "CN")
             if nc:
                 out.append(nc)
-        elif market_key == "hk" and not _is_a_share(c):
+        elif market_key == "etf" and _is_etf(c):
+            nc = str(c).strip()
+            out.append(nc)
+        elif market_key == "hk" and not _is_a_share(c) and not _is_etf(c):
             nc = normalize_gms_stock_code(c, "HK")
             if nc:
                 out.append(nc)
@@ -668,8 +740,12 @@ def _gms_evaluate_one_signal(
     code = str(code).strip()
     if not code:
         return None
-    mt_key = "CN" if market_key == "cn" else "HK"
-    code = normalize_gms_stock_code(code, mt_key)
+    mt_map = {"cn": "CN", "hk": "HK", "etf": "ETF"}
+    mt_key = mt_map.get(market_key, market_key)
+    if mt_key == "ETF":
+        code = str(code).strip()
+    else:
+        code = normalize_gms_stock_code(code, mt_key)
     if not code:
         return None
     once_key = (mt_key, code)
@@ -679,7 +755,10 @@ def _gms_evaluate_one_signal(
     buy_type = r.get("buy_type") or ("左侧" if r.get("left_buy_signal") else "右侧")
     score_total = _parse_score(r)
 
-    if market_key == "cn":
+    if market_key == "etf":
+        entry_open = _get_entry_open_next_day_etf(db, code, trade_date)
+        future_bars = _get_future_ohlc_etf(db, code, trade_date, horizon_days)
+    elif market_key == "cn":
         entry_open = _get_entry_open_next_day_cn(db, code, trade_date)
         future_bars = _get_future_ohlc_cn(db, code, trade_date, horizon_days)
     else:
@@ -688,7 +767,9 @@ def _gms_evaluate_one_signal(
 
     if entry_open is None or entry_open <= 0:
         return None
-    if market_key == "cn":
+    if market_key == "etf":
+        obs_end = _get_observation_window_end_etf(db, code, trade_date, horizon_days)
+    elif market_key == "cn":
         obs_end = _get_observation_window_end_cn(db, code, trade_date, horizon_days)
     else:
         obs_end = _get_observation_window_end_hk(db, code, trade_date, horizon_days)
@@ -816,20 +897,30 @@ def run_gms_backtest(
         s = str(c).strip()
         return len(s) >= 6 and s.isdigit() and s[0] in "6039"
 
+    def _is_etf(c: str) -> bool:
+        s = str(c).strip()
+        return len(s) >= 6 and s.isdigit() and s[0] in "518"
+
     if market == "all":
         dates_cn = _get_trading_dates_cn(db, start_str, end_str)
         dates_hk = _get_trading_dates_hk(db, start_str, end_str)
+        # ETF 使用 A 股交易日历（因为都在沪深交易所）
+        dates_etf = dates_cn
         if stock_pool:
             cn_codes = [c for c in stock_pool if _is_a_share(c)]
-            hk_codes = [c for c in stock_pool if c not in cn_codes]
-            if cn_codes and not hk_codes:
-                markets_to_run = [("cn", dates_cn)]
-            elif hk_codes and not cn_codes:
-                markets_to_run = [("hk", dates_hk)]
-            else:
-                markets_to_run = [("cn", dates_cn), ("hk", dates_hk)]
+            etf_codes = [c for c in stock_pool if _is_etf(c)]
+            hk_codes = [c for c in stock_pool if c not in cn_codes and c not in etf_codes]
+            markets_to_run = []
+            if cn_codes:
+                markets_to_run.append(("cn", dates_cn))
+            if etf_codes:
+                markets_to_run.append(("etf", dates_etf))
+            if hk_codes:
+                markets_to_run.append(("hk", dates_hk))
+            if not markets_to_run:
+                markets_to_run = [("cn", dates_cn), ("etf", dates_etf), ("hk", dates_hk)]
         else:
-            markets_to_run = [("cn", dates_cn), ("hk", dates_hk)]
+            markets_to_run = [("cn", dates_cn), ("etf", dates_etf), ("hk", dates_hk)]
     elif market == "cn":
         markets_to_run = [("cn", _get_trading_dates_cn(db, start_str, end_str))]
     else:

@@ -1376,3 +1376,70 @@ class TradingCalendarInDB(TradingCalendarBase):
 
     class Config:
         from_attributes = True
+
+
+# ========================= 基金/ETF 相关模型 =========================
+
+class FundBasicInfo(Base):
+    """基金/ETF 基础信息表"""
+    __tablename__ = "fund_basic_info"
+
+    code = Column(StockCodeTextPK(), primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    fund_type = Column(String(20), nullable=True)           # 基金类型: ETF / LOF 等
+    listing_date = Column(Text, nullable=True)              # 上市日期
+    fund_company = Column(String(100), nullable=True)       # 基金公司
+    industry = Column(Text, nullable=True)                  # 所属行业/板块
+    total_shares = Column(Float, nullable=True)             # 总份额
+    free_float_shares = Column(Float, nullable=True)        # 流通份额
+    shares_updated_at = Column(DateTime, nullable=True)
+    collect_enabled = Column(Boolean, nullable=True, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class FundRealtimeQuote(Base):
+    """基金/ETF 实时行情表"""
+    __tablename__ = "fund_realtime_quote"
+
+    code = Column(StockCodeTextPK(), primary_key=True)
+    trade_date = Column(String, primary_key=True)
+    name = Column(String)
+    current_price = Column(Float)
+    change_percent = Column(Float)
+    volume = Column(Float)
+    amount = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    open = Column(Float)
+    pre_close = Column(Float)
+    turnover_rate = Column(Float)
+    total_market_value = Column(Float)
+    circulating_market_value = Column(Float)
+    update_time = Column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint('code', 'trade_date', name='uq_fund_realtime_quote_code_date'),
+    )
+
+
+class FundHistoricalQuotes(Base):
+    """基金/ETF 历史行情表"""
+    __tablename__ = 'fund_historical_quotes'
+
+    code = Column(StockCodeTextPK(), primary_key=True)
+    name = Column(String)
+    date = Column(Date, primary_key=True)
+    open = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    close = Column(Float)
+    pre_close = Column(Float)
+    volume = Column(Float)                  # 成交量
+    amount = Column(Float)                  # 成交额
+    change_percent = Column(Float)          # 涨跌幅
+    change = Column(Float)                  # 涨跌额
+    amplitude = Column(Float)              # 振幅
+    turnover_rate = Column(Float)          # 换手率
+    collected_source = Column(String)
+    collected_date = Column(DateTime, default=datetime.now)

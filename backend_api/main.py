@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI 主应用
 """
 print(f"Loading main.py from: {__file__}")
@@ -554,6 +554,20 @@ if gms_admin_router is not None:
     print("GMS admin 路由注册成功 (/api/admin/gms)")
 else:
     print("GMS admin 路由未注册")
+
+# 尝试导入 ETF admin 路由
+try:
+    from backend_api.admin.etf_admin_routes import router as etf_admin_router
+    print("etf_admin_router 导入成功")
+except Exception as e:
+    print(f"etf_admin_router 导入失败: {e}")
+    etf_admin_router = None
+
+if etf_admin_router is not None:
+    app.include_router(etf_admin_router)
+    print("ETF admin 路由注册成功 (/api/admin/etf)")
+else:
+    print("ETF admin 路由未注册")
 
 # 前端公开接口：路径与 PVFRS 完全分离（/api/frontend/gms vs /api/frontend/pvfrs）
 if gms_frontend_router is not None:

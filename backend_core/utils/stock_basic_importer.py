@@ -91,6 +91,15 @@ def _to_bool(v: Any) -> Optional[bool]:
     return None
 
 
+def _to_optional_text(v: Any) -> Optional[str]:
+    if v is None or pd.isna(v):
+        return None
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "null", "nat"):
+        return None
+    return s
+
+
 def _read_df_from_bytes(filename: str, content: bytes) -> pd.DataFrame:
     name = filename.lower()
     if name.endswith(".xlsx") or name.endswith(".xls"):
@@ -124,13 +133,13 @@ def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any
             issues.append(ImportIssue(row_no=row_no, code="", message="代码为空"))
             continue
 
-        name = str(row.get(picked["name"], "") or "").strip() if picked["name"] else ""
+        name = _to_optional_text(row.get(picked["name"])) if picked["name"] else None
         market = detect_market(code, row.get(picked["market"]) if picked["market"] else None)
         total_shares = _to_float(row.get(picked["total_shares"])) if picked["total_shares"] else None
         free_float_shares = _to_float(row.get(picked["free_float_shares"])) if picked["free_float_shares"] else None
-        listing_date = str(row.get(picked["listing_date"], "") or "").strip() if picked["listing_date"] else ""
-        industry = str(row.get(picked["industry"], "") or "").strip() if picked["industry"] else ""
-        asof_date = str(row.get(picked["asof_date"], "") or "").strip() if picked["asof_date"] else ""
+        listing_date = _to_optional_text(row.get(picked["listing_date"])) if picked["listing_date"] else None
+        industry = _to_optional_text(row.get(picked["industry"])) if picked["industry"] else None
+        asof_date = _to_optional_text(row.get(picked["asof_date"])) if picked["asof_date"] else None
         collect_enabled = _to_bool(row.get(picked["collect_enabled"])) if picked["collect_enabled"] else None
 
         if total_shares is not None and total_shares <= 0:
@@ -151,13 +160,13 @@ def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any
             {
                 "row_no": row_no,
                 "code": code,
-                "name": name,
+                "name": name or "",
                 "market": market,
                 "total_shares": total_shares,
                 "free_float_shares": free_float_shares,
-                "listing_date": listing_date or None,
-                "industry": industry or None,
-                "asof_date": asof_date or None,
+                "listing_date": listing_date,
+                "industry": industry,
+                "asof_date": asof_date,
                 "collect_enabled": collect_enabled,
             }
         )
@@ -247,7 +256,11 @@ def _update_cn_only_fill_empty(session, row: Dict[str, Any]) -> int:
                 total_shares = CASE WHEN total_shares IS NULL THEN :total_shares ELSE total_shares END,
                 free_float_shares = CASE WHEN free_float_shares IS NULL THEN :free_float_shares ELSE free_float_shares END,
                 industry = CASE WHEN (industry IS NULL OR industry = '') THEN :industry ELSE industry END,
-                listing_date = CASE WHEN (listing_date IS NULL OR listing_date = '') THEN :listing_date ELSE listing_date END,
+                listing_date = CASE
+                    WHEN listing_date IS NULL OR NULLIF(TRIM(CAST(listing_date AS TEXT)), '') IS NULL
+                    THEN :listing_date
+                    ELSE listing_date
+                END,
                 collect_enabled = CASE WHEN :collect_enabled IS NOT NULL THEN :collect_enabled ELSE collect_enabled END,
                 shares_updated_at = CASE
                     WHEN shares_updated_at IS NULL AND
@@ -282,7 +295,11 @@ def _update_hk_only_fill_empty(session, row: Dict[str, Any]) -> int:
                 total_shares = CASE WHEN total_shares IS NULL THEN :total_shares ELSE total_shares END,
                 free_float_shares = CASE WHEN free_float_shares IS NULL THEN :free_float_shares ELSE free_float_shares END,
                 industry = CASE WHEN (industry IS NULL OR industry = '') THEN :industry ELSE industry END,
-                listing_date = CASE WHEN (listing_date IS NULL OR listing_date = '') THEN :listing_date ELSE listing_date END,
+                listing_date = CASE
+                    WHEN listing_date IS NULL OR NULLIF(TRIM(CAST(listing_date AS TEXT)), '') IS NULL
+                    THEN :listing_date
+                    ELSE listing_date
+                END,
                 collect_enabled = CASE WHEN :collect_enabled IS NOT NULL THEN :collect_enabled ELSE collect_enabled END,
                 shares_updated_at = CASE
                     WHEN shares_updated_at IS NULL AND

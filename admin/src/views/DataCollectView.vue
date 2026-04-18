@@ -801,6 +801,155 @@
         </el-card>
       </el-tab-pane>
 
+      <!-- ETF基金数据采集 -->
+      <el-tab-pane label="ETF基金数据采集" name="etf">
+        <el-card>
+          <div class="text-center mb-8">
+            <el-icon class="text-6xl text-green-400 mb-4"><DataAnalysis /></el-icon>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">ETF基金数据采集</h2>
+            <p class="text-gray-600">采集ETF基金列表、历史行情数据并计算技术指标</p>
+          </div>
+
+          <!-- ETF 统计卡片 -->
+          <div class="grid grid-cols-4 gap-4 mb-6" v-if="etfStats">
+            <el-card shadow="never" class="bg-blue-50 border-blue-100 text-center">
+              <div class="text-2xl font-bold text-blue-600">{{ etfStats.total_funds || 0 }}</div>
+              <div class="text-xs text-gray-500 mt-1">ETF总数</div>
+            </el-card>
+            <el-card shadow="never" class="bg-green-50 border-green-100 text-center">
+              <div class="text-2xl font-bold text-green-600">{{ etfStats.active_funds || 0 }}</div>
+              <div class="text-xs text-gray-500 mt-1">已启用</div>
+            </el-card>
+            <el-card shadow="never" class="bg-purple-50 border-purple-100 text-center">
+              <div class="text-2xl font-bold text-purple-600">{{ etfStats.historical_records || 0 }}</div>
+              <div class="text-xs text-gray-500 mt-1">历史行情条数</div>
+            </el-card>
+            <el-card shadow="never" class="bg-orange-50 border-orange-100 text-center">
+              <div class="text-sm font-bold text-orange-600">{{ etfStats.latest_date || '暂无' }}</div>
+              <div class="text-xs text-gray-500 mt-1">最新数据日期</div>
+            </el-card>
+          </div>
+
+          <!-- ETF 任务状态 -->
+          <el-alert
+            v-if="etfTaskStatus.is_running"
+            :title="etfTaskStatus.message || '任务进行中...'"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="mb-4"
+          />
+          <el-alert
+            v-if="!etfTaskStatus.is_running && etfTaskStatus.result"
+            :title="etfTaskStatus.message || '任务已完成'"
+            :type="etfTaskStatus.result?.error ? 'error' : 'success'"
+            :closable="true"
+            show-icon
+            class="mb-4"
+          />
+
+          <div class="max-w-2xl mx-auto">
+            <!-- 第一步：同步ETF列表 -->
+            <el-divider content-position="left">
+              <el-tag type="primary" size="large">第1步：同步ETF列表</el-tag>
+            </el-divider>
+            <el-form label-width="120px" class="mb-6">
+              <el-form-item>
+                <el-button
+                  type="success"
+                  :loading="etfSyncLoading"
+                  :disabled="etfTaskStatus.is_running"
+                  @click="syncETFList"
+                >
+                  <el-icon v-if="etfSyncLoading" class="mr-2"><Loading /></el-icon>
+                  {{ etfSyncLoading ? '同步中...' : (etfTaskStatus.is_running ? '等待任务完成' : '同步ETF列表') }}
+                </el-button>
+                <span class="text-sm text-gray-500 ml-3">从东方财富获取最新ETF列表并入库</span>
+              </el-form-item>
+            </el-form>
+
+            <!-- 第二步：历史行情采集 -->
+            <el-divider content-position="left">
+              <el-tag type="primary" size="large">第2步：历史行情采集</el-tag>
+            </el-divider>
+            <el-form @submit.prevent="startETFCollection" :model="etfForm" label-width="120px">
+              <!-- 日期范围 -->
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="开始日期" required>
+                    <el-date-picker
+                      v-model="etfForm.start_date"
+                      type="date"
+                      placeholder="选择开始日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="结束日期" required>
+                    <el-date-picker
+                      v-model="etfForm.end_date"
+                      type="date"
+                      placeholder="选择结束日期"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+
+              <!-- ETF选择 -->
+              <el-form-item label="采集范围">
+                <el-radio-group v-model="etfForm.collection_type">
+                  <el-radio value="all">全量ETF采集</el-radio>
+                  <el-radio value="specified">指定ETF代码</el-radio>
+                </el-radio-group>
+              </el-form-item>
+
+              <!-- 指定ETF代码输入 -->
+              <el-form-item v-if="etfForm.collection_type === 'specified'" label="ETF代码" required>
+                <el-input
+                  v-model="etfForm.etf_codes_text"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="请输入ETF代码，每行一个，例如：&#10;510300&#10;159919&#10;512100"
+                />
+                <div class="text-sm text-gray-500 mt-1">支持输入多个ETF代码，每行一个</div>
+              </el-form-item>
+
+              <!-- 全量采集说明 -->
+              <el-alert
+                v-if="etfForm.collection_type === 'all'"
+                title="全量采集说明"
+                type="info"
+                :closable="false"
+                show-icon
+                class="mb-4"
+              >
+                <p>将采集数据库中所有已启用的ETF历史行情数据，采集完成后自动计算所有技术指标（MA/MAVOL/MACD/KDJ/RSI/BOLL/GMS均值频率共振）。</p>
+              </el-alert>
+
+              <!-- 操作按钮 -->
+              <el-form-item>
+                <el-button
+                  type="primary"
+                  :loading="etfCollectLoading"
+                  :disabled="etfTaskStatus.is_running"
+                  @click="startETFCollection"
+                >
+                  <el-icon v-if="etfCollectLoading" class="mr-2"><Loading /></el-icon>
+                  {{ etfCollectLoading ? '启动中...' : (etfTaskStatus.is_running ? '等待任务完成' : '开始采集') }}
+                </el-button>
+                <el-button @click="resetETFForm">重置</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+        </el-card>
+      </el-tab-pane>
+
       <!-- 采集日历管理 -->
       <el-tab-pane label="采集日历管理" name="calendar">
         <el-card>
@@ -1225,6 +1374,19 @@ const ashareRealtimeLoading = ref(false)
 const hkRealtimeLoading = ref(false)
 const hkFileLoading = ref(false)
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
+
+// ETF 相关数据
+const etfSyncLoading = ref(false)
+const etfCollectLoading = ref(false)
+const etfStats = ref<any>(null)
+const etfTaskStatus = ref<any>({ is_running: false, message: '', result: null })
+const etfForm = ref({
+  start_date: '',
+  end_date: '',
+  collection_type: 'all' as 'all' | 'specified',
+  etf_codes_text: ''
+})
+let etfPollingTimer: NodeJS.Timeout | null = null
 
 // 计算属性
 const allIndicators = ['ma', 'mavol', 'kdj', 'rsi', 'boll', 'pvfrs', 'icost']
@@ -2248,8 +2410,123 @@ const exportCalendar = () => {
   ElMessage.success('导出成功')
 }
 
+// ============== ETF 相关方法 ==============
+
+const loadETFStats = async () => {
+  try {
+    const res = await axios.get(`${API_BASE}/api/admin/etf/stats`)
+    if (res.data?.success) {
+      etfStats.value = res.data.data
+    }
+  } catch (e) {
+    console.warn('加载ETF统计失败', e)
+  }
+}
+
+const pollETFTaskStatus = async () => {
+  try {
+    const res = await axios.get(`${API_BASE}/api/admin/etf/task-status`)
+    if (res.data?.success) {
+      etfTaskStatus.value = res.data.data
+      if (!res.data.data.is_running && etfPollingTimer) {
+        clearInterval(etfPollingTimer)
+        etfPollingTimer = null
+        etfSyncLoading.value = false
+        etfCollectLoading.value = false
+        // 任务完成后刷新统计
+        await loadETFStats()
+      }
+    }
+  } catch (e) {
+    console.warn('查询ETF任务状态失败', e)
+  }
+}
+
+const startETFPolling = () => {
+  if (etfPollingTimer) clearInterval(etfPollingTimer)
+  etfPollingTimer = setInterval(pollETFTaskStatus, 3000)
+}
+
+const syncETFList = async () => {
+  try {
+    etfSyncLoading.value = true
+    const res = await axios.post(`${API_BASE}/api/admin/etf/sync-list`)
+    if (res.data?.success) {
+      ElMessage.success('ETF列表同步任务已启动')
+      startETFPolling()
+    } else {
+      ElMessage.error(res.data?.detail || '同步启动失败')
+      etfSyncLoading.value = false
+    }
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.detail || 'ETF列表同步失败')
+    etfSyncLoading.value = false
+  }
+}
+
+const startETFCollection = async () => {
+  if (!etfForm.value.start_date || !etfForm.value.end_date) {
+    ElMessage.warning('请选择日期范围')
+    return
+  }
+
+  let etf_codes: string[] | null = null
+  if (etfForm.value.collection_type === 'specified') {
+    const text = etfForm.value.etf_codes_text.trim()
+    if (!text) {
+      ElMessage.warning('请输入ETF代码')
+      return
+    }
+    etf_codes = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+    if (etf_codes.length === 0) {
+      ElMessage.warning('请输入有效的ETF代码')
+      return
+    }
+  }
+
+  try {
+    etfCollectLoading.value = true
+    const res = await axios.post(`${API_BASE}/api/admin/etf/collect`, {
+      start_date: etfForm.value.start_date,
+      end_date: etfForm.value.end_date,
+      etf_codes: etf_codes
+    })
+    if (res.data?.success) {
+      ElMessage.success('ETF行情采集任务已启动')
+      startETFPolling()
+    } else {
+      ElMessage.error(res.data?.detail || '采集启动失败')
+      etfCollectLoading.value = false
+    }
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.detail || 'ETF行情采集失败')
+    etfCollectLoading.value = false
+  }
+}
+
+const resetETFForm = () => {
+  etfForm.value = {
+    start_date: '',
+    end_date: '',
+    collection_type: 'all',
+    etf_codes_text: ''
+  }
+}
+
+// 切到 ETF 标签页时自动加载统计
+watch(() => activeMainTab.value, (val) => {
+  if (val === 'etf') {
+    loadETFStats()
+    pollETFTaskStatus()
+  }
+})
+
 onUnmounted(() => {
   stopPolling()
+  if (etfPollingTimer) {
+    clearInterval(etfPollingTimer)
+    etfPollingTimer = null
+  }
 })
 
 </script>
