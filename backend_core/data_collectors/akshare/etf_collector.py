@@ -132,67 +132,162 @@ class ETFCollector:
 
     def sync_etf_list(self) -> Dict:
         """
-        从 akshare 同步ETF基础信息列表
-
-        Returns:
-            Dict: 同步结果统计
+        同步ETF基础信息列表。优先通过最新实时行情表提取，避免外部接口限流/失败。
         """
         try:
-            logger.info("开始同步ETF基础信息列表...")
-            # 使用 fund_etf_spot_em 获取当前所有ETF的基本行情（含名称和代码）
-            df = ak.fund_etf_spot_em()
+            logger.info("开始从本地实时行情表同步ETF基础信息列表...")
+            # 1. 尝试从实时表提取最新的一批代码和名称
+            res = self.session.execute(text("""
+                WITH LatestDate AS (
+                    SELECT MAX(trade_date) as max_date FROM fund_realtime_quote
+                )
+                SELECT DISTINCT code, name 
+                FROM fund_realtime_quote 
+                WHERE trade_date = (SELECT max_date FROM LatestDate)
+            """)).fetchall()
 
-            if df is None or df.empty:
-                logger.warning("未获取到ETF列表数据")
-                return {'total': 0, 'inserted': 0, 'updated': 0, 'failed': 0}
+            if not res:
+                logger.warning("实时行情表无最新数据，尝试通过外部接口(akshare)同步列表...")
+                # 备选方案：通过 akshare 获取全量列表
+                try:
+                    df = ak.fund_etf_spot_em()
+                    if df is not None and not df.empty:
+                        res = []
+                        for _, row in df.iterrows():
+                            res.append((str(row.get('代码', '')), str(row.get('名称', ''))))
+                    else:
+                        return {'total': 0, 'inserted': 0, 'updated': 0, 'failed': 1, 'error': 'No data from real-time or external'}
+                except Exception as ex:
+                    logger.error(f"外部接口同步列表也失败: {ex}")
+                    return {'total': 0, 'inserted': 0, 'updated': 0, 'failed': 1, 'error': str(ex)}
 
-            logger.info(f"从akshare获取到 {len(df)} 只ETF基金")
+            logger.info(f"获取到 {len(res)} 只ETF，准备更新基础信息表...")
 
-            inserted = 0
             updated = 0
             failed = 0
+            now = datetime.now()
 
-            for _, row in df.iterrows():
+            for code, name in res:
+                if not code or not name:
+                    continue
                 try:
-                    code = str(row.get('代码', '')).strip()
-                    name = str(row.get('名称', '')).strip()
-
-                    if not code or not name:
-                        continue
-
-                    self.session.execute(text('''
-                        INSERT INTO fund_basic_info (code, name, fund_type, collect_enabled, created_at, updated_at)
-                        VALUES (:code, :name, :fund_type, TRUE, :now, :now)
+                    # 使用 UPSERT 逻辑更新 fund_basic_info
+                    # 仅更新名称和更新时间，保留原有配置（如 collect_enabled）
+                    sql = text("""
+                        INSERT INTO fund_basic_info (code, name, fund_type, created_at, updated_at)
+                        VALUES (:code, :name, 'ETF', :now, :now)
                         ON CONFLICT (code) DO UPDATE SET
                             name = EXCLUDED.name,
                             updated_at = EXCLUDED.updated_at
-                    '''), {
-                        'code': code,
-                        'name': name,
-                        'fund_type': 'ETF',
-                        'now': datetime.now()
-                    })
-                    inserted += 1
-
+                    """)
+                    self.session.execute(sql, {'code': code, 'name': name, 'now': now})
+                    updated += 1
                 except Exception as e:
-                    logger.error(f"同步ETF {code} 失败: {e}")
+                    logger.error(f"更新ETF {code} 基础信息失败: {e}")
                     failed += 1
-                    continue
 
             self.session.commit()
             result = {
-                'total': len(df),
-                'inserted': inserted,
+                'total': len(res),
+                'inserted': 0,
                 'updated': updated,
                 'failed': failed
             }
-            logger.info(f"ETF列表同步完成: {result}")
+            logger.info(f"ETF 基础信息列表同步完成: {result}")
             return result
-
         except Exception as e:
-            logger.error(f"同步ETF列表失败: {e}")
             self.session.rollback()
+            logger.error(f"同步ETF基础信息列表异常: {e}")
             return {'total': 0, 'inserted': 0, 'updated': 0, 'failed': 1, 'error': str(e)}
+
+    def collect_historical_quotes_from_realtime(self, date_str: str) -> bool:
+        """
+        从 ETF 实时行情表同步指定日期的数据到历史行情表，避免外部接口限流。
+        
+        Args:
+            date_str: 日期字符串 (YYYY-MM-DD 或 YYYYMMDD)
+            
+        Returns:
+            bool: 同步是否成功（且实时表有数据）
+        """
+        try:
+            # 统一日期格式为 YYYY-MM-DD
+            if '-' in date_str:
+                trade_date = date_str
+            else:
+                trade_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+                
+            # 1. 检查实时行情表中是否有该日期数据
+            count_res = self.session.execute(text("""
+                SELECT COUNT(1) FROM fund_realtime_quote WHERE trade_date = :trade_date
+            """), {'trade_date': trade_date}).fetchone()
+            
+            count = count_res[0] if count_res else 0
+            if count == 0:
+                logger.info(f"ETF 实时行情表无日期 {trade_date} 的数据，无法同步。")
+                return False
+
+            logger.info(f"开始从 ETF 实时行情表同步数据，日期: {trade_date}, 共 {count} 条记录")
+
+            # 2. 从实时表读取数据并同步到历史表
+            # 注意：实时表的字段名与历史表略有不同 (e.g., current_price -> close)
+            # 实时表没有 change 和 amplitude 字段，需要计算或设为 NULL
+            self.session.execute(text("""
+                INSERT INTO fund_historical_quotes (
+                    code, name, date, open, high, low, close, pre_close, 
+                    volume, amount, change_percent, change, amplitude, 
+                    turnover_rate, collected_source, collected_date
+                )
+                SELECT 
+                    code, name, CAST(trade_date AS DATE) as date, open, high, low, current_price as close, pre_close,
+                    volume, amount, change_percent, 
+                    (current_price - pre_close) as change,
+                    CASE WHEN pre_close > 0 THEN (high - low) / pre_close * 100 ELSE NULL END as amplitude,
+                    turnover_rate, 'realtime_sync' as collected_source, NOW() as collected_date
+                FROM fund_realtime_quote
+                WHERE trade_date = :trade_date
+                ON CONFLICT (code, date) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    close = EXCLUDED.close,
+                    pre_close = EXCLUDED.pre_close,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    change_percent = EXCLUDED.change_percent,
+                    change = EXCLUDED.change,
+                    amplitude = EXCLUDED.amplitude,
+                    turnover_rate = EXCLUDED.turnover_rate,
+                    collected_source = EXCLUDED.collected_source,
+                    collected_date = EXCLUDED.collected_date
+            """), {'trade_date': trade_date})
+            
+            self.session.commit()
+            logger.info(f"ETF 实时表同步到历史表完成，日期: {trade_date}")
+            
+            # 3. 触发这些同步数据的指标计算
+            # 获取刚才同步过的所有代码
+            codes_res = self.session.execute(text("""
+                SELECT DISTINCT code FROM fund_realtime_quote WHERE trade_date = :trade_date
+            """), {'trade_date': trade_date}).fetchall()
+            
+            if codes_res:
+                logger.info(f"开始计算 {len(codes_res)} 只 ETF 的技术指标...")
+                for row in codes_res:
+                    etf_code = row[0]
+                    try:
+                        self._calculate_all_indicators(etf_code, trade_date, trade_date)
+                    except Exception as e:
+                        logger.warning(f"ETF {etf_code} 指标计算失败: {e}")
+                logger.info(f"ETF 技术指标计算完成。")
+            
+            return True
+            
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"从 ETF 实时表同步历史行情失败: {e}")
+            return False
 
     # ===================== 获取ETF列表 =====================
 

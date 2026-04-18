@@ -61,6 +61,9 @@ try:
         StockTechnicalIndicators = getattr(models_module, 'StockTechnicalIndicators', None)
         StockRealtimeQuote = getattr(models_module, 'StockRealtimeQuote', None)
         StockRealtimeQuoteHK = getattr(models_module, 'StockRealtimeQuoteHK', None)
+        FundBasicInfo = getattr(models_module, 'FundBasicInfo', None)
+        FundRealtimeQuote = getattr(models_module, 'FundRealtimeQuote', None)
+        FundHistoricalQuotes = getattr(models_module, 'FundHistoricalQuotes', None)
         HistoricalQuotes = getattr(models_module, 'HistoricalQuotes', None)
         HistoricalQuotesHK = getattr(models_module, 'HistoricalQuotesHK', None)
         IndexRealtimeQuotes = getattr(models_module, 'IndexRealtimeQuotes', None)
@@ -149,6 +152,9 @@ except Exception as e:
     StockTechnicalIndicators = None
     StockRealtimeQuote = None
     StockRealtimeQuoteHK = None
+    FundBasicInfo = None
+    FundRealtimeQuote = None
+    FundHistoricalQuotes = None
     HistoricalQuotes = None
     HistoricalQuotesHK = None
     IndexRealtimeQuotes = None
@@ -240,6 +246,9 @@ __all__ = [
     'StockTechnicalIndicators',
     'StockRealtimeQuote',
     'StockRealtimeQuoteHK',
+    'FundBasicInfo',
+    'FundRealtimeQuote',
+    'FundHistoricalQuotes',
     'HistoricalQuotes',
     'HistoricalQuotesHK',
     'IndexRealtimeQuotes',

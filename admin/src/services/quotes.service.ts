@@ -375,6 +375,55 @@ class QuotesService {
   }
 
   /**
+   * 获取ETF实时行情数据
+   */
+  async getETFQuotes(params: StockQuoteParams): Promise<QuotesResponse<any>> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('page', params.page.toString())
+    queryParams.append('page_size', params.pageSize.toString())
+
+    if (params.keyword) {
+      queryParams.append('keyword', params.keyword)
+    }
+
+    return apiService.get<QuotesResponse<any>>(this.getQuotesApiUrl(`/etf-stocks?${queryParams}`))
+  }
+
+  /**
+   * 获取ETF历史行情数据
+   */
+  async getETFHistoricalQuotes(params: HistoricalQuoteParams): Promise<QuotesResponse<any>> {
+    const queryParams = new URLSearchParams()
+
+    if (params.code) {
+      queryParams.append('code', params.code)
+    }
+    if (params.keyword) {
+      queryParams.append('keyword', params.keyword)
+    }
+
+    queryParams.append('page', params.page.toString())
+    queryParams.append('size', params.pageSize.toString())
+
+    if (params.startDate) {
+      queryParams.append('start_date', params.startDate)
+    }
+    if (params.endDate) {
+      queryParams.append('end_date', params.endDate)
+    }
+
+    const response = await apiService.get<any>(this.getQuotesApiUrl(`/etf-history?${queryParams}`))
+
+    return {
+      success: true,
+      data: response.items || [],
+      total: response.total || 0,
+      page: params.page,
+      pageSize: params.pageSize
+    }
+  }
+
+  /**
    * 获取多周期历史行情数据
    */
   async getMultiPeriodHistoricalQuotes(params: MultiPeriodQuoteParams): Promise<QuotesResponse<any>> {

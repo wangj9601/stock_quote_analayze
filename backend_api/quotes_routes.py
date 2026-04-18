@@ -15,13 +15,36 @@ from database import get_db
 from models import (
     StockRealtimeQuote, IndexRealtimeQuotes, IndustryBoardRealtimeQuotes,
     HistoricalQuotes, StockRealtimeQuoteHK, HKIndexRealtimeQuotes,
-    HistoricalQuotesHK
+    HistoricalQuotesHK, FundRealtimeQuote, FundHistoricalQuotes
 )
 from backend_core.data_collectors.akshare.hk_historical_import_from_file import complete_hk_change_fields
 from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 _logger = logging.getLogger(__name__)
+
+def _historical_quotes_etf_to_api(row: FundHistoricalQuotes) -> dict:
+    """ETF historical_quotes 序列化"""
+    d = row.date
+    date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+    return {
+        "code": row.code,
+        "name": row.name,
+        "date": date_str,
+        "open": row.open,
+        "high": row.high,
+        "low": row.low,
+        "close": row.close,
+        "pre_close": row.pre_close,
+        "volume": row.volume,
+        "amount": row.amount,
+        "amplitude": row.amplitude,
+        "change_percent": row.change_percent,
+        "change": row.change,
+        "turnover_rate": row.turnover_rate,
+        "collected_source": row.collected_source,
+        "collected_date": row.collected_date.isoformat() if row.collected_date and hasattr(row.collected_date, "isoformat") else None,
+    }
 
 
 def _historical_quotes_cn_to_api(row: HistoricalQuotes) -> dict:
@@ -392,6 +415,80 @@ def get_hk_index_historical_quotes(
     
     return {
         "items": [item.__dict__ for item in result["items"]],
+        "total": result["total"],
+        "page": page,
+        "size": size
+    }
+
+# 9. ETF实时行情
+@router.get("/etf-stocks")
+def get_etf_quotes(
+    page: int = 1,
+    page_size: int = 20,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    # 获取最新日期
+    latest_date_row = db.query(FundRealtimeQuote.trade_date).order_by(desc(FundRealtimeQuote.trade_date)).first()
+    if not latest_date_row:
+        return {"success": True, "data": [], "total": 0, "page": page, "page_size": page_size}
+    
+    latest_date = latest_date_row[0]
+    
+    query = db.query(FundRealtimeQuote).filter(FundRealtimeQuote.trade_date == latest_date)
+    
+    if keyword:
+        query = query.filter(or_(
+            FundRealtimeQuote.code.like(f"%{keyword}%"),
+            FundRealtimeQuote.name.like(f"%{keyword}%")
+        ))
+        
+    # 默认按涨跌幅排序
+    query = query.order_by(desc(FundRealtimeQuote.change_percent))
+    
+    result = paginate_query(query, page, page_size)
+    
+    return {
+        "success": True,
+        "data": [item.__dict__ for item in result["items"]],
+        "total": result["total"],
+        "page": page,
+        "page_size": page_size
+    }
+
+# 10. ETF历史行情
+@router.get("/etf-history")
+def get_etf_historical_quotes(
+    page: int = 1,
+    size: int = 20,
+    code: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(FundHistoricalQuotes)
+    
+    if code:
+        query = query.filter(FundHistoricalQuotes.code == code)
+        
+    if keyword:
+        query = query.filter(or_(
+            FundHistoricalQuotes.code.like(f"%{keyword}%"),
+            FundHistoricalQuotes.name.like(f"%{keyword}%")
+        ))
+        
+    if start_date:
+        query = query.filter(FundHistoricalQuotes.date >= start_date)
+    if end_date:
+        query = query.filter(FundHistoricalQuotes.date <= end_date)
+        
+    query = query.order_by(desc(FundHistoricalQuotes.date))
+    
+    result = paginate_query(query, page, size)
+    
+    return {
+        "items": [_historical_quotes_etf_to_api(item) for item in result["items"]],
         "total": result["total"],
         "page": page,
         "size": size

@@ -37,6 +37,7 @@ from backend_core.data_collectors.akshare.hk_semiannual_collector import HKSemiA
 from backend_core.data_collectors.akshare.annual_collector import AnnualDataGenerator
 from backend_core.data_collectors.akshare.hk_annual_collector import HKAnnualDataGenerator
 import time
+import pandas as pd
 from backend_api.database import SessionLocal as ApiSessionLocal
 from sqlalchemy import text
 
@@ -141,9 +142,6 @@ def collect_tushare_historical():
         today_str_dash = today.strftime('%Y-%m-%d')
         if _is_market_holiday('CN', today_str_dash):
             logging.info(f"[定时任务] A股 {today_str_dash} 为节假日（trading_calendar），跳过历史行情采集。")
-            return
-        if today.weekday() in (5, 6):
-            logging.info("[定时任务] 今天是周末，不执行 A 股历史行情采集。")
             return
         today_str = today.strftime('%Y%m%d')
         logging.info(f"[定时任务] A 股历史行情采集开始，日期: {today_str}")
@@ -267,9 +265,6 @@ def collect_hk_historical():
         today_str_dash = today.strftime('%Y-%m-%d')
         if _is_market_holiday('HK', today_str_dash):
             logging.info(f"[定时任务] 港股 {today_str_dash} 为节假日（trading_calendar），跳过历史行情采集。")
-            return
-        if today.weekday() in (5, 6):
-            logging.info("[定时任务] 今天是周末，不执行港股历史行情采集。")
             return
         today = today.strftime('%Y%m%d')
         logging.info(f"[定时任务] 港股历史行情采集开始，日期: {today}")
@@ -396,22 +391,22 @@ def collect_etf_realtime():
         try:
             df = __import__('akshare').fund_etf_spot_em()
         except Exception as em_ex:
-            logging.warning(f"东方财富 ETF 实时接口访问失败: {em_ex}，尝试切换同花顺接口...")
+            logging.warning(f"东方财富 ETF 实时接口访问失败: {em_ex}，尝试切换新浪接口...")
             
-        if df is None or df.empty:
-            source = 'ths'
-            try:
-                df = __import__('akshare').fund_etf_spot_ths()
-            except Exception as ths_ex:
-                logging.warning(f"同花顺 ETF 实时接口也访问失败: {ths_ex}，尝试切换新浪接口...")
-                df = None
-        
         if df is None or df.empty:
             source = 'sina'
             try:
                 df = __import__('akshare').fund_etf_category_sina(symbol="ETF基金")
             except Exception as sina_ex:
-                logging.error(f"新浪 ETF 实时接口最后也访问失败: {sina_ex}")
+                logging.warning(f"新浪 ETF 实时接口也访问失败: {sina_ex}，尝试切换同花顺接口...")
+                df = None
+        
+        if df is None or df.empty:
+            source = 'ths'
+            try:
+                df = __import__('akshare').fund_etf_spot_ths()
+            except Exception as ths_ex:
+                logging.error(f"同花顺 ETF 实时接口最后也访问失败: {ths_ex}")
                 return
                 
         if df is not None and not df.empty:
@@ -434,17 +429,7 @@ def collect_etf_realtime():
                     turnover_rate = float(row.get('换手率', 0)) if pd.notna(row.get('换手率')) else None
                     total_mv = float(row.get('总市值', 0)) if pd.notna(row.get('总市值')) else None
                     circulating_mv = float(row.get('流通市值', 0)) if pd.notna(row.get('流通市值')) else None
-                elif source == 'ths':
-                    code = str(row.get('基金代码', ''))
-                    if not code: continue
-                    name = str(row.get('基金名称', ''))
-                    current_price = float(row.get('当前-单位净值', 0)) if pd.notna(row.get('当前-单位净值')) else None
-                    if current_price is None or current_price == 0:
-                        current_price = float(row.get('最新-单位净值', 0)) if pd.notna(row.get('最新-单位净值')) else None
-                    change_percent = float(row.get('增长率', 0)) if pd.notna(row.get('增长率')) else None
-                    pre_close = float(row.get('前一日-单位净值', 0)) if pd.notna(row.get('前一日-单位净值')) else None
-                    volume = amount = high = low = open_price = turnover_rate = total_mv = circulating_mv = None
-                else: # sina
+                elif source == 'sina':
                     code = str(row.get('代码', ''))
                     if not code: continue
                     name = str(row.get('名称', ''))
@@ -457,7 +442,35 @@ def collect_etf_realtime():
                     open_price = float(row.get('今开', 0)) if pd.notna(row.get('今开')) else None
                     pre_close = float(row.get('昨收', 0)) if pd.notna(row.get('昨收')) else None
                     turnover_rate = total_mv = circulating_mv = None
+                else: # ths
+                    code = str(row.get('基金代码', ''))
+                    if not code: continue
+                    name = str(row.get('基金名称', ''))
+                    current_price = float(row.get('当前-单位净值', 0)) if pd.notna(row.get('当前-单位净值')) else None
+                    if current_price is None or current_price == 0:
+                        current_price = float(row.get('最新-单位净值', 0)) if pd.notna(row.get('最新-单位净值')) else None
+                    change_percent = float(row.get('增长率', 0)) if pd.notna(row.get('增长率')) else None
+                    pre_close = float(row.get('前一日-单位净值', 0)) if pd.notna(row.get('前一日-单位净值')) else None
+                    volume = amount = high = low = open_price = turnover_rate = total_mv = circulating_mv = None
                 
+                # 针对特定代码输出日志用于排查
+                if code == '510300' or code == 'sh510300' or code == 'sz510300':
+                    logging.info(f"[ETF排查] 代码: {code}, 数据源: {source}, 最新价: {current_price}, 成交量: {volume}, 成交额: {amount}")
+
+                if code.startswith('sh') or code.startswith('sz'):
+                    code = code[2:]
+                
+                # 更新基本信息表
+                session.execute(text("""
+                    INSERT INTO fund_basic_info (code, name, fund_type, collect_enabled, created_at, updated_at)
+                    VALUES (:code, :name, 'ETF', TRUE, :now, :now)
+                    ON CONFLICT (code) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        updated_at = EXCLUDED.updated_at
+                """), {
+                    'code': code, 'name': name, 'now': now
+                })
+
                 session.execute(text("""
                     INSERT INTO fund_realtime_quote (code, trade_date, name, current_price, change_percent, volume, amount, high, low, open, pre_close, turnover_rate, total_market_value, circulating_market_value, update_time)
                     VALUES (:code, :trade_date, :name, :current_price, :change_percent, :volume, :amount, :high, :low, :open, :pre_close, :turnover_rate, :total_market_value, :circulating_market_value, :update_time)
@@ -479,14 +492,17 @@ def collect_etf_historical():
         if _is_market_holiday('CN', today_str_dash):
             logging.info(f"[定时任务] A股(ETF) {today_str_dash} 为节假日，跳过 ETF 历史行情采集。")
             return
-        if today.weekday() in (5, 6):
-            logging.info("[定时任务] 今天是周末，不执行 ETF 历史行情采集。")
-            return
         logging.info(f"[定时任务] ETF 历史行情与列表同步采集开始，日期: {today_str_dash}")
         # 先同步一次列表
         etf_collector_instance.sync_etf_list()
-        # 全量采集今日收盘数据
-        etf_collector_instance.collect_historical_data(start_date=today_str_dash, end_date=today_str_dash)
+        
+        # 优先从实时行情表同步到历史表，避免爬虫限流
+        if etf_collector_instance.collect_historical_quotes_from_realtime(today_str_dash):
+             logging.info(f"[定时任务] {today_str_dash} ETF 历史数据已通过实时表同步完成")
+        else:
+             logging.info(f"[定时任务] 实时表无数据，尝试通过外部接口采集 {today_str_dash} ETF 历史行情")
+             etf_collector_instance.collect_historical_data(start_date=today_str_dash, end_date=today_str_dash)
+        
         logging.info("[定时任务] ETF 历史行情采集完成")
     except Exception as e:
         logging.error(f"[定时任务] ETF 历史行情采集异常: {e}")
