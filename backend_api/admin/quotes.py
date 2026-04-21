@@ -559,7 +559,7 @@ async def get_historical_quotes(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     keyword: Optional[str] = None,
-    date_range: str = Query("today", regex="^(today|week|month|custom)$"),
+    date_range: str = Query("today", pattern="^(today|week|month|custom)$"),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     current_user: Any = Depends(get_current_admin),
@@ -613,7 +613,7 @@ async def get_historical_quotes(
 async def export_quote_data(
     quote_type: str,
     keyword: Optional[str] = None,
-    date_range: str = Query("today", regex="^(today|week|month|custom)$"),
+    date_range: str = Query("today", pattern="^(today|week|month|custom)$"),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     current_user: Any = Depends(get_current_admin),
