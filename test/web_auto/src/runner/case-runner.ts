@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import type { WebCase, WebCaseStep } from '../data/excel-case-parser'
+import type { WebCase, WebCaseStep } from '../data/excel-case-parser.js'
 
 async function runStep(page: Page, step: WebCaseStep): Promise<void> {
   const target = page.locator(step.target)
