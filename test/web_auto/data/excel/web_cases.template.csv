@@ -1,0 +1,5 @@
+caseId,title,tags,precondition,stepAction,stepTarget,stepValue,stepExpect
+CASE-001,登录后打开用户管理,"core,smoke","已登录系统",click,"a.nav-item:has-text('用户管理')",,
+CASE-001,登录后打开用户管理,"core,smoke","已登录系统",assertVisible,".admin-content",,
+CASE-002,打开系统日志页并校验标题,"core,regression","已登录系统",click,"a.nav-item:has-text('系统日志')",,
+CASE-002,打开系统日志页并校验标题,"core,regression","已登录系统",assertText,".admin-content","",系统日志

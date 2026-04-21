@@ -1,0 +1,5 @@
+.env.web-auto
+.auth/
+playwright-report/
+test-results/
+data/generated/
