@@ -34,6 +34,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend_core.database.db import SessionLocal  # noqa: E402
 
+PROGRESS_LOG_INTERVAL = 100
+
 
 def _now() -> datetime:
     return datetime.now()
@@ -140,8 +142,10 @@ class EtfHistoricalMigration:
                 else:
                     self.stats["failed_etf"] += 1
 
-                if idx % self.batch_size == 0:
+                if idx % PROGRESS_LOG_INTERVAL == 0:
                     self._print_progress(idx)
+
+                if idx % self.batch_size == 0:
                     self._sleep()
 
             elapsed = (_now() - started).total_seconds()
