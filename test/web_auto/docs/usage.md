@@ -2,11 +2,17 @@
 
 ## 1. 目录说明
 
-- 根目录：`test/web_auto`
-- 冒烟测试：`specs/smoke.spec.ts`
-- 用例回归：`specs/excel-cases.spec.ts`
-- Excel 模板：`data/excel/web_cases.template.csv`
-- 登录策略：`docs/login_strategy.md`
+- **根目录**：`test/web_auto`
+- **业务脚本 (Specs)**：`specs/`
+  - `pvfrs-workflow.spec.ts`：PVFRS 策略全生命周期测试
+  - `gms-workflow.spec.ts`：GMS 回测管理测试
+  - `users-management.spec.ts`：用户管理测试
+  - `market-data.spec.ts`：行情浏览测试
+  - `data-collection.spec.ts`：采集任务启动测试
+  - `smoke.spec.ts`：全菜单页面可用性扫描
+- **页面对象 (POM)**：`src/pages/`
+  - 存放各页面的 Locator 封装及核心 Action。
+- **配置与工具**：`src/config.ts`, `src/fixtures/`
 
 ## 2. 环境准备
 
@@ -25,92 +31,70 @@ copy .env.web-auto.example .env.web-auto
 
 ## 3. 环境变量说明
 
-- `WEB_BASE_URL`：待测系统地址（如 `http://127.0.0.1:3000`）
-- `WEB_USERNAME`：登录用户名
-- `WEB_PASSWORD`：登录密码
-- `LOGIN_MODE`：登录模式（`account_password/storage_state/manual_captcha`）
-- `STORAGE_STATE_PATH`：登录态文件路径（默认 `.auth/storage-state.json`）
-- `HEADLESS`：是否无头执行（`true/false`）
-- `CAPTCHA_BYPASS_HEADER_KEY`：可选，验证码绕过 Header 键
-- `CAPTCHA_BYPASS_HEADER_VALUE`：可选，验证码绕过 Header 值
+- `WEB_BASE_URL`：待测系统地址（默认 `http://127.0.0.1:3000`）
+- `WEB_USERNAME`：登录用户名（必填）
+- `WEB_PASSWORD`：登录密码（必填）
+- `LOGIN_MODE`：建议保持 `account_password`
+- `HEADLESS`：设置为 `false` 可在运行时弹出浏览器窗口观察
 
-## 4. 常用命令
+## 4. 常用执行命令
 
-### 4.1 冒烟扫描
-
+### 4.1 全量回归
 ```bash
-npm run test:smoke
+npx playwright test
 ```
 
-### 4.2 Excel 用例回归
-
+### 4.2 执行特定模块
 ```bash
-npm run test:cases
+npx playwright test specs/pvfrs-workflow.spec.ts
 ```
 
-### 4.3 全量执行
-
+### 4.3 调试模式 (UI)
 ```bash
-npm run test:all
+npx playwright test --ui
 ```
 
-### 4.4 查看报告
+## 5. 开发指南：如何新增一个测试
 
-```bash
-npm run report
+### 步骤 A：创建页面对象 (POM)
+在 `src/pages/` 创建新文件，如 `report.page.ts`：
+```typescript
+export class ReportPage {
+  constructor(readonly page: Page) {
+    this.table = page.locator('.report-table');
+  }
+  async download(id: string) {
+    await this.table.locator(`tr:has-text("${id}")`).getByText('下载').click();
+  }
+}
 ```
 
-### 4.5 Excel 转 JSON
+### 步骤 B：编写业务脚本 (Spec)
+在 `specs/` 创建新文件。**注意：相对路径导入必须带 `.js` 后缀**：
+```typescript
+import { test, expect } from '../src/fixtures/auth.fixture.js';
+import { ReportPage } from '../src/pages/report.page.js';
 
-```bash
-npm run excel:convert
+test('下载报告测试', async ({ authenticatedPage }) => {
+  const reportPage = new ReportPage(authenticatedPage);
+  await authenticatedPage.goto('/reports');
+  await reportPage.download('REP-001');
+  // ... 加上断言
+});
 ```
 
-## 5. Excel 用例编写规范
+## 6. 常见排障
 
-建议将业务用例整理成 `web_cases.xlsx`，字段如下：
+### 6.1 导入报错 (Module Not Found)
+因为项目使用 `ESM (NodeNext)`，TS 在编译时要求显式指定 `.js`。
+- ❌ `import { X } from '../pages/my.page'`
+- ✅ `import { X } from '../pages/my.page.js'`
 
-- `caseId`
-- `title`
-- `tags`（逗号分隔）
-- `precondition`
-- `stepAction`
-- `stepTarget`
-- `stepValue`
-- `stepExpect`
+### 6.2 登录超时或失败
+1. 检查 `.env.web-auto` 中的账号密码是否正确。
+2. 检查 `WEB_BASE_URL` 是否可达。
+3. 如果系统有验证码，请在测试环境开启“万能验证码”或“验证码绕过”。
 
-动作说明：
-
-- `click`：点击元素（`stepTarget` 为选择器）
-- `fill`：输入文本（`stepValue` 为输入值）
-- `press`：按键（`stepValue` 如 `Enter`）
-- `assertVisible`：断言元素可见
-- `assertText`：断言元素包含文本（`stepExpect`）
-- `goto`：访问 URL（`stepTarget` 为地址）
-
-## 6. 登录模式实践建议
-
-- **推荐**：测试环境支持免验证码，使用 `account_password`
-- **次选**：先人工登录一次，再用 `storage_state`
-- **过渡**：`manual_captcha` 模式联调
-
-若你们系统必须滑块/图形验证码，建议先让后端给测试账号开白名单或测试开关。
-
-## 7. 失败排查
-
-- 登录失败：检查 `WEB_BASE_URL/用户名/密码` 与登录接口可用性
-- 选择器失效：页面改版后更新 `stepTarget` 或 POM
-- 用例未执行：确认 `data/excel/web_cases.xlsx` 已放置且字段正确
-- CI 失败：查看 `playwright-report` artifact 与截图/trace
-
-## 8. CI 接入
-
-已提供工作流：`.github/workflows/web-auto-e2e.yml`
-
-建议在仓库 Secrets 中配置：
-
-- `WEB_BASE_URL`
-- `WEB_USERNAME`
-- `WEB_PASSWORD`
-- `LOGIN_MODE`
-- `WEB_AUTO_ALERT_WEBHOOK`（可选）
+### 6.3 选择器不生效
+- 使用 `npx playwright test --debug` 启动步进式调试。
+- 建议优先使用 `page.getByRole` 或 `page.getByPlaceholder` 等面向用户的 Locator。

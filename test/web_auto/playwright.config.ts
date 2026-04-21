@@ -12,12 +12,15 @@ export default defineConfig({
   expect: {
     timeout: 10_000
   },
+  workers: 1,
   use: {
     baseURL: process.env.WEB_BASE_URL ?? 'http://127.0.0.1:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    headless: process.env.HEADLESS !== 'false'
+    headless: process.env.HEADLESS !== 'false',
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
   projects: [
     {

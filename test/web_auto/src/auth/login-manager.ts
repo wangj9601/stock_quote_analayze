@@ -38,7 +38,10 @@ export async function performLogin(page: Page, context: BrowserContext): Promise
 
   await loginPage.goto()
   await loginPage.login(config.username, config.password)
-  await expect(page).toHaveURL(/dashboard/)
+  
+  // 等待 URL 变更并进入稳定状态
+  await expect(page).toHaveURL(/dashboard/, { timeout: 15_000 })
+  await page.waitForLoadState('networkidle')
 
   await ensureStorageDir(config.storageStatePath)
   await context.storageState({ path: config.storageStatePath })
