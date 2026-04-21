@@ -34,7 +34,10 @@ class MACalculator:
             col_name = f'ma{period}'
             df[col_name] = df['close'].rolling(window=period, min_periods=period).mean()
         
-        return df.round(4)  # 保留4位小数
+        # 仅对数值列做 round，避免 datetime 列触发无效告警
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        df.loc[:, numeric_cols] = df.loc[:, numeric_cols].round(4)
+        return df
     
     @staticmethod
     def calculate_ma_for_list(closes: List[float], periods: List[int] = [5, 10, 20, 30, 60, 120, 200]) -> Dict[str, Optional[float]]:
