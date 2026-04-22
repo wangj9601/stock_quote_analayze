@@ -380,33 +380,85 @@ class AkshareDataCollector:
             if existing_dates:
                 logger.debug(f"股票 {stock_code} 在 {start_date} 到 {end_date} 期间已有 {len(existing_dates)} 天数据")
             
-            # 使用akshare获取历史数据
+            # 使用akshare获取历史数据：优先东方财富，失败后回退新浪
             logger.info(f"开始采集股票 {stock_code} 的历史数据...")
-            
-            # 添加重试机制
+            source = 'akshare_eastmoney'
+            start_ymd = pd.to_datetime(start_date).strftime('%Y%m%d')
+            end_ymd = pd.to_datetime(end_date).strftime('%Y%m%d')
+            df = None
+
+            # 1) 东方财富接口（stock_zh_a_hist）重试
             max_retries = 3
+            last_em_error = None
             for attempt in range(max_retries):
                 try:
-                    # 使用akshare获取历史数据
-                    # 日期格式为yyyymmdd，akshare要求start_date和end_date为"yyyymmdd"格式
                     df = ak.stock_zh_a_hist(
                         symbol=stock_code,
                         period='daily',
-                        start_date=pd.to_datetime(start_date).strftime('%Y%m%d'),
-                        end_date=pd.to_datetime(end_date).strftime('%Y%m%d'),
+                        start_date=start_ymd,
+                        end_date=end_ymd,
                         adjust=""  # 不复权
                     )
                     break
                 except Exception as e:
+                    last_em_error = e
                     if attempt < max_retries - 1:
                         wait_time = (attempt + 1) * 2 + random.uniform(0, 1)
-                        logger.warning(f"股票 {stock_code} 第 {attempt + 1} 次采集失败，{wait_time:.1f}秒后重试: {e}")
+                        logger.warning(f"股票 {stock_code} 第 {attempt + 1} 次东财接口采集失败，{wait_time:.1f}秒后重试: {e}")
                         time.sleep(wait_time)
+
+            # 2) 东财失败或无数据时，回退新浪接口（stock_zh_a_daily）
+            if df is None or df.empty:
+                source = 'akshare_sina'
+                logger.warning(f"股票 {stock_code} 东财接口不可用或无数据，回退新浪接口。东财错误: {last_em_error}")
+                try:
+                    if stock_code.startswith("6"):
+                        sina_symbol = "sh" + stock_code
+                    elif stock_code.startswith(("0", "3")):
+                        sina_symbol = "sz" + stock_code
                     else:
-                        logger.error(f"股票 {stock_code} 采集失败，已重试 {max_retries} 次: {e}")
-                        self.failed_count += 1
-                        self.failed_stocks.append(f"{stock_code}: {str(e)}")
-                        return False
+                        sina_symbol = "bj" + stock_code
+
+                    daily_df = ak.stock_zh_a_daily(
+                        symbol=sina_symbol,
+                        start_date=start_ymd,
+                        end_date=end_ymd,
+                        adjust=""
+                    )
+
+                    if daily_df is not None and not daily_df.empty:
+                        daily_df = daily_df.copy()
+                        daily_df['date'] = pd.to_datetime(daily_df['date'])
+                        daily_df = daily_df.sort_values('date')
+                        pre_close = daily_df['close'].shift(1)
+                        daily_df['change_amount'] = daily_df['close'] - pre_close
+                        daily_df['change_percent'] = (daily_df['change_amount'] / pre_close) * 100
+                        daily_df['amplitude'] = ((daily_df['high'] - daily_df['low']) / pre_close) * 100
+
+                        # 统一成下游写库逻辑使用的中文列名
+                        df = pd.DataFrame()
+                        df['日期'] = daily_df['date'].dt.strftime('%Y-%m-%d')
+                        df['开盘'] = daily_df['open']
+                        df['最高'] = daily_df['high']
+                        df['最低'] = daily_df['low']
+                        df['收盘'] = daily_df['close']
+                        df['成交量'] = daily_df['volume']
+                        df['成交额'] = daily_df['amount'] if 'amount' in daily_df.columns else None
+                        df['涨跌幅'] = daily_df['change_percent']
+                        df['涨跌额'] = daily_df['change_amount']
+                        df['振幅'] = daily_df['amplitude']
+                        df['换手率'] = daily_df['turnover'] * 100 if 'turnover' in daily_df.columns else None
+                except Exception as e2:
+                    logger.error(f"股票 {stock_code} 新浪接口采集失败: {e2}")
+                    self.failed_count += 1
+                    self.failed_stocks.append(f"{stock_code}: 东财={last_em_error} | 新浪={str(e2)}")
+                    return False
+
+            if df is None:
+                logger.error(f"股票 {stock_code} 采集失败：东财与新浪均不可用")
+                self.failed_count += 1
+                self.failed_stocks.append(f"{stock_code}: 东财={last_em_error} | 新浪=无数据")
+                return False
             
             if df.empty:
                 logger.warning(f"股票 {stock_code} 在指定日期范围内没有数据")
@@ -452,7 +504,7 @@ class AkshareDataCollector:
                         'change': float(row['涨跌额']) if pd.notna(row['涨跌额']) else None,
                         'amplitude': float(row['振幅']) if pd.notna(row['振幅']) else None,
                         'turnover_rate': float(row['换手率']) if pd.notna(row['换手率']) else None,
-                        'collected_source': 'akshare',
+                        'collected_source': source,
                         'collected_date': datetime.now().isoformat()
                     }
                     

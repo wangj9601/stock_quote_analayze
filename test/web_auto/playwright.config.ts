@@ -1,11 +1,17 @@
 import { defineConfig, devices } from '@playwright/test'
 import dotenv from 'dotenv'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-dotenv.config({ path: '.env.web-auto' })
+const configDir = dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: resolve(configDir, '.env.web-auto') })
 
 export default defineConfig({
   testDir: './specs',
+  testMatch: ['**/*.spec.ts'],
+  testIgnore: ['**/*.test.ts', '**/node_modules/**'],
   fullyParallel: true,
+  forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [['html', { open: 'never' }], ['list']],
   timeout: 60_000,

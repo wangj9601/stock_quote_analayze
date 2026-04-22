@@ -42,14 +42,15 @@ export class UsersPage {
       await this.dialog.getByPlaceholder('请输入密码').fill(data.password)
     }
     
-    // 处理 Element Plus Select
-    await this.dialog.getByPlaceholder('选择用户角色').click()
+    // 处理 Element Plus Select（新版为带标签的 combobox，无 placeholder）
+    const roleSelect = this.dialog.locator('.el-form-item').filter({ hasText: '角色' }).locator('.el-select').first()
+    await roleSelect.click({ force: true })
     const roleLabel = {
       admin: '管理员',
       user: '用户',
       guest: '访客'
     }[data.role]
-    await this.page.locator('ul.el-select-dropdown__list').getByText(roleLabel).click()
+    await this.page.getByRole('option', { name: roleLabel }).first().click()
 
     await this.dialog.getByRole('button', { name: '确定' }).click()
   }

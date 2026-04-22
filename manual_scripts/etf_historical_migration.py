@@ -11,7 +11,19 @@ ETF历史行情迁移脚本
 说明:
 - 目标表: fund_historical_quotes
 - 主键: (code, date)
-- 默认使用 UPSERT 覆写同日数据; 开启 --skip-existing 时仅补缺
+- 默认使用增量采集（按每只ETF在库内最大日期+1作为起点）
+- 开启 --full-refresh 时按传入日期区间全量回刷
+- UPSERT 逻辑默认会更新同日数据；开启 --skip-existing 时仅补缺
+
+常用示例:
+1) 日常增量（推荐）:
+   python manual_scripts/etf_historical_migration.py --start-date 2020-01-01 --end-date 2026-04-22
+
+2) 指定部分ETF增量:
+   python manual_scripts/etf_historical_migration.py --start-date 2020-01-01 --end-date 2026-04-22 --codes 510300 159915
+
+3) 全量回刷（谨慎）:
+   python manual_scripts/etf_historical_migration.py --start-date 2020-01-01 --end-date 2026-04-22 --full-refresh
 """
 
 import argparse
@@ -20,7 +32,7 @@ import random
 import sys
 import time
 from collections import Counter
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -96,6 +108,7 @@ class EtfHistoricalMigration:
         skip_existing: bool,
         recalc_indicators: bool,
         max_retries: int,
+        full_refresh: bool,
     ):
         self.start_date = start_date
         self.end_date = end_date
@@ -105,6 +118,7 @@ class EtfHistoricalMigration:
         self.skip_existing = bool(skip_existing)
         self.recalc_indicators = bool(recalc_indicators)
         self.max_retries = max(1, int(max_retries))
+        self.full_refresh = bool(full_refresh)
 
         self.session = SessionLocal()
         self.stats = {
@@ -210,11 +224,19 @@ class EtfHistoricalMigration:
         ).fetchall()
         return [(_normalize_code(r[0]), str(r[1] or "")) for r in result]
 
-    def _fetch_with_retry(self, source: str, fn, code: str, name: str) -> Optional[pd.DataFrame]:
+    def _fetch_with_retry(
+        self,
+        source: str,
+        fn,
+        code: str,
+        name: str,
+        start_date: str,
+        end_date: str,
+    ) -> Optional[pd.DataFrame]:
         last_err = None
         for attempt in range(1, self.max_retries + 1):
             try:
-                df = fn(code, name)
+                df = fn(code, name, start_date, end_date)
                 if df is not None and not df.empty:
                     return df
             except Exception as e:
@@ -227,6 +249,11 @@ class EtfHistoricalMigration:
 
     def _migrate_one(self, code: str, name: str) -> bool:
         try:
+            effective_start = self._resolve_effective_start_date(code)
+            if effective_start > self.end_date:
+                logger.info(f"ETF {code} 已是最新，无需迁移（库内最大日期已覆盖到 {self.end_date}）")
+                return True
+
             fetchers = [
                 ("eastmoney", self._fetch_eastmoney),
                 ("sina", self._fetch_sina),
@@ -237,7 +264,7 @@ class EtfHistoricalMigration:
             used_source = None
             for source, fn in fetchers:
                 try:
-                    df = self._fetch_with_retry(source, fn, code, name)
+                    df = self._fetch_with_retry(source, fn, code, name, effective_start, self.end_date)
                 except Exception:
                     df = None
                 if df is not None and not df.empty:
@@ -249,7 +276,7 @@ class EtfHistoricalMigration:
                 self.failures.append((code, "三源均未获取到可用数据"))
                 return False
 
-            inserted, updated, skipped = self._upsert_rows(code, name, used_source, df)
+            inserted, updated, skipped = self._upsert_rows(code, name, used_source, df, effective_start, self.end_date)
             self.stats["inserted_rows"] += inserted
             self.stats["updated_rows"] += updated
             self.stats["skipped_rows"] += skipped
@@ -263,12 +290,12 @@ class EtfHistoricalMigration:
             self.failures.append((code, str(e)))
             return False
 
-    def _fetch_eastmoney(self, code: str, _name: str) -> pd.DataFrame:
+    def _fetch_eastmoney(self, code: str, _name: str, start_date: str, end_date: str) -> pd.DataFrame:
         df = ak.fund_etf_hist_em(
             symbol=_normalize_code(code),
             period="daily",
-            start_date=_to_ymd(self.start_date),
-            end_date=_to_ymd(self.end_date),
+            start_date=_to_ymd(start_date),
+            end_date=_to_ymd(end_date),
             adjust="",
         )
         if df is None or df.empty:
@@ -290,7 +317,7 @@ class EtfHistoricalMigration:
             }
         )
 
-    def _fetch_sina(self, code: str, _name: str) -> pd.DataFrame:
+    def _fetch_sina(self, code: str, _name: str, _start_date: str, _end_date: str) -> pd.DataFrame:
         symbol = _to_sina_symbol(code)
         df = ak.fund_etf_hist_sina(symbol=symbol)
         if df is None or df.empty:
@@ -313,13 +340,13 @@ class EtfHistoricalMigration:
         )
         return mapped
 
-    def _fetch_ths_daily_snapshot(self, code: str, _name: str) -> pd.DataFrame:
+    def _fetch_ths_daily_snapshot(self, code: str, _name: str, start_date: str, end_date: str) -> pd.DataFrame:
         """
         同花顺在 akshare 仅提供 fund_etf_spot_ths（实时快照）。
         这里仅在请求区间包含“今天”时，补录今日单日 close/pre_close/change_percent。
         """
-        start_obj = datetime.strptime(self.start_date, "%Y-%m-%d").date()
-        end_obj = datetime.strptime(self.end_date, "%Y-%m-%d").date()
+        start_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
         today_obj = datetime.now().date()
         if not (start_obj <= today_obj <= end_obj):
             return pd.DataFrame()
@@ -382,14 +409,40 @@ class EtfHistoricalMigration:
         ).fetchall()
         return {str(r[0]) for r in rows}
 
-    def _upsert_rows(self, code: str, name: str, source: str, df: pd.DataFrame) -> Tuple[int, int, int]:
+    def _resolve_effective_start_date(self, code: str) -> str:
+        """默认按增量采集：从库内最大日期+1开始；开启 full_refresh 则按入参 start_date 全量回刷。"""
+        if self.full_refresh:
+            return self.start_date
+
+        row = self.session.execute(
+            text("SELECT MAX(date) FROM fund_historical_quotes WHERE code=:code"),
+            {"code": code},
+        ).fetchone()
+        max_date = row[0] if row else None
+        if not max_date:
+            return self.start_date
+
+        max_date_obj = _as_date(max_date)
+        if not max_date_obj:
+            return self.start_date
+        return (max_date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    def _upsert_rows(
+        self,
+        code: str,
+        name: str,
+        source: str,
+        df: pd.DataFrame,
+        start_date: str,
+        end_date: str,
+    ) -> Tuple[int, int, int]:
         inserted = 0
         updated = 0
         skipped = 0
 
         existing_dates = self._existing_dates(code) if self.skip_existing else set()
-        start_obj = datetime.strptime(self.start_date, "%Y-%m-%d").date()
-        end_obj = datetime.strptime(self.end_date, "%Y-%m-%d").date()
+        start_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
 
         for _, row in df.iterrows():
             d_obj = _as_date(row.get("date"))
@@ -501,6 +554,7 @@ def parse_args() -> argparse.Namespace:
         help="迁移后触发ETF指标重算（MA/MACD/KDJ/RSI/BOLL/MAVOL/均值频率）",
     )
     parser.add_argument("--max-retries", type=int, default=3, help="单数据源最大重试次数，默认3")
+    parser.add_argument("--full-refresh", action="store_true", help="强制按入参日期区间全量回刷（默认增量）")
     return parser.parse_args()
 
 
@@ -531,6 +585,7 @@ def main():
         skip_existing=args.skip_existing,
         recalc_indicators=args.recalc_indicators,
         max_retries=args.max_retries,
+        full_refresh=args.full_refresh,
     )
     exit_code = runner.run()
     sys.exit(exit_code)

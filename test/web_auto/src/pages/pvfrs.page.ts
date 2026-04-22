@@ -24,9 +24,9 @@ export class PVFRSPage {
   constructor(page: Page) {
     this.page = page
     this.nameInput = page.getByPlaceholder('请输入任务名称')
-    this.modeSelect = page.locator('.task-form').getByPlaceholder('选择回测模式')
-    this.startDatePicker = page.getByPlaceholder('选择开始日期')
-    this.endDatePicker = page.getByPlaceholder('选择结束日期')
+    this.modeSelect = page.getByRole('combobox', { name: /回测模式/ }).first()
+    this.startDatePicker = page.getByRole('combobox', { name: /开始日期/ }).first()
+    this.endDatePicker = page.getByRole('combobox', { name: /结束日期/ }).first()
     this.stockCodeInput = page.getByPlaceholder('例如：000001')
     this.stockListInput = page.getByPlaceholder('请输入股票代码，每行一个')
     this.submitButton = page.getByRole('button', { name: '创建任务' })
@@ -41,23 +41,26 @@ export class PVFRSPage {
     await this.nameInput.fill(details.name)
     
     // 处理 Element Plus Select
-    await this.modeSelect.click()
+    await this.page.locator('.task-form .el-form-item').filter({ hasText: '回测模式' }).locator('.el-select').first().click({ force: true })
     const modeLabel = {
       single: '单股回测',
       batch: '批量回测',
       optimize: '参数优化',
       portfolio: '组合回测'
     }[details.mode]
-    await this.page.locator('ul.el-select-dropdown__list').getByText(modeLabel).click()
+    await this.page.getByRole('option', { name: modeLabel }).first().click()
 
     await this.startDatePicker.fill(details.startDate)
     await this.page.keyboard.press('Enter') // 触发日期选择器关闭
+    await this.startDatePicker.blur()
     
     await this.endDatePicker.fill(details.endDate)
     await this.page.keyboard.press('Enter')
+    await this.endDatePicker.blur()
 
     if (details.mode === 'single' && details.stockCode) {
       await this.stockCodeInput.fill(details.stockCode)
+      await this.stockCodeInput.blur()
     } else if (details.mode === 'batch' && details.stockList) {
       await this.stockListInput.fill(details.stockList)
     }

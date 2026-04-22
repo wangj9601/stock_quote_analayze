@@ -40,7 +40,15 @@ export async function performLogin(page: Page, context: BrowserContext): Promise
   await loginPage.login(config.username, config.password)
   
   // 等待 URL 变更并进入稳定状态
-  await expect(page).toHaveURL(/dashboard/, { timeout: 15_000 })
+  try {
+    await expect(page).toHaveURL(/dashboard/, { timeout: 45_000 })
+  } catch {
+    const buttonText = (await page.getByRole('button', { name: /登录|登录中/ }).first().textContent().catch(() => null))?.trim()
+    const alertText = (await page.locator('[role="alert"], .el-alert, .el-message').first().textContent().catch(() => null))?.trim()
+    throw new Error(
+      `登录后 45 秒仍未跳转到 dashboard。当前URL=${page.url()}，按钮=${buttonText || '未知'}${alertText ? `，提示=${alertText}` : ''}`
+    )
+  }
   await page.waitForLoadState('networkidle')
 
   await ensureStorageDir(config.storageStatePath)

@@ -21,6 +21,16 @@
 - **功能**: 实际的数据采集逻辑
 - **技术栈**: akshare + pandas + SQLAlchemy
 
+### 4. A股历史采集数据源回退策略（新增）
+- 入口：`backend_api/stock/data_collection_api.py` 的 A股历史采集逻辑
+- 策略：
+  1. 优先调用东方财富接口 `ak.stock_zh_a_hist`
+  2. 若东财接口异常或无数据，自动回退新浪接口 `ak.stock_zh_a_daily`
+- 结果标记：
+  - `collected_source = akshare_eastmoney`（东财）
+  - `collected_source = akshare_sina`（新浪回退）
+- 作用：降低外部源瞬时失败导致的任务失败率，提升管理端“历史数据采集-AkShare”稳定性
+
 ## 🚀 API接口说明
 
 ### 1. 启动历史数据采集
@@ -277,6 +287,7 @@ logger = logging.getLogger(__name__)
 - 检查网络连接
 - 确认akshare可用性
 - 查看详细错误信息
+- 若日志出现东财接口连接中断（如 `Remote end closed connection without response`），系统会自动回退新浪接口；可重点关注最终 `collected_source` 与失败明细
 
 ### 2. 调试方法
 

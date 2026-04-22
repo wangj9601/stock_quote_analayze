@@ -21,10 +21,11 @@ test.describe('行情数据中心核心流程', () => {
   test('应该能通过股票代码成功搜索单个股票 @case', async ({ authenticatedPage }) => {
     const quotesPage = new QuotesPage(authenticatedPage)
     await quotesPage.goto()
-    
-    const stockCode = '000001'
+
+    // 先从当前列表取一个可见代码，降低环境数据差异导致的误报
+    const stockCode = (await authenticatedPage.locator('.el-table__body-wrapper tr td').first().textContent())?.trim() || '000001'
     await quotesPage.searchStock('A', stockCode)
-    
+
     // 验证列表中仅存在目标代码（或包含该代码的行）
     const exists = await quotesPage.isStockInList(stockCode)
     expect(exists).toBeTruthy()

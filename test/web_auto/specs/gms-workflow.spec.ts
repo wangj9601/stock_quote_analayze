@@ -8,15 +8,12 @@ test.describe('GMS 回测管理核心流程', () => {
     
     // 切换到策略配置标签
     await gmsPage.switchTab('config')
-    await expect(authenticatedPage.getByText('策略参数配置')).toBeVisible()
+    await expect(authenticatedPage.getByText('GMS 策略配置（服务端持久化）')).toBeVisible()
     
-    // 返回任务管理并尝试打开对话框
+    // 返回任务管理并验证创建区域可用（新版为内联创建，不再弹窗）
     await gmsPage.switchTab('backtest')
-    await gmsPage.createTaskButton.click()
     await expect(authenticatedPage.getByText('创建回测任务')).toBeVisible()
-    
-    // 关闭对话框 (点击取消按钮)
-    await authenticatedPage.getByRole('button', { name: '取消' }).click()
+    await expect(gmsPage.createTaskButton).toBeVisible()
   })
 
   test('应该能成功创建一个 GMS 基本回测任务 @smoke', async ({ authenticatedPage }) => {

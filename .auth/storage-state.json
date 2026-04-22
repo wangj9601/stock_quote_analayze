@@ -1,0 +1,18 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:8001",
+      "localStorage": [
+        {
+          "name": "admin_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlzX2FkbWluIjp0cnVlLCJleHAiOjE3NzY5MTgwMzV9.xnlfT0P1XFE5e8bb9obT5VX04ZEV5CeR9aWjMC653GI"
+        },
+        {
+          "name": "admin_user",
+          "value": "null"
+        }
+      ]
+    }
+  ]
+}

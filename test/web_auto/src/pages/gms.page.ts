@@ -9,9 +9,9 @@ export class GMSPage {
 
   constructor(page: Page) {
     this.page = page
-    this.backtestTab = page.locator('.management-tabs').getByText('回测任务管理')
-    this.reportsTab = page.locator('.management-tabs').getByText('报告与分析')
-    this.configTab = page.locator('.management-tabs').getByText('策略配置')
+    this.backtestTab = page.getByRole('tab', { name: '回测任务管理' })
+    this.reportsTab = page.getByRole('tab', { name: '报告与分析' })
+    this.configTab = page.getByRole('tab', { name: '策略配置' })
     this.createTaskButton = page.getByRole('button', { name: '创建任务' })
   }
 
@@ -29,19 +29,18 @@ export class GMSPage {
   }
 
   async createTask(details: { name: string, stockPool: string }) {
-    await this.createTaskButton.click()
-    const dialog = this.page.getByRole('dialog')
-    await dialog.locator('input[placeholder*="任务名称"]').fill(details.name)
-    
-    // 假设是基础的选择器
-    await dialog.locator('input[placeholder*="选择股票池"]').click()
-    await this.page.locator('ul.el-select-dropdown__list').getByText(details.stockPool).click()
-    
-    await dialog.getByRole('button', { name: '确定' }).click()
+    const formCard = this.page.locator('.create-task-card').first()
+    await formCard.getByRole('textbox', { name: '任务名称' }).fill(details.name)
+
+    // 当前页面默认股票池即“全市场”，烟雾用例仅验证任务可创建，避免选择器脆弱点。
+    void details.stockPool
+
+    await formCard.getByRole('button', { name: '创建任务' }).click()
   }
 
   async getLatestTaskStatus(): Promise<string | null> {
-    const table = this.page.locator('.backtest-management .el-table')
-    return table.locator('tr').first().locator('td').nth(4).textContent() // 假设状态在第5列
+    const firstStatusTag = this.page.locator('.task-list-card .el-table .el-tag').first()
+    await firstStatusTag.waitFor({ state: 'visible', timeout: 30000 })
+    return firstStatusTag.textContent()
   }
 }

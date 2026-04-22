@@ -10,11 +10,11 @@ export class QuotesPage {
 
   constructor(page: Page) {
     this.page = page
-    this.mainTabAShare = page.locator('.tabs-section').getByText('A股数据')
-    this.mainTabHKShare = page.locator('.tabs-section').getByText('港股数据')
-    this.searchInputA = page.getByPlaceholder('搜索股票代码或名称')
+    this.mainTabAShare = page.getByRole('tab', { name: 'A股数据' })
+    this.mainTabHKShare = page.getByRole('tab', { name: '港股数据' })
+    this.searchInputA = page.locator('input[placeholder="搜索股票代码或名称"]:visible').first()
     this.searchInputHK = page.getByPlaceholder('搜索港股代码或名称')
-    this.refreshButton = page.getByRole('button', { name: '刷新' })
+    this.refreshButton = page.getByRole('button', { name: '刷新数据' })
   }
 
   async goto() {
