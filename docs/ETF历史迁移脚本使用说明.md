@@ -7,7 +7,7 @@
 - 从多数据源迁移 ETF 历史行情到 `fund_historical_quotes`。
 - 数据源自动降级顺序：东方财富 -> 新浪 -> 同花顺（同花顺仅做今日单日快照兜底）。
 - 使用 `(code, date)` 主键幂等写入（`ON CONFLICT DO UPDATE`）。
-- 默认按每只 ETF 的库内最大日期做增量采集（`max(date)+1` 到 `--end-date`）。
+- 默认按“本次时间段内”做补缺采集：整段扫描，只写入缺失日期（支持中断后重跑续传，不重复写入已存在日期）。
 
 ## 2. 参数说明
 
@@ -16,10 +16,11 @@
 - `--codes`：ETF 代码列表（可选，不传则读取 `fund_basic_info` 启用列表）
 - `--batch-size`：每批处理 ETF 数量，默认 `20`
 - `--sleep-ms`：每批处理后的休眠毫秒数，默认 `500`
-- `--skip-existing`：仅补缺，不更新已存在记录
+- `--skip-existing`：仅补缺，不更新已存在记录（默认模式下已是该行为；该参数主要用于显式表达）
 - `--recalc-indicators`：迁移后重算 ETF 指标
 - `--max-retries`：单数据源最大重试次数，默认 `3`
 - `--full-refresh`：强制全量回刷（忽略默认增量起点，按 `--start-date ~ --end-date` 全量处理）
+- `--log-effective-start`：打印每只 ETF 在本次区间内的实际增量起点（用于排查断点续跑）
 
 ## 3. 常用命令
 
@@ -53,6 +54,12 @@ python manual_scripts/etf_historical_migration.py --start-date 2026-01-01 --end-
 python manual_scripts/etf_historical_migration.py --start-date 2025-01-01 --end-date 2026-04-20 --full-refresh
 ```
 
+### 3.6 打印每只 ETF 的区间增量起点（调试）
+
+```bash
+python manual_scripts/etf_historical_migration.py --start-date 2025-01-01 --end-date 2026-04-20 --codes 159001 510300 --log-effective-start
+```
+
 ## 4. 输出与退出码
 
 - 输出统计包括：
@@ -67,7 +74,8 @@ python manual_scripts/etf_historical_migration.py --start-date 2025-01-01 --end-
 
 ## 5. 幂等与补缺行为
 
-- 默认模式：按增量区间采集；同一 `(code, date)` 再次写入会更新（幂等覆盖）。
+- 默认模式：按“本次区间补缺”采集；中断后重跑会跳过已存在日期，只补缺失日期。
+- 同一 `(code, date)` 再次写入会更新（幂等覆盖）。
 - `--skip-existing` 模式：已存在记录会被跳过，只写入缺失日期。
 - `--full-refresh` 模式：按指定日期区间全量处理，适用于口径变更或数据纠偏。
 

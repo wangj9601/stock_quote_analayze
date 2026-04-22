@@ -27,6 +27,7 @@ ETF历史行情迁移脚本
 """
 
 import argparse
+import logging
 import os
 import random
 import sys
@@ -47,6 +48,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from backend_core.database.db import SessionLocal  # noqa: E402
 
 PROGRESS_LOG_INTERVAL = 100
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -109,6 +111,7 @@ class EtfHistoricalMigration:
         recalc_indicators: bool,
         max_retries: int,
         full_refresh: bool,
+        log_effective_start: bool,
     ):
         self.start_date = start_date
         self.end_date = end_date
@@ -119,12 +122,14 @@ class EtfHistoricalMigration:
         self.recalc_indicators = bool(recalc_indicators)
         self.max_retries = max(1, int(max_retries))
         self.full_refresh = bool(full_refresh)
+        self.log_effective_start = bool(log_effective_start)
 
         self.session = SessionLocal()
         self.stats = {
             "total_etf": 0,
             "success_etf": 0,
             "failed_etf": 0,
+            "no_op_etf": 0,
             "inserted_rows": 0,
             "updated_rows": 0,
             "skipped_rows": 0,
@@ -150,9 +155,11 @@ class EtfHistoricalMigration:
             started = _now()
 
             for idx, (code, name) in enumerate(etf_list, start=1):
-                ok = self._migrate_one(code=code, name=name)
+                ok, did_work = self._migrate_one(code=code, name=name)
                 if ok:
                     self.stats["success_etf"] += 1
+                    if not did_work:
+                        self.stats["no_op_etf"] += 1
                 else:
                     self.stats["failed_etf"] += 1
 
@@ -178,7 +185,7 @@ class EtfHistoricalMigration:
     def _print_progress(self, done: int):
         print(
             f"[进度] {done}/{self.stats['total_etf']} "
-            f"成功ETF={self.stats['success_etf']} 失败ETF={self.stats['failed_etf']} "
+            f"成功ETF={self.stats['success_etf']} 无需更新ETF={self.stats['no_op_etf']} 失败ETF={self.stats['failed_etf']} "
             f"插入={self.stats['inserted_rows']} 更新={self.stats['updated_rows']} 跳过={self.stats['skipped_rows']}"
         )
 
@@ -186,7 +193,8 @@ class EtfHistoricalMigration:
         print("\n========== 迁移完成 ==========")
         print(f"耗时: {elapsed_seconds:.1f}s")
         print(
-            f"ETF总数={self.stats['total_etf']} 成功={self.stats['success_etf']} 失败={self.stats['failed_etf']}"
+            f"ETF总数={self.stats['total_etf']} 成功={self.stats['success_etf']} "
+            f"(其中无需更新={self.stats['no_op_etf']}) 失败={self.stats['failed_etf']}"
         )
         print(
             f"行统计: 插入={self.stats['inserted_rows']} 更新={self.stats['updated_rows']} 跳过={self.stats['skipped_rows']}"
@@ -247,12 +255,14 @@ class EtfHistoricalMigration:
             raise RuntimeError(f"{source}获取失败: {last_err}") from last_err
         return None
 
-    def _migrate_one(self, code: str, name: str) -> bool:
+    def _migrate_one(self, code: str, name: str) -> Tuple[bool, bool]:
         try:
             effective_start = self._resolve_effective_start_date(code)
+            if self.log_effective_start:
+                print(f"[增量起点] ETF={code} 区间={self.start_date}~{self.end_date} effective_start={effective_start}")
             if effective_start > self.end_date:
                 logger.info(f"ETF {code} 已是最新，无需迁移（库内最大日期已覆盖到 {self.end_date}）")
-                return True
+                return True, False
 
             fetchers = [
                 ("eastmoney", self._fetch_eastmoney),
@@ -274,7 +284,7 @@ class EtfHistoricalMigration:
 
             if df is None or df.empty:
                 self.failures.append((code, "三源均未获取到可用数据"))
-                return False
+                return False, False
 
             inserted, updated, skipped = self._upsert_rows(code, name, used_source, df, effective_start, self.end_date)
             self.stats["inserted_rows"] += inserted
@@ -284,11 +294,11 @@ class EtfHistoricalMigration:
             if self.recalc_indicators and (inserted > 0 or updated > 0):
                 self._recalc_indicators(code)
 
-            return True
+            return True, (inserted > 0 or updated > 0)
         except Exception as e:
             self.session.rollback()
             self.failures.append((code, str(e)))
-            return False
+            return False, False
 
     def _fetch_eastmoney(self, code: str, _name: str, start_date: str, end_date: str) -> pd.DataFrame:
         df = ak.fund_etf_hist_em(
@@ -410,22 +420,10 @@ class EtfHistoricalMigration:
         return {str(r[0]) for r in rows}
 
     def _resolve_effective_start_date(self, code: str) -> str:
-        """默认按增量采集：从库内最大日期+1开始；开启 full_refresh 则按入参 start_date 全量回刷。"""
+        """默认按区间补缺采集：从入参 start_date 开始扫描；开启 full_refresh 仍按全区间回刷。"""
         if self.full_refresh:
             return self.start_date
-
-        row = self.session.execute(
-            text("SELECT MAX(date) FROM fund_historical_quotes WHERE code=:code"),
-            {"code": code},
-        ).fetchone()
-        max_date = row[0] if row else None
-        if not max_date:
-            return self.start_date
-
-        max_date_obj = _as_date(max_date)
-        if not max_date_obj:
-            return self.start_date
-        return (max_date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
+        return self.start_date
 
     def _upsert_rows(
         self,
@@ -440,7 +438,9 @@ class EtfHistoricalMigration:
         updated = 0
         skipped = 0
 
-        existing_dates = self._existing_dates(code) if self.skip_existing else set()
+        # 默认区间补缺：非 full_refresh 下自动跳过已存在日期，避免中断重跑重复写入
+        should_skip_existing = self.skip_existing or (not self.full_refresh)
+        existing_dates = self._existing_dates(code) if should_skip_existing else set()
         start_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
 
@@ -452,7 +452,7 @@ class EtfHistoricalMigration:
                 continue
 
             d_str = d_obj.strftime("%Y-%m-%d")
-            if self.skip_existing and d_str in existing_dates:
+            if should_skip_existing and d_str in existing_dates:
                 skipped += 1
                 continue
 
@@ -555,6 +555,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-retries", type=int, default=3, help="单数据源最大重试次数，默认3")
     parser.add_argument("--full-refresh", action="store_true", help="强制按入参日期区间全量回刷（默认增量）")
+    parser.add_argument("--log-effective-start", action="store_true", help="打印每只ETF在本次区间内的实际增量起点")
     return parser.parse_args()
 
 
@@ -586,6 +587,7 @@ def main():
         recalc_indicators=args.recalc_indicators,
         max_retries=args.max_retries,
         full_refresh=args.full_refresh,
+        log_effective_start=args.log_effective_start,
     )
     exit_code = runner.run()
     sys.exit(exit_code)
