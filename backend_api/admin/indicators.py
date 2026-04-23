@@ -13,13 +13,31 @@ import traceback
 
 from backend_api.models import (
     MAIndicators, MACDIndicators, RSIIndicators, KDJIndicators, BOLLIndicators,
-    MAVOLIndicators, InfiniteCostIndicators, MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK, User,
+    MAVOLIndicators, InfiniteCostIndicators, MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK,
+    FundHistoricalQuotes, User,
     StockBasicInfo
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_admin, get_current_user
 
 router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
+
+
+def _fetch_historical_quote_rows(db: Session, code: str, market_type: str):
+    """按市场类型加载历史行情 ORM 行列表（日期升序）。不支持的市场类型返回 None。"""
+    if market_type == "CN":
+        return db.query(HistoricalQuotes).filter(
+            HistoricalQuotes.code == code
+        ).order_by(HistoricalQuotes.date).all()
+    if market_type == "HK":
+        return db.query(HistoricalQuotesHK).filter(
+            HistoricalQuotesHK.code == code
+        ).order_by(HistoricalQuotesHK.date).all()
+    if market_type == "ETF":
+        return db.query(FundHistoricalQuotes).filter(
+            FundHistoricalQuotes.code == code
+        ).order_by(FundHistoricalQuotes.date).all()
+    return None
 
 
 def _historical_quotes_to_dataframe(items):
@@ -117,7 +135,7 @@ async def get_ma_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -151,7 +169,7 @@ async def get_macd_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -187,7 +205,7 @@ async def get_rsi_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -221,7 +239,7 @@ async def get_kdj_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -255,7 +273,7 @@ async def get_boll_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -289,7 +307,7 @@ async def get_mavol_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -324,7 +342,7 @@ async def get_icost_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -359,7 +377,7 @@ async def get_pvfrs_indicators(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     code: Optional[str] = None,
-    market_type: Optional[str] = Query(None, description="CN 或 HK"),
+    market_type: Optional[str] = Query(None, description="CN、HK 或 ETF"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: Any = Depends(get_current_admin),
@@ -392,7 +410,7 @@ async def get_pvfrs_indicators(
 async def get_indicator_details(
     code: str = Query(..., description="股票代码"),
     date: str = Query(..., description="日期 YYYY-MM-DD"),
-    market_type: str = Query("CN", description="CN 或 HK"),
+    market_type: str = Query("CN", description="CN、HK 或 ETF"),
     current_user: Any = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -444,7 +462,7 @@ async def get_indicator_history(
     code: str = Query(..., description="股票代码"),
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
-    market_type: str = Query("CN", description="CN 或 HK"),
+    market_type: str = Query("CN", description="CN、HK 或 ETF"),
     db: Session = Depends(get_db)
 ):
     """查询指定股票和日期范围的所有指标数据"""
@@ -1189,9 +1207,15 @@ async def generate_indicators(
             "success": False,
             "message": "参数不完整，需要股票代码、市场类型和指标列表"
         }
-    
+
+    if market_type not in ("CN", "HK", "ETF"):
+        return {
+            "success": False,
+            "message": "市场类型须为 CN（A股）、HK（港股）或 ETF",
+        }
+
     results = {}
-    
+
     try:
         # 导入指标计算器和pandas
         import pandas as pd
@@ -1202,19 +1226,10 @@ async def generate_indicators(
         from backend_core.utils.rsi_calculator import RSICalculator
         from backend_core.utils.boll_calculator import BOLLCalculator
         from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
-        
-        # 从数据库获取历史数据
-        if market_type == "CN":
-            # A股历史数据
-            historical_data = db.query(HistoricalQuotes).filter(
-                HistoricalQuotes.code == code
-            ).order_by(HistoricalQuotes.date).all()
-        else:  # HK
-            # 港股历史数据
-            historical_data = db.query(HistoricalQuotesHK).filter(
-                HistoricalQuotesHK.code == code
-            ).order_by(HistoricalQuotesHK.date).all()
-        
+
+        # 从数据库获取历史数据（A股 / 港股 / ETF）
+        historical_data = _fetch_historical_quote_rows(db, code, market_type)
+
         # 转换为DataFrame（含成交额、换手率，供 icost 等指标使用）
         historical_data = _historical_quotes_to_dataframe(historical_data)
         

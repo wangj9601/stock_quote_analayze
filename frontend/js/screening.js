@@ -6,6 +6,7 @@ const ScreeningPage = {
     /** GMS 列表分页（选股页） */
     gmsPage: 1,
     GMS_PAGE_SIZE: 50,
+    gmsLocateActive: false,
 
     // 初始化
     async init() {
@@ -158,6 +159,33 @@ const ScreeningPage = {
         const exportExcelBtnGms = document.getElementById('exportExcelBtn-gms');
         if (exportExcelBtnGms) {
             exportExcelBtnGms.addEventListener('click', () => void this.exportToExcelGms());
+        }
+        const gmsLocateBtn = document.getElementById('gmsLocateBtn');
+        const gmsLocateClearBtn = document.getElementById('gmsLocateClearBtn');
+        const gmsLocateInput = document.getElementById('gmsLocateInput');
+        if (gmsLocateBtn) {
+            gmsLocateBtn.addEventListener('click', () => void this.locateGmsStock());
+        }
+        if (gmsLocateClearBtn) {
+            gmsLocateClearBtn.addEventListener('click', () => {
+                this.gmsLocateActive = false;
+                if (gmsLocateInput) gmsLocateInput.value = '';
+                const hint = document.getElementById('gmsLocateHint');
+                if (hint) {
+                    hint.textContent = '';
+                    hint.style.display = 'none';
+                }
+                gmsLocateClearBtn.style.display = 'none';
+                void this.loadScreeningResults('gms', { resetGmsPage: false });
+            });
+        }
+        if (gmsLocateInput) {
+            gmsLocateInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void this.locateGmsStock();
+                }
+            });
         }
 
         const gmsPrev = document.getElementById('gmsPaginationPrev');
@@ -342,6 +370,7 @@ const ScreeningPage = {
         if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
         if (gmsParams.ratio_d20_max != null) q.set('ratio_d20_max', gmsParams.ratio_d20_max);
         if (gmsParams.volume_ratio_max != null) q.set('volume_ratio_max', gmsParams.volume_ratio_max);
+        if (gmsParams.left_buy_min_accumulation != null) q.set('left_buy_min_accumulation', gmsParams.left_buy_min_accumulation);
         if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
         if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
         if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
@@ -364,6 +393,65 @@ const ScreeningPage = {
             q.set('use_pagination', 'false');
         }
         return q;
+    },
+
+    /** GMS：按代码/名称精准定位（全量拉取后匹配） */
+    async locateGmsStock() {
+        const inputEl = document.getElementById('gmsLocateInput');
+        const clearBtn = document.getElementById('gmsLocateClearBtn');
+        const hintEl = document.getElementById('gmsLocateHint');
+        const keywordRaw = inputEl ? String(inputEl.value || '').trim() : '';
+        if (!keywordRaw) {
+            if (window.CommonUtils) CommonUtils.showToast('请输入股票代码或名称', 'warning');
+            return;
+        }
+        const keyword = keywordRaw.toLowerCase();
+        try {
+            const q = this.getGmsQuerySearchParams({ includePagination: false });
+            const result = await this.fetchGmsStrategyResult(q.toString());
+            if (!result.success || !Array.isArray(result.data)) {
+                throw new Error(result.message || '定位查询失败');
+            }
+            const fullData = result.data;
+            const exactCode = fullData.find((r) => {
+                const code = String(r.symbol || r.code || '').trim().toLowerCase();
+                return code === keyword;
+            });
+            const exactName = exactCode ? null : fullData.find((r) => {
+                const name = String(r.name || '').trim().toLowerCase();
+                return name === keyword;
+            });
+            const fuzzy = (!exactCode && !exactName) ? fullData.find((r) => {
+                const code = String(r.symbol || r.code || '').trim().toLowerCase();
+                const name = String(r.name || '').trim().toLowerCase();
+                return code.includes(keyword) || name.includes(keyword);
+            }) : null;
+            const hit = exactCode || exactName || fuzzy;
+            if (!hit) {
+                if (window.CommonUtils) CommonUtils.showToast(`未找到“${keywordRaw}”对应的股票`, 'warning');
+                if (hintEl) {
+                    hintEl.textContent = `未找到“${keywordRaw}”`;
+                    hintEl.style.display = 'inline-block';
+                }
+                return;
+            }
+            this.gmsLocateActive = true;
+            this.lastResults.gms = [hit];
+            this.renderResults([hit], result.search_date, 'gms', null, { enabled: false });
+            this.updateGmsPaginationUi({ enabled: false });
+            if (clearBtn) clearBtn.style.display = 'inline-block';
+            if (hintEl) {
+                const hitCode = String(hit.symbol || hit.code || '');
+                const hitName = String(hit.name || '--');
+                hintEl.textContent = `定位结果：${hitCode} ${hitName}`;
+                hintEl.style.display = 'inline-block';
+            }
+            const searchDate = document.getElementById('searchDate-gms');
+            if (searchDate && result.search_date) searchDate.textContent = `筛选时间: ${result.search_date}`;
+        } catch (e) {
+            const msg = e && e.message ? e.message : String(e);
+            if (window.CommonUtils) CommonUtils.showToast(`定位失败: ${msg}`, 'warning');
+        }
     },
 
     /** GMS：先 trace_only 再按需全量，queryString 已含分页或全量参数 */
@@ -518,6 +606,14 @@ const ScreeningPage = {
         if (strategy === 'gms') {
             const excelBtn = document.getElementById('exportExcelBtn-gms');
             if (excelBtn) excelBtn.style.display = 'none';
+            this.gmsLocateActive = false;
+            const hint = document.getElementById('gmsLocateHint');
+            if (hint) {
+                hint.textContent = '';
+                hint.style.display = 'none';
+            }
+            const clearBtn = document.getElementById('gmsLocateClearBtn');
+            if (clearBtn) clearBtn.style.display = 'none';
         }
 
         try {
@@ -777,6 +873,7 @@ const ScreeningPage = {
                 observation_period: 20,
                 ratio_d20_max: 0.015,
                 volume_ratio_max: 0.8,
+                left_buy_min_accumulation: 0,
                 volume_ratio_min: 1.5,
                 accumulation_fz_min: 1.5,
                 balance_ratio_max: 0.01,
@@ -804,6 +901,7 @@ const ScreeningPage = {
             set('gms-observation_period', data.observation_period);
             set('gms-ratio_d20_max', data.ratio_d20_max);
             set('gms-volume_ratio_max', data.volume_ratio_max);
+            set('gms-left_buy_min_accumulation', data.left_buy_min_accumulation);
             set('gms-volume_ratio_min', data.volume_ratio_min);
             set('gms-accumulation_fz_min', data.accumulation_fz_min);
             set('gms-balance_ratio_max', data.balance_ratio_max);
@@ -845,6 +943,7 @@ const ScreeningPage = {
             observation_period: get('gms-observation_period'),
             ratio_d20_max: get('gms-ratio_d20_max'),
             volume_ratio_max: get('gms-volume_ratio_max'),
+            left_buy_min_accumulation: get('gms-left_buy_min_accumulation'),
             volume_ratio_min: get('gms-volume_ratio_min'),
             accumulation_fz_min: get('gms-accumulation_fz_min'),
             balance_ratio_max: get('gms-balance_ratio_max'),
@@ -1329,6 +1428,19 @@ const ScreeningPage = {
                 const wMomD1 = (sd.weight_mom_ratio_d1 != null && !isNaN(sd.weight_mom_ratio_d1)) ? sd.weight_mom_ratio_d1 : 40;
                 const wMomDev = (sd.weight_mom_deviation != null && !isNaN(sd.weight_mom_deviation)) ? sd.weight_mom_deviation : 30;
                 const wMomVol = (sd.weight_mom_volume != null && !isNaN(sd.weight_mom_volume)) ? sd.weight_mom_volume : 30;
+                let gmsDominantHint = '';
+                const _acc = sd.score_accumulation;
+                const _mom = sd.score_momentum;
+                const _an = (_acc != null && !isNaN(_acc)) ? Number(_acc) : NaN;
+                const _mn = (_mom != null && !isNaN(_mom)) ? Number(_mom) : NaN;
+                if (!isNaN(_an) || !isNaN(_mn)) {
+                    if (!isNaN(_an) && !isNaN(_mn)) {
+                        if (_an > _mom) gmsDominantHint = '当前主导：均值收敛态（蓄势）。';
+                        else if (_mn > _an) gmsDominantHint = '当前主导：动量溢出态。';
+                        else gmsDominantHint = '两模块小计相同。';
+                    } else if (!isNaN(_an)) gmsDominantHint = '当前主导：均值收敛态（蓄势）。';
+                    else gmsDominantHint = '当前主导：动量溢出态。';
+                }
                 const scoreDetailHtml = `
                     <div class="gms-score-detail-inner">
                         <div class="gms-score-detail-section">
@@ -1357,6 +1469,10 @@ const ScreeningPage = {
                         </div>
                         <div class="gms-score-detail-section">
                             <strong>综合</strong> 总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}；信号强度=总分/100
+                            <p class="gms-total-hint-text" style="font-size:12px;color:#666;margin:6px 0 0 0;line-height:1.45;">
+                                总分 = max(均值收敛态小计, 动量溢出态小计)，非两模块分数相加。
+                                ${gmsDominantHint ? '<br>' + gmsDominantHint : ''}
+                            </p>
                         </div>
                         <div class="gms-score-detail-section gms-indicators-section">
                             <strong>计算指标细项</strong>
@@ -1367,9 +1483,9 @@ const ScreeningPage = {
                                     <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
                                     <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
                                     <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
-                                    <tr><td>偏离率 (Δ/d₂₀)</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>现价相对周期末价张力</td></tr>
-                                    <tr><td>突变率 (Δ/d₁)</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
-                                    <tr><td>Δ₂₀/d</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>Δ₂₀ = d₂₀ - d（价格相对均线偏离率）</td></tr>
+                                    <tr><td>Δ/d₂₀（宏观位移/收盘价）</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>左侧买点粘合用 |Δ/d₂₀|；≠ 下方均线乖离 Δ₂₀/d</td></tr>
+                                    <tr><td>Δ/d₁（突变率）</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
+                                    <tr><td>Δ₂₀/d（均线乖离）</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>(d₂₀−d)/d；不是左侧判定用的 Δ/d₂₀</td></tr>
                                     <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
                                     <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
                                     <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>
@@ -1816,6 +1932,7 @@ const ScreeningPage = {
         lines.push(`动量溢出态小计\t${n(sd.score_momentum)}\t判定: ${sd.momentum_grade || '—'} (≥${momFull}全速; ≥${momBatch}分批)`);
         lines.push('');
         lines.push('综合  总分=' + (sd.score_total != null ? sd.score_total.toFixed(1) : '--') + '；信号强度=总分/100');
+        lines.push('说明  总分=max(均值收敛态小计,动量溢出态小计)，非两模块相加');
         lines.push('');
         lines.push('计算指标细项');
         lines.push('d₁ (首日收盘价)\t' + gmsFmt(sd.d1, 'price') + '\t周期起点价格' + (sd.d1_date ? '，交易日期 ' + sd.d1_date : ''));
@@ -1823,9 +1940,9 @@ const ScreeningPage = {
         lines.push('d (20日均价)\t' + gmsFmt(sd.d, 'price') + '\t周期均价');
         lines.push('Δ (d₂₀ - d₁)\t' + gmsFmt(sd.delta, 'num') + '\t宏观位移');
         lines.push('Δ/d\t' + (sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--') + '\t宏观位移相对均价');
-        lines.push('偏离率 (Δ/d₂₀)\t' + gmsFmt(sd.ratio_d20, 'pct') + '\t现价相对周期末价张力');
-        lines.push('突变率 (Δ/d₁)\t' + gmsFmt(sd.ratio_d1, 'pct') + '\t现价相对周期起点位移');
-        lines.push('Δ₂₀/d\t' + gmsFmt(sd.ratio_d, 'pct') + '\t价格相对均线偏离率');
+        lines.push('Δ/d₂₀（宏观位移/收盘价）\t' + gmsFmt(sd.ratio_d20, 'pct') + '\t左侧买点用|Δ/d₂₀|；≠ 均线乖离');
+        lines.push('Δ/d₁（突变率）\t' + gmsFmt(sd.ratio_d1, 'pct') + '\t现价相对周期起点位移');
+        lines.push('Δ₂₀/d（均线乖离）\t' + gmsFmt(sd.ratio_d, 'pct') + '\t(d₂₀−d)/d，非左侧判定用 Δ/d₂₀');
         lines.push('Z (上涨天数)\t' + gmsFmt(sd.rising_days, 'int') + '\t多头天数');
         lines.push('F (下跌天数)\t' + gmsFmt(sd.falling_days, 'int') + '\t空头天数');
         lines.push('m (20日平均成交量)\t' + gmsFmt(sd.avg_volume_20d, 'vol') + '\t平均量');

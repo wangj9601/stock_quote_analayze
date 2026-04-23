@@ -35,6 +35,7 @@ class GMSConfigManager:
             "left_buy": {
                 "ratio_d20_abs_max": 0.015,  # |Δ/d₂₀| < 1.5%
                 "volume_ratio_max": 0.8,  # m₂₀ < 0.8m
+                "min_accumulation_score": 0,  # 左侧额外要求均值收敛态得分下限，0=关闭
             },
             "right_buy": {
                 "volume_ratio_min": 1.5,  # m₂₀ > 1.5m

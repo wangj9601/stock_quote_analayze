@@ -6,7 +6,8 @@
   },
   "left_buy": {
     "ratio_d20_abs_max": 0.015,
-    "volume_ratio_max": 0.8
+    "volume_ratio_max": 0.8,
+    "min_accumulation_score": 0
   },
   "right_buy": {
     "volume_ratio_min": 1.5

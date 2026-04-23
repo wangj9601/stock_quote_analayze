@@ -25,6 +25,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -88,6 +89,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -149,6 +151,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -200,6 +203,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -254,6 +258,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -305,6 +310,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -368,6 +374,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -472,6 +479,7 @@
                   <el-select v-model="filters.market_type" placeholder="市场类型" clearable @change="handleFilterChange">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="4">
@@ -527,6 +535,7 @@
                   <el-select v-model="generationForm.market_type" placeholder="选择市场类型" style="width: 100%">
                     <el-option label="A股 (CN)" value="CN" />
                     <el-option label="港股 (HK)" value="HK" />
+                    <el-option label="ETF" value="ETF" />
                   </el-select>
                 </el-col>
                 <el-col :span="8">
@@ -790,6 +799,13 @@ const handleSelectAllIndicators = (checked: boolean | string | number | boolean[
   }
 }
 
+const marketTypeLabel = (mt: string): string => {
+  if (mt === 'CN') return 'A股'
+  if (mt === 'HK') return '港股'
+  if (mt === 'ETF') return 'ETF'
+  return mt || ''
+}
+
 const getIndicatorLabel = (key: string): string => {
   const labels: Record<string, string> = {
     ma: 'MA (移动平均线)',
@@ -807,7 +823,7 @@ const getIndicatorLabel = (key: string): string => {
 const generateIndicators = async () => {
   try {
     await ElMessageBox.confirm(
-      `确定要为股票 ${generationForm.code}(${generationForm.market_type === 'CN' ? 'A股' : '港股'}) 生成选中的指标数据吗？`,
+      `确定要为股票 ${generationForm.code}(${marketTypeLabel(generationForm.market_type)}) 生成选中的指标数据吗？`,
       '确认生成',
       {
         confirmButtonText: '确定生成',

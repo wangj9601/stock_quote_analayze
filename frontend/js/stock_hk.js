@@ -1527,6 +1527,19 @@ const StockPage = {
         const wMomD1 = (sd.weight_mom_ratio_d1 != null && !isNaN(sd.weight_mom_ratio_d1)) ? sd.weight_mom_ratio_d1 : 40;
         const wMomDev = (sd.weight_mom_deviation != null && !isNaN(sd.weight_mom_deviation)) ? sd.weight_mom_deviation : 30;
         const wMomVol = (sd.weight_mom_volume != null && !isNaN(sd.weight_mom_volume)) ? sd.weight_mom_volume : 30;
+        let gmsDominantHint = '';
+        const _acc = sd.score_accumulation;
+        const _mom = sd.score_momentum;
+        const _an = (_acc != null && !isNaN(_acc)) ? Number(_acc) : NaN;
+        const _mn = (_mom != null && !isNaN(_mom)) ? Number(_mom) : NaN;
+        if (!isNaN(_an) || !isNaN(_mn)) {
+            if (!isNaN(_an) && !isNaN(_mn)) {
+                if (_an > _mn) gmsDominantHint = '当前主导：均值收敛态（蓄势）。';
+                else if (_mn > _an) gmsDominantHint = '当前主导：动量溢出态。';
+                else gmsDominantHint = '两模块小计相同。';
+            } else if (!isNaN(_an)) gmsDominantHint = '当前主导：均值收敛态（蓄势）。';
+            else gmsDominantHint = '当前主导：动量溢出态。';
+        }
 
         const scoreDetailHtml = `
             <div class="gms-score-detail-inner">
@@ -1556,6 +1569,10 @@ const StockPage = {
                 </div>
                 <div class="gms-score-detail-section">
                     <strong>综合</strong> 总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}；信号强度=总分/100
+                    <p class="gms-total-hint-text" style="font-size:12px;color:#666;margin:6px 0 0 0;line-height:1.45;">
+                        总分 = max(均值收敛态小计, 动量溢出态小计)，非两模块分数相加。
+                        ${gmsDominantHint ? '<br>' + gmsDominantHint : ''}
+                    </p>
                 </div>
                 <div class="gms-score-detail-section gms-indicators-section">
                     <strong>计算指标细项</strong>
@@ -1566,9 +1583,9 @@ const StockPage = {
                             <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
                             <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
                             <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
-                            <tr><td>偏离率 (Δ/d₂₀)</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>现价相对周期末价张力</td></tr>
-                            <tr><td>突变率 (Δ/d₁)</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
-                            <tr><td>Δ₂₀/d</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>Δ₂₀ = d₂₀ - d（价格相对均线偏离率）</td></td></tr>
+                            <tr><td>Δ/d₂₀（宏观位移/收盘价）</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>左侧买点粘合用 |Δ/d₂₀|；≠ 下方均线乖离 Δ₂₀/d</td></tr>
+                            <tr><td>Δ/d₁（突变率）</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
+                            <tr><td>Δ₂₀/d（均线乖离）</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>(d₂₀−d)/d；不是左侧判定用的 Δ/d₂₀</td></tr>
                             <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
                             <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
                             <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>

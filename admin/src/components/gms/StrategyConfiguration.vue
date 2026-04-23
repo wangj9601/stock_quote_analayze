@@ -72,7 +72,7 @@ function resetDefault() {
   configJson.value = JSON.stringify({
     observation_period: 20,
     ratio_indicators: { use_ratio_d: true, use_ratio_d_for_exit: false },
-    left_buy: { ratio_d20_abs_max: 0.015, volume_ratio_max: 0.8 },
+    left_buy: { ratio_d20_abs_max: 0.015, volume_ratio_max: 0.8, min_accumulation_score: 0 },
     right_buy: { volume_ratio_min: 1.5 },
     scoring: {
       accumulation_fz_min: 1.5,

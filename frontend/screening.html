@@ -741,7 +741,7 @@
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
                     <li><strong>数据来源：</strong>【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
-                        股基本信息表中全部 A 股的 GMS 指标列表。</li>
+                        股基本信息表中全部 A 股的 GMS 指标列表；【全部ETF】显示 ETF 基本信息表中全部 ETF 的 GMS 指标列表。</li>
                     <li><strong>时间范围：</strong>最近 20 个交易日</li>
                     <li><strong>双模块阶梯式评分：</strong></li>
                     <li class="condition-item"><strong>【均值收敛态】</strong>
@@ -768,6 +768,10 @@
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="gmsScopeHK" name="gmsScope" value="hk" style="margin-right: 5px;">
                         <label for="gmsScopeHK" style="cursor: pointer;">全部港股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeETF" name="gmsScope" value="etf" style="margin-right: 5px;">
+                        <label for="gmsScopeETF" style="cursor: pointer;">全部ETF</label>
                     </div>
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="gmsScopeWatchlist" name="gmsScope" value="watchlist"
@@ -811,6 +815,11 @@
                         <label for="gms-volume_ratio_max">左侧买点 量比上限</label>
                         <input type="number" id="gms-volume_ratio_max" class="param-input" min="0.1" max="2" step="0.1">
                         <span class="param-rule">地量 m₂₀/m &lt; 此值，默认 0.8</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-left_buy_min_accumulation">左侧 蓄势分下限</label>
+                        <input type="number" id="gms-left_buy_min_accumulation" class="param-input" min="0" max="100" step="1" value="0">
+                        <span class="param-rule">0=关闭；&gt;0 时标「左侧」需均值收敛态得分≥此值</span>
                     </div>
                     <div class="parameter-group">
                         <label for="gms-volume_ratio_min">右侧买点 量比下限</label>
@@ -926,6 +935,16 @@
                 <button id="refreshBtn-gms" class="refresh-btn" data-strategy="gms">刷新筛选</button>
                 <button id="exportBtn-gms" class="export-btn" style="display:none;">导出CSV</button>
                 <button id="exportExcelBtn-gms" class="export-btn" style="display:none;">导出Excel</button>
+                <input
+                    type="text"
+                    id="gmsLocateInput"
+                    class="param-input"
+                    style="width: 220px; margin-left: 8px;"
+                    placeholder="输入股票代码或名称"
+                >
+                <button id="gmsLocateBtn" class="refresh-btn" type="button">精准定位</button>
+                <button id="gmsLocateClearBtn" class="export-btn" type="button" style="display:none;">清除定位</button>
+                <span id="gmsLocateHint" class="search-date" style="display:none;"></span>
                 <span id="searchDate-gms" class="search-date"></span>
             </div>
 

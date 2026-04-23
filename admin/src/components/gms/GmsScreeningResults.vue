@@ -4,7 +4,7 @@
       <template #header><span class="font-semibold">策略说明</span></template>
       <ul class="strategy-conditions text-sm text-gray-700 list-disc pl-5 space-y-1">
         <li>
-          <strong>数据来源：</strong>【GMS观察股】为管理端「观察股管理」中启用版本下的股票；【我的自选】支持指定用户（管理员）；【全部港股】【全部A股】与网站端一致。
+          <strong>数据来源：</strong>【GMS观察股】为管理端「观察股管理」中启用版本下的股票；【我的自选】支持指定用户（管理员）；【全部港股】【全部A股】【全部ETF】与网站端一致。
         </li>
         <li><strong>时间范围：</strong>最近 20 个交易日</li>
         <li><strong>双模块阶梯式评分：</strong></li>
@@ -26,6 +26,7 @@
       <el-radio-group v-model="scope" class="flex flex-wrap gap-4" @change="onScopeChange">
         <el-radio label="cn">全部A股</el-radio>
         <el-radio label="hk">全部港股</el-radio>
+        <el-radio label="etf">全部ETF</el-radio>
         <el-radio label="watchlist">我的自选</el-radio>
         <el-radio label="gms_watchlist">GMS观察股</el-radio>
       </el-radio-group>
@@ -239,7 +240,7 @@ import {
 const STORAGE_KEY = 'adminGmsParams'
 const GMS_PAGE_SIZE = 50
 
-const scope = ref<'cn' | 'hk' | 'watchlist' | 'gms_watchlist'>('cn')
+const scope = ref<'cn' | 'hk' | 'etf' | 'watchlist' | 'gms_watchlist'>('cn')
 /** scope=gms_watchlist 时传给后端的 gms_watchlist_market */
 const gmsWatchlistMarket = ref<'all' | 'cn' | 'hk'>('all')
 const watchlistUserId = ref<number | undefined>(undefined)
@@ -250,6 +251,7 @@ const gmsForm = reactive({
   observation_period: 20,
   ratio_d20_max: 0.015,
   volume_ratio_max: 0.8,
+  left_buy_min_accumulation: 0,
   volume_ratio_min: 1.5,
   accumulation_fz_min: 1.5,
   balance_ratio_max: 0.01,
@@ -276,6 +278,12 @@ const primaryParamRows = [
   { k: 'observation_period' as const, label: '观察周期（天）', type: 'num' as const, hint: '默认 20（仅本地记录）' },
   { k: 'ratio_d20_max' as const, label: '左侧买点 Δ/d₂₀ 上限', type: 'num' as const, hint: '如 0.015 = 1.5%' },
   { k: 'volume_ratio_max' as const, label: '左侧买点 量比上限', type: 'num' as const, hint: '地量 m₂₀/m 阈值' },
+  {
+    k: 'left_buy_min_accumulation' as const,
+    label: '左侧 蓄势分下限',
+    type: 'num' as const,
+    hint: '0=关闭；>0 时「左侧」需均值收敛态得分≥此值',
+  },
   { k: 'volume_ratio_min' as const, label: '右侧买点 量比下限', type: 'num' as const, hint: '放量' },
   { k: 'accumulation_fz_min' as const, label: '蓄势 F/Z 下限', type: 'num' as const, hint: '' },
   { k: 'balance_ratio_max' as const, label: '平衡 |Δ/d₂₀| 上限', type: 'num' as const, hint: '' },
@@ -346,6 +354,7 @@ function buildSearchParams(includePagination: boolean): URLSearchParams {
   if (f.start_date) q.set('date', f.start_date)
   if (f.ratio_d20_max != null) q.set('ratio_d20_max', String(f.ratio_d20_max))
   if (f.volume_ratio_max != null) q.set('volume_ratio_max', String(f.volume_ratio_max))
+  if (f.left_buy_min_accumulation != null) q.set('left_buy_min_accumulation', String(f.left_buy_min_accumulation))
   if (f.volume_ratio_min != null) q.set('volume_ratio_min', String(f.volume_ratio_min))
   if (f.accumulation_fz_min != null) q.set('accumulation_fz_min', String(f.accumulation_fz_min))
   if (f.balance_ratio_max != null) q.set('balance_ratio_max', String(f.balance_ratio_max))

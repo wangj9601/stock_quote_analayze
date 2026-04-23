@@ -125,6 +125,7 @@ export function buildGmsScoreDetailCommentText(sdIn: Record<string, unknown> | n
   lines.push(`动量溢出态小计\t${n(sd.score_momentum)}\t判定: ${String(sd.momentum_grade || '—')} (≥${momFull}全速; ≥${momBatch}分批)`)
   lines.push('')
   lines.push('综合  总分=' + (sd.score_total != null ? Number(sd.score_total).toFixed(1) : '--') + '；信号强度=总分/100')
+  lines.push('说明  总分=max(均值收敛态小计,动量溢出态小计)，非两模块相加')
   lines.push('')
   lines.push('计算指标细项')
   lines.push('d₁ (首日收盘价)\t' + gmsFmt(sd.d1, 'price') + '\t周期起点价格' + (sd.d1_date ? '，交易日期 ' + String(sd.d1_date) : ''))
@@ -136,9 +137,11 @@ export function buildGmsScoreDetailCommentText(sdIn: Record<string, unknown> | n
       (sd.delta != null && sd.d != null && Number(sd.d) !== 0 ? gmsFmt(Number(sd.delta) / Number(sd.d), 'pct') : '--') +
       '\t宏观位移相对均价'
   )
-  lines.push('偏离率 (Δ/d₂₀)\t' + gmsFmt(sd.ratio_d20, 'pct') + '\t现价相对周期末价张力')
-  lines.push('突变率 (Δ/d₁)\t' + gmsFmt(sd.ratio_d1, 'pct') + '\t现价相对周期起点位移')
-  lines.push('Δ₂₀/d\t' + gmsFmt(sd.ratio_d, 'pct') + '\t价格相对均线偏离率')
+  lines.push(
+    'Δ/d₂₀（宏观位移/收盘价）\t' + gmsFmt(sd.ratio_d20, 'pct') + '\t左侧买点用|Δ/d₂₀|；≠ 均线乖离'
+  )
+  lines.push('Δ/d₁（突变率）\t' + gmsFmt(sd.ratio_d1, 'pct') + '\t现价相对周期起点位移')
+  lines.push('Δ₂₀/d（均线乖离）\t' + gmsFmt(sd.ratio_d, 'pct') + '\t(d₂₀−d)/d，非左侧判定用 Δ/d₂₀')
   lines.push('Z (上涨天数)\t' + gmsFmt(sd.rising_days, 'int') + '\t多头天数')
   lines.push('F (下跌天数)\t' + gmsFmt(sd.falling_days, 'int') + '\t空头天数')
   lines.push('m (20日平均成交量)\t' + gmsFmt(sd.avg_volume_20d, 'vol') + '\t平均量')

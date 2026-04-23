@@ -932,7 +932,7 @@ async def get_gms_strategy(
     date: str = Query(None, description="目标日期 YYYY-MM-DD"),
     limit: int = Query(None, ge=1, description="最大返回数量"),
     min_score: float = Query(0, ge=0, le=100, description="最低总分阈值"),
-    scope: str = Query("all", description="股票范围: all/cn/hk/watchlist/gms_watchlist"),
+    scope: str = Query("all", description="股票范围: all/cn/hk/etf/watchlist/gms_watchlist"),
     watchlist_user_id: Optional[int] = Query(
         None,
         ge=1,
@@ -948,6 +948,12 @@ async def get_gms_strategy(
     volume_ratio_min: Optional[float] = Query(None, description="动量量比下限"),
     ratio_d20_max: Optional[float] = Query(None, description="左侧买点 Δ/d₂₀ 上限"),
     volume_ratio_max: Optional[float] = Query(None, description="左侧买点地量 m₂₀/m 上限"),
+    left_buy_min_accumulation: Optional[float] = Query(
+        None,
+        ge=0,
+        le=100,
+        description="左侧买点额外要求：均值收敛态得分≥此值，0 或不传沿用配置（默认 0 关闭）",
+    ),
     watch_threshold: Optional[float] = Query(None, description="重点关注分数"),
     alert_threshold: Optional[float] = Query(None, description="动量突变预警分数"),
     overbought_ratio: Optional[float] = Query(None, description="乖离过大退出阈值"),
@@ -1120,6 +1126,8 @@ async def get_gms_strategy(
             market = "cn"
         elif scope == "hk":
             market = "hk"
+        elif scope == "etf":
+            market = "etf"
         else:
             market = "all"
 
@@ -1139,6 +1147,8 @@ async def get_gms_strategy(
             config.setdefault("left_buy", {})["ratio_d20_abs_max"] = ratio_d20_max
         if volume_ratio_max is not None:
             config.setdefault("left_buy", {})["volume_ratio_max"] = volume_ratio_max
+        if left_buy_min_accumulation is not None:
+            config.setdefault("left_buy", {})["min_accumulation_score"] = left_buy_min_accumulation
         if overbought_ratio is not None:
             config.setdefault("exit", {})["overbought_ratio"] = overbought_ratio
         if volume_ratio_min is not None:

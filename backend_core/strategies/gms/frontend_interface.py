@@ -213,6 +213,8 @@ class GMSFrontendInterface:
                 requested.append((code, mt))
             elif market == "hk" and mt == "HK":
                 requested.append((code, mt))
+            elif market == "etf" and mt == "ETF":
+                requested.append((code, mt))
 
         if not requested:
             empty_meta = {
@@ -334,7 +336,8 @@ class GMSFrontendInterface:
         按数据来源获取股票池：
         - cn（全部A股）：A 股基本信息表 stock_basic_info 全部代码
         - hk（全部港股）：港股基本信息表 stock_basic_info_hk 全部代码
-        - all：上述两表合并（本接口由 API 在 scope=cn/hk 时分别传 market，此处 all 仅作备用）
+        - etf（全部ETF）：基金基本信息表 fund_basic_info 中 collect_enabled=true 的代码
+        - all：A股 + ETF + 港股
         """
         try:
             from backend_api.models import StockBasicInfo, StockBasicInfoHK
@@ -356,6 +359,13 @@ class GMSFrontendInterface:
                     else:
                         codes.append(c)
                 logger.info(f"GMS 股票池(全部港股): {len(codes)} 只")
+            elif market == "etf":
+                from backend_api.models import FundBasicInfo
+                rows = self.db.query(FundBasicInfo.code).filter(
+                    FundBasicInfo.collect_enabled == True
+                ).all()
+                codes = [str(r[0]).strip() for r in rows if r[0] is not None]
+                logger.info(f"GMS 股票池(全部ETF): {len(codes)} 只")
             elif market == "all":
                 cn_rows = self.db.query(StockBasicInfo.code).all()
                 cn_codes = [str(r[0]).zfill(6) if isinstance(r[0], int) else str(r[0]) for r in cn_rows if r[0] is not None]

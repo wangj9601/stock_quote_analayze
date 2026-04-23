@@ -19,8 +19,14 @@
           <el-table-column prop="rule" label="规则" min-width="240" />
         </el-table>
       </div>
-      <div class="text-gray-700">
-        <strong>综合</strong> 总分={{ scoreTotal }}；信号强度=总分/100
+      <div class="text-gray-700 space-y-1">
+        <div>
+          <strong>综合</strong> 总分={{ scoreTotal }}；信号强度=总分/100
+        </div>
+        <p class="text-xs text-gray-600 leading-relaxed">
+          总分 = max(均值收敛态小计, 动量溢出态小计)，非两模块分数相加；用于排序与信号强度。
+        </p>
+        <p v-if="dominantModuleHint" class="text-xs text-gray-600">{{ dominantModuleHint }}</p>
       </div>
       <div>
         <div class="font-semibold mb-2">计算指标细项</div>
@@ -140,6 +146,19 @@ const scoreTotal = computed(() =>
   sd.value.score_total != null ? Number(sd.value.score_total).toFixed(1) : '--'
 )
 
+const dominantModuleHint = computed(() => {
+  const sa = sd.value.score_accumulation
+  const sm = sd.value.score_momentum
+  const a = sa != null && !isNaN(Number(sa)) ? Number(sa) : NaN
+  const m = sm != null && !isNaN(Number(sm)) ? Number(sm) : NaN
+  if (isNaN(a) && isNaN(m)) return ''
+  if (isNaN(a)) return '当前主导：动量溢出态。'
+  if (isNaN(m)) return '当前主导：均值收敛态。'
+  if (a > m) return '当前主导：均值收敛态（蓄势）。'
+  if (m > a) return '当前主导：动量溢出态。'
+  return '两模块小计相同。'
+})
+
 const indicatorRows = computed(() => {
   const s = sd.value
   const d = s.d != null ? s.d : props.stock.d_ma20
@@ -151,9 +170,17 @@ const indicatorRows = computed(() => {
     { name: 'd (20日均价)', val: gmsFmt(d, 'price'), note: '周期均价' },
     { name: 'Δ (d₂₀ - d₁)', val: gmsFmt(s.delta, 'num'), note: '宏观位移' },
     { name: 'Δ/d', val: deltaPct, note: '宏观位移相对均价 (Δ/d)' },
-    { name: '偏离率 (Δ/d₂₀)', val: gmsFmt(s.ratio_d20, 'pct'), note: '现价相对周期末价张力' },
-    { name: '突变率 (Δ/d₁)', val: gmsFmt(s.ratio_d1, 'pct'), note: '现价相对周期起点位移' },
-    { name: 'Δ₂₀/d', val: gmsFmt(s.ratio_d, 'pct'), note: '价格相对均线偏离率' },
+    {
+      name: 'Δ/d₂₀（宏观位移/收盘价）',
+      val: gmsFmt(s.ratio_d20, 'pct'),
+      note: '左侧买点粘合用 |Δ/d₂₀| 与配置比较；≠ 下方均线乖离 Δ₂₀/d',
+    },
+    { name: 'Δ/d₁（突变率）', val: gmsFmt(s.ratio_d1, 'pct'), note: '现价相对周期起点位移' },
+    {
+      name: 'Δ₂₀/d（均线乖离）',
+      val: gmsFmt(s.ratio_d, 'pct'),
+      note: '(d₂₀−d)/d，常与表头「涨跌幅相对均线」一致；不是左侧判定用的 Δ/d₂₀',
+    },
     { name: 'Z (上涨天数)', val: gmsFmt(s.rising_days, 'int'), note: '多头天数' },
     { name: 'F (下跌天数)', val: gmsFmt(s.falling_days, 'int'), note: '空头天数' },
     { name: 'm (20日平均成交量)', val: gmsFmt(s.avg_volume_20d, 'vol'), note: '平均量' },

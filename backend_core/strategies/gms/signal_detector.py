@@ -22,6 +22,8 @@ class GMSSignalDetector(ISignalDetector):
         exit_cfg = self.config.get("exit", {})
         self.ratio_d20_abs_max = float(left.get("ratio_d20_abs_max", 0.015))
         self.volume_ratio_max = float(left.get("volume_ratio_max", 0.8))
+        # 可选：均值收敛态得分下限，0 表示不启用（收紧低分「左侧」信号）
+        self.left_min_accumulation_score = float(left.get("min_accumulation_score", 0))
         self.volume_ratio_min = float(right.get("volume_ratio_min", 1.5))
         self.overbought_ratio = float(exit_cfg.get("overbought_ratio", 0.15))
         self.use_ratio_d_for_exit = self.config.get("ratio_indicators", {}).get("use_ratio_d_for_exit", False)
@@ -33,6 +35,7 @@ class GMSSignalDetector(ISignalDetector):
         - 前置：F > Z 且 d₂₀ < d₁（即 delta < 0）
         - 极度粘合：|Δ/d₂₀| < 1.5%
         - 地量洗盘：m₂₀ < 0.8m
+        - 可选：均值收敛态得分 ≥ min_accumulation_score（配置为 0 时不启用）
         """
         if getattr(indicators, "accumulation_grade", None) in ("S", "A"):
             pass
@@ -55,6 +58,11 @@ class GMSSignalDetector(ISignalDetector):
                 return False
         else:
             return False
+
+        if self.left_min_accumulation_score > 0:
+            acc = getattr(indicators, "score_accumulation", None)
+            if acc is None or float(acc) < self.left_min_accumulation_score:
+                return False
 
         return True
 
