@@ -1,0 +1,59 @@
+{
+  "devicesSnapshot": {
+    "endpoint": "GET /api/twin/devices",
+    "data": [
+      {
+        "deviceId": "D-1001",
+        "name": "东门泵站",
+        "longitude": 113.945321,
+        "latitude": 22.546882,
+        "altitude": 12.5,
+        "status": "online",
+        "alarmLevel": "none",
+        "cameraId": "CAM-01"
+      },
+      {
+        "deviceId": "D-1002",
+        "name": "中央冷站",
+        "longitude": 113.946231,
+        "latitude": 22.547612,
+        "altitude": 15.2,
+        "status": "online",
+        "alarmLevel": "low",
+        "cameraId": "CAM-02"
+      }
+    ]
+  },
+  "stateDeltaMessage": {
+    "topic": "/ws/twin/state",
+    "data": {
+      "ts": "2026-04-24T10:25:00Z",
+      "deviceId": "D-1001",
+      "status": "online",
+      "alarmLevel": "none",
+      "metrics": {
+        "temperature": 42.1,
+        "pressure": 2.7
+      }
+    }
+  },
+  "alarmMessage": {
+    "topic": "/ws/twin/alarm",
+    "data": {
+      "alarmId": "AL-20260424-001",
+      "deviceId": "D-1003",
+      "alarmLevel": "high",
+      "alarmType": "overheat",
+      "startTime": "2026-04-24T10:26:12Z",
+      "message": "配电房A温度超限"
+    }
+  },
+  "videoStreamResponse": {
+    "endpoint": "GET /api/video/stream?cameraId=CAM-03&protocol=webrtc",
+    "data": {
+      "playUrl": "webrtc://media-gw.local/live/CAM-03",
+      "codec": "h264",
+      "expireAt": "2026-04-24T12:00:00Z"
+    }
+  }
+}

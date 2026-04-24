@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数字孪生大屏 Demo</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <link rel="stylesheet" href="./digital_twin_demo.css" />
+</head>
+<body>
+  <div class="layout">
+    <header class="topbar">
+      <div class="title">数字孪生大屏 Demo（GIS + 监控画中画）</div>
+      <div class="status-group">
+        <span id="wsStatus" class="badge ok">数据通道：已连接</span>
+        <span id="mapModeStatus" class="badge">底图：在线</span>
+        <span id="fpsStatus" class="badge">FPS: --</span>
+        <span id="latencyStatus" class="badge">延迟: -- ms</span>
+      </div>
+    </header>
+
+    <main class="main">
+      <section id="mapStage" class="map-stage">
+        <div id="realMap" class="real-map"></div>
+        <div id="offlineMap" class="offline-map"></div>
+        <div class="map-grid"></div>
+        <svg class="map-overlay" id="mapOverlay"></svg>
+        <div id="mapHint" class="hint">真实底图模式：可缩放/拖拽地图，点击设备点位打开画中画</div>
+      </section>
+
+      <aside class="right-panel">
+        <div class="card">
+          <h3>设备状态</h3>
+          <div id="deviceList" class="device-list"></div>
+        </div>
+        <div class="card">
+          <h3>演示控制台</h3>
+          <div class="actions">
+            <button id="basemapModeBtn">切换到离线底图</button>
+            <button id="alarmBtn">注入高优告警</button>
+            <button id="disconnectBtn">模拟断线 10 秒</button>
+            <button id="closeAllBtn">关闭全部 PiP</button>
+          </div>
+          <div class="note">
+            已实现能力：地图点选、PiP 拖拽缩放、告警自动弹窗、多窗管理、断线重连、性能看板。
+            <br />
+            离线底图可替换：把园区图片放到 <code>demo/assets/park_basemap.png</code>（或 jpg/jpeg/webp）。
+          </div>
+        </div>
+        <div class="card">
+          <h3>离线四点标定</h3>
+          <div class="note">
+            点位格式：lat/lng 为经纬度，x/y 为图片归一化坐标(0~1)。至少 4 个点。
+          </div>
+          <textarea id="calibrationInput" class="calibration-input"></textarea>
+          <div class="actions">
+            <button id="applyCalibrationBtn">应用标定</button>
+            <button id="resetCalibrationBtn">恢复默认</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <template id="pipTemplate">
+    <div class="pip-window">
+      <div class="pip-head">
+        <span class="pip-title"></span>
+        <div class="pip-actions">
+          <button class="min-btn">最小化</button>
+          <button class="top-btn">置顶</button>
+          <button class="close-btn">关闭</button>
+        </div>
+      </div>
+      <div class="pip-body">
+        <canvas class="feed-canvas" width="480" height="270"></canvas>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+  </template>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="./digital_twin_demo.js"></script>
+</body>
+</html>
