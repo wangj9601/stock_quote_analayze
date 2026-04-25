@@ -2,6 +2,20 @@
 
 脚本路径：`manual_scripts/etf_historical_migration.py`
 
+## 0. 当前实现的整体处理流程（总览）
+
+1. 参数解析与日期校验（`parse_args` + `validate_dates`）
+2. 初始化迁移器（`EtfHistoricalMigration`），建立数据库会话并初始化统计器
+3. 加载 ETF 列表（`_load_etf_list`）
+   - 传了 `--codes`：按指定代码处理
+   - 未传 `--codes`：从 `fund_basic_info` 读取 `collect_enabled=true` 的全部 ETF
+4. 主循环按 ETF 代码逐只执行（`run` -> `_migrate_one`）
+5. 单只 ETF 内执行三数据源“重试 + 降级”拉取
+   - `eastmoney` -> `sina` -> `ths`
+6. 对拉取结果按日期过滤后 UPSERT 到 `fund_historical_quotes`（`_upsert_rows`）
+7. 可选重算指标（`--recalc-indicators`）
+8. 输出进度、汇总统计和失败明细，返回退出码
+
 ## 1. 功能概述
 
 - 从多数据源迁移 ETF 历史行情到 `fund_historical_quotes`。
@@ -79,7 +93,61 @@ python manual_scripts/etf_historical_migration.py --start-date 2025-01-01 --end-
 - `--skip-existing` 模式：已存在记录会被跳过，只写入缺失日期。
 - `--full-refresh` 模式：按指定日期区间全量处理，适用于口径变更或数据纠偏。
 
-## 6. 常见问题与处理建议
+## 6. 详细处理逻辑（按代码维度）
+
+### 6.1 主循环是否按 ETF 代码执行
+
+- 是。`run()` 中固定使用 `for idx, (code, name) in enumerate(etf_list, start=1)` 逐只处理。
+- 即使开启 `--full-refresh`，外层循环仍不变，依然是“每次处理一只 ETF”。
+
+### 6.2 单只 ETF 的处理步骤（`_migrate_one`）
+
+1. 计算 `effective_start`（当前实现中，无论是否 `full_refresh`，都返回 `start_date`）
+2. 如 `effective_start > end_date`，判定该 ETF 无需处理
+3. 依次尝试数据源：
+   - `eastmoney`：`ak.fund_etf_hist_em`（支持区间参数）
+   - `sina`：`ak.fund_etf_hist_sina`（取全量后再在本地按日期过滤）
+   - `ths`：`ak.fund_etf_spot_ths`（仅当区间包含今天时，补“今日单日快照”）
+4. 每个数据源走 `_fetch_with_retry`，最多 `--max-retries` 次
+5. 三源都无可用数据则记录失败
+6. 有数据则执行 `_upsert_rows`
+7. 若启用 `--recalc-indicators` 且本次有插入/更新，则触发指标重算
+
+### 6.3 全量与增量在入库层的差异
+
+- 核心开关：`should_skip_existing = skip_existing or (not full_refresh)`
+- 默认模式（未开 `--full-refresh`）：
+  - `should_skip_existing=True`
+  - 先查区间内已有日期集合（`_existing_dates`）
+  - 已存在日期直接 `skipped`，只补缺
+- 全量模式（开启 `--full-refresh`）：
+  - 若未额外传 `--skip-existing`，则 `should_skip_existing=False`
+  - 区间内所有有效数据都参与 UPSERT
+  - 已有记录会走 `ON CONFLICT DO UPDATE`，形成“全量回刷覆盖”
+
+### 6.4 行级写入与字段处理
+
+- 逐行读取 DataFrame，先做日期合法性和区间过滤
+- 关键字段标准化：
+  - 数值字段统一 `_to_float`
+  - `pre_close` 缺失且 `close/change` 可用时，按 `pre_close = close - change` 回推
+- 通过主键 `(code, date)` UPSERT 写入
+- 统计分为 `inserted / updated / skipped`
+- 单只 ETF 完成后 `commit`；异常则 `rollback` 并记录失败
+
+### 6.5 节流、进度和异常
+
+- 每处理 `batch_size` 只 ETF 后睡眠 `sleep_ms + 随机抖动`
+- 每 `100` 只 ETF 打印一次进度（可通过 `PROGRESS_LOG_INTERVAL` 调整）
+- 失败不会中断全局流程，统一累计到 `failures`，最终汇总输出
+
+## 7. 数据源能力边界说明（当前实现）
+
+- `eastmoney`：主采源，区间历史能力完整
+- `sina`：降级源，可提供历史数据，但接口形态与字段较简化
+- `ths`：兜底源，仅用于“区间包含今天”时补今日快照，不承担历史区间主采
+
+## 8. 常见问题与处理建议
 
 - 东方财富接口不可达：脚本会自动降级到新浪，再降级同花顺。
 - 同花顺历史能力说明：当前仅可通过实时快照兜底“今日单日”数据，不适合区间历史主采。

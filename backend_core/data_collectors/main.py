@@ -11,7 +11,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from datetime import datetime, timedelta
 from backend_core.data_collectors.akshare.realtime import AkshareRealtimeQuoteCollector
 from backend_core.data_collectors.akshare.historical_turnover_rate import HistoricalTurnoverRateCollector
-from backend_core.data_collectors.akshare.stock_shares_collector import StockSharesCollector
+from backend_core.data_collectors.akshare.stock_shares_collector import StockSharesCollector, StockSharesSyncAbortError
 from backend_core.data_collectors.tushare.historical import HistoricalQuoteCollector
 from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
 from backend_core.config.config import DATA_COLLECTORS
@@ -201,6 +201,10 @@ def update_stock_shares():
             logging.info(f"[定时任务] 股本数据更新完成: {result}")
         else:
             logging.warning(f"[定时任务] 股本数据更新结果: {result}")
+    except StockSharesSyncAbortError as e:
+        logging.critical(f"[定时任务] 股本数据更新触发强制退出: {e}")
+        # 按需求：失败股票数超过阈值后，强制结束整个同步程序进程
+        os._exit(1)
     except Exception as e:
         logging.error(f"[定时任务] 股本数据更新异常: {e}")
 
@@ -522,6 +526,67 @@ def _env_bool(k: str, default: bool = True) -> bool:
     return v in ("1", "true", "yes", "y", "on")
 
 
+def _register_stock_shares_job():
+    """
+    注册股本同步任务，支持 weekly/monthly/quarterly 三种模式。
+
+    .env 参数：
+    - SCHED_STOCK_SHARES_MODE=weekly|monthly|quarterly（默认 weekly）
+    - SCHED_STOCK_SHARES_HOUR / SCHED_STOCK_SHARES_MINUTE
+    - weekly:    SCHED_STOCK_SHARES_DOW
+    - monthly:   SCHED_STOCK_SHARES_DAY
+    - quarterly: SCHED_STOCK_SHARES_DAY + SCHED_STOCK_SHARES_QUARTER_MONTHS
+    """
+    mode = _env("SCHED_STOCK_SHARES_MODE", "weekly").lower()
+    hour = _cron_int("SCHED_STOCK_SHARES_HOUR", 10)
+    minute = _cron_int("SCHED_STOCK_SHARES_MINUTE", 0)
+    job_kwargs = {
+        "hour": hour,
+        "minute": minute,
+        "id": "stock_shares_update",
+    }
+
+    if mode == "monthly":
+        # 每月第 N 天（默认 1 号）
+        day = _cron_int("SCHED_STOCK_SHARES_DAY", 1)
+        day = min(31, max(1, day))
+        job_kwargs["day"] = day
+        scheduler.add_job(update_stock_shares, "cron", **job_kwargs)
+        logging.info(
+            "已注册股本同步任务：mode=monthly, day=%s, hour=%s, minute=%s",
+            day, hour, minute
+        )
+        return
+
+    if mode == "quarterly":
+        # 季度月份默认 1,4,7,10；支持自定义逗号表达式
+        quarter_months = _cron("SCHED_STOCK_SHARES_QUARTER_MONTHS", "1,4,7,10")
+        day = _cron_int("SCHED_STOCK_SHARES_DAY", 1)
+        day = min(31, max(1, day))
+        job_kwargs["month"] = quarter_months
+        job_kwargs["day"] = day
+        scheduler.add_job(update_stock_shares, "cron", **job_kwargs)
+        logging.info(
+            "已注册股本同步任务：mode=quarterly, months=%s, day=%s, hour=%s, minute=%s",
+            quarter_months, day, hour, minute
+        )
+        return
+
+    # 默认 weekly；非法值回退 weekly
+    if mode not in ("weekly", "monthly", "quarterly"):
+        logging.warning(
+            "SCHED_STOCK_SHARES_MODE=%s 非法，已回退 weekly 模式",
+            mode
+        )
+    dow = _cron("SCHED_STOCK_SHARES_DOW", "sat")
+    job_kwargs["day_of_week"] = dow
+    scheduler.add_job(update_stock_shares, "cron", **job_kwargs)
+    logging.info(
+        "已注册股本同步任务：mode=weekly, dow=%s, hour=%s, minute=%s",
+        dow, hour, minute
+    )
+
+
 def _register_gms_signal_precompute_jobs():
     """定时将 GMS 信号写入 gms_signal_trace（全 A、全港股、自定义池、全量自关注并集），供选股页优先读库。"""
     if not _env_bool("ENABLE_GMS_PRECOMPUTE", True):
@@ -603,11 +668,7 @@ scheduler.add_job(collect_akshare_turnover_rate, 'cron',
     hour=_cron('SCHED_AKSHARE_TURNOVER_HOUR', '11'),
     minute=_cron_int('SCHED_AKSHARE_TURNOVER_MINUTE', 13),
     id='akshare_turnover_rate')
-scheduler.add_job(update_stock_shares, 'cron',
-    day_of_week=_cron('SCHED_STOCK_SHARES_DOW', 'sat'),
-    hour=_cron_int('SCHED_STOCK_SHARES_HOUR', 10),
-    minute=_cron_int('SCHED_STOCK_SHARES_MINUTE', 0),
-    id='stock_shares_update')
+_register_stock_shares_job()
 # scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
 # scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
 # scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')

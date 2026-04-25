@@ -347,14 +347,14 @@ class StockGMSTracePage {
             return;
         }
         const market = document.getElementById('btMarket')?.value || 'all';
-        const pctRaw = parseFloat(String(document.getElementById('btTargetPct')?.value || '5'), 10);
+        const pctRaw = parseFloat(String(document.getElementById('btTargetPct')?.value || '10'), 10);
         if (Number.isNaN(pctRaw) || pctRaw < 0.1 || pctRaw > 100) {
-            alert('目标阈值请在 0.1%～100% 之间（输入数字为百分比，如 5 表示 +5%）');
+            alert('目标阈值请在 0.1%～100% 之间（输入数字为百分比，如 10 表示 +10%）');
             return;
         }
         const targetPct = pctRaw / 100;
         const horizon = parseInt(document.getElementById('btHorizon')?.value || '20', 10);
-        const minScore = parseFloat(document.getElementById('btMinScore')?.value || '0', 10);
+        const minScore = parseFloat(document.getElementById('btMinScore')?.value || '70', 10);
         if (horizon < 10 || horizon > 30) {
             alert('持有窗口应在 10～30 个交易日之间');
             return;

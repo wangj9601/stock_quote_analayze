@@ -23,6 +23,10 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
 
+class StockSharesSyncAbortError(Exception):
+    """股本同步失败数超过阈值时触发的致命异常。"""
+
+
 class StockSharesCollector(AKShareCollector):
     """股本数据采集器"""
 
@@ -119,6 +123,7 @@ class StockSharesCollector(AKShareCollector):
         success_count = 0
         fail_count = 0
         skip_count = 0
+        fail_threshold = 3
 
         try:
             # 确保字段存在
@@ -190,6 +195,10 @@ class StockSharesCollector(AKShareCollector):
                 except Exception as e:
                     fail_count += 1
                     self.logger.error(f"处理股票 {code}({name}) 股本数据时异常: {e}")
+                    if fail_count > fail_threshold:
+                        raise StockSharesSyncAbortError(
+                            f"FAIL_THRESHOLD_EXCEEDED: 股本同步失败股票数 {fail_count} 超过阈值 {fail_threshold}，中止任务"
+                        )
 
                 # 每 50 条提交一次
                 if i % 50 == 0:
@@ -211,6 +220,9 @@ class StockSharesCollector(AKShareCollector):
             self.logger.info(f"股本数据采集完成: {result}")
             return result
 
+        except StockSharesSyncAbortError:
+            session.rollback()
+            raise
         except Exception as e:
             self.logger.error(f"股本数据采集异常: {e}")
             session.rollback()

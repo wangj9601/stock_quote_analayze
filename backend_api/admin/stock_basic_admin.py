@@ -89,10 +89,20 @@ async def get_pipeline_status(
     ).scalar() or 0
     scheduler = {
         "stock_shares_update": {
+            "mode": "weekly|monthly|quarterly",
             "day_of_week": "sat",
+            "day": 1,
+            "quarter_months": "1,4,7,10",
             "hour": 10,
             "minute": 0,
-            "env_keys": ["SCHED_STOCK_SHARES_DOW", "SCHED_STOCK_SHARES_HOUR", "SCHED_STOCK_SHARES_MINUTE"],
+            "env_keys": [
+                "SCHED_STOCK_SHARES_MODE",
+                "SCHED_STOCK_SHARES_DOW",
+                "SCHED_STOCK_SHARES_DAY",
+                "SCHED_STOCK_SHARES_QUARTER_MONTHS",
+                "SCHED_STOCK_SHARES_HOUR",
+                "SCHED_STOCK_SHARES_MINUTE",
+            ],
         },
         "turnover_collect": {
             "day_of_week": "mon-fri",
