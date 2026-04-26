@@ -47,7 +47,7 @@ python manual_scripts/etf_historical_migration.py --start-date 2026-04-01 --end-
 ### 3.2 全量启用 ETF 历史回填（默认增量）
 
 ```bash
-python manual_scripts/etf_historical_migration.py --start-date 2025-01-01 --end-date 2026-04-20
+python manual_scripts/etf_historical_migration.py --start-date 2025-01-01 --end-date 2026-04-24
 ```
 
 ### 3.3 仅补缺模式（不覆盖已有数据）

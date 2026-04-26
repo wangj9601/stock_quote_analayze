@@ -730,13 +730,16 @@ def _build_xlsx_bytes(details: List[Dict[str, Any]]) -> bytes:
     sorted_details = _sort_gms_details_for_export(details)
     _, fieldnames_zh, rows_zh = _build_gms_detail_rows(sorted_details, code_csv_format=False)
     cn_rows = [r for r in rows_zh if r.get("市场") == "CN"]
+    etf_rows = [r for r in rows_zh if r.get("市场") == "ETF"]
     hk_rows = [r for r in rows_zh if r.get("市场") == "HK"]
 
     wb = Workbook()
     wb.remove(wb.active)
     ws_cn = wb.create_sheet("A股", 0)
     _write_gms_xlsx_sheet(ws_cn, fieldnames_zh, cn_rows)
-    ws_hk = wb.create_sheet("港股", 1)
+    ws_etf = wb.create_sheet("ETF", 1)
+    _write_gms_xlsx_sheet(ws_etf, fieldnames_zh, etf_rows)
+    ws_hk = wb.create_sheet("港股", 2)
     _write_gms_xlsx_sheet(ws_hk, fieldnames_zh, hk_rows)
 
     bio = io.BytesIO()

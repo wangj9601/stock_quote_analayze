@@ -183,8 +183,13 @@ const WatchlistPage = {
         // 删除自选股按钮
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('remove-btn')) {
+                // 兼容网格卡片(.stock-card)与列表行(tr[data-code])两种视图
                 const card = e.target.closest('.stock-card');
-                const code = card.dataset.code;
+                const row = e.target.closest('tr[data-code]');
+                const code = (card && card.dataset && card.dataset.code)
+                    ? card.dataset.code
+                    : (row && row.dataset ? row.dataset.code : '');
+                if (!code) return;
                 this.removeStock(code);
             }
         });

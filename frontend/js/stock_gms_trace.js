@@ -28,9 +28,25 @@ class StockGMSTracePage {
         this.currentStockName = params.get('name') || '';
         document.getElementById('stockDisplay').textContent =
             this.currentStockCode ? `${this.currentStockCode} ${decodeURIComponent(this.currentStockName || '')}` : '--';
+        const marketSel = document.getElementById('btMarket');
+        if (marketSel && this.currentStockCode) {
+            if (this.isAShareCode(this.currentStockCode)) marketSel.value = 'cn';
+            else if (this.isETFCode(this.currentStockCode)) marketSel.value = 'etf';
+            else marketSel.value = 'hk';
+        }
         if (this.currentStockCode) {
             this.fetchData();
         }
+    }
+
+    isAShareCode(code) {
+        const s = String(code || '').trim();
+        return s.length >= 6 && /^\d+$/.test(s) && '6039'.includes(s[0]);
+    }
+
+    isETFCode(code) {
+        const s = String(code || '').trim();
+        return s.length >= 6 && /^\d+$/.test(s) && '518'.includes(s[0]);
     }
 
     bindEvents() {

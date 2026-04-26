@@ -28,14 +28,39 @@ def _txt_name_hk():
     )
 
 
-def _stock_name_for_code(db: Session, code: str) -> str:
-    """与 pvfrs 选股接口一致：按代码形态查 A 股 / 港股名称。"""
+def _txt_name_etf():
+    return text("SELECT name FROM fund_basic_info WHERE code = :code LIMIT 1").bindparams(
+        bindparam("code", type_=SAString())
+    )
+
+
+def _stock_name_for_code(db: Session, code: str, market_type: Optional[str] = None) -> str:
+    """按 market_type 优先查 A 股 / ETF / 港股名称，代码形态仅做兜底。"""
     c = str(code).strip()
     if not c:
         return f"股票{c}"
+    mt = str(market_type or "").strip().upper()
+    if mt == "ETF":
+        row = db.execute(_txt_name_etf(), {"code": c}).fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+    elif mt == "CN":
+        row = db.execute(_txt_name_cn(), {"code": c}).fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+    elif mt == "HK":
+        row = db.execute(_txt_name_hk(), {"code": c}).fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+
+    # 兜底：按代码形态推断
     is_cn = len(c) >= 6 and c.isdigit() and c[0] in "6039"
+    # ETF 常见代码段：51x/15x/56x/58x（沪深场内基金）
+    is_etf = len(c) >= 6 and c.isdigit() and c[:2] in {"15", "51", "56", "58"}
     if is_cn:
         row = db.execute(_txt_name_cn(), {"code": c}).fetchone()
+    elif is_etf:
+        row = db.execute(_txt_name_etf(), {"code": c}).fetchone()
     else:
         row = db.execute(_txt_name_hk(), {"code": c}).fetchone()
     if row and row[0]:
@@ -137,7 +162,7 @@ def query_gms_signal_trace_selection(
     for r in deduped:
         code = r.code
         st = float(r.score_total or 0)
-        name = _stock_name_for_code(db, code)
+        name = _stock_name_for_code(db, code, getattr(r, "market_type", None))
 
         if st >= 90:
             advice = "强烈推荐"

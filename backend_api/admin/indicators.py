@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, or_, text
-from datetime import datetime
+from datetime import datetime, date
 import asyncio
 import traceback
 
@@ -44,10 +44,20 @@ def _historical_quotes_to_dataframe(items):
     """从 ORM 行情列表构造 DataFrame；含 turnover_rate 供无穷成本均线（CYC∞）使用。"""
     import pandas as pd
 
+    def _normalize_date_value(value):
+        """统一将日期键规范为 YYYY-MM-DD 字符串，避免 varchar/date 比较错误。"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date().isoformat()
+        if isinstance(value, date):
+            return value.isoformat()
+        return str(value)[:10]
+
     return pd.DataFrame(
         [
             {
-                "date": item.date,
+                "date": _normalize_date_value(item.date),
                 "open": item.open,
                 "high": item.high,
                 "low": item.low,

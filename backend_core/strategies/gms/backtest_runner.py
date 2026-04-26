@@ -923,6 +923,9 @@ def run_gms_backtest(
             markets_to_run = [("cn", dates_cn), ("etf", dates_etf), ("hk", dates_hk)]
     elif market == "cn":
         markets_to_run = [("cn", _get_trading_dates_cn(db, start_str, end_str))]
+    elif market == "etf":
+        # ETF 使用 A 股交易日历（沪深 ETF 与 A 股同交易日历）
+        markets_to_run = [("etf", _get_trading_dates_cn(db, start_str, end_str))]
     else:
         markets_to_run = [("hk", _get_trading_dates_hk(db, start_str, end_str))]
 

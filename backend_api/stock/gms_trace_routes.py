@@ -200,6 +200,16 @@ def _normalize_code(code: str, market_type: str) -> str:
     return s
 
 
+def _infer_market_type(code: str) -> str:
+    """按代码规则推断市场：A股/CN、ETF、港股/HK。"""
+    s = str(code).strip()
+    if len(s) >= 6 and s.isdigit() and s[0] in "6039":
+        return "CN"
+    if len(s) >= 6 and s.isdigit() and s[0] in "518":
+        return "ETF"
+    return "HK"
+
+
 def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, config: dict) -> int:
     """
     对单只股票从 mean_frequency_resonance_indicators 的首日到最新日执行 GMS 追溯计算，
@@ -329,9 +339,8 @@ async def get_gms_signal_trace(
     if not code:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
 
-    # 判断市场类型
-    is_a_share = len(code) >= 6 and code.isdigit() and code[0] in "6039"
-    market_type = "CN" if is_a_share else "HK"
+    # 判断市场类型（A股/ETF/港股）
+    market_type = _infer_market_type(code)
     code_norm = _normalize_code(code, market_type)
 
     try:
@@ -470,7 +479,7 @@ class GMSStockBacktestBody(BaseModel):
     code: str = Field(..., description="股票代码")
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
-    market: str = Field("all", description="市场: cn / hk / all")
+    market: str = Field("all", description="市场: cn / etf / hk / all")
     target_pct: float = Field(0.05, description="目标涨幅，如 0.05 表示 5%")
     horizon_days: int = Field(20, ge=10, le=30, description="持有窗口交易日数")
     min_score: float = Field(0, ge=0, le=100, description="最低总分（与 GMSFrontendInterface 一致，管理端回测相同）")
