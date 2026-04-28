@@ -119,6 +119,73 @@ def _fill_gms_indicator_fallback(db: Session, code: str, target_date: str, marke
         return None
 
 
+def _resolve_gms_stock_name(db: Session, code: str, market_type_hint: Optional[str] = None) -> str:
+    """
+    GMS 列表展示用证券简称：与引擎 market 划分一致——A 股走 stock_basic_info，
+    港股走 stock_basic_info_hk，沪深 ETF（如 159xxx/510xxx）走 fund_basic_info。
+    """
+    code = str(code).strip()
+    if not code:
+        return "股票"
+    mt = (market_type_hint or "").strip().upper()
+
+    from backend_api.models import StockBasicInfo, StockBasicInfoHK, FundBasicInfo
+
+    if mt == "HK":
+        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
+        if info and info.name:
+            return info.name
+
+    info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code).first()
+    if not info and code.startswith("SZ"):
+        info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
+    if not info and code.startswith("SH"):
+        info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
+    if info and info.name:
+        return info.name
+
+    if mt == "ETF":
+        finfo = db.query(FundBasicInfo).filter(FundBasicInfo.code == code).first()
+        if finfo and finfo.name:
+            return finfo.name
+
+    # 159xxx 等深市 ETF：历史上会被误判进「港股」分支但不在 HK 表，此处统一从基金表兜底
+    if len(code) >= 6 and code.isdigit():
+        finfo = db.query(FundBasicInfo).filter(FundBasicInfo.code == code).first()
+        if finfo and finfo.name:
+            return finfo.name
+
+    if len(code) == 5 and code.isdigit():
+        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
+        if info and info.name:
+            return info.name
+
+    if mt != "HK":
+        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
+        if info and info.name:
+            return info.name
+
+    return f"股票{code}"
+
+
+def _fallback_gms_indicator_market_type(symbol: str, scope: str, cn_codes: set) -> str:
+    """与 strategy_engine 一致：用于指标表兜底查询的 market_type（CN / ETF / HK）。"""
+    s = str(symbol or "").strip()
+    if scope == "etf":
+        return "ETF"
+    if s in cn_codes:
+        return "CN"
+    if len(s) >= 6 and s.isdigit():
+        if s[0] in "6039":
+            return "CN"
+        if s[0] in "518":
+            return "ETF"
+        return "HK"
+    if len(s) == 5 and s.isdigit():
+        return "HK"
+    return "CN"
+
+
 def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_type: str, config: dict) -> Optional[Dict[str, Any]]:
     """
     兜底：当 score_detail 为空或得分字段缺失时，使用指标表 + 当前配置重新计算得分明细。
@@ -1255,12 +1322,14 @@ async def get_gms_strategy(
                 },
             })
 
-        from backend_api.models import StockBasicInfo, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK
+        from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
         from sqlalchemy import func
 
         stock_codes = [str(r["symbol"]).strip() for r in selection_results]
+        code_to_gms_mt = {str(r["symbol"]).strip(): r.get("market_type") for r in selection_results}
         # 6 位：6/0/3 为 A 股，9 为沪市 B 股，均从 A 股行情/基本信息表取数
         cn_codes = [c for c in stock_codes if c and len(c) >= 6 and c.isdigit() and c[0] in "6039"]
+        cn_code_set = set(cn_codes)
         hk_codes = [c for c in stock_codes if c and c not in cn_codes]
 
         # 从历史行情表获取最近交易日收盘价（A股、港股分别查）
@@ -1308,22 +1377,7 @@ async def get_gms_strategy(
 
         for r in selection_results:
             code = str(r["symbol"]).strip()
-            name = ""
-            is_hk = code in hk_codes
-            if is_hk:
-                info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
-                if info and info.name:
-                    name = info.name
-            else:
-                info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code).first()
-                if not info and code.startswith("SZ"):
-                    info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
-                if not info and code.startswith("SH"):
-                    info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
-                if info and info.name:
-                    name = info.name
-            if not name:
-                name = f"股票{code}"
+            name = _resolve_gms_stock_name(db, code, r.get("market_type"))
 
             current_price = r.get("d") or 0
             change_percent = None
@@ -1380,7 +1434,12 @@ async def get_gms_strategy(
                 or item.get("avg_volume_20d") is None
                 or item.get("current_volume") is None
             )
-            mt = "HK" if (item.get("symbol") in hk_codes) else "CN"
+            _sym = str(item.get("symbol") or "").strip()
+            _gmt = code_to_gms_mt.get(_sym)
+            if _gmt in ("CN", "HK", "ETF"):
+                mt = _gmt
+            else:
+                mt = _fallback_gms_indicator_market_type(_sym, scope, cn_code_set)
             if need_fill:
                 fallback = _fill_gms_indicator_fallback(db, item.get("symbol"), target_date, mt)
                 if fallback:
