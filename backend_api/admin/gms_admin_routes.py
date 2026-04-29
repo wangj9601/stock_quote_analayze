@@ -141,7 +141,7 @@ def _distinct_gms_strategy_stock_codes(db: Session, market: Optional[str] = None
         GMSStrategyVersion, GMSStrategyVersion.id == GMSStrategyVersionStock.version_id
     ).filter(
         GMSStrategyVersion.is_active == True,
-        GMSStrategyVersionStock.status == "active"
+        func.lower(func.trim(func.coalesce(GMSStrategyVersionStock.status, ""))) == "active",
     )
     if market and market != "all":
         norm_m = _normalize_market(market)

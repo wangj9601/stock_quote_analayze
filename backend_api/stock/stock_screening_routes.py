@@ -1156,7 +1156,7 @@ async def get_gms_strategy(
                 .join(GMSStrategyVersion, GMSStrategyVersion.id == GMSStrategyVersionStock.version_id)
                 .filter(
                     GMSStrategyVersion.is_active == True,
-                    GMSStrategyVersionStock.status == "active",
+                    func.lower(func.trim(func.coalesce(GMSStrategyVersionStock.status, ""))) == "active",
                 )
             )
             if mraw in ("cn", "a"):
