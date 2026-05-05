@@ -3,13 +3,14 @@
 提供MA、MACD、RSI、KDJ等指标数据的查询接口
 """
 
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional, Dict, Any, Literal
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, or_, text
 from datetime import datetime, date
 import asyncio
 import traceback
+from pydantic import BaseModel, Field, model_validator
 
 from backend_api.models import (
     MAIndicators, MACDIndicators, RSIIndicators, KDJIndicators, BOLLIndicators,
@@ -19,8 +20,100 @@ from backend_api.models import (
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_admin, get_current_user
+from backend_api.admin.quotes import (
+    _try_append_operation_log,
+    _parse_optional_trade_date,
+    _normalize_code,
+    _normalize_hk_stock_code,
+)
 
 router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
+
+
+def _norm_indicator_market(s: Optional[str]) -> str:
+    return (s or "").strip().upper()
+
+
+def _normalize_indicator_code(raw: Any, market_type: Optional[str]) -> str:
+    """按市场规范化代码：CN/ETF 用 A 股规则补零；HK 不强制 6 位。"""
+    if _norm_indicator_market(market_type) == "HK":
+        return _normalize_hk_stock_code(raw)
+    return _normalize_code(raw)
+
+
+class DeleteIndicatorDataBody(BaseModel):
+    """删除 MA / MAVOL / PVFRS 等指标表行（按 code + date + market_type 复合主键）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    market_type: Optional[str] = Field(
+        None, description="CN、HK 或 ETF；单个标的必选；全部时可限定仅删某市场"
+    )
+    start_date: Optional[str] = Field(None, description="指标日期下限（含）YYYY-MM-DD")
+    end_date: Optional[str] = Field(None, description="指标日期上限（含）YYYY-MM-DD")
+
+    @model_validator(mode="after")
+    def _validate_indicator_delete(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个标的」时必须填写代码")
+            if not (self.market_type or "").strip():
+                raise ValueError("选择「单个标的」时必须选择市场类型")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+def _delete_indicator_rows(
+    db: Session,
+    model_cls,
+    body: DeleteIndicatorDataBody,
+    *,
+    log_type: str,
+    table_human: str,
+    current_user: Any,
+) -> Dict[str, Any]:
+    """按条件删除指标表；date 列为字符串 YYYY-MM-DD。"""
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(model_cls)
+    if body.scope == "single":
+        mt = _norm_indicator_market(body.market_type)
+        if mt not in ("CN", "HK", "ETF"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="市场类型须为 CN、HK 或 ETF")
+        c = _normalize_indicator_code(body.code, mt)
+        if not c:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="代码无效")
+        q = q.filter(model_cls.code == c, model_cls.market_type == mt)
+    else:
+        if body.market_type:
+            mt = _norm_indicator_market(body.market_type)
+            if mt not in ("CN", "HK", "ETF"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="市场类型须为 CN、HK 或 ETF")
+            q = q.filter(model_cls.market_type == mt)
+    if start:
+        q = q.filter(model_cls.date >= start)
+    if end:
+        q = q.filter(model_cls.date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type=log_type,
+        log_message=(
+            f"删除{table_human} scope={body.scope} code={body.code or '-'} "
+            f"market={body.market_type or '-'} start={start or '-'} end={end or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
 
 
 def _fetch_historical_quote_rows(db: Session, code: str, market_type: str):
@@ -415,6 +508,58 @@ async def get_pvfrs_indicators(
         "page": page,
         "page_size": page_size
     }
+
+
+@router.post("/ma/delete")
+async def delete_ma_indicators(
+    body: DeleteIndicatorDataBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除 MA 表 ma_indicators（按 date 字符串与 market_type）。"""
+    return _delete_indicator_rows(
+        db,
+        MAIndicators,
+        body,
+        log_type="indicator_ma_delete",
+        table_human="MA(ma_indicators)",
+        current_user=current_user,
+    )
+
+
+@router.post("/mavol/delete")
+async def delete_mavol_indicators(
+    body: DeleteIndicatorDataBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除 MAVOL 表 mavol_indicators。"""
+    return _delete_indicator_rows(
+        db,
+        MAVOLIndicators,
+        body,
+        log_type="indicator_mavol_delete",
+        table_human="MAVOL(mavol_indicators)",
+        current_user=current_user,
+    )
+
+
+@router.post("/pvfrs/delete")
+async def delete_pvfrs_indicators(
+    body: DeleteIndicatorDataBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除 PVFRS 表 mean_frequency_resonance_indicators。"""
+    return _delete_indicator_rows(
+        db,
+        MeanFrequencyResonanceIndicators,
+        body,
+        log_type="indicator_pvfrs_delete",
+        table_human="PVFRS(mean_frequency_resonance_indicators)",
+        current_user=current_user,
+    )
+
 
 @router.get("/details")
 async def get_indicator_details(

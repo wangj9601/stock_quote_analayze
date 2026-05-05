@@ -69,6 +69,7 @@ try:
         IndexRealtimeQuotes = getattr(models_module, 'IndexRealtimeQuotes', None)
         IndustryBoardRealtimeQuotes = getattr(models_module, 'IndustryBoardRealtimeQuotes', None)
         HKIndexRealtimeQuotes = getattr(models_module, 'HKIndexRealtimeQuotes', None)
+        HKIndexHistoricalQuotes = getattr(models_module, 'HKIndexHistoricalQuotes', None)
         StockNews = getattr(models_module, 'StockNews', None)
         MAIndicators = getattr(models_module, 'MAIndicators', None)
         MACDIndicators = getattr(models_module, 'MACDIndicators', None)
@@ -160,6 +161,7 @@ except Exception as e:
     IndexRealtimeQuotes = None
     IndustryBoardRealtimeQuotes = None
     HKIndexRealtimeQuotes = None
+    HKIndexHistoricalQuotes = None
     StockNews = None
     MAIndicators = None
     MACDIndicators = None
@@ -254,6 +256,7 @@ __all__ = [
     'IndexRealtimeQuotes',
     'IndustryBoardRealtimeQuotes',
     'HKIndexRealtimeQuotes',
+    'HKIndexHistoricalQuotes',
     'StockNews',
     'MAIndicators',
     'MACDIndicators',

@@ -75,6 +75,11 @@
                         换手率导入
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="danger" plain @click="openDeleteRealtimeDialog" :style="{ width: '100%' }">
+                        删除实时行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -132,6 +137,11 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="update_time" label="更新时间" min-width="120" show-overflow-tooltip />
+                  <el-table-column label="操作" width="100" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteStockRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <!-- 分页组件 -->
@@ -170,6 +180,11 @@
                       <el-button @click="refreshIndexData" :loading="indexLoading" :style="{ width: '100%' }">
                         <el-icon><Refresh /></el-icon>
                         刷新
+                      </el-button>
+                    </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="danger" plain @click="openDeleteIndexRealtimeDialog" :style="{ width: '100%' }">
+                        删除指数实时行情
                       </el-button>
                     </el-col>
                   </el-row>
@@ -219,6 +234,11 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="update_time" label="更新时间" width="140" />
+                  <el-table-column label="操作" width="100" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteIndexRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -301,6 +321,11 @@
                         换手率更新
                       </el-button>
                     </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button type="danger" plain @click="openDeleteHistoricalDialog" :style="{ width: '100%' }">
+                        删除历史行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -351,6 +376,11 @@
                       </span>
                     </template>
                   </el-table-column>
+                  <el-table-column label="操作" width="100" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteHistoricalRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -390,6 +420,11 @@
                         刷新
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="danger" plain @click="openDeleteIndustryRealtimeDialog" :style="{ width: '100%' }">
+                        删除行业板块行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -400,6 +435,7 @@
                   :style="{ width: '100%' }"
                   class="responsive-table"
                 >
+                  <el-table-column prop="board_code" label="板块代码" width="100" show-overflow-tooltip />
                   <el-table-column prop="board_name" label="行业名称" min-width="120" show-overflow-tooltip />
                   <el-table-column prop="latest_price" label="点位" min-width="80" show-overflow-tooltip>
                     <template #default="scope">
@@ -425,6 +461,11 @@
                   </el-table-column>
                   <el-table-column prop="leading_stock_name" label="领涨股" min-width="90" show-overflow-tooltip />
                   <el-table-column prop="update_time" label="更新时间" min-width="120" show-overflow-tooltip />
+                  <el-table-column label="操作" width="100" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteIndustryRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -469,6 +510,11 @@
                         刷新
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="danger" plain @click="openHkStockRtDeleteDialog" :style="{ width: '100%' }">
+                        删除实时行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -481,6 +527,7 @@
                 >
                   <el-table-column prop="code" label="代码" width="80" show-overflow-tooltip />
                   <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+                  <el-table-column prop="trade_date" label="交易日" width="110" show-overflow-tooltip />
                   <el-table-column prop="current_price" label="现价" min-width="80" show-overflow-tooltip>
                     <template #default="scope">
                       <span :class="getPriceClass(scope.row.current_price, scope.row.pre_close)">
@@ -516,6 +563,11 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="update_time" label="更新时间" min-width="120" show-overflow-tooltip />
+                  <el-table-column label="操作" width="88" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteHKStockRealtimeRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -583,6 +635,11 @@
                         导出
                       </el-button>
                     </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button type="danger" plain @click="openHkStockHistDeleteDialog" :style="{ width: '100%' }">
+                        删除历史行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -640,6 +697,11 @@
                       </span>
                     </template>
                   </el-table-column>
+                  <el-table-column label="操作" width="88" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteHKHistoricalStockRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -679,6 +741,11 @@
                         刷新
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="danger" plain @click="openHkIdxRtDeleteDialog" :style="{ width: '100%' }">
+                        删除指数实时行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -691,6 +758,7 @@
                 >
                   <el-table-column prop="code" label="代码" width="100" show-overflow-tooltip />
                   <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+                  <el-table-column prop="trade_date" label="交易日" width="110" show-overflow-tooltip />
                   <el-table-column prop="price" label="点位" min-width="80" show-overflow-tooltip>
                     <template #default="scope">
                       <span :class="getPriceClass(scope.row.price, scope.row.pre_close)">
@@ -726,6 +794,11 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="update_time" label="更新时间" width="140" />
+                  <el-table-column label="操作" width="88" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteHKIndexRealtimeRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -787,6 +860,11 @@
                         刷新
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="12" :md="5" :lg="5" :xl="5">
+                      <el-button type="danger" plain @click="openHkIdxHistDeleteDialog" :style="{ width: '100%' }">
+                        删除指数历史行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -830,6 +908,11 @@
                       <span :class="getChangeClass(scope.row.change_percent)">
                         {{ formatPercent(scope.row.change_percent) }}
                       </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="88" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteHKIndexHistoricalRow(scope.row)">删除</el-button>
                     </template>
                   </el-table-column>
                 </el-table>
@@ -876,6 +959,11 @@
                         刷新
                       </el-button>
                     </el-col>
+                    <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
+                      <el-button type="danger" plain @click="openEtfRtDeleteDialog" :style="{ width: '100%' }">
+                        删除实时行情
+                      </el-button>
+                    </el-col>
                   </el-row>
                 </div>
 
@@ -888,6 +976,7 @@
                 >
                   <el-table-column prop="code" label="代码" width="80" show-overflow-tooltip />
                   <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+                  <el-table-column prop="trade_date" label="交易日" width="110" show-overflow-tooltip />
                   <el-table-column prop="current_price" label="现价" min-width="80" show-overflow-tooltip>
                     <template #default="scope">
                       <span :class="getPriceClass(scope.row.current_price, scope.row.pre_close)">
@@ -928,6 +1017,11 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="update_time" label="更新时间" min-width="120" show-overflow-tooltip />
+                  <el-table-column label="操作" width="88" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteEtfRealtimeRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -987,6 +1081,11 @@
                       <el-button @click="refreshETFHistoricalData" :loading="etfHistoricalLoading" :style="{ width: '100%' }">
                         <el-icon><Refresh /></el-icon>
                         刷新
+                      </el-button>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button type="danger" plain @click="openEtfHistDeleteDialog" :style="{ width: '100%' }">
+                        删除历史行情
                       </el-button>
                     </el-col>
                   </el-row>
@@ -1056,6 +1155,11 @@
                       {{ formatPercent(scope.row.turnover_rate) }}
                     </template>
                   </el-table-column>
+                  <el-table-column label="操作" width="88" fixed="right" align="center">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="confirmDeleteEtfHistoricalRow(scope.row)">删除</el-button>
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-section">
@@ -1075,6 +1179,305 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <el-dialog v-model="deleteHistoricalDialogVisible" title="删除 A 股历史行情" width="560px" @open="onDeleteHistoricalDialogOpen">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-4"
+        title="将物理删除 historical_quotes 表中的日线 K 线记录。可按单只股票、全部 A 股；可选 K 线日期区间。不选区间时：单股票表示删除该票全部历史日期；全部 A 股表示清空整张表。表格「删除」仅删除当前行对应的一条日线。"
+      />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="deleteHistoricalScope">
+            <el-radio value="single">单个股票</el-radio>
+            <el-radio value="all">全部 A 股</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="deleteHistoricalScope === 'single'" label="股票代码" required>
+          <el-input v-model="deleteHistoricalCode" placeholder="如 600519" clearable />
+        </el-form-item>
+        <el-form-item label="K 线日期">
+          <el-date-picker
+            v-model="deleteHistoricalDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日"
+            end-placeholder="结束日"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+            clearable
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deleteHistoricalDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="deleteHistoricalLoading" @click="submitDeleteHistorical">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="deleteIndexRealtimeDialogVisible" title="删除 A 股指数实时行情" width="560px" @open="onDeleteIndexRealtimeDialogOpen">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-4"
+        title="将物理删除 index_realtime_quotes 表中的数据。可按单个指数、全部指数删除；可选「更新时间」对应日期区间（取每条记录 update_time 的日期部分）；不选区间时单指数删该指数全部记录，全部指数则清空整张表。"
+      />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="deleteIndexRealtimeScope">
+            <el-radio value="single">单个指数</el-radio>
+            <el-radio value="all">全部 A 股指数</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="deleteIndexRealtimeScope === 'single'" label="指数代码" required>
+          <el-input v-model="deleteIndexRealtimeCode" placeholder="如 000001" clearable />
+        </el-form-item>
+        <el-form-item label="更新时间（日期）">
+          <el-date-picker
+            v-model="deleteIndexRealtimeDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日"
+            end-placeholder="结束日"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+            clearable
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deleteIndexRealtimeDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="deleteIndexRealtimeLoading" @click="submitDeleteIndexRealtime">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="deleteIndustryRealtimeDialogVisible"
+      title="删除 A 股行业板块实时行情"
+      width="560px"
+      @open="onDeleteIndustryRealtimeDialogOpen"
+    >
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-4"
+        title="将物理删除 industry_board_realtime_quotes 表中的数据。单个板块请填板块代码（如 BK0479）；可选「更新时间」的日期区间（取 update_time 前 10 位）。不选区间时：单板块删该板块全部记录；全部板块则清空整张表。"
+      />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="deleteIndustryRealtimeScope">
+            <el-radio value="single">单个板块</el-radio>
+            <el-radio value="all">全部板块</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="deleteIndustryRealtimeScope === 'single'" label="板块代码" required>
+          <el-input v-model="deleteIndustryRealtimeCode" placeholder="如 BK0479" clearable />
+        </el-form-item>
+        <el-form-item label="更新时间（日期）">
+          <el-date-picker
+            v-model="deleteIndustryRealtimeDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日"
+            end-placeholder="结束日"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+            clearable
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deleteIndustryRealtimeDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="deleteIndustryRealtimeLoading" @click="submitDeleteIndustryRealtime">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 港股：删除行情（4 个弹窗） -->
+    <el-dialog v-model="hkStockRtDelVisible" title="删除港股实时行情" width="560px" @open="onHkStockRtDelOpen">
+      <el-alert type="warning" :closable="false" show-icon class="mb-4"
+        title="删除 stock_realtime_quote_hk。按交易日 trade_date 筛选；单个港股填代码（如 00700）；不选日期时单个表示删该股票全部交易日，全部港股表示清空整张表。" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="hkStockRtDelScope">
+            <el-radio value="single">单个股票</el-radio>
+            <el-radio value="all">全部港股</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="hkStockRtDelScope === 'single'" label="股票代码" required>
+          <el-input v-model="hkStockRtDelCode" placeholder="如 00700" clearable />
+        </el-form-item>
+        <el-form-item label="交易日">
+          <el-date-picker v-model="hkStockRtDelRange" type="daterange" range-separator="至" start-placeholder="开始日" end-placeholder="结束日"
+            value-format="YYYY-MM-DD" style="width: 100%" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="hkStockRtDelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="hkStockRtDelLoading" @click="submitHkStockRtDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="hkStockHistDelVisible" title="删除港股历史行情" width="560px" @open="onHkStockHistDelOpen">
+      <el-alert type="warning" :closable="false" show-icon class="mb-4"
+        title="删除 historical_quotes_hk。按 K 线日期 date 筛选；不选日期时单个表示删该股票全部历史，全部表示清空整张表。" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="hkStockHistDelScope">
+            <el-radio value="single">单个股票</el-radio>
+            <el-radio value="all">全部港股</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="hkStockHistDelScope === 'single'" label="股票代码" required>
+          <el-input v-model="hkStockHistDelCode" placeholder="如 00700" clearable />
+        </el-form-item>
+        <el-form-item label="K 线日期">
+          <el-date-picker v-model="hkStockHistDelRange" type="daterange" range-separator="至" start-placeholder="开始日" end-placeholder="结束日"
+            value-format="YYYY-MM-DD" style="width: 100%" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="hkStockHistDelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="hkStockHistDelLoading" @click="submitHkStockHistDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="hkIdxRtDelVisible" title="删除港股指数实时行情" width="560px" @open="onHkIdxRtDelOpen">
+      <el-alert type="warning" :closable="false" show-icon class="mb-4"
+        title="删除 hk_index_realtime_quotes。按交易日 trade_date 筛选；单个指数填代码；不选日期时单个删该指数全部记录，全部则清空整张表。" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="hkIdxRtDelScope">
+            <el-radio value="single">单个指数</el-radio>
+            <el-radio value="all">全部港股指数</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="hkIdxRtDelScope === 'single'" label="指数代码" required>
+          <el-input v-model="hkIdxRtDelCode" placeholder="如 HSI" clearable />
+        </el-form-item>
+        <el-form-item label="交易日">
+          <el-date-picker v-model="hkIdxRtDelRange" type="daterange" range-separator="至" start-placeholder="开始日" end-placeholder="结束日"
+            value-format="YYYY-MM-DD" style="width: 100%" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="hkIdxRtDelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="hkIdxRtDelLoading" @click="submitHkIdxRtDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="hkIdxHistDelVisible" title="删除港股指数历史行情" width="560px" @open="onHkIdxHistDelOpen">
+      <el-alert type="warning" :closable="false" show-icon class="mb-4"
+        title="删除 hk_index_historical_quotes。按日期 date 筛选；不选日期时单个删该指数全部历史，全部则清空整张表。" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="hkIdxHistDelScope">
+            <el-radio value="single">单个指数</el-radio>
+            <el-radio value="all">全部港股指数</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="hkIdxHistDelScope === 'single'" label="指数代码" required>
+          <el-input v-model="hkIdxHistDelCode" placeholder="如 HSI" clearable />
+        </el-form-item>
+        <el-form-item label="日期">
+          <el-date-picker v-model="hkIdxHistDelRange" type="daterange" range-separator="至" start-placeholder="开始日" end-placeholder="结束日"
+            value-format="YYYY-MM-DD" style="width: 100%" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="hkIdxHistDelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="hkIdxHistDelLoading" @click="submitHkIdxHistDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ETF：删除行情 -->
+    <el-dialog v-model="etfRtDelVisible" title="删除 ETF 实时行情" width="560px" @open="onEtfRtDelOpen">
+      <el-alert type="warning" :closable="false" show-icon class="mb-4"
+        title="删除 fund_realtime_quote。按交易日 trade_date 筛选；单个 ETF 填代码（如 510300）；不选日期时单个表示删该基金全部交易日记录，全部 ETF 表示清空整张表。" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="etfRtDelScope">
+            <el-radio value="single">单个 ETF</el-radio>
+            <el-radio value="all">全部 ETF</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="etfRtDelScope === 'single'" label="ETF 代码" required>
+          <el-input v-model="etfRtDelCode" placeholder="如 510300" clearable />
+        </el-form-item>
+        <el-form-item label="交易日">
+          <el-date-picker v-model="etfRtDelRange" type="daterange" range-separator="至" start-placeholder="开始日" end-placeholder="结束日"
+            value-format="YYYY-MM-DD" style="width: 100%" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="etfRtDelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="etfRtDelLoading" @click="submitEtfRtDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="etfHistDelVisible" title="删除 ETF 历史行情" width="560px" @open="onEtfHistDelOpen">
+      <el-alert type="warning" :closable="false" show-icon class="mb-4"
+        title="删除 fund_historical_quotes。按 K 线日期 date 筛选；不选日期时单个表示删该基金全部历史，全部表示清空整张表。" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="etfHistDelScope">
+            <el-radio value="single">单个 ETF</el-radio>
+            <el-radio value="all">全部 ETF</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="etfHistDelScope === 'single'" label="ETF 代码" required>
+          <el-input v-model="etfHistDelCode" placeholder="如 510300" clearable />
+        </el-form-item>
+        <el-form-item label="K 线日期">
+          <el-date-picker v-model="etfHistDelRange" type="daterange" range-separator="至" start-placeholder="开始日" end-placeholder="结束日"
+            value-format="YYYY-MM-DD" style="width: 100%" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="etfHistDelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="etfHistDelLoading" @click="submitEtfHistDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="deleteRealtimeDialogVisible" title="删除 A 股实时行情" width="560px" @open="onDeleteRealtimeDialogOpen">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-4"
+        title="将物理删除 stock_realtime_quote 表中的数据。可按股票、按全部 A 股、并可限制交易日期范围；不选日期时，单个股票表示删该票全部日期，全部 A 股表示删整张表。"
+      />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="deleteRealtimeScope">
+            <el-radio value="single">单个股票</el-radio>
+            <el-radio value="all">全部 A 股</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="deleteRealtimeScope === 'single'" label="股票代码" required>
+          <el-input v-model="deleteRealtimeCode" placeholder="如 600519" clearable />
+        </el-form-item>
+        <el-form-item label="交易日期">
+          <el-date-picker
+            v-model="deleteRealtimeDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日"
+            end-placeholder="结束日"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+            clearable
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deleteRealtimeDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="deleteRealtimeLoading" @click="submitDeleteRealtime">确定删除</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="turnoverImportDialogVisible" title="A股实时行情换手率导入" width="640px">
       <el-alert
@@ -1268,7 +1671,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElLoading } from 'element-plus'
+import { ElMessage, ElLoading, ElMessageBox } from 'element-plus'
 import { Refresh, Search, Download } from '@element-plus/icons-vue'
 import { quotesService } from '@/services/quotes.service'
 
@@ -1299,6 +1702,66 @@ const historicalTurnoverImportFile = ref<File | null>(null)
 const historicalTurnoverImportLoading = ref(false)
 const historicalTurnoverImportDryRun = ref(false)
 const historicalTurnoverImportResult = ref<any>(null)
+
+const deleteRealtimeDialogVisible = ref(false)
+const deleteRealtimeLoading = ref(false)
+const deleteRealtimeScope = ref<'single' | 'all'>('single')
+const deleteRealtimeCode = ref('')
+const deleteRealtimeDateRange = ref<[string, string] | null>(null)
+
+const deleteIndexRealtimeDialogVisible = ref(false)
+const deleteIndexRealtimeLoading = ref(false)
+const deleteIndexRealtimeScope = ref<'single' | 'all'>('single')
+const deleteIndexRealtimeCode = ref('')
+const deleteIndexRealtimeDateRange = ref<[string, string] | null>(null)
+
+const deleteIndustryRealtimeDialogVisible = ref(false)
+const deleteIndustryRealtimeLoading = ref(false)
+const deleteIndustryRealtimeScope = ref<'single' | 'all'>('single')
+const deleteIndustryRealtimeCode = ref('')
+const deleteIndustryRealtimeDateRange = ref<[string, string] | null>(null)
+
+const hkStockRtDelVisible = ref(false)
+const hkStockRtDelLoading = ref(false)
+const hkStockRtDelScope = ref<'single' | 'all'>('single')
+const hkStockRtDelCode = ref('')
+const hkStockRtDelRange = ref<[string, string] | null>(null)
+
+const hkStockHistDelVisible = ref(false)
+const hkStockHistDelLoading = ref(false)
+const hkStockHistDelScope = ref<'single' | 'all'>('single')
+const hkStockHistDelCode = ref('')
+const hkStockHistDelRange = ref<[string, string] | null>(null)
+
+const hkIdxRtDelVisible = ref(false)
+const hkIdxRtDelLoading = ref(false)
+const hkIdxRtDelScope = ref<'single' | 'all'>('single')
+const hkIdxRtDelCode = ref('')
+const hkIdxRtDelRange = ref<[string, string] | null>(null)
+
+const hkIdxHistDelVisible = ref(false)
+const hkIdxHistDelLoading = ref(false)
+const hkIdxHistDelScope = ref<'single' | 'all'>('single')
+const hkIdxHistDelCode = ref('')
+const hkIdxHistDelRange = ref<[string, string] | null>(null)
+
+const etfRtDelVisible = ref(false)
+const etfRtDelLoading = ref(false)
+const etfRtDelScope = ref<'single' | 'all'>('single')
+const etfRtDelCode = ref('')
+const etfRtDelRange = ref<[string, string] | null>(null)
+
+const etfHistDelVisible = ref(false)
+const etfHistDelLoading = ref(false)
+const etfHistDelScope = ref<'single' | 'all'>('single')
+const etfHistDelCode = ref('')
+const etfHistDelRange = ref<[string, string] | null>(null)
+
+const deleteHistoricalDialogVisible = ref(false)
+const deleteHistoricalLoading = ref(false)
+const deleteHistoricalScope = ref<'single' | 'all'>('single')
+const deleteHistoricalCode = ref('')
+const deleteHistoricalDateRange = ref<[string, string] | null>(null)
 
 // A股指数数据
 const indexData = ref<any[]>([])
@@ -1693,6 +2156,886 @@ const handleStockPageChange = () => fetchStockData()
 const handleStockPageSizeChange = () => {
   stockCurrentPage.value = 1
   fetchStockData()
+}
+
+const openDeleteRealtimeDialog = () => {
+  deleteRealtimeDialogVisible.value = true
+}
+
+const onDeleteRealtimeDialogOpen = () => {
+  deleteRealtimeScope.value = 'single'
+  deleteRealtimeCode.value = ''
+  deleteRealtimeDateRange.value = null
+}
+
+const submitDeleteRealtime = async () => {
+  if (deleteRealtimeScope.value === 'single' && !deleteRealtimeCode.value.trim()) {
+    ElMessage.warning('请填写股票代码')
+    return
+  }
+  const range = deleteRealtimeDateRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (deleteRealtimeScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将删除 A 股实时行情表（stock_realtime_quote）中的全部记录，所有股票、所有交易日。此操作不可恢复，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除实时行情数据吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+
+  deleteRealtimeLoading.value = true
+  try {
+    const res = await quotesService.deleteAshareRealtimeQuotes({
+      scope: deleteRealtimeScope.value,
+      code: deleteRealtimeScope.value === 'single' ? deleteRealtimeCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      deleteRealtimeDialogVisible.value = false
+      await fetchStockData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    deleteRealtimeLoading.value = false
+  }
+}
+
+const confirmDeleteStockRow = (row: { code?: string; name?: string }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  ElMessageBox.confirm(
+    `确定删除股票 ${code} ${name} 在实时行情表中的全部记录（所有交易日）吗？不可恢复。`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      const res = await quotesService.deleteAshareRealtimeQuotes({ scope: 'single', code })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchStockData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openDeleteIndexRealtimeDialog = () => {
+  deleteIndexRealtimeDialogVisible.value = true
+}
+
+const onDeleteIndexRealtimeDialogOpen = () => {
+  deleteIndexRealtimeScope.value = 'single'
+  deleteIndexRealtimeCode.value = ''
+  deleteIndexRealtimeDateRange.value = null
+}
+
+const submitDeleteIndexRealtime = async () => {
+  if (deleteIndexRealtimeScope.value === 'single' && !deleteIndexRealtimeCode.value.trim()) {
+    ElMessage.warning('请填写指数代码')
+    return
+  }
+  const range = deleteIndexRealtimeDateRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (deleteIndexRealtimeScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将删除指数实时行情表（index_realtime_quotes）中的全部记录，所有指数。此操作不可恢复，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除指数实时行情数据吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+
+  deleteIndexRealtimeLoading.value = true
+  try {
+    const res = await quotesService.deleteAshareIndexRealtimeQuotes({
+      scope: deleteIndexRealtimeScope.value,
+      code: deleteIndexRealtimeScope.value === 'single' ? deleteIndexRealtimeCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      deleteIndexRealtimeDialogVisible.value = false
+      await fetchIndexData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    deleteIndexRealtimeLoading.value = false
+  }
+}
+
+const confirmDeleteIndexRow = (row: { code?: string; name?: string }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  ElMessageBox.confirm(
+    `确定删除指数 ${code} ${name} 在 index_realtime_quotes 中的全部记录吗？不可恢复。`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      const res = await quotesService.deleteAshareIndexRealtimeQuotes({ scope: 'single', code })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchIndexData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openDeleteIndustryRealtimeDialog = () => {
+  deleteIndustryRealtimeDialogVisible.value = true
+}
+
+const onDeleteIndustryRealtimeDialogOpen = () => {
+  deleteIndustryRealtimeScope.value = 'single'
+  deleteIndustryRealtimeCode.value = ''
+  deleteIndustryRealtimeDateRange.value = null
+}
+
+const submitDeleteIndustryRealtime = async () => {
+  if (deleteIndustryRealtimeScope.value === 'single' && !deleteIndustryRealtimeCode.value.trim()) {
+    ElMessage.warning('请填写板块代码')
+    return
+  }
+  const range = deleteIndustryRealtimeDateRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (deleteIndustryRealtimeScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将删除行业板块实时行情表（industry_board_realtime_quotes）中的全部记录。此操作不可恢复，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除行业板块实时行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+
+  deleteIndustryRealtimeLoading.value = true
+  try {
+    const res = await quotesService.deleteAshareIndustryRealtimeQuotes({
+      scope: deleteIndustryRealtimeScope.value,
+      code: deleteIndustryRealtimeScope.value === 'single' ? deleteIndustryRealtimeCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      deleteIndustryRealtimeDialogVisible.value = false
+      await fetchIndustryData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    deleteIndustryRealtimeLoading.value = false
+  }
+}
+
+const confirmDeleteIndustryRow = (row: { board_code?: string; board_name?: string }) => {
+  const code = row?.board_code || ''
+  const name = row?.board_name || ''
+  ElMessageBox.confirm(
+    `确定删除板块 ${code} ${name} 在 industry_board_realtime_quotes 中的全部记录吗？不可恢复。`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      const res = await quotesService.deleteAshareIndustryRealtimeQuotes({ scope: 'single', code })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchIndustryData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openDeleteHistoricalDialog = () => {
+  deleteHistoricalDialogVisible.value = true
+}
+
+const onDeleteHistoricalDialogOpen = () => {
+  deleteHistoricalScope.value = 'single'
+  deleteHistoricalCode.value = ''
+  deleteHistoricalDateRange.value = null
+}
+
+const submitDeleteHistorical = async () => {
+  if (deleteHistoricalScope.value === 'single' && !deleteHistoricalCode.value.trim()) {
+    ElMessage.warning('请填写股票代码')
+    return
+  }
+  const range = deleteHistoricalDateRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (deleteHistoricalScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将删除历史行情表（historical_quotes）中的全部日线记录，所有股票。此操作不可恢复，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除历史行情数据吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+
+  deleteHistoricalLoading.value = true
+  try {
+    const res = await quotesService.deleteAshareHistoricalQuotes({
+      scope: deleteHistoricalScope.value,
+      code: deleteHistoricalScope.value === 'single' ? deleteHistoricalCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      deleteHistoricalDialogVisible.value = false
+      await fetchHistoricalData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    deleteHistoricalLoading.value = false
+  }
+}
+
+/** 将接口返回的 date 格式化为 YYYY-MM-DD */
+const formatHistoricalRowDate = (d: unknown): string => {
+  if (d == null || d === '') return ''
+  if (typeof d === 'string') return d.length >= 10 ? d.slice(0, 10) : d
+  return String(d)
+}
+
+const confirmDeleteHistoricalRow = (row: { code?: string; name?: string; date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.date)
+  if (!code || !day) {
+    ElMessage.warning('当前行缺少代码或日期，无法删除')
+    return
+  }
+  ElMessageBox.confirm(
+    `确定删除 ${code} ${name} 在 ${day} 这一天的历史行情记录吗？不可恢复。`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      const res = await quotesService.deleteAshareHistoricalQuotes({
+        scope: 'single',
+        code,
+        startDate: day,
+        endDate: day
+      })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchHistoricalData()
+      }
+    })
+    .catch(() => {})
+}
+
+// —— 港股：删除行情 ——
+const openHkStockRtDeleteDialog = () => {
+  hkStockRtDelVisible.value = true
+}
+const onHkStockRtDelOpen = () => {
+  hkStockRtDelScope.value = 'single'
+  hkStockRtDelCode.value = ''
+  hkStockRtDelRange.value = null
+}
+const submitHkStockRtDelete = async () => {
+  if (hkStockRtDelScope.value === 'single' && !hkStockRtDelCode.value.trim()) {
+    ElMessage.warning('请填写股票代码')
+    return
+  }
+  const range = hkStockRtDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (hkStockRtDelScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空港股实时行情表 stock_realtime_quote_hk 的全部记录，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除港股实时行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+  hkStockRtDelLoading.value = true
+  try {
+    const res = await quotesService.deleteHKStockRealtimeQuotes({
+      scope: hkStockRtDelScope.value,
+      code: hkStockRtDelScope.value === 'single' ? hkStockRtDelCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      hkStockRtDelVisible.value = false
+      await fetchHKStockData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    hkStockRtDelLoading.value = false
+  }
+}
+const confirmDeleteHKStockRealtimeRow = (row: { code?: string; name?: string; trade_date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.trade_date)
+  if (!code) {
+    ElMessage.warning('当前行缺少股票代码')
+    return
+  }
+  const msg = day
+    ? `确定删除 ${code} ${name} 在交易日 ${day} 的港股实时记录吗？`
+    : `当前行无交易日字段，将删除 ${code} ${name} 在库中的全部港股实时记录。是否继续？`
+  ElMessageBox.confirm(msg, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      const res = day
+        ? await quotesService.deleteHKStockRealtimeQuotes({
+            scope: 'single',
+            code,
+            startDate: day,
+            endDate: day
+          })
+        : await quotesService.deleteHKStockRealtimeQuotes({ scope: 'single', code })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchHKStockData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openHkStockHistDeleteDialog = () => {
+  hkStockHistDelVisible.value = true
+}
+const onHkStockHistDelOpen = () => {
+  hkStockHistDelScope.value = 'single'
+  hkStockHistDelCode.value = ''
+  hkStockHistDelRange.value = null
+}
+const submitHkStockHistDelete = async () => {
+  if (hkStockHistDelScope.value === 'single' && !hkStockHistDelCode.value.trim()) {
+    ElMessage.warning('请填写股票代码')
+    return
+  }
+  const range = hkStockHistDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (hkStockHistDelScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空港股历史行情表 historical_quotes_hk 的全部记录，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除港股历史行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+  hkStockHistDelLoading.value = true
+  try {
+    const res = await quotesService.deleteHKStockHistoricalQuotes({
+      scope: hkStockHistDelScope.value,
+      code: hkStockHistDelScope.value === 'single' ? hkStockHistDelCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      hkStockHistDelVisible.value = false
+      await fetchHKHistoricalData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    hkStockHistDelLoading.value = false
+  }
+}
+const confirmDeleteHKHistoricalStockRow = (row: { code?: string; name?: string; date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.date)
+  if (!code || !day) {
+    ElMessage.warning('当前行缺少代码或日期')
+    return
+  }
+  ElMessageBox.confirm(
+    `确定删除 ${code} ${name} 在 ${day} 的港股历史记录吗？`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      const res = await quotesService.deleteHKStockHistoricalQuotes({
+        scope: 'single',
+        code,
+        startDate: day,
+        endDate: day
+      })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchHKHistoricalData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openHkIdxRtDeleteDialog = () => {
+  hkIdxRtDelVisible.value = true
+}
+const onHkIdxRtDelOpen = () => {
+  hkIdxRtDelScope.value = 'single'
+  hkIdxRtDelCode.value = ''
+  hkIdxRtDelRange.value = null
+}
+const submitHkIdxRtDelete = async () => {
+  if (hkIdxRtDelScope.value === 'single' && !hkIdxRtDelCode.value.trim()) {
+    ElMessage.warning('请填写指数代码')
+    return
+  }
+  const range = hkIdxRtDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (hkIdxRtDelScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空港股指数实时行情表 hk_index_realtime_quotes 的全部记录，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除港股指数实时行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+  hkIdxRtDelLoading.value = true
+  try {
+    const res = await quotesService.deleteHKIndexRealtimeQuotes({
+      scope: hkIdxRtDelScope.value,
+      code: hkIdxRtDelScope.value === 'single' ? hkIdxRtDelCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      hkIdxRtDelVisible.value = false
+      await fetchHKIndexData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    hkIdxRtDelLoading.value = false
+  }
+}
+const confirmDeleteHKIndexRealtimeRow = (row: { code?: string; name?: string; trade_date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.trade_date)
+  if (!code) {
+    ElMessage.warning('当前行缺少指数代码')
+    return
+  }
+  const msg = day
+    ? `确定删除指数 ${code} ${name} 在交易日 ${day} 的实时记录吗？`
+    : `当前行无交易日字段，将删除 ${code} ${name} 在库中的全部港股指数实时记录。是否继续？`
+  ElMessageBox.confirm(msg, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      const res = day
+        ? await quotesService.deleteHKIndexRealtimeQuotes({
+            scope: 'single',
+            code,
+            startDate: day,
+            endDate: day
+          })
+        : await quotesService.deleteHKIndexRealtimeQuotes({ scope: 'single', code })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchHKIndexData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openHkIdxHistDeleteDialog = () => {
+  hkIdxHistDelVisible.value = true
+}
+const onHkIdxHistDelOpen = () => {
+  hkIdxHistDelScope.value = 'single'
+  hkIdxHistDelCode.value = ''
+  hkIdxHistDelRange.value = null
+}
+const submitHkIdxHistDelete = async () => {
+  if (hkIdxHistDelScope.value === 'single' && !hkIdxHistDelCode.value.trim()) {
+    ElMessage.warning('请填写指数代码')
+    return
+  }
+  const range = hkIdxHistDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (hkIdxHistDelScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空港股指数历史行情表 hk_index_historical_quotes 的全部记录，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除港股指数历史行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+  hkIdxHistDelLoading.value = true
+  try {
+    const res = await quotesService.deleteHKIndexHistoricalQuotes({
+      scope: hkIdxHistDelScope.value,
+      code: hkIdxHistDelScope.value === 'single' ? hkIdxHistDelCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      hkIdxHistDelVisible.value = false
+      await fetchHKIndexHistoricalData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    hkIdxHistDelLoading.value = false
+  }
+}
+const confirmDeleteHKIndexHistoricalRow = (row: { code?: string; name?: string; date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.date)
+  if (!code || !day) {
+    ElMessage.warning('当前行缺少代码或日期')
+    return
+  }
+  ElMessageBox.confirm(`确定删除指数 ${code} ${name} 在 ${day} 的历史记录吗？`, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      const res = await quotesService.deleteHKIndexHistoricalQuotes({
+        scope: 'single',
+        code,
+        startDate: day,
+        endDate: day
+      })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchHKIndexHistoricalData()
+      }
+    })
+    .catch(() => {})
+}
+
+// —— ETF：删除行情 ——
+const openEtfRtDeleteDialog = () => {
+  etfRtDelVisible.value = true
+}
+const onEtfRtDelOpen = () => {
+  etfRtDelScope.value = 'single'
+  etfRtDelCode.value = ''
+  etfRtDelRange.value = null
+}
+const submitEtfRtDelete = async () => {
+  if (etfRtDelScope.value === 'single' && !etfRtDelCode.value.trim()) {
+    ElMessage.warning('请填写 ETF 代码')
+    return
+  }
+  const range = etfRtDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (etfRtDelScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空 ETF 实时行情表 fund_realtime_quote 的全部记录，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除 ETF 实时行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+  etfRtDelLoading.value = true
+  try {
+    const res = await quotesService.deleteETFRealtimeQuotes({
+      scope: etfRtDelScope.value,
+      code: etfRtDelScope.value === 'single' ? etfRtDelCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      etfRtDelVisible.value = false
+      await fetchETFData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    etfRtDelLoading.value = false
+  }
+}
+const confirmDeleteEtfRealtimeRow = (row: { code?: string; name?: string; trade_date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.trade_date)
+  if (!code) {
+    ElMessage.warning('当前行缺少 ETF 代码')
+    return
+  }
+  const msg = day
+    ? `确定删除 ${code} ${name} 在交易日 ${day} 的 ETF 实时记录吗？`
+    : `当前行无交易日字段，将删除 ${code} ${name} 在库中的全部 ETF 实时记录。是否继续？`
+  ElMessageBox.confirm(msg, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      const res = day
+        ? await quotesService.deleteETFRealtimeQuotes({
+            scope: 'single',
+            code,
+            startDate: day,
+            endDate: day
+          })
+        : await quotesService.deleteETFRealtimeQuotes({ scope: 'single', code })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchETFData()
+      }
+    })
+    .catch(() => {})
+}
+
+const openEtfHistDeleteDialog = () => {
+  etfHistDelVisible.value = true
+}
+const onEtfHistDelOpen = () => {
+  etfHistDelScope.value = 'single'
+  etfHistDelCode.value = ''
+  etfHistDelRange.value = null
+}
+const submitEtfHistDelete = async () => {
+  if (etfHistDelScope.value === 'single' && !etfHistDelCode.value.trim()) {
+    ElMessage.warning('请填写 ETF 代码')
+    return
+  }
+  const range = etfHistDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  if (etfHistDelScope.value === 'all' && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空 ETF 历史行情表 fund_historical_quotes 的全部记录，是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除 ETF 历史行情吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+  etfHistDelLoading.value = true
+  try {
+    const res = await quotesService.deleteETFHistoricalQuotes({
+      scope: etfHistDelScope.value,
+      code: etfHistDelScope.value === 'single' ? etfHistDelCode.value.trim() : undefined,
+      startDate,
+      endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      etfHistDelVisible.value = false
+      await fetchETFHistoricalData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    etfHistDelLoading.value = false
+  }
+}
+const confirmDeleteEtfHistoricalRow = (row: { code?: string; name?: string; date?: unknown }) => {
+  const code = row?.code || ''
+  const name = row?.name || ''
+  const day = formatHistoricalRowDate(row?.date)
+  if (!code || !day) {
+    ElMessage.warning('当前行缺少代码或日期')
+    return
+  }
+  ElMessageBox.confirm(`确定删除 ${code} ${name} 在 ${day} 的 ETF 历史记录吗？`, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      const res = await quotesService.deleteETFHistoricalQuotes({
+        scope: 'single',
+        code,
+        startDate: day,
+        endDate: day
+      })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchETFHistoricalData()
+      }
+    })
+    .catch(() => {})
 }
 
 const openTurnoverImportDialog = () => {

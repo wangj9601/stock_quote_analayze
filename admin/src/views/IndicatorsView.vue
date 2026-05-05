@@ -34,6 +34,11 @@
                 <el-col :span="4">
                   <el-date-picker v-model="filters.end_date" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
                 </el-col>
+                <el-col :span="4">
+                  <el-button type="danger" plain @click="openIndicatorDeleteDialog" :style="{ width: '100%' }">
+                    删除指标数据
+                  </el-button>
+                </el-col>
               </el-row>
             </div>
 
@@ -60,6 +65,11 @@
               </el-table-column>
               <el-table-column prop="ma200" label="MA200">
                 <template #default="scope">{{ scope.row.ma200?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="88" fixed="right" align="center">
+                <template #default="scope">
+                  <el-button type="danger" link @click="confirmDeleteIndicatorRow(scope.row)">删除</el-button>
+                </template>
               </el-table-column>
             </el-table>
 
@@ -319,6 +329,11 @@
                 <el-col :span="4">
                   <el-date-picker v-model="filters.end_date" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
                 </el-col>
+                <el-col :span="4">
+                  <el-button type="danger" plain @click="openIndicatorDeleteDialog" :style="{ width: '100%' }">
+                    删除指标数据
+                  </el-button>
+                </el-col>
               </el-row>
             </div>
 
@@ -345,6 +360,11 @@
               </el-table-column>
               <el-table-column prop="mavol200" label="MAVOL200">
                 <template #default="scope">{{ scope.row.mavol200?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="88" fixed="right" align="center">
+                <template #default="scope">
+                  <el-button type="danger" link @click="confirmDeleteIndicatorRow(scope.row)">删除</el-button>
+                </template>
               </el-table-column>
             </el-table>
 
@@ -382,6 +402,11 @@
                 </el-col>
                 <el-col :span="4">
                   <el-date-picker v-model="filters.end_date" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleFilterChange" />
+                </el-col>
+                <el-col :span="4">
+                  <el-button type="danger" plain @click="openIndicatorDeleteDialog" :style="{ width: '100%' }">
+                    删除指标数据
+                  </el-button>
                 </el-col>
               </el-row>
             </div>
@@ -447,6 +472,11 @@
               </el-table-column>
               <el-table-column prop="mavol20_m" label="MAVOL20">
                 <template #default="scope">{{ scope.row.mavol20_m?.toFixed(2) || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="88" fixed="right" align="center">
+                <template #default="scope">
+                  <el-button type="danger" link @click="confirmDeleteIndicatorRow(scope.row)">删除</el-button>
+                </template>
               </el-table-column>
             </el-table>
 
@@ -663,6 +693,56 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <el-dialog
+      v-model="indicatorDeleteDialogVisible"
+      :title="indicatorDeleteDialogTitle"
+      width="560px"
+      @open="onIndicatorDeleteDialogOpen"
+    >
+      <el-alert type="warning" :closable="false" show-icon class="mb-4" :title="indicatorDeleteHint" />
+      <el-form label-width="120px">
+        <el-form-item label="范围">
+          <el-radio-group v-model="indicatorDelScope">
+            <el-radio value="single">单个标的</el-radio>
+            <el-radio value="all">全部（可筛选市场/日期）</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="indicatorDelScope === 'single'" label="代码" required>
+          <el-input v-model="indicatorDelCode" placeholder="股票/ETF 代码" clearable />
+        </el-form-item>
+        <el-form-item v-if="indicatorDelScope === 'single'" label="市场" required>
+          <el-select v-model="indicatorDelMarket" placeholder="市场类型" clearable style="width: 100%">
+            <el-option label="A股 (CN)" value="CN" />
+            <el-option label="港股 (HK)" value="HK" />
+            <el-option label="ETF" value="ETF" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="indicatorDelScope === 'all'" label="限定市场">
+          <el-select v-model="indicatorDelMarket" placeholder="不选表示所有市场" clearable style="width: 100%">
+            <el-option label="A股 (CN)" value="CN" />
+            <el-option label="港股 (HK)" value="HK" />
+            <el-option label="ETF" value="ETF" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="指标日期">
+          <el-date-picker
+            v-model="indicatorDelRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日"
+            end-placeholder="结束日"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+            clearable
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="indicatorDeleteDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="indicatorDelLoading" @click="submitIndicatorDelete">确定删除</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -696,6 +776,34 @@ const filters = reactive({
   market_type: '',
   start_date: '',
   end_date: ''
+})
+
+const indicatorDeleteDialogVisible = ref(false)
+const indicatorDelLoading = ref(false)
+const indicatorDelScope = ref<'single' | 'all'>('single')
+const indicatorDelCode = ref('')
+const indicatorDelMarket = ref('')
+const indicatorDelRange = ref<[string, string] | null>(null)
+
+const indicatorKindsWithDelete = ['ma', 'mavol', 'pvfrs']
+
+const indicatorDeleteDialogTitle = computed(() => {
+  const t: Record<string, string> = {
+    ma: '删除 MA 指标数据',
+    mavol: '删除 MAVOL 指标数据',
+    pvfrs: '删除 PVFRS 指标数据'
+  }
+  return t[activeIndicator.value] || '删除指标数据'
+})
+
+const indicatorDeleteHint = computed(() => {
+  const tbl: Record<string, string> = {
+    ma: 'ma_indicators',
+    mavol: 'mavol_indicators',
+    pvfrs: 'mean_frequency_resonance_indicators'
+  }
+  const name = tbl[activeIndicator.value] || ''
+  return `将物理删除表 ${name} 中的记录。按指标日期 date（YYYY-MM-DD）筛选；主键为 code + date + market_type。`
 })
 
 const generationForm = reactive<{ code: string; market_type: string; indicators: string[] }>({
@@ -784,6 +892,117 @@ const refreshData = () => {
   if (activeMainTab.value === 'query') {
     fetchData()
   }
+}
+
+const formatIndicatorRowDate = (d: unknown): string => {
+  if (d == null || d === '') return ''
+  if (typeof d === 'string') return d.length >= 10 ? d.slice(0, 10) : d
+  return String(d)
+}
+
+const openIndicatorDeleteDialog = () => {
+  if (!indicatorKindsWithDelete.includes(activeIndicator.value)) {
+    return
+  }
+  indicatorDeleteDialogVisible.value = true
+}
+
+const onIndicatorDeleteDialogOpen = () => {
+  indicatorDelScope.value = 'single'
+  indicatorDelCode.value = ''
+  indicatorDelMarket.value = ''
+  indicatorDelRange.value = null
+}
+
+const submitIndicatorDelete = async () => {
+  if (!indicatorKindsWithDelete.includes(activeIndicator.value)) return
+  if (indicatorDelScope.value === 'single') {
+    if (!indicatorDelCode.value.trim() || !indicatorDelMarket.value) {
+      ElMessage.warning('请填写代码并选择市场类型')
+      return
+    }
+  }
+  const range = indicatorDelRange.value
+  const startDate = range?.[0]
+  const endDate = range?.[1]
+  const mt = indicatorDelMarket.value || undefined
+
+  if (indicatorDelScope.value === 'all' && !mt && !startDate && !endDate) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空当前指标表中的全部记录（所有市场、所有日期）。是否继续？',
+        '危险操作',
+        { type: 'error', confirmButtonText: '仍要删除', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  } else {
+    try {
+      await ElMessageBox.confirm('确定按上述条件删除指标数据吗？此操作不可恢复。', '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+  }
+
+  indicatorDelLoading.value = true
+  try {
+    const kind = activeIndicator.value
+    const res: any = await apiService.post(`/indicators/${kind}/delete`, {
+      scope: indicatorDelScope.value,
+      code: indicatorDelScope.value === 'single' ? indicatorDelCode.value.trim() : undefined,
+      market_type: mt,
+      start_date: startDate,
+      end_date: endDate
+    })
+    if (res.success) {
+      ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+      indicatorDeleteDialogVisible.value = false
+      await fetchData()
+    } else {
+      ElMessage.warning(res.message || '删除未完成')
+    }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '删除失败')
+  } finally {
+    indicatorDelLoading.value = false
+  }
+}
+
+const confirmDeleteIndicatorRow = (row: { code?: string; market_type?: string; date?: unknown }) => {
+  if (!indicatorKindsWithDelete.includes(activeIndicator.value)) return
+  const code = row?.code || ''
+  const mt = row?.market_type || ''
+  const day = formatIndicatorRowDate(row?.date)
+  if (!code || !mt || !day) {
+    ElMessage.warning('当前行缺少代码、市场类型或日期')
+    return
+  }
+  ElMessageBox.confirm(
+    `确定删除 ${code}（市场 ${mt}）在 ${day} 的指标记录吗？`,
+    '删除确认',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+  )
+    .then(async () => {
+      const kind = activeIndicator.value
+      const res: any = await apiService.post(`/indicators/${kind}/delete`, {
+        scope: 'single',
+        code,
+        market_type: mt,
+        start_date: day,
+        end_date: day
+      })
+      if (res.success) {
+        ElMessage.success(res.message || `已删除 ${res.data?.deleted ?? 0} 条`)
+        await fetchData()
+      }
+    })
+    .catch(() => {})
 }
 
 const handleMainTabChange = () => {

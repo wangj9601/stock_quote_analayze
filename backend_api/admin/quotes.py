@@ -3,11 +3,13 @@
 提供行情数据管理相关的接口
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, text
-from datetime import datetime, timedelta
+from sqlalchemy import desc, text, func, cast, String
+from sqlalchemy import Date as SA_Date
+from datetime import datetime, timedelta, date as date_type
 import logging
 import csv
 import json
@@ -16,12 +18,22 @@ import akshare as ak
 import pandas as pd
 from pathlib import Path
 from io import BytesIO, StringIO
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from fastapi.responses import StreamingResponse
 
 from backend_api.models import (
     QuoteData, QuoteDataCreate, QuoteDataInDB,
-    User, QuoteSyncTask, QuoteSyncTaskCreate
+    User, QuoteSyncTask, QuoteSyncTaskCreate,
+    StockRealtimeQuote,
+    IndexRealtimeQuotes,
+    HistoricalQuotes,
+    IndustryBoardRealtimeQuotes,
+    StockRealtimeQuoteHK,
+    HistoricalQuotesHK,
+    HKIndexRealtimeQuotes,
+    HKIndexHistoricalQuotes,
+    FundRealtimeQuote,
+    FundHistoricalQuotes,
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_user, get_current_admin
@@ -48,6 +60,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _try_append_operation_log(
+    db: Session,
+    *,
+    log_type: str,
+    log_message: str,
+    affected_count: int,
+    log_status: str,
+    error_info: Optional[str],
+) -> None:
+    """
+    尝试写入 operation_logs。部分库中该表为旧结构（缺少 log_type 等列），
+    写入失败时仅记录 warning，不影响主流程（主事务应先已 commit）。
+    """
+    try:
+        db.execute(
+            text(
+                """
+                INSERT INTO operation_logs (log_type, log_message, affected_count, log_status, error_info, log_time)
+                VALUES (:log_type, :log_message, :affected_count, :log_status, :error_info, NOW())
+                """
+            ),
+            {
+                "log_type": log_type,
+                "log_message": log_message,
+                "affected_count": affected_count,
+                "log_status": log_status,
+                "error_info": error_info,
+            },
+        )
+        db.commit()
+    except Exception as ex:
+        db.rollback()
+        logger.warning(
+            "写入 operation_logs 失败（若需记录系统日志，请为表 operation_logs 补齐列 "
+            "log_type, log_message, affected_count, log_status, error_info, log_time）: %s",
+            ex,
+        )
+
+
 def _normalize_code(raw: Any) -> str:
     s = str(raw or "").strip().upper()
     # 兼容 Excel 文本格式常见前缀，如 'SZ300668 或 ’SZ300668
@@ -61,6 +112,33 @@ def _normalize_code(raw: Any) -> str:
         s = s.split(".")[0]
     if s.isdigit() and len(s) < 6:
         s = s.zfill(6)
+    return s
+
+
+def _normalize_board_code(raw: Any) -> str:
+    """行业板块 board_code（如 BK0479）：仅去空白与统一大写，不剥字母前缀。"""
+    s = str(raw or "").strip().upper()
+    s = s.lstrip("'").lstrip("’").strip()
+    return s
+
+
+def _normalize_hk_stock_code(raw: Any) -> str:
+    """港股股票代码：去掉常见市场前缀，不强制补零到 6 位（避免 00700 被改成 007000）。"""
+    s = str(raw or "").strip().upper()
+    s = s.lstrip("'").lstrip("’").strip()
+    if not s:
+        return ""
+    while s and s[0].isalpha():
+        s = s[1:]
+    if "." in s:
+        s = s.split(".")[0]
+    return s
+
+
+def _normalize_hk_index_code(raw: Any) -> str:
+    """港股指数代码（可能含字母，如 HSI）：仅规范化空白与大小写。"""
+    s = str(raw or "").strip().upper()
+    s = s.lstrip("'").lstrip("’").strip()
     return s
 
 
@@ -254,25 +332,14 @@ async def import_turnover_rate(
         db.rollback()
     else:
         db.commit()
-        try:
-            db.execute(
-                text(
-                    """
-                    INSERT INTO operation_logs (log_type, log_message, affected_count, log_status, error_info, log_time)
-                    VALUES (:log_type, :log_message, :affected_count, :log_status, :error_info, NOW())
-                    """
-                ),
-                {
-                    "log_type": "turnover_rate_import",
-                    "log_message": f"导入A股实时行情换手率 by {getattr(current_user, 'username', 'admin')}",
-                    "affected_count": success,
-                    "log_status": "成功" if failed == 0 else "部分失败",
-                    "error_info": None if failed == 0 else f"failed={failed}",
-                },
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        _try_append_operation_log(
+            db,
+            log_type="turnover_rate_import",
+            log_message=f"导入A股实时行情换手率 by {getattr(current_user, 'username', 'admin')}",
+            affected_count=success,
+            log_status="成功" if failed == 0 else "部分失败",
+            error_info=None if failed == 0 else f"failed={failed}",
+        )
 
     return {
         "success": failed == 0,
@@ -455,25 +522,14 @@ async def import_turnover_rate_historical(
         db.rollback()
     else:
         db.commit()
-        try:
-            db.execute(
-                text(
-                    """
-                    INSERT INTO operation_logs (log_type, log_message, affected_count, log_status, error_info, log_time)
-                    VALUES (:log_type, :log_message, :affected_count, :log_status, :error_info, NOW())
-                    """
-                ),
-                {
-                    "log_type": "turnover_rate_import_historical",
-                    "log_message": f"导入A股历史行情换手率 by {getattr(current_user, 'username', 'admin')}",
-                    "affected_count": success,
-                    "log_status": "成功" if failed == 0 else "部分失败",
-                    "error_info": None if failed == 0 else f"failed={failed}",
-                },
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        _try_append_operation_log(
+            db,
+            log_type="turnover_rate_import_historical",
+            log_message=f"导入A股历史行情换手率 by {getattr(current_user, 'username', 'admin')}",
+            affected_count=success,
+            log_status="成功" if failed == 0 else "部分失败",
+            error_info=None if failed == 0 else f"failed={failed}",
+        )
 
     return {
         "success": failed == 0,
@@ -608,6 +664,578 @@ async def get_historical_quotes(
         "page": page,
         "page_size": page_size
     }
+
+
+_TRADE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parse_optional_trade_date(label: str, s: Optional[str]) -> Optional[str]:
+    if s is None or not str(s).strip():
+        return None
+    t = str(s).strip()
+    if not _TRADE_DATE_RE.match(t):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{label}须为 YYYY-MM-DD 格式",
+        )
+    return t
+
+
+class DeleteAshareRealtimeQuotesBody(BaseModel):
+    """删除 A 股表 stock_realtime_quote 中的记录（管理端）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    start_date: Optional[str] = Field(None, description="交易日下限（含），YYYY-MM-DD")
+    end_date: Optional[str] = Field(None, description="交易日上限（含），YYYY-MM-DD")
+
+    @model_validator(mode="after")
+    def _validate_scope(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个股票」时必须填写股票代码")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+@router.post("/realtime/stocks/delete")
+async def delete_ashare_realtime_quotes(
+    body: DeleteAshareRealtimeQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    删除 A 股股票实时行情（表 stock_realtime_quote）。
+    - scope=single：按股票代码删除，可配合 start_date/end_date 限定交易日。
+    - scope=all：删除全部 A 股实时记录，可配合日期范围；不填日期则删除整张表全部记录。
+    """
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(StockRealtimeQuote)
+    if body.scope == "single":
+        norm = _normalize_code(body.code)
+        if not norm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="股票代码无效")
+        q = q.filter(StockRealtimeQuote.code == norm)
+    if start:
+        q = q.filter(StockRealtimeQuote.trade_date >= start)
+    if end:
+        q = q.filter(StockRealtimeQuote.trade_date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="ashare_realtime_delete",
+        log_message=(
+            f"删除A股实时行情 scope={body.scope} code={body.code or '-'} "
+            f"start={start or '-'} end={end or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+
+    return {
+        "success": True,
+        "data": {"deleted": deleted},
+        "message": f"已删除 {deleted} 条记录",
+    }
+
+
+class DeleteAshareIndexRealtimeQuotesBody(BaseModel):
+    """删除 A 股指数实时表 index_realtime_quotes（管理端）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    start_date: Optional[str] = Field(
+        None, description="按记录更新时间筛选：日期下限（含），YYYY-MM-DD，对应 update_time 日期部分"
+    )
+    end_date: Optional[str] = Field(None, description="日期上限（含），YYYY-MM-DD")
+
+    @model_validator(mode="after")
+    def _validate_scope(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个指数」时必须填写指数代码")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+@router.post("/realtime/indices/delete")
+async def delete_ashare_index_realtime_quotes(
+    body: DeleteAshareIndexRealtimeQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    删除 A 股指数实时行情（表 index_realtime_quotes）。
+    - 时间段按每条记录的 update_time 的日期部分（前 10 位）筛选。
+    - scope=single：按指数代码删除；可与日期组合。
+    - scope=all：删除全部指数记录；可与日期组合；不填日期则清空整张表。
+    """
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(IndexRealtimeQuotes)
+    if body.scope == "single":
+        norm = _normalize_code(body.code)
+        if not norm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="指数代码无效")
+        q = q.filter(IndexRealtimeQuotes.code == norm)
+    # update_time 可能为 TEXT 或 TIMESTAMP，先 cast 为字符串再取日期部分比较
+    idx_ut_day = func.substr(cast(IndexRealtimeQuotes.update_time, String), 1, 10)
+    if start:
+        q = q.filter(idx_ut_day >= start)
+    if end:
+        q = q.filter(idx_ut_day <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="ashare_index_realtime_delete",
+        log_message=(
+            f"删除A股指数实时行情 scope={body.scope} code={body.code or '-'} "
+            f"start={start or '-'} end={end or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+
+    return {
+        "success": True,
+        "data": {"deleted": deleted},
+        "message": f"已删除 {deleted} 条记录",
+    }
+
+
+class DeleteAshareIndustryRealtimeQuotesBody(BaseModel):
+    """删除 A 股行业板块实时表 industry_board_realtime_quotes（管理端）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    start_date: Optional[str] = Field(
+        None, description="按 update_time 日期部分（前 10 位）筛选，下限 YYYY-MM-DD"
+    )
+    end_date: Optional[str] = Field(None, description="上限 YYYY-MM-DD（含）")
+
+    @model_validator(mode="after")
+    def _validate_scope(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个板块」时必须填写板块代码")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+@router.post("/realtime/industries/delete")
+async def delete_ashare_industry_realtime_quotes(
+    body: DeleteAshareIndustryRealtimeQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    删除 A 股行业板块实时行情（表 industry_board_realtime_quotes）。
+    - 按 update_time 字符串的日期部分（前 10 位）做区间筛选。
+    - scope=single：按 board_code（body.code）删除；可与日期组合；不选日期则删该板块全部记录。
+    - scope=all：全部板块；可与日期组合；不选日期则清空整张表。
+    """
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(IndustryBoardRealtimeQuotes)
+    if body.scope == "single":
+        bcode = _normalize_board_code(body.code)
+        if not bcode:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="板块代码无效")
+        q = q.filter(IndustryBoardRealtimeQuotes.board_code == bcode)
+    ind_ut_day = func.substr(cast(IndustryBoardRealtimeQuotes.update_time, String), 1, 10)
+    if start:
+        q = q.filter(ind_ut_day >= start)
+    if end:
+        q = q.filter(ind_ut_day <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="ashare_industry_realtime_delete",
+        log_message=(
+            f"删除A股行业板块实时行情 scope={body.scope} board_code={body.code or '-'} "
+            f"start={start or '-'} end={end or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+
+    return {
+        "success": True,
+        "data": {"deleted": deleted},
+        "message": f"已删除 {deleted} 条记录",
+    }
+
+
+class DeleteAshareHistoricalQuotesBody(BaseModel):
+    """删除 A 股历史行情表 historical_quotes（管理端）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    start_date: Optional[str] = Field(None, description="K 线日期下限（含），YYYY-MM-DD")
+    end_date: Optional[str] = Field(None, description="K 线日期上限（含），YYYY-MM-DD")
+
+    @model_validator(mode="after")
+    def _validate_scope(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个股票」时必须填写股票代码")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+def _parse_optional_iso_date(label: str, s: Optional[str]) -> Optional[date_type]:
+    """将 YYYY-MM-DD 转为 date，供 HistoricalQuotes.date 列比较。"""
+    raw = _parse_optional_trade_date(label, s)
+    if raw is None:
+        return None
+    return date_type.fromisoformat(raw)
+
+
+@router.post("/historical/delete")
+async def delete_ashare_historical_quotes(
+    body: DeleteAshareHistoricalQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    删除 A 股历史行情（表 historical_quotes，按 K 线日期 date）。
+    - scope=single：按股票代码删除；可与 start_date/end_date 限定日期区间。
+    - scope=all：删除全部 A 股历史记录；可与日期区间组合；不填日期则清空整张表。
+    """
+    start = _parse_optional_iso_date("开始日期", body.start_date)
+    end = _parse_optional_iso_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(HistoricalQuotes)
+    if body.scope == "single":
+        norm = _normalize_code(body.code)
+        if not norm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="股票代码无效")
+        q = q.filter(HistoricalQuotes.code == norm)
+    # 部分库中 date 列为 TEXT，直接与 Python date 比较会在 PostgreSQL 上报 text >= date；统一 cast 为 DATE
+    date_as_sql_date = cast(HistoricalQuotes.date, SA_Date)
+    if start:
+        q = q.filter(date_as_sql_date >= start)
+    if end:
+        q = q.filter(date_as_sql_date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="ashare_historical_delete",
+        log_message=(
+            f"删除A股历史行情 scope={body.scope} code={body.code or '-'} "
+            f"start={body.start_date or '-'} end={body.end_date or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+
+    return {
+        "success": True,
+        "data": {"deleted": deleted},
+        "message": f"已删除 {deleted} 条记录",
+    }
+
+
+class DeleteHkQuotesBody(BaseModel):
+    """港股行情删除公共请求体（股票/指数、实时/历史）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    start_date: Optional[str] = Field(None, description="日期下限 YYYY-MM-DD（含）")
+    end_date: Optional[str] = Field(None, description="日期上限 YYYY-MM-DD（含）")
+
+    @model_validator(mode="after")
+    def _validate_hk_delete(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个」时必须填写代码")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+@router.post("/hk/stocks/realtime/delete")
+async def delete_hk_stock_realtime_quotes(
+    body: DeleteHkQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除港股股票实时行情 stock_realtime_quote_hk（按 trade_date 字符串区间）。"""
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(StockRealtimeQuoteHK)
+    if body.scope == "single":
+        c = _normalize_hk_stock_code(body.code)
+        if not c:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="股票代码无效")
+        q = q.filter(StockRealtimeQuoteHK.code == c)
+    if start:
+        q = q.filter(StockRealtimeQuoteHK.trade_date >= start)
+    if end:
+        q = q.filter(StockRealtimeQuoteHK.trade_date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="hk_stock_realtime_delete",
+        log_message=f"删除港股实时行情 scope={body.scope} code={body.code or '-'} start={start or '-'} end={end or '-'} by {uname}",
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
+
+
+@router.post("/hk/stocks/historical/delete")
+async def delete_hk_stock_historical_quotes(
+    body: DeleteHkQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除港股股票历史行情 historical_quotes_hk（按 date 字符串）。"""
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(HistoricalQuotesHK)
+    if body.scope == "single":
+        c = _normalize_hk_stock_code(body.code)
+        if not c:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="股票代码无效")
+        q = q.filter(HistoricalQuotesHK.code == c)
+    if start:
+        q = q.filter(HistoricalQuotesHK.date >= start)
+    if end:
+        q = q.filter(HistoricalQuotesHK.date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="hk_stock_historical_delete",
+        log_message=f"删除港股历史行情 scope={body.scope} code={body.code or '-'} start={start or '-'} end={end or '-'} by {uname}",
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
+
+
+@router.post("/hk/indices/realtime/delete")
+async def delete_hk_index_realtime_quotes(
+    body: DeleteHkQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除港股指数实时行情 hk_index_realtime_quotes（按 trade_date）。"""
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(HKIndexRealtimeQuotes)
+    if body.scope == "single":
+        c = _normalize_hk_index_code(body.code)
+        if not c:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="指数代码无效")
+        q = q.filter(HKIndexRealtimeQuotes.code == c)
+    if start:
+        q = q.filter(HKIndexRealtimeQuotes.trade_date >= start)
+    if end:
+        q = q.filter(HKIndexRealtimeQuotes.trade_date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="hk_index_realtime_delete",
+        log_message=f"删除港股指数实时行情 scope={body.scope} code={body.code or '-'} start={start or '-'} end={end or '-'} by {uname}",
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
+
+
+@router.post("/hk/indices/historical/delete")
+async def delete_hk_index_historical_quotes(
+    body: DeleteHkQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除港股指数历史行情 hk_index_historical_quotes（按 date 字符串）。"""
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(HKIndexHistoricalQuotes)
+    if body.scope == "single":
+        c = _normalize_hk_index_code(body.code)
+        if not c:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="指数代码无效")
+        q = q.filter(HKIndexHistoricalQuotes.code == c)
+    if start:
+        q = q.filter(HKIndexHistoricalQuotes.date >= start)
+    if end:
+        q = q.filter(HKIndexHistoricalQuotes.date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="hk_index_historical_delete",
+        log_message=f"删除港股指数历史行情 scope={body.scope} code={body.code or '-'} start={start or '-'} end={end or '-'} by {uname}",
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
+
+
+class DeleteEtfQuotesBody(BaseModel):
+    """ETF 行情删除（实时 / 历史）。"""
+
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+    start_date: Optional[str] = Field(None, description="日期下限 YYYY-MM-DD（含）")
+    end_date: Optional[str] = Field(None, description="日期上限 YYYY-MM-DD（含）")
+
+    @model_validator(mode="after")
+    def _validate_etf_delete(self):
+        if self.scope == "single":
+            if not (self.code or "").strip():
+                raise ValueError("选择「单个」时必须填写 ETF 代码")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("开始日期不能晚于结束日期")
+        return self
+
+
+@router.post("/etf/realtime/delete")
+async def delete_etf_realtime_quotes(
+    body: DeleteEtfQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除 ETF 实时行情 fund_realtime_quote（按 trade_date 字符串区间）。"""
+    start = _parse_optional_trade_date("开始日期", body.start_date)
+    end = _parse_optional_trade_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(FundRealtimeQuote)
+    if body.scope == "single":
+        c = _normalize_code(body.code)
+        if not c:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ETF 代码无效")
+        q = q.filter(FundRealtimeQuote.code == c)
+    if start:
+        q = q.filter(FundRealtimeQuote.trade_date >= start)
+    if end:
+        q = q.filter(FundRealtimeQuote.trade_date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="etf_realtime_delete",
+        log_message=(
+            f"删除ETF实时行情 scope={body.scope} code={body.code or '-'} "
+            f"start={start or '-'} end={end or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
+
+
+@router.post("/etf/historical/delete")
+async def delete_etf_historical_quotes(
+    body: DeleteEtfQuotesBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除 ETF 历史行情 fund_historical_quotes（按 K 线 date）。"""
+    start = _parse_optional_iso_date("开始日期", body.start_date)
+    end = _parse_optional_iso_date("结束日期", body.end_date)
+    if start and end and start > end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="开始日期不能晚于结束日期")
+
+    q = db.query(FundHistoricalQuotes)
+    if body.scope == "single":
+        norm = _normalize_code(body.code)
+        if not norm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ETF 代码无效")
+        q = q.filter(FundHistoricalQuotes.code == norm)
+    date_as_sql_date = cast(FundHistoricalQuotes.date, SA_Date)
+    if start:
+        q = q.filter(date_as_sql_date >= start)
+    if end:
+        q = q.filter(date_as_sql_date <= end)
+
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="etf_historical_delete",
+        log_message=(
+            f"删除ETF历史行情 scope={body.scope} code={body.code or '-'} "
+            f"start={body.start_date or '-'} end={body.end_date or '-'} by {uname}"
+        ),
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {"success": True, "data": {"deleted": deleted}, "message": f"已删除 {deleted} 条记录"}
+
 
 @router.get("/{quote_type}/export")
 async def export_quote_data(

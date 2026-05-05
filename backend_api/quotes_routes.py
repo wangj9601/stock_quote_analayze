@@ -15,7 +15,7 @@ from database import get_db
 from models import (
     StockRealtimeQuote, IndexRealtimeQuotes, IndustryBoardRealtimeQuotes,
     HistoricalQuotes, StockRealtimeQuoteHK, HKIndexRealtimeQuotes,
-    HistoricalQuotesHK, FundRealtimeQuote, FundHistoricalQuotes
+    HistoricalQuotesHK, HKIndexHistoricalQuotes, FundRealtimeQuote, FundHistoricalQuotes
 )
 from backend_core.data_collectors.akshare.hk_historical_import_from_file import complete_hk_change_fields
 from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
@@ -98,6 +98,29 @@ def _historical_quotes_hk_to_api(row: HistoricalQuotesHK) -> dict:
     # 与 A 股 historical_quotes.change（涨跌额）字段对齐，便于导出/联表
     out['change'] = ca
     return out
+
+
+def _hk_index_historical_to_api(row: HKIndexHistoricalQuotes) -> dict:
+    """港股指数历史行情序列化，避免 __dict__ 混入 _sa_instance_state。"""
+    d = row.date
+    date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+    return {
+        "code": row.code,
+        "name": row.name,
+        "date": date_str,
+        "open": row.open,
+        "high": row.high,
+        "low": row.low,
+        "close": row.close,
+        "volume": row.volume,
+        "amount": row.amount,
+        "change": row.change,
+        "pct_chg": row.pct_chg,
+        "collected_source": row.collected_source,
+        "collected_date": row.collected_date.isoformat()
+        if row.collected_date and hasattr(row.collected_date, "isoformat")
+        else None,
+    }
 
 
 # 通用分页响应模型
@@ -414,7 +437,7 @@ def get_hk_index_historical_quotes(
     result = paginate_query(query, page, size)
     
     return {
-        "items": [item.__dict__ for item in result["items"]],
+        "items": [_hk_index_historical_to_api(item) for item in result["items"]],
         "total": result["total"],
         "page": page,
         "size": size

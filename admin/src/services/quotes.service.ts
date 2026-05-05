@@ -88,6 +88,176 @@ class QuotesService {
   }
 
   /**
+   * 删除 A 股实时行情（stock_realtime_quote，管理端）
+   */
+  async deleteAshareRealtimeQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post<{ success: boolean; message?: string; data?: { deleted: number } }>(
+      '/quotes/realtime/stocks/delete',
+      {
+        scope: params.scope,
+        code: params.code,
+        start_date: params.startDate || undefined,
+        end_date: params.endDate || undefined
+      }
+    )
+  }
+
+  /**
+   * 删除 A 股指数实时行情（index_realtime_quotes，管理端）
+   */
+  async deleteAshareIndexRealtimeQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post<{ success: boolean; message?: string; data?: { deleted: number } }>(
+      '/quotes/realtime/indices/delete',
+      {
+        scope: params.scope,
+        code: params.code,
+        start_date: params.startDate || undefined,
+        end_date: params.endDate || undefined
+      }
+    )
+  }
+
+  /**
+   * 删除 A 股历史行情（historical_quotes，管理端）
+   */
+  async deleteAshareHistoricalQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post<{ success: boolean; message?: string; data?: { deleted: number } }>(
+      '/quotes/historical/delete',
+      {
+        scope: params.scope,
+        code: params.code,
+        start_date: params.startDate || undefined,
+        end_date: params.endDate || undefined
+      }
+    )
+  }
+
+  /**
+   * 删除 A 股行业板块实时行情（industry_board_realtime_quotes，管理端）
+   */
+  async deleteAshareIndustryRealtimeQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post<{ success: boolean; message?: string; data?: { deleted: number } }>(
+      '/quotes/realtime/industries/delete',
+      {
+        scope: params.scope,
+        code: params.code,
+        start_date: params.startDate || undefined,
+        end_date: params.endDate || undefined
+      }
+    )
+  }
+
+  /** 港股股票实时 stock_realtime_quote_hk */
+  async deleteHKStockRealtimeQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post('/quotes/hk/stocks/realtime/delete', {
+      scope: params.scope,
+      code: params.code,
+      start_date: params.startDate || undefined,
+      end_date: params.endDate || undefined
+    })
+  }
+
+  /** 港股股票历史 historical_quotes_hk */
+  async deleteHKStockHistoricalQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post('/quotes/hk/stocks/historical/delete', {
+      scope: params.scope,
+      code: params.code,
+      start_date: params.startDate || undefined,
+      end_date: params.endDate || undefined
+    })
+  }
+
+  /** 港股指数实时 hk_index_realtime_quotes */
+  async deleteHKIndexRealtimeQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post('/quotes/hk/indices/realtime/delete', {
+      scope: params.scope,
+      code: params.code,
+      start_date: params.startDate || undefined,
+      end_date: params.endDate || undefined
+    })
+  }
+
+  /** 港股指数历史 hk_index_historical_quotes */
+  async deleteHKIndexHistoricalQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post('/quotes/hk/indices/historical/delete', {
+      scope: params.scope,
+      code: params.code,
+      start_date: params.startDate || undefined,
+      end_date: params.endDate || undefined
+    })
+  }
+
+  /** ETF 实时 fund_realtime_quote */
+  async deleteETFRealtimeQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post('/quotes/etf/realtime/delete', {
+      scope: params.scope,
+      code: params.code,
+      start_date: params.startDate || undefined,
+      end_date: params.endDate || undefined
+    })
+  }
+
+  /** ETF 历史 fund_historical_quotes */
+  async deleteETFHistoricalQuotes(params: {
+    scope: 'single' | 'all'
+    code?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<{ success: boolean; message?: string; data?: { deleted: number } }> {
+    return apiService.post('/quotes/etf/historical/delete', {
+      scope: params.scope,
+      code: params.code,
+      start_date: params.startDate || undefined,
+      end_date: params.endDate || undefined
+    })
+  }
+
+  /**
    * 获取股票实时行情数据
    */
   async getStockQuotes(params: StockQuoteParams): Promise<QuotesResponse<any>> {
