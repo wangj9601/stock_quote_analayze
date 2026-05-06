@@ -27,6 +27,7 @@ class PushEventType(Enum):
     SERVICE_UNAVAILABLE = "service_unavailable"  # 服务不可用
     USER_NOT_CONFIGURED = "user_not_configured"  # 用户未配置
     DUPLICATE_PUSH_SKIPPED = "duplicate_push_skipped"  # 重复推送跳过
+    GMS_NON_TRADING_SKIPPED = "gms_non_trading_skipped"  # GMS 非交易日（周末/节假日）跳过
 
 
 class LogLevel(Enum):
@@ -241,7 +242,8 @@ def _get_default_log_level(event_type: PushEventType) -> LogLevel:
     warning_events = [
         PushEventType.DATA_MISSING,
         PushEventType.USER_NOT_CONFIGURED,
-        PushEventType.DUPLICATE_PUSH_SKIPPED
+        PushEventType.DUPLICATE_PUSH_SKIPPED,
+        PushEventType.GMS_NON_TRADING_SKIPPED,
     ]
     
     if event_type in error_events:
@@ -279,7 +281,8 @@ def _format_log_message(event_type: PushEventType, log_data: Dict[str, Any]) -> 
         PushEventType.DATA_MISSING: "数据缺失",
         PushEventType.SERVICE_UNAVAILABLE: "服务不可用",
         PushEventType.USER_NOT_CONFIGURED: "用户未配置",
-        PushEventType.DUPLICATE_PUSH_SKIPPED: "重复推送跳过"
+        PushEventType.DUPLICATE_PUSH_SKIPPED: "重复推送跳过",
+        PushEventType.GMS_NON_TRADING_SKIPPED: "GMS非交易日跳过",
     }
     
     description = event_descriptions.get(event_type, event_type.value)

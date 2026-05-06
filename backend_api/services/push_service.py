@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime, date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 from dataclasses import dataclass
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -126,10 +126,52 @@ class PushService:
                     push_results=[]
                 )
             push_date = date.today()
+
             # 2. 按 (user, report_type, push_time) 去重：已推送过的任务跳过
             tasks_to_push = []
             skipped_count = 0
             for config, user in tasks:
+                # GMS：按用户自选股涉及的 CN/HK 分别对照 trading_calendar，仅当持仓侧均为休市日才跳过
+                if config.report_type == "gms_daily":
+                    skip_gms, gms_skip_reason = False, ""
+                    mkt: Set[str] = set()
+                    try:
+                        from backend_api.utils.trading_calendar_utils import (
+                            should_skip_gms_scheduled_notification,
+                        )
+
+                        wl = self.report_service.get_user_watchlist(
+                            user.id, config.stock_codes
+                        )
+                        mkt = {w["market"] for w in wl} if wl else set()
+                        skip_gms, gms_skip_reason = (
+                            should_skip_gms_scheduled_notification(
+                                self.config_service.db, push_date, mkt
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "GMS 休市日判定异常 user=%s: %s", user.id, e
+                        )
+                    if skip_gms:
+                        logger.info(
+                            "用户 %s 任务 gms_daily 跳过（%s）",
+                            user.id,
+                            gms_skip_reason,
+                        )
+                        log_push_event(
+                            event_type=PushEventType.GMS_NON_TRADING_SKIPPED,
+                            user_id=user.id,
+                            push_time=push_time,
+                            details={
+                                "push_date": str(push_date),
+                                "report_type": "gms_daily",
+                                "reason": gms_skip_reason,
+                                "watchlist_markets": sorted(mkt),
+                            },
+                        )
+                        skipped_count += 1
+                        continue
                 is_duplicate = self.record_repository.check_duplicate_push(
                     user_id=user.id,
                     push_date=push_date,

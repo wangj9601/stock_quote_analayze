@@ -39,6 +39,7 @@ from backend_core.data_collectors.akshare.hk_annual_collector import HKAnnualDat
 import time
 import pandas as pd
 from backend_api.database import SessionLocal as ApiSessionLocal
+from backend_api.utils.trading_calendar_utils import is_market_session_closed
 from sqlalchemy import text
 
 # 加载项目根目录 .env（有 python-dotenv 时；生产环境无则使用系统环境变量）
@@ -89,30 +90,25 @@ etf_collector_instance = ETFCollector()
 scheduler = BlockingScheduler()
 
 
-def _is_market_holiday(market: str, trade_date: str) -> bool:
-    """
-    按 trading_calendar 判断是否节假日（优先级最高）。
-    market: CN / HK
-    trade_date: YYYY-MM-DD
-    """
+def _cn_session_closed_today() -> bool:
+    """A 股侧今日是否休市：周六日或 trading_calendar(CN)。查询失败时不跳过。"""
     session = ApiSessionLocal()
     try:
-        row = session.execute(
-            text(
-                """
-                SELECT 1
-                FROM trading_calendar
-                WHERE market = :market
-                  AND holiday_date = CAST(:trade_date AS DATE)
-                LIMIT 1
-                """
-            ),
-            {"market": str(market).upper(), "trade_date": trade_date},
-        ).fetchone()
-        return row is not None
+        return is_market_session_closed(session, "CN", datetime.now().date())
     except Exception as e:
-        # 节假日表查询失败时不阻断采集，避免误停全链路。
-        logging.warning(f"查询 trading_calendar 失败，跳过节假日短路: market={market}, date={trade_date}, err={e}")
+        logging.warning(f"A股休市判定异常，不跳过采集: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def _hk_session_closed_today() -> bool:
+    """港股侧今日是否休市：周六日或 trading_calendar(HK)。查询失败时不跳过。"""
+    session = ApiSessionLocal()
+    try:
+        return is_market_session_closed(session, "HK", datetime.now().date())
+    except Exception as e:
+        logging.warning(f"港股休市判定异常，不跳过采集: {e}")
         return False
     finally:
         session.close()
@@ -120,8 +116,8 @@ def _is_market_holiday(market: str, trade_date: str) -> bool:
 def collect_akshare_realtime():
     try:
         today_str = datetime.now().strftime('%Y-%m-%d')
-        if _is_market_holiday('CN', today_str):
-            logging.info(f"[定时任务] A股 {today_str} 为节假日（trading_calendar），跳过实时行情采集。")
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股 {today_str} 为休市日（周末或 trading_calendar），跳过实时行情采集。")
             return
         logging.info("[定时任务] AKShare 实时行情采集开始...")
         df = ak_collector.collect_quotes()
@@ -130,6 +126,10 @@ def collect_akshare_realtime():
 
 def collect_akshare_index_realtime(): 
     try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股 {today_str} 为休市日，跳过指数实时行情采集。")
+            return
         logging.info("[定时任务] AKShare 指数实时行情采集开始...")
         df = index_collector.collect_quotes()
         logging.info(f"[定时任务] AKShare 指数实时行情采集完成，采集到 {len(df)} 条数据")
@@ -140,8 +140,8 @@ def collect_tushare_historical():
     try:
         today = datetime.now()
         today_str_dash = today.strftime('%Y-%m-%d')
-        if _is_market_holiday('CN', today_str_dash):
-            logging.info(f"[定时任务] A股 {today_str_dash} 为节假日（trading_calendar），跳过历史行情采集。")
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股 {today_str_dash} 为休市日，跳过历史行情采集。")
             return
         today_str = today.strftime('%Y%m%d')
         logging.info(f"[定时任务] A 股历史行情采集开始，日期: {today_str}")
@@ -251,8 +251,8 @@ def cleanup_old_news():
 def collect_hk_realtime():
     try:
         today_str = datetime.now().strftime('%Y-%m-%d')
-        if _is_market_holiday('HK', today_str):
-            logging.info(f"[定时任务] 港股 {today_str} 为节假日（trading_calendar），跳过实时行情采集。")
+        if _hk_session_closed_today():
+            logging.info(f"[定时任务] 港股 {today_str} 为休市日（周末或 trading_calendar），跳过实时行情采集。")
             return
         logging.info("[定时任务] 港股实时行情采集开始...")
         success = hk_realtime_collector.collect_quotes()
@@ -267,8 +267,8 @@ def collect_hk_historical():
     try:
         today = datetime.now()
         today_str_dash = today.strftime('%Y-%m-%d')
-        if _is_market_holiday('HK', today_str_dash):
-            logging.info(f"[定时任务] 港股 {today_str_dash} 为节假日（trading_calendar），跳过历史行情采集。")
+        if _hk_session_closed_today():
+            logging.info(f"[定时任务] 港股 {today_str_dash} 为休市日，跳过历史行情采集。")
             return
         today = today.strftime('%Y%m%d')
         logging.info(f"[定时任务] 港股历史行情采集开始，日期: {today}")
@@ -282,6 +282,9 @@ def collect_hk_historical():
 
 def generate_weekly_data():
     try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] A股休市日，跳过周线数据生成。")
+            return
         logging.info("[定时任务] A股当前周线数据生成开始...")
         result = weekly_generator.generate_current_week_data()
         logging.info(f"[定时任务] A股当前周线数据生成完成: {result}")
@@ -290,6 +293,9 @@ def generate_weekly_data():
 
 def generate_hk_weekly_data():
     try:
+        if _hk_session_closed_today():
+            logging.info("[定时任务] 港股休市日，跳过周线数据生成。")
+            return
         logging.info("[定时任务] 港股当前周线数据生成开始...")
         result = hk_weekly_generator.generate_current_week_data()
         logging.info(f"[定时任务] 港股当前周线数据生成完成: {result}")
@@ -298,6 +304,9 @@ def generate_hk_weekly_data():
 
 def generate_monthly_data():
     try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] A股休市日，跳过月线数据生成。")
+            return
         logging.info("[定时任务] A股当前月线数据生成开始...")
         result = monthly_generator.generate_current_month_data()
         logging.info(f"[定时任务] A股当前月线数据生成完成: {result}")
@@ -306,6 +315,9 @@ def generate_monthly_data():
 
 def generate_hk_monthly_data():
     try:
+        if _hk_session_closed_today():
+            logging.info("[定时任务] 港股休市日，跳过月线数据生成。")
+            return
         logging.info("[定时任务] 港股当前月线数据生成开始...")
         result = hk_monthly_generator.generate_current_month_data()
         logging.info(f"[定时任务] 港股当前月线数据生成完成: {result}")
@@ -314,6 +326,9 @@ def generate_hk_monthly_data():
 
 def generate_quarterly_data():
     try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] A股休市日，跳过季线数据生成。")
+            return
         logging.info("[定时任务] A股当前季线数据生成开始...")
         result = quarterly_generator.generate_current_quarter_data()
         logging.info(f"[定时任务] A股当前季线数据生成完成: {result}")
@@ -322,6 +337,9 @@ def generate_quarterly_data():
 
 def generate_hk_quarterly_data():
     try:
+        if _hk_session_closed_today():
+            logging.info("[定时任务] 港股休市日，跳过季线数据生成。")
+            return
         logging.info("[定时任务] 港股当前季线数据生成开始...")
         result = hk_quarterly_generator.generate_current_quarter_data()
         logging.info(f"[定时任务] 港股当前季线数据生成完成: {result}")
@@ -330,6 +348,9 @@ def generate_hk_quarterly_data():
 
 def generate_semiannual_data():
     try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] A股休市日，跳过半年线数据生成。")
+            return
         logging.info("[定时任务] A股当前半年线数据生成开始...")
         result = semiannual_generator.generate_current_semiannual_data()
         logging.info(f"[定时任务] A股当前半年线数据生成完成: {result}")
@@ -338,6 +359,9 @@ def generate_semiannual_data():
 
 def generate_hk_semiannual_data():
     try:
+        if _hk_session_closed_today():
+            logging.info("[定时任务] 港股休市日，跳过半年线数据生成。")
+            return
         logging.info("[定时任务] 港股当前半年线数据生成开始...")
         result = hk_semiannual_generator.generate_current_semiannual_data()
         logging.info(f"[定时任务] 港股当前半年线数据生成完成: {result}")
@@ -346,6 +370,9 @@ def generate_hk_semiannual_data():
 
 def generate_annual_data():
     try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] A股休市日，跳过年线数据生成。")
+            return
         logging.info("[定时任务] A股当前年线数据生成开始...")
         result = annual_generator.generate_current_annual_data()
         logging.info(f"[定时任务] A股当前年线数据生成完成: {result}")
@@ -354,6 +381,9 @@ def generate_annual_data():
 
 def generate_hk_annual_data():
     try:
+        if _hk_session_closed_today():
+            logging.info("[定时任务] 港股休市日，跳过年线数据生成。")
+            return
         logging.info("[定时任务] 港股当前年线数据生成开始...")
         result = hk_annual_generator.generate_current_annual_data()
         logging.info(f"[定时任务] 港股当前年线数据生成完成: {result}")
@@ -362,6 +392,10 @@ def generate_hk_annual_data():
 
 def collect_hk_index_realtime():
     try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _hk_session_closed_today():
+            logging.info(f"[定时任务] 港股 {today_str} 为休市日，跳过指数实时行情采集。")
+            return
         logging.info("[定时任务] 港股指数实时行情采集开始...")
         result = hk_index_collector.collect_realtime_quotes()
         if result:
@@ -373,6 +407,10 @@ def collect_hk_index_realtime():
 
 def collect_hk_index_historical():
     try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _hk_session_closed_today():
+            logging.info(f"[定时任务] 港股 {today_str} 为休市日，跳过指数历史行情归档。")
+            return
         logging.info("[定时任务] 港股指数历史行情采集开始...")
         result = hk_index_historical_collector.collect_daily_to_historical()
         if result and result.get('success', 0) > 0:
@@ -385,8 +423,8 @@ def collect_hk_index_historical():
 def collect_etf_realtime():
     try:
         today_str = datetime.now().strftime('%Y-%m-%d')
-        if _is_market_holiday('CN', today_str):
-            logging.info(f"[定时任务] A股(ETF) {today_str} 为节假日，跳过 ETF 实时行情采集。")
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股(ETF) {today_str} 为休市日，跳过 ETF 实时行情采集。")
             return
         logging.info("[定时任务] ETF 实时行情采集开始...")
         
@@ -493,8 +531,8 @@ def collect_etf_historical():
     try:
         today = datetime.now()
         today_str_dash = today.strftime('%Y-%m-%d')
-        if _is_market_holiday('CN', today_str_dash):
-            logging.info(f"[定时任务] A股(ETF) {today_str_dash} 为节假日，跳过 ETF 历史行情采集。")
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股(ETF) {today_str_dash} 为休市日，跳过 ETF 历史行情采集。")
             return
         logging.info(f"[定时任务] ETF 历史行情与列表同步采集开始，日期: {today_str_dash}")
         # 先同步一次列表

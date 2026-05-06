@@ -9,7 +9,7 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Any
 import logging
 import time
 import random
@@ -582,6 +582,25 @@ class ETFCollector:
         """), {'code': etf_code, 'start': query_start, 'end': end_date})
         return result.fetchall()
 
+    @staticmethod
+    def _hlc_from_rows_for_indicators(rows: List[Any]) -> Tuple[List[float], List[float], List[float]]:
+        """
+        从 fund_historical_quotes 行生成 high/low/close 序列。
+        部分历史行仅保证 close、volume 非空，high/low 可能为 NULL，KDJ 等需 OHLC 的指标会 float(None) 报错；
+        缺失时用收盘价代替（与常见行情补全方式一致）。
+        """
+        highs: List[float] = []
+        lows: List[float] = []
+        closes: List[float] = []
+        for r in rows:
+            c = float(r[4])
+            h = float(r[2]) if r[2] is not None else c
+            l = float(r[3]) if r[3] is not None else c
+            highs.append(h)
+            lows.append(l)
+            closes.append(c)
+        return highs, lows, closes
+
     def _calculate_and_save_macd(self, etf_code: str, start_date: str, end_date: str):
         """计算并保存MACD指标"""
         rows = self._load_historical_data(etf_code, start_date, end_date)
@@ -603,12 +622,10 @@ class ETFCollector:
         rows = self._load_historical_data(etf_code, start_date, end_date)
         if len(rows) < 9:
             return
-        highs = [float(r[2]) for r in rows]
-        lows = [float(r[3]) for r in rows]
-        closes = [float(r[4]) for r in rows]
+        highs, lows, closes = self._hlc_from_rows_for_indicators(rows)
         dates = [r[0] for r in rows]
         calculator = KDJCalculator()
-        results = calculator.calculate_kdj_batch(highs, lows, closes)
+        results = calculator.calculate_kdj_batch(closes, highs, lows)
         if not results:
             return
         self._save_indicator_batch(etf_code, dates, results, start_date, end_date,
