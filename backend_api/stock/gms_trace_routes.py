@@ -22,7 +22,10 @@ router = APIRouter(prefix="/api/stock", tags=["GMS信号追溯"])
 
 
 def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
-    """从 mean_frequency_resonance_indicators 合并 d1、d20 及对应交易日期，与指标表一致。"""
+    """从 mean_frequency_resonance_indicators 合并 d1、d20、成交量及 bias(均线乖离 Δ₂₀/d) 等，供前端「计算指标细项」展示。
+
+    trace 表与 to_dict 不含 avg_volume_20d / current_volume / ratio_d，必须与筛选页一致从指标行带出。
+    """
     code = row_dict.get("code")
     date_str = str(row_dict.get("date", ""))[:10]
     market_type = row_dict.get("market_type", "CN")
@@ -64,6 +67,21 @@ def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
     vd = getattr(row, "d20_date", None)
     if vd is not None:
         out["d20_date"] = _norm_date(vd)
+
+    mavol20_m = getattr(row, "mavol20_m", None)
+    eff_m20_m = getattr(row, "efficiency_m20_minus_m", None)
+    if mavol20_m is not None:
+        try:
+            out["avg_volume_20d"] = float(mavol20_m)
+            out["current_volume"] = float(mavol20_m or 0) + float(eff_m20_m or 0)
+        except (TypeError, ValueError):
+            pass
+    bias = getattr(row, "bias", None)
+    if bias is not None:
+        try:
+            out["ratio_d"] = float(bias)
+        except (TypeError, ValueError):
+            pass
     return out
 
 try:
