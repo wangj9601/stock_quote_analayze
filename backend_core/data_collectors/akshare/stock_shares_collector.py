@@ -12,15 +12,131 @@ if _project_root not in sys.path:
 
 import akshare as ak
 import pandas as pd
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 import logging
 import time
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from backend_core.data_collectors.akshare.base import AKShareCollector
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
+
+# Excel 模板列为「万股」，库内与 akshare 一致为「股」
+_SHARES_PER_WAN_GU = 10000.0
+
+# 列名兼容（表头去首尾空格后匹配）
+_EXCEL_CODE_HEADERS = ("证券代码",)
+_EXCEL_TOTAL_WAN_HEADERS = ("总股本(万股)", "总股本")
+_EXCEL_FLOAT_WAN_HEADERS = ("已流通股份(万股)", "流通股(万股)", "流通股本(万股)")
+_EXCEL_CHANGE_DATE_HEADERS = ("变动日期",)
+_EXCEL_ANNOUNCE_DATE_HEADERS = ("公告日期",)
+
+
+def _strip_header(h: Any) -> str:
+    if h is None or (isinstance(h, float) and pd.isna(h)):
+        return ""
+    s = str(h).strip().replace("\u3000", " ")
+    return " ".join(s.split())
+
+
+def _pick_column(columns: List[str], candidates: Tuple[str, ...]) -> Optional[str]:
+    norm = {_strip_header(c): c for c in columns}
+    for cand in candidates:
+        if cand in norm:
+            return norm[cand]
+    return None
+
+
+def normalize_excel_stock_code(raw: Any) -> Optional[str]:
+    """将 Excel 中的证券代码规范为 6 位字符串（与 stock_basic_info.code 对齐）。"""
+    if raw is None:
+        return None
+    if isinstance(raw, float) and pd.isna(raw):
+        return None
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        try:
+            return str(int(float(raw))).zfill(6)
+        except (ValueError, OverflowError):
+            return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.endswith(".0") and s[:-2].replace(".", "", 1).isdigit():
+        try:
+            return str(int(float(s))).zfill(6)
+        except ValueError:
+            pass
+    try:
+        if all(c in "0123456789." for c in s):
+            return str(int(float(s))).zfill(6)
+    except ValueError:
+        pass
+    if s.isdigit():
+        return s.zfill(6)
+    return s
+
+
+def _wan_gu_to_shares_cell(val: Any) -> Optional[float]:
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    try:
+        return float(val) * _SHARES_PER_WAN_GU
+    except (TypeError, ValueError):
+        return None
+
+
+def prepare_shares_excel_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    将原始 Excel DataFrame 解析为按证券代码去重后的更新行（每股单位：股）。
+    同一代码多行时保留「变动日期」最新一行；变动日期缺失时用「公告日期」。
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["code", "total_shares", "free_float_shares", "_sort_ts"])
+
+    cols = list(df.columns)
+    code_col = _pick_column(cols, _EXCEL_CODE_HEADERS)
+    total_col = _pick_column(cols, _EXCEL_TOTAL_WAN_HEADERS)
+    float_col = _pick_column(cols, _EXCEL_FLOAT_WAN_HEADERS)
+    change_col = _pick_column(cols, _EXCEL_CHANGE_DATE_HEADERS)
+    announce_col = _pick_column(cols, _EXCEL_ANNOUNCE_DATE_HEADERS)
+
+    if not code_col:
+        raise ValueError("Excel 中未找到「证券代码」列，请检查表头是否与模板一致")
+
+    out_rows: List[Dict[str, Any]] = []
+    for _, row in df.iterrows():
+        code = normalize_excel_stock_code(row.get(code_col))
+        if not code:
+            continue
+        total_s = _wan_gu_to_shares_cell(row.get(total_col)) if total_col else None
+        free_s = _wan_gu_to_shares_cell(row.get(float_col)) if float_col else None
+        if total_s is None and free_s is None:
+            continue
+
+        ch_raw = row.get(change_col) if change_col else None
+        an_raw = row.get(announce_col) if announce_col else None
+        ch_dt = pd.to_datetime(ch_raw, errors="coerce") if change_col else pd.NaT
+        an_dt = pd.to_datetime(an_raw, errors="coerce") if announce_col else pd.NaT
+        sort_ts = ch_dt if pd.notna(ch_dt) else an_dt
+        if pd.isna(sort_ts):
+            sort_ts = pd.Timestamp.min
+
+        out_rows.append(
+            {
+                "code": code,
+                "total_shares": total_s,
+                "free_float_shares": free_s,
+                "_sort_ts": sort_ts,
+            }
+        )
+
+    if not out_rows:
+        return pd.DataFrame(columns=["code", "total_shares", "free_float_shares"])
+
+    mdf = pd.DataFrame(out_rows)
+    mdf = mdf.sort_values("_sort_ts", ascending=False).drop_duplicates(subset=["code"], keep="first")
+    return mdf.drop(columns=["_sort_ts"])
 
 
 class StockSharesSyncAbortError(Exception):
@@ -32,6 +148,34 @@ class StockSharesCollector(AKShareCollector):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
+
+    def _ensure_stock_basic_shares_columns(self, session) -> None:
+        session.execute(text('''
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info'
+                                   AND column_name='total_shares') THEN
+                        ALTER TABLE stock_basic_info ADD COLUMN total_shares REAL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info'
+                                   AND column_name='free_float_shares') THEN
+                        ALTER TABLE stock_basic_info ADD COLUMN free_float_shares REAL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info'
+                                   AND column_name='shares_updated_at') THEN
+                        ALTER TABLE stock_basic_info ADD COLUMN shares_updated_at TIMESTAMP;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='stock_basic_info'
+                                   AND column_name='collect_enabled') THEN
+                        ALTER TABLE stock_basic_info ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
+                    END IF;
+                END
+                $$;
+            '''))
 
     def _get_stocks_to_update(self, session, mode: str = 'incremental', max_stocks: Optional[int] = None):
         """
@@ -126,33 +270,7 @@ class StockSharesCollector(AKShareCollector):
         fail_threshold = 3
 
         try:
-            # 确保字段存在
-            session.execute(text('''
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                                   WHERE table_name='stock_basic_info'
-                                   AND column_name='total_shares') THEN
-                        ALTER TABLE stock_basic_info ADD COLUMN total_shares REAL;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                                   WHERE table_name='stock_basic_info'
-                                   AND column_name='free_float_shares') THEN
-                        ALTER TABLE stock_basic_info ADD COLUMN free_float_shares REAL;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                                   WHERE table_name='stock_basic_info'
-                                   AND column_name='shares_updated_at') THEN
-                        ALTER TABLE stock_basic_info ADD COLUMN shares_updated_at TIMESTAMP;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                                   WHERE table_name='stock_basic_info'
-                                   AND column_name='collect_enabled') THEN
-                        ALTER TABLE stock_basic_info ADD COLUMN collect_enabled BOOLEAN DEFAULT TRUE;
-                    END IF;
-                END
-                $$;
-            '''))
+            self._ensure_stock_basic_shares_columns(session)
             session.commit()
 
             stocks = self._get_stocks_to_update(session, mode, max_stocks)
@@ -236,6 +354,144 @@ class StockSharesCollector(AKShareCollector):
         finally:
             session.close()
 
+    def collect_shares_from_excel(
+        self,
+        excel_path: str,
+        sheet_name: Any = 0,
+    ) -> Dict[str, Any]:
+        """
+        从固定列格式的 Excel 批量更新股本（万股 → 股写入 stock_basic_info）。
+        列：证券代码、总股本(万股)、已流通股份(万股)；可选 变动日期/公告日期 用于同代码多行取最新。
+        """
+        path = Path(excel_path).expanduser()
+        if not path.is_file():
+            self.logger.error("股本 Excel 文件不存在: %s", path)
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "skipped": 0,
+                "not_in_db": 0,
+                "error": f"file_not_found: {path}",
+            }
+
+        try:
+            df_raw = pd.read_excel(path, sheet_name=sheet_name, dtype=object)
+        except Exception as e:
+            self.logger.error("读取股本 Excel 失败: %s", e)
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "skipped": 0,
+                "not_in_db": 0,
+                "error": str(e),
+            }
+
+        try:
+            mdf = prepare_shares_excel_rows(df_raw)
+        except ValueError as e:
+            self.logger.error("%s", e)
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "skipped": 0,
+                "not_in_db": 0,
+                "error": str(e),
+            }
+
+        total = len(mdf)
+        if total == 0:
+            self.logger.warning("股本 Excel 解析后无有效数据行（需至少证券代码及总股本/已流通股份之一）")
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "skipped": 0,
+                "not_in_db": 0,
+            }
+
+        self.logger.info("股本 Excel 解析完成，待写入股票数: %s（来源: %s）", total, path)
+
+        session = SessionLocal()
+        success_count = 0
+        fail_count = 0
+        skip_count = 0
+        not_in_db = 0
+        updated_at = datetime.now()
+
+        try:
+            self._ensure_stock_basic_shares_columns(session)
+            session.commit()
+
+            upd = text("""
+                UPDATE stock_basic_info
+                SET total_shares = COALESCE(:total_shares, total_shares),
+                    free_float_shares = COALESCE(:free_float_shares, free_float_shares),
+                    shares_updated_at = :updated_at
+                WHERE code = :code
+            """)
+
+            for i, row in enumerate(mdf.itertuples(index=False), 1):
+                code = row.code
+                total_shares = getattr(row, "total_shares", None)
+                free_float_shares = getattr(row, "free_float_shares", None)
+                try:
+                    r = session.execute(
+                        upd,
+                        {
+                            "code": code,
+                            "total_shares": total_shares,
+                            "free_float_shares": free_float_shares,
+                            "updated_at": updated_at,
+                        },
+                    )
+                    n = r.rowcount if r is not None else 0
+                    if n and n > 0:
+                        success_count += 1
+                    else:
+                        not_in_db += 1
+                except Exception as e:
+                    fail_count += 1
+                    self.logger.error("写入股本失败 code=%s: %s", code, e)
+
+                if i % 200 == 0:
+                    session.commit()
+                    self.logger.info(
+                        "股本 Excel 导入进度: %s/%s，成功 %s，失败 %s，库中无此代码 %s",
+                        i,
+                        total,
+                        success_count,
+                        fail_count,
+                        not_in_db,
+                    )
+
+            session.commit()
+            result = {
+                "total": total,
+                "success": success_count,
+                "failed": fail_count,
+                "skipped": skip_count,
+                "not_in_db": not_in_db,
+            }
+            self.logger.info("股本 Excel 导入完成: %s", result)
+            return result
+
+        except Exception as e:
+            self.logger.error("股本 Excel 导入异常: %s", e)
+            session.rollback()
+            return {
+                "total": total,
+                "success": success_count,
+                "failed": fail_count,
+                "skipped": skip_count,
+                "not_in_db": not_in_db,
+                "error": str(e),
+            }
+        finally:
+            session.close()
+
     def run(self, mode: str = 'incremental', max_stocks: Optional[int] = None):
         """
         运行采集器
@@ -252,16 +508,49 @@ class StockSharesCollector(AKShareCollector):
 
 if __name__ == "__main__":
     import argparse
-    from backend_core.data_collectors.akshare.stock_shares_collector import StockSharesCollector
 
-    parser = argparse.ArgumentParser(description='股本数据采集器')
-    parser.add_argument('--mode', choices=['full', 'incremental'], default='incremental',
-                        help='更新模式: full=全量, incremental=增量(默认)')
-    parser.add_argument('--max-stocks', type=int, default=None,
-                        help='最大更新数量限制')
+    parser = argparse.ArgumentParser(description="股本数据采集器")
+    parser.add_argument(
+        "--source",
+        choices=["akshare", "excel"],
+        default="akshare",
+        help="数据来源：akshare（默认）或 excel（列格式见文档）",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["full", "incremental"],
+        default="incremental",
+        help="akshare 模式：full=全量, incremental=增量(默认)",
+    )
+    parser.add_argument("--max-stocks", type=int, default=None, help="akshare 最大更新数量")
+    parser.add_argument(
+        "--excel-path",
+        type=str,
+        default=None,
+        help="excel 模式：xlsx/xls 路径（亦可设环境变量 STOCK_SHARES_EXCEL_PATH）",
+    )
+    parser.add_argument(
+        "--excel-sheet",
+        type=str,
+        default="",
+        help="工作表序号（如 0）或名称；不设则用环境变量 STOCK_SHARES_EXCEL_SHEET，否则首张表",
+    )
     args = parser.parse_args()
 
     collector = StockSharesCollector()
-    collector.run(mode=args.mode, max_stocks=args.max_stocks)
+    if args.source == "excel":
+        path = (args.excel_path or os.getenv("STOCK_SHARES_EXCEL_PATH") or "").strip()
+        if not path:
+            parser.error("--source=excel 需要 --excel-path 或环境变量 STOCK_SHARES_EXCEL_PATH")
+        sheet_kw: Any = 0
+        sheet_raw = (args.excel_sheet or os.getenv("STOCK_SHARES_EXCEL_SHEET") or "").strip()
+        if sheet_raw:
+            try:
+                sheet_kw = int(sheet_raw)
+            except ValueError:
+                sheet_kw = sheet_raw
+        collector.collect_shares_from_excel(path, sheet_name=sheet_kw)
+    else:
+        collector.run(mode=args.mode, max_stocks=args.max_stocks)
 
 

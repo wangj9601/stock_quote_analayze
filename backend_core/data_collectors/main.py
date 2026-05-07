@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from pathlib import Path
+from typing import Union
 
 try:
     from dotenv import load_dotenv
@@ -194,10 +195,37 @@ def collect_akshare_turnover_rate():
         logging.error(f"[定时任务] AKShare 历史换手率数据采集异常: {e}")
 
 def update_stock_shares():
+    if not _env_bool("SCHED_STOCK_SHARES_ENABLED", True):
+        logging.info("[定时任务] 股本定时同步已关闭（SCHED_STOCK_SHARES_ENABLED=false），跳过。")
+        return
+    source = _env("STOCK_SHARES_UPDATE_SOURCE", "akshare").lower()
     try:
-        logging.info("[定时任务] 股本数据更新开始...")
-        result = stock_shares_collector.run(mode='incremental')
-        if result and result.get('success', 0) > 0:
+        logging.info("[定时任务] 股本数据更新开始... source=%s", source)
+        if source == "excel":
+            xls = _resolve_optional_project_path(_env("STOCK_SHARES_EXCEL_PATH", ""))
+            if not xls:
+                logging.error(
+                    "[定时任务] STOCK_SHARES_UPDATE_SOURCE=excel 但未配置 STOCK_SHARES_EXCEL_PATH"
+                )
+                return
+            sheet_raw = _env("STOCK_SHARES_EXCEL_SHEET", "").strip()
+            sheet_kw: Union[int, str] = 0
+            if sheet_raw:
+                try:
+                    sheet_kw = int(sheet_raw)
+                except ValueError:
+                    sheet_kw = sheet_raw
+            result = stock_shares_collector.collect_shares_from_excel(
+                xls, sheet_name=sheet_kw
+            )
+        else:
+            if source not in ("akshare", ""):
+                logging.warning(
+                    "[定时任务] STOCK_SHARES_UPDATE_SOURCE=%s 未识别，按 akshare 处理",
+                    source,
+                )
+            result = stock_shares_collector.run(mode="incremental")
+        if result and result.get("success", 0) > 0:
             logging.info(f"[定时任务] 股本数据更新完成: {result}")
         else:
             logging.warning(f"[定时任务] 股本数据更新结果: {result}")
@@ -564,20 +592,37 @@ def _env_bool(k: str, default: bool = True) -> bool:
     return v in ("1", "true", "yes", "y", "on")
 
 
+def _resolve_optional_project_path(rel_or_abs: str) -> str:
+    """相对路径相对于项目根目录（与 load_dotenv 同一根目录）解析。"""
+    p = (rel_or_abs or "").strip()
+    if not p:
+        return ""
+    pp = Path(p).expanduser()
+    if pp.is_absolute():
+        return str(pp)
+    return str(_project_root / pp)
+
+
 def _register_stock_shares_job():
     """
     注册股本同步任务，支持 weekly/monthly/quarterly 三种模式。
 
     .env 参数：
+    - SCHED_STOCK_SHARES_ENABLED=true|false（默认 true；false 时不注册定时任务）
+    - STOCK_SHARES_UPDATE_SOURCE=akshare|excel（默认 akshare；excel 时需 STOCK_SHARES_EXCEL_PATH）
+    - STOCK_SHARES_EXCEL_PATH、STOCK_SHARES_EXCEL_SHEET（可选，sheet 为序号或工作表名）
     - SCHED_STOCK_SHARES_MODE=weekly|monthly|quarterly（默认 weekly）
-    - SCHED_STOCK_SHARES_HOUR / SCHED_STOCK_SHARES_MINUTE
+    - SCHED_STOCK_SHARES_HOUR / SCHED_STOCK_SHARES_MINUTE（与其它 cron 一致，可为单个值或逗号区间，如 10 或 9,15）
     - weekly:    SCHED_STOCK_SHARES_DOW
-    - monthly:   SCHED_STOCK_SHARES_DAY
+    - monthly:   SCHED_STOCK_SHARES_DAY（每月几号，1-31）
     - quarterly: SCHED_STOCK_SHARES_DAY + SCHED_STOCK_SHARES_QUARTER_MONTHS
     """
+    if not _env_bool("SCHED_STOCK_SHARES_ENABLED", True):
+        logging.info("股本定时任务未注册（SCHED_STOCK_SHARES_ENABLED=false）")
+        return
     mode = _env("SCHED_STOCK_SHARES_MODE", "weekly").lower()
-    hour = _cron_int("SCHED_STOCK_SHARES_HOUR", 10)
-    minute = _cron_int("SCHED_STOCK_SHARES_MINUTE", 0)
+    hour = _cron("SCHED_STOCK_SHARES_HOUR", "10")
+    minute = _cron("SCHED_STOCK_SHARES_MINUTE", "0")
     job_kwargs = {
         "hour": hour,
         "minute": minute,
