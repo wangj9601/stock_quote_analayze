@@ -406,6 +406,22 @@ import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
 
 const gmsApi = inject<any>('gmsApi')
 
+/** 创建任务缺省：结束日为今日，开始日为当前日期减一年（本地日历） */
+function getDefaultBacktestDateRange(): { start_date: string; end_date: string } {
+  const end = new Date()
+  const start = new Date(end)
+  start.setFullYear(start.getFullYear() - 1)
+  const fmt = (d: Date) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  return { start_date: fmt(start), end_date: fmt(end) }
+}
+
+const defaultBacktestDates = getDefaultBacktestDateRange()
+
 const formRef = ref()
 const loading = ref(false)
 const creating = ref(false)
@@ -415,11 +431,11 @@ const selectedTaskId = ref('')
 const form = reactive({
   task_name: '',
   market: 'all',
-  start_date: '',
-  end_date: '',
-  target_pct: 0.05,
+  start_date: defaultBacktestDates.start_date,
+  end_date: defaultBacktestDates.end_date,
+  target_pct: 0.1,
   horizon_days: 20,
-  min_score: 0,
+  min_score: 70,
   backtest_type: 'signal_hit_rate',
   stop_loss_pct: 0,
   commission_bps: 0,
@@ -667,13 +683,14 @@ async function createTask() {
 }
 
 function resetForm() {
+  const d = getDefaultBacktestDateRange()
   form.task_name = ''
   form.market = 'all'
-  form.start_date = ''
-  form.end_date = ''
-  form.target_pct = 0.05
+  form.start_date = d.start_date
+  form.end_date = d.end_date
+  form.target_pct = 0.1
   form.horizon_days = 20
-  form.min_score = 0
+  form.min_score = 70
   form.backtest_type = 'signal_hit_rate'
   tradePreset.value = 'balanced'
   applyTradePreset('balanced')
@@ -757,6 +774,9 @@ defineExpose({ refresh })
 
 onMounted(async () => {
   await Promise.all([refresh(), loadWatchlistUsers()])
+  const d = getDefaultBacktestDateRange()
+  form.start_date = d.start_date
+  form.end_date = d.end_date
 })
 </script>
 
