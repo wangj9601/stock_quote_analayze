@@ -1,8 +1,8 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { test } from '../src/fixtures/auth.fixture'
-import { parseExcelCases, type WebCase } from '../src/data/excel-case-parser'
-import { runCase } from '../src/runner/case-runner'
+import { test } from '../src/fixtures/auth.fixture.js'
+import { parseExcelCases, type WebCase } from '../src/data/excel-case-parser.js'
+import { runCase } from '../src/runner/case-runner.js'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const excelPath = path.resolve(currentDir, '../data/excel/web_cases.xlsx')

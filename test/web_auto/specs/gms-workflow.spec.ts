@@ -1,5 +1,6 @@
 import { test, expect } from '../src/fixtures/auth.fixture.js'
 import { GMSPage } from '../src/pages/gms.page.js'
+import { GMS_E2E_SINGLE_STOCK } from '../src/pages/selection-results.page.js'
 
 test.describe('GMS 回测管理核心流程', () => {
   test('应该能切换 GMS 管理标签并打开创建任务对话框 @case', async ({ authenticatedPage }) => {
@@ -16,14 +17,14 @@ test.describe('GMS 回测管理核心流程', () => {
     await expect(gmsPage.createTaskButton).toBeVisible()
   })
 
-  test('应该能成功创建一个 GMS 基本回测任务 @smoke', async ({ authenticatedPage }) => {
+  test(`应该能成功创建一个 GMS 基本回测任务（单股 ${GMS_E2E_SINGLE_STOCK}） @smoke`, async ({ authenticatedPage }) => {
     const gmsPage = new GMSPage(authenticatedPage)
     await gmsPage.goto()
     
     const taskName = `GMS_Auto_${Date.now()}`
     await gmsPage.createTask({
       name: taskName,
-      stockPool: '中证800' // 假设环境中存在的股票池名称
+      singleStockCode: GMS_E2E_SINGLE_STOCK
     })
     
     // 检查列表状态

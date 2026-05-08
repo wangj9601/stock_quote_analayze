@@ -4,7 +4,6 @@
 
 - **根目录**：`test/web_auto`
 - **业务脚本 (Specs)**：`specs/`
-  - `pvfrs-workflow.spec.ts`：PVFRS 策略全生命周期测试
   - `gms-workflow.spec.ts`：GMS 回测管理测试
   - `users-management.spec.ts`：用户管理测试
   - `market-data.spec.ts`：行情浏览测试
@@ -56,7 +55,7 @@ npx --prefix test/web_auto playwright test --config test/web_auto/playwright.con
 
 ### 4.2 执行特定模块
 ```bash
-npx --prefix test/web_auto playwright test --config test/web_auto/playwright.config.ts test/web_auto/specs/pvfrs-workflow.spec.ts
+npx --prefix test/web_auto playwright test --config test/web_auto/playwright.config.ts test/web_auto/specs/gms-workflow.spec.ts
 ```
 
 ### 4.3 调试模式 (UI)

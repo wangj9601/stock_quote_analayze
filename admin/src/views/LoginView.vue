@@ -53,7 +53,12 @@
           </button>
         </div>
 
-        <div v-if="error" class="text-red-600 text-center text-sm">
+        <div
+          v-if="error"
+          role="alert"
+          data-testid="login-error"
+          class="text-red-600 text-center text-sm"
+        >
           {{ error }}
         </div>
       </form>

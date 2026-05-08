@@ -21,21 +21,23 @@ npx playwright install --with-deps chromium
 ### 配置环境变量
 复制 `.env.web-auto.example` 并命名为 `.env.web-auto`：
 ```bash
-WEB_BASE_URL=http://localhost:3000
+WEB_BASE_URL=http://127.0.0.1:8001
 WEB_USERNAME=admin
 WEB_PASSWORD=admin123
 ```
 > [!IMPORTANT]
 > 必须提供 `WEB_USERNAME` 和 `WEB_PASSWORD` 才能执行需要登录的测试任务。
+> `WEB_BASE_URL` 需与实际管理端地址一致（例如本仓库 `admin` 默认开发端口为 `8001`）。
 
 ## 2. 常用执行命令
 
 | 描述 | 命令 |
 | :--- | :--- |
 | 运行所有测试 (Headless) | `npx playwright test` |
-| 运行单个测试文件 | `npx playwright test specs/pvfrs-workflow.spec.ts` |
+| 运行单个测试文件 | `npx playwright test specs/gms-workflow.spec.ts` |
 | 进入 GUI 模式 (有头) | `npx playwright test --headed` |
 | 只运行冒烟测试 | `npm run test:smoke` |
+| 只运行全模块覆盖用例 | `npm run test:modules` |
 | 查看测试报告 | `npm run report` |
 
 ## 3. 开发指南 (POM)
@@ -57,10 +59,10 @@ export class MyPage {
 > **ESM 导入规则**：在 `specs` 中导入内部模块时，路径必须包含 `.js` 后缀。
 ```typescript
 import { test, expect } from '../src/fixtures/auth.fixture.js';
-import { PVFRSPage } from '../src/pages/pvfrs.page.js';
+import { DashboardPage } from '../src/pages/dashboard.page.js';
 
 test('业务流程测试', async ({ authenticatedPage }) => {
-  const page = new PVFRSPage(authenticatedPage);
+  const page = new DashboardPage(authenticatedPage);
   await page.goto();
   // 执行操作...
 });

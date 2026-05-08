@@ -70,6 +70,14 @@
             @update:model-value="(v: number | undefined) => (gmsFormDyn[row.k] = v ?? 0)"
           />
           <el-input
+            v-else-if="row.type === 'text'"
+            :model-value="String(gmsFormDyn[row.k] ?? '')"
+            clearable
+            placeholder="留空则按下方数据来源范围"
+            class="w-full"
+            @update:model-value="(v: string) => (gmsFormDyn[row.k] = v)"
+          />
+          <el-input
             v-else
             :model-value="String(gmsFormDyn[row.k] ?? '')"
             type="date"
@@ -247,6 +255,8 @@ const watchlistUserId = ref<number | undefined>(undefined)
 const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
 
 const gmsForm = reactive({
+  /** 非空时请求带 code=，后端仅计算该股（忽略数据来源 scope） */
+  single_stock_code: '' as string,
   start_date: '' as string,
   observation_period: 20,
   ratio_d20_max: 0.015,
@@ -274,6 +284,12 @@ const gmsForm = reactive({
 const gmsFormDyn = gmsForm as Record<string, string | number | undefined>
 
 const primaryParamRows = [
+  {
+    k: 'single_stock_code' as const,
+    label: '限定股票代码（可选）',
+    type: 'text' as const,
+    hint: '填写则仅对该股选股（请求参数 code），忽略下方「数据来源」范围',
+  },
   { k: 'start_date' as const, label: '策略起始交易日期', type: 'date' as const, hint: '留空则取历史行情最近一日' },
   { k: 'observation_period' as const, label: '观察周期（天）', type: 'num' as const, hint: '默认 20（仅本地记录）' },
   { k: 'ratio_d20_max' as const, label: '左侧买点 Δ/d₂₀ 上限', type: 'num' as const, hint: '如 0.015 = 1.5%' },
@@ -351,6 +367,8 @@ function buildSearchParams(includePagination: boolean): URLSearchParams {
     q.set('gms_watchlist_market', gmsWatchlistMarket.value)
   }
   const f = gmsForm
+  const singleCode = String(f.single_stock_code ?? '').trim()
+  if (singleCode) q.set('code', singleCode)
   if (f.start_date) q.set('date', f.start_date)
   if (f.ratio_d20_max != null) q.set('ratio_d20_max', String(f.ratio_d20_max))
   if (f.volume_ratio_max != null) q.set('volume_ratio_max', String(f.volume_ratio_max))

@@ -15,7 +15,8 @@
         <GmsScreeningResults />
       </el-tab-pane>
 
-      <el-tab-pane label="观察股管理" name="watchlist">
+      <!-- lazy：进入页默认只看「选股结果」时不挂载观察股管理，避免冒烟/首屏多一套列表请求与误认「全量」 -->
+      <el-tab-pane label="观察股管理" name="watchlist" lazy>
         <WatchlistManagement ref="watchlistRef" />
       </el-tab-pane>
     </el-tabs>

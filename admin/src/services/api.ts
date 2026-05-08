@@ -53,7 +53,10 @@ class ApiService {
       (response) => response.data,
       (error) => {
         // 避免在登出请求时触发无限循环
-        if (error.response?.status === 401 && !this.isLoggingOut) {
+        const reqUrl = String(error.config?.url ?? '')
+        const isLoginAttempt = reqUrl.includes('/auth/login')
+        // 登录接口返回 401：交给登录页展示错误，切勿整页跳转（否则会刷新掉表单错误提示）
+        if (error.response?.status === 401 && !this.isLoggingOut && !isLoginAttempt) {
           console.log('🔒 收到401未授权响应，清除认证状态')
           // 清除本地存储的认证信息
           localStorage.removeItem('admin_token')

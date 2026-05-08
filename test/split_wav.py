@@ -21,6 +21,8 @@
       → 将 AAC 直接转为 ./out/voice.mp3
   python split_wav.py input.aac --compress-only -o ./out
       → 默认同名输出 ./out/input.mp3
+  python split_wav.py --merge a.wav b.aac c.m4a -o ./out -p merged
+      → 按顺序合并后输出 ./out/merged.mp3（输入可为 wav/aac/m4a/mp3 等 ffmpeg 可解码格式）
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ import math
 import subprocess
 import wave
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
 
 def _num_width(total_parts: int) -> int:
@@ -102,6 +104,74 @@ def compress_only_to_mp3(input_path: Path, output_dir: Path, prefix: str, bitrat
     """仅压缩，不切割。"""
     out_path = output_dir / f"{prefix}.mp3"
     _convert_wav_to_mp3(input_path, out_path, bitrate)
+    return out_path
+
+
+def _build_merge_filter_complex(num_inputs: int) -> str:
+    """将多路音频统一到 44100Hz 立体声 fltp 后再 concat，避免采样率/声道不一致导致拼接失败。"""
+    if num_inputs < 1:
+        raise ValueError("合并至少需要 1 个输入")
+    branches: List[str] = []
+    labels: List[str] = []
+    for i in range(num_inputs):
+        lab = f"m{i}"
+        branches.append(
+            f"[{i}:a]aresample=44100:async=1:first_pts=0,"
+            f"aformat=sample_fmts=fltp:channel_layouts=stereo[{lab}]"
+        )
+        labels.append(f"[{lab}]")
+    concat = f"{''.join(labels)}concat=n={num_inputs}:v=0:a=1[outa]"
+    return ";".join(branches + [concat])
+
+
+def merge_inputs_to_mp3(
+    input_paths: List[Path],
+    output_dir: Path,
+    prefix: str,
+    bitrate: str,
+) -> Path:
+    """按顺序合并多个音频文件（ffmpeg 可解码的格式），输出单个 MP3。"""
+    if not input_paths:
+        raise ValueError("未提供任何输入文件")
+    _ensure_ffmpeg()
+    for p in input_paths:
+        if not p.is_file():
+            raise SystemExit(f"找不到文件: {p}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"{prefix}.mp3"
+    if len(input_paths) == 1:
+        _convert_wav_to_mp3(input_paths[0], out_path, bitrate)
+        return out_path
+    cmd: List[str] = [
+        "ffmpeg",
+        "-y",
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+    ]
+    for p in input_paths:
+        cmd.extend(["-i", str(p)])
+    cmd.extend(
+        [
+            "-filter_complex",
+            _build_merge_filter_complex(len(input_paths)),
+            "-map",
+            "[outa]",
+            "-vn",
+            "-acodec",
+            "libmp3lame",
+            "-b:a",
+            bitrate,
+            str(out_path),
+        ]
+    )
+    try:
+        subprocess.run(cmd, check=True, timeout=7200)
+    except subprocess.TimeoutExpired as exc:
+        raise SystemExit("ffmpeg 合并/编码超时（>7200秒）") from exc
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit("ffmpeg 合并或转码失败，请确认各文件为有效音频且 ffmpeg 支持该格式") from exc
     return out_path
 
 
@@ -208,8 +278,16 @@ def split_wav_into_parts(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="将 WAV 切割为多个顺序编号的小文件（支持 mp3/aac 转 mp3）")
-    parser.add_argument("input", type=Path, help="输入音频路径（切割仅支持 .wav；--compress-only 支持 .wav/.aac）")
+    parser = argparse.ArgumentParser(
+        description="将 WAV 切割为多个顺序编号的小文件；支持仅压缩、多文件合并转 MP3（依赖 ffmpeg）"
+    )
+    parser.add_argument(
+        "inputs",
+        type=Path,
+        nargs="+",
+        help="输入音频路径：切割模式仅 1 个且须为 .wav；--compress-only 为 1 个 .wav/.aac；"
+        "--merge 为多个（顺序合并），格式可为 wav/aac/m4a/mp3 等 ffmpeg 可解码格式",
+    )
     parser.add_argument(
         "-o",
         "--output-dir",
@@ -221,7 +299,7 @@ def main() -> None:
         "-p",
         "--prefix",
         default="part",
-        help="输出文件名前缀（切割默认 part；仅压缩模式默认输入文件同名）",
+        help="输出文件名前缀（切割默认 part；仅压缩模式默认输入文件同名；--merge 生成 <前缀>.mp3）",
     )
     parser.add_argument(
         "-f",
@@ -236,10 +314,16 @@ def main() -> None:
         default="96k",
         help="MP3 码率（默认 96k；越小越压缩，如 64k）",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--compress-only",
         action="store_true",
-        help="仅压缩为一个 mp3 文件，不切割",
+        help="仅压缩为一个 mp3 文件，不切割（单输入）",
+    )
+    mode.add_argument(
+        "--merge",
+        action="store_true",
+        help="将多个输入文件按顺序合并为一个 mp3（支持 wav/aac/m4a/mp3 等）",
     )
     g = parser.add_mutually_exclusive_group()
     g.add_argument(
@@ -258,18 +342,33 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    input_path: Path = args.input
-    if not input_path.is_file():
-        raise SystemExit(f"找不到文件: {input_path}")
+    input_paths: List[Path] = list(args.inputs)
+    for p in input_paths:
+        if not p.is_file():
+            raise SystemExit(f"找不到文件: {p}")
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     out_format: str = args.format
     mp3_bitrate: str = str(args.bitrate).strip() or "96k"
 
-    ext = input_path.suffix.lower()
     if out_format == "mp3":
         _ensure_ffmpeg()
+
+    if args.merge:
+        if out_format != "mp3":
+            raise SystemExit("--merge 模式下 --format 必须为 mp3")
+        if len(input_paths) < 2:
+            raise SystemExit("--merge 至少需要 2 个输入文件")
+        out_mp3 = merge_inputs_to_mp3(input_paths, output_dir, args.prefix, mp3_bitrate)
+        print(f"完成：已合并 {len(input_paths)} 个文件 → {out_mp3.resolve()}，码率={mp3_bitrate}")
+        return
+
+    input_path = input_paths[0]
+    if len(input_paths) > 1:
+        raise SystemExit("切割或 --compress-only 模式仅支持单个输入；多文件请使用 --merge")
+
+    ext = input_path.suffix.lower()
 
     if args.compress_only:
         if out_format != "mp3":

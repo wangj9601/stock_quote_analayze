@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:smoke": "playwright test --project=chromium --grep @smoke",
+    "test:modules": "playwright test --project=chromium --grep @module",
     "test:cases": "playwright test --project=chromium --grep @case",
     "test:all": "playwright test --project=chromium",
     "test:headed": "playwright test --project=chromium --headed",

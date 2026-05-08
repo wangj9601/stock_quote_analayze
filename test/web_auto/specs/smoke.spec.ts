@@ -1,5 +1,5 @@
-import { test, expect } from '../src/fixtures/auth.fixture'
-import { runSmokeScan } from '../src/runner/smoke-scanner'
+import { test, expect } from '../src/fixtures/auth.fixture.js'
+import { runSmokeScan } from '../src/runner/smoke-scanner.js'
 
 test.describe('菜单冒烟扫描 @smoke', () => {
   test('登录后扫描主菜单并记录失败项 @smoke', async ({ authenticatedPage }) => {
