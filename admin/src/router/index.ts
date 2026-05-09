@@ -68,6 +68,11 @@ const routes = [
         component: () => import('@/views/SelectionResultsView.vue')
       },
       {
+        path: 'gms-watchlist',
+        name: 'GmsWatchlist',
+        component: () => import('@/views/GmsWatchlistView.vue')
+      },
+      {
         path: 'datasource',
         name: 'DataSource',
         component: () => import('@/views/DataSourceView.vue')
@@ -89,13 +94,11 @@ const routes = [
       },
       {
         path: 'content',
-        name: 'Content',
-        component: () => import('@/views/ContentView.vue')
+        redirect: { name: 'Dashboard' }
       },
       {
         path: 'announcements',
-        name: 'Announcements',
-        component: () => import('@/views/AnnouncementsView.vue')
+        redirect: { name: 'Dashboard' }
       },
       {
         path: 'reports/:id',

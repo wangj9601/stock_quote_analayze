@@ -118,8 +118,7 @@ import {
   TrendCharts,
   Monitor,
   Setting,
-  DataAnalysis,
-  Bell
+  DataAnalysis
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -139,8 +138,7 @@ const quickActions: { name: string; path: string; type: '' | 'text' | 'default' 
   { name: '行情数据', path: '/quotes', type: 'warning', icon: TrendCharts },
   { name: '系统监控', path: '/monitoring', type: 'info', icon: Monitor },
   { name: '数据采集', path: '/datacollect', type: 'primary', icon: DataAnalysis },
-  { name: '系统设置', path: '/datasource', type: 'success', icon: Setting },
-  { name: '公告管理', path: '/announcements', type: 'warning', icon: Bell }
+  { name: '系统设置', path: '/datasource', type: 'success', icon: Setting }
 ]
 
 // 最近活动

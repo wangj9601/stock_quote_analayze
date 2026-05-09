@@ -8,9 +8,15 @@ type AuthFixture = {
 
 export const test = base.extend<AuthFixture>({
   authenticatedPage: async ({ page, context }, use, testInfo: TestInfo) => {
-    // 登录 + waitForURL + 侧边栏断言 + storageState，长套件后半段可能较慢
-    testInfo.setTimeout(180_000)
-    await performLogin(page, context)
+    // 登录 + waitForURL + 侧边栏断言 + storageState；串行冒烟后半段偶发 XHR 挂起，清 Cookie 重试一次
+    testInfo.setTimeout(320_000)
+    try {
+      await performLogin(page, context)
+    } catch {
+      await context.clearCookies()
+      await page.goto('/login', { waitUntil: 'domcontentloaded' })
+      await performLogin(page, context)
+    }
     await use(page)
   }
 })

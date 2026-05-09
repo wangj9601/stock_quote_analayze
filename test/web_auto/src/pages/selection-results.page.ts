@@ -53,8 +53,8 @@ export class SelectionResultsPage extends BaseAdminPage {
 
   async expectLoaded(): Promise<void> {
     await this.expectOneVisible([
-      this.page.getByRole('heading', { name: 'GMS策略管理' }),
-      this.page.getByRole('tab', { name: '选股结果' })
+      this.page.getByRole('heading', { name: '选股管理' }),
+      this.page.getByRole('tab', { name: 'GMS均值引力动量' })
     ])
   }
 }

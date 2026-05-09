@@ -7,8 +7,6 @@ import { DataSourcePage } from '../src/pages/datasource.page.js'
 import { MonitoringPage } from '../src/pages/monitoring.page.js'
 import { ModelsPage } from '../src/pages/models.page.js'
 import { LogsPage } from '../src/pages/logs.page.js'
-import { ContentPage } from '../src/pages/content.page.js'
-import { AnnouncementsPage } from '../src/pages/announcements.page.js'
 import { ReportManagementPage } from '../src/pages/report-management.page.js'
 
 test.describe('管理端全模块加载冒烟 @module', () => {
@@ -30,7 +28,7 @@ test.describe('管理端全模块加载冒烟 @module', () => {
     await pageObject.expectLoaded()
   })
 
-  test('GMS 策略管理（仅单股 000001）可加载 @module', async ({ authenticatedPage }) => {
+  test('选股管理（仅单股 000001）可加载 @module', async ({ authenticatedPage }) => {
     const pageObject = new SelectionResultsPage(authenticatedPage)
     // 默认 goto：昨日 + GMS_E2E_SINGLE_STOCK=000001，不触全市场
     await pageObject.goto()
@@ -61,18 +59,6 @@ test.describe('管理端全模块加载冒烟 @module', () => {
     await expect(authenticatedPage.getByText('系统日志')).toBeVisible()
     await logsPage.switchTab('operation')
     await expect(authenticatedPage.getByRole('tab', { name: '操作日志' })).toBeVisible()
-  })
-
-  test('内容管理模块可加载 @module', async ({ authenticatedPage }) => {
-    const pageObject = new ContentPage(authenticatedPage)
-    await pageObject.goto()
-    await pageObject.expectLoaded()
-  })
-
-  test('公告发布模块可加载 @module', async ({ authenticatedPage }) => {
-    const pageObject = new AnnouncementsPage(authenticatedPage)
-    await pageObject.goto()
-    await pageObject.expectLoaded()
   })
 
   test('报告管理模块默认 Tab 可加载 @module', async ({ authenticatedPage }) => {

@@ -9,7 +9,8 @@ dotenv.config({ path: resolve(configDir, '.env.web-auto') })
 export default defineConfig({
   testDir: './specs',
   testMatch: ['**/*.spec.ts'],
-  testIgnore: ['**/*.test.ts', '**/node_modules/**'],
+  // 排除会触发管理端「数据采集/AkShare」及后端东财等行情接口的用例，勿纳入 test:all
+  testIgnore: ['**/*.test.ts', '**/node_modules/**', '**/data-collection.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

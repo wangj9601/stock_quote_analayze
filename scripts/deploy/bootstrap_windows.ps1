@@ -3,36 +3,40 @@ param(
     [string]$PythonExe = "python",
     [string]$NodeExe = "node",
     [string]$NpmExe = "npm",
-    [string]$NssmExe = "C:\tools\nssm\nssm.exe"
+    [string]$NssmExe = "C:\work\stock_quote_analayze\tools\nssm.exe"
 )
 
 $ErrorActionPreference = "Stop"
 
-function Write-Step([string]$msg) {
-    Write-Host "==> $msg" -ForegroundColor Cyan
+function Write-Step([string]$Msg) {
+    Write-Host "==> $Msg" -ForegroundColor Cyan
 }
 
-function Assert-Command([string]$name, [string]$cmd) {
+function Assert-Command([string]$Name, [string]$Cmd) {
     try {
-        & $cmd --version | Out-Null
-        Write-Host "[OK] $name 可用: $cmd"
+        & $Cmd --version | Out-Null
+        Write-Host "[OK] $Name : $Cmd"
     }
     catch {
-        throw "[FAIL] $name 不可用，请先安装并确保命令可执行: $cmd"
+        throw "[FAIL] $Name not found or not runnable: $Cmd"
     }
 }
 
-Write-Step "检查运行时环境"
+Write-Step "Check runtime (python / node / npm)"
 Assert-Command "Python" $PythonExe
 Assert-Command "Node.js" $NodeExe
 Assert-Command "npm" $NpmExe
 
-if (-not (Test-Path -LiteralPath $NssmExe)) {
-    throw "[FAIL] 未找到 NSSM: $NssmExe"
+if (Test-Path -LiteralPath $NssmExe) {
+    Write-Host "[OK] NSSM: $NssmExe"
 }
-Write-Host "[OK] NSSM 可用: $NssmExe"
+else {
+    Write-Host "[WARN] NSSM not found at: $NssmExe" -ForegroundColor Yellow
+    Write-Host "       Bootstrap does not need NSSM. Install NSSM before install_services.ps1 (Windows services)." -ForegroundColor Yellow
+    Write-Host "       Download: https://nssm.cc/  -> copy nssm.exe to above path, or pass -NssmExe when running install_services.ps1" -ForegroundColor Yellow
+}
 
-Write-Step "创建部署目录结构"
+Write-Step "Create DeployRoot layout"
 $dirs = @(
     $DeployRoot,
     (Join-Path $DeployRoot "releases"),
@@ -55,7 +59,7 @@ foreach ($d in $dirs) {
 $envTemplate = Join-Path $DeployRoot "shared\.env.example"
 if (-not (Test-Path -LiteralPath $envTemplate)) {
     @(
-        "# 复制为 .env 并填入真实值",
+        "# Copy to .env and fill real values",
         "ENVIRONMENT=production",
         "BACKEND_PORT=5000",
         "UVICORN_WORKERS=2",
@@ -68,11 +72,11 @@ if (-not (Test-Path -LiteralPath $envTemplate)) {
 $envReal = Join-Path $DeployRoot "shared\.env"
 if (-not (Test-Path -LiteralPath $envReal)) {
     Copy-Item -Path $envTemplate -Destination $envReal
-    Write-Host "[CREATE] $envReal (请立即编辑真实配置)"
+    Write-Host "[CREATE] $envReal (edit this file with real secrets)"
 }
 else {
     Write-Host "[EXISTS] $envReal"
 }
 
-Write-Step "初始化完成"
-Write-Host "下一步：运行 scripts\deploy\install_services.ps1 注册服务。"
+Write-Step "Bootstrap done"
+Write-Host "Next: edit shared\.env -> upload zip -> release.ps1 -> install_services.ps1 (needs NSSM at path above or -NssmExe)."

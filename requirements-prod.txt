@@ -1,70 +1,7 @@
-# 生产环境依赖 - 股票分析系统
-# 只包含运行时必需的依赖，不包含开发工具
+# 生产环境依赖（与新版 backend_api/requirements.txt + backend_core 最小运行时对齐）
+# 不含开发/测试工具（pytest、black 等见 backend_api/requirements-dev.txt）。
+# 修改 API 运行时依赖请编辑：backend_api/requirements.txt
+# 修改 core 最小依赖请编辑：backend_core/requirements-minimal.txt
 
-# Web框架
-fastapi>=0.115,<0.116
-uvicorn>=0.34.2,<0.35.0
-python-multipart>=0.0.20,<0.0.21
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-email-validator==2.1.0.post1
-
-# 数据库
-sqlalchemy==2.0.27
-alembic==1.13.1
-psycopg2-binary==2.9.10
-
-# 数据处理
-pandas==2.2.0
-numpy==1.26.4
-akshare==1.17.70
-openpyxl>=3.1.5,<4.0.0
-
-# 工具
-python-dotenv==1.0.1
-pydantic>=2.6.1,<3.0.0
-pydantic-settings>=2.1.0,<3.0.0
-requests>=2.32.1,<3.0.0
-aiohttp>=3.11.13,<4.0.0
-tenacity==8.2.3
-
-# JWT认证
-PyJWT>=2.0.0
-
-# 定时任务调度
-apscheduler>=3.10.0
-
-# 日志和监控
-loguru>=0.6.0
-
-# 配置管理
-pyyaml>=6.0
-
-# 进度条
-tqdm>=4.64.0
-
-# 数据验证
-marshmallow>=3.19.0
-
-# 缓存
-redis>=4.3.0
-
-# 文件处理
-xlrd>=2.0.1
-xlwt>=1.3.0
-
-# 网络请求增强
-urllib3>=1.26.0
-certifi>=2023.7.22
-
-# 时间处理
-python-dateutil>=2.8.2
-
-# 加密和安全
-cryptography>=41.0.0
-
-# 数据序列化
-msgpack>=1.0.5
-
-# 系统监控
-psutil>=5.9.0 
+-r backend_api/requirements.txt
+-r backend_core/requirements-minimal.txt

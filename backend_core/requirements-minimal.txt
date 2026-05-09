@@ -1,27 +1,26 @@
-# 核心数据处理
+# 核心数据处理（backend_core 源码直接引用）
 pandas>=1.5.0
 numpy>=1.21.0
-scipy>=1.7.0
 
 # 数据采集
 akshare>=1.17.70
 tushare>=1.2.0
 requests>=2.28.0
-beautifulsoup4>=4.11.0
-lxml>=4.9.0
 
 # 数据库
 sqlalchemy>=1.4.0
-redis>=4.3.0
 
 # 工具
 python-dotenv>=0.20.0
-pyyaml>=6.0
-tqdm>=4.64.0
-loguru>=0.6.0
 
 # 定时任务
 apscheduler>=3.10.0
+
+# 轻量定时（news_scheduler、daily_report_scheduler 使用 import schedule）
+schedule>=1.2.0
+
+# 监控（monitoring/system_monitor.py）
+psutil>=5.9.0
 
 # 可选：机器学习（如果需要可以单独安装）
 # scikit-learn>=1.0.0
@@ -42,15 +41,8 @@ apscheduler>=3.10.0
 # celery>=5.2.0
 # flower>=1.0.0
 
-# 可选：MongoDB（如果需要可以单独安装）
+# 可选：Redis / MongoDB（如果需要可以单独安装）
+# redis>=4.3.0
 # pymongo>=4.0.0
 
-# 测试
-pytest>=7.0.0
-pytest-cov>=3.0.0
-pytest-mock>=3.8.0
-
-# 开发工具
-black>=22.0.0
-flake8>=4.0.0
-isort>=5.10.0
+# 运行 backend_core/test 时请另行安装：pip install pytest

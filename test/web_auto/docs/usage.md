@@ -7,7 +7,7 @@
   - `gms-workflow.spec.ts`：GMS 回测管理测试
   - `users-management.spec.ts`：用户管理测试
   - `market-data.spec.ts`：行情浏览测试
-  - `data-collection.spec.ts`：采集任务启动测试
+  - ~~`data-collection.spec.ts`~~：已从默认集合移除（会触发 AkShare/行情采集；见 `playwright.config.ts` 的 `testIgnore`）
   - `smoke.spec.ts`：全菜单页面可用性扫描
 - **页面对象 (POM)**：`src/pages/`
   - 存放各页面的 Locator 封装及核心 Action。

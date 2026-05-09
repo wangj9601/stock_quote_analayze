@@ -3,24 +3,52 @@ param(
     [string]$PackagePath,
     [string]$DeployRoot = "C:\deploy\stock_quote",
     [string]$PythonExe = "python",
-    [string]$NpmExe = "npm"
+    [string]$NpmExe = "npm",
+    [string]$NginxHome = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-function Write-Step([string]$msg) {
-    Write-Host "==> $msg" -ForegroundColor Cyan
+function Write-Step([string]$Msg) {
+    Write-Host "==> $Msg" -ForegroundColor Cyan
 }
 
-function Restart-IfExists([string]$name) {
-    $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
+function Restart-IfExists([string]$Name) {
+    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
     if ($null -ne $svc) {
-        Restart-Service -Name $name -Force
-        Write-Host "[RESTART] $name"
+        Restart-Service -Name $Name -Force
+        Write-Host "[RESTART] $Name"
     }
     else {
-        Write-Host "[SKIP] 服务不存在: $name"
+        Write-Host "[SKIP] Service not installed: $Name"
     }
+}
+
+function Get-NginxExe {
+    if ($NginxHome -ne "") {
+        $exe = Join-Path $NginxHome "nginx.exe"
+        if (Test-Path -LiteralPath $exe) {
+            return $exe
+        }
+        Write-Host "[WARN] nginx.exe not found at $exe, using nginx from PATH" -ForegroundColor Yellow
+    }
+    return "nginx"
+}
+
+function Expand-ZipToDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ZipPath,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationDirectory
+    )
+    $zipResolved = (Resolve-Path -LiteralPath $ZipPath).Path
+    if (Get-Command Expand-Archive -ErrorAction SilentlyContinue) {
+        Expand-Archive -LiteralPath $zipResolved -DestinationPath $DestinationDirectory -Force
+        return
+    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipResolved, $DestinationDirectory)
 }
 
 function Test-Health([string]$url, [int]$retry = 20) {
@@ -38,7 +66,7 @@ function Test-Health([string]$url, [int]$retry = 20) {
 }
 
 if (-not (Test-Path -LiteralPath $PackagePath)) {
-    throw "部署包不存在: $PackagePath"
+    throw "Package zip not found: $PackagePath"
 }
 
 $releasesDir = Join-Path $DeployRoot "releases"
@@ -48,31 +76,31 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $newRelease = Join-Path $releasesDir $timestamp
 $backupCurrent = "${currentDir}_backup_${timestamp}"
 
-Write-Step "创建新版本目录"
+Write-Step "Create release folder"
 New-Item -ItemType Directory -Path $newRelease -Force | Out-Null
 
-Write-Step "解压部署包"
-Expand-Archive -LiteralPath $PackagePath -DestinationPath $newRelease -Force
+Write-Step "Expand zip"
+Expand-ZipToDirectory -ZipPath $PackagePath -DestinationDirectory $newRelease
 
-Write-Step "复制共享配置"
+Write-Step "Copy shared .env"
 $sharedEnv = Join-Path $sharedDir ".env"
 if (Test-Path -LiteralPath $sharedEnv) {
     Copy-Item -Path $sharedEnv -Destination (Join-Path $newRelease ".env") -Force
 }
 else {
-    Write-Host "[WARN] 未找到 shared\.env，后端可能无法启动"
+    Write-Host "[WARN] shared\.env not found; backend may fail to start"
 }
 
-Write-Step "安装 Python 依赖"
+Write-Step "pip install (requirements-prod.txt -> backend_api/requirements.txt + backend_core/requirements-minimal.txt)"
 Push-Location $newRelease
 & $PythonExe -m pip install --upgrade pip
+$prodReq = Join-Path $newRelease "requirements-prod.txt"
+if (-not (Test-Path -LiteralPath $prodReq)) {
+    throw "requirements-prod.txt not found in release package (expected to aggregate backend_api/requirements.txt and backend_core/requirements-minimal.txt)."
+}
 & $PythonExe -m pip install -r requirements-prod.txt
 
-if (Test-Path -LiteralPath (Join-Path $newRelease "backend_core\requirements.txt")) {
-    & $PythonExe -m pip install -r backend_core\requirements.txt
-}
-
-Write-Step "构建 admin 前端"
+Write-Step "Build admin"
 if (Test-Path -LiteralPath (Join-Path $newRelease "admin\package.json")) {
     Push-Location (Join-Path $newRelease "admin")
     & $NpmExe install
@@ -80,48 +108,52 @@ if (Test-Path -LiteralPath (Join-Path $newRelease "admin\package.json")) {
     Pop-Location
 }
 else {
-    Write-Host "[WARN] 未找到 admin/package.json，跳过 admin 构建"
+    Write-Host "[WARN] admin/package.json not found, skip admin build"
 }
 
-Write-Step "执行可选数据库迁移"
+Write-Step "Optional migrate_db.py"
 if (Test-Path -LiteralPath (Join-Path $newRelease "migrate_db.py")) {
     & $PythonExe migrate_db.py
 }
 
-Write-Step "切换 current 版本"
+Write-Step "Switch current"
 if (Test-Path -LiteralPath $currentDir) {
     Move-Item -Path $currentDir -Destination $backupCurrent -Force
 }
 Move-Item -Path $newRelease -Destination $currentDir -Force
 
 try {
-    Write-Step "重启应用服务"
+    Write-Step "Restart Windows services (if exist)"
     Restart-IfExists "stock-quote-api"
     Restart-IfExists "stock-quote-core"
     Restart-IfExists "stock-quote-notify"
 
-    Write-Step "校验并重载 Nginx（复用现有配置）"
-    & nginx -t
+    Write-Step "nginx -t and reload"
+    $nginxExe = Get-NginxExe
+    & $nginxExe -t
     if ($LASTEXITCODE -eq 0) {
-        & nginx -s reload
+        & $nginxExe -s reload
+    }
+    else {
+        Write-Host "[WARN] nginx -t failed, skip reload" -ForegroundColor Yellow
     }
 
-    Write-Step "健康检查"
+    Write-Step "Health check"
     $okApi = Test-Health "http://127.0.0.1:5000/"
     $okWeb = Test-Health "https://www.icemaplecity.com/"
     $okAdmin = Test-Health "https://www.icemaplecity.com/admin/"
 
     if (-not ($okApi -and $okWeb -and $okAdmin)) {
-        throw "健康检查失败: api=$okApi web=$okWeb admin=$okAdmin"
+        throw "Health check failed: api=$okApi web=$okWeb admin=$okAdmin"
     }
 
     if (Test-Path -LiteralPath $backupCurrent) {
         Remove-Item -LiteralPath $backupCurrent -Recurse -Force
     }
-    Write-Host "[SUCCESS] 发布成功: $timestamp"
+    Write-Host "[SUCCESS] Released: $timestamp"
 }
 catch {
-    Write-Host "[ERROR] 发布失败，开始回滚: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERROR] Release failed, rollback: $($_.Exception.Message)" -ForegroundColor Red
     if (Test-Path -LiteralPath $currentDir) {
         Remove-Item -LiteralPath $currentDir -Recurse -Force
     }

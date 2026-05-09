@@ -67,9 +67,9 @@ import {
   Histogram,
   Monitor,
   Cpu,
-  DocumentCopy,
-  Bell,
-  Tickets
+  Tickets,
+  Select,
+  Star
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -82,18 +82,17 @@ const menuItems = [
   { path: '/users', name: '用户管理', icon: User },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
   { path: '/stock-basic', name: '股票基本信息管理', icon: Tickets },
+  { path: '/selection-results', name: '选股管理', icon: Select },
+  { path: '/gms-watchlist', name: '观察股管理', icon: Star },
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/pvfrs-strategy', name: 'PVFARS交易策略', icon: TrendCharts },
   { path: '/pvfrs-management', name: 'PVFARS策略管理', icon: DataAnalysis },
   { path: '/gms-management', name: 'GMS回测管理', icon: TrendCharts },
-  { path: '/selection-results', name: 'GMS策略管理', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },
   { path: '/models', name: '预测模型', icon: Cpu },
   { path: '/logs', name: '系统日志', icon: Document },
-  { path: '/content', name: '内容管理', icon: DocumentCopy },
-  { path: '/announcements', name: '公告发布', icon: Bell },
   { path: '/report-management', name: '报告管理', icon: Setting }
 ]
 

@@ -38,58 +38,51 @@ export async function performLogin(page: Page, context: BrowserContext): Promise
 
   await loginPage.goto()
 
-  const dashboardRe = /\/dashboard(\/|$|\?|#)/i
+  // 支持 dev 根路径 `/dashboard` 与生产式 `/admin/dashboard`
+  const dashboardRe = /\/(?:admin\/)?dashboard(?:\/|$|\?|#)/i
 
-  // 须在点击前监听 POST：login() 只点到按钮即返回，若与 waitForURL 盲目并联，401/500 时会空等 URL 直至 120s。
-  const loginPostPromise = page.waitForResponse(
-    (resp) => {
-      if (resp.request().method() !== 'POST') return false
-      const u = resp.url()
-      if (/oauth/i.test(u)) return false
-      return /\/auth\/login\b/i.test(u) || u.includes('admin/auth/login')
-    },
-    { timeout: 120_000 }
-  )
+  // 须在提交前监听 POST（用于失败时区分 401/500）；成功路径只看路由进入 dashboard。
+  // 必须 .catch：否则 listener 在超时 reject 时会变成未处理的 Promise（成功路径从不 await 该 listener）。
+  const loginPostPromise = page
+    .waitForResponse(
+      (resp) => {
+        if (resp.request().method() !== 'POST') return false
+        const u = resp.url()
+        if (/oauth/i.test(u)) return false
+        return /\/auth\/login\b/i.test(u) || u.includes('admin/auth/login')
+      },
+      { timeout: 150_000 }
+    )
+    .catch(() => null as Response | null)
 
   await loginPage.login(config.username, config.password)
 
-  let loginResp
   try {
-    loginResp = await loginPostPromise
+    await page.waitForURL(dashboardRe, { timeout: 150_000 })
   } catch {
-    if (dashboardRe.test(page.url())) {
-      loginResp = null
-    } else {
+    const postResp = await Promise.race([
+      loginPostPromise,
+      new Promise<Response | null>((resolve) => setTimeout(() => resolve(null), 8000)),
+    ])
+
+    if (postResp && !postResp.ok()) {
+      const status = postResp.status()
+      const errUi =
+        (await page.getByTestId('login-error').textContent().catch(() => null))?.trim() ||
+        (await page.locator('[role="alert"], .el-alert, .el-message').first().textContent().catch(() => null))?.trim()
+      const serverHint =
+        status >= 500
+          ? ' 此为服务端错误，请查看后端日志（POST /api/admin/auth/login）：数据库连接、依赖服务或代码异常。'
+          : ''
+      throw new Error(`登录接口 HTTP ${status}${errUi ? `：${errUi}` : ''}。${serverHint}`.trim())
+    }
+
+    if (!dashboardRe.test(page.url())) {
+      const buttonText = (await page.getByRole('button', { name: /登录|登录中/ }).first().textContent().catch(() => null))?.trim()
       const loginErr = (await page.getByTestId('login-error').textContent().catch(() => null))?.trim()
       throw new Error(
-        `未收到登录 POST 响应且未进入 dashboard。当前URL=${page.url()}${loginErr ? `，登录错误区=${loginErr}` : ''}。请确认后端已启动、Vite 将 /api 代理到后端；若按钮点击曾超时，已改为密码框 Enter 提交以避免 SPA 无整页导航导致的长时间等待。`
+        `登录后未进入 dashboard。当前URL=${page.url()}，按钮=${buttonText || '未知'}${loginErr ? `，登录错误区=${loginErr}` : ''}。请确认后端已启动、Vite 将 /api 代理到后端（默认管理端 :8001 → /api/admin/auth/login）。`
       )
-    }
-  }
-
-  if (loginResp && !loginResp.ok()) {
-    const status = loginResp.status()
-    const errUi =
-      (await page.getByTestId('login-error').textContent().catch(() => null))?.trim() ||
-      (await page.locator('[role="alert"], .el-alert, .el-message').first().textContent().catch(() => null))?.trim()
-    const serverHint =
-      status >= 500
-        ? ' 此为服务端错误，请查看后端日志（POST /api/admin/auth/login）：数据库连接、依赖服务或代码异常。'
-        : ''
-    throw new Error(`登录接口 HTTP ${status}${errUi ? `：${errUi}` : ''}。${serverHint}`.trim())
-  }
-
-  if (!dashboardRe.test(page.url())) {
-    try {
-      await page.waitForURL(dashboardRe, { timeout: 60_000 })
-    } catch {
-      if (!dashboardRe.test(page.url())) {
-        const buttonText = (await page.getByRole('button', { name: /登录|登录中/ }).first().textContent().catch(() => null))?.trim()
-        const loginErr = (await page.getByTestId('login-error').textContent().catch(() => null))?.trim()
-        throw new Error(
-          `登录成功响应后仍未进入 dashboard。当前URL=${page.url()}，按钮=${buttonText || '未知'}${loginErr ? `，登录错误区=${loginErr}` : ''}。`
-        )
-      }
     }
   }
 

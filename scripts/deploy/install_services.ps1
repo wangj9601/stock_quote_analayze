@@ -1,7 +1,7 @@
 param(
     [string]$DeployRoot = "C:\deploy\stock_quote",
     [string]$PythonExe = "python",
-    [string]$NssmExe = "C:\tools\nssm\nssm.exe",
+    [string]$NssmExe = "C:\work\stock_quote_analayze\tools\nssm.exe",
     [switch]$StartAfterInstall
 )
 
