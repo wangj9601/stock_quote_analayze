@@ -1,10 +1,14 @@
-# 注册 NSSM 服务。默认不执行 pip；首次缺依赖可加 -PreparePython（PIP_USER=0 装入 Lib\site-packages）。依赖也可由 release.ps1 预装。
+﻿# UTF-8 BOM (first char): PS 5.1 正确解析中文；勿删文件首字节 BOM。
+# 注册 NSSM 服务。默认：用即将写入 NSSM 的同一 python.exe 探测生产依赖，缺失则自动 pip（PIP_USER=0 -> Lib\site-packages，与 AppEnvironmentExtra=PYTHONNOUSERSITE=1 一致）。
+# -PreparePython：无论是否已齐全都强制 pip。-SkipAutoPreparePython：关闭自动 pip（离线/自控）。依赖也可由 release.ps1 预装。
 param(
     [string]$DeployRoot = "C:\deploy\stock_quote",
     [string]$PythonExe = "python",
     [string]$NssmExe = "C:\work\stock_quote_analayze\tools\nssm.exe",
-    # 首次部署或服务报 ModuleNotFoundError 时加上：用 PIP_USER=0 装入 Lib\site-packages（与 NSSM LocalSystem 一致）
+    # 强制 pip install -r current\requirements-prod.txt（升级/修环境）
     [switch]$PreparePython,
+    # 探测失败时不自动 pip（仍可与 -PreparePython 联用）
+    [switch]$SkipAutoPreparePython,
     [switch]$StartAfterInstall
 )
 
@@ -59,12 +63,137 @@ function Resolve-PythonExeToFullPath([string]$Preferred) {
             }
         }
     }
-    throw "无法解析 python.exe。NSSM 服务环境无 PATH 时请传入完整路径，例如: -PythonExe 'C:\Python313\python.exe'"
+    throw "Cannot resolve python.exe. Pass full path: -PythonExe 'C:\Python313\python.exe'"
+}
+
+function Test-LegacyEmojiStartBackendCore([string]$ScriptPath) {
+    if (-not (Test-Path -LiteralPath $ScriptPath)) {
+        return $false
+    }
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($ScriptPath)
+        $sig = [byte[]](0xF0, 0x9F, 0x93, 0x8A)
+        for ($i = 0; $i -le $bytes.Length - $sig.Length; $i++) {
+            $ok = $true
+            for ($j = 0; $j -lt $sig.Length; $j++) {
+                if ($bytes[$i + $j] -ne $sig[$j]) {
+                    $ok = $false
+                    break
+                }
+            }
+            if ($ok) {
+                return $true
+            }
+        }
+    }
+    catch {
+    }
+    try {
+        $raw = Get-Content -LiteralPath $ScriptPath -Raw -Encoding UTF8 -ErrorAction Stop
+        if ($null -ne $raw -and $raw.Contains('\U0001f4ca')) {
+            return $true
+        }
+        if ($null -ne $raw -and $raw.IndexOf([char]0x1F4CA) -ge 0) {
+            return $true
+        }
+    }
+    catch {
+    }
+    return $false
+}
+
+function Sync-StartBackendCoreFromRepoRoot([string]$DeployRootParam) {
+    try {
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        $src = Join-Path $repoRoot 'start_backend_core.py'
+        $dst = Join-Path $DeployRootParam 'current\start_backend_core.py'
+        if (-not (Test-Path -LiteralPath $src)) {
+            return
+        }
+        $need = $false
+        if (-not (Test-Path -LiteralPath $dst)) {
+            $need = $true
+        }
+        elseif (Test-LegacyEmojiStartBackendCore $dst) {
+            $need = $true
+        }
+        else {
+            try {
+                $tx = Get-Content -LiteralPath $dst -Raw -Encoding UTF8 -ErrorAction Stop
+                if ($tx -notmatch '\[START\] backend_core') {
+                    $need = $true
+                }
+            }
+            catch {
+                $need = $true
+            }
+            if (-not $need) {
+                $need = ((Get-Item -LiteralPath $src).LastWriteTimeUtc -gt (Get-Item -LiteralPath $dst).LastWriteTimeUtc)
+            }
+        }
+        if ($need) {
+            Copy-Item -LiteralPath $src -Destination $dst -Force
+            Write-Host '[INFO] Synced start_backend_core.py from repo root into DeployRoot\current\.' -ForegroundColor Cyan
+        }
+    }
+    catch {
+        Write-Host ('[WARN] Sync start_backend_core skipped: ' + $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
+# 与 start_backend_core.py 依赖检查一致；仅用 NSSM 将绑定的解释器探测。
+function Test-NssmPythonHasProdDeps([string]$PyExe) {
+    $snippet = 'import requests,apscheduler,akshare,tushare,pandas'
+    $p = Start-Process -FilePath $PyExe -ArgumentList @('-c', $snippet) -Wait -PassThru -NoNewWindow
+    if ($null -eq $p.ExitCode) {
+        return $false
+    }
+    return ($p.ExitCode -eq 0)
+}
+
+# 必须用此函数安装：PIP_USER=0，否则 PYTHONNOUSERSITE=1 下服务仍 ModuleNotFoundError。
+function Install-RequirementsProdForNssmPython {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExeFullPath,
+        [Parameter(Mandatory = $true)][string]$RequirementsFile,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+    Write-Host '[INFO] pip install -r requirements-prod.txt (PIP_USER=0 -> Lib\site-packages, same exe as NSSM) ...'
+    $savedPipUser = $env:PIP_USER
+    $env:PIP_USER = '0'
+    try {
+        $proc = Start-Process -FilePath $PythonExeFullPath -ArgumentList @('-m', 'pip', 'install', '-r', $RequirementsFile) -WorkingDirectory $WorkingDirectory -Wait -PassThru -NoNewWindow
+        if ($null -eq $proc.ExitCode -or $proc.ExitCode -ne 0) {
+            throw ("pip install failed (exit {0})" -f $proc.ExitCode)
+        }
+    }
+    finally {
+        if ($null -eq $savedPipUser) {
+            Remove-Item Env:\PIP_USER -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:PIP_USER = $savedPipUser
+        }
+    }
+    Write-Host '[OK] Python deps refreshed for system site-packages (matches NSSM interpreter).'
+}
+
+function Write-WarnBadPythonUtf8EnvironmentVariable {
+    foreach ($scope in @('Machine', 'User')) {
+        $pv = [Environment]::GetEnvironmentVariable('PYTHONUTF8', $scope)
+        if ([string]::IsNullOrWhiteSpace($pv)) {
+            continue
+        }
+        $t = $pv.Trim()
+        if ($t.Length -gt 12 -or $t -match '\s') {
+            Write-Host ('[WARN] PYTHONUTF8="{0}" ({1}) bad value; fix or remove in System Properties env.' -f $t, $scope) -ForegroundColor Yellow
+        }
+    }
 }
 
 function Ensure-Service([string]$ServiceName, [string]$ScriptPath, [string]$WorkDir, [string]$StdoutFile, [string]$StderrFile) {
     if (-not (Test-Path -LiteralPath $ScriptPath)) {
-        throw "脚本不存在: $ScriptPath"
+        throw ('Missing script: ' + $ScriptPath)
     }
 
     $exists = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -87,7 +216,7 @@ function Ensure-Service([string]$ServiceName, [string]$ScriptPath, [string]$Work
             $installed = $true
             break
         }
-        Write-Host "[WARN] nssm install retry $i/8 ($ServiceName): service not visible yet (marked-for-delete cooldown?)" -ForegroundColor Yellow
+        Write-Host ('[WARN] nssm install retry {0}/8 ({1}): service not visible yet' -f $i, $ServiceName) -ForegroundColor Yellow
         Start-Sleep -Seconds 6
     }
     if (-not $installed) {
@@ -102,51 +231,82 @@ function Ensure-Service([string]$ServiceName, [string]$ScriptPath, [string]$Work
     $null = Invoke-Nssm @('set', $ServiceName, 'AppRotateOnline', '1')
     $null = Invoke-Nssm @('set', $ServiceName, 'AppRotateSeconds', '86400')
     $null = Invoke-Nssm @('set', $ServiceName, 'AppExit', 'Default', 'Restart')
-    # PYTHONNOUSERSITE=1：禁止读 Administrator 的 Roaming site-packages；依赖须装在 Lib\site-packages（与 release.ps1 PIP_USER=0 一致）
-    $null = Invoke-Nssm @('set', $ServiceName, 'AppEnvironmentExtra', 'PYTHONUTF8=1 PYTHONNOUSERSITE=1')
+    # 仅一行：多行 AppEnvironmentExtra 在部分 NSSM/编码下仍会弄坏 PYTHONUTF8。PYTHONUTF8 请在系统环境变量中删除非法值。
+    $null = Invoke-Nssm @('set', $ServiceName, 'AppEnvironmentExtra', 'PYTHONNOUSERSITE=1')
 
-    Write-Host "[OK] Service installed: $ServiceName"
+    Write-Host ('[OK] Service installed: ' + $ServiceName)
 }
 
 if (-not (Test-Path -LiteralPath $NssmExe)) {
-    throw "未找到 NSSM: $NssmExe"
+    throw ('NSSM not found: ' + $NssmExe)
 }
 
 $PythonExe = Resolve-PythonExeToFullPath $PythonExe
-Write-Host "[INFO] NSSM will use Python: $PythonExe"
+Write-Host ('[INFO] NSSM will use Python: ' + $PythonExe)
 
 $current = Join-Path $DeployRoot "current"
 $sharedLogs = Join-Path $DeployRoot "shared\logs"
 
 if (-not (Test-Path -LiteralPath $current)) {
-    throw "未找到 current 目录，请先执行一次 release.ps1: $current"
+    throw ('Missing current directory (run release.ps1 first): ' + $current)
 }
+
+Sync-StartBackendCoreFromRepoRoot $DeployRoot
+
+$coreStart = Join-Path $current "start_backend_core.py"
+$coreResolved = (Resolve-Path -LiteralPath $coreStart).Path
+Write-Host '[INFO] Script path NSSM uses (must be DeployRoot\current\, not repo root):' -ForegroundColor DarkGray
+Write-Host ('       ' + $coreResolved) -ForegroundColor DarkGray
+try {
+    $rawCorePeek = Get-Content -LiteralPath $coreResolved -Raw -Encoding UTF8 -ErrorAction Stop
+    if ($rawCorePeek -notmatch '\[START\] backend_core') {
+        Write-Host '[WARN] No literal [START] backend_core in file above. Often: only repo root was updated, not current\.' -ForegroundColor Yellow
+    }
+}
+catch {
+}
+if (Test-LegacyEmojiStartBackendCore $coreStart) {
+    throw ('Deploy blocked: legacy emoji in current\start_backend_core.py. Path checked: ' + $coreResolved)
+}
+
+Write-WarnBadPythonUtf8EnvironmentVariable
 
 New-Item -ItemType Directory -Path $sharedLogs -Force | Out-Null
 
+$prodReq = Join-Path $current "requirements-prod.txt"
+$depsOk = Test-NssmPythonHasProdDeps $PythonExe
+$didPip = $false
+
 if ($PreparePython) {
-    $prodReq = Join-Path $current "requirements-prod.txt"
     if (-not (Test-Path -LiteralPath $prodReq)) {
-        throw "未找到 $prodReq ，请先 release.ps1 部署 current"
+        throw ('Missing requirements file: ' + $prodReq)
     }
-    Write-Host "[INFO] pip install -r requirements-prod.txt (PIP_USER=0 -> Lib\site-packages) ..."
-    $savedPipUser = $env:PIP_USER
-    $env:PIP_USER = '0'
-    try {
-        $p = Start-Process -FilePath $PythonExe -ArgumentList @('-m', 'pip', 'install', '-r', $prodReq) -WorkingDirectory $current -Wait -PassThru -NoNewWindow
-        if ($null -eq $p.ExitCode -or $p.ExitCode -ne 0) {
-            throw ("pip install failed (exit {0})" -f $p.ExitCode)
+    Write-Host '[INFO] -PreparePython: forcing pip install against NSSM Python.' -ForegroundColor Cyan
+    Install-RequirementsProdForNssmPython -PythonExeFullPath $PythonExe -RequirementsFile $prodReq -WorkingDirectory $current
+    $didPip = $true
+}
+elseif (-not $SkipAutoPreparePython) {
+    if (-not $depsOk) {
+        if (-not (Test-Path -LiteralPath $prodReq)) {
+            throw ('Python missing prod deps and requirements-prod.txt not found under current\: ' + $prodReq + ' (re-run release.ps1 or copy requirements-prod.txt).')
         }
+        Write-Host '[INFO] NSSM Python lacks prod deps; auto pip with SAME exe (PIP_USER=0). No manual copy-paste needed.' -ForegroundColor Cyan
+        Install-RequirementsProdForNssmPython -PythonExeFullPath $PythonExe -RequirementsFile $prodReq -WorkingDirectory $current
+        $didPip = $true
     }
-    finally {
-        if ($null -eq $savedPipUser) {
-            Remove-Item Env:\PIP_USER -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:PIP_USER = $savedPipUser
-        }
+    else {
+        Write-Host '[OK] Production imports OK on NSSM Python (requests/apscheduler/akshare/tushare/pandas).' -ForegroundColor DarkGray
     }
-    Write-Host "[OK] Python deps refreshed for system site-packages."
+}
+elseif (-not $depsOk) {
+    Write-Host '[WARN] NSSM Python missing prod deps; -SkipAutoPreparePython set — NOT running pip. Add -PreparePython or fix env.' -ForegroundColor Yellow
+}
+
+if ($didPip) {
+    $depsOkAfter = Test-NssmPythonHasProdDeps $PythonExe
+    if (-not $depsOkAfter) {
+        throw 'pip finished but prod imports still fail. Check stderr above, VPN/wheel, or Python version.'
+    }
 }
 
 Ensure-Service `
@@ -182,38 +342,52 @@ if ($StartAfterInstall) {
         try {
             $svc0 = Get-Service -Name $nm -ErrorAction SilentlyContinue
             if ($null -ne $svc0 -and $svc0.Status -eq 'Running') {
-                Write-Host ("[OK] Already running: {0}" -f $nm)
+                Write-Host ('[OK] Already running: ' + $nm)
                 continue
             }
             Start-Service -Name $nm -ErrorAction Stop
         }
         catch {
-            # Start-Service 在部分环境下会抛错，但子进程已拉起（尤其是 api 多 worker）；以下用状态为准
+            # Start-Service may throw while workers already up; verify by status
         }
         Start-Sleep -Seconds 3
         $svc = Get-Service -Name $nm -ErrorAction SilentlyContinue
         if ($null -ne $svc -and $svc.Status -eq 'Running') {
-            Write-Host ("[OK] Started: {0}" -f $nm)
+            Write-Host ('[OK] Started: ' + $nm)
             continue
         }
+        if ($null -ne $svc -and $svc.Status -eq 'Paused') {
+            try {
+                Resume-Service -Name $nm -ErrorAction Stop
+                Start-Sleep -Seconds 3
+                $svc = Get-Service -Name $nm -ErrorAction SilentlyContinue
+                if ($null -ne $svc -and $svc.Status -eq 'Running') {
+                    Write-Host ('[OK] Resumed: ' + $nm)
+                    continue
+                }
+            }
+            catch {
+            }
+        }
         $anyFail = $true
-        Write-Host ("[ERROR] Not running: {0} (status={1})" -f $nm, $(if ($null -ne $svc) { $svc.Status } else { 'missing' })) -ForegroundColor Red
+        Write-Host ('[ERROR] Not running: ' + $nm + ' (status=' + $(if ($null -ne $svc) { $svc.Status } else { 'missing' }) + ')') -ForegroundColor Red
         if (Test-Path -LiteralPath $sp.Err) {
-            Write-Host ("[INFO] Last lines of stderr ({0}):" -f $sp.Err) -ForegroundColor Yellow
+            Write-Host ('[INFO] Last lines of stderr (' + $sp.Err + '):') -ForegroundColor Yellow
             Get-Content -LiteralPath $sp.Err -Tail 40 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
         }
         else {
-            Write-Host "[INFO] No stderr log yet." -ForegroundColor Yellow
+            Write-Host '[INFO] No stderr log yet.' -ForegroundColor Yellow
         }
     }
     if ($anyFail) {
         $pipHint = Join-Path $current "requirements-prod.txt"
-        Write-Host "[HINT] Run install_services.ps1 with -PreparePython (installs requirements-prod into Lib\site-packages), or manually:" -ForegroundColor Cyan
-        Write-Host ('  $env:PIP_USER=''0''; & "{0}" -m pip install -r "{1}"' -f $PythonExe, $pipHint) -ForegroundColor Cyan
-        Write-Host "[HINT] Redeploy current via release.ps1 if start_backend_core.py still shows emoji in stderr." -ForegroundColor Cyan
+        Write-Host '[HINT] Re-run install_services.ps1 with same -PythonExe (auto pip when deps missing), or -PreparePython, or manual:' -ForegroundColor Cyan
+        $pipOneLine = '$env:PIP_USER=''0''; & "' + $PythonExe + '" -m pip install -r "' + $pipHint + '"'
+        Write-Host $pipOneLine -ForegroundColor Cyan
+        Write-Host '[HINT] Offline: use -SkipAutoPreparePython and pre-install wheels. Emoji/PYTHONUTF8: fix current\ and system env.' -ForegroundColor Cyan
         throw "One or more services failed to start. Fix Python path or check logs under shared\logs."
     }
-    Write-Host "[OK] All services running."
+    Write-Host '[OK] All services running.'
 }
 
-Write-Host "Done. Get-Service stock-quote-*"
+Write-Host 'Done. Get-Service stock-quote-*'

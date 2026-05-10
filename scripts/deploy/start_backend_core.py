@@ -34,10 +34,6 @@ def _reconfigure_stdio_utf8() -> None:
 # 须在 main() 之前执行：旧版若仍有 emoji print，先切 UTF-8 可避免进程首行即崩。
 _reconfigure_stdio_utf8()
 
-from timestamp_stdio import install_timestamp_prefix_stdio
-
-install_timestamp_prefix_stdio()
-
 
 def main():
     _reconfigure_stdio_utf8()
@@ -46,10 +42,9 @@ def main():
     print("[START] backend_core 定时采集服务")
     print("=" * 50)
 
-    # 检查依赖（requests 须先过：akshare 等会间接用到；缺它时错误曾显示在 import akshare 上）
+    # 检查依赖
     print("[CHECK] 检查依赖包...")
     try:
-        import requests
         import apscheduler
         import akshare
         import tushare
@@ -57,11 +52,9 @@ def main():
         print("[OK] 依赖包检查通过")
     except ImportError as e:
         print(f"[ERROR] 缺少依赖包: {e}")
-        print("本机: pip install -r backend_core/requirements-minimal.txt")
-        print("生产/NSSM(与 install_services 一致): 在 current 目录下对「同一 python.exe」执行:")
-        print("  $env:PIP_USER='0'; & <python.exe> -m pip install -r requirements-prod.txt")
-        print("或: install_services.ps1 -StartAfterInstall（默认缺依赖会自动 pip，与 NSSM 同一 python.exe）")
-        print("若需完整依赖: pip install -r backend_core/requirements.txt")
+        print("请运行: pip install -r backend_core/requirements-minimal.txt")
+        print("（部署/生产与 release 一致请用: pip install -r requirements-prod.txt）")
+        print("若需机器学习等完整依赖: pip install -r backend_core/requirements.txt")
         return
 
     # 启动 backend_core（自动拉起定时采集进程）

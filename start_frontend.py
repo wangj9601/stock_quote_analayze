@@ -15,6 +15,38 @@ import urllib.parse
 from pathlib import Path
 
 
+def _reconfigure_stdio_utf8() -> None:
+    """Windows 服务 / GBK 控制台下避免 print 特殊 Unicode 触发 UnicodeEncodeError。"""
+    if sys.platform != "win32":
+        return
+    for _stream in (sys.stdout, sys.stderr):
+        _fn = getattr(_stream, "reconfigure", None)
+        if callable(_fn):
+            try:
+                _fn(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_reconfigure_stdio_utf8()
+
+
+def _print_safe(*args, **kwargs) -> None:
+    """NSSM / Start-Process 重定向 stdout 时可能仍为 GBK；避免任意字符触发 UnicodeEncodeError。"""
+    sep = kwargs.pop("sep", " ")
+    end = kwargs.pop("end", "\n")
+    try:
+        print(*args, sep=sep, end=end, **kwargs)
+    except UnicodeEncodeError:
+        msg = sep.join(str(a) for a in args) + end
+        buf = getattr(sys.stdout, "buffer", None)
+        if buf is not None:
+            buf.write(msg.encode("utf-8", errors="replace"))
+            buf.flush()
+        else:
+            sys.stdout.write(msg.encode("ascii", errors="replace").decode("ascii"))
+
+
 def load_dotenv_file(dotenv_path: str) -> None:
     """轻量读取 .env 文件并写入 os.environ（不覆盖已存在的环境变量）。
     只支持 KEY=VALUE 形式，忽略空行与 # 注释行。
@@ -96,18 +128,19 @@ def find_available_port(start_port=8000, max_attempts=100):
     return None
 
 def start_server(port):
+    _reconfigure_stdio_utf8()
     try:
         server_cls = ThreadingHTTPServer if is_production_env() else HTTPServer
         with server_cls(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
-            print(f"✓ 前端服务器启动成功")
-            print(f"✓ 服务地址: http://localhost:{port}")
-            print(f"✓ 登录页面: http://localhost:{port}/login.html")
-            print(f"✓ 首页: http://localhost:{port}/index.html")
-            print(f"✓ 管理后台: http://localhost:{port}/admin")
-            print(f"✓ 运行环境: {'production(多线程)' if is_production_env() else 'development(单线程)'}")
-            print("-" * 60)
-            print("按 Ctrl+C 停止服务")
-            print("-" * 60)
+            _print_safe("[OK] frontend HTTP server started")
+            _print_safe(f"[OK] URL: http://localhost:{port}")
+            _print_safe(f"[OK] login: http://localhost:{port}/login.html")
+            _print_safe(f"[OK] index: http://localhost:{port}/index.html")
+            _print_safe(f"[OK] admin path: http://localhost:{port}/admin")
+            _print_safe(f"[OK] mode: {'production(threaded)' if is_production_env() else 'development'}")
+            _print_safe("-" * 60)
+            _print_safe("Press Ctrl+C to stop")
+            _print_safe("-" * 60)
             def open_browser():
                 time.sleep(1)
                 webbrowser.open(f'http://localhost:{port}/login.html')
@@ -116,21 +149,22 @@ def start_server(port):
             browser_thread.start()
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n前端服务已停止")
+        _print_safe("\n[STOP] frontend server stopped")
     except Exception as e:
-        print(f"❌ 服务器启动失败: {e}")
+        _print_safe(f"[ERROR] server start failed: {e}")
         sys.exit(1)
 
 def main():
-    print("=" * 60)
-    print("           股票分析系统前端启动器")
-    print("=" * 60)
+    _reconfigure_stdio_utf8()
+    _print_safe("=" * 60)
+    _print_safe("stock frontend launcher")
+    _print_safe("=" * 60)
     # 尝试读取项目根目录 .env（不覆盖已存在环境变量）
     project_root = Path(__file__).resolve().parent
     load_dotenv_file(str(project_root / ".env"))
     port = find_available_port(8000)
     if not port:
-        print("❌ 无法找到可用端口")
+        _print_safe("[ERROR] no free port found from 8000")
         sys.exit(1)
     start_server(port)
 

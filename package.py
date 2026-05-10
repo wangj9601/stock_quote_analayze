@@ -79,6 +79,8 @@ class ProjectPackager:
             "start_backend_core.py",
             "start_backend_api.py",
             "start_scheduler.py",
+            "timestamp_stdio.py",
+            "uvicorn_log_timestamp.yaml",
             
             # 数据库相关
             "migrate_db.py",

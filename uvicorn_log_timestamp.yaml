@@ -1,0 +1,22 @@
+# uvicorn --log-config：stderr 每行带时间戳（与 NSSM shared/logs/*.err.log 对齐）
+version: 1
+disable_existing_loggers: false
+formatters:
+  default:
+    format: "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+handlers:
+  default:
+    class: logging.StreamHandler
+    formatter: default
+    stream: ext://sys.stderr
+root:
+  level: INFO
+  handlers: [default]
+loggers:
+  uvicorn:
+    level: INFO
+  uvicorn.error:
+    level: INFO
+  uvicorn.access:
+    level: INFO

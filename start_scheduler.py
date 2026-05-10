@@ -41,6 +41,10 @@ def _reconfigure_stdio_utf8() -> None:
 
 _reconfigure_stdio_utf8()
 
+from timestamp_stdio import install_timestamp_prefix_stdio
+
+install_timestamp_prefix_stdio()
+
 from backend_api.config import PUSH_CONFIG, SMTP_CONFIG
 from backend_api.services.email_service import EmailService, SMTPConfig
 from backend_core.scheduler.push_scheduler import PushScheduler
@@ -110,9 +114,10 @@ def setup_logging(log_level: str):
     if not isinstance(numeric_level, int):
         raise ValueError(f'Invalid log level: {log_level}')
     
+    # stdout 已由 timestamp_stdio 加行首时间戳；此处不再重复 %(asctime)s
     logging.basicConfig(
         level=numeric_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format='%(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler('scheduler.log'),
             logging.StreamHandler(sys.stdout)

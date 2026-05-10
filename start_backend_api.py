@@ -50,6 +50,9 @@ env["PYTHONPATH"] = f"{root_dir}{os.pathsep}{os.path.join(root_dir, 'backend_api
 
 if __name__ == "__main__":
     _reconfigure_stdio_utf8()
+    from timestamp_stdio import install_timestamp_prefix_stdio
+
+    install_timestamp_prefix_stdio()
     # Windows 服务/NSSM 下 stdout 常为 GBK，勿用 emoji，否则 UnicodeEncodeError 会直接退出
     print("[START] 启动股票分析系统后端服务...")
     print(f"[PATH] Working Directory: {root_dir}")
@@ -65,6 +68,13 @@ if __name__ == "__main__":
     # Use -m uvicorn to avoid import issues and let uvicorn handle reloading properly
     cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app",
            "--host", "0.0.0.0", "--port", port]
+    _uvicorn_log_cfg = os.path.join(root_dir, "uvicorn_log_timestamp.yaml")
+    if os.path.isfile(_uvicorn_log_cfg):
+        try:
+            import yaml  # noqa: F401 — uvicorn 加载 YAML 日志配置同样需要 PyYAML
+            cmd += ["--log-config", _uvicorn_log_cfg]
+        except ImportError:
+            print("[WARN] PyYAML missing; skip --log-config (pip install PyYAML). Using uvicorn default logging.")
     if is_prod:
         # 生产环境用多 worker 提升并发；注意 workers>1 为多进程（uvicorn 机制）
         cmd += ["--workers", str(workers)]

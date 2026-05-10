@@ -10,6 +10,8 @@ param(
     [string]$ServerNginxHome = "",
     [string]$NpmExe = "npm",
     [string]$PythonExe = "python",
+    # 不打前端产物时可跳过（默认：npm install + npm run build，产物进 zip 供服务器免 npm）
+    [switch]$SkipAdminBuild,
     [switch]$SkipPackagePy,
     [string]$PackageProjectRoot = "",
     [string]$PackagePyFormat = "zip",
@@ -62,19 +64,27 @@ if (-not (Test-Path -LiteralPath $localDist)) {
     New-Item -ItemType Directory -Path $localDist | Out-Null
 }
 
-Write-Step "Admin npm install only (no npm run build; build separately if needed)"
 $adminDir = Join-Path $projectRoot "admin"
 $adminPkg = Join-Path $adminDir "package.json"
-if (-not (Test-Path -LiteralPath $adminPkg)) {
-    throw "Not found: admin/package.json"
+if (-not $SkipAdminBuild) {
+    Write-Step "Admin npm install + npm run build (artifacts included in zip; server needs no npm)"
+    if (-not (Test-Path -LiteralPath $adminPkg)) {
+        throw "Not found: admin/package.json"
+    }
+    Push-Location $adminDir
+    try {
+        Invoke-DeployCommand -Program $NpmExe -Arguments @("install")
+        Invoke-DeployCommand -Program $NpmExe -Arguments @("run", "build")
+    }
+    finally {
+        Pop-Location
+    }
 }
-
-Push-Location $adminDir
-try {
-    Invoke-DeployCommand -Program $NpmExe -Arguments @("install")
-}
-finally {
-    Pop-Location
+else {
+    Write-Step "Skip admin npm (SkipAdminBuild): ensure admin/dist exists from a previous build"
+    if (-not (Test-Path -LiteralPath (Join-Path $adminDir "dist"))) {
+        Write-Host "[WARN] admin\dist not found; UI may be missing in package." -ForegroundColor Yellow
+    }
 }
 
 if (-not $SkipPackagePy) {
@@ -174,6 +184,9 @@ if (-not $RemoteDeploy) {
     Write-Host ('    -PackagePath "C:\work\stock_quote_analayze\tmp\{0}" `' -f $packageName)
     Write-Host '    -DeployRoot "C:\work\stock_quote_analayze" `'
     Write-Host '    -NginxHome "C:\work\stock_quote_analayze\tools\nginx-1.28.0"'
+    Write-Host ""
+    Write-Host "  Low-disk / no-NSSM server (pre-built admin in zip):" -ForegroundColor Yellow
+    Write-Host '    -ManualProcessDeploy -SkipAdminBuild -SkipHealthCheck'
     Write-Host ""
     exit 0
 }

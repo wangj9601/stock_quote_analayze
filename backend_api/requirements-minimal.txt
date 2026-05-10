@@ -3,6 +3,8 @@
 
 fastapi>=0.115,<0.116
 uvicorn>=0.34.2,<0.35.0
+# uvicorn --log-config *.yaml 会 import yaml
+PyYAML>=6.0.1,<7
 python-multipart>=0.0.20,<0.0.21
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
