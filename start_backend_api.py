@@ -5,6 +5,18 @@ from pathlib import Path
 
 root_dir = os.path.dirname(os.path.abspath(__file__))
 
+
+def _reconfigure_stdio_utf8() -> None:
+    if sys.platform != "win32":
+        return
+    for _stream in (sys.stdout, sys.stderr):
+        _fn = getattr(_stream, "reconfigure", None)
+        if callable(_fn):
+            try:
+                _fn(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
 # 轻量读取 .env 文件并写入 env（不覆盖已存在环境变量）
 def _load_dotenv_into_env(env: dict, dotenv_path: str) -> None:
     try:
@@ -37,16 +49,18 @@ current_path = env.get("PYTHONPATH", "")
 env["PYTHONPATH"] = f"{root_dir}{os.pathsep}{os.path.join(root_dir, 'backend_api')}{os.pathsep}{current_path}"
 
 if __name__ == "__main__":
-    print("🚀 启动股票分析系统后端服务...")
-    print(f"📁 Working Directory: {root_dir}")
-    print(f"🐍 PYTHONPATH set to include: {root_dir} and backend_api")
+    _reconfigure_stdio_utf8()
+    # Windows 服务/NSSM 下 stdout 常为 GBK，勿用 emoji，否则 UnicodeEncodeError 会直接退出
+    print("[START] 启动股票分析系统后端服务...")
+    print(f"[PATH] Working Directory: {root_dir}")
+    print(f"[PATH] PYTHONPATH 已包含: {root_dir} 与 backend_api")
     is_prod = _is_production_env(env)
     port = str(env.get("BACKEND_PORT") or env.get("PORT") or "5000")
     workers = int(env.get("UVICORN_WORKERS") or env.get("BACKEND_WORKERS") or (os.cpu_count() or 2))
     if workers < 1:
         workers = 1
-    print(f"🌍 运行环境: {'production(多worker)' if is_prod else 'development(--reload)'}")
-    print(f"🔌 端口: {port}")
+    print(f"[ENV] 运行环境: {'production(多worker)' if is_prod else 'development(--reload)'}")
+    print(f"[ENV] 端口: {port}")
     
     # Use -m uvicorn to avoid import issues and let uvicorn handle reloading properly
     cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app",
@@ -60,6 +74,6 @@ if __name__ == "__main__":
     try:
         subprocess.run(cmd, env=env, cwd=root_dir)
     except KeyboardInterrupt:
-        print("\n🛑 Service stopped")
+        print("\n[STOP] Service stopped")
     except Exception as e:
-        print(f"❌ Failed to start service: {e}")
+        print(f"[ERROR] Failed to start service: {e}")

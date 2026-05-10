@@ -26,6 +26,21 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+
+def _reconfigure_stdio_utf8() -> None:
+    if sys.platform != "win32":
+        return
+    for _stream in (sys.stdout, sys.stderr):
+        _fn = getattr(_stream, "reconfigure", None)
+        if callable(_fn):
+            try:
+                _fn(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_reconfigure_stdio_utf8()
+
 from backend_api.config import PUSH_CONFIG, SMTP_CONFIG
 from backend_api.services.email_service import EmailService, SMTPConfig
 from backend_core.scheduler.push_scheduler import PushScheduler

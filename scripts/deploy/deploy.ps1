@@ -62,7 +62,7 @@ if (-not (Test-Path -LiteralPath $localDist)) {
     New-Item -ItemType Directory -Path $localDist | Out-Null
 }
 
-Write-Step "Build admin (npm install + npm run build)"
+Write-Step "Admin npm install only (no npm run build; build separately if needed)"
 $adminDir = Join-Path $projectRoot "admin"
 $adminPkg = Join-Path $adminDir "package.json"
 if (-not (Test-Path -LiteralPath $adminPkg)) {
@@ -72,7 +72,6 @@ if (-not (Test-Path -LiteralPath $adminPkg)) {
 Push-Location $adminDir
 try {
     Invoke-DeployCommand -Program $NpmExe -Arguments @("install")
-    Invoke-DeployCommand -Program $NpmExe -Arguments @("run", "build")
 }
 finally {
     Pop-Location

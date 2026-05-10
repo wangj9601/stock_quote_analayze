@@ -10,7 +10,7 @@ passlib[bcrypt]==1.7.4
 email-validator==2.1.0.post1
 
 # 数据库
-sqlalchemy==2.0.27
+sqlalchemy>=2.0.36,<2.1
 psycopg2-binary==2.9.10
 
 # 数据处理（本地完整安装亦建议与 minimal 一致，避免 Py3.13 无 wheel）
@@ -22,7 +22,7 @@ xlrd>=2.0.1
 
 # 工具
 python-dotenv==1.0.1
-pydantic>=2.10.0,<3
+pydantic>=2.11.7,<3
 aiohttp==3.11.18
 
 # 报告导出（admin/pvfrs_admin_routes：HTML -> PDF，延迟 import）
