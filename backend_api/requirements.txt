@@ -13,16 +13,16 @@ email-validator==2.1.0.post1
 sqlalchemy==2.0.27
 psycopg2-binary==2.9.10
 
-# 数据处理
-pandas==2.2.0
-numpy==1.26.4
+# 数据处理（本地完整安装亦建议与 minimal 一致，避免 Py3.13 无 wheel）
+pandas>=2.2.3,<3
+numpy>=2.1.0,<3
 akshare>=1.17.70
 openpyxl>=3.1.5,<4.0.0
 xlrd>=2.0.1
 
 # 工具
 python-dotenv==1.0.1
-pydantic==2.6.1
+pydantic>=2.10.0,<3
 aiohttp==3.11.18
 
 # 报告导出（admin/pvfrs_admin_routes：HTML -> PDF，延迟 import）

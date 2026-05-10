@@ -22,7 +22,9 @@ def main():
         print("✅ 依赖包检查通过")
     except ImportError as e:
         print(f"❌ 缺少依赖包: {e}")
-        print("请运行: pip install -r backend_core/requirements.txt")
+        print("请运行: pip install -r backend_core/requirements-minimal.txt")
+        print("（部署/生产与 release 一致请用: pip install -r requirements-prod.txt）")
+        print("若需机器学习等完整依赖: pip install -r backend_core/requirements.txt")
         return
 
     # 启动 backend_core（自动拉起定时采集进程）

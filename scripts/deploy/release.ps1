@@ -9,6 +9,32 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "Assert-RequirementsProdMinimal.ps1")
+
+function Assert-LastExitCode([string]$StepName) {
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        throw "$StepName failed (exit code $LASTEXITCODE)."
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($PythonExe)) {
+    throw "PythonExe is empty. Pass e.g. -PythonExe (Get-Command python).Source"
+}
+
+# npm.ps1 + `& npm ...` breaks under PowerShell; use npm.cmd on Windows when using the call operator.
+if ($env:OS -eq 'Windows_NT' -and ([string]::IsNullOrWhiteSpace($NpmExe) -or $NpmExe.Trim() -eq 'npm')) {
+    $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($null -ne $npmCmd) {
+        $NpmExe = [string]$npmCmd.Source
+    }
+}
+
+$npmResolved = Get-Command $NpmExe -ErrorAction SilentlyContinue
+if ($null -eq $npmResolved) {
+    throw "Cannot resolve npm for '&': '$NpmExe'. Install Node.js (ensure npm.cmd is on PATH) or pass -NpmExe with full path to npm.cmd."
+}
+$NpmExe = [string]$npmResolved.Source
+
 function Write-Step([string]$Msg) {
     Write-Host "==> $Msg" -ForegroundColor Cyan
 }
@@ -91,14 +117,18 @@ else {
     Write-Host "[WARN] shared\.env not found; backend may fail to start"
 }
 
-Write-Step "pip install (requirements-prod.txt -> backend_api/requirements.txt + backend_core/requirements-minimal.txt)"
+Write-Step 'pip install (requirements-prod.txt -> backend_api/requirements-minimal.txt + backend_core/requirements-minimal.txt)'
 Push-Location $newRelease
 & $PythonExe -m pip install --upgrade pip
+Assert-LastExitCode "pip install --upgrade pip"
 $prodReq = Join-Path $newRelease "requirements-prod.txt"
 if (-not (Test-Path -LiteralPath $prodReq)) {
-    throw "requirements-prod.txt not found in release package (expected to aggregate backend_api/requirements.txt and backend_core/requirements-minimal.txt)."
+    throw 'requirements-prod.txt not found in release package (expected to aggregate backend_api/requirements-minimal.txt and backend_core/requirements-minimal.txt).'
 }
+Assert-RequirementsProdMinimalDeps -RequirementsProdPath $prodReq
+Write-Host '[pip] requirements-prod only (backend_api + backend_core minimal); no torch/tensorflow ML stacks.' -ForegroundColor DarkGray
 & $PythonExe -m pip install -r requirements-prod.txt
+Assert-LastExitCode "pip install -r requirements-prod.txt"
 
 Write-Step "Build admin"
 if (Test-Path -LiteralPath (Join-Path $newRelease "admin\package.json")) {
@@ -123,7 +153,7 @@ if (Test-Path -LiteralPath $currentDir) {
 Move-Item -Path $newRelease -Destination $currentDir -Force
 
 try {
-    Write-Step "Restart Windows services (if exist)"
+    Write-Step 'Restart Windows services (if exist)'
     Restart-IfExists "stock-quote-api"
     Restart-IfExists "stock-quote-core"
     Restart-IfExists "stock-quote-notify"
@@ -153,7 +183,7 @@ try {
     Write-Host "[SUCCESS] Released: $timestamp"
 }
 catch {
-    Write-Host "[ERROR] Release failed, rollback: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ("ERROR: Release failed, rollback: " + $_.Exception.Message) -ForegroundColor Red
     if (Test-Path -LiteralPath $currentDir) {
         Remove-Item -LiteralPath $currentDir -Recurse -Force
     }

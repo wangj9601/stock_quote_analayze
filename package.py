@@ -105,10 +105,6 @@ class ProjectPackager:
             
             # 配置文件
             ".gitattributes",
-            
-            # 测试文件
-            "backend_api/test/**/*",
-            "backend_core/test/**/*",
         ]
     
     def get_exclude_patterns(self) -> List[str]:
@@ -174,12 +170,19 @@ class ProjectPackager:
             
             # 临时文档
             "**/~$*.docx",
+
+            # 测试目录（远程部署包不含）
+            "**/test/**",
+            "**/tests/**",
         ]
     
     def should_include_file(self, file_path: Path, include_patterns: List[str], exclude_patterns: List[str]) -> bool:
         """判断文件是否应该包含在打包中"""
         file_str = str(file_path.relative_to(self.project_root))
-        
+        norm_parts = file_str.replace("\\", "/").split("/")
+        if "test" in norm_parts or "tests" in norm_parts:
+            return False
+
         # 检查排除模式
         for pattern in exclude_patterns:
             if self.match_pattern(file_str, pattern):
@@ -213,7 +216,11 @@ class ProjectPackager:
                     return str((root_path / d).relative_to(self.project_root))
                 except ValueError:
                     return str(root_path / d)
-            dirs[:] = [d for d in dirs if not any(self.match_pattern(_rel(d), pattern) for pattern in exclude_patterns)]
+            dirs[:] = [
+                d for d in dirs
+                if not any(p in ("test", "tests") for p in (root_path / d).relative_to(self.project_root).parts)
+                and not any(self.match_pattern(_rel(d), pattern) for pattern in exclude_patterns)
+            ]
             for file in files:
                 file_path = root_path / file
                 if self.should_include_file(file_path, include_patterns, exclude_patterns):
@@ -534,7 +541,11 @@ class ProjectPackager:
                     return str((root_path / d).relative_to(self.project_root))
                 except ValueError:
                     return str(root_path / d)
-            dirs[:] = [d for d in dirs if not any(self.match_pattern(_rel(d), pattern) for pattern in minimal_excludes)]
+            dirs[:] = [
+                d for d in dirs
+                if not any(p in ("test", "tests") for p in (root_path / d).relative_to(self.project_root).parts)
+                and not any(self.match_pattern(_rel(d), pattern) for pattern in minimal_excludes)
+            ]
             for filename in filenames:
                 file_path = root_path / filename
                 if self.should_include_file(file_path, minimal_patterns, minimal_excludes):

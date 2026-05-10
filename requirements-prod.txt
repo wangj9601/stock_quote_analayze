@@ -1,7 +1,9 @@
-# 生产环境依赖（与新版 backend_api/requirements.txt + backend_core 最小运行时对齐）
+# 生产环境依赖（backend_api + backend_core 均使用各自 requirements-minimal.txt）
 # 不含开发/测试工具（pytest、black 等见 backend_api/requirements-dev.txt）。
-# 修改 API 运行时依赖请编辑：backend_api/requirements.txt
+# 修改 API 生产最小依赖请编辑：backend_api/requirements-minimal.txt（完整 API 含 PDF 等见 backend_api/requirements.txt）
 # 修改 core 最小依赖请编辑：backend_core/requirements-minimal.txt
+# 禁止在此文件中加入 -r backend_api/requirements.txt（含 xhtml2pdf 等，按需单独安装）
+# 禁止在此文件中加入 -r backend_core/requirements.txt（完整依赖含 torch/tensorflow 等，仅用于本地/完整环境）。
 
--r backend_api/requirements.txt
+-r backend_api/requirements-minimal.txt
 -r backend_core/requirements-minimal.txt

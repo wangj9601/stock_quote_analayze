@@ -161,12 +161,14 @@ class Deployer:
             environment = self.config.get("environment", "production")
             logger.info(f"🔧 部署环境: {environment}")
             
-            # 安装生产环境依赖
+            # 安装生产环境依赖（与 release.ps1 一致：仅 requirements-prod 内嵌的 api/core minimal，不装 ML 全量包）
+            used_requirements_prod = False
             if os.path.exists("requirements-prod.txt"):
-                logger.info("📦 安装生产环境依赖...")
-                subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements-prod.txt"], 
+                logger.info("📦 安装生产环境依赖 (requirements-prod.txt -> api/core requirements-minimal)...")
+                subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements-prod.txt"],
                              check=True, capture_output=True)
                 logger.info("✅ 生产环境依赖安装完成")
+                used_requirements_prod = True
             elif os.path.exists("requirements.txt"):
                 logger.info("📦 安装标准依赖...")
                 subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], 
@@ -183,8 +185,8 @@ class Deployer:
                              check=True, capture_output=True)
                 logger.info("✅ 开发环境依赖安装完成")
             
-            # 安装子模块依赖（如果存在且需要）
-            if self.config.get("install_submodules", True):
+            # 安装子模块依赖（若未使用 requirements-prod：否则会重复安装并可能拉取 backend_api/requirements.txt / backend_core 全量含 ML）
+            if self.config.get("install_submodules", True) and not used_requirements_prod:
                 # 安装backend_core依赖 - 优先使用简化版本
                 if os.path.exists("backend_core/requirements-minimal.txt"):
                     logger.info("📦 安装backend_core简化依赖...")
@@ -198,10 +200,17 @@ class Deployer:
                     logger.info("✅ backend_core完整依赖安装完成")
                 
                 # 安装backend_api依赖
-                if os.path.exists("backend_api/requirements.txt"):
+                if os.path.exists("backend_api/requirements-minimal.txt"):
+                    logger.info("📦 安装backend_api简化依赖...")
+                    subprocess.run([sys.executable, "-m", "pip", "install", "-r", "backend_api/requirements-minimal.txt"],
+                                 check=True, capture_output=True)
+                    logger.info("✅ backend_api简化依赖安装完成")
+                elif os.path.exists("backend_api/requirements.txt"):
                     subprocess.run([sys.executable, "-m", "pip", "install", "-r", "backend_api/requirements.txt"], 
                                  check=True, capture_output=True)
                     logger.info("✅ backend_api依赖安装完成")
+            elif used_requirements_prod:
+                logger.info("📦 已使用 requirements-prod.txt，跳过子模块重复 pip（避免装入完整 backend_api / backend_core 清单）")
             
             return True
             

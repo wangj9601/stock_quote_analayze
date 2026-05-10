@@ -32,7 +32,8 @@ def main():
         print("✅ 依赖包检查通过")
     except ImportError as e:
         print(f"❌ 缺少依赖包: {e}")
-        print("请运行: pip install -r requirements.txt")
+        print("请运行: pip install -r backend_api/requirements-minimal.txt")
+        print("（部署/生产与 release 一致请用: pip install -r requirements-prod.txt）")
         return
 
     print("\n💾 初始化数据库...")

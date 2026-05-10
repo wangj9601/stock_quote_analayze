@@ -1,3 +1,4 @@
+# 仅注册 NSSM 服务（不执行 pip）。Python 依赖须已由 release.ps1 安装：requirements-prod.txt -> backend_api/requirements-minimal.txt + backend_core/requirements-minimal.txt。
 param(
     [string]$DeployRoot = "C:\deploy\stock_quote",
     [string]$PythonExe = "python",

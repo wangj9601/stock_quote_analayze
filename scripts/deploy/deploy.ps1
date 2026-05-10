@@ -18,6 +18,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# npm.ps1 + PowerShell's call operator `& npm ...` misparses $MyInvocation (errors like Unknown command "Program"/"pm").
+# Prefer npm.cmd on Windows — same as typing `npm` at an interactive prompt.
+if ($env:OS -eq 'Windows_NT' -and $NpmExe -eq 'npm') {
+    $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($null -ne $npmCmd) {
+        $NpmExe = $npmCmd.Source
+    }
+}
+
 function Write-Step([string]$Msg) {
     Write-Host "==> $Msg" -ForegroundColor Cyan
 }
@@ -42,6 +51,8 @@ if ($RemoteDeploy) {
 }
 
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\")
+. (Join-Path $PSScriptRoot "Assert-RequirementsProdMinimal.ps1")
+Assert-RequirementsProdMinimalDeps -RequirementsProdPath (Join-Path $projectRoot.Path "requirements-prod.txt")
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $packageName = "stock_quote_release_$timestamp.zip"
 $localDist = Join-Path $projectRoot "dist"
@@ -91,15 +102,25 @@ if (Test-Path -LiteralPath $localPackage) {
 }
 
 $zipExcludeTopLevel = @(
-    '.git',
+    '.agent',
+    '.auth',
     '.cursor',
-    'dist',
-    'node_modules',
-    '.venv',
-    'venv',
-    'env',
+    '.gemini',
+    '.git',
+    '.github',
+    '.hypothesis',
     '.idea',
-    '.vs'
+    '.kiro',
+    '.pytest_cache',
+    '.qoder',
+    '.vs',
+    '.venv',
+    '.vscode',
+    'dist',
+    'env',
+    'node_modules',
+    'test',
+    'venv'
 )
 $rootPath = $projectRoot.Path
 $zipEntries = @(Get-ChildItem -LiteralPath $rootPath -Force | Where-Object { $zipExcludeTopLevel -notcontains $_.Name })
@@ -117,7 +138,7 @@ try {
     foreach ($entry in $zipEntries) {
         $targetPath = Join-Path $stagingRoot $entry.Name
         if ($entry.PSIsContainer) {
-            & robocopy $entry.FullName $targetPath /E /XD node_modules __pycache__ .pytest_cache .mypy_cache /NFL /NDL /NJH /NJS /nc /ns /np
+            & robocopy $entry.FullName $targetPath /E /XD node_modules __pycache__ .pytest_cache .mypy_cache .git .agent .auth .cursor .gemini .github .hypothesis .kiro .qoder .vscode test tests /NFL /NDL /NJH /NJS /nc /ns /np
             if ($LASTEXITCODE -ge 8) {
                 throw ("robocopy failed for {0} exit {1}" -f $entry.Name, $LASTEXITCODE)
             }

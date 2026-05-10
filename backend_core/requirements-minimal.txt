@@ -1,6 +1,7 @@
 # 核心数据处理（backend_core 源码直接引用）
-pandas>=1.5.0
-numpy>=1.21.0
+# 与 backend_api/requirements-minimal 合并安装时，以较高下界为准（如 numpy>=2.1 以支持 Py3.13 Windows wheel）。
+pandas>=1.5.0,<3
+numpy>=1.21.0,<3
 
 # 数据采集
 akshare>=1.17.70

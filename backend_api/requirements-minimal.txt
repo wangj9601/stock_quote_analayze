@@ -11,14 +11,16 @@ email-validator==2.1.0.post1
 sqlalchemy==2.0.27
 psycopg2-binary==2.9.10
 
-pandas==2.2.0
-numpy==1.26.4
+# Python 3.13 + Windows：numpy 1.26 无 cp313 wheel，会走源码编译并依赖 VS/C 编译器；请使用带 wheel 的版本。
+pandas>=2.2.3,<3
+numpy>=2.1.0,<3
 akshare>=1.17.70
 openpyxl>=3.1.5,<4.0.0
 xlrd>=2.0.1
 
 python-dotenv==1.0.1
-pydantic==2.6.1
+# pydantic 2.6 / pydantic-core 2.16 在 Py3.13 常无 wheel，会源码编译（Rust）卡在 Preparing metadata；需 2.10+ 搭配新版 pydantic-core。
+pydantic>=2.10.0,<3
 aiohttp==3.11.18
 
 psutil>=5.9.0
