@@ -51,6 +51,7 @@ try:
         UserUpdate = getattr(models_module, 'UserUpdate', None)
         MeanFrequencyResonanceIndicators = getattr(models_module, 'MeanFrequencyResonanceIndicators', None)
         GMSSignalTrace = getattr(models_module, 'GMSSignalTrace', None)
+        VolumeShrinkBreakoutSignal = getattr(models_module, 'VolumeShrinkBreakoutSignal', None)
         GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
         GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
         GMSRuntimeConfig = getattr(models_module, 'GMSRuntimeConfig', None)
@@ -143,6 +144,7 @@ except Exception as e:
     UserUpdate = None
     MeanFrequencyResonanceIndicators = None
     GMSSignalTrace = None
+    VolumeShrinkBreakoutSignal = None
     GMSStrategyVersion = None
     GMSStrategyVersionStock = None
     GMSRuntimeConfig = None
@@ -238,6 +240,7 @@ __all__ = [
     'UserUpdate',
     'MeanFrequencyResonanceIndicators',
     'GMSSignalTrace',
+    'VolumeShrinkBreakoutSignal',
     'GMSStrategyVersion',
     'GMSStrategyVersionStock',
     'GMSRuntimeConfig',

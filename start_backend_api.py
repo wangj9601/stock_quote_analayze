@@ -66,6 +66,9 @@ if __name__ == "__main__":
     print(f"[ENV] 端口: {port}")
     
     # Use -m uvicorn to avoid import issues and let uvicorn handle reloading properly
+    if sys.platform == "win32":
+        env.setdefault("PYTHONUTF8", "1")
+
     cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app",
            "--host", "0.0.0.0", "--port", port]
     _uvicorn_log_cfg = os.path.join(root_dir, "uvicorn_log_timestamp.yaml")

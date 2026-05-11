@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3倍量缩量突破 — 信号历史</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+
+    <div class="container">
+        <div class="gms-trace-card" title="本页只读已落库记录，不在此重新跑选股算法。">
+            <div class="gms-trace-title" title="与选股页「3倍量缩量突破」命中写入同一张表。">3倍量缩量突破 — 已落库信号历史</div>
+            <p class="gms-backtest-hint" style="margin-bottom:12px;" title="无数据时请先跑选股且 persist=true，并确认库中已建 volume_shrink_breakout_signals 表。">
+                数据来自选股命中写入的 <code>volume_shrink_breakout_signals</code> 表；未跑过选股或曾加 <code>persist=false</code> 则无记录。
+                列表接口优先 <code>/api/vsb/signals</code>（在 <code>main.app</code> 上直挂）；若 404 再依次尝试 <code>/api/screening/vsb-signals</code>、<code>/api/stock/vsb-signals</code>。
+                无记录时可点<strong>重算并落库</strong>：按<strong>最新日线</strong>跑一次策略，若当前满足条件则写入表。
+                若要在下方「开始/结束日期」对应区间内<strong>逐交易日</strong>模拟「当时最新 K 线」并落库，请点<strong>区间内逐日回放</strong>（耗时与区间长度成正比，单次最多约 500 个交易日）。
+            </p>
+            <div class="toolbar" title="按 signal_date（信号日=突破日）区间过滤；修改后点查询。">
+                <div class="toolbar-row">
+                    <label title="从选股结果「信号历史」链入时会自动带上 code。">股票: <span id="stockDisplay">--</span></label>
+                    <label title="列表筛选与逐日回放均使用该起止：signal_date 起始（含）。">开始日期: <input type="date" id="startDate" title="列表：signal_date ≥ 该日；逐日回放：回放窗口起点（含）。"></label>
+                    <label title="列表筛选与逐日回放均使用该起止：signal_date 结束（含）。">结束日期: <input type="date" id="endDate" title="列表：signal_date ≤ 该日；逐日回放：回放窗口终点（含）。"></label>
+                    <button id="searchBtn" title="按股票代码与日期区间重新拉取列表（最多 200 条）。">查询</button>
+                    <button type="button" id="vsbRecalcBtn" title="按最新 K 线重跑 VSB；命中则写入或更新 volume_shrink_breakout_signals，随后自动刷新本页列表。">重算并落库</button>
+                    <button type="button" id="vsbReplayBtn" title="对开始～结束日期内每个交易日，以该日为「最新日」重算 VSB 并批量落库；完成后自动刷新列表。">区间内逐日回放</button>
+                </div>
+            </div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;" title="请求接口中，请稍候。">加载中...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;" title="该区间无落库记录，或尚未跑过选股落库。">暂无信号记录</div>
+            <div class="table-wrapper" title="鼠标悬停表头可查看各列含义。">
+                <table class="trace-table" id="vsbTable">
+                    <thead>
+                        <tr>
+                            <th title="表中主键日期：突破日，即 signal_date。">信号日</th>
+                            <th title="侦测日（阶段1）日期，与选股结果 boom_date 一致。">爆量日</th>
+                            <th title="侦测日收盘价。">爆量收盘</th>
+                            <th title="侦测日量相对前一日的倍数。">量比(对前日)</th>
+                            <th title="侦测日处的 MA5、MA10、MA20。">MA5/10/20</th>
+                            <th title="突破日（触发日）收盘价。">突破收盘</th>
+                            <th title="突破日成交量。">突破量</th>
+                            <th title="突破日涨跌幅%。">涨跌幅%</th>
+                            <th title="落库时的参考买点摘要。">参考买点</th>
+                            <th title="强度分与等级。">信号强度</th>
+                            <th title="落库时的提醒列表。">强度提醒</th>
+                            <th title="选股接口传入的 run_search_date，便于区分批次。">落库检索日</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/stock_vsb_trace.js"></script>
+
+    <footer class="icp-footer">
+        <div class="icp-container">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">京ICP备18061239号-1</a>
+        </div>
+    </footer>
+</body>
+
+</html>

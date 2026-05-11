@@ -277,6 +277,45 @@ CREATE TABLE IF NOT EXISTS public.gms_signal_trace
 ALTER TABLE IF EXISTS public.gms_signal_trace
     OWNER to postgres;
 
+-- 3倍量缩量突破策略信号（选股命中落库；signal_date 为突破日）
+CREATE TABLE IF NOT EXISTS public.volume_shrink_breakout_signals (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(32) NOT NULL,
+    name VARCHAR(100) NOT NULL DEFAULT '',
+    signal_date DATE NOT NULL,
+    boom_date VARCHAR(20),
+    boom_close REAL,
+    boom_volume REAL,
+    boom_volume_ratio_vs_prev REAL,
+    ma5_at_boom REAL,
+    ma10_at_boom REAL,
+    ma20_at_boom REAL,
+    breakout_close REAL,
+    breakout_volume REAL,
+    current_change_percent REAL,
+    volume_ratio_param REAL,
+    boom_lookback_min INTEGER,
+    boom_lookback_max INTEGER,
+    boards_json TEXT,
+    run_search_date VARCHAR(20),
+    signal_strength INTEGER,
+    signal_strength_level VARCHAR(10),
+    buy_signal_text VARCHAR(220),
+    signal_reminders_json TEXT,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_vsb_signal_code_signal_date UNIQUE (code, signal_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vsb_signals_signal_date ON public.volume_shrink_breakout_signals (signal_date);
+CREATE INDEX IF NOT EXISTS idx_vsb_signals_code ON public.volume_shrink_breakout_signals (code);
+
+-- 已有表升级：买点/强度/提醒（可重复执行；表须已存在）
+ALTER TABLE public.volume_shrink_breakout_signals ADD COLUMN IF NOT EXISTS signal_strength INTEGER;
+ALTER TABLE public.volume_shrink_breakout_signals ADD COLUMN IF NOT EXISTS signal_strength_level VARCHAR(10);
+ALTER TABLE public.volume_shrink_breakout_signals ADD COLUMN IF NOT EXISTS buy_signal_text VARCHAR(220);
+ALTER TABLE public.volume_shrink_breakout_signals ADD COLUMN IF NOT EXISTS signal_reminders_json TEXT;
+
 
     -- 策略配置表
 CREATE TABLE pvfrs_strategy_configs (

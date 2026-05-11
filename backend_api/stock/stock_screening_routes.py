@@ -11,7 +11,7 @@ import logging
 import asyncio
 import math
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # PVFRS 选股为 CPU 密集型，允许较长超时（秒）；Nginx 的 proxy_read_timeout 需 >= 此值
 PVFRS_SCREENING_TIMEOUT = 300
@@ -25,6 +25,7 @@ def _int_env(name: str, default: int) -> int:
 
 
 GMS_SCREENING_TIMEOUT = max(60, _int_env("GMS_SCREENING_TIMEOUT", 600))
+VSB_SCREENING_TIMEOUT = max(60, _int_env("VSB_SCREENING_TIMEOUT", 600))
 
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -43,9 +44,10 @@ from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 
 logger = logging.getLogger(__name__)
 logger.info(
-    "选股接口超时: PVFRS_SCREENING_TIMEOUT=%ss, GMS_SCREENING_TIMEOUT=%ss（全A股请保证网关超时≥此值）",
+    "选股接口超时: PVFRS_SCREENING_TIMEOUT=%ss, GMS_SCREENING_TIMEOUT=%ss, VSB_SCREENING_TIMEOUT=%ss（全A股请保证网关超时≥此值）",
     PVFRS_SCREENING_TIMEOUT,
     GMS_SCREENING_TIMEOUT,
+    VSB_SCREENING_TIMEOUT,
 )
 
 router = APIRouter(prefix="/api/screening", tags=["screening"])
@@ -373,6 +375,15 @@ except Exception as e:
     print(f"GMS 前端接口导入失败: {e}")
     logger.warning(f"GMS 前端接口导入失败: {e}")
     GMS_AVAILABLE = False
+
+try:
+    from backend_core.strategies.volume_shrink_breakout import VolumeShrinkBreakoutFrontendInterface
+
+    VSB_AVAILABLE = True
+except Exception as e:
+    VolumeShrinkBreakoutFrontendInterface = None  # type: ignore
+    VSB_AVAILABLE = False
+    logger.warning("VSB 策略模块导入失败: %s", e)
 
 # PVFRS 策略参数（供选股界面显示与编辑）
 PVFRS_PARAM_KEYS = [
@@ -1922,6 +1933,255 @@ async def get_low_nine_strategy(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"低九策略选股执行失败: {str(e)}"
         )
+
+
+@router.get("/volume-shrink-breakout-strategy")
+async def get_volume_shrink_breakout_strategy(
+    scope: str = Query("all", description="股票范围: all(全A，可用 limit 压测), watchlist(当前登录用户自选股)"),
+    limit: Optional[int] = Query(None, ge=1, description="限制扫描数量（测试用；全市场时强烈建议先设 limit）"),
+    date: Optional[str] = Query(
+        None,
+        description="筛选基准日 YYYY-MM-DD；不传则按当前自然日。若 historical_quotes 无该日或晚于表内最新日，则自动用表内全局最新 date 作为 K 线窗口止日",
+    ),
+    volume_ratio: Optional[float] = Query(None, ge=1.0, le=30.0, description="爆量相对前一交易日倍数，默认读配置"),
+    boom_lookback_min: Optional[int] = Query(None, ge=1, le=250, description="爆量日在最近 K 线中的最小下标"),
+    boom_lookback_max: Optional[int] = Query(None, ge=1, le=250, description="爆量日在最近 K 线中的最大下标"),
+    boards: Optional[List[str]] = Query(
+        None,
+        description="板块/代码段过滤，可多传：CYB创业板 KCB科创板 SH_MAIN沪市主板 SZ_MAIN深市主板 SZ_SME中小板；不传=全市场",
+    ),
+    persist: bool = Query(True, description="为 true 时将选股命中写入 volume_shrink_breakout_signals"),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """
+    3倍量缩量突破策略（独立 core 模块）。
+    爆量：volume[k] >= volume_ratio * volume[k+1]；均线多头在爆量日；最新日缩量突破爆量日收盘。
+    """
+    if not VSB_AVAILABLE or VolumeShrinkBreakoutFrontendInterface is None:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "3倍量缩量突破策略模块不可用", "data": []},
+        )
+
+    stock_codes: Optional[List[str]] = None
+    if scope == "watchlist":
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="查看自选股需要登录",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username: str = payload.get("sub")
+            if username is None:
+                raise HTTPException(status_code=401, detail="无效的认证凭据")
+            from backend_api.models import User
+
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="用户不存在")
+            watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+            if not watchlist_items:
+                from backend_core.strategies.volume_shrink_breakout.data_loader import VolumeShrinkBreakoutDataLoader
+
+                eff = VolumeShrinkBreakoutDataLoader.resolve_effective_history_end_date(db, date)
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": eff,
+                        "strategy_name": "3倍量缩量突破",
+                        "scope": "watchlist",
+                        "message": "您的自选股列表为空",
+                    }
+                )
+            stock_codes = [str(item.stock_code).strip() for item in watchlist_items]
+        except JWTError:
+            raise HTTPException(status_code=401, detail="无效的认证凭据")
+    elif scope != "all":
+        raise HTTPException(status_code=400, detail="scope 仅支持 all 或 watchlist")
+
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        return VolumeShrinkBreakoutFrontendInterface.screen(
+            db,
+            scope=scope,
+            limit=limit,
+            stock_codes=stock_codes,
+            volume_ratio=volume_ratio,
+            boom_lookback_min=boom_lookback_min,
+            boom_lookback_max=boom_lookback_max,
+            boards=boards,
+            persist_signals=persist,
+            screening_date=date,
+        )
+
+    try:
+        payload = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=VSB_SCREENING_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.warning("VSB 选股超时(%ss) scope=%s", VSB_SCREENING_TIMEOUT, scope)
+        return JSONResponse(
+            status_code=504,
+            content={
+                "success": False,
+                "message": f"选股计算超时（超过{VSB_SCREENING_TIMEOUT}秒），请缩小范围或使用 limit",
+                "data": [],
+            },
+        )
+
+    return JSONResponse(payload)
+
+
+@router.get("/vsb-signals")
+async def screening_get_vsb_signals_by_code(
+    code: str = Query(..., description="股票代码"),
+    start_date: Optional[str] = Query(None, description="signal_date 起（含）"),
+    end_date: Optional[str] = Query(None, description="signal_date 止（含）"),
+    limit: int = Query(200, ge=1, le=2000, description="最大条数"),
+    db: Session = Depends(get_db),
+):
+    """VSB 信号历史（与 GET /api/stock/vsb-signals 同源；便于与选股同前缀走 Nginx）。"""
+    from backend_api.services.vsb_signals_service import query_vsb_signals_by_code
+
+    try:
+        payload, err = query_vsb_signals_by_code(
+            db, code=code, start_date=start_date, end_date=end_date, limit=limit
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if err == "model_unavailable":
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "VSB 信号模型不可用", "data": [], "total": 0},
+        )
+    if err == "table_missing":
+        return JSONResponse(status_code=503, content=payload)
+    if err == "bad_code":
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+    return JSONResponse(payload)
+
+
+@router.get("/vsb-signals/by-date")
+async def screening_get_vsb_signals_by_signal_date(
+    signal_date: str = Query(..., description="信号日（突破日）YYYY-MM-DD"),
+    limit: int = Query(500, ge=1, le=5000, description="最大条数"),
+    db: Session = Depends(get_db),
+):
+    """按 signal_date 查询当日全市场已落库的 VSB 信号（与 GET /api/stock/vsb-signals/by-date 同源）。"""
+    from backend_api.services.vsb_signals_service import query_vsb_signals_by_signal_date
+
+    try:
+        payload, err = query_vsb_signals_by_signal_date(db, signal_date=signal_date, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if err == "model_unavailable":
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "VSB 信号模型不可用", "data": [], "total": 0},
+        )
+    if err == "table_missing":
+        return JSONResponse(status_code=503, content=payload)
+    return JSONResponse(payload)
+
+
+VSB_RECALCULATE_TIMEOUT_SEC = 120
+VSB_REPLAY_TIMEOUT_SEC = 600
+
+
+@router.post("/vsb-signals/recalculate")
+async def screening_post_vsb_signals_recalculate(
+    code: str = Query(..., description="6 位股票代码"),
+    name: Optional[str] = Query(None, description="证券简称，可空"),
+    search_date: Optional[str] = Query(None, description="落库 run_search_date，默认今日"),
+    replay_range: bool = Query(False, description="为 true 时对 start_date～end_date 逐日切片重算并落库"),
+    start_date: Optional[str] = Query(None, description="逐日回放起始 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="逐日回放结束 YYYY-MM-DD"),
+    volume_ratio: Optional[float] = Query(None, ge=1.0, le=30.0),
+    boom_lookback_min: Optional[int] = Query(None, ge=1, le=250),
+    boom_lookback_max: Optional[int] = Query(None, ge=1, le=250),
+    db: Session = Depends(get_db),
+):
+    """单股重算 VSB 并落库（与 POST /api/vsb/signals/recalculate 同源）。"""
+    if not VSB_AVAILABLE or VolumeShrinkBreakoutFrontendInterface is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": "3倍量缩量突破策略模块不可用",
+                "saved": 0,
+                "hit": False,
+                "data": [],
+            },
+        )
+
+    if replay_range:
+        rs = (start_date or "").strip()[:10]
+        re = (end_date or "").strip()[:10]
+        if not rs or not re:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "replay_range=true 时必须同时提供 start_date 与 end_date（YYYY-MM-DD）",
+                    "saved": 0,
+                    "hit": False,
+                    "data": [],
+                },
+            )
+    else:
+        rs = ""
+        re = ""
+
+    loop = asyncio.get_event_loop()
+    timeout_sec = VSB_REPLAY_TIMEOUT_SEC if replay_range else VSB_RECALCULATE_TIMEOUT_SEC
+
+    def _run():
+        if replay_range:
+            return VolumeShrinkBreakoutFrontendInterface.recalculate_range_replay_and_persist(
+                db,
+                code=code,
+                name=name,
+                search_date=search_date,
+                replay_start=rs,
+                replay_end=re,
+                volume_ratio=volume_ratio,
+                boom_lookback_min=boom_lookback_min,
+                boom_lookback_max=boom_lookback_max,
+            )
+        return VolumeShrinkBreakoutFrontendInterface.recalculate_single_and_persist(
+            db,
+            code=code,
+            name=name,
+            search_date=search_date,
+            volume_ratio=volume_ratio,
+            boom_lookback_min=boom_lookback_min,
+            boom_lookback_max=boom_lookback_max,
+        )
+
+    try:
+        out = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=timeout_sec)
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={
+                "success": False,
+                "message": (
+                    f"VSB 逐日回放超时（>{timeout_sec}s）"
+                    if replay_range
+                    else f"单股重算超时（>{timeout_sec}s）"
+                ),
+                "saved": 0,
+                "hit": False,
+                "data": [],
+            },
+        )
+    if not out.get("success"):
+        return JSONResponse(status_code=400, content=out)
+    return JSONResponse(content=out)
 
 
 @router.get("/one-yang-three-lines")

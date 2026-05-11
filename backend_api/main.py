@@ -72,15 +72,19 @@ except ImportError:
 # 导入 FastAPI 和其它模块
 from typing import Optional
 
-from fastapi import FastAPI, Request, Response, Query
+from fastapi import FastAPI, Request, Response, Query, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+import asyncio
 import re
 import uvicorn
 import logging
 import os
 import sys
+from sqlalchemy.orm import Session
+
+from backend_api.database import get_db
 
 # 配置日志
 logging.basicConfig(
@@ -155,6 +159,13 @@ try:
 except ImportError as e:
     print(f"gms_trace_router 导入失败: {e}")
     gms_trace_router = None
+
+try:
+    from .stock.vsb_signal_routes import router as vsb_signal_router
+    print("vsb_signal_router 导入成功")
+except ImportError as e:
+    print(f"vsb_signal_router 导入失败: {e}")
+    vsb_signal_router = None
 
 # 尝试导入history路由
 try:
@@ -311,6 +322,159 @@ app.add_middleware(RequestLoggingMiddleware)
 async def orm_stock_code_pg_check_early():
     return JSONResponse(content=await _orm_stock_code_pg_check(), headers=_NO_CACHE)
 
+
+# ---------------------------------------------------------------------------
+# VSB 信号历史 — 主应用直挂（与 screening / stock 子路由逻辑同源）
+# 部分部署环境子路由未挂上时 /api/screening/vsb-signals 与 /api/stock/vsb-signals 会双 404，
+# 此处固定注册在 main.app 上，路径与 stock_manage 等无前缀冲突。
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/vsb/signals")
+async def vsb_signals_by_code_on_app(
+    code: str = Query(..., description="股票代码"),
+    start_date: Optional[str] = Query(None, description="signal_date 起（含）"),
+    end_date: Optional[str] = Query(None, description="signal_date 止（含）"),
+    limit: int = Query(200, ge=1, le=2000, description="最大条数"),
+    db: Session = Depends(get_db),
+):
+    from backend_api.services.vsb_signals_service import query_vsb_signals_by_code
+
+    try:
+        payload, err = query_vsb_signals_by_code(
+            db, code=code, start_date=start_date, end_date=end_date, limit=limit
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if err == "model_unavailable":
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "VSB 信号模型不可用", "data": [], "total": 0},
+        )
+    if err == "table_missing":
+        return JSONResponse(status_code=503, content=payload)
+    if err == "bad_code":
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+    return JSONResponse(payload)
+
+
+@app.get("/api/vsb/signals/by-date")
+async def vsb_signals_by_signal_date_on_app(
+    signal_date: str = Query(..., description="信号日（突破日）YYYY-MM-DD"),
+    limit: int = Query(500, ge=1, le=5000, description="最大条数"),
+    db: Session = Depends(get_db),
+):
+    from backend_api.services.vsb_signals_service import query_vsb_signals_by_signal_date
+
+    try:
+        payload, err = query_vsb_signals_by_signal_date(db, signal_date=signal_date, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if err == "model_unavailable":
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "VSB 信号模型不可用", "data": [], "total": 0},
+        )
+    if err == "table_missing":
+        return JSONResponse(status_code=503, content=payload)
+    return JSONResponse(payload)
+
+
+VSB_RECALCULATE_TIMEOUT_SEC = 120
+VSB_REPLAY_TIMEOUT_SEC = 600
+
+
+@app.post("/api/vsb/signals/recalculate")
+async def vsb_signals_recalculate_on_app(
+    code: str = Query(..., description="6 位股票代码"),
+    name: Optional[str] = Query(None, description="证券简称，可空"),
+    search_date: Optional[str] = Query(None, description="落库 run_search_date，默认今日 YYYY-MM-DD"),
+    replay_range: bool = Query(False, description="为 true 时对 start_date～end_date 内每个交易日切片重算并落库"),
+    start_date: Optional[str] = Query(None, description="逐日回放起始日 YYYY-MM-DD（与 end_date 同用）"),
+    end_date: Optional[str] = Query(None, description="逐日回放结束日 YYYY-MM-DD"),
+    volume_ratio: Optional[float] = Query(None, ge=1.0, le=30.0),
+    boom_lookback_min: Optional[int] = Query(None, ge=1, le=250),
+    boom_lookback_max: Optional[int] = Query(None, ge=1, le=250),
+    db: Session = Depends(get_db),
+):
+    """单股按最新日线重算 VSB，或可选区间内逐日回放；命中则 upsert 至 volume_shrink_breakout_signals。"""
+    try:
+        from backend_core.strategies.volume_shrink_breakout import VolumeShrinkBreakoutFrontendInterface
+    except ImportError:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": "3倍量缩量突破策略模块不可用",
+                "saved": 0,
+                "hit": False,
+                "data": [],
+            },
+        )
+
+    if replay_range:
+        rs = (start_date or "").strip()[:10]
+        re = (end_date or "").strip()[:10]
+        if not rs or not re:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "replay_range=true 时必须同时提供 start_date 与 end_date（YYYY-MM-DD）",
+                    "saved": 0,
+                    "hit": False,
+                    "data": [],
+                },
+            )
+
+    loop = asyncio.get_event_loop()
+    timeout_sec = VSB_REPLAY_TIMEOUT_SEC if replay_range else VSB_RECALCULATE_TIMEOUT_SEC
+
+    def _run():
+        if replay_range:
+            return VolumeShrinkBreakoutFrontendInterface.recalculate_range_replay_and_persist(
+                db,
+                code=code,
+                name=name,
+                search_date=search_date,
+                replay_start=(start_date or "").strip()[:10],
+                replay_end=(end_date or "").strip()[:10],
+                volume_ratio=volume_ratio,
+                boom_lookback_min=boom_lookback_min,
+                boom_lookback_max=boom_lookback_max,
+            )
+        return VolumeShrinkBreakoutFrontendInterface.recalculate_single_and_persist(
+            db,
+            code=code,
+            name=name,
+            search_date=search_date,
+            volume_ratio=volume_ratio,
+            boom_lookback_min=boom_lookback_min,
+            boom_lookback_max=boom_lookback_max,
+        )
+
+    try:
+        out = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=timeout_sec)
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={
+                "success": False,
+                "message": (
+                    f"VSB 逐日回放超时（>{timeout_sec}s）"
+                    if replay_range
+                    else f"单股重算超时（>{timeout_sec}s）"
+                ),
+                "saved": 0,
+                "hit": False,
+                "data": [],
+            },
+        )
+    if not out.get("success"):
+        return JSONResponse(status_code=400, content=out)
+    return JSONResponse(content=out)
+
+
 # 挂载静态文件目录
 #app.mount("/admin", StaticFiles(directory="admin", html=True), name="admin")
 
@@ -344,6 +508,7 @@ _include_router(app, market_router, "market")
 _include_router(app, stock_router, "stock")
 _include_router(app, screening_router, "screening")
 _include_router(app, gms_trace_router, "gms_trace")
+_include_router(app, vsb_signal_router, "vsb_signal")
 _include_router(app, history_router, "history")
 _include_router(app, news_router, "新闻")
 _include_router(app, data_collection_router, "数据采集")

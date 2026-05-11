@@ -1,4 +1,4 @@
-param(
+﻿param(
     # Default: pack only (no SSH). Use -RemoteDeploy to upload and run release.ps1 on server.
     [switch]$RemoteDeploy,
     [string]$ServerHost = "",
@@ -10,7 +10,7 @@ param(
     [string]$ServerNginxHome = "",
     [string]$NpmExe = "npm",
     [string]$PythonExe = "python",
-    # 不打前端产物时可跳过（默认：npm install + npm run build，产物进 zip 供服务器免 npm）
+    # Skip admin npm build when set; default runs npm install + npm run build so zip includes admin dist.
     [switch]$SkipAdminBuild,
     [switch]$SkipPackagePy,
     [string]$PackageProjectRoot = "",
@@ -20,8 +20,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# npm.ps1 + PowerShell's call operator `& npm ...` misparses $MyInvocation (errors like Unknown command "Program"/"pm").
-# Prefer npm.cmd on Windows — same as typing `npm` at an interactive prompt.
+# npm.ps1 plus call operator with npm can misparse $MyInvocation (Unknown command Program or pm).
+# Prefer npm.cmd on Windows so behavior matches typing npm at an interactive prompt.
 if ($env:OS -eq 'Windows_NT' -and $NpmExe -eq 'npm') {
     $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
     if ($null -ne $npmCmd) {
@@ -110,29 +110,12 @@ if (Test-Path -LiteralPath $localPackage) {
     Remove-Item -LiteralPath $localPackage -Force
 }
 
-$zipExcludeTopLevel = @(
-    '.agent',
-    '.auth',
-    '.cursor',
-    '.gemini',
-    '.git',
-    '.github',
-    '.hypothesis',
-    '.idea',
-    '.kiro',
-    '.pytest_cache',
-    '.qoder',
-    '.vs',
-    '.venv',
-    '.vscode',
-    'dist',
-    'env',
-    'node_modules',
-    'test',
-    'venv'
-)
+# Top-level excludes for zip; subtree and log rules also in robocopy args below.
+$zipExcludePart1 = '.agent', '.auth', '.cursor', '.gemini', '.git', '.github', '.hypothesis', '.idea', '.kiro', '.pytest_cache', '.qoder', '.vs', '.venv', '.vscode', 'database', 'demo', 'dist'
+$zipExcludePart2 = 'docs', 'env', 'image', 'logs', 'manual_scripts', 'node_modules', 'test', 'test-results', 'venv'
+$zipExcludeTopLevel = $zipExcludePart1 + $zipExcludePart2
 $rootPath = $projectRoot.Path
-$zipEntries = @(Get-ChildItem -LiteralPath $rootPath -Force | Where-Object { $zipExcludeTopLevel -notcontains $_.Name })
+$zipEntries = [array](Get-ChildItem -LiteralPath $rootPath -Force | Where-Object { ($zipExcludeTopLevel -notcontains $_.Name) -and ($_.Name -notlike '*.log') })
 if ($zipEntries.Count -eq 0) {
     throw "Nothing to archive (all top-level entries excluded?)."
 }
@@ -147,7 +130,14 @@ try {
     foreach ($entry in $zipEntries) {
         $targetPath = Join-Path $stagingRoot $entry.Name
         if ($entry.PSIsContainer) {
-            & robocopy $entry.FullName $targetPath /E /XD node_modules __pycache__ .pytest_cache .mypy_cache .git .agent .auth .cursor .gemini .github .hypothesis .kiro .qoder .vscode test tests /NFL /NDL /NJH /NJS /nc /ns /np
+            $robocopyArgs = @(
+                $entry.FullName, $targetPath,
+                '/E',
+                '/XD', 'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache', '.git', '.agent', '.auth', '.cursor', '.gemini', '.github', '.hypothesis', '.kiro', '.qoder', '.vscode', 'test', 'tests', 'database', 'demo', 'docs', 'image', 'logs', 'manual_scripts', 'test-results',
+                '/XF', '*.log',
+                '/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np'
+            )
+            & robocopy @robocopyArgs
             if ($LASTEXITCODE -ge 8) {
                 throw ("robocopy failed for {0} exit {1}" -f $entry.Name, $LASTEXITCODE)
             }
@@ -196,8 +186,8 @@ $scpArgs = @()
 $sshArgs = @()
 
 if ($SshKeyPath -ne "") {
-    $scpArgs += @("-i", $SshKeyPath)
-    $sshArgs += @("-i", $SshKeyPath)
+    $scpArgs += '-i', $SshKeyPath
+    $sshArgs += '-i', $SshKeyPath
 }
 
 Write-Step "Ensure remote temp dir"
@@ -205,10 +195,11 @@ $sshEnsureDir = 'powershell -NoProfile -Command "New-Item -ItemType Directory -F
 Invoke-DeployCommand -Program "ssh" -Arguments ($sshArgs + $sshTarget + $sshEnsureDir)
 
 Write-Step "Upload zip"
-Invoke-DeployCommand -Program "scp" -Arguments ($scpArgs + $localPackage + "$sshTarget`:$RemoteTempDir\$packageName")
+$remoteZipPath = Join-Path $RemoteTempDir $packageName
+Invoke-DeployCommand -Program "scp" -Arguments ($scpArgs + $localPackage + ($sshTarget + ':' + $remoteZipPath))
 
 Write-Step "Remote release.ps1"
-$remotePackage = "$RemoteTempDir\$packageName"
+$remotePackage = $remoteZipPath
 $remoteCmd = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $ServerReleaseScript + '" -PackagePath "' + $remotePackage + '" -DeployRoot "' + $ServerDeployRoot + '"'
 if ($ServerNginxHome -ne "") {
     $remoteCmd += ' -NginxHome "' + $ServerNginxHome + '"'

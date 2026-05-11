@@ -17,6 +17,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Set
 
+# 与 scripts/deploy/deploy.ps1 发布 zip 剔除目录一致（相对路径任一层目录名命中即不入包）
+SKIP_PACKAGE_DIR_NAMES = frozenset({
+    "database",
+    "demo",
+    "docs",
+    "image",
+    "logs",
+    "manual_scripts",
+    "test-results",
+})
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -87,8 +98,6 @@ class ProjectPackager:
             "init_postgresql_db.py",
             "create_stock_news_table.py",
             "update_historical_quotes_name.py",
-            # "database/**/*",  # database目录不打包
-
             # 部署相关
             "deploy.py",
             "package.py",
@@ -176,6 +185,14 @@ class ProjectPackager:
             # 测试目录（远程部署包不含）
             "**/test/**",
             "**/tests/**",
+
+            # 与 deploy.ps1 一致：整类目录不入包
+            "**/database/**",
+            "**/demo/**",
+            "**/docs/**",
+            "**/image/**",
+            "**/manual_scripts/**",
+            "**/test-results/**",
         ]
     
     def should_include_file(self, file_path: Path, include_patterns: List[str], exclude_patterns: List[str]) -> bool:
@@ -183,6 +200,8 @@ class ProjectPackager:
         file_str = str(file_path.relative_to(self.project_root))
         norm_parts = file_str.replace("\\", "/").split("/")
         if "test" in norm_parts or "tests" in norm_parts:
+            return False
+        if any(p in SKIP_PACKAGE_DIR_NAMES for p in norm_parts):
             return False
 
         # 检查排除模式
@@ -198,9 +217,10 @@ class ProjectPackager:
         return False
     
     def match_pattern(self, file_path: str, pattern: str) -> bool:
-        """简单的模式匹配"""
+        """简单的模式匹配（统一为正斜杠，便于 Windows 下 **/ 类排除生效）"""
         import fnmatch
-        return fnmatch.fnmatch(file_path, pattern)
+        normalized = file_path.replace("\\", "/")
+        return fnmatch.fnmatch(normalized, pattern)
     
     def collect_files(self) -> List[Path]:
         """收集需要打包的文件"""
@@ -220,8 +240,11 @@ class ProjectPackager:
                     return str(root_path / d)
             dirs[:] = [
                 d for d in dirs
-                if not any(p in ("test", "tests") for p in (root_path / d).relative_to(self.project_root).parts)
-                and not any(self.match_pattern(_rel(d), pattern) for pattern in exclude_patterns)
+                if (
+                    not any(p in ("test", "tests") for p in (root_path / d).relative_to(self.project_root).parts)
+                    and not any(p in SKIP_PACKAGE_DIR_NAMES for p in (root_path / d).relative_to(self.project_root).parts)
+                    and not any(self.match_pattern(_rel(d), pattern) for pattern in exclude_patterns)
+                )
             ]
             for file in files:
                 file_path = root_path / file
@@ -502,7 +525,6 @@ class ProjectPackager:
             "start_admin.py",
             "run.py",
             "migrate_db.py",
-            "database/**/*",
             "README.md",
             "START_GUIDE.md",
             "deploy.py",
@@ -529,6 +551,11 @@ class ProjectPackager:
             "**/*.log",
             "**/logs/**",
             "**/docs/**",
+            "**/database/**",
+            "**/demo/**",
+            "**/image/**",
+            "**/manual_scripts/**",
+            "**/test-results/**",
             "**/package.py",
             "**/*.egg-info/**",
             "**/build/**",
@@ -545,8 +572,11 @@ class ProjectPackager:
                     return str(root_path / d)
             dirs[:] = [
                 d for d in dirs
-                if not any(p in ("test", "tests") for p in (root_path / d).relative_to(self.project_root).parts)
-                and not any(self.match_pattern(_rel(d), pattern) for pattern in minimal_excludes)
+                if (
+                    not any(p in ("test", "tests") for p in (root_path / d).relative_to(self.project_root).parts)
+                    and not any(p in SKIP_PACKAGE_DIR_NAMES for p in (root_path / d).relative_to(self.project_root).parts)
+                    and not any(self.match_pattern(_rel(d), pattern) for pattern in minimal_excludes)
+                )
             ]
             for filename in filenames:
                 file_path = root_path / filename

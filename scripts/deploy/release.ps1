@@ -19,7 +19,7 @@ param(
     [switch]$AllowScriptPathMismatch,
     # 若不停止服务，pip 升级 psycopg2 等 .pyd 时常因进程占用报 WinError 5「拒绝访问」
     [switch]$SkipStopServicesBeforePip,
-    # 若同为 Python313 下还有手工起的 python/pythonw（未注册为服务），仍会锁住 .pyd；默认结束这些进程
+    # 仅跳过「pip 之前」的同解释器 python 结束；覆盖 current（robocopy）前仍会结束同解释器进程以释放目录/句柄
     [switch]$SkipKillPythonBeforePip,
     # 手工进程部署：不依赖 NSSM；不发 Restart-Service；在 DeployRoot\current 后台启动 5 个进程（日志 shared\logs\manual-*.log）
     [switch]$ManualProcessDeploy,
@@ -102,7 +102,7 @@ function Assert-ReleaseScriptPathMatchesDeployRoot {
   nginx：仓库根目录 nginx.conf（与 docs/prod/nginx.conf 同步）应与上述端口一致；-ManualProcessDeploy 且指定 -NginxHome 时会在 nginx -t 前校验 conf 内 upstream。
 #>
 
-function Normalize-NonEmpty([string]$Value, [string]$Default) {
+function Get-NonEmptyString([string]$Value, [string]$Default) {
     $v = [string]$Value
     if ([string]::IsNullOrWhiteSpace($v)) {
         return $Default
@@ -114,12 +114,12 @@ function Normalize-NonEmpty([string]$Value, [string]$Default) {
     return $v
 }
 
-$NpmExe = Normalize-NonEmpty $NpmExe "npm"
+$NpmExe = Get-NonEmptyString $NpmExe "npm"
 
 # 统一解析 python.exe 绝对路径（仅此一处使用 Get-Command -Name，禁止对「完整路径」做位置调用）
 function Resolve-ToPythonExePath {
     param([string]$Preferred)
-    $s = Normalize-NonEmpty $Preferred "python"
+    $s = Get-NonEmptyString $Preferred "python"
     if ([System.IO.Path]::IsPathRooted($s) -and (Test-Path -LiteralPath $s)) {
         return (Resolve-Path -LiteralPath $s).Path
     }
@@ -582,6 +582,8 @@ function Invoke-RobocopyMirror {
 
 # 需在脚本中已解析 $PythonExe 之后调用；用于释放 _psycopg*.pyd / current 目录占用。
 # 仅用 Get-Process / Get-CimInstance：避免某些 PS5.1 环境下 Get-Process -Name 触发 ParameterBindingException。
+# 说明：Win32_Process.ExecutablePath 在不少主机上为空（权限/会话差异），若仅按路径前缀匹配会杀不掉旧进程；
+# 因此补充 CommandLine 匹配（同解释器路径、或 DeployRoot\current 下手工启动入口脚本路径）。
 function Invoke-KillPythonSameInterpreter {
     if ($env:OS -ne 'Windows_NT') {
         return
@@ -593,12 +595,40 @@ function Invoke-KillPythonSameInterpreter {
         }
         $fullPyKill = (Resolve-Path -LiteralPath $PythonExe).Path
         $pyRootKill = Split-Path -LiteralPath $fullPyKill -Parent
+        $pyRootNorm = $pyRootKill
+        try {
+            $pyRootNorm = [System.IO.Path]::GetFullPath($pyRootKill)
+        }
+        catch {
+            $pyRootNorm = $pyRootKill
+        }
+
+        # 与 Start-ManualStockQuoteProcesses 对齐：用于 ExecutablePath 为空时按命令行识别本部署 worker
+        # 注意：勿使用 Get-Variable -Scope Script；在部分宿主下会触发「无法使用指定的命名参数解析参数集」。
+        $currentScriptMarkers = @()
+        $curVar = Get-Variable -Name 'currentDir' -ErrorAction SilentlyContinue
+        if ($null -ne $curVar -and -not [string]::IsNullOrWhiteSpace([string]$curVar.Value)) {
+            $cd = [string]$curVar.Value
+            if (Test-Path -LiteralPath $cd) {
+                try {
+                    $curFull = (Resolve-Path -LiteralPath $cd).Path
+                    foreach ($rel in @('start_backend_core.py', 'start_backend_api.py', 'start_scheduler.py', 'start_frontend.py')) {
+                        $currentScriptMarkers += (Join-Path $curFull $rel)
+                    }
+                    $currentScriptMarkers += (Join-Path $curFull 'admin\dist')
+                }
+                catch {
+                    $currentScriptMarkers = @()
+                }
+            }
+        }
 
         $cimList = @()
-        $wql = "SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name='python.exe' OR Name='pythonw.exe'"
+        $procFilter = "Name='python.exe' OR Name='pythonw.exe'"
         try {
             if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
-                $cimList = @(Get-CimInstance -Query $wql -ErrorAction Stop)
+                # 使用 -ClassName/-Filter，避免 -Query 在少数环境下与公共参数组合触发 ParameterBindingException
+                $cimList = @(Get-CimInstance -ClassName Win32_Process -Filter $procFilter -ErrorAction Stop)
             }
         }
         catch {
@@ -606,28 +636,80 @@ function Invoke-KillPythonSameInterpreter {
         }
         if ($cimList.Count -eq 0) {
             try {
-                $cimList = @(Get-WmiObject -Class Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction Stop)
+                $cimList = @(Get-WmiObject -Class Win32_Process -Filter $procFilter -ErrorAction Stop)
             }
             catch {
                 $cimList = @()
             }
         }
 
+        $taskkillExe = Join-Path $env:SystemRoot "System32\taskkill.exe"
+
         foreach ($wp in $cimList) {
-            $exePathKill = $wp.ExecutablePath
-            if ([string]::IsNullOrWhiteSpace($exePathKill)) {
+            $exePathKill = [string]$wp.ExecutablePath
+            $cmdLineKill = [string]$wp.CommandLine
+
+            $matchSameInterpreter = $false
+            if (-not [string]::IsNullOrWhiteSpace($exePathKill)) {
+                try {
+                    $exeNorm = [System.IO.Path]::GetFullPath($exePathKill)
+                    if ($exeNorm.StartsWith($pyRootNorm, [StringComparison]::OrdinalIgnoreCase)) {
+                        $matchSameInterpreter = $true
+                    }
+                }
+                catch {
+                    if ($exePathKill.StartsWith($pyRootKill, [StringComparison]::OrdinalIgnoreCase)) {
+                        $matchSameInterpreter = $true
+                    }
+                }
+            }
+
+            if (-not $matchSameInterpreter -and -not [string]::IsNullOrWhiteSpace($cmdLineKill)) {
+                if ($cmdLineKill.IndexOf($fullPyKill, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                    $matchSameInterpreter = $true
+                }
+            }
+
+            $matchDeployWorker = $false
+            if (-not $matchSameInterpreter -and $currentScriptMarkers.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($cmdLineKill)) {
+                foreach ($marker in $currentScriptMarkers) {
+                    if ($cmdLineKill.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                        $matchDeployWorker = $true
+                        break
+                    }
+                }
+            }
+
+            if (-not $matchSameInterpreter -and -not $matchDeployWorker) {
                 continue
             }
-            if (-not ($exePathKill.StartsWith($pyRootKill, [StringComparison]::OrdinalIgnoreCase))) {
-                continue
-            }
+
             $procIdKill = [int]$wp.ProcessId
+            if ($procIdKill -le 0) {
+                continue
+            }
+
+            $reason = if ($matchDeployWorker) { 'deploy-current cmdline' } else { 'same-interpreter' }
             try {
                 Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-                Write-Host ("[KILL] PID {0} {1}" -f $procIdKill, $exePathKill) -ForegroundColor DarkYellow
+                Write-Host ("[KILL] PID {0} ({1}) exe={2}" -f $procIdKill, $reason, $(if ([string]::IsNullOrWhiteSpace($exePathKill)) { '(empty)' } else { $exePathKill })) -ForegroundColor DarkYellow
             }
             catch {
-                Write-Host ("[WARN] Cannot stop PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow
+                Write-Host ("[WARN] Stop-Process PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow
+                if (Test-Path -LiteralPath $taskkillExe) {
+                    try {
+                        $null = & $taskkillExe /F /PID $procIdKill 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host ("[KILL] taskkill /F /PID {0} ({1})" -f $procIdKill, $reason) -ForegroundColor DarkYellow
+                        }
+                        else {
+                            Write-Host ("[WARN] taskkill exit {0} for PID {1}" -f $LASTEXITCODE, $procIdKill) -ForegroundColor Yellow
+                        }
+                    }
+                    catch {
+                        Write-Host ("[WARN] taskkill failed for PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow
+                    }
+                }
             }
         }
     }
@@ -695,7 +777,7 @@ function Start-ManualStockQuoteProcesses {
     }
 }
 
-$PythonExe = Normalize-NonEmpty $PythonExe "python"
+$PythonExe = Get-NonEmptyString $PythonExe "python"
 $PythonExe = Resolve-ToPythonExePath $PythonExe
 # 强制为单个字符串，避免少数环境下解析为数组导致后续绑定歧义
 $PythonExe = [string](@($PythonExe)[0])
@@ -873,14 +955,16 @@ Write-DeployStep 'Stop Windows services before switching current'
 Stop-StockQuoteServicesIfRunning
 Start-Sleep -Seconds 8
 
-# 手工进程模式：必须在镜像 current 前结束旧 Python，否则句柄占用导致 robocopy 失败；不受 -SkipKillPythonBeforePip 影响。
-if ($ManualProcessDeploy -and $env:OS -eq 'Windows_NT') {
-    Write-DeployStep 'Manual deploy: kill old python.exe/pythonw (same interpreter) before overwriting current'
-    Invoke-KillPythonSameInterpreter
-    Start-Sleep -Seconds 3
-}
-elseif ($env:OS -eq 'Windows_NT' -and -not $SkipKillPythonBeforePip) {
-    Write-DeployStep 'Kill python.exe/pythonw again (unlock current directory)'
+# 镜像 current 前必须结束同解释器下的旧 Python（手工/NSSM 均适用），否则句柄占用导致 robocopy 失败。
+# 与 -SkipKillPythonBeforePip 无关：该开关只跳过 pip 阶段的 kill，不跳过此处。
+if ($env:OS -eq 'Windows_NT') {
+    $killStepMsg = if ($ManualProcessDeploy) {
+        'Kill old python.exe/pythonw (same interpreter as -PythonExe) before overwriting current (manual deploy)'
+    }
+    else {
+        'Kill python.exe/pythonw (same interpreter as -PythonExe) before overwriting current (unlock directory)'
+    }
+    Write-DeployStep $killStepMsg
     Invoke-KillPythonSameInterpreter
     Start-Sleep -Seconds 3
 }

@@ -30,6 +30,7 @@
             <button class="strategy-tab" data-strategy="one-yang-three-lines" id="oneYangThreeLinesTab">一阳穿三线</button>
             <button class="strategy-tab" data-strategy="pvfrs" id="pvfrsTab" style="display:none;">PVFARS量价频幅度共振</button>
             <button class="strategy-tab" data-strategy="gms" id="gmsTab">GMS均值引力动量</button>
+            <button class="strategy-tab" data-strategy="volume-shrink-breakout" id="volumeShrinkBreakoutTab">3倍量缩量突破</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -989,6 +990,96 @@
                         <tbody id="resultsTableBody-gms">
                             <tr>
                                 <td colspan="16" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3倍量缩量突破（独立 core 模块） -->
+        <div id="volume-shrink-breakout-content" class="strategy-content" title="本页为「3倍量缩量突破」选股；K 线为日期倒序。更多参数见后端 vsb_config.json。">
+            <div class="strategy-info-card" title="以下为策略逻辑说明；鼠标悬停本卡片可再次看到本提示。">
+                <h2 title="策略名称：Volume Shrink Breakout（VSB），中文常称三倍量缩量突破。">策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li title="候选池：全 A 排除 ST；若登录并选自选，则只扫自选与基础规则交集；下方「代码段」可再缩小范围。"><strong>股票范围：</strong>全 A（排除 ST）；可选登录后「自选」范围（与接口 scope 一致）；可选参数中可按代码段（创业板/科创板/沪市主板等）多选缩小扫描池</li>
+                    <li title="默认三阶段：①侦测日 倍量+MA5上穿MA20+趋势 ②回调段 不破关键位且每日量&lt;侦测日一半 ③触发日 收盘突破侦测日收盘且缩量。切回旧版需在配置 evaluation_mode=legacy。"><strong>三阶段（默认）：</strong>① <strong>侦测日</strong>：在 lookback 内找最近满足「倍量 + MA5 上穿 MA20 + 均线向上」的侦测日，并锁定其 OHLC 与量能；② <strong>回调段</strong>（侦测日的下一交易日至触发前一日）：收盘不有效跌破侦测日开盘/最低（容差见配置），每日量 &lt; 侦测量×0.5，均线满足多头或 MA5 走平不破 MA20；③ <strong>触发日</strong>（最新日）：收盘 &gt; 侦测日收盘且量 &lt; 侦测日量。配置 <code>evaluation_mode=legacy</code> 可切回旧版「爆量日 MA 多头 + 两点缩量突破」。</li>
+                    <li title="结果列中的买点文案、强度分与提醒仅供模拟参考，不构成投资建议。"><strong>交易参考：</strong>结果中给出<strong>参考买点</strong>文案、<strong>信号强度</strong>（0–100）与<strong>强/中/弱</strong>分级及<strong>强度提醒</strong>（非投资建议，请模拟验证）</li>
+                    <li class="condition-item" title="全 A 扫描耗时长；请配合 limit 小批量试跑，并保证网关与 Nginx 的读超时 ≥ 环境变量 VSB_SCREENING_TIMEOUT（默认约 600 秒）。">全市场扫描较慢，联调请先在 URL 加 <code>limit=</code> 限制只数；网关超时需 ≥ 后端 VSB_SCREENING_TIMEOUT</li>
+                </ul>
+            </div>
+            <div class="parameters-card" title="以下为请求选股接口时携带的参数；三阶段细项（如趋势回看、跌破容差）在服务端 vsb_config.json 配置。">
+                <h3 title="修改后点击「刷新筛选」生效；留空的项将不传该 Query，由服务端默认处理。">可选参数</h3>
+                <div class="parameters-grid">
+                    <div class="parameter-group" title="限制本次扫描的最大股票只数。留空表示不按条数截断（全市场很慢，联调建议填 200 等）。对应接口参数 limit。">
+                        <label for="vsbScreeningDate" title="选股用 K 线窗口的「止日」；若该日在 historical_quotes 中尚无记录，或晚于表内最新日，则自动从表内全局最新交易日开始计算。">筛选基准日</label>
+                        <input type="date" id="vsbScreeningDate" class="param-input" title="留空：按当前自然日意图，若当日无行情则回退表内最新日。填写如 2026-05-11：以该日为最新一根 K（无数据时同样回退）。">
+                        <label for="vsbLimit" title="同上：限制扫描只数，空=不按 limit 截断。">limit（空=全市场）</label>
+                        <input type="number" id="vsbLimit" class="param-input" min="1" max="10000" step="1" placeholder="如 200" title="填写正整数限制只数；不填则扫描全候选池（耗时长）。">
+                    </div>
+                    <div class="parameter-group" title="侦测日成交量须 ≥ 本倍数 × 更旧一日成交量。默认 3 即三倍量；与 volume_ratio 一致。">
+                        <label for="vsbVolumeRatio" title="倍量门槛：越大越难出现侦测信号。">爆量倍数 volume_ratio</label>
+                        <input type="number" id="vsbVolumeRatio" class="param-input" min="1" max="30" step="0.1" value="3" title="常用 2～5；过大可能导致极少命中。">
+                    </div>
+                    <div class="parameter-group" title="侦测日在 K 线倒序中的最小下标 s：s 过小噪声大，过大则侦测日离最新日过远。与 boom_lookback_min 一致。">
+                        <label for="vsbBoomMin" title="侦测日距「最新日」至少隔几根 K（含边界）。默认 5。">boom_lookback_min</label>
+                        <input type="number" id="vsbBoomMin" class="param-input" min="1" max="250" step="1" value="5" title="须 ≤ boom_lookback_max；与引擎中侦测日搜索区间下界一致。">
+                    </div>
+                    <div class="parameter-group" title="侦测日下标 s 的上界：s 越大侦测日越早。与 boom_lookback_max 一致。">
+                        <label for="vsbBoomMax" title="区间上界；与 min 搭配限定侦测日出现在近若干根 K 内。">boom_lookback_max</label>
+                        <input type="number" id="vsbBoomMax" class="param-input" min="1" max="250" step="1" value="60" title="须 ≥ boom_lookback_min；全 A 扫描时区间越大计算越慢。">
+                    </div>
+                    <div class="parameter-group" style="grid-column: 1 / -1;" title="勾选后只保留对应前缀的 A 股；可多选合并为「或」。不勾选=不按代码段过滤（仍应用 ST 等基础规则）。">
+                        <label title="与接口 boards 参数对应；不选表示不限板块。">代码段过滤（多选；不选表示全市场）</label>
+                        <div class="ma-periods-checkboxes" id="vsbBoardCheckboxes" title="勾选一项或多项以缩小扫描范围；与上方 limit 可同时使用。">
+                            <label title="创业板：股票代码以 300 开头。"><input type="checkbox" name="vsbBoard" value="CYB"> 创业板 (300)</label>
+                            <label title="科创板：股票代码以 688 开头。"><input type="checkbox" name="vsbBoard" value="KCB"> 科创板 (688)</label>
+                            <label title="沪市主板：600、601、602、603、605 开头（不含 688）。"><input type="checkbox" name="vsbBoard" value="SH_MAIN"> 沪市主板 (600/601/602/603/605)</label>
+                            <label title="深市主板：000、001 开头。"><input type="checkbox" name="vsbBoard" value="SZ_MAIN"> 深市主板 (000/001)</label>
+                            <label title="深圳中小板：002 开头。"><input type="checkbox" name="vsbBoard" value="SZ_SME"> 深圳中小板 (002)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="screening-actions" title="刷新：按当前参数请求选股接口；导出：将当前表格结果下载为 CSV。">
+                <button id="refreshBtn-volume-shrink-breakout" class="refresh-btn" data-strategy="volume-shrink-breakout" title="按当前 limit、倍量、lookback 与代码段调用选股接口，结果在下方表格展示。全市场可能需数分钟。">刷新筛选</button>
+                <button id="exportBtn-volume-shrink-breakout" class="export-btn" style="display:none;" title="将当前列表导出为 CSV 文件（有结果时显示本按钮）。">导出CSV</button>
+                <span id="searchDate-volume-shrink-breakout" class="search-date"></span>
+            </div>
+            <div id="loadingIndicator-volume-shrink-breakout" class="loading-indicator" style="display:none;" title="正在向后端请求批量计算，请勿重复点击刷新。">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+            <div id="errorMessage-volume-shrink-breakout" class="error-message" style="display:none;" title="接口错误或超时时的提示区域。"></div>
+            <div id="resultsContainer-volume-shrink-breakout" class="results-container" title="筛选命中列表；可点击「信号历史」查看该股已落库记录。">
+                <div class="results-header">
+                    <span id="resultsCount-volume-shrink-breakout" class="results-count" title="本次请求返回的命中条数。">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-volume-shrink-breakout" class="results-table-wrapper" title="表头支持悬停查看各列含义；列较多时可横向滚动。">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th title="6 位 A 股代码。">股票代码</th>
+                                <th title="证券简称。">股票名称</th>
+                                <th title="three_phase_v1：三阶段路径；legacy：旧版两点式判定。">模式</th>
+                                <th title="侦测日（阶段1）日期；与 boom_* 字段一致。">爆量日</th>
+                                <th title="侦测日收盘价（C_limit），用于阶段3 对比。">爆量收盘</th>
+                                <th title="侦测日成交量（V_limit）。">爆量成交量</th>
+                                <th title="侦测日量 ÷ 前一日量，反映倍量实际倍数。">量比(对前日)</th>
+                                <th title="侦测日当根 K 上的 MA5、MA10、MA20 数值。">MA5/10/20</th>
+                                <th title="触发买入判定的最近交易日（K 线倒序下标 0）。">突破日</th>
+                                <th title="触发日收盘价。">突破收盘</th>
+                                <th title="触发日成交量；应小于侦测日量（缩量）。">突破量</th>
+                                <th title="触发日涨跌幅百分比。">当前涨跌幅%</th>
+                                <th title="策略生成的参考买点文案（非投资建议）。">参考买点</th>
+                                <th title="0～100 分与强/中/弱分级。">信号强度</th>
+                                <th title="强度相关的简短提醒列表。">强度提醒</th>
+                                <th title="跳转信号历史、行情与详情。">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-volume-shrink-breakout">
+                            <tr>
+                                <td colspan="16" class="empty-state">点击「刷新筛选」开始</td>
                             </tr>
                         </tbody>
                     </table>

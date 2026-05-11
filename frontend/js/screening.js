@@ -578,6 +578,8 @@ const ScreeningPage = {
             suffix = 'pvfrs';
         } else if (strategy === 'gms') {
             suffix = 'gms';
+        } else if (strategy === 'volume-shrink-breakout') {
+            suffix = 'volume-shrink-breakout';
         } else {
             suffix = 'cyb';
         }
@@ -677,6 +679,30 @@ const ScreeningPage = {
                     page: this.gmsPage,
                     includePagination: true,
                 }).toString();
+            } else if (strategy === 'volume-shrink-breakout') {
+                const params = new URLSearchParams();
+                params.set('scope', 'all');
+                const vsbDateEl = document.getElementById('vsbScreeningDate');
+                if (vsbDateEl && vsbDateEl.value) {
+                    params.set('date', vsbDateEl.value);
+                }
+                const limEl = document.getElementById('vsbLimit');
+                const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
+                if (limRaw !== '') {
+                    const lim = parseInt(limRaw, 10);
+                    if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
+                }
+                const vr = parseFloat(document.getElementById('vsbVolumeRatio')?.value);
+                if (!isNaN(vr) && vr > 0) params.set('volume_ratio', String(vr));
+                const bmin = parseInt(document.getElementById('vsbBoomMin')?.value, 10);
+                if (!isNaN(bmin) && bmin > 0) params.set('boom_lookback_min', String(bmin));
+                const bmax = parseInt(document.getElementById('vsbBoomMax')?.value, 10);
+                if (!isNaN(bmax) && bmax > 0) params.set('boom_lookback_max', String(bmax));
+                document.querySelectorAll('input[name="vsbBoard"]:checked').forEach((cb) => {
+                    const v = cb && cb.value ? String(cb.value).trim() : '';
+                    if (v) params.append('boards', v);
+                });
+                url = `${apiBaseUrl}/api/screening/volume-shrink-breakout-strategy?${params.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -768,6 +794,8 @@ const ScreeningPage = {
                 colSpan = 12;
             } else if (strategy === 'gms') {
                 colSpan = 11;
+            } else if (strategy === 'volume-shrink-breakout') {
+                colSpan = 16;
             } else {
                 colSpan = 12;
             }
@@ -1001,6 +1029,8 @@ const ScreeningPage = {
             suffix = 'pvfrs';
         } else if (strategy === 'gms') {
             suffix = 'gms';
+        } else if (strategy === 'volume-shrink-breakout') {
+            suffix = 'volume-shrink-breakout';
         } else {
             suffix = 'cyb';
         }
@@ -1032,6 +1062,8 @@ const ScreeningPage = {
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
             } else if (strategy === 'gms') {
+                colSpan = 16;
+            } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
             } else {
                 colSpan = 12;
@@ -1202,6 +1234,44 @@ const ScreeningPage = {
                         <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
                         <td>
                             <div class="action-links">
+                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else if (strategy === 'volume-shrink-breakout') {
+                const maStr = [
+                    stock.ma5_at_boom != null ? Number(stock.ma5_at_boom).toFixed(2) : '--',
+                    stock.ma10_at_boom != null ? Number(stock.ma10_at_boom).toFixed(2) : '--',
+                    stock.ma20_at_boom != null ? Number(stock.ma20_at_boom).toFixed(2) : '--',
+                ].join(' / ');
+                const buyTxt = (stock.buy_signal || '--').replace(/</g, '＜').replace(/>/g, '＞');
+                const lvl = stock.signal_strength_level || '--';
+                const sc = stock.signal_strength != null && !isNaN(Number(stock.signal_strength)) ? Number(stock.signal_strength) : null;
+                const strengthCell = sc != null ? `${sc}（${lvl}）` : `--（${lvl}）`;
+                const remindArr = Array.isArray(stock.signal_reminders) ? stock.signal_reminders : [];
+                const remindTxt = remindArr.length ? remindArr.join('；').replace(/</g, '＜').replace(/>/g, '＞') : '—';
+                html += `
+                    <tr>
+                        <td><span class="stock-code">${stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name}</span></td>
+                        <td>${stock.strategy_phase || '--'}</td>
+                        <td>${stock.boom_date || '--'}</td>
+                        <td>${stock.boom_close != null ? Number(stock.boom_close).toFixed(2) : '--'}</td>
+                        <td>${stock.boom_volume != null ? stock.boom_volume : '--'}</td>
+                        <td>${stock.boom_volume_ratio_vs_prev != null ? Number(stock.boom_volume_ratio_vs_prev).toFixed(2) : '--'}</td>
+                        <td>${maStr}</td>
+                        <td>${stock.breakout_date || '--'}</td>
+                        <td>${stock.breakout_close != null ? Number(stock.breakout_close).toFixed(2) : '--'}</td>
+                        <td>${stock.breakout_volume != null ? stock.breakout_volume : '--'}</td>
+                        <td class="${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
+                        <td title="${buyTxt}">${buyTxt.length > 28 ? buyTxt.slice(0, 28) + '…' : buyTxt}</td>
+                        <td>${strengthCell}</td>
+                        <td style="max-width:220px;font-size:12px;" title="${remindTxt}">${remindTxt.length > 40 ? remindTxt.slice(0, 40) + '…' : remindTxt}</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_vsb_trace.html?code=${stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">信号历史</a>
                                 <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
                                 <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
                             </div>
@@ -1841,6 +1911,38 @@ const ScreeningPage = {
                 stock.current_change_percent ? stock.current_change_percent + '%' : '0%'
             ]);
             filename = `低九策略筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'volume-shrink-breakout') {
+            headers = [
+                '股票代码', '股票名称', '模式', '爆量日', '爆量收盘', '爆量成交量', '量比(对前日)',
+                'MA5', 'MA10', 'MA20', '突破日', '突破收盘', '突破量', '涨跌幅%',
+                '参考买点', '信号强度', '强度分级', '强度提醒',
+            ];
+            rows = data.map((stock) => {
+                const ma5 = stock.ma5_at_boom != null ? Number(stock.ma5_at_boom).toFixed(2) : '';
+                const ma10 = stock.ma10_at_boom != null ? Number(stock.ma10_at_boom).toFixed(2) : '';
+                const ma20 = stock.ma20_at_boom != null ? Number(stock.ma20_at_boom).toFixed(2) : '';
+                const remindArr = Array.isArray(stock.signal_reminders) ? stock.signal_reminders : [];
+                const remindStr = remindArr.join('；');
+                return [
+                    `\u2060${stock.code}`,
+                    stock.name,
+                    stock.strategy_phase || '',
+                    stock.boom_date || '',
+                    stock.boom_close != null ? Number(stock.boom_close).toFixed(2) : '',
+                    stock.boom_volume != null ? stock.boom_volume : '',
+                    stock.boom_volume_ratio_vs_prev != null ? Number(stock.boom_volume_ratio_vs_prev).toFixed(2) : '',
+                    ma5, ma10, ma20,
+                    stock.breakout_date || '',
+                    stock.breakout_close != null ? Number(stock.breakout_close).toFixed(2) : '',
+                    stock.breakout_volume != null ? stock.breakout_volume : '',
+                    stock.current_change_percent != null ? `${stock.current_change_percent}%` : '',
+                    stock.buy_signal || '',
+                    stock.signal_strength != null ? String(stock.signal_strength) : '',
+                    stock.signal_strength_level || '',
+                    remindStr,
+                ];
+            });
+            filename = `3倍量缩量突破筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else {
             // 通用导出（如果需要支持其他策略）
             if (data.length > 0) {

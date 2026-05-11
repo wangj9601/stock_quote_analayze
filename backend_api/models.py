@@ -1150,6 +1150,44 @@ class OneYangThreeLinesSignal(Base):
         UniqueConstraint('code', 'signal_date', name='uq_one_yang_signal_code_date'),
     )
 
+
+class VolumeShrinkBreakoutSignal(Base):
+    """3倍量缩量突破策略信号表（选股命中落库，signal_date=突破日）"""
+
+    __tablename__ = "volume_shrink_breakout_signals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(StockCodeTextPK(), nullable=False, index=True)
+    name = Column(String(100), nullable=False, default="")
+    signal_date = Column(Date, nullable=False, index=True)
+    boom_date = Column(String(20), nullable=True)
+    boom_close = Column(Float, nullable=True)
+    boom_volume = Column(Float, nullable=True)
+    boom_volume_ratio_vs_prev = Column(Float, nullable=True)
+    ma5_at_boom = Column(Float, nullable=True)
+    ma10_at_boom = Column(Float, nullable=True)
+    ma20_at_boom = Column(Float, nullable=True)
+    breakout_close = Column(Float, nullable=True)
+    breakout_volume = Column(Float, nullable=True)
+    current_change_percent = Column(Float, nullable=True)
+    volume_ratio_param = Column(Float, nullable=True)
+    boom_lookback_min = Column(Integer, nullable=True)
+    boom_lookback_max = Column(Integer, nullable=True)
+    boards_json = Column(Text, nullable=True)
+    run_search_date = Column(String(20), nullable=True)
+    signal_strength = Column(Integer, nullable=True)
+    signal_strength_level = Column(String(10), nullable=True)
+    buy_signal_text = Column(String(220), nullable=True)
+    signal_reminders_json = Column(Text, nullable=True)
+    phase_state_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("code", "signal_date", name="uq_vsb_signal_code_signal_date"),
+    )
+
+
 # 系统监控相关模型
 class SystemMonitorMetric(Base):
     """系统监控指标表"""

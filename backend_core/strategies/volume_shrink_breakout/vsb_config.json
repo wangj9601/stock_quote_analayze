@@ -1,0 +1,12 @@
+{
+  "volume_ratio": 3.0,
+  "boom_lookback_min": 5,
+  "boom_lookback_max": 60,
+  "ma_periods": [5, 10, 20],
+  "history_calendar_days": 180,
+  "evaluation_mode": "three_phase",
+  "trend_ma_lookback": 5,
+  "retracement_break_eps": 0.005,
+  "ma_flat_tol": 0.008,
+  "retracement_volume_half_ratio": 0.5
+}

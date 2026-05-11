@@ -1,4 +1,4 @@
-# uvicorn --log-config：stderr 每行带时间戳（与 NSSM shared/logs/*.err.log 对齐）
+# uvicorn --log-config: timestamps on stderr (UTF-8 file; avoid non-ASCII in comments on Windows GBK locale)
 version: 1
 disable_existing_loggers: false
 formatters:
