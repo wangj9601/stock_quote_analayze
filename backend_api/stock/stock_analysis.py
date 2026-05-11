@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import logging
 import os
-import google.generativeai as genai
 from sqlalchemy.orm import Session
 from sqlalchemy import text, desc
 from database import get_db
@@ -734,6 +733,12 @@ class StockAnalysisService:
         def _call_gemini():
             """内部函数，用于在线程中执行 Gemini 调用"""
             try:
+                try:
+                    import google.generativeai as genai
+                except ImportError:
+                    logger.warning("google-generativeai 未安装，无法调用 Gemini（请 pip install google-generativeai 或保持仅用本地技术指标）")
+                    return "AI 深度分析未启用：服务器未安装 google-generativeai 包。"
+
                 # 设置你的代理端口（请根据你代理软件的实际端口修改，常见为 7890 或 1080）
                 os.environ['HTTP_PROXY'] = 'http://127.0.0.1:9910'
                 os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:9910'

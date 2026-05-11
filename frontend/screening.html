@@ -1022,12 +1022,12 @@
                         <input type="number" id="vsbVolumeRatio" class="param-input" min="1" max="30" step="0.1" value="3" title="常用 2～5；过大可能导致极少命中。">
                     </div>
                     <div class="parameter-group" title="侦测日在 K 线倒序中的最小下标 s：s 过小噪声大，过大则侦测日离最新日过远。与 boom_lookback_min 一致。">
-                        <label for="vsbBoomMin" title="侦测日距「最新日」至少隔几根 K（含边界）。默认 5。">boom_lookback_min</label>
-                        <input type="number" id="vsbBoomMin" class="param-input" min="1" max="250" step="1" value="5" title="须 ≤ boom_lookback_max；与引擎中侦测日搜索区间下界一致。">
+                        <label for="vsbBoomMin" title="接口参数 boom_lookback_min。侦测日距「最新日」至少隔几根 K（含边界）。默认 5。">爆量回溯下限（根）</label>
+                        <input type="number" id="vsbBoomMin" class="param-input" min="1" max="250" step="1" value="5" title="须 ≤ 爆量回溯上限；与引擎中侦测日搜索区间下界一致。">
                     </div>
                     <div class="parameter-group" title="侦测日下标 s 的上界：s 越大侦测日越早。与 boom_lookback_max 一致。">
-                        <label for="vsbBoomMax" title="区间上界；与 min 搭配限定侦测日出现在近若干根 K 内。">boom_lookback_max</label>
-                        <input type="number" id="vsbBoomMax" class="param-input" min="1" max="250" step="1" value="60" title="须 ≥ boom_lookback_min；全 A 扫描时区间越大计算越慢。">
+                        <label for="vsbBoomMax" title="接口参数 boom_lookback_max。区间上界；与下限搭配限定侦测日出现在近若干根 K 内。">爆量回溯上限（根）</label>
+                        <input type="number" id="vsbBoomMax" class="param-input" min="1" max="250" step="1" value="60" title="须 ≥ 爆量回溯下限；全 A 扫描时区间越大计算越慢。">
                     </div>
                     <div class="parameter-group" style="grid-column: 1 / -1;" title="勾选后只保留对应前缀的 A 股；可多选合并为「或」。不勾选=不按代码段过滤（仍应用 ST 等基础规则）。">
                         <label title="与接口 boards 参数对应；不选表示不限板块。">代码段过滤（多选；不选表示全市场）</label>

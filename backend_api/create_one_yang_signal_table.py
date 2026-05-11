@@ -2,6 +2,13 @@
 创建一阳穿三线策略信号数据库表
 """
 
+import os
+import sys
+
+_pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _pkg_parent not in sys.path:
+    sys.path.insert(0, _pkg_parent)
+
 from backend_api.database import engine
 from backend_api.models import OneYangThreeLinesSignal
 

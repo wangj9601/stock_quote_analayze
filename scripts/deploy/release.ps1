@@ -581,7 +581,8 @@ function Invoke-RobocopyMirror {
 }
 
 # 需在脚本中已解析 $PythonExe 之后调用；用于释放 _psycopg*.pyd / current 目录占用。
-# 仅用 Get-Process / Get-CimInstance：避免某些 PS5.1 环境下 Get-Process -Name 触发 ParameterBindingException。
+# 枚举进程：优先 Win32_Process（可看 CommandLine）；避免 Get-Variable（部分宿主报「无法使用指定的命名参数解析参数集」）；
+# 避免 Get-Process -Name 多名称；CIM/WMI 的 Filter 不用 OR，分两次查询更稳。
 # 说明：Win32_Process.ExecutablePath 在不少主机上为空（权限/会话差异），若仅按路径前缀匹配会杀不掉旧进程；
 # 因此补充 CommandLine 匹配（同解释器路径、或 DeployRoot\current 下手工启动入口脚本路径）。
 function Invoke-KillPythonSameInterpreter {
@@ -604,11 +605,19 @@ function Invoke-KillPythonSameInterpreter {
         }
 
         # 与 Start-ManualStockQuoteProcesses 对齐：用于 ExecutablePath 为空时按命令行识别本部署 worker
-        # 注意：勿使用 Get-Variable -Scope Script；在部分宿主下会触发「无法使用指定的命名参数解析参数集」。
+        # 勿用 Get-Variable：在部分 PS5.1 宿主会与 $ErrorActionPreference=Stop 组合触发 ParameterBindingException，导致整段 kill 被跳过。
         $currentScriptMarkers = @()
-        $curVar = Get-Variable -Name 'currentDir' -ErrorAction SilentlyContinue
-        if ($null -ne $curVar -and -not [string]::IsNullOrWhiteSpace([string]$curVar.Value)) {
-            $cd = [string]$curVar.Value
+        $cdRaw = $null
+        if (Test-Path -LiteralPath 'variable:currentDir') {
+            try {
+                $cdRaw = [string](Get-Item -LiteralPath 'variable:currentDir').Value
+            }
+            catch {
+                $cdRaw = $null
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($cdRaw)) {
+            $cd = $cdRaw.Trim()
             if (Test-Path -LiteralPath $cd) {
                 try {
                     $curFull = (Resolve-Path -LiteralPath $cd).Path
@@ -623,23 +632,73 @@ function Invoke-KillPythonSameInterpreter {
             }
         }
 
-        $cimList = @()
-        $procFilter = "Name='python.exe' OR Name='pythonw.exe'"
-        try {
-            if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
-                # 使用 -ClassName/-Filter，避免 -Query 在少数环境下与公共参数组合触发 ParameterBindingException
-                $cimList = @(Get-CimInstance -ClassName Win32_Process -Filter $procFilter -ErrorAction Stop)
-            }
-        }
-        catch {
-            $cimList = @()
-        }
-        if ($cimList.Count -eq 0) {
+        $cimList = [System.Collections.Generic.List[object]]::new()
+        foreach ($procBaseName in @('python.exe', 'pythonw.exe')) {
+            $oneFilter = "Name='$procBaseName'"
             try {
-                $cimList = @(Get-WmiObject -Class Win32_Process -Filter $procFilter -ErrorAction Stop)
+                if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
+                    foreach ($row in @(Get-CimInstance -ClassName Win32_Process -Filter $oneFilter -ErrorAction SilentlyContinue)) {
+                        if ($null -ne $row) {
+                            $cimList.Add($row)
+                        }
+                    }
+                }
             }
             catch {
-                $cimList = @()
+            }
+        }
+        if ($cimList.Count -eq 0) {
+            foreach ($procBaseName in @('python.exe', 'pythonw.exe')) {
+                $oneFilter = "Name='$procBaseName'"
+                try {
+                    foreach ($row in @(Get-WmiObject -Class Win32_Process -Filter $oneFilter -ErrorAction SilentlyContinue)) {
+                        if ($null -ne $row) {
+                            $cimList.Add($row)
+                        }
+                    }
+                }
+                catch {
+                }
+            }
+        }
+        # CIM/WMI 全失败时：用 .NET 按 MainModule 路径匹配同解释器（无 CommandLine，仅路径规则）
+        if ($cimList.Count -eq 0) {
+            foreach ($procBase in @('python', 'pythonw')) {
+                try {
+                    foreach ($dp in @([System.Diagnostics.Process]::GetProcessesByName($procBase))) {
+                        if ($null -eq $dp) {
+                            continue
+                        }
+                        $exeP = $null
+                        try {
+                            $exeP = [string]$dp.MainModule.FileName
+                        }
+                        catch {
+                            continue
+                        }
+                        if ([string]::IsNullOrWhiteSpace($exeP)) {
+                            continue
+                        }
+                        $matchRoot = $false
+                        try {
+                            $exeNormP = [System.IO.Path]::GetFullPath($exeP)
+                            if ($exeNormP.StartsWith($pyRootNorm, [StringComparison]::OrdinalIgnoreCase)) {
+                                $matchRoot = $true
+                            }
+                        }
+                        catch {
+                            if ($exeP.StartsWith($pyRootKill, [StringComparison]::OrdinalIgnoreCase)) {
+                                $matchRoot = $true
+                            }
+                        }
+                        if (-not $matchRoot) {
+                            continue
+                        }
+                        $cimList.Add([PSCustomObject]@{ ProcessId = $dp.Id; ExecutablePath = $exeP; CommandLine = [string]::Empty })
+                    }
+                }
+                catch {
+                }
             }
         }
 
