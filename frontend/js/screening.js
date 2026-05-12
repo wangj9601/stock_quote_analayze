@@ -2480,6 +2480,16 @@ const ScreeningPage = {
             else alert(`导出失败: ${msg}`);
             return;
         }
+        try {
+            if (typeof window.ensureSheetJsLoaded === 'function') {
+                await window.ensureSheetJsLoaded();
+            }
+        } catch (e) {
+            const msg = (e && e.message) ? e.message : String(e);
+            if (window.CommonUtils) CommonUtils.showToast(`Excel 组件加载失败: ${msg}`, 'warning');
+            else alert(`Excel 组件加载失败: ${msg}`);
+            return;
+        }
         if (typeof XLSX === 'undefined') {
             if (window.CommonUtils) CommonUtils.showToast('请刷新页面后重试（Excel 导出依赖未加载）', 'warning');
             else alert('请刷新页面后重试');

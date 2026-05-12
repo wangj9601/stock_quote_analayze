@@ -63,6 +63,47 @@ async function smartFetch(url, options = {}) {
 window.authFetch = authFetch;
 window.smartFetch = smartFetch;
 
+/** SheetJS 本地按需加载（与旧 CDN 版全局 `XLSX` 一致）；路径相对 `js/config.js`。 */
+(function () {
+    let _xlsxInflight = null;
+    window.ensureSheetJsLoaded = function ensureSheetJsLoaded() {
+        if (typeof XLSX !== 'undefined') {
+            return Promise.resolve();
+        }
+        if (_xlsxInflight) {
+            return _xlsxInflight;
+        }
+        _xlsxInflight = new Promise((resolve, reject) => {
+            const ref = document.querySelector('script[src*="config.js"]');
+            let src = 'js/vendor/xlsx.full.min.js';
+            if (ref && ref.src) {
+                try {
+                    src = new URL('vendor/xlsx.full.min.js', ref.src).href;
+                } catch (_) {
+                    /* keep default */
+                }
+            }
+            const el = document.createElement('script');
+            el.async = true;
+            el.src = src;
+            el.onload = function () {
+                if (typeof XLSX !== 'undefined') {
+                    resolve();
+                } else {
+                    _xlsxInflight = null;
+                    reject(new Error('XLSX 未定义'));
+                }
+            };
+            el.onerror = function () {
+                _xlsxInflight = null;
+                reject(new Error('加载失败: ' + src));
+            };
+            document.head.appendChild(el);
+        });
+        return _xlsxInflight;
+    };
+})();
+
 // 通用功能模块
 const CommonUtils = {
     // 用户认证模块

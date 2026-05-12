@@ -653,6 +653,15 @@ const MarketsPage = {
             CommonUtils.showToast('没有可导出的数据', 'warning');
             return;
         }
+        try {
+            if (typeof window.ensureSheetJsLoaded === 'function') {
+                await window.ensureSheetJsLoaded();
+            }
+        } catch (e) {
+            const msg = (e && e.message) ? e.message : String(e);
+            CommonUtils.showToast(`Excel 组件加载失败: ${msg}`, 'warning');
+            return;
+        }
         if (typeof XLSX === 'undefined') {
             CommonUtils.showToast('请刷新页面后重试（Excel 导出依赖未加载）', 'warning');
             return;
