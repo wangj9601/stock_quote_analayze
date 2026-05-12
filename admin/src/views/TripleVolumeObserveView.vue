@@ -17,6 +17,20 @@
             <el-option label="港股" value="HK" />
           </el-select>
         </el-form-item>
+        <el-form-item label="板块">
+          <el-select
+            v-model="filters.board"
+            placeholder="全部"
+            clearable
+            style="width: 150px"
+            :disabled="filters.market === 'HK'"
+          >
+            <el-option label="沪深主板" value="MAIN" />
+            <el-option label="创业板" value="CYB" />
+            <el-option label="中小板" value="SZ_SME" />
+            <el-option label="科创板" value="KCB" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filters.status" placeholder="全部" clearable style="width: 120px;">
             <el-option label="待观察" value="待观察" />
@@ -80,9 +94,10 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(50)
 
-const filters = reactive<{ market?: string; status?: string }>({
+const filters = reactive<{ market?: string; status?: string; board?: string }>({
   market: undefined,
-  status: undefined
+  status: undefined,
+  board: undefined
 })
 
 function formatTime(v: string | undefined | null) {
@@ -93,8 +108,13 @@ function formatTime(v: string | undefined | null) {
 async function load() {
   loading.value = true
   try {
+    const board =
+      filters.market === 'HK' ? undefined : filters.board || undefined
+    const market =
+      board && !filters.market ? 'CN' : filters.market || undefined
     const res = await listTripleVolumeObserve({
-      market: filters.market,
+      market,
+      board,
       status: filters.status,
       page: page.value,
       page_size: pageSize.value
@@ -115,8 +135,13 @@ async function load() {
 async function doExport() {
   exporting.value = true
   try {
+    const board =
+      filters.market === 'HK' ? undefined : filters.board || undefined
+    const market =
+      board && !filters.market ? 'CN' : filters.market || undefined
     const blob = await exportTripleVolumeObserveBlob({
-      market: filters.market,
+      market,
+      board,
       status: filters.status
     })
     const a = document.createElement('a')

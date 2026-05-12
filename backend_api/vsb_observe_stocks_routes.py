@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend_api.auth import get_current_user_or_admin
 from backend_api.database import get_db
 from backend_api.models import User, Admin, VsbObserveStock
+from backend_api.utils.cn_listed_board_filter import filter_query_by_market_and_board
 
 router = APIRouter(prefix="/api/stock/vsb-observe-stocks", tags=["vsb-observe-stocks"])
 
@@ -90,10 +91,16 @@ def _list_impl(
     market: Optional[str],
     page: int,
     page_size: int,
+    board_segment: Optional[str] = None,
 ) -> VsbObserveListResponse:
     q = db.query(VsbObserveStock)
-    if market:
-        q = q.filter(VsbObserveStock.market == market.strip().upper()[:10])
+    q = filter_query_by_market_and_board(
+        q,
+        VsbObserveStock.market,
+        VsbObserveStock.code,
+        market,
+        board_segment,
+    )
     total = q.count()
     rows = (
         q.order_by(VsbObserveStock.signal_date.desc(), VsbObserveStock.code)
@@ -113,12 +120,18 @@ def _export_impl(
     db: Session,
     market: Optional[str],
     principal: Union[User, Admin],
+    board_segment: Optional[str] = None,
 ):
     import pandas as pd
 
     q = db.query(VsbObserveStock)
-    if market:
-        q = q.filter(VsbObserveStock.market == market.strip().upper()[:10])
+    q = filter_query_by_market_and_board(
+        q,
+        VsbObserveStock.market,
+        VsbObserveStock.code,
+        market,
+        board_segment,
+    )
     rows = q.order_by(
         VsbObserveStock.signal_date.desc(),
         VsbObserveStock.market,
@@ -159,18 +172,20 @@ def _export_impl(
 @router.get("/list", response_model=VsbObserveListResponse)
 def list_vsb_observe_stocks(
     market: Optional[str] = Query(None, description="CN 或 HK"),
+    board: Optional[str] = Query(None, description="A股代码段：CYB SZ_SME KCB MAIN"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     _principal: Union[User, Admin] = Depends(get_current_user_or_admin),
     db: Session = Depends(get_db),
 ):
-    return _list_impl(db, market, page, page_size)
+    return _list_impl(db, market, page, page_size, board)
 
 
 @router.get("/export")
 def export_vsb_observe_stocks(
     market: Optional[str] = Query(None),
+    board: Optional[str] = Query(None),
     principal: Union[User, Admin] = Depends(get_current_user_or_admin),
     db: Session = Depends(get_db),
 ):
-    return _export_impl(db, market, principal)
+    return _export_impl(db, market, principal, board)

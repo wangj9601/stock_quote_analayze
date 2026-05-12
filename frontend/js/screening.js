@@ -9,6 +9,8 @@ const ScreeningPage = {
     gmsLocateActive: false,
     _vsbOpenFromHash: false,
     vsbSubPanel: 'pick',
+    /** 观察股池内子页：vsb=选股命中表；daily=日终爆量表 */
+    vsbObserveSource: 'vsb',
 
     // 初始化
     async init() {
@@ -80,7 +82,10 @@ const ScreeningPage = {
     },
 
     initVsbIntegratedTabs() {
-        document.querySelectorAll('.vsb-sub-tab').forEach((btn) => {
+        const pick = document.getElementById('vsbSubTabPick');
+        const obs = document.getElementById('vsbSubTabObserve');
+        [pick, obs].forEach((btn) => {
+            if (!btn) return;
             btn.addEventListener('click', () => {
                 const sub = btn.getAttribute('data-vsb-sub');
                 if (sub === 'pick' || sub === 'observe') {
@@ -88,22 +93,35 @@ const ScreeningPage = {
                 }
             });
         });
-        const br = document.getElementById('btnTvoObserveRefresh');
-        const bx = document.getElementById('btnTvoObserveExport');
+        document.querySelectorAll('#vsb-sub-observe-wrap .observe-source-tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const src = btn.getAttribute('data-observe-source');
+                if (src === 'vsb' || src === 'daily') {
+                    this.switchObserveSource(src);
+                }
+            });
+        });
+        const br = document.getElementById('btnObservePoolRefresh');
+        const bx = document.getElementById('btnObservePoolExport');
         if (br) {
-            br.addEventListener('click', () => this.loadTripleVolumeObserveList());
+            br.addEventListener('click', () => this.refreshObserveActiveList());
         }
         if (bx) {
-            bx.addEventListener('click', () => this.exportTripleVolumeObserveXlsx());
+            bx.addEventListener('click', () => this.exportObserveActiveXlsx());
         }
     },
 
     applyVsbHashOnLoad() {
         const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
-        if (h === 'vsb-observe' || h === 'triple-volume-observe') {
+        if (h === 'vsb-observe' || h === 'vsb-observe-daily' || h === 'triple-volume-observe') {
             this._vsbOpenFromHash = true;
             this.switchStrategy('volume-shrink-breakout');
             this._vsbOpenFromHash = false;
+            if (h === 'vsb-observe-daily' || h === 'triple-volume-observe') {
+                this.vsbObserveSource = 'daily';
+            } else {
+                this.vsbObserveSource = 'vsb';
+            }
             this.switchVsbSubPanel('observe');
             return;
         }
@@ -117,7 +135,7 @@ const ScreeningPage = {
 
     switchVsbSubPanel(sub) {
         this.vsbSubPanel = sub;
-        document.querySelectorAll('.vsb-sub-tab').forEach((t) => {
+        document.querySelectorAll('.vsb-integrated-head .vsb-sub-tab').forEach((t) => {
             t.classList.toggle('active', t.getAttribute('data-vsb-sub') === sub);
         });
         document.querySelectorAll('.vsb-sub-panel').forEach((p) => {
@@ -127,14 +145,59 @@ const ScreeningPage = {
             p.classList.toggle('active', show);
         });
         if (sub === 'observe') {
-            this.loadTripleVolumeObserveList();
+            this._syncObserveInnerTabsFromState();
+            this.refreshObserveActiveList();
         }
+        this._replaceVsbScreeningHash();
+    },
+
+    _syncObserveInnerTabsFromState() {
+        const src = this.vsbObserveSource === 'daily' ? 'daily' : 'vsb';
+        document.querySelectorAll('#vsb-sub-observe-wrap .observe-source-tab').forEach((t) => {
+            t.classList.toggle('active', t.getAttribute('data-observe-source') === src);
+        });
+        const wV = document.getElementById('observe-source-vsb-wrap');
+        const wD = document.getElementById('observe-source-daily-wrap');
+        if (wV) wV.classList.toggle('active', src === 'vsb');
+        if (wD) wD.classList.toggle('active', src === 'daily');
+        const statusWrap = document.getElementById('dailyTvoFilterStatusWrap');
+        if (statusWrap) {
+            statusWrap.style.display = src === 'daily' ? '' : 'none';
+        }
+    },
+
+    switchObserveSource(src) {
+        this.vsbObserveSource = src === 'daily' ? 'daily' : 'vsb';
+        this._syncObserveInnerTabsFromState();
+        this.refreshObserveActiveList();
+        this._replaceVsbScreeningHash();
+    },
+
+    _replaceVsbScreeningHash() {
         try {
-            if (window.history && window.history.replaceState) {
-                const suffix = sub === 'observe' ? '#vsb-observe' : '#vsb-pick';
-                window.history.replaceState(null, '', 'screening.html' + suffix);
+            if (!window.history || !window.history.replaceState) return;
+            let suffix = '#vsb-pick';
+            if (this.vsbSubPanel === 'observe') {
+                suffix = this.vsbObserveSource === 'daily' ? '#vsb-observe-daily' : '#vsb-observe';
             }
+            window.history.replaceState(null, '', 'screening.html' + suffix);
         } catch (_) {}
+    },
+
+    refreshObserveActiveList() {
+        if (this.vsbObserveSource === 'daily') {
+            this.loadDailyTripleVolumeObserveList();
+        } else {
+            this.loadVsbObserveStocksList();
+        }
+    },
+
+    exportObserveActiveXlsx() {
+        if (this.vsbObserveSource === 'daily') {
+            this.exportDailyTripleVolumeObserveXlsx();
+        } else {
+            this.exportVsbObserveStocksXlsx();
+        }
     },
 
     _tvoEscapeHtml(s) {
@@ -146,7 +209,22 @@ const ScreeningPage = {
             .replace(/"/g, '&quot;');
     },
 
-    async loadTripleVolumeObserveList() {
+    /** 观察股池「市场/板块」下拉：值为 HK | CN | CN|CYB 等 */
+    _parseObserveMarketSelect(raw) {
+        const v = (raw || '').trim();
+        if (!v) return { market: '', board: '' };
+        const i = v.indexOf('|');
+        if (i === -1) return { market: v, board: '' };
+        return { market: v.slice(0, i).trim(), board: v.slice(i + 1).trim() };
+    },
+
+    _applyObserveMarketBoardToQs(qs, rawSelectValue) {
+        const { market, board } = this._parseObserveMarketSelect(rawSelectValue);
+        if (market) qs.set('market', market);
+        if (board) qs.set('board', board);
+    },
+
+    async loadVsbObserveStocksList() {
         const apiBase = this.API_BASE_URL || '';
         const marketEl = document.getElementById('tvoFilterMarket');
         const err = document.getElementById('tvoObserveError');
@@ -154,9 +232,9 @@ const ScreeningPage = {
             err.style.display = 'none';
             err.textContent = '';
         }
-        const market = marketEl ? marketEl.value : '';
+        const mv = marketEl ? marketEl.value : '';
         const qs = new URLSearchParams({ page: '1', page_size: '200' });
-        if (market) qs.set('market', market);
+        this._applyObserveMarketBoardToQs(qs, mv);
         const url = `${apiBase}/api/stock/vsb-observe-stocks/list?${qs.toString()}`;
         const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
         let res;
@@ -226,13 +304,109 @@ const ScreeningPage = {
         }
     },
 
-    async exportTripleVolumeObserveXlsx() {
+    _tvoFmtNum(v) {
+        if (v == null || v === '') return '';
+        const n = Number(v);
+        if (Number.isNaN(n)) return String(v);
+        if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+        if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(2) + '万';
+        return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    },
+
+    async loadDailyTripleVolumeObserveList() {
+        const apiBase = this.API_BASE_URL || '';
+        const marketEl = document.getElementById('tvoFilterMarket');
+        const statusEl = document.getElementById('dailyTvoFilterStatus');
+        const err = document.getElementById('tvoObserveError');
+        if (err) {
+            err.style.display = 'none';
+            err.textContent = '';
+        }
+        const mv = marketEl ? marketEl.value : '';
+        const status = statusEl ? statusEl.value : '';
+        const qs = new URLSearchParams({ page: '1', page_size: '200' });
+        this._applyObserveMarketBoardToQs(qs, mv);
+        if (status) qs.set('status', status);
+        const url = `${apiBase}/api/stock/triple-volume-observe/list?${qs.toString()}`;
+        const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
+        let res;
+        try {
+            res = await fetchFn(url);
+        } catch (e) {
+            if (err) {
+                err.textContent = String(e.message || e);
+                err.style.display = 'block';
+            }
+            return;
+        }
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            if (err) {
+                err.textContent = '响应解析失败';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        if (!res.ok) {
+            if (err) {
+                err.textContent = data.detail || data.message || '加载失败';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        const tbody = document.getElementById('dailyTvoObserveTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const items = data.items || [];
+        if (items.length === 0) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="11" class="empty-state">暂无数据</td>';
+            tbody.appendChild(tr);
+        } else {
+            const esc = this._tvoEscapeHtml.bind(this);
+            const fmtNum = this._tvoFmtNum.bind(this);
+            items.forEach((row) => {
+                const tr = document.createElement('tr');
+                const up = row.updated_at
+                    ? String(row.updated_at).replace('T', ' ').slice(0, 19)
+                    : '';
+                const ev = row.vsb_evaluated_at
+                    ? String(row.vsb_evaluated_at).replace('T', ' ').slice(0, 19)
+                    : '';
+                const ratio =
+                    row.volume_ratio_actual != null && row.volume_ratio_actual !== ''
+                        ? Number(row.volume_ratio_actual).toFixed(2)
+                        : '';
+                tr.innerHTML =
+                    '<td>' + esc(row.market) + '</td>' +
+                    '<td>' + esc(row.code) + '</td>' +
+                    '<td>' + esc(row.name) + '</td>' +
+                    '<td>' + esc(row.observe_trade_date) + '</td>' +
+                    '<td>' + esc(row.prev_trade_date || '') + '</td>' +
+                    '<td>' + esc(fmtNum(row.prev_volume)) + '</td>' +
+                    '<td>' + esc(fmtNum(row.curr_volume)) + '</td>' +
+                    '<td>' + esc(ratio) + '</td>' +
+                    '<td>' + esc(row.status) + '</td>' +
+                    '<td>' + esc(ev) + '</td>' +
+                    '<td>' + esc(up) + '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+        const pager = document.getElementById('dailyTvoObservePager');
+        if (pager) {
+            pager.textContent = '共 ' + (data.total || 0) + ' 条，本页 ' + items.length + ' 条';
+        }
+    },
+
+    async exportVsbObserveStocksXlsx() {
         const apiBase = this.API_BASE_URL || '';
         const marketEl = document.getElementById('tvoFilterMarket');
         const err = document.getElementById('tvoObserveError');
-        const market = marketEl ? marketEl.value : '';
+        const mv = marketEl ? marketEl.value : '';
         const qs = new URLSearchParams();
-        if (market) qs.set('market', market);
+        this._applyObserveMarketBoardToQs(qs, mv);
         const url = `${apiBase}/api/stock/vsb-observe-stocks/export?${qs.toString()}`;
         const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
         let res;
@@ -259,6 +433,46 @@ const ScreeningPage = {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'vsb_observe_stocks.xlsx';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    },
+
+    async exportDailyTripleVolumeObserveXlsx() {
+        const apiBase = this.API_BASE_URL || '';
+        const marketEl = document.getElementById('tvoFilterMarket');
+        const statusEl = document.getElementById('dailyTvoFilterStatus');
+        const err = document.getElementById('tvoObserveError');
+        const mv = marketEl ? marketEl.value : '';
+        const status = statusEl ? statusEl.value : '';
+        const qs = new URLSearchParams();
+        this._applyObserveMarketBoardToQs(qs, mv);
+        if (status) qs.set('status', status);
+        const url = `${apiBase}/api/stock/triple-volume-observe/export?${qs.toString()}`;
+        const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
+        let res;
+        try {
+            res = await fetchFn(url);
+        } catch (e) {
+            if (err) {
+                err.textContent = String(e.message || e);
+                err.style.display = 'block';
+            }
+            return;
+        }
+        if (!res.ok) {
+            if (err) {
+                err.textContent = '导出失败';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        if (err) {
+            err.style.display = 'none';
+        }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'triple_volume_observe_stocks.xlsx';
         a.click();
         URL.revokeObjectURL(a.href);
     },

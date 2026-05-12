@@ -40,6 +40,71 @@
     display: block;
 }
 
+/* 观察股池内：选股命中 vs 日终爆量 */
+.observe-source-tabs {
+    margin-bottom: 0;
+}
+.observe-pool-toolbar {
+    margin: 0 0 16px 0;
+    padding: 14px 16px;
+    background: #f8fafb;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+}
+.observe-pool-toolbar-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e1e8ed;
+}
+.observe-pool-toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px 20px;
+}
+.observe-pool-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 20px;
+    min-width: 0;
+}
+.observe-pool-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #37474f;
+    white-space: nowrap;
+}
+.observe-pool-select {
+    width: auto;
+    min-width: 200px;
+    max-width: 280px;
+    margin: 0;
+}
+.observe-pool-select--status {
+    width: 120px;
+}
+.observe-pool-btns {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.observe-source-panel {
+    display: none;
+}
+.observe-source-panel.active {
+    display: block;
+}
+
 .screening-container {
     max-width: 1400px;
     margin: 0 auto;

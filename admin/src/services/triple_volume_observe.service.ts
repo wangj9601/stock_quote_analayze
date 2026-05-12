@@ -28,6 +28,7 @@ export interface ObserveListResponse {
 
 export async function listTripleVolumeObserve(params: {
   market?: string
+  board?: string
   status?: string
   page?: number
   page_size?: number
@@ -37,6 +38,7 @@ export async function listTripleVolumeObserve(params: {
 
 export async function exportTripleVolumeObserveBlob(params: {
   market?: string
+  board?: string
   status?: string
 }): Promise<Blob> {
   const { default: axios } = await import('axios')
