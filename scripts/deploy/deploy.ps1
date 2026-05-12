@@ -111,7 +111,7 @@ if (Test-Path -LiteralPath $localPackage) {
 }
 
 # Top-level excludes for zip; subtree and log rules also in robocopy args below.
-$zipExcludePart1 = '.agent', '.auth', '.cursor', '.gemini', '.git', '.github', '.hypothesis', '.idea', '.kiro', '.pytest_cache', '.qoder', '.vs', '.venv', '.vscode', 'database', 'demo', 'dist'
+$zipExcludePart1 = '.agent', '.auth', '.cursor', '.gemini', '.git', '.github', '.hypothesis', '.idea', '.kiro', '.pytest_cache', '.qoder', '.vs', '.venv', '.vscode', 'demo', 'dist'
 $zipExcludePart2 = 'docs', 'env', 'image', 'logs', 'manual_scripts', 'node_modules', 'test', 'test-results', 'venv'
 $zipExcludeTopLevel = $zipExcludePart1 + $zipExcludePart2
 $rootPath = $projectRoot.Path
@@ -133,7 +133,7 @@ try {
             $robocopyArgs = @(
                 $entry.FullName, $targetPath,
                 '/E',
-                '/XD', 'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache', '.git', '.agent', '.auth', '.cursor', '.gemini', '.github', '.hypothesis', '.kiro', '.qoder', '.vscode', 'test', 'tests', 'database', 'demo', 'docs', 'image', 'logs', 'manual_scripts', 'test-results',
+                '/XD', 'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache', '.git', '.agent', '.auth', '.cursor', '.gemini', '.github', '.hypothesis', '.kiro', '.qoder', '.vscode', 'test', 'tests', 'demo', 'docs', 'image', 'logs', 'manual_scripts', 'test-results',
                 '/XF', '*.log',
                 '/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np'
             )
