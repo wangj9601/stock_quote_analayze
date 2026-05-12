@@ -1188,6 +1188,30 @@ class VolumeShrinkBreakoutSignal(Base):
     )
 
 
+class VsbObserveStock(Base):
+    """VSB 选股观察股：策略筛选命中后写入（与 volume_shrink_breakout_signals 同源触发）"""
+
+    __tablename__ = "vsb_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_date = Column(Date, nullable=False, index=True)
+    boom_date = Column(String(20), nullable=True)
+    run_search_date = Column(String(20), nullable=True)
+    signal_strength = Column(Integer, nullable=True)
+    signal_strength_level = Column(String(20), nullable=True)
+    buy_signal_text = Column(String(220), nullable=True)
+    screen_snapshot_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("market", "code", "signal_date", name="uq_vsb_observe_market_code_signal_date"),
+    )
+
+
 # 系统监控相关模型
 class SystemMonitorMetric(Base):
     """系统监控指标表"""

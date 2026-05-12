@@ -149,18 +149,15 @@ const ScreeningPage = {
     async loadTripleVolumeObserveList() {
         const apiBase = this.API_BASE_URL || '';
         const marketEl = document.getElementById('tvoFilterMarket');
-        const statusEl = document.getElementById('tvoFilterStatus');
         const err = document.getElementById('tvoObserveError');
         if (err) {
             err.style.display = 'none';
             err.textContent = '';
         }
         const market = marketEl ? marketEl.value : '';
-        const status = statusEl ? statusEl.value : '';
         const qs = new URLSearchParams({ page: '1', page_size: '200' });
         if (market) qs.set('market', market);
-        if (status) qs.set('status', status);
-        const url = `${apiBase}/api/stock/triple-volume-observe/list?${qs.toString()}`;
+        const url = `${apiBase}/api/stock/vsb-observe-stocks/list?${qs.toString()}`;
         const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
         let res;
         try {
@@ -195,26 +192,30 @@ const ScreeningPage = {
         const items = data.items || [];
         if (items.length === 0) {
             const tr = document.createElement('tr');
-            tr.innerHTML = '<td colspan="8" class="empty-state">暂无数据</td>';
+            tr.innerHTML = '<td colspan="10" class="empty-state">暂无数据</td>';
             tbody.appendChild(tr);
         } else {
             const esc = this._tvoEscapeHtml.bind(this);
             items.forEach((row) => {
                 const tr = document.createElement('tr');
-                const ev = row.vsb_evaluated_at
-                    ? String(row.vsb_evaluated_at).replace('T', ' ').slice(0, 19)
-                    : '';
                 const up = row.updated_at
                     ? String(row.updated_at).replace('T', ' ').slice(0, 19)
                     : '';
+                const strength =
+                    row.signal_strength != null || row.signal_strength_level
+                        ? (row.signal_strength != null ? String(row.signal_strength) : '') +
+                          (row.signal_strength_level ? ' ' + esc(row.signal_strength_level) : '')
+                        : '';
                 tr.innerHTML =
                     '<td>' + esc(row.market) + '</td>' +
                     '<td>' + esc(row.code) + '</td>' +
                     '<td>' + esc(row.name) + '</td>' +
-                    '<td>' + esc(row.observe_trade_date) + '</td>' +
-                    '<td>' + (row.volume_ratio_actual != null ? Number(row.volume_ratio_actual).toFixed(2) : '') + '</td>' +
-                    '<td>' + esc(row.status) + '</td>' +
-                    '<td>' + esc(ev) + '</td>' +
+                    '<td>' + esc(row.display_status || '') + '</td>' +
+                    '<td>' + esc(row.signal_date) + '</td>' +
+                    '<td>' + esc(row.boom_date) + '</td>' +
+                    '<td>' + esc(row.run_search_date) + '</td>' +
+                    '<td>' + strength.trim() + '</td>' +
+                    '<td>' + esc(row.buy_signal_text) + '</td>' +
                     '<td>' + esc(up) + '</td>';
                 tbody.appendChild(tr);
             });
@@ -228,14 +229,11 @@ const ScreeningPage = {
     async exportTripleVolumeObserveXlsx() {
         const apiBase = this.API_BASE_URL || '';
         const marketEl = document.getElementById('tvoFilterMarket');
-        const statusEl = document.getElementById('tvoFilterStatus');
         const err = document.getElementById('tvoObserveError');
         const market = marketEl ? marketEl.value : '';
-        const status = statusEl ? statusEl.value : '';
         const qs = new URLSearchParams();
         if (market) qs.set('market', market);
-        if (status) qs.set('status', status);
-        const url = `${apiBase}/api/stock/triple-volume-observe/export?${qs.toString()}`;
+        const url = `${apiBase}/api/stock/vsb-observe-stocks/export?${qs.toString()}`;
         const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
         let res;
         try {
@@ -260,7 +258,7 @@ const ScreeningPage = {
         const blob = await res.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'triple_volume_observe.xlsx';
+        a.download = 'vsb_observe_stocks.xlsx';
         a.click();
         URL.revokeObjectURL(a.href);
     },

@@ -152,6 +152,13 @@ except ImportError as e:
     triple_volume_observe_router = None
     triple_volume_observe_admin_router = None
 
+try:
+    from .vsb_observe_stocks_routes import router as vsb_observe_stocks_router
+    print("vsb_observe_stocks_router 导入成功")
+except ImportError as e:
+    print(f"vsb_observe_stocks_router 导入失败: {e}")
+    vsb_observe_stocks_router = None
+
 # 尝试导入screening路由
 try:
     from .stock.stock_screening_routes import router as screening_router
@@ -516,6 +523,7 @@ _include_router(app, market_router, "market")
 _include_router(app, stock_router, "stock")
 _include_router(app, triple_volume_observe_router, "triple_volume_observe")
 _include_router(app, triple_volume_observe_admin_router, "triple_volume_observe_admin")
+_include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")
 _include_router(app, screening_router, "screening")
 _include_router(app, gms_trace_router, "gms_trace")
 _include_router(app, vsb_signal_router, "vsb_signal")

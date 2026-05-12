@@ -751,7 +751,8 @@ function Invoke-KillPythonSameInterpreter {
             $reason = if ($matchDeployWorker) { 'deploy-current cmdline' } else { 'same-interpreter' }
             try {
                 Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-                Write-Host ("[KILL] PID {0} ({1}) exe={2}" -f $procIdKill, $reason, $(if ([string]::IsNullOrWhiteSpace($exePathKill)) { '(empty)' } else { $exePathKill })) -ForegroundColor DarkYellow
+                $exeDispKill = if ([string]::IsNullOrWhiteSpace($exePathKill)) { 'NO_EXE_PATH' } else { $exePathKill }
+                Write-Host ('KILL: PID={0} reason={1} exe={2}' -f $procIdKill, $reason, $exeDispKill) -ForegroundColor DarkYellow
             }
             catch {
                 Write-Host ("[WARN] Stop-Process PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow

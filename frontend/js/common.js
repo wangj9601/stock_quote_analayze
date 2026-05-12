@@ -47,7 +47,8 @@ async function smartFetch(url, options = {}) {
         '/api/user/',
         '/api/admin/',
         '/api/simtrade',
-        '/api/stock/triple-volume-observe'
+        '/api/stock/triple-volume-observe',
+        '/api/stock/vsb-observe-stocks'
     ];
 
     const needsAuth = authRequiredEndpoints.some(endpoint => url.includes(endpoint));

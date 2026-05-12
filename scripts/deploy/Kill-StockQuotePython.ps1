@@ -1,27 +1,17 @@
 <#
 .SYNOPSIS
-    单独结束「本 stock_quote 部署」相关的 python.exe / pythonw.exe（与 release.ps1 手工进程识别规则一致）。
+    Stop python.exe / pythonw.exe tied to this stock_quote deploy (same rules as release.ps1 manual workers).
 
 .DESCRIPTION
-    匹配条件（满足其一即视为本项目相关）：
-    1) 命令行包含 DeployRoot\current 下入口路径：start_backend_core.py / start_backend_api.py /
-       start_scheduler.py / start_frontend.py，或 current\admin\dist（与手工启动一致）；
-    2) 若指定 -PythonExe：与 release.ps1 一致，同时结束「同解释器」进程（ExecutablePath 位于该 python 目录下，或命令行含该 python 全路径）。
-       未指定 -PythonExe 时，仅按上述 current 路径标记匹配（更安全）。
-
-    需要 Windows；建议以管理员运行以便结束其它会话启动的进程。
+    Match if CommandLine contains paths under DeployRoot\current for:
+    start_backend_core.py, start_backend_api.py, start_scheduler.py, start_frontend.py, or current\admin\dist.
+    Optional -PythonExe adds same-interpreter matching (ExecutablePath under that python folder, or CommandLine contains full python path).
 
 .EXAMPLE
-    .\Kill-StockQuotePython.ps1
-    # 使用默认 DeployRoot C:\deploy\stock_quote
+    .\Kill-StockQuotePython.ps1 -WhatIf
 
 .EXAMPLE
-    .\Kill-StockQuotePython.ps1 -DeployRoot 'D:\work\stock_quote_deploy' -WhatIf
-    # 仅列出将结束的 PID，不实际结束
-
-.EXAMPLE
-    .\Kill-StockQuotePython.ps1 -DeployRoot 'C:\deploy\stock_quote' -PythonExe 'C:\Python311\python.exe'
-    # 同时按同解释器路径辅助匹配（与 release -PythonExe 一致）
+    .\Kill-StockQuotePython.ps1 -DeployRoot 'D:\deploy\stock_quote' -PythonExe 'C:\Python311\python.exe'
 #>
 
 param(
@@ -33,12 +23,12 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($env:OS -ne 'Windows_NT') {
-    Write-Host '仅支持 Windows。' -ForegroundColor Yellow
+    Write-Host "This script supports Windows only." -ForegroundColor Yellow
     exit 1
 }
 
 if (-not (Test-Path -LiteralPath $DeployRoot)) {
-    Write-Host ("[ERR] DeployRoot 不存在: {0}" -f $DeployRoot) -ForegroundColor Red
+    Write-Host "ERR: DeployRoot not found: $DeployRoot" -ForegroundColor Red
     exit 1
 }
 
@@ -56,7 +46,6 @@ foreach ($rel in @('start_backend_core.py', 'start_backend_api.py', 'start_sched
     [void]$markers.Add((Join-Path $currentFull $rel))
 }
 [void]$markers.Add((Join-Path $currentFull 'admin\dist'))
-# 命令行里可能出现正斜杠
 foreach ($m in @($markers.ToArray())) {
     $u = $m -replace '\\', '/'
     if ($u -ne $m -and -not $markers.Contains($u)) {
@@ -69,7 +58,7 @@ $pyRootKill = $null
 $pyRootNorm = $null
 if (-not [string]::IsNullOrWhiteSpace($PythonExe)) {
     if (-not (Test-Path -LiteralPath $PythonExe)) {
-        Write-Host ("[ERR] -PythonExe 路径不存在: {0}" -f $PythonExe) -ForegroundColor Red
+        Write-Host "ERR: -PythonExe path not found: $PythonExe" -ForegroundColor Red
         exit 1
     }
     $fullPyKill = (Resolve-Path -LiteralPath $PythonExe).Path
@@ -144,22 +133,22 @@ function Test-MatchSameInterpreter {
     return $false
 }
 
-Write-Host ("[INFO] DeployRoot={0}" -f $deployFull) -ForegroundColor Cyan
-Write-Host ("[INFO] current={0}" -f $currentFull) -ForegroundColor Cyan
+Write-Host "INFO: DeployRoot=$deployFull" -ForegroundColor Cyan
+Write-Host "INFO: current=$currentFull" -ForegroundColor Cyan
 if ($null -ne $fullPyKill) {
-    Write-Host ("[INFO] PythonExe={0}" -f $fullPyKill) -ForegroundColor Cyan
+    Write-Host "INFO: PythonExe=$fullPyKill" -ForegroundColor Cyan
 }
 if ($WhatIf) {
-    Write-Host '[INFO] -WhatIf：仅列出将结束的进程，不执行 Stop-Process/taskkill。' -ForegroundColor Yellow
+    Write-Host "INFO: -WhatIf list targets only; no Stop-Process/taskkill." -ForegroundColor Yellow
 }
 
 $cimList = Get-Win32PythonProcesses
 if ($cimList.Count -eq 0) {
-    Write-Host '[INFO] 未发现 python.exe / pythonw.exe 进程。' -ForegroundColor Green
+    Write-Host "INFO: No python.exe / pythonw.exe processes." -ForegroundColor Green
     exit 0
 }
 
-$taskkillExe = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+$taskkillExe = [System.IO.Path]::Combine($env:SystemRoot, 'System32', 'taskkill.exe')
 $killed = 0
 
 foreach ($wp in $cimList) {
@@ -167,7 +156,6 @@ foreach ($wp in $cimList) {
     $cmdLineKill = [string]$wp.CommandLine
     $matchDeploy = Test-MatchDeployMarkers -CmdLine $cmdLineKill
     $matchInterp = Test-MatchSameInterpreter -ExePath $exePathKill -CmdLine $cmdLineKill
-    # 与 release.ps1 Invoke-KillPythonSameInterpreter：命中 current 标记或同解释器即结束
     $shouldKill = $matchDeploy -or $matchInterp
 
     if (-not $shouldKill) {
@@ -179,18 +167,17 @@ foreach ($wp in $cimList) {
         continue
     }
 
-    $reason = if ($matchDeploy -and $matchInterp) { 'markers+interpreter' }
-    elseif ($matchDeploy) { 'deploy-markers' }
-    else { 'same-interpreter' }
+    $reason = if ($matchDeploy -and $matchInterp) { 'markers+interpreter' } elseif ($matchDeploy) { 'deploy-markers' } else { 'same-interpreter' }
 
     if ($WhatIf) {
-        Write-Host ("[WHATIF] PID={0} reason={1} exe={2}" -f $procIdKill, $reason, $(if ([string]::IsNullOrWhiteSpace($exePathKill)) { '(empty)' } else { $exePathKill })) -ForegroundColor Magenta
+        $exeDisp = if ([string]::IsNullOrWhiteSpace($exePathKill)) { 'NO_EXE_PATH' } else { $exePathKill }
+        Write-Host "WHATIF: PID=$procIdKill reason=$reason exe=$exeDisp" -ForegroundColor Magenta
         if (-not [string]::IsNullOrWhiteSpace($cmdLineKill)) {
             $snippet = $cmdLineKill
             if ($snippet.Length -gt 200) {
                 $snippet = $snippet.Substring(0, 200) + '...'
             }
-            Write-Host ("         cmd: {0}" -f $snippet) -ForegroundColor DarkGray
+            Write-Host "cmd: $snippet" -ForegroundColor DarkGray
         }
         $killed++
         continue
@@ -198,22 +185,22 @@ foreach ($wp in $cimList) {
 
     try {
         Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-        Write-Host ("[KILL] PID={0} ({1})" -f $procIdKill, $reason) -ForegroundColor DarkYellow
+        Write-Host "KILL: PID=$procIdKill reason=$reason" -ForegroundColor DarkYellow
         $killed++
     }
     catch {
-        Write-Host ("[WARN] Stop-Process PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow
+        Write-Host "WARN: Stop-Process PID=$procIdKill msg=$($_.Exception.Message)" -ForegroundColor Yellow
         if (Test-Path -LiteralPath $taskkillExe) {
             $null = & $taskkillExe /F /PID $procIdKill 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Host ("[KILL] taskkill /F /PID {0} ({1})" -f $procIdKill, $reason) -ForegroundColor DarkYellow
+                Write-Host "KILL: taskkill /F PID=$procIdKill reason=$reason" -ForegroundColor DarkYellow
                 $killed++
             }
             else {
-                Write-Host ("[WARN] taskkill 退出码 {0} PID={1}" -f $LASTEXITCODE, $procIdKill) -ForegroundColor Yellow
+                Write-Host "WARN: taskkill exit=$LASTEXITCODE PID=$procIdKill" -ForegroundColor Yellow
             }
         }
     }
 }
 
-Write-Host ("[DONE] 处理结束，共匹配并尝试结束 {0} 个进程。" -f $killed) -ForegroundColor Green
+Write-Host "DONE: matched or attempted stop count=$killed" -ForegroundColor Green

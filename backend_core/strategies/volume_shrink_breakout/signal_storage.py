@@ -6,12 +6,24 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _is_vsb_observe_table_missing(exc: BaseException) -> bool:
+    """PostgreSQL 42P01 undefined_table 或文案中含表名且「不存在」。"""
+    if isinstance(exc, ProgrammingError):
+        orig = getattr(exc, "orig", None)
+        if getattr(orig, "pgcode", None) == "42P01":
+            return "vsb_observe_stocks" in str(exc)
+    msg = str(exc).lower()
+    return "vsb_observe_stocks" in msg and ("does not exist" in msg or "不存在" in str(exc))
 
 
 def parse_vsb_signal_date(breakout_date: Any) -> Optional[date]:
@@ -109,6 +121,92 @@ def screen_row_to_signal_fields(
     }
 
 
+def _vsb_screening_observe_enabled() -> bool:
+    """为 false 时仅写 volume_shrink_breakout_signals，不写 vsb_observe_stocks。"""
+    raw = (os.getenv("VSB_SCREENING_OBSERVE_ENABLED") or "true").strip().lower()
+    return raw in ("1", "true", "yes", "on", "y")
+
+
+def _save_vsb_observe_from_screen_rows(
+    db: Session,
+    rows: List[Dict[str, Any]],
+    *,
+    parameters: Dict[str, Any],
+    search_date: str,
+) -> int:
+    """将选股命中同步写入 vsb_observe_stocks；(market, code, signal_date) 幂等更新。"""
+    if not rows:
+        return 0
+    try:
+        from backend_api.models import VsbObserveStock
+    except ImportError:
+        return 0
+    if VsbObserveStock is None:
+        return 0
+    rs = (search_date or "").strip()[:20]
+    n = 0
+    for row in rows:
+        code = str(row.get("code") or "").strip()
+        if len(code) == 5 and code.isdigit():
+            code = code.zfill(6)
+        if not code:
+            continue
+        sd = parse_vsb_signal_date(row.get("breakout_date"))
+        if sd is None:
+            continue
+        snap: Dict[str, Any] = {
+            "volume_ratio": parameters.get("volume_ratio"),
+            "boom_lookback_min": parameters.get("boom_lookback_min"),
+            "boom_lookback_max": parameters.get("boom_lookback_max"),
+            "evaluation_mode": parameters.get("evaluation_mode"),
+            "screening_date_effective": parameters.get("screening_date_effective"),
+            "screening_date_requested": parameters.get("screening_date_requested"),
+        }
+        ps = row.get("phase_state")
+        if isinstance(ps, dict):
+            snap["strategy_phase"] = ps.get("strategy_phase")
+        name = (str(row.get("name") or "").strip()[:200] or None)
+        boom_d = str(row.get("boom_date") or "").strip()[:20] or None
+        bst = str(row.get("buy_signal") or "").strip()[:220] or None
+        lvl = str(row.get("signal_strength_level") or "").strip()[:20] or None
+        existing = (
+            db.query(VsbObserveStock)
+            .filter(
+                VsbObserveStock.market == "CN",
+                VsbObserveStock.code == code,
+                VsbObserveStock.signal_date == sd,
+            )
+            .first()
+        )
+        if existing:
+            if name:
+                existing.name = name
+            existing.boom_date = boom_d
+            existing.run_search_date = rs or None
+            existing.signal_strength = _i(row.get("signal_strength"))
+            existing.signal_strength_level = lvl
+            existing.buy_signal_text = bst
+            existing.screen_snapshot_json = snap
+            existing.updated_at = datetime.now()
+        else:
+            db.add(
+                VsbObserveStock(
+                    market="CN",
+                    code=code,
+                    name=name,
+                    signal_date=sd,
+                    boom_date=boom_d,
+                    run_search_date=rs or None,
+                    signal_strength=_i(row.get("signal_strength")),
+                    signal_strength_level=lvl,
+                    buy_signal_text=bst,
+                    screen_snapshot_json=snap,
+                )
+            )
+        n += 1
+    return n
+
+
 def save_screen_hits(
     db: Session,
     rows: List[Dict[str, Any]],
@@ -118,7 +216,8 @@ def save_screen_hits(
 ) -> int:
     """
     将选股命中列表写入 volume_shrink_breakout_signals；同一 (code, signal_date) 则更新。
-    返回成功写入/更新的条数；异常时 rollback 并返回 0。
+    在信号表提交成功后，默认再写入 vsb_observe_stocks（可用环境变量 VSB_SCREENING_OBSERVE_ENABLED=false 关闭）。
+    返回成功写入/更新的信号条数；信号异常时 rollback 并返回 0。
     """
     if not rows:
         return 0
@@ -156,4 +255,22 @@ def save_screen_hits(
         db.rollback()
         logger.warning("VSB 信号批量保存失败: %s", e, exc_info=True)
         return 0
+
+    if _vsb_screening_observe_enabled():
+        try:
+            no = _save_vsb_observe_from_screen_rows(db, rows, parameters=parameters, search_date=search_date)
+            if no > 0:
+                db.commit()
+                logger.info("VSB 观察股表 vsb_observe_stocks 已写入/更新 %s 条", no)
+        except Exception as e:
+            db.rollback()
+            if _is_vsb_observe_table_missing(e):
+                logger.warning(
+                    "VSB 观察股表 vsb_observe_stocks 不存在，请在项目根执行: "
+                    "python migrations/add_vsb_observe_stocks_table.py（信号表已提交，不影响选股）"
+                )
+            else:
+                logger.warning(
+                    "VSB 观察股表写入失败（信号表已提交，不影响选股结果）: %s", e, exc_info=True
+                )
     return n
