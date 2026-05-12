@@ -154,6 +154,38 @@ def start_server(port):
         _print_safe(f"[ERROR] server start failed: {e}")
         sys.exit(1)
 
+def _resolve_listen_port() -> int:
+    """
+    监听端口：
+    - 若设置环境变量 FRONTEND_PORT（或别名 STOCK_FRONTEND_PORT），则使用该端口（须空闲）；
+    - 否则从 8000 起递增查找第一个空闲端口（与原先行为一致）。
+    可在系统环境或项目根 .env 中配置（本脚本会先 load_dotenv_file）。
+    """
+    raw = (os.getenv("FRONTEND_PORT") or os.getenv("STOCK_FRONTEND_PORT") or "").strip()
+    if raw:
+        try:
+            port = int(raw)
+        except ValueError:
+            _print_safe("[ERROR] FRONTEND_PORT / STOCK_FRONTEND_PORT must be an integer")
+            sys.exit(1)
+        if not (1 <= port <= 65535):
+            _print_safe("[ERROR] FRONTEND_PORT out of range 1-65535")
+            sys.exit(1)
+        if not check_port(port):
+            _print_safe(f"[ERROR] port {port} is already in use (set FRONTEND_PORT to a free port)")
+            sys.exit(1)
+        _print_safe(f"[OK] listen port from env: {port}")
+        return port
+
+    port = find_available_port(8000)
+    if not port:
+        _print_safe("[ERROR] no free port found from 8000 (set FRONTEND_PORT to pick a port)")
+        sys.exit(1)
+    if port != 8000:
+        _print_safe(f"[INFO] port 8000 busy, using {port} (set FRONTEND_PORT=8000 after freeing 8000)")
+    return port
+
+
 def main():
     _reconfigure_stdio_utf8()
     _print_safe("=" * 60)
@@ -162,10 +194,7 @@ def main():
     # 尝试读取项目根目录 .env（不覆盖已存在环境变量）
     project_root = Path(__file__).resolve().parent
     load_dotenv_file(str(project_root / ".env"))
-    port = find_available_port(8000)
-    if not port:
-        _print_safe("[ERROR] no free port found from 8000")
-        sys.exit(1)
+    port = _resolve_listen_port()
     start_server(port)
 
 if __name__ == "__main__":

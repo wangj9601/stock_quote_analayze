@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -177,6 +177,41 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
     if admin is None:
         raise credentials_exception
     return admin
+
+
+AuthUserOrAdmin = Union[User, Admin]
+
+
+async def get_current_user_or_admin(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> AuthUserOrAdmin:
+    """前台用户 JWT 或管理端管理员 JWT（is_admin=true）均可，用于同一套只读接口。"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无效的认证凭据",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        is_admin: bool = payload.get("is_admin", False)
+    except JWTError:
+        raise credentials_exception
+
+    if is_admin:
+        admin = db.query(Admin).filter(Admin.username == username).first()
+        if admin is None:
+            raise credentials_exception
+        return admin
+
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     """验证用户"""

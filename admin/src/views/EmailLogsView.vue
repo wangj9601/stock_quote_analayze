@@ -99,7 +99,10 @@ import type { User } from '@/types/users.types'
 const REPORT_TYPE_LABELS: Record<string, string> = {
   summary: '汇总报告',
   detailed: '详细报告',
-  gms_daily: '自选股GSM策略指标信号列表'
+  gms_daily: '自选股GSM策略指标信号列表',
+  volume_aberration: '成交量异动榜',
+  triple_volume_observe_scan: '3倍量观察-爆量扫描',
+  triple_volume_observe_eval: '3倍量观察-策略复核'
 }
 
 const loading = ref(false)

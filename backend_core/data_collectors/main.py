@@ -155,6 +155,39 @@ def collect_tushare_historical():
     except Exception as e:
         logging.error(f"[定时任务] A 股历史行情采集异常: {e}")
 
+
+def run_job_triple_volume_scan():
+    """日终：3倍量爆量扫描入库（受 TRIPLE_VOLUME_OBSERVE_ENABLED 控制）。"""
+    try:
+        db = ApiSessionLocal()
+        try:
+            from backend_core.strategies.triple_volume_observe.scan_job import run_triple_volume_scan
+
+            out = run_triple_volume_scan(db)
+            if out.get("skipped"):
+                logging.info("[定时任务] 3倍量观察股爆量扫描跳过: %s", out.get("reason"))
+        finally:
+            db.close()
+    except Exception as e:
+        logging.error("[定时任务] 3倍量观察股爆量扫描异常: %s", e)
+
+
+def run_job_triple_volume_eval():
+    """日终：3倍量观察股 VSB 状态复核（受 TRIPLE_VOLUME_OBSERVE_ENABLED 控制）。"""
+    try:
+        db = ApiSessionLocal()
+        try:
+            from backend_core.strategies.triple_volume_observe.eval_job import run_triple_volume_eval
+
+            out = run_triple_volume_eval(db)
+            if out.get("skipped"):
+                logging.info("[定时任务] 3倍量观察股VSB复核跳过: %s", out.get("reason"))
+        finally:
+            db.close()
+    except Exception as e:
+        logging.error("[定时任务] 3倍量观察股VSB复核异常: %s", e)
+
+
 def collect_tushare_realtime():
     try:
         logging.info("[定时任务] Tushare 实时行情采集开始...")
@@ -735,6 +768,16 @@ scheduler.add_job(collect_tushare_historical, 'cron',
     hour=_cron('SCHED_TUSHARE_HISTORICAL_HOUR', '16'),
     minute=_cron_int('SCHED_TUSHARE_HISTORICAL_MINUTE', 2),
     id='tushare_historical')
+scheduler.add_job(run_job_triple_volume_scan, 'cron',
+    day_of_week=_cron('SCHED_TRIPLE_VOLUME_SCAN_DOW', 'mon-fri'),
+    hour=_cron_int('SCHED_TRIPLE_VOLUME_SCAN_HOUR', 16),
+    minute=_cron_int('SCHED_TRIPLE_VOLUME_SCAN_MINUTE', 25),
+    id='triple_volume_observe_scan')
+scheduler.add_job(run_job_triple_volume_eval, 'cron',
+    day_of_week=_cron('SCHED_TRIPLE_VOLUME_EVAL_DOW', 'mon-fri'),
+    hour=_cron_int('SCHED_TRIPLE_VOLUME_EVAL_HOUR', 16),
+    minute=_cron_int('SCHED_TRIPLE_VOLUME_EVAL_MINUTE', 40),
+    id='triple_volume_observe_eval')
 scheduler.add_job(collect_akshare_index_realtime, 'cron',
     day_of_week=_cron('SCHED_AKSHARE_INDEX_REALTIME_DOW', 'mon-fri'),
     hour=_cron('SCHED_AKSHARE_INDEX_REALTIME_HOUR', '11,15'),

@@ -69,7 +69,8 @@ import {
   Cpu,
   Tickets,
   Select,
-  Star
+  Star,
+  Notebook
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -84,6 +85,7 @@ const menuItems = [
   { path: '/stock-basic', name: '股票基本信息管理', icon: Tickets },
   { path: '/selection-results', name: '选股管理', icon: Select },
   { path: '/gms-watchlist', name: '观察股管理', icon: Star },
+  { path: '/triple-volume-observe', name: '3倍量观察股', icon: Notebook },
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/pvfrs-strategy', name: 'PVFARS交易策略', icon: TrendCharts },
   { path: '/pvfrs-management', name: 'PVFARS策略管理', icon: DataAnalysis },

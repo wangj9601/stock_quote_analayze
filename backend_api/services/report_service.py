@@ -11,7 +11,14 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 
-from backend_api.models import Watchlist, HistoricalQuotes, HistoricalQuotesHK, StockBasicInfo, StockBasicInfoHK
+from backend_api.models import (
+    Watchlist,
+    HistoricalQuotes,
+    HistoricalQuotesHK,
+    StockBasicInfo,
+    StockBasicInfoHK,
+    TripleVolumeObserveStock,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +290,9 @@ class ReportService:
             # 成交量异动榜不依赖自选股，直接生成
             if report_type == 'volume_aberration':
                 return self._generate_volume_aberration_report(user_id)
+
+            if report_type in ('triple_volume_observe_scan', 'triple_volume_observe_eval'):
+                return self._generate_triple_volume_observe_report(user_id, report_type)
 
             # 获取用户自选股列表
             watchlist = self.get_user_watchlist(user_id, stock_codes)
@@ -724,6 +734,71 @@ class ReportService:
                 stock_count=total_count,
                 report_date=report_date,
                 report_type="volume_aberration",
+                file_size=file_size,
+                has_data=True,
+                missing_data_stocks=[],
+            ),
+            error_message=None,
+        )
+
+    def _generate_triple_volume_observe_report(self, user_id: int, report_type: str) -> ReportResult:
+        """3倍量观察股：scan=仅最新观察日；eval=全表快照。"""
+        q = self.db.query(TripleVolumeObserveStock)
+        if report_type == "triple_volume_observe_scan":
+            md = self.db.query(func.max(TripleVolumeObserveStock.observe_trade_date)).scalar()
+            if md is not None:
+                q = q.filter(TripleVolumeObserveStock.observe_trade_date == md)
+        rows = q.order_by(
+            TripleVolumeObserveStock.observe_trade_date.desc(),
+            TripleVolumeObserveStock.market,
+            TripleVolumeObserveStock.code,
+        ).all()
+
+        report_date = datetime.now().strftime("%Y-%m-%d")
+        if rows:
+            d0 = rows[0].observe_trade_date
+            report_date = d0.strftime("%Y-%m-%d") if hasattr(d0, "strftime") else str(d0)[:10]
+
+        data = []
+        for r in rows:
+            vd = r.vsb_detail_json if isinstance(r.vsb_detail_json, dict) else {}
+            data.append(
+                {
+                    "市场": r.market,
+                    "代码": r.code,
+                    "名称": r.name or "",
+                    "观察日": r.observe_trade_date.strftime("%Y-%m-%d")
+                    if hasattr(r.observe_trade_date, "strftime")
+                    else str(r.observe_trade_date)[:10],
+                    "前日": r.prev_trade_date.strftime("%Y-%m-%d")
+                    if r.prev_trade_date and hasattr(r.prev_trade_date, "strftime")
+                    else ("" if not r.prev_trade_date else str(r.prev_trade_date)[:10]),
+                    "前日量": r.prev_volume,
+                    "当日量": r.curr_volume,
+                    "量比": round(r.volume_ratio_actual, 4) if r.volume_ratio_actual is not None else "",
+                    "状态": r.status,
+                    "复核时间": r.vsb_evaluated_at.strftime("%Y-%m-%d %H:%M:%S") if r.vsb_evaluated_at else "",
+                    "VSB摘要": str(vd) if vd else "",
+                }
+            )
+
+        timestamp = datetime.now().strftime("%H%M%S")
+        short = "tvo_scan" if report_type == "triple_volume_observe_scan" else "tvo_eval"
+        filename = f"{short}_{user_id}_{report_date.replace('-', '')}_{timestamp}.xlsx"
+        filepath = os.path.join(self.report_dir, filename)
+        df = pd.DataFrame(data)
+        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+            sheet = "爆量侦测" if report_type == "triple_volume_observe_scan" else "状态复核"
+            df.to_excel(writer, sheet_name=sheet, index=False)
+
+        file_size = os.path.getsize(filepath)
+        return ReportResult(
+            success=True,
+            file_path=filepath,
+            report_info=ReportInfo(
+                stock_count=len(rows),
+                report_date=report_date,
+                report_type=report_type,
                 file_size=file_size,
                 has_data=True,
                 missing_data_stocks=[],

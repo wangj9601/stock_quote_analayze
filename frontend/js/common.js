@@ -46,7 +46,8 @@ async function smartFetch(url, options = {}) {
         '/api/trading_notes',
         '/api/user/',
         '/api/admin/',
-        '/api/simtrade'
+        '/api/simtrade',
+        '/api/stock/triple-volume-observe'
     ];
 
     const needsAuth = authRequiredEndpoints.some(endpoint => url.includes(endpoint));
@@ -106,10 +107,17 @@ const CommonUtils = {
                     console.error('登出请求失败:', error);
                 }
 
-                // 清除所有本地存储
-                localStorage.removeItem('userInfo');
-                localStorage.removeItem('rememberedUsername');
-                localStorage.clear(); // 确保清除所有缓存
+                // 仅清除用户站登录相关项，保留同域管理端 admin_token / admin_user 等
+                ;[
+                    'access_token',
+                    'userInfo',
+                    'token',
+                    'rememberedUsername',
+                    'adminLoggedIn',
+                    'adminData'
+                ].forEach(function (k) {
+                    try { localStorage.removeItem(k); } catch (e) {}
+                });
 
                 CommonUtils.showToast('已安全退出', 'success');
 

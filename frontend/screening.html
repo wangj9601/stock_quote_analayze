@@ -997,8 +997,18 @@
             </div>
         </div>
 
-        <!-- 3倍量缩量突破（独立 core 模块） -->
-        <div id="volume-shrink-breakout-content" class="strategy-content" title="本页为「3倍量缩量突破」选股；K 线为日期倒序。更多参数见后端 vsb_config.json。">
+        <!-- 3倍量缩量突破 + 观察股池（同频道整合） -->
+        <div id="volume-shrink-breakout-content" class="strategy-content" title="本页为「3倍量缩量突破」选股与观察股池；K 线为日期倒序。更多参数见后端 vsb_config.json。">
+            <div class="vsb-integrated-head">
+                <p class="vsb-integrated-hint">
+                    本标签内含 <strong>策略选股</strong>（实时 VSB 扫描）与 <strong>观察股池</strong>（日终爆量入库 + 复核状态）。二者逻辑一致：复核均走同一套 VSB 引擎。
+                </p>
+                <div class="vsb-sub-tabs" role="tablist">
+                    <button type="button" class="vsb-sub-tab active" data-vsb-sub="pick" id="vsbSubTabPick">策略选股</button>
+                    <button type="button" class="vsb-sub-tab" data-vsb-sub="observe" id="vsbSubTabObserve">观察股池</button>
+                </div>
+            </div>
+            <div id="vsb-sub-pick-wrap" class="vsb-sub-panel active">
             <div class="strategy-info-card" title="以下为策略逻辑说明；鼠标悬停本卡片可再次看到本提示。">
                 <h2 title="策略名称：Volume Shrink Breakout（VSB），中文常称三倍量缩量突破。">策略说明</h2>
                 <ul class="strategy-conditions">
@@ -1083,6 +1093,58 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+            </div>
+            <div id="vsb-sub-observe-wrap" class="vsb-sub-panel">
+                <div class="strategy-info-card">
+                    <h2>观察股池</h2>
+                    <ul class="strategy-conditions">
+                        <li><strong>数据来源：</strong>日终任务将满足「相对上一交易日放量倍数」的股票写入库表，再用与左侧相同的 VSB 引擎复核状态（待观察 / 观察中 / 交易触发）。</li>
+                        <li class="condition-item">列表与导出需登录；与推送报告字段一致。</li>
+                    </ul>
+                </div>
+                <div class="screening-actions">
+                    <label>市场
+                        <select id="tvoFilterMarket" class="param-input" style="width:100px;margin-left:6px;">
+                            <option value="">全部</option>
+                            <option value="CN">A股</option>
+                            <option value="HK">港股</option>
+                        </select>
+                    </label>
+                    <label style="margin-left:12px;">状态
+                        <select id="tvoFilterStatus" class="param-input" style="width:120px;margin-left:6px;">
+                            <option value="">全部</option>
+                            <option value="待观察">待观察</option>
+                            <option value="观察中">观察中</option>
+                            <option value="交易触发">交易触发</option>
+                        </select>
+                    </label>
+                    <button type="button" id="btnTvoObserveRefresh" class="refresh-btn" style="margin-left:12px;">刷新列表</button>
+                    <button type="button" id="btnTvoObserveExport" class="export-btn" style="margin-left:8px;">导出 Excel</button>
+                </div>
+                <div id="tvoObserveError" class="error-message" style="display:none;"></div>
+                <div class="results-container">
+                    <div class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>市场</th>
+                                    <th>代码</th>
+                                    <th>名称</th>
+                                    <th>观察日</th>
+                                    <th>量比</th>
+                                    <th>状态</th>
+                                    <th>复核时间</th>
+                                    <th>更新时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tvoObserveTableBody">
+                                <tr><td colspan="8" class="empty-state">切换到本页后点击「刷新列表」</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p id="tvoObservePager" class="search-date" style="margin-top:8px;"></p>
                 </div>
             </div>
         </div>

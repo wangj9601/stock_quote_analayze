@@ -24,6 +24,7 @@ class ConfigUpdate:
     push_times: Optional[List[str]] = None
     report_type: Optional[str] = None
     stock_codes: Optional[List[str]] = None
+    wechat_notify_userids: Optional[List[str]] = None
 
 
 class ConfigService:
@@ -75,6 +76,33 @@ class ConfigService:
             return self.db.query(UserPushConfig).filter(UserPushConfig.id == config_id).first()
         except Exception as e:
             logger.error(f"获取推送配置失败: config_id={config_id}, error={str(e)}", exc_info=True)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            raise
+
+    def get_config_by_user_and_report_type(
+        self, user_id: int, report_type: str
+    ) -> Optional[UserPushConfig]:
+        """按用户与 report_type 获取一条推送任务（用于重试等场景）。"""
+        try:
+            return (
+                self.db.query(UserPushConfig)
+                .filter(
+                    UserPushConfig.user_id == user_id,
+                    UserPushConfig.report_type == report_type,
+                )
+                .first()
+            )
+        except Exception as e:
+            logger.error(
+                "获取推送配置失败: user_id=%s report_type=%s error=%s",
+                user_id,
+                report_type,
+                str(e),
+                exc_info=True,
+            )
             try:
                 self.db.rollback()
             except Exception:
@@ -176,6 +204,9 @@ class ConfigService:
             
             if config_update.stock_codes is not None:
                 config.stock_codes = config_update.stock_codes
+
+            if config_update.wechat_notify_userids is not None:
+                config.wechat_notify_userids = config_update.wechat_notify_userids
             
             # 更新时间戳
             config.updated_at = datetime.now()
@@ -297,6 +328,8 @@ class ConfigService:
                 config.report_type = config_update.report_type
             if config_update.stock_codes is not None:
                 config.stock_codes = config_update.stock_codes
+            if config_update.wechat_notify_userids is not None:
+                config.wechat_notify_userids = config_update.wechat_notify_userids
             config.updated_at = datetime.now()
             self.db.commit()
             self.db.refresh(config)
@@ -318,6 +351,7 @@ class ConfigService:
         push_times: Optional[List[str]] = None,
         report_type: str = "summary",
         stock_codes: Optional[List[str]] = None,
+        wechat_notify_userids: Optional[List[str]] = None,
     ) -> UserPushConfig:
         """为指定用户创建配置；同一用户同一 report_type 已存在则更新。"""
         try:
@@ -335,6 +369,8 @@ class ConfigService:
                 existing.push_times = push_times or ["09:00", "15:00"]
                 existing.report_type = report_type
                 existing.stock_codes = stock_codes
+                if wechat_notify_userids is not None:
+                    existing.wechat_notify_userids = wechat_notify_userids
                 existing.updated_at = datetime.now()
                 self.db.commit()
                 self.db.refresh(existing)
@@ -348,6 +384,7 @@ class ConfigService:
                 push_times=push_times or ["09:00", "15:00"],
                 report_type=report_type,
                 stock_codes=stock_codes,
+                wechat_notify_userids=wechat_notify_userids,
             )
             self.db.add(config)
             self.db.commit()
@@ -369,6 +406,7 @@ class ConfigService:
                 existing.push_times = push_times or ["09:00", "15:00"]
                 existing.report_type = report_type
                 existing.stock_codes = stock_codes
+                existing.wechat_notify_userids = wechat_notify_userids
                 existing.updated_at = datetime.now()
                 self.db.commit()
                 self.db.refresh(existing)

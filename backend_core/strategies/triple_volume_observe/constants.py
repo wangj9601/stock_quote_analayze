@@ -1,0 +1,2 @@
+REPORT_TRIPLE_VOLUME_OBSERVE_SCAN = "triple_volume_observe_scan"
+REPORT_TRIPLE_VOLUME_OBSERVE_EVAL = "triple_volume_observe_eval"

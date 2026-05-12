@@ -1279,6 +1279,31 @@ class SystemPerformanceReport(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
+class TripleVolumeObserveStock(Base):
+    """3倍量观察股：爆量侦测入库 + VSB 复核状态"""
+
+    __tablename__ = "triple_volume_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    market = Column(String(10), nullable=False, index=True)  # CN / HK
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    observe_trade_date = Column(Date, nullable=False, index=True)
+    prev_trade_date = Column(Date, nullable=True)
+    prev_volume = Column(Float, nullable=True)
+    curr_volume = Column(Float, nullable=True)
+    volume_ratio_actual = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="待观察", index=True)
+    vsb_evaluated_at = Column(DateTime, nullable=True)
+    vsb_detail_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("market", "code", "observe_trade_date", name="uq_tvo_code_market_obdate"),
+    )
+
+
 # 微信每日报告推送相关模型
 class UserPushConfig(Base):
     """用户推送配置表"""
@@ -1296,11 +1321,14 @@ class UserPushConfig(Base):
     # 推送时间配置 (JSON格式: ["09:30", "15:30"])
     push_times = Column(JSON, default=["09:30", "15:30"], nullable=False)
     
-    # 报告类型: 'summary' 或 'detailed'
-    report_type = Column(String(20), default="summary", nullable=False)
+    # 报告类型（含 triple_volume_observe_scan / triple_volume_observe_eval 等）
+    report_type = Column(String(64), default="summary", nullable=False)
     
     # 股票范围配置 (JSON格式: null表示全部, 或["000001", "600000"])
     stock_codes = Column(JSON, nullable=True)
+
+    # 可选：本推送任务企业微信接收人 userid 列表（覆盖 users.wechat_userid）；JSON 数组字符串
+    wechat_notify_userids = Column(JSON, nullable=True)
     
     # 时间戳
     created_at = Column(DateTime, default=datetime.now)
@@ -1320,7 +1348,7 @@ class PushRecord(Base):
     # 推送信息
     push_date = Column(Date, nullable=False, index=True)
     push_time = Column(String(10), nullable=False)  # "09:30"
-    report_type = Column(String(20), nullable=False)  # 'summary' 或 'detailed'
+    report_type = Column(String(64), nullable=False)
     
     # 推送渠道和状态 (JSON格式)
     # {"wechat": "success", "email": "failed"}
@@ -1371,7 +1399,7 @@ class EmailSendLog(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     to_email = Column(String(255), nullable=False)
     subject = Column(String(500), nullable=False)
-    report_type = Column(String(20), nullable=False)
+    report_type = Column(String(64), nullable=False)
     push_record_id = Column(Integer, ForeignKey("push_records.id"), nullable=True, index=True)
     sent_at = Column(DateTime, nullable=False, default=datetime.now)
     success = Column(Boolean, nullable=False)

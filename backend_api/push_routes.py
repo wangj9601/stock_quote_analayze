@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/push", tags=["push"])
 
+VALID_PUSH_REPORT_TYPES = (
+    "summary",
+    "detailed",
+    "gms_daily",
+    "volume_aberration",
+    "triple_volume_observe_scan",
+    "triple_volume_observe_eval",
+)
+
 
 # ==================== Pydantic 模型定义 ====================
 
@@ -36,6 +45,7 @@ class UserPushConfigResponse(BaseModel):
     push_times: List[str]
     report_type: str
     stock_codes: Optional[List[str]]
+    wechat_notify_userids: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
     
@@ -50,6 +60,7 @@ class ConfigUpdateRequest(BaseModel):
     push_times: Optional[List[str]] = None
     report_type: Optional[str] = None
     stock_codes: Optional[List[str]] = None
+    wechat_notify_userids: Optional[List[str]] = None
 
 
 class ConfigCreateRequest(BaseModel):
@@ -59,6 +70,7 @@ class ConfigCreateRequest(BaseModel):
     channels: Optional[List[str]] = None  # 不传则默认 ["email"]
     push_times: Optional[List[str]] = None  # 不传则默认 ["09:00", "15:00"]
     report_type: Optional[str] = None  # 不传则默认 "summary"
+    wechat_notify_userids: Optional[List[str]] = None
 
 
 class BindWeChatRequest(BaseModel):
@@ -274,11 +286,10 @@ def update_push_config(
                     )
         
         if config_update.report_type is not None:
-            valid_types = ['summary', 'detailed', 'gms_daily', 'volume_aberration']
-            if config_update.report_type not in valid_types:
+            if config_update.report_type not in VALID_PUSH_REPORT_TYPES:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"无效的报告类型: {config_update.report_type}，有效值为: {valid_types}"
+                    detail=f"无效的报告类型: {config_update.report_type}，有效值为: {list(VALID_PUSH_REPORT_TYPES)}"
                 )
         
         # 更新配置
@@ -287,7 +298,8 @@ def update_push_config(
             channels=config_update.channels,
             push_times=config_update.push_times,
             report_type=config_update.report_type,
-            stock_codes=config_update.stock_codes
+            stock_codes=config_update.stock_codes,
+            wechat_notify_userids=config_update.wechat_notify_userids,
         )
         
         updated_config = config_service.update_user_config(
@@ -675,8 +687,8 @@ def admin_create_push_config(
     config_service: ConfigService = Depends(get_config_service),
 ):
     """管理员创建推送配置（同一用户可有多条，按 report_type 区分）。"""
-    if body.report_type is not None and body.report_type not in ("summary", "detailed", "gms_daily", "volume_aberration"):
-        raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily, volume_aberration")
+    if body.report_type is not None and body.report_type not in VALID_PUSH_REPORT_TYPES:
+        raise HTTPException(status_code=400, detail=f"report_type 有效值为: {list(VALID_PUSH_REPORT_TYPES)}")
     try:
         config = config_service.create_config(
             user_id=body.user_id,
@@ -684,6 +696,7 @@ def admin_create_push_config(
             channels=body.channels or ["email"],
             push_times=body.push_times or ["09:00", "15:00"],
             report_type=body.report_type or "summary",
+            wechat_notify_userids=body.wechat_notify_userids,
         )
         return config
     except ValueError as e:
@@ -701,14 +714,15 @@ def admin_update_push_config_by_id(
     config_service: ConfigService = Depends(get_config_service),
 ):
     """管理员按任务 id 修改一条推送配置"""
-    if config_update.report_type is not None and config_update.report_type not in ("summary", "detailed", "gms_daily", "volume_aberration"):
-        raise HTTPException(status_code=400, detail="report_type 有效值为: summary, detailed, gms_daily, volume_aberration")
+    if config_update.report_type is not None and config_update.report_type not in VALID_PUSH_REPORT_TYPES:
+        raise HTTPException(status_code=400, detail=f"report_type 有效值为: {list(VALID_PUSH_REPORT_TYPES)}")
     update_obj = ConfigUpdate(
         enabled=config_update.enabled,
         channels=config_update.channels,
         push_times=config_update.push_times,
         report_type=config_update.report_type,
         stock_codes=config_update.stock_codes,
+        wechat_notify_userids=config_update.wechat_notify_userids,
     )
     try:
         updated = config_service.update_config_by_id(config_id, update_obj)

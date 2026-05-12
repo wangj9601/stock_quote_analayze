@@ -1,7 +1,7 @@
 """
 数据库管理器（兼容旧代码）
 
-项目当前数据库连接与 Session 工厂定义在 `backend_core.database.db`。
+Session 与引擎定义在 `backend_core.database.db`（委托 `backend_api.database`）。
 一些旧模块（如 CSV 报告/调度器）依赖 `DatabaseManager.query()` 这种简化接口，
 因此在此提供轻量封装，避免改动大量调用方。
 """

@@ -27,6 +27,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="report_type_label" label="报告类型" width="160" />
+        <el-table-column label="企微接收人覆盖" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ (row.wechat_notify_userids && row.wechat_notify_userids.length) ? row.wechat_notify_userids.join('、') : '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
@@ -89,7 +94,20 @@
           <el-select v-model="addForm.report_type" placeholder="请选择" style="width: 100%;">
             <el-option label="自选股GSM策略指标信号列表" value="gms_daily" />
             <el-option label="成交量异动榜" value="volume_aberration" />
+            <el-option label="3倍量观察-爆量扫描" value="triple_volume_observe_scan" />
+            <el-option label="3倍量观察-策略复核" value="triple_volume_observe_eval" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="企微接收人覆盖">
+          <el-select
+            v-model="addForm.wechat_notify_userids"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="可选；不填则使用用户账号绑定的企业微信"
+            style="width: 100%;"
+          ></el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -131,7 +149,20 @@
           <el-select v-model="editForm.report_type" placeholder="请选择" style="width: 100%;">
             <el-option label="自选股GSM策略指标信号列表" value="gms_daily" />
             <el-option label="成交量异动榜" value="volume_aberration" />
+            <el-option label="3倍量观察-爆量扫描" value="triple_volume_observe_scan" />
+            <el-option label="3倍量观察-策略复核" value="triple_volume_observe_eval" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="企微接收人覆盖">
+          <el-select
+            v-model="editForm.wechat_notify_userids"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="留空则走账号默认绑定"
+            style="width: 100%;"
+          ></el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -154,7 +185,9 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   summary: '汇总报告',
   detailed: '详细报告',
   gms_daily: '自选股GSM策略指标信号列表',
-  volume_aberration: '成交量异动榜'
+  volume_aberration: '成交量异动榜',
+  triple_volume_observe_scan: '3倍量观察-爆量扫描',
+  triple_volume_observe_eval: '3倍量观察-策略复核'
 }
 
 /** 推送时间选项：半小时间隔，0-24 小时（00:00 ~ 23:30） */
@@ -200,7 +233,8 @@ const addForm = ref({
   enabled: true,
   channels: ['email'] as string[],
   push_times: ['09:00', '15:00'] as string[],
-  report_type: 'gms_daily'
+  report_type: 'gms_daily',
+  wechat_notify_userids: [] as string[]
 })
 
 const editForm = ref({
@@ -210,7 +244,8 @@ const editForm = ref({
   enabled: true,
   channels: [] as string[],
   push_times: [] as string[],
-  report_type: 'gms_daily'
+  report_type: 'gms_daily',
+  wechat_notify_userids: [] as string[]
 })
 
 async function loadConfigs() {
@@ -247,7 +282,8 @@ function resetAddForm() {
     enabled: true,
     channels: ['email'],
     push_times: ['09:00', '15:00'],
-    report_type: 'gms_daily'
+    report_type: 'gms_daily',
+    wechat_notify_userids: []
   }
 }
 
@@ -259,7 +295,11 @@ async function submitAddTask() {
       enabled: addForm.value.enabled,
       channels: addForm.value.channels,
       push_times: addForm.value.push_times,
-      report_type: addForm.value.report_type
+      report_type: addForm.value.report_type,
+      wechat_notify_userids:
+        addForm.value.wechat_notify_userids && addForm.value.wechat_notify_userids.length
+          ? addForm.value.wechat_notify_userids
+          : undefined
     })
     ElMessage.success('已添加推送任务')
     addTaskVisible.value = false
@@ -274,7 +314,16 @@ async function submitAddTask() {
   }
 }
 
-function openEdit(row: { id: number; user_id: number; username?: string; enabled: boolean; channels: string[]; push_times: string[]; report_type: string }) {
+function openEdit(row: {
+  id: number
+  user_id: number
+  username?: string
+  enabled: boolean
+  channels: string[]
+  push_times: string[]
+  report_type: string
+  wechat_notify_userids?: string[] | null
+}) {
   editForm.value = {
     config_id: row.id,
     user_id: row.user_id,
@@ -282,7 +331,8 @@ function openEdit(row: { id: number; user_id: number; username?: string; enabled
     enabled: row.enabled,
     channels: Array.isArray(row.channels) ? [...row.channels] : [],
     push_times: Array.isArray(row.push_times) ? [...row.push_times] : [],
-    report_type: row.report_type || 'gms_daily'
+    report_type: row.report_type || 'gms_daily',
+    wechat_notify_userids: Array.isArray(row.wechat_notify_userids) ? [...row.wechat_notify_userids] : []
   }
   editVisible.value = true
 }
@@ -295,7 +345,8 @@ function resetEditForm() {
     enabled: true,
     channels: [],
     push_times: [],
-    report_type: 'gms_daily'
+    report_type: 'gms_daily',
+    wechat_notify_userids: []
   }
 }
 
@@ -330,7 +381,11 @@ async function submitEdit() {
       enabled: editForm.value.enabled,
       channels: editForm.value.channels,
       push_times: editForm.value.push_times,
-      report_type: editForm.value.report_type
+      report_type: editForm.value.report_type,
+      wechat_notify_userids:
+        editForm.value.wechat_notify_userids && editForm.value.wechat_notify_userids.length
+          ? editForm.value.wechat_notify_userids
+          : []
     })
     ElMessage.success('保存成功')
     editVisible.value = false

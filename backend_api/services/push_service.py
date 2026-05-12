@@ -80,6 +80,20 @@ class PushService:
         self.record_repository = record_repository
         
         logger.info("PushService 初始化完成")
+
+    @staticmethod
+    def _wechat_recipient_userids(user: User, config: Optional[Any] = None) -> List[str]:
+        """企业微信接收人：优先 user_push_configs.wechat_notify_userids，否则用户绑定。"""
+        raw = getattr(config, "wechat_notify_userids", None) if config is not None else None
+        if raw is not None:
+            if isinstance(raw, list):
+                out = [str(x).strip() for x in raw if str(x).strip()]
+                if out:
+                    return out
+            if isinstance(raw, str) and raw.strip():
+                return [p.strip() for p in raw.replace("|", ",").split(",") if p.strip()]
+        one = getattr(user, "wechat_userid", None) or getattr(user, "wechat_openid", None)
+        return [one] if one else []
     
     def execute_scheduled_push(self, push_time: str, max_workers: int = 1) -> PushBatchResult:
         """
@@ -364,11 +378,11 @@ class PushService:
                     error_message=error_msg
                 )
             
-            # 检查是否有可用的推送渠道（微信优先使用 wechat_userid，其次 wechat_openid）
-            wechat_id = getattr(user, 'wechat_userid', None) or user.wechat_openid
+            # 检查是否有可用的推送渠道（微信：user_push_configs.wechat_notify_userids 优先，否则 wechat_userid / wechat_openid）
+            wechat_targets = self._wechat_recipient_userids(user, config)
             available_channels = []
             for channel in config.channels:
-                if channel == 'wechat' and wechat_id:
+                if channel == 'wechat' and wechat_targets:
                     available_channels.append('wechat')
                 elif channel == 'email' and user.email:
                     available_channels.append('email')
@@ -489,7 +503,8 @@ class PushService:
                         result = self._send_via_wechat(
                             user=user,
                             report_path=report_result.file_path,
-                            report_info=report_result.report_info
+                            report_info=report_result.report_info,
+                            wechat_user_ids=self._wechat_recipient_userids(user, config),
                         )
                     elif channel == 'email':
                         result = self._send_via_email(
@@ -584,26 +599,24 @@ class PushService:
             )
     
     def _send_via_wechat(
-        self, 
-        user: User, 
-        report_path: str, 
-        report_info: ReportInfo
+        self,
+        user: User,
+        report_path: str,
+        report_info: ReportInfo,
+        wechat_user_ids: Optional[List[str]] = None,
     ) -> ChannelResult:
         """
         通过微信发送报告
-        
+
         Args:
             user: 用户对象
             report_path: 报告文件路径
             report_info: 报告信息
-            
-        Returns:
-            ChannelResult: 微信推送结果
+            wechat_user_ids: 企业微信 userid 列表（已解析）；空则回退用户绑定
         """
         try:
-            # 微信接收人：优先使用 wechat_userid（企业微信），否则 wechat_openid
-            wechat_recipient = getattr(user, 'wechat_userid', None) or user.wechat_openid
-            if not wechat_recipient:
+            ids = [x for x in (wechat_user_ids or []) if x]
+            if not ids:
                 error_msg = f"用户 {user.id} 未绑定微信（未设置 wechat_userid 或 wechat_openid）"
                 logger.warning(error_msg)
                 return ChannelResult(
@@ -611,17 +624,17 @@ class PushService:
                     success=False,
                     error_message=error_msg
                 )
-            
+
             # 格式化推送消息
             text_message = self._format_push_message(user, report_info)
-            
+
             # 1. 先发送文本消息
-            logger.info(f"向用户 {user.id} 发送微信文本消息")
+            logger.info(f"向用户 {user.id} 发送微信文本消息 -> {ids}")
             text_success = self.wechat_service.send_text_message(
-                user_ids=[wechat_recipient],
+                user_ids=ids,
                 content=text_message
             )
-            
+
             if not text_success:
                 error_msg = "微信文本消息发送失败"
                 logger.error(f"用户 {user.id}: {error_msg}")
@@ -638,17 +651,17 @@ class PushService:
                     success=False,
                     error_message=error_msg
                 )
-            
+
             # 2. 然后发送CSV文件
             logger.info(f"向用户 {user.id} 发送微信文件消息")
             import os
             file_name = os.path.basename(report_path)
             file_success = self.wechat_service.send_file_message(
-                user_ids=[wechat_recipient],
+                user_ids=ids,
                 file_path=report_path,
                 file_name=file_name
             )
-            
+
             if not file_success:
                 error_msg = "微信文件消息发送失败"
                 logger.error(f"用户 {user.id}: {error_msg}")
@@ -665,7 +678,7 @@ class PushService:
                     success=False,
                     error_message=error_msg
                 )
-            
+
             logger.info(f"用户 {user.id} 微信推送成功")
             # 记录渠道发送成功事件
             log_push_event(
@@ -703,6 +716,10 @@ class PushService:
             if report_info.report_type == "gms_daily"
             else f"成交量异动榜 - {report_info.report_date}"
             if report_info.report_type == "volume_aberration"
+            else f"3倍量观察股·爆量侦测 - {report_info.report_date}"
+            if report_info.report_type == "triple_volume_observe_scan"
+            else f"3倍量观察股·状态复核 - {report_info.report_date}"
+            if report_info.report_type == "triple_volume_observe_eval"
             else f"股票报告推送 - {report_info.report_date}"
         )
 
@@ -796,6 +813,10 @@ class PushService:
             report_type_name = "自选股GSM策略指标信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
+        elif report_info.report_type == "triple_volume_observe_scan":
+            report_type_name = "3倍量观察股·爆量侦测"
+        elif report_info.report_type == "triple_volume_observe_eval":
+            report_type_name = "3倍量观察股·状态复核"
         elif report_info.report_type == "summary":
             report_type_name = "汇总报告"
         else:
@@ -834,6 +855,10 @@ class PushService:
             report_type_name = "自选股GSM策略指标信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
+        elif report_info.report_type == "triple_volume_observe_scan":
+            report_type_name = "3倍量观察股·爆量侦测"
+        elif report_info.report_type == "triple_volume_observe_eval":
+            report_type_name = "3倍量观察股·状态复核"
         elif report_info.report_type == "summary":
             report_type_name = "汇总报告"
         else:
@@ -1059,10 +1084,12 @@ class PushService:
                     error_message=error_msg
                 )
             
-            # 获取用户配置
-            config = self.config_service.get_user_config(user_id)
-            if not config:
-                error_msg = f"用户配置不存在: user_id={user_id}"
+            # 获取用户配置（按推送记录上的 report_type 匹配任务，避免多任务用户重试错配）
+            config_retry = self.config_service.get_config_by_user_and_report_type(
+                user_id, record.report_type
+            )
+            if not config_retry:
+                error_msg = f"用户配置不存在: user_id={user_id}, report_type={record.report_type}"
                 logger.error(error_msg)
                 
                 self.record_repository.update_record_status(
@@ -1081,7 +1108,7 @@ class PushService:
                 )
             
             # 检查推送是否启用
-            if not config.enabled:
+            if not config_retry.enabled:
                 error_msg = f"用户推送功能已禁用: user_id={user_id}"
                 logger.warning(error_msg)
                 
@@ -1105,8 +1132,8 @@ class PushService:
             for channel, status in record.channel_status.items():
                 if status == "failed" or status == "pending":
                     # 检查用户是否仍然绑定了该渠道（微信：wechat_userid 或 wechat_openid）
-                    wechat_id = getattr(user, 'wechat_userid', None) or user.wechat_openid
-                    if channel == 'wechat' and wechat_id:
+                    wechat_targets = self._wechat_recipient_userids(user, config_retry)
+                    if channel == 'wechat' and wechat_targets:
                         channels_to_retry.append('wechat')
                     elif channel == 'email' and user.email:
                         channels_to_retry.append('email')
@@ -1169,7 +1196,8 @@ class PushService:
                         result = self._send_via_wechat(
                             user=user,
                             report_path=record.report_file_path,
-                            report_info=report_info
+                            report_info=report_info,
+                            wechat_user_ids=self._wechat_recipient_userids(user, config_retry),
                         )
                     elif channel == 'email':
                         result = self._send_via_email(

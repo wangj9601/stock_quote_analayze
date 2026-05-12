@@ -7,12 +7,16 @@ const ScreeningPage = {
     gmsPage: 1,
     GMS_PAGE_SIZE: 50,
     gmsLocateActive: false,
+    _vsbOpenFromHash: false,
+    vsbSubPanel: 'pick',
 
     // 初始化
     async init() {
         await this.loadHeader();
         this.bindEvents();
         this.initStrategyTabs();
+        this.initVsbIntegratedTabs();
+        this.applyVsbHashOnLoad();
     },
 
     // 初始化策略标签页
@@ -70,6 +74,195 @@ const ScreeningPage = {
             this.loadGmsParams();
             this.syncGmsWatchlistMarketWrap();
         }
+        if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
+            this.switchVsbSubPanel('pick');
+        }
+    },
+
+    initVsbIntegratedTabs() {
+        document.querySelectorAll('.vsb-sub-tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const sub = btn.getAttribute('data-vsb-sub');
+                if (sub === 'pick' || sub === 'observe') {
+                    this.switchVsbSubPanel(sub);
+                }
+            });
+        });
+        const br = document.getElementById('btnTvoObserveRefresh');
+        const bx = document.getElementById('btnTvoObserveExport');
+        if (br) {
+            br.addEventListener('click', () => this.loadTripleVolumeObserveList());
+        }
+        if (bx) {
+            bx.addEventListener('click', () => this.exportTripleVolumeObserveXlsx());
+        }
+    },
+
+    applyVsbHashOnLoad() {
+        const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+        if (h === 'vsb-observe' || h === 'triple-volume-observe') {
+            this._vsbOpenFromHash = true;
+            this.switchStrategy('volume-shrink-breakout');
+            this._vsbOpenFromHash = false;
+            this.switchVsbSubPanel('observe');
+            return;
+        }
+        if (h === 'vsb-pick') {
+            this._vsbOpenFromHash = true;
+            this.switchStrategy('volume-shrink-breakout');
+            this._vsbOpenFromHash = false;
+            this.switchVsbSubPanel('pick');
+        }
+    },
+
+    switchVsbSubPanel(sub) {
+        this.vsbSubPanel = sub;
+        document.querySelectorAll('.vsb-sub-tab').forEach((t) => {
+            t.classList.toggle('active', t.getAttribute('data-vsb-sub') === sub);
+        });
+        document.querySelectorAll('.vsb-sub-panel').forEach((p) => {
+            const show =
+                (sub === 'pick' && p.id === 'vsb-sub-pick-wrap') ||
+                (sub === 'observe' && p.id === 'vsb-sub-observe-wrap');
+            p.classList.toggle('active', show);
+        });
+        if (sub === 'observe') {
+            this.loadTripleVolumeObserveList();
+        }
+        try {
+            if (window.history && window.history.replaceState) {
+                const suffix = sub === 'observe' ? '#vsb-observe' : '#vsb-pick';
+                window.history.replaceState(null, '', 'screening.html' + suffix);
+            }
+        } catch (_) {}
+    },
+
+    _tvoEscapeHtml(s) {
+        if (s == null || s === '') return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    },
+
+    async loadTripleVolumeObserveList() {
+        const apiBase = this.API_BASE_URL || '';
+        const marketEl = document.getElementById('tvoFilterMarket');
+        const statusEl = document.getElementById('tvoFilterStatus');
+        const err = document.getElementById('tvoObserveError');
+        if (err) {
+            err.style.display = 'none';
+            err.textContent = '';
+        }
+        const market = marketEl ? marketEl.value : '';
+        const status = statusEl ? statusEl.value : '';
+        const qs = new URLSearchParams({ page: '1', page_size: '200' });
+        if (market) qs.set('market', market);
+        if (status) qs.set('status', status);
+        const url = `${apiBase}/api/stock/triple-volume-observe/list?${qs.toString()}`;
+        const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
+        let res;
+        try {
+            res = await fetchFn(url);
+        } catch (e) {
+            if (err) {
+                err.textContent = String(e.message || e);
+                err.style.display = 'block';
+            }
+            return;
+        }
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            if (err) {
+                err.textContent = '响应解析失败';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        if (!res.ok) {
+            if (err) {
+                err.textContent = data.detail || data.message || '加载失败';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        const tbody = document.getElementById('tvoObserveTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const items = data.items || [];
+        if (items.length === 0) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="8" class="empty-state">暂无数据</td>';
+            tbody.appendChild(tr);
+        } else {
+            const esc = this._tvoEscapeHtml.bind(this);
+            items.forEach((row) => {
+                const tr = document.createElement('tr');
+                const ev = row.vsb_evaluated_at
+                    ? String(row.vsb_evaluated_at).replace('T', ' ').slice(0, 19)
+                    : '';
+                const up = row.updated_at
+                    ? String(row.updated_at).replace('T', ' ').slice(0, 19)
+                    : '';
+                tr.innerHTML =
+                    '<td>' + esc(row.market) + '</td>' +
+                    '<td>' + esc(row.code) + '</td>' +
+                    '<td>' + esc(row.name) + '</td>' +
+                    '<td>' + esc(row.observe_trade_date) + '</td>' +
+                    '<td>' + (row.volume_ratio_actual != null ? Number(row.volume_ratio_actual).toFixed(2) : '') + '</td>' +
+                    '<td>' + esc(row.status) + '</td>' +
+                    '<td>' + esc(ev) + '</td>' +
+                    '<td>' + esc(up) + '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+        const pager = document.getElementById('tvoObservePager');
+        if (pager) {
+            pager.textContent = '共 ' + (data.total || 0) + ' 条，本页 ' + items.length + ' 条';
+        }
+    },
+
+    async exportTripleVolumeObserveXlsx() {
+        const apiBase = this.API_BASE_URL || '';
+        const marketEl = document.getElementById('tvoFilterMarket');
+        const statusEl = document.getElementById('tvoFilterStatus');
+        const err = document.getElementById('tvoObserveError');
+        const market = marketEl ? marketEl.value : '';
+        const status = statusEl ? statusEl.value : '';
+        const qs = new URLSearchParams();
+        if (market) qs.set('market', market);
+        if (status) qs.set('status', status);
+        const url = `${apiBase}/api/stock/triple-volume-observe/export?${qs.toString()}`;
+        const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
+        let res;
+        try {
+            res = await fetchFn(url);
+        } catch (e) {
+            if (err) {
+                err.textContent = String(e.message || e);
+                err.style.display = 'block';
+            }
+            return;
+        }
+        if (!res.ok) {
+            if (err) {
+                err.textContent = '导出失败';
+                err.style.display = 'block';
+            }
+            return;
+        }
+        if (err) {
+            err.style.display = 'none';
+        }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'triple_volume_observe.xlsx';
+        a.click();
+        URL.revokeObjectURL(a.href);
     },
 
     /** 显示/隐藏「GMS观察股」下的市场筛选行 */

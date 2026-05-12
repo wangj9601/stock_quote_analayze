@@ -105,6 +105,7 @@ try:
         PushRecord = getattr(models_module, 'PushRecord', None)
         EmailSenderConfig = getattr(models_module, 'EmailSenderConfig', None)
         EmailSendLog = getattr(models_module, 'EmailSendLog', None)
+        TripleVolumeObserveStock = getattr(models_module, 'TripleVolumeObserveStock', None)
         # 交易笔记与模拟交易模型
         TradingNotes = getattr(models_module, 'TradingNotes', None)
         TradingJournalLog = getattr(models_module, 'TradingJournalLog', None)
@@ -198,6 +199,7 @@ except Exception as e:
     PushRecord = None
     EmailSenderConfig = None
     EmailSendLog = None
+    TripleVolumeObserveStock = None
     # 交易笔记与模拟交易模型占位符
     TradingNotes = None
     TradingJournalLog = None
@@ -289,6 +291,7 @@ __all__ = [
     'PushRecord',
     'EmailSenderConfig',
     'EmailSendLog',
+    'TripleVolumeObserveStock',
     'TradingNotes',
     'TradingJournalLog',
     'TradeExecutionLog',

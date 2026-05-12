@@ -63,6 +63,11 @@ const routes = [
         component: () => import('@/views/GMSManagementView.vue')
       },
       {
+        path: 'triple-volume-observe',
+        name: 'TripleVolumeObserve',
+        component: () => import('@/views/TripleVolumeObserveView.vue')
+      },
+      {
         path: 'selection-results',
         name: 'SelectionResults',
         component: () => import('@/views/SelectionResultsView.vue')

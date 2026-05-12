@@ -8,11 +8,12 @@
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/login.css">
     <script>
-        localStorage.clear();
-        sessionStorage.clear();
-        document.cookie.split(';').forEach(function(c) {
-          document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
-        });
+        // 仅清理用户站登录态，避免与同域 /admin 共用的 localStorage 整库 clear 误删 admin_token
+        (function () {
+            ['access_token', 'userInfo', 'token'].forEach(function (k) {
+                try { localStorage.removeItem(k); } catch (e) {}
+            });
+        })();
     </script>
 </head>
 <body>

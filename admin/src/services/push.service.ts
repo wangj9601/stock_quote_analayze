@@ -30,6 +30,7 @@ export interface UserPushConfigResponse {
   push_times: string[]
   report_type: string
   stock_codes?: string[] | null
+  wechat_notify_userids?: string[] | null
   created_at: string
   updated_at: string
 }
@@ -40,6 +41,7 @@ export interface ConfigUpdateRequest {
   push_times?: string[]
   report_type?: string
   stock_codes?: string[] | null
+  wechat_notify_userids?: string[] | null
 }
 
 export interface EmailSendLogResponse {
@@ -83,15 +85,29 @@ export class PushService {
   /** 管理员为指定用户新建推送配置（用户来源于 user 表，配置写入 user_push_configs 表） */
   async createPushConfig(
     userId: number,
-    options?: { enabled?: boolean; channels?: string[]; push_times?: string[]; report_type?: string }
+    options?: {
+      enabled?: boolean
+      channels?: string[]
+      push_times?: string[]
+      report_type?: string
+      wechat_notify_userids?: string[] | null
+    }
   ): Promise<UserPushConfigResponse> {
-    const body: { user_id: number; enabled?: boolean; channels?: string[]; push_times?: string[]; report_type?: string } = {
+    const body: {
+      user_id: number
+      enabled?: boolean
+      channels?: string[]
+      push_times?: string[]
+      report_type?: string
+      wechat_notify_userids?: string[] | null
+    } = {
       user_id: userId
     }
     if (options?.enabled !== undefined) body.enabled = options.enabled
     if (options?.channels !== undefined) body.channels = options.channels
     if (options?.push_times !== undefined) body.push_times = options.push_times
     if (options?.report_type !== undefined) body.report_type = options.report_type
+    if (options?.wechat_notify_userids !== undefined) body.wechat_notify_userids = options.wechat_notify_userids
     return apiService.post<UserPushConfigResponse>(`${this.base}/configs`, body)
   }
 

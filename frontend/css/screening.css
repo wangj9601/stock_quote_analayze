@@ -1,5 +1,45 @@
 /* 选股页面样式 */
 
+/* 3倍量缩量突破：策略选股 / 观察股池 子标签 */
+.vsb-integrated-head {
+    margin-bottom: 16px;
+}
+.vsb-integrated-hint {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #444;
+    line-height: 1.5;
+}
+.vsb-sub-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.vsb-sub-tab {
+    padding: 8px 16px;
+    border: 1px solid #cfd8dc;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #37474f;
+}
+.vsb-sub-tab:hover {
+    border-color: #1976d2;
+    color: #1976d2;
+}
+.vsb-sub-tab.active {
+    background: #1976d2;
+    border-color: #1976d2;
+    color: #fff;
+}
+.vsb-sub-panel {
+    display: none;
+}
+.vsb-sub-panel.active {
+    display: block;
+}
+
 .screening-container {
     max-width: 1400px;
     margin: 0 auto;
