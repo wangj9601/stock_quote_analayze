@@ -108,7 +108,12 @@ async def get_pipeline_status(
             "day_of_week": "mon-fri",
             "hour": 11,
             "minute": 13,
-            "env_keys": ["SCHED_AKSHARE_TURNOVER_DOW", "SCHED_AKSHARE_TURNOVER_HOUR", "SCHED_AKSHARE_TURNOVER_MINUTE"],
+            "env_keys": [
+                "SCHED_AKSHARE_TURNOVER_ENABLED",
+                "SCHED_AKSHARE_TURNOVER_DOW",
+                "SCHED_AKSHARE_TURNOVER_HOUR",
+                "SCHED_AKSHARE_TURNOVER_MINUTE",
+            ],
         },
     }
     return {

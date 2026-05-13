@@ -216,6 +216,9 @@ def collect_akshare_stock_notices():
         logging.error(f"[定时任务] A股公告数据采集异常: {e}")
 
 def collect_akshare_turnover_rate():
+    if not _env_bool("SCHED_AKSHARE_TURNOVER_ENABLED", False):
+        logging.info("[定时任务] AKShare 历史换手率数据采集已关闭（SCHED_AKSHARE_TURNOVER_ENABLED 未设为 true），跳过。")
+        return
     try:
         logging.info("[定时任务] AKShare 历史换手率数据采集开始...")
         turnover_days = _env_int("COLLECTOR_TURNOVER_RATE_DAYS", 30)
@@ -789,11 +792,14 @@ scheduler.add_job(collect_akshare_industry_board_realtime, 'cron',
     minute=_cron_int('SCHED_AKSHARE_INDUSTRY_MINUTE', 3),
     id='akshare_industry_board_realtime')
 # scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
-scheduler.add_job(collect_akshare_turnover_rate, 'cron',
-    day_of_week=_cron('SCHED_AKSHARE_TURNOVER_DOW', 'mon-fri'),
-    hour=_cron('SCHED_AKSHARE_TURNOVER_HOUR', '11'),
-    minute=_cron_int('SCHED_AKSHARE_TURNOVER_MINUTE', 13),
-    id='akshare_turnover_rate')
+if _env_bool("SCHED_AKSHARE_TURNOVER_ENABLED", False):
+    scheduler.add_job(collect_akshare_turnover_rate, 'cron',
+        day_of_week=_cron('SCHED_AKSHARE_TURNOVER_DOW', 'mon-fri'),
+        hour=_cron('SCHED_AKSHARE_TURNOVER_HOUR', '11'),
+        minute=_cron_int('SCHED_AKSHARE_TURNOVER_MINUTE', 13),
+        id='akshare_turnover_rate')
+else:
+    logging.info("AKShare 历史换手率定时采集未注册（默认关闭，需设置 SCHED_AKSHARE_TURNOVER_ENABLED=true 启用）")
 _register_stock_shares_job()
 # scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
 # scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
