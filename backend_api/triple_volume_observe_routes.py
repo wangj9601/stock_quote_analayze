@@ -130,19 +130,34 @@ def _export_observe_impl(
     ).all()
     data = []
     for r in rows:
-        vd = r.vsb_detail_json if isinstance(r.vsb_detail_json, dict) else {}
+        ob = (
+            r.observe_trade_date.strftime("%Y-%m-%d")
+            if hasattr(r.observe_trade_date, "strftime")
+            else str(r.observe_trade_date)[:10]
+        )
+        prev_d = (
+            r.prev_trade_date.strftime("%Y-%m-%d")
+            if r.prev_trade_date and hasattr(r.prev_trade_date, "strftime")
+            else ("" if not r.prev_trade_date else str(r.prev_trade_date)[:10])
+        )
+        ratio = (
+            round(float(r.volume_ratio_actual), 2)
+            if r.volume_ratio_actual is not None
+            else ""
+        )
         data.append(
             {
                 "市场": r.market,
                 "代码": r.code,
                 "名称": r.name or "",
-                "观察日": r.observe_trade_date.strftime("%Y-%m-%d")
-                if hasattr(r.observe_trade_date, "strftime")
-                else str(r.observe_trade_date)[:10],
+                "观察日": ob,
+                "前交易日": prev_d,
+                "前日量": r.prev_volume,
+                "当日量": r.curr_volume,
+                "量比": ratio,
                 "状态": r.status,
-                "量比": r.volume_ratio_actual,
                 "复核时间": r.vsb_evaluated_at.strftime("%Y-%m-%d %H:%M:%S") if r.vsb_evaluated_at else "",
-                "VSB摘要": str(vd) if vd else "",
+                "更新时间": r.updated_at.strftime("%Y-%m-%d %H:%M:%S") if r.updated_at else "",
             }
         )
     report_dir = "reports/csv"

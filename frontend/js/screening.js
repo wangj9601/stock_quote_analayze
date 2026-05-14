@@ -549,9 +549,10 @@ const ScreeningPage = {
             });
         });
 
-        // 绑定所有导出按钮
+        // 绑定各策略「导出 CSV」：仅 id 为 exportBtn-<策略名> 的按钮（与 GMS 导出 Excel、观察股池导出 Excel、定位清除等区分）
         document.querySelectorAll('.export-btn').forEach(btn => {
             if (btn.id === 'exportExcelBtn-gms') return; // GMS Excel 单独绑定
+            if (!btn.id || !btn.id.startsWith('exportBtn-')) return;
             btn.addEventListener('click', () => {
                 const strategy = btn.id.replace('exportBtn-', '');
                 if (strategy === 'gms') {
