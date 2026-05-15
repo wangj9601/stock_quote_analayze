@@ -21,6 +21,8 @@ def mock_wechat_service():
     service = Mock(spec=WeChatService)
     service.send_text_message.return_value = True
     service.send_file_message.return_value = True
+    service.config = Mock()
+    service.config.is_configured.return_value = True
     return service
 
 
@@ -69,9 +71,12 @@ def mock_config_service():
     mock_config.channels = ["wechat", "email"]
     mock_config.report_type = "summary"
     mock_config.stock_codes = None
-    
+    mock_config.wechat_notify_userids = None
+    mock_config.wechat_app_profile = None
+
     service.get_user_config.return_value = mock_config
-    
+    service.get_config_by_user_and_report_type.return_value = mock_config
+
     return service
 
 
@@ -234,6 +239,7 @@ def test_retry_failed_push_user_disabled(
     mock_config = Mock(spec=UserPushConfig)
     mock_config.enabled = False
     mock_config_service.get_user_config.return_value = mock_config
+    mock_config_service.get_config_by_user_and_report_type.return_value = mock_config
     
     # 执行重试
     result = push_service.retry_failed_push(record_id=1)
@@ -261,6 +267,7 @@ def test_retry_failed_push_no_channels_to_retry(
     mock_record.completed_at = datetime.now() - timedelta(minutes=2)
     mock_record.report_file_path = "/path/to/report.csv"
     mock_record.error_messages = {}
+    mock_record.report_type = "summary"
     
     mock_record_repository.get_record_by_id.return_value = mock_record
     
@@ -269,6 +276,7 @@ def test_retry_failed_push_no_channels_to_retry(
     mock_user.id = 100
     mock_user.username = "test_user"
     mock_user.wechat_openid = None  # 已解绑
+    mock_user.wechat_userid = None
     mock_user.email = "test@example.com"
     
     mock_db = MagicMock()
@@ -281,7 +289,7 @@ def test_retry_failed_push_no_channels_to_retry(
     # 验证结果 - 没有需要重试的渠道，但email已经成功，所以标记为partial_success
     # 注意：由于没有实际重试任何渠道，success应该基于已有的成功渠道
     assert result.user_id == 100
-    assert "没有需要重试的渠道" in result.error_message
+    assert result.error_message and "没有需要重试的渠道" in result.error_message
     
     # 验证记录状态被更新为partial_success（因为email成功了）
     assert mock_record_repository.update_record_status.called

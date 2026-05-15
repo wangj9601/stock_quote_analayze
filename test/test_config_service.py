@@ -58,8 +58,8 @@ def test_create_default_config(config_service, sample_user):
     
     assert config.user_id == sample_user.id
     assert config.enabled == True
-    assert config.channels == ["wechat"]
-    assert config.push_times == ["09:30", "15:30"]
+    assert config.channels == ["email"]
+    assert config.push_times == ["09:00", "15:00"]
     assert config.report_type == "summary"
     assert config.stock_codes is None
 
@@ -70,12 +70,12 @@ def test_create_default_config_user_not_exist(config_service):
         config_service.create_default_config(99999)
 
 
-def test_create_default_config_already_exists(config_service, sample_user):
-    """测试重复创建配置"""
-    config_service.create_default_config(sample_user.id)
-    
-    with pytest.raises(ValueError, match="用户配置已存在"):
-        config_service.create_default_config(sample_user.id)
+def test_create_default_config_allows_multiple_tasks(config_service, sample_user):
+    """同一用户可有多条推送任务，重复调用 create_default_config 会再插入一条。"""
+    c1 = config_service.create_default_config(sample_user.id)
+    c2 = config_service.create_default_config(sample_user.id)
+    assert c1.id != c2.id
+    assert c1.user_id == sample_user.id and c2.user_id == sample_user.id
 
 
 def test_get_user_config(config_service, sample_user):
@@ -106,7 +106,7 @@ def test_update_user_config_enabled(config_service, sample_user):
     updated_config = config_service.update_user_config(sample_user.id, update)
     
     assert updated_config.enabled == False
-    assert updated_config.channels == ["wechat"]  # 其他字段不变
+    assert updated_config.channels == ["email"]  # 其他字段不变
 
 
 def test_update_user_config_channels(config_service, sample_user):
@@ -181,7 +181,7 @@ def test_update_user_config_auto_create(config_service, sample_user):
     # 应该自动创建配置并应用更新
     assert updated_config is not None
     assert updated_config.enabled == False
-    assert updated_config.channels == ["wechat"]  # 默认值
+    assert updated_config.channels == ["email"]  # 默认值（create_default_config / 自动创建）
 
 
 def test_update_user_config_user_not_exist(config_service):

@@ -17,6 +17,18 @@ from backend_core.wechat.wechat_service import WeChatService
 from backend_api.models import User, UserPushConfig, PushRecord
 
 
+def _push_task(user: Mock) -> tuple:
+    cfg = Mock(spec=UserPushConfig)
+    cfg.id = user.id
+    cfg.enabled = True
+    cfg.channels = ["wechat", "email"]
+    cfg.report_type = "summary"
+    cfg.stock_codes = None
+    cfg.wechat_notify_userids = None
+    cfg.wechat_app_profile = None
+    return (cfg, user)
+
+
 class TestPushServiceLogging:
     """测试 PushService 中的日志记录"""
     
@@ -24,6 +36,8 @@ class TestPushServiceLogging:
     def mock_services(self):
         """创建模拟服务"""
         wechat_service = Mock(spec=WeChatService)
+        wechat_service.config = Mock()
+        wechat_service.config.is_configured.return_value = True
         email_service = Mock(spec=EmailService)
         report_service = Mock(spec=ReportService)
         config_service = Mock(spec=ConfigService)
@@ -51,7 +65,7 @@ class TestPushServiceLogging:
     def test_execute_scheduled_push_logs_batch_events(self, push_service, mock_services, caplog):
         """测试批量推送记录批量事件日志"""
         # 设置模拟数据
-        mock_services['config'].get_users_for_push_time.return_value = []
+        mock_services['config'].get_configs_for_push_time.return_value = []
         
         with caplog.at_level(logging.INFO):
             result = push_service.execute_scheduled_push("09:30")
@@ -60,8 +74,11 @@ class TestPushServiceLogging:
         log_messages = [record.message for record in caplog.records]
         assert any("批量推送开始" in msg for msg in log_messages)
         
-        # 当没有用户时，不会记录批量推送完成事件，但会记录"没有需要推送的用户"
-        assert any("没有需要推送的用户" in msg for msg in log_messages)
+        # 当没有任务时，不会记录批量推送完成事件，但会记录「没有需要推送的任务」
+        assert any(
+            "没有需要推送的任务" in msg or "没有需要推送的用户" in msg
+            for msg in log_messages
+        )
     
     def test_execute_scheduled_push_logs_duplicate_skip(self, push_service, mock_services, caplog):
         """测试批量推送记录重复跳过日志"""
@@ -71,7 +88,7 @@ class TestPushServiceLogging:
         user.wechat_openid = "test_openid"
         user.email = "test@example.com"
         
-        mock_services['config'].get_users_for_push_time.return_value = [user]
+        mock_services['config'].get_configs_for_push_time.return_value = [_push_task(user)]
         mock_services['record'].check_duplicate_push.return_value = True  # 模拟重复推送
         
         with caplog.at_level(logging.INFO):

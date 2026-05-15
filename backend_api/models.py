@@ -1353,7 +1353,10 @@ class UserPushConfig(Base):
 
     # 可选：本推送任务企业微信接收人 userid 列表（覆盖 users.wechat_userid）；JSON 数组字符串
     wechat_notify_userids = Column(JSON, nullable=True)
-    
+
+    # 可选：企业微信应用配置档（仅大写字母数字下划线，最长 32）。非空则读 WECHAT_<PROFILE>_CORP_ID 等；空则读 WECHAT_CORP_ID 默认三套
+    wechat_app_profile = Column(String(32), nullable=True)
+
     # 时间戳
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)

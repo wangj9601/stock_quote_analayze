@@ -23,6 +23,8 @@ def mock_wechat_service():
     service = Mock(spec=WeChatService)
     service.send_text_message.return_value = True
     service.send_file_message.return_value = True
+    service.config = Mock()
+    service.config.is_configured.return_value = True
     return service
 
 
@@ -53,8 +55,11 @@ def mock_config_service():
     mock_config.push_times = ["09:30", "15:30"]
     mock_config.report_type = "summary"
     mock_config.stock_codes = None
+    mock_config.wechat_notify_userids = None
+    mock_config.wechat_app_profile = None
     
     service.get_user_config.return_value = mock_config
+    service.get_config_by_id.return_value = mock_config
     
     return service
 
@@ -111,6 +116,7 @@ def mock_user():
     user.username = "test_user"
     user.email = "test@example.com"
     user.wechat_openid = "test_openid_123"
+    user.wechat_userid = None
     user.wechat_type = "personal"
     return user
 
@@ -212,6 +218,7 @@ class TestPushToUser:
         mock_user_no_channels.username = "test_user"
         mock_user_no_channels.email = None  # 没有邮箱
         mock_user_no_channels.wechat_openid = None  # 没有微信
+        mock_user_no_channels.wechat_userid = None
         
         # Mock 数据库会话
         mock_db = Mock(spec=Session)

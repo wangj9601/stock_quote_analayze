@@ -31,6 +31,7 @@ export interface UserPushConfigResponse {
   report_type: string
   stock_codes?: string[] | null
   wechat_notify_userids?: string[] | null
+  wechat_app_profile?: string | null
   created_at: string
   updated_at: string
 }
@@ -42,6 +43,7 @@ export interface ConfigUpdateRequest {
   report_type?: string
   stock_codes?: string[] | null
   wechat_notify_userids?: string[] | null
+  wechat_app_profile?: string | null
 }
 
 export interface EmailSendLogResponse {
@@ -91,6 +93,7 @@ export class PushService {
       push_times?: string[]
       report_type?: string
       wechat_notify_userids?: string[] | null
+      wechat_app_profile?: string | null
     }
   ): Promise<UserPushConfigResponse> {
     const body: {
@@ -100,6 +103,7 @@ export class PushService {
       push_times?: string[]
       report_type?: string
       wechat_notify_userids?: string[] | null
+      wechat_app_profile?: string | null
     } = {
       user_id: userId
     }
@@ -108,6 +112,7 @@ export class PushService {
     if (options?.push_times !== undefined) body.push_times = options.push_times
     if (options?.report_type !== undefined) body.report_type = options.report_type
     if (options?.wechat_notify_userids !== undefined) body.wechat_notify_userids = options.wechat_notify_userids
+    if (options?.wechat_app_profile !== undefined) body.wechat_app_profile = options.wechat_app_profile
     return apiService.post<UserPushConfigResponse>(`${this.base}/configs`, body)
   }
 

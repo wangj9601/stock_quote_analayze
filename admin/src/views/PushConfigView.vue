@@ -32,6 +32,11 @@
             {{ (row.wechat_notify_userids && row.wechat_notify_userids.length) ? row.wechat_notify_userids.join('、') : '-' }}
           </template>
         </el-table-column>
+        <el-table-column prop="wechat_app_profile" label="企微应用 profile" width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.wechat_app_profile || '默认' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
@@ -109,6 +114,13 @@
             style="width: 100%;"
           ></el-select>
         </el-form-item>
+        <el-form-item label="企微应用 profile">
+          <el-input
+            v-model="addForm.wechat_app_profile"
+            clearable
+            placeholder="留空=默认 WECHAT_CORP_ID；填 B 则用 WECHAT_B_CORP_ID 等"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="addTaskVisible = false">取消</el-button>
@@ -163,6 +175,13 @@
             placeholder="留空则走账号默认绑定"
             style="width: 100%;"
           ></el-select>
+        </el-form-item>
+        <el-form-item label="企微应用 profile">
+          <el-input
+            v-model="editForm.wechat_app_profile"
+            clearable
+            placeholder="留空=默认主体；保存空串可清除命名 profile"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -234,7 +253,8 @@ const addForm = ref({
   channels: ['email'] as string[],
   push_times: ['09:00', '15:00'] as string[],
   report_type: 'gms_daily',
-  wechat_notify_userids: [] as string[]
+  wechat_notify_userids: [] as string[],
+  wechat_app_profile: '' as string
 })
 
 const editForm = ref({
@@ -245,7 +265,8 @@ const editForm = ref({
   channels: [] as string[],
   push_times: [] as string[],
   report_type: 'gms_daily',
-  wechat_notify_userids: [] as string[]
+  wechat_notify_userids: [] as string[],
+  wechat_app_profile: '' as string
 })
 
 async function loadConfigs() {
@@ -283,7 +304,8 @@ function resetAddForm() {
     channels: ['email'],
     push_times: ['09:00', '15:00'],
     report_type: 'gms_daily',
-    wechat_notify_userids: []
+    wechat_notify_userids: [],
+    wechat_app_profile: ''
   }
 }
 
@@ -299,6 +321,10 @@ async function submitAddTask() {
       wechat_notify_userids:
         addForm.value.wechat_notify_userids && addForm.value.wechat_notify_userids.length
           ? addForm.value.wechat_notify_userids
+          : undefined,
+      wechat_app_profile:
+        addForm.value.wechat_app_profile && addForm.value.wechat_app_profile.trim()
+          ? addForm.value.wechat_app_profile.trim()
           : undefined
     })
     ElMessage.success('已添加推送任务')
@@ -323,6 +349,7 @@ function openEdit(row: {
   push_times: string[]
   report_type: string
   wechat_notify_userids?: string[] | null
+  wechat_app_profile?: string | null
 }) {
   editForm.value = {
     config_id: row.id,
@@ -332,7 +359,8 @@ function openEdit(row: {
     channels: Array.isArray(row.channels) ? [...row.channels] : [],
     push_times: Array.isArray(row.push_times) ? [...row.push_times] : [],
     report_type: row.report_type || 'gms_daily',
-    wechat_notify_userids: Array.isArray(row.wechat_notify_userids) ? [...row.wechat_notify_userids] : []
+    wechat_notify_userids: Array.isArray(row.wechat_notify_userids) ? [...row.wechat_notify_userids] : [],
+    wechat_app_profile: row.wechat_app_profile ?? ''
   }
   editVisible.value = true
 }
@@ -346,7 +374,8 @@ function resetEditForm() {
     channels: [],
     push_times: [],
     report_type: 'gms_daily',
-    wechat_notify_userids: []
+    wechat_notify_userids: [],
+    wechat_app_profile: ''
   }
 }
 
@@ -385,7 +414,10 @@ async function submitEdit() {
       wechat_notify_userids:
         editForm.value.wechat_notify_userids && editForm.value.wechat_notify_userids.length
           ? editForm.value.wechat_notify_userids
-          : []
+          : [],
+      wechat_app_profile: editForm.value.wechat_app_profile.trim()
+        ? editForm.value.wechat_app_profile.trim()
+        : ''
     })
     ElMessage.success('保存成功')
     editVisible.value = false

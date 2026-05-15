@@ -12,6 +12,7 @@ import logging
 
 from backend_api.models import User, UserPushConfig
 from backend_core.database.db import get_db
+from backend_core.wechat.wechat_config import normalize_wechat_app_profile
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class ConfigUpdate:
     report_type: Optional[str] = None
     stock_codes: Optional[List[str]] = None
     wechat_notify_userids: Optional[List[str]] = None
+    wechat_app_profile: Optional[str] = None
 
 
 class ConfigService:
@@ -207,6 +209,13 @@ class ConfigService:
 
             if config_update.wechat_notify_userids is not None:
                 config.wechat_notify_userids = config_update.wechat_notify_userids
+
+            if config_update.wechat_app_profile is not None:
+                p = config_update.wechat_app_profile
+                if isinstance(p, str) and not p.strip():
+                    config.wechat_app_profile = None
+                else:
+                    config.wechat_app_profile = normalize_wechat_app_profile(p) if isinstance(p, str) else None
             
             # 更新时间戳
             config.updated_at = datetime.now()
@@ -330,6 +339,12 @@ class ConfigService:
                 config.stock_codes = config_update.stock_codes
             if config_update.wechat_notify_userids is not None:
                 config.wechat_notify_userids = config_update.wechat_notify_userids
+            if config_update.wechat_app_profile is not None:
+                p = config_update.wechat_app_profile
+                if isinstance(p, str) and not p.strip():
+                    config.wechat_app_profile = None
+                else:
+                    config.wechat_app_profile = normalize_wechat_app_profile(p) if isinstance(p, str) else None
             config.updated_at = datetime.now()
             self.db.commit()
             self.db.refresh(config)
@@ -352,6 +367,7 @@ class ConfigService:
         report_type: str = "summary",
         stock_codes: Optional[List[str]] = None,
         wechat_notify_userids: Optional[List[str]] = None,
+        wechat_app_profile: Optional[str] = None,
     ) -> UserPushConfig:
         """为指定用户创建配置；同一用户同一 report_type 已存在则更新。"""
         try:
@@ -371,11 +387,27 @@ class ConfigService:
                 existing.stock_codes = stock_codes
                 if wechat_notify_userids is not None:
                     existing.wechat_notify_userids = wechat_notify_userids
+                if wechat_app_profile is not None:
+                    if isinstance(wechat_app_profile, str) and not wechat_app_profile.strip():
+                        existing.wechat_app_profile = None
+                    else:
+                        existing.wechat_app_profile = (
+                            normalize_wechat_app_profile(wechat_app_profile)
+                            if isinstance(wechat_app_profile, str)
+                            else None
+                        )
                 existing.updated_at = datetime.now()
                 self.db.commit()
                 self.db.refresh(existing)
                 logger.info(f"推送配置已存在，执行更新: user_id={user_id}, config_id={existing.id}")
                 return existing
+
+            prof_norm = None
+            if wechat_app_profile is not None:
+                if isinstance(wechat_app_profile, str) and not wechat_app_profile.strip():
+                    prof_norm = None
+                elif isinstance(wechat_app_profile, str):
+                    prof_norm = normalize_wechat_app_profile(wechat_app_profile)
 
             config = UserPushConfig(
                 user_id=user_id,
@@ -385,6 +417,7 @@ class ConfigService:
                 report_type=report_type,
                 stock_codes=stock_codes,
                 wechat_notify_userids=wechat_notify_userids,
+                wechat_app_profile=prof_norm,
             )
             self.db.add(config)
             self.db.commit()
@@ -406,7 +439,17 @@ class ConfigService:
                 existing.push_times = push_times or ["09:00", "15:00"]
                 existing.report_type = report_type
                 existing.stock_codes = stock_codes
-                existing.wechat_notify_userids = wechat_notify_userids
+                if wechat_notify_userids is not None:
+                    existing.wechat_notify_userids = wechat_notify_userids
+                if wechat_app_profile is not None:
+                    if isinstance(wechat_app_profile, str) and not wechat_app_profile.strip():
+                        existing.wechat_app_profile = None
+                    else:
+                        existing.wechat_app_profile = (
+                            normalize_wechat_app_profile(wechat_app_profile)
+                            if isinstance(wechat_app_profile, str)
+                            else None
+                        )
                 existing.updated_at = datetime.now()
                 self.db.commit()
                 self.db.refresh(existing)

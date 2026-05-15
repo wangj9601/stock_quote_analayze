@@ -46,6 +46,7 @@ class UserPushConfigResponse(BaseModel):
     report_type: str
     stock_codes: Optional[List[str]]
     wechat_notify_userids: Optional[List[str]] = None
+    wechat_app_profile: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     
@@ -61,6 +62,7 @@ class ConfigUpdateRequest(BaseModel):
     report_type: Optional[str] = None
     stock_codes: Optional[List[str]] = None
     wechat_notify_userids: Optional[List[str]] = None
+    wechat_app_profile: Optional[str] = None
 
 
 class ConfigCreateRequest(BaseModel):
@@ -71,6 +73,7 @@ class ConfigCreateRequest(BaseModel):
     push_times: Optional[List[str]] = None  # 不传则默认 ["09:00", "15:00"]
     report_type: Optional[str] = None  # 不传则默认 "summary"
     wechat_notify_userids: Optional[List[str]] = None
+    wechat_app_profile: Optional[str] = None
 
 
 class BindWeChatRequest(BaseModel):
@@ -300,6 +303,7 @@ def update_push_config(
             report_type=config_update.report_type,
             stock_codes=config_update.stock_codes,
             wechat_notify_userids=config_update.wechat_notify_userids,
+            wechat_app_profile=config_update.wechat_app_profile,
         )
         
         updated_config = config_service.update_user_config(
@@ -697,6 +701,7 @@ def admin_create_push_config(
             push_times=body.push_times or ["09:00", "15:00"],
             report_type=body.report_type or "summary",
             wechat_notify_userids=body.wechat_notify_userids,
+            wechat_app_profile=body.wechat_app_profile,
         )
         return config
     except ValueError as e:
@@ -723,6 +728,7 @@ def admin_update_push_config_by_id(
         report_type=config_update.report_type,
         stock_codes=config_update.stock_codes,
         wechat_notify_userids=config_update.wechat_notify_userids,
+        wechat_app_profile=config_update.wechat_app_profile,
     )
     try:
         updated = config_service.update_config_by_id(config_id, update_obj)

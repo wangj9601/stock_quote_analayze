@@ -4,7 +4,7 @@
 
 - **任务1（爆量扫描）**：日 K 落库后由 `backend_core` 定时任务写入 `triple_volume_observe_stocks`，状态初始为「待观察」。
 - **任务2（VSB 复核）**：对「待观察」「观察中」记录调用既有 `evaluate_stock`，命中则「交易触发」，否则「观察中」。
-- **推送**：与 GMS 日报相同链路，使用 `user_push_configs` / `push_records`；`report_type` 为 `triple_volume_observe_scan`（扫描结果）与 `triple_volume_observe_eval`（复核结果）。可选字段 `wechat_notify_userids`（JSON 数组）按**单条推送任务**覆盖企业微信接收人；为空则使用 `users.wechat_userid` / `wechat_openid`。
+- **推送**：与 GMS 日报相同链路，使用 `user_push_configs` / `push_records`；`report_type` 为 `triple_volume_observe_scan`（扫描结果）与 `triple_volume_observe_eval`（复核结果）。可选字段 `wechat_notify_userids`（JSON 数组）按**单条推送任务**覆盖企业微信接收人；为空则使用 `users.wechat_userid` / `wechat_openid`。可选 **`wechat_app_profile`**（如 `B`）：非空时微信推送使用环境变量 **`WECHAT_B_CORP_ID`、`WECHAT_B_CORP_SECRET`、`WECHAT_B_AGENT_ID`**（命名规则 `WECHAT_<PROFILE>_*`）；空则使用默认 `WECHAT_CORP_ID` 等。扫描与复核可各建一条推送任务，分别绑定不同 profile + 各自企业内 userid。
 
 ## 环境变量（扫描范围，与订阅表解耦）
 

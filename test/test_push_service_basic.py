@@ -32,6 +32,8 @@ class TestPushServiceBasic:
         service = Mock(spec=WeChatService)
         service.send_text_message.return_value = True
         service.send_file_message.return_value = True
+        service.config = Mock()
+        service.config.is_configured.return_value = True
         return service
     
     @pytest.fixture
@@ -86,6 +88,7 @@ class TestPushServiceBasic:
         user.username = "test_user"
         user.email = "test@example.com"
         user.wechat_openid = "test_openid"
+        user.wechat_userid = None
         user.wechat_type = "personal"
         return user
     
@@ -155,6 +158,7 @@ class TestPushServiceBasic:
     ):
         """测试通过微信发送报告 - 用户未绑定微信"""
         sample_user.wechat_openid = None
+        sample_user.wechat_userid = None
         
         result = push_service._send_via_wechat(
             user=sample_user,
@@ -309,7 +313,7 @@ class TestPushServiceBasic:
         
         assert result.channel == 'email'
         assert result.success is False
-        assert "邮件发送失败" in result.error_message
+        assert "SMTP connection failed" in (result.error_message or "")
     
     def test_format_push_message(self, push_service, sample_user, sample_report_info):
         """测试格式化推送消息"""

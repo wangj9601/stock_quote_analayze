@@ -4,11 +4,12 @@ import json
 from typing import List, Dict, Any, Optional
 from .wechat_config import WeChatConfig
 
+
 class WeChatService:
-    """企业微信服务"""
-    
-    def __init__(self):
-        self.config = WeChatConfig()
+    """企业微信服务（每个 app_profile 独立 WeChatConfig，避免多主体共用 access_token）"""
+
+    def __init__(self, app_profile: Optional[str] = None, config: Optional[WeChatConfig] = None):
+        self.config = config if config is not None else WeChatConfig(app_profile)
     
     def send_text_message(self, user_ids: List[str], content: str) -> bool:
         """发送文本消息"""

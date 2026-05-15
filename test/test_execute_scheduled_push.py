@@ -15,6 +15,20 @@ from backend_core.wechat.wechat_service import WeChatService
 from backend_api.models import User, UserPushConfig
 
 
+def _push_task(user: Mock, config_id=None) -> tuple:
+    """构造 execute_scheduled_push 所需的 (UserPushConfig, User) 元组。"""
+    cfg = Mock(spec=UserPushConfig)
+    uid = user.id
+    cfg.id = config_id if config_id is not None else uid
+    cfg.enabled = True
+    cfg.channels = ["wechat", "email"]
+    cfg.report_type = "summary"
+    cfg.stock_codes = None
+    cfg.wechat_notify_userids = None
+    cfg.wechat_app_profile = None
+    return (cfg, user)
+
+
 class TestExecuteScheduledPush:
     """测试批量推送逻辑"""
     
@@ -22,6 +36,8 @@ class TestExecuteScheduledPush:
     def mock_services(self):
         """创建模拟服务"""
         wechat_service = Mock(spec=WeChatService)
+        wechat_service.config = Mock()
+        wechat_service.config.is_configured.return_value = True
         email_service = Mock(spec=EmailService)
         report_service = Mock(spec=ReportService)
         config_service = Mock(spec=ConfigService)
@@ -49,7 +65,7 @@ class TestExecuteScheduledPush:
     def test_execute_scheduled_push_no_users(self, push_service, mock_services):
         """测试：没有需要推送的用户"""
         # 设置：没有用户需要推送
-        mock_services['config'].get_users_for_push_time.return_value = []
+        mock_services['config'].get_configs_for_push_time.return_value = []
         
         # 执行
         result = push_service.execute_scheduled_push("09:30")
@@ -62,7 +78,7 @@ class TestExecuteScheduledPush:
         assert len(result.push_results) == 0
         
         # 验证调用
-        mock_services['config'].get_users_for_push_time.assert_called_once_with("09:30")
+        mock_services['config'].get_configs_for_push_time.assert_called_once_with("09:30")
     
     def test_execute_scheduled_push_all_duplicates(self, push_service, mock_services):
         """测试：所有用户今日已推送（去重）"""
@@ -74,7 +90,9 @@ class TestExecuteScheduledPush:
         ]
         
         # 设置：有3个用户需要推送
-        mock_services['config'].get_users_for_push_time.return_value = users
+        mock_services['config'].get_configs_for_push_time.return_value = [
+            _push_task(u) for u in users
+        ]
         
         # 设置：所有用户都已推送过（去重检查返回True）
         mock_services['record'].check_duplicate_push.return_value = True
@@ -98,7 +116,7 @@ class TestExecuteScheduledPush:
         user = Mock(spec=User, id=1, username="user1", wechat_openid="openid1", email="user1@test.com")
         
         # 设置：有1个用户需要推送
-        mock_services['config'].get_users_for_push_time.return_value = [user]
+        mock_services['config'].get_configs_for_push_time.return_value = [_push_task(user)]
         
         # 设置：未推送过（去重检查返回False）
         mock_services['record'].check_duplicate_push.return_value = False
@@ -137,16 +155,18 @@ class TestExecuteScheduledPush:
         ]
         
         # 设置：有4个用户需要推送
-        mock_services['config'].get_users_for_push_time.return_value = users
+        mock_services['config'].get_configs_for_push_time.return_value = [
+            _push_task(u) for u in users
+        ]
         
         # 设置：user1已推送（跳过），其他未推送
-        def check_duplicate_side_effect(user_id, push_date, push_time):
+        def check_duplicate_side_effect(user_id, push_date, push_time, report_type=None, **kwargs):
             return user_id == 1  # user1已推送
         
         mock_services['record'].check_duplicate_push.side_effect = check_duplicate_side_effect
         
         # 模拟 push_to_user 返回不同结果
-        def push_to_user_side_effect(user_id, push_time):
+        def push_to_user_side_effect(user_id, push_time, config_id=None, **kwargs):
             if user_id == 2:
                 # user2 推送成功
                 return PushResult(
@@ -197,7 +217,9 @@ class TestExecuteScheduledPush:
         users = [Mock(spec=User, id=i, username=f"user{i}") for i in range(1, 11)]
         
         # 设置：有10个用户需要推送
-        mock_services['config'].get_users_for_push_time.return_value = users
+        mock_services['config'].get_configs_for_push_time.return_value = [
+            _push_task(u) for u in users
+        ]
         
         # 设置：都未推送过
         mock_services['record'].check_duplicate_push.return_value = False
@@ -205,7 +227,7 @@ class TestExecuteScheduledPush:
         # 记录调用顺序和时间
         call_times = []
         
-        def push_to_user_side_effect(user_id, push_time):
+        def push_to_user_side_effect(user_id, push_time, config_id=None, **kwargs):
             import time
             call_times.append((user_id, datetime.now()))
             time.sleep(0.1)  # 模拟推送耗时
@@ -240,13 +262,15 @@ class TestExecuteScheduledPush:
         ]
         
         # 设置：有3个用户需要推送
-        mock_services['config'].get_users_for_push_time.return_value = users
+        mock_services['config'].get_configs_for_push_time.return_value = [
+            _push_task(u) for u in users
+        ]
         
         # 设置：都未推送过
         mock_services['record'].check_duplicate_push.return_value = False
         
         # 模拟 push_to_user：user2抛出异常，其他正常
-        def push_to_user_side_effect(user_id, push_time):
+        def push_to_user_side_effect(user_id, push_time, config_id=None, **kwargs):
             if user_id == 2:
                 raise Exception("模拟推送异常")
             return PushResult(
@@ -275,8 +299,8 @@ class TestExecuteScheduledPush:
     
     def test_execute_scheduled_push_exception_handling(self, push_service, mock_services):
         """测试：批量推送过程中的异常处理"""
-        # 设置：get_users_for_push_time 抛出异常
-        mock_services['config'].get_users_for_push_time.side_effect = Exception("数据库连接失败")
+        # 设置：get_configs_for_push_time 抛出异常
+        mock_services['config'].get_configs_for_push_time.side_effect = Exception("数据库连接失败")
         
         # 执行
         result = push_service.execute_scheduled_push("09:30")
@@ -310,6 +334,8 @@ class TestExecuteScheduledPushIntegration:
     def mock_services(self):
         """创建模拟服务"""
         wechat_service = Mock(spec=WeChatService)
+        wechat_service.config = Mock()
+        wechat_service.config.is_configured.return_value = True
         email_service = Mock(spec=EmailService)
         report_service = Mock(spec=ReportService)
         config_service = Mock(spec=ConfigService)
@@ -343,12 +369,14 @@ class TestExecuteScheduledPushIntegration:
         ]
         
         # 设置
-        mock_services['config'].get_users_for_push_time.return_value = users
+        mock_services['config'].get_configs_for_push_time.return_value = [
+            _push_task(u) for u in users
+        ]
         
         # 记录 check_duplicate_push 的调用
         duplicate_checks = []
         
-        def check_duplicate_side_effect(user_id, push_date, push_time):
+        def check_duplicate_side_effect(user_id, push_date, push_time, report_type=None, **kwargs):
             duplicate_checks.append({
                 'user_id': user_id,
                 'push_date': push_date,

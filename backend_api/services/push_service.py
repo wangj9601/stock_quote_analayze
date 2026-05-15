@@ -7,6 +7,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Set
 from dataclasses import dataclass
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from backend_api.models import User
@@ -15,6 +16,7 @@ from backend_api.services.config_service import ConfigService
 from backend_api.services.report_service import ReportService, ReportInfo
 from backend_api.services.record_repository import RecordRepository
 from backend_core.wechat.wechat_service import WeChatService
+from backend_core.wechat.wechat_config import normalize_wechat_app_profile
 from backend_api.services.logging_utils import (
     log_push_event, log_data_missing, log_service_unavailable,
     log_push_failure, log_user_not_configured,
@@ -22,6 +24,9 @@ from backend_api.services.logging_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+_wechat_service_lock = threading.Lock()
+_wechat_service_by_key: Dict[str, WeChatService] = {}
 
 
 @dataclass
@@ -80,6 +85,17 @@ class PushService:
         self.record_repository = record_repository
         
         logger.info("PushService 初始化完成")
+
+    def _get_wechat_service_for_push_config(self, push_config: Any) -> WeChatService:
+        """按推送任务 wechat_app_profile 返回 WeChatService；空 profile 复用注入的默认实例（与单测 Mock 一致）。"""
+        raw = getattr(push_config, "wechat_app_profile", None)
+        key = normalize_wechat_app_profile(raw) or ""
+        if not key:
+            return self.wechat_service
+        with _wechat_service_lock:
+            if key not in _wechat_service_by_key:
+                _wechat_service_by_key[key] = WeChatService(app_profile=key)
+            return _wechat_service_by_key[key]
 
     @staticmethod
     def _wechat_recipient_userids(user: User, config: Optional[Any] = None) -> List[str]:
@@ -381,13 +397,40 @@ class PushService:
             # 检查是否有可用的推送渠道（微信：user_push_configs.wechat_notify_userids 优先，否则 wechat_userid / wechat_openid）
             wechat_targets = self._wechat_recipient_userids(user, config)
             available_channels = []
+            wechat_skipped_misconfig = False
             for channel in config.channels:
                 if channel == 'wechat' and wechat_targets:
+                    wx_svc = self._get_wechat_service_for_push_config(config)
+                    if not wx_svc.config.is_configured():
+                        prof_disp = getattr(config, "wechat_app_profile", None) or ""
+                        logger.warning(
+                            "用户 %s: 微信渠道已启用且已有接收人，但企业微信凭证不完整（wechat_app_profile=%s），跳过微信渠道",
+                            user_id,
+                            prof_disp if prof_disp else "(空=默认 WECHAT_CORP_ID 等)",
+                        )
+                        wechat_skipped_misconfig = True
+                        continue
                     available_channels.append('wechat')
                 elif channel == 'email' and user.email:
                     available_channels.append('email')
             
             if not available_channels:
+                if wechat_skipped_misconfig and wechat_targets:
+                    error_msg = (
+                        f"用户 {user_id} 企业微信应用凭证未配置完整。"
+                        f"wechat_app_profile={getattr(config, 'wechat_app_profile', None) or '(空=默认)'}；"
+                        "默认需 WECHAT_CORP_ID/WECHAT_CORP_SECRET/WECHAT_AGENT_ID；"
+                        "命名 profile 需 WECHAT_<PROFILE>_CORP_ID、WECHAT_<PROFILE>_CORP_SECRET、WECHAT_<PROFILE>_AGENT_ID。"
+                    )
+                    logger.warning(error_msg)
+                    log_user_not_configured(user_id=user_id, reason="企业微信凭证不完整")
+                    return PushResult(
+                        user_id=user_id,
+                        success=False,
+                        channel_results=[],
+                        record_id=None,
+                        error_message=error_msg
+                    )
                 error_msg = f"用户 {user_id} 没有绑定任何推送渠道"
                 logger.warning(error_msg)
                 # 记录用户未配置事件
@@ -505,6 +548,7 @@ class PushService:
                             report_path=report_result.file_path,
                             report_info=report_result.report_info,
                             wechat_user_ids=self._wechat_recipient_userids(user, config),
+                            push_config=config,
                         )
                     elif channel == 'email':
                         result = self._send_via_email(
@@ -604,6 +648,7 @@ class PushService:
         report_path: str,
         report_info: ReportInfo,
         wechat_user_ids: Optional[List[str]] = None,
+        push_config: Optional[Any] = None,
     ) -> ChannelResult:
         """
         通过微信发送报告
@@ -613,9 +658,27 @@ class PushService:
             report_path: 报告文件路径
             report_info: 报告信息
             wechat_user_ids: 企业微信 userid 列表（已解析）；空则回退用户绑定
+            push_config: 当前推送任务配置；非空时按 wechat_app_profile 选择企业微信应用凭证
         """
         try:
-            ids = [x for x in (wechat_user_ids or []) if x]
+            wx = (
+                self._get_wechat_service_for_push_config(push_config)
+                if push_config is not None
+                else self.wechat_service
+            )
+            if not wx.config.is_configured():
+                prof = getattr(push_config, "wechat_app_profile", None) if push_config is not None else None
+                error_msg = (
+                    f"企业微信凭证未配置完整（wechat_app_profile={prof or '默认'}）。"
+                    "请检查环境变量 WECHAT_* 或 WECHAT_<PROFILE>_*。"
+                )
+                logger.warning("用户 %s: %s", user.id, error_msg)
+                return ChannelResult(channel="wechat", success=False, error_message=error_msg)
+
+            if wechat_user_ids is not None:
+                ids = [x for x in wechat_user_ids if x]
+            else:
+                ids = self._wechat_recipient_userids(user, push_config)
             if not ids:
                 error_msg = f"用户 {user.id} 未绑定微信（未设置 wechat_userid 或 wechat_openid）"
                 logger.warning(error_msg)
@@ -630,7 +693,7 @@ class PushService:
 
             # 1. 先发送文本消息
             logger.info(f"向用户 {user.id} 发送微信文本消息 -> {ids}")
-            text_success = self.wechat_service.send_text_message(
+            text_success = wx.send_text_message(
                 user_ids=ids,
                 content=text_message
             )
@@ -656,7 +719,7 @@ class PushService:
             logger.info(f"向用户 {user.id} 发送微信文件消息")
             import os
             file_name = os.path.basename(report_path)
-            file_success = self.wechat_service.send_file_message(
+            file_success = wx.send_file_message(
                 user_ids=ids,
                 file_path=report_path,
                 file_name=file_name
@@ -1198,6 +1261,7 @@ class PushService:
                             report_path=record.report_file_path,
                             report_info=report_info,
                             wechat_user_ids=self._wechat_recipient_userids(user, config_retry),
+                            push_config=config_retry,
                         )
                     elif channel == 'email':
                         result = self._send_via_email(
