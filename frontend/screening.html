@@ -741,7 +741,7 @@
             <div class="strategy-info-card">
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
-                    <li><strong>数据来源：</strong>【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
+                    <li><strong>数据来源：</strong>【单只股票】输入代码或名称，仅计算该股的 GMS 策略信号；【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
                         股基本信息表中全部 A 股的 GMS 指标列表；【全部ETF】显示 ETF 基本信息表中全部 ETF 的 GMS 指标列表。</li>
                     <li><strong>时间范围：</strong>最近 20 个交易日</li>
                     <li><strong>双模块阶梯式评分：</strong></li>
@@ -784,6 +784,17 @@
                             style="margin-right: 5px;">
                         <label for="gmsScopeGmsWatchlist" style="cursor: pointer;">GMS观察股</label>
                     </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeSingle" name="gmsScope" value="single"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeSingle" style="cursor: pointer;">单只股票</label>
+                    </div>
+                </div>
+                <div id="gmsSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <label for="gmsSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
+                    <input type="text" id="gmsSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
+                        style="min-width: 220px; max-width: 320px;">
+                    <span style="color: #888; font-size: 12px;">选定后点击「刷新筛选」计算该股 GMS 信号</span>
                 </div>
                 <div id="gmsWatchlistMarketWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;">
                     <span style="color: #666; font-size: 13px;">观察股市场：</span>

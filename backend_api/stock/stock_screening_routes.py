@@ -1004,6 +1004,53 @@ def _normalize_stock_code_for_gms_pool(c: str) -> str:
     return s
 
 
+def _resolve_gms_stock_code_from_input(db: Session, raw: str) -> Optional[str]:
+    """
+    将用户输入的代码或名称解析为 GMS 可用的证券代码。
+    支持 6 位 A 股、5 位港股、SH/SZ 前缀及简称/代码模糊匹配。
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    upper = s.upper()
+    if upper.startswith(("SH", "SZ")) and len(s) > 2:
+        s = s[2:].strip()
+    if s.isdigit():
+        norm = _normalize_stock_code_for_gms_pool(s)
+        return norm if norm else None
+
+    from backend_api.models import StockBasicInfo, StockBasicInfoHK, FundBasicInfo
+
+    def _code_from_row(row) -> str:
+        return str(getattr(row, "code", "") or "").strip()
+
+    for Model in (StockBasicInfo, StockBasicInfoHK, FundBasicInfo):
+        row = db.query(Model).filter(Model.code == s).first()
+        if row:
+            return _code_from_row(row)
+        norm = _normalize_stock_code_for_gms_pool(s)
+        if norm and norm != s:
+            row = db.query(Model).filter(Model.code == norm).first()
+            if row:
+                return _code_from_row(row)
+
+    for Model in (StockBasicInfo, StockBasicInfoHK, FundBasicInfo):
+        row = db.query(Model).filter(Model.name == s).first()
+        if row:
+            return _code_from_row(row)
+
+    like = f"%{s}%"
+    for Model in (StockBasicInfo, StockBasicInfoHK, FundBasicInfo):
+        row = (
+            db.query(Model)
+            .filter((Model.code.like(like)) | (Model.name.like(like)))
+            .first()
+        )
+        if row:
+            return _code_from_row(row)
+    return None
+
+
 # GMS 策略选股路由（以前端页面参数为准，与前端共用同一套参数）
 @router.get("/gms-strategy")
 async def get_gms_strategy(
@@ -1112,8 +1159,28 @@ async def get_gms_strategy(
         market = "all"
         stock_pool_size = 0
         if code:
-            stock_pool = [str(code).strip()]
-            logger.info(f"GMS 单个股票查询: {code}")
+            resolved_code = _resolve_gms_stock_code_from_input(db, code)
+            if not resolved_code:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": target_date,
+                        "strategy_name": "GMS均值引力动量策略",
+                        "scope": "single",
+                        "message": f"未找到与「{str(code).strip()}」匹配的股票，请检查代码或名称",
+                        "paging": {
+                            "enabled": use_pagination,
+                            "page": 1,
+                            "page_size": page_size if use_pagination else 0,
+                            "total": 0,
+                            "total_pages": 0,
+                        },
+                    }
+                )
+            stock_pool = [resolved_code]
+            logger.info("GMS 单个股票查询: input=%s resolved=%s", code, resolved_code)
             market = "all"
         elif scope == "watchlist":
             if not token:

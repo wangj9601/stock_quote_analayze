@@ -75,6 +75,7 @@ const ScreeningPage = {
         if (strategy === 'gms') {
             this.loadGmsParams();
             this.syncGmsWatchlistMarketWrap();
+        this.syncGmsSingleStockWrap();
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');
@@ -486,6 +487,66 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
+    /** 显示/隐藏「单只股票」输入行 */
+    syncGmsSingleStockWrap() {
+        const wrap = document.getElementById('gmsSingleStockWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="gmsScope"]:checked');
+        const show = checked && checked.value === 'single';
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
+    /**
+     * 将用户输入的股票代码或名称解析为代码（本地缓存优先，否则 /api/stock/list）
+     * @returns {Promise<string|null>}
+     */
+    async resolveGmsSingleStockKeyword(keywordRaw) {
+        const keyword = String(keywordRaw || '').trim();
+        if (!keyword) return null;
+
+        let code = keyword.replace(/\s/g, '');
+        if (/^(sh|sz)/i.test(code)) code = code.slice(2);
+        if (/^\d{4,6}$/.test(code)) {
+            if (code.length <= 5) return code.padStart(5, '0');
+            return code.padStart(6, '0');
+        }
+
+        const lower = keyword.toLowerCase();
+        try {
+            const cached = localStorage.getItem('stockBasicInfo');
+            if (cached) {
+                const stocks = JSON.parse(cached);
+                if (Array.isArray(stocks)) {
+                    const exactCode = stocks.find((s) => String(s.code || '').trim().toLowerCase() === lower);
+                    if (exactCode) return String(exactCode.code).trim();
+                    const exactName = stocks.find((s) => String(s.name || '').trim() === keyword);
+                    if (exactName) return String(exactName.code).trim();
+                    const fuzzy = stocks.find((s) => {
+                        const c = String(s.code || '').toLowerCase();
+                        const n = String(s.name || '').toLowerCase();
+                        return c.includes(lower) || n.includes(lower);
+                    });
+                    if (fuzzy) return String(fuzzy.code).trim();
+                }
+            }
+        } catch (e) {
+            console.warn('[GMS] 本地股票缓存解析失败', e);
+        }
+
+        const fetchFn = this.getAuthFetchFn();
+        const url = `${this.API_BASE_URL}/api/stock/list?query=${encodeURIComponent(keyword)}&limit=10`;
+        const res = await fetchFn(url);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !Array.isArray(data.data) || data.data.length === 0) {
+            return null;
+        }
+        const exactCode = data.data.find((s) => String(s.code || '').trim().toLowerCase() === lower);
+        if (exactCode) return String(exactCode.code).trim();
+        const exactName = data.data.find((s) => String(s.name || '').trim() === keyword);
+        if (exactName) return String(exactName.code).trim();
+        return String(data.data[0].code || '').trim() || null;
+    },
+
     // 加载头部导航
     async loadHeader() {
         try {
@@ -624,6 +685,12 @@ const ScreeningPage = {
         document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.syncGmsWatchlistMarketWrap();
+        this.syncGmsSingleStockWrap();
+                this.syncGmsSingleStockWrap();
+                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                if (scopeEl && scopeEl.value === 'single') {
+                    return;
+                }
                 this.loadScreeningResults('gms');
             });
         });
@@ -636,6 +703,18 @@ const ScreeningPage = {
             });
         });
         this.syncGmsWatchlistMarketWrap();
+        this.syncGmsSingleStockWrap();
+        const gmsSingleInput = document.getElementById('gmsSingleStockInput');
+        if (gmsSingleInput) {
+            gmsSingleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                    if (scopeEl && scopeEl.value === 'single') {
+                        void this.loadScreeningResults('gms');
+                    }
+                }
+            });
+        }
 
         // GMS 策略参数：保存按钮
         const gmsParamsSaveBtn = document.getElementById('gmsParamsSaveBtn');
@@ -756,7 +835,7 @@ const ScreeningPage = {
 
     /**
      * 构建 GMS 接口查询串（不含 trace_only）
-     * @param {{ page?: number, includePagination?: boolean }} options
+     * @param {{ page?: number, includePagination?: boolean, resolvedSingleCode?: string }} options
      */
     getGmsQuerySearchParams(options = {}) {
         const includePagination = options.includePagination !== false;
@@ -765,7 +844,13 @@ const ScreeningPage = {
         const scope = scopeElement ? scopeElement.value : 'all';
         const gmsParams = this.getGmsParams();
         const q = new URLSearchParams();
-        q.set('scope', scope);
+        if (scope === 'single') {
+            const code = options.resolvedSingleCode || '';
+            if (code) q.set('code', code);
+            q.set('scope', 'cn');
+        } else {
+            q.set('scope', scope);
+        }
         if (scope === 'gms_watchlist') {
             const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
@@ -791,7 +876,9 @@ const ScreeningPage = {
         if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
         if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
         if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
-        if (includePagination) {
+        if (scope === 'single') {
+            q.set('use_pagination', 'false');
+        } else if (includePagination) {
             q.set('use_pagination', 'true');
             q.set('page', String(page));
             q.set('page_size', String(this.GMS_PAGE_SIZE));
@@ -799,6 +886,29 @@ const ScreeningPage = {
             q.set('use_pagination', 'false');
         }
         return q;
+    },
+
+    /** 构建 GMS 查询串（含单只股票代码解析） */
+    async buildGmsQuerySearchParams(options = {}) {
+        const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
+        const scope = scopeElement ? scopeElement.value : 'all';
+        if (scope === 'single') {
+            const inputEl = document.getElementById('gmsSingleStockInput');
+            const raw = inputEl ? String(inputEl.value || '').trim() : '';
+            if (!raw) {
+                throw new Error('请输入股票代码或名称');
+            }
+            const resolved = await this.resolveGmsSingleStockKeyword(raw);
+            if (!resolved) {
+                throw new Error(`未找到与「${raw}」匹配的股票`);
+            }
+            return this.getGmsQuerySearchParams({
+                ...options,
+                resolvedSingleCode: resolved,
+                includePagination: false,
+            });
+        }
+        return this.getGmsQuerySearchParams(options);
     },
 
     /** GMS：按代码/名称精准定位（全量拉取后匹配） */
@@ -1081,10 +1191,11 @@ const ScreeningPage = {
 
                 url = `${apiBaseUrl}/api/screening/pvfrs-strategy?scope=${scope}`;
             } else if (strategy === 'gms') {
-                gmsQueryString = this.getGmsQuerySearchParams({
+                const gmsQ = await this.buildGmsQuerySearchParams({
                     page: this.gmsPage,
                     includePagination: true,
-                }).toString();
+                });
+                gmsQueryString = gmsQ.toString();
             } else if (strategy === 'volume-shrink-breakout') {
                 const params = new URLSearchParams();
                 params.set('scope', 'all');
@@ -2116,7 +2227,7 @@ const ScreeningPage = {
     /** GMS：导出 CSV 前拉取全量（不分页） */
     async exportGmsCsvFull() {
         try {
-            const q = this.getGmsQuerySearchParams({ includePagination: false });
+            const q = await this.buildGmsQuerySearchParams({ includePagination: false });
             const result = await this.fetchGmsStrategyResult(q.toString());
             if (!result.success || !result.data) {
                 if (window.CommonUtils) CommonUtils.showToast(result.message || '没有可导出的数据', 'warning');
@@ -2467,7 +2578,7 @@ const ScreeningPage = {
     async exportToExcelGms() {
         let data;
         try {
-            const q = this.getGmsQuerySearchParams({ includePagination: false });
+            const q = await this.buildGmsQuerySearchParams({ includePagination: false });
             const result = await this.fetchGmsStrategyResult(q.toString());
             if (!result.success || !result.data || result.data.length === 0) {
                 if (window.CommonUtils) CommonUtils.showToast(result.message || '没有可导出的数据', 'warning');
