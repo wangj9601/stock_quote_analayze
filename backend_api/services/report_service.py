@@ -741,6 +741,70 @@ class ReportService:
             error_message=None,
         )
 
+    @staticmethod
+    def _triple_volume_observe_row_dict(r: TripleVolumeObserveStock) -> Dict[str, Any]:
+        vd = r.vsb_detail_json if isinstance(r.vsb_detail_json, dict) else {}
+        return {
+            "市场": r.market,
+            "代码": r.code,
+            "名称": r.name or "",
+            "观察日": r.observe_trade_date.strftime("%Y-%m-%d")
+            if hasattr(r.observe_trade_date, "strftime")
+            else str(r.observe_trade_date)[:10],
+            "前日": r.prev_trade_date.strftime("%Y-%m-%d")
+            if r.prev_trade_date and hasattr(r.prev_trade_date, "strftime")
+            else ("" if not r.prev_trade_date else str(r.prev_trade_date)[:10]),
+            "前日量": r.prev_volume,
+            "当日量": r.curr_volume,
+            "量比": round(r.volume_ratio_actual, 4) if r.volume_ratio_actual is not None else "",
+            "状态": r.status,
+            "复核时间": r.vsb_evaluated_at.strftime("%Y-%m-%d %H:%M:%S") if r.vsb_evaluated_at else "",
+            "VSB摘要": str(vd) if vd else "",
+        }
+
+    @staticmethod
+    def _write_triple_volume_scan_push_excel(filepath: str, rows: List[Dict[str, Any]]) -> None:
+        """每日爆量推送 Excel：沪深主板 / 中小板 / 创业板 / 科创板 各一 sheet；港股单独 sheet。"""
+        from backend_api.utils.cn_listed_board_filter import (
+            TVO_PUSH_EXCEL_BOARD_SHEETS,
+            TVO_PUSH_EXCEL_HK_SHEET,
+            group_tvo_rows_by_excel_board,
+        )
+
+        column_order = [
+            "市场",
+            "代码",
+            "名称",
+            "观察日",
+            "前日",
+            "前日量",
+            "当日量",
+            "量比",
+            "状态",
+            "复核时间",
+            "VSB摘要",
+        ]
+        buckets = group_tvo_rows_by_excel_board(rows)
+        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+            for seg, sheet_name in TVO_PUSH_EXCEL_BOARD_SHEETS:
+                seg_rows = buckets.get(seg, [])
+                df = (
+                    pd.DataFrame(seg_rows, columns=column_order)
+                    if seg_rows
+                    else pd.DataFrame(columns=column_order)
+                )
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+            hk_rows = buckets.get("HK", [])
+            if hk_rows:
+                pd.DataFrame(hk_rows, columns=column_order).to_excel(
+                    writer, sheet_name=TVO_PUSH_EXCEL_HK_SHEET, index=False
+                )
+            other_rows = buckets.get("OTHER", [])
+            if other_rows:
+                pd.DataFrame(other_rows, columns=column_order).to_excel(
+                    writer, sheet_name="其他", index=False
+                )
+
     def _generate_triple_volume_observe_report(self, user_id: int, report_type: str) -> ReportResult:
         """3倍量观察股：scan=仅最新观察日；eval=全表快照。"""
         q = self.db.query(TripleVolumeObserveStock)
@@ -759,37 +823,18 @@ class ReportService:
             d0 = rows[0].observe_trade_date
             report_date = d0.strftime("%Y-%m-%d") if hasattr(d0, "strftime") else str(d0)[:10]
 
-        data = []
-        for r in rows:
-            vd = r.vsb_detail_json if isinstance(r.vsb_detail_json, dict) else {}
-            data.append(
-                {
-                    "市场": r.market,
-                    "代码": r.code,
-                    "名称": r.name or "",
-                    "观察日": r.observe_trade_date.strftime("%Y-%m-%d")
-                    if hasattr(r.observe_trade_date, "strftime")
-                    else str(r.observe_trade_date)[:10],
-                    "前日": r.prev_trade_date.strftime("%Y-%m-%d")
-                    if r.prev_trade_date and hasattr(r.prev_trade_date, "strftime")
-                    else ("" if not r.prev_trade_date else str(r.prev_trade_date)[:10]),
-                    "前日量": r.prev_volume,
-                    "当日量": r.curr_volume,
-                    "量比": round(r.volume_ratio_actual, 4) if r.volume_ratio_actual is not None else "",
-                    "状态": r.status,
-                    "复核时间": r.vsb_evaluated_at.strftime("%Y-%m-%d %H:%M:%S") if r.vsb_evaluated_at else "",
-                    "VSB摘要": str(vd) if vd else "",
-                }
-            )
+        data = [self._triple_volume_observe_row_dict(r) for r in rows]
 
         timestamp = datetime.now().strftime("%H%M%S")
         short = "tvo_scan" if report_type == "triple_volume_observe_scan" else "tvo_eval"
         filename = f"{short}_{user_id}_{report_date.replace('-', '')}_{timestamp}.xlsx"
         filepath = os.path.join(self.report_dir, filename)
-        df = pd.DataFrame(data)
-        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
-            sheet = "爆量侦测" if report_type == "triple_volume_observe_scan" else "状态复核"
-            df.to_excel(writer, sheet_name=sheet, index=False)
+        if report_type == "triple_volume_observe_scan":
+            self._write_triple_volume_scan_push_excel(filepath, data)
+        else:
+            df = pd.DataFrame(data)
+            with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+                df.to_excel(writer, sheet_name="状态复核", index=False)
 
         file_size = os.path.getsize(filepath)
         return ReportResult(

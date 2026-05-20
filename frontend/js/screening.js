@@ -11,6 +11,12 @@ const ScreeningPage = {
     vsbSubPanel: 'pick',
     /** 观察股池内子页：vsb=选股命中表；daily=日终爆量表 */
     vsbObserveSource: 'vsb',
+    /** GMS 子页：signals=策略信号；trade-observe=交易观察列表 */
+    gmsSubPanel: 'signals',
+    /** 已加入交易观察的 CN:code / HK:code */
+    gmsTradeObserveCodeSet: new Set(),
+    /** 最近一次 GMS 筛选基准交易日（与接口 search_date 一致） */
+    lastGmsSearchDate: null,
 
     // 初始化
     async init() {
@@ -18,6 +24,7 @@ const ScreeningPage = {
         this.bindEvents();
         this.initStrategyTabs();
         this.initVsbIntegratedTabs();
+        this.initGmsIntegratedTabs();
         this.applyVsbHashOnLoad();
     },
 
@@ -75,11 +82,324 @@ const ScreeningPage = {
         if (strategy === 'gms') {
             this.loadGmsParams();
             this.syncGmsWatchlistMarketWrap();
-        this.syncGmsSingleStockWrap();
+            this.syncGmsSingleStockWrap();
+            void this.loadGmsTradeObserveCodes();
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');
         }
+    },
+
+    initGmsIntegratedTabs() {
+        document.querySelectorAll('.gms-integrated-head .gms-sub-tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const sub = btn.getAttribute('data-gms-sub');
+                if (sub === 'signals' || sub === 'trade-observe') {
+                    this.switchGmsSubPanel(sub);
+                }
+            });
+        });
+        const refreshBtn = document.getElementById('gmsTradeObserveRefreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.refreshGmsTradeObserveList());
+        }
+        const observeBody = document.getElementById('gmsTradeObserveTableBody');
+        if (observeBody) {
+            observeBody.addEventListener('click', (e) => {
+                const rm = e.target.closest('.gms-trade-observe-remove');
+                if (!rm) return;
+                e.preventDefault();
+                const id = rm.getAttribute('data-id');
+                if (id) void this.removeGmsTradeObserve(parseInt(id, 10), rm);
+            });
+        }
+    },
+
+    switchGmsSubPanel(sub) {
+        this.gmsSubPanel = sub;
+        document.querySelectorAll('.gms-integrated-head .gms-sub-tab').forEach((t) => {
+            t.classList.toggle('active', t.getAttribute('data-gms-sub') === sub);
+        });
+        document.querySelectorAll('.gms-sub-panel').forEach((p) => {
+            const show =
+                (sub === 'signals' && p.id === 'gms-sub-signals-wrap') ||
+                (sub === 'trade-observe' && p.id === 'gms-sub-trade-observe-wrap');
+            p.classList.toggle('active', show);
+        });
+        if (sub === 'trade-observe') {
+            this.refreshGmsTradeObserveList();
+        }
+    },
+
+    _gmsMarketFromStock(stock) {
+        const m = (stock && stock.market ? String(stock.market) : '').trim().toUpperCase();
+        if (m === 'HK' || m === 'CN') return m;
+        const code = String(stock?.symbol || stock?.code || '').trim();
+        if (code.length === 5 && /^\d+$/.test(code)) return 'HK';
+        return 'CN';
+    },
+
+    _gmsTradeObserveKey(market, code) {
+        const m = (market || 'CN').toUpperCase();
+        return `${m}:${String(code || '').trim()}`;
+    },
+
+    _resolveGmsSignalDate(stock) {
+        if (!stock || typeof stock !== 'object') return this.lastGmsSearchDate || null;
+        const direct = stock.signal_date || stock.indicator_date || stock.search_date;
+        if (direct) return String(direct).slice(0, 10);
+        const sd = stock.score_detail || stock.indicators?.score_detail || {};
+        if (sd.d20_date) return String(sd.d20_date).slice(0, 10);
+        if (sd.date) return String(sd.date).slice(0, 10);
+        return this.lastGmsSearchDate || null;
+    },
+
+    _buildGmsTradeObserveSnapshot(stock) {
+        if (!stock || typeof stock !== 'object') return {};
+        const sd = stock.score_detail || stock.indicators?.score_detail || {};
+        const signalDate = this._resolveGmsSignalDate(stock);
+        return {
+            signal_date: signalDate,
+            signal_strength: stock.signal_strength,
+            score_total: stock.score_total,
+            buy_type: stock.buy_type,
+            left_buy_signal: stock.left_buy_signal,
+            right_buy_signal: stock.right_buy_signal,
+            current_price: stock.current_price,
+            change_percent: stock.change_percent,
+            delta: stock.delta,
+            d_ma20: stock.d_ma20,
+            ratio_d20: stock.ratio_d20,
+            ratio_d1: stock.ratio_d1,
+            fz_ratio: stock.fz_ratio,
+            rising_days: stock.rising_days,
+            falling_days: stock.falling_days,
+            score_detail: sd,
+        };
+    },
+
+    async loadGmsTradeObserveCodes() {
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            this.gmsTradeObserveCodeSet = new Set();
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-trade-observe/codes`);
+            if (!res.ok) {
+                this.gmsTradeObserveCodeSet = new Set();
+                return;
+            }
+            const codes = await res.json();
+            this.gmsTradeObserveCodeSet = new Set(Array.isArray(codes) ? codes : []);
+        } catch (_) {
+            this.gmsTradeObserveCodeSet = new Set();
+        }
+    },
+
+    async refreshGmsTradeObserveList() {
+        const errEl = document.getElementById('gmsTradeObserveError');
+        const loadingEl = document.getElementById('gmsTradeObserveLoading');
+        const tbody = document.getElementById('gmsTradeObserveTableBody');
+        const countEl = document.getElementById('gmsTradeObserveCount');
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (errEl) {
+                errEl.style.display = '';
+                errEl.textContent = '请先登录后查看交易观察列表';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">请先登录</td></tr>';
+            }
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+        if (loadingEl) loadingEl.style.display = '';
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-trade-observe/list?page=1&page_size=500`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加载失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const items = data.items || [];
+            this.gmsTradeObserveCodeSet = new Set(
+                items.map((it) => this._gmsTradeObserveKey(it.market, it.code))
+            );
+            this.renderGmsTradeObserveTable(items);
+            if (countEl) countEl.textContent = `共 ${data.total != null ? data.total : items.length} 只观察股`;
+        } catch (e) {
+            if (errEl) {
+                errEl.style.display = '';
+                errEl.textContent = e.message || '加载交易观察列表失败';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">加载失败</td></tr>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    },
+
+    renderGmsTradeObserveTable(items) {
+        const tbody = document.getElementById('gmsTradeObserveTableBody');
+        if (!tbody) return;
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
+            return;
+        }
+        const esc = (s) => String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+        const fmtStrength = (snap) => {
+            if (!snap) return '--';
+            let v = snap.signal_strength;
+            if ((v == null || v === 0) && snap.score_total > 0) v = snap.score_total / 100;
+            if (v == null) return '--';
+            return (Number(v) * 100).toFixed(1) + '%';
+        };
+        const fmtPrice = (v) => (v != null && !isNaN(v)) ? Number(v).toFixed(2) : '--';
+        const fmtDt = (iso) => {
+            if (!iso) return '--';
+            const s = String(iso);
+            return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
+        };
+        tbody.innerHTML = items.map((it) => {
+            const snap = it.snapshot || {};
+            const buyType = snap.buy_type || '—';
+            const buyClass = snap.left_buy_signal ? 'gms-left' : (snap.right_buy_signal ? 'gms-right' : '');
+            const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            const traceHref = `stock_gms_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            return `
+                <tr data-observe-id="${it.id}">
+                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
+                    <td class="gms-col-narrow">${fmtStrength(snap)}</td>
+                    <td class="gms-col-narrow"><span class="${buyClass}">${esc(buyType)}</span></td>
+                    <td class="gms-col-price">${fmtPrice(snap.current_price)}</td>
+                    <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
+                    <td class="gms-col-narrow">${fmtDt(it.updated_at || it.created_at)}</td>
+                    <td class="gms-col-actions">
+                        <div class="action-links">
+                            <a href="${traceHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
+                            <button type="button" class="gms-op-btn gms-trade-observe-remove" data-id="${it.id}" title="移出交易观察">移除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    async addGmsTradeObserveFromRow(rowIndex, btnEl) {
+        const stocks = this.lastResults.gms;
+        const stock = Array.isArray(stocks) ? stocks[rowIndex] : null;
+        if (!stock) {
+            if (window.CommonUtils) CommonUtils.showToast('未找到该行信号数据，请刷新筛选后重试', 'warning');
+            return;
+        }
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (window.CommonUtils) CommonUtils.showToast('请先登录后再加入交易观察', 'warning');
+            window.location.href = 'login.html';
+            return;
+        }
+        const code = String(stock.symbol || stock.code || '').trim();
+        const market = this._gmsMarketFromStock(stock);
+        const key = this._gmsTradeObserveKey(market, code);
+        if (this.gmsTradeObserveCodeSet.has(key)) {
+            if (window.CommonUtils) CommonUtils.showToast('已在交易观察列表中', 'info');
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        const snapshot = this._buildGmsTradeObserveSnapshot(stock);
+        const signalDate = this._resolveGmsSignalDate(stock);
+        if (!signalDate) {
+            if (window.CommonUtils) CommonUtils.showToast('无法确定信号交易日，请先刷新 GMS 筛选', 'warning');
+            return;
+        }
+        try {
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.textContent = '加入中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-trade-observe/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code,
+                    market,
+                    name: stock.name || code,
+                    signal_date: signalDate,
+                    snapshot,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            this.gmsTradeObserveCodeSet.add(key);
+            if (window.CommonUtils) CommonUtils.showToast(`已加入交易观察：${stock.name || code}`, 'success');
+            if (btnEl) {
+                btnEl.textContent = '已观察';
+                btnEl.classList.add('is-added');
+                btnEl.disabled = true;
+            }
+            if (this.gmsSubPanel === 'trade-observe') {
+                void this.refreshGmsTradeObserveList();
+            }
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '加入交易观察失败', 'error');
+            if (btnEl) {
+                btnEl.textContent = '观察';
+                btnEl.disabled = false;
+            }
+        }
+    },
+
+    async removeGmsTradeObserve(itemId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) btnEl.disabled = true;
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-trade-observe/${itemId}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `移除失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            if (window.CommonUtils) CommonUtils.showToast('已移出交易观察列表', 'success');
+            await this.loadGmsTradeObserveCodes();
+            void this.refreshGmsTradeObserveList();
+            this._refreshGmsTradeObserveButtonsInSignalTable();
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '移除失败', 'error');
+            if (btnEl) btnEl.disabled = false;
+        }
+    },
+
+    _refreshGmsTradeObserveButtonsInSignalTable() {
+        const tbody = document.getElementById('resultsTableBody-gms');
+        if (!tbody) return;
+        tbody.querySelectorAll('.gms-trade-observe-add').forEach((btn) => {
+            const code = btn.getAttribute('data-code') || '';
+            const market = (btn.getAttribute('data-market') || 'CN').toUpperCase();
+            const key = this._gmsTradeObserveKey(market, code);
+            if (this.gmsTradeObserveCodeSet.has(key)) {
+                btn.textContent = '已观察';
+                btn.classList.add('is-added');
+                btn.disabled = true;
+            } else {
+                btn.textContent = '观察';
+                btn.classList.remove('is-added');
+                btn.disabled = false;
+            }
+        });
     },
 
     initVsbIntegratedTabs() {
@@ -726,6 +1046,15 @@ const ScreeningPage = {
         const gmsContainer = document.getElementById('resultsContainer-gms');
         if (gmsContainer) {
             gmsContainer.addEventListener('click', (e) => {
+                const observeBtn = e.target.closest('.gms-trade-observe-add');
+                if (observeBtn) {
+                    e.preventDefault();
+                    const rowIndex = observeBtn.getAttribute('data-row');
+                    if (rowIndex != null && rowIndex !== '') {
+                        void this.addGmsTradeObserveFromRow(parseInt(rowIndex, 10), observeBtn);
+                    }
+                    return;
+                }
                 const addBtn = e.target.closest('.gms-watchlist-add');
                 if (addBtn) {
                     e.preventDefault();
@@ -953,6 +1282,10 @@ const ScreeningPage = {
             }
             this.gmsLocateActive = true;
             this.lastResults.gms = [hit];
+            if (result.search_date) {
+                this.lastGmsSearchDate = String(result.search_date).slice(0, 10);
+            }
+            await this.loadGmsTradeObserveCodes();
             this.renderResults([hit], result.search_date, 'gms', null, { enabled: false });
             this.updateGmsPaginationUi({ enabled: false });
             if (clearBtn) clearBtn.style.display = 'inline-block';
@@ -1000,9 +1333,7 @@ const ScreeningPage = {
         this.gmsPage = page;
         bar.style.display = 'flex';
         bar.setAttribute('data-total-pages', String(Math.max(0, totalPages)));
-        label.textContent = totalPages > 0
-            ? `第 ${page} / ${totalPages} 页（每页 ${paging.page_size || this.GMS_PAGE_SIZE} 条，共 ${total} 条）`
-            : `共 ${total} 条`;
+        label.textContent = totalPages > 0 ? `第 ${page} / ${totalPages} 页` : '';
         if (prev) prev.disabled = page <= 1 || total <= 0;
         if (next) next.disabled = totalPages <= 0 || page >= totalPages;
     },
@@ -1235,8 +1566,14 @@ const ScreeningPage = {
 
             if (result.success && result.data) {
                 this.lastResults[strategy] = result.data;
+                if (strategy === 'gms' && result.search_date) {
+                    this.lastGmsSearchDate = String(result.search_date).slice(0, 10);
+                }
                 const emptyMsg = (result.data.length === 0 && result.message) ? result.message : null;
                 const gmsPaging = strategy === 'gms' ? result.paging : null;
+                if (strategy === 'gms') {
+                    await this.loadGmsTradeObserveCodes();
+                }
                 this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
                 if (strategy === 'gms') {
                     if (result.paging) {
@@ -1600,7 +1937,10 @@ const ScreeningPage = {
         // 更新计数
         if (resultsCount) {
             if (strategy === 'gms' && gmsPaging && gmsPaging.enabled && gmsPaging.total != null) {
-                resultsCount.textContent = `本页 ${data.length} 条，合计 ${gmsPaging.total} 条（每页 ${gmsPaging.page_size || this.GMS_PAGE_SIZE} 条）`;
+                const pageSize = gmsPaging.page_size || this.GMS_PAGE_SIZE;
+                resultsCount.textContent = `共 ${gmsPaging.total} 条 · 本页 ${data.length} 条（每页 ${pageSize} 条）`;
+            } else if (strategy === 'gms') {
+                resultsCount.textContent = `共 ${data.length} 条信号`;
             } else {
                 resultsCount.textContent = `共找到 ${data.length} 只符合条件的股票`;
             }
@@ -2102,6 +2442,9 @@ const ScreeningPage = {
                     .replace(/'/g, '&#39;')
                     .replace(/</g, '&lt;');
                 const gmsCode = String(stock.symbol || stock.code || '');
+                const gmsMarket = this._gmsMarketFromStock(stock);
+                const gmsObserveKey = this._gmsTradeObserveKey(gmsMarket, gmsCode);
+                const gmsAlreadyObserve = this.gmsTradeObserveCodeSet.has(gmsObserveKey);
                 const gmsScopeElement = document.querySelector('input[name="gmsScope"]:checked');
                 const gmsScope = gmsScopeElement ? gmsScopeElement.value : 'all';
                 const canShowWatchlistAction = gmsScope !== 'watchlist';
@@ -2125,9 +2468,10 @@ const ScreeningPage = {
                         <td class="gms-col-pct ${changeClass}">${changeSymbol}${changePercent.toFixed(2)}%</td>
                         <td class="gms-col-actions">
                             <div class="action-links">
-                                <a href="stock_gms_trace.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">历史</a>
-                                ${canShowWatchlistAction ? `<button type="button" class="action-link gms-watchlist-add" data-code="${gmsCode}" data-name="${gmsTitleAttr}" title="加入自选股">+自选</button>` : ''}
-                                <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
+                                <a href="stock_gms_trace.html?code=${stock.symbol || stock.code}&name=${encodeURIComponent(stock.name || '')}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
+                                <button type="button" class="gms-op-btn gms-op-btn--primary gms-trade-observe-add${gmsAlreadyObserve ? ' is-added' : ''}" data-row="${index}" data-code="${gmsCode}" data-market="${gmsMarket}" title="加入交易观察" ${gmsAlreadyObserve ? 'disabled' : ''}>${gmsAlreadyObserve ? '已观察' : '观察'}</button>
+                                ${canShowWatchlistAction ? `<button type="button" class="gms-op-btn gms-watchlist-add" data-code="${gmsCode}" data-name="${gmsTitleAttr}" title="加入自选股">自选</button>` : ''}
+                                <button type="button" class="gms-op-btn gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">明细</button>
                             </div>
                         </td>
                     </tr>

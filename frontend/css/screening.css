@@ -39,6 +39,147 @@
 .vsb-sub-panel.active {
     display: block;
 }
+.gms-sub-panel {
+    display: none;
+}
+.gms-sub-panel.active {
+    display: block;
+}
+
+/* GMS 整合区：分段标签 + 工具栏 + 表格元信息 */
+.gms-integrated-head {
+    margin: 0 0 16px 0;
+}
+.gms-integrated-hint {
+    margin: 10px 0 0 0;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+}
+.gms-segmented-tabs {
+    display: inline-flex;
+    padding: 3px;
+    background: #eef2f6;
+    border-radius: 8px;
+    gap: 2px;
+}
+.gms-sub-tab {
+    border: none;
+    background: transparent;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #475569;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.gms-sub-tab:hover {
+    color: #1976d2;
+}
+.gms-sub-tab.active {
+    background: #fff;
+    color: #1976d2;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+    font-weight: 600;
+}
+.gms-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.gms-toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.gms-toolbar-search {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+.gms-toolbar-meta {
+    margin-left: auto;
+    gap: 10px;
+}
+.gms-search-input {
+    width: 180px;
+    max-width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+}
+.gms-search-input:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+}
+.gms-btn-outline {
+    padding: 8px 14px;
+    background: #fff;
+    color: #37474f;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.gms-btn-outline:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+.gms-btn-outline--muted {
+    color: #64748b;
+}
+.gms-meta-text {
+    font-size: 13px;
+    color: #64748b;
+    white-space: nowrap;
+}
+.gms-meta-chip {
+    font-size: 12px;
+    color: #334155;
+    background: #e2e8f0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.gms-results-card {
+    border-radius: 8px;
+    overflow: hidden;
+}
+.gms-table-meta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    padding: 10px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+.gms-table-meta-summary {
+    font-size: 13px;
+    color: #334155;
+    font-weight: 500;
+}
+.gms-pagination-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+#resultsContainer-gms .results-header {
+    display: none;
+}
 
 /* 观察股池内：选股命中 vs 日终爆量 */
 .observe-source-tabs {
@@ -857,23 +998,8 @@
     flex-wrap: wrap;
     gap: 16px 24px;
 }
-.gms-score-detail-toggle {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #2e7d32;
-    text-decoration: underline;
-    font-size: inherit;
-    padding: 0;
-    margin-left: 4px;
-    border-radius: 4px;
-}
-/* GMS 操作列：历史、详情链接颜色与得分明细一致 */
-#resultsContainer-gms .action-links a.action-link {
-    color: #2e7d32;
-}
-#resultsContainer-gms .action-links a.action-link:hover {
-    color: #1b5e20;
+#resultsContainer-gms .gms-score-detail-toggle {
+    font-family: inherit;
 }
 .gms-score-detail-section {
     margin-bottom: 12px;
@@ -921,36 +1047,29 @@
     font-weight: 500;
 }
 
-/* GMS 列表分页 */
-.gms-pagination-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin: 10px 0 12px;
-    padding: 8px 12px;
-    background: var(--card-bg, #f8f9fa);
-    border-radius: 8px;
-    border: 1px solid var(--border-color, #e0e0e0);
-}
+/* GMS 列表分页（内嵌于表头 meta 栏） */
 .gms-pagination-btn {
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: 6px;
-    border: 1px solid #ccc;
+    border: 1px solid #cbd5e1;
     background: #fff;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
+    color: #334155;
 }
 .gms-pagination-btn:hover:not(:disabled) {
-    background: #eef1f5;
+    background: #f1f5f9;
+    border-color: #94a3b8;
 }
 .gms-pagination-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
 }
 .gms-pagination-label {
-    font-size: 14px;
-    color: #444;
+    font-size: 13px;
+    color: #64748b;
+    min-width: 4.5em;
+    text-align: center;
 }
 
 /* GMS 信号列表：略压缩列宽 + 表头两行 + 名称列限宽 + 操作列 sticky 贴右（横向滚动仍可见） */
@@ -1062,14 +1181,14 @@
     position: sticky;
     right: 0;
     z-index: 2;
-    min-width: 220px;
-    width: 220px;
-    max-width: 240px;
+    min-width: 168px;
+    width: 168px;
+    max-width: 180px;
     white-space: nowrap;
     text-align: center;
     background: #fff;
-    box-shadow: -6px 0 12px -6px rgba(0, 0, 0, 0.12);
-    border-left: 1px solid #eee;
+    box-shadow: -6px 0 12px -6px rgba(0, 0, 0, 0.08);
+    border-left: 1px solid #e2e8f0;
 }
 
 #resultsContainer-gms .results-table thead th.gms-col-actions {
@@ -1081,32 +1200,72 @@
     background: #f8f9fa;
 }
 
-#resultsContainer-gms .action-links {
+#resultsContainer-gms .action-links,
+#resultsTable-gms-trade-observe .action-links {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: nowrap;
-    white-space: nowrap;
 }
 
-#resultsContainer-gms .action-link,
-#resultsContainer-gms .gms-score-detail-toggle {
-    white-space: nowrap;
-}
-
-#resultsContainer-gms .gms-watchlist-add {
-    background: none;
-    border: none;
-    color: #2e7d32;
-    text-decoration: underline;
+.gms-op-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.3;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
     cursor: pointer;
-    padding: 0;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.gms-op-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #1976d2;
+}
+.gms-op-btn--primary {
+    border-color: #90caf9;
+    color: #1565c0;
+    background: #e3f2fd;
+}
+.gms-op-btn--primary:hover:not(:disabled) {
+    background: #bbdefb;
+}
+.gms-op-btn.is-added,
+.gms-op-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
 }
 
-#resultsContainer-gms .gms-watchlist-add:disabled,
-#resultsContainer-gms .gms-watchlist-add.is-added {
-    color: #888;
-    text-decoration: none;
-    cursor: not-allowed;
+#resultsContainer-gms .strength-high,
+#resultsContainer-gms .strength-mid,
+#resultsContainer-gms .strength-low {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+#resultsContainer-gms .strength-high {
+    background: #fff3e0;
+    color: #e65100;
+}
+#resultsContainer-gms .strength-mid {
+    background: #fff8e1;
+    color: #f57f17;
+}
+#resultsContainer-gms .strength-low {
+    background: #f5f5f5;
+    color: #757575;
 }

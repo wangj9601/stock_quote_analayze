@@ -943,21 +943,30 @@
                 </div>
             </div>
 
-            <div class="screening-actions">
-                <button id="refreshBtn-gms" class="refresh-btn" data-strategy="gms">刷新筛选</button>
-                <button id="exportBtn-gms" class="export-btn" style="display:none;">导出CSV</button>
-                <button id="exportExcelBtn-gms" class="export-btn" style="display:none;">导出Excel</button>
-                <input
-                    type="text"
-                    id="gmsLocateInput"
-                    class="param-input"
-                    style="width: 220px; margin-left: 8px;"
-                    placeholder="输入股票代码或名称"
-                >
-                <button id="gmsLocateBtn" class="refresh-btn" type="button">精准定位</button>
-                <button id="gmsLocateClearBtn" class="export-btn" type="button" style="display:none;">清除定位</button>
-                <span id="gmsLocateHint" class="search-date" style="display:none;"></span>
-                <span id="searchDate-gms" class="search-date"></span>
+            <div class="gms-integrated-head">
+                <div class="gms-segmented-tabs" role="tablist" aria-label="GMS 列表类型">
+                    <button type="button" class="gms-sub-tab active" data-gms-sub="signals" id="gmsSubTabSignals">策略信号</button>
+                    <button type="button" class="gms-sub-tab" data-gms-sub="trade-observe" id="gmsSubTabTradeObserve">交易观察</button>
+                </div>
+                <p class="gms-integrated-hint">策略信号为当前筛选结果；交易观察为您从信号中标记、便于跟进的股票。</p>
+            </div>
+
+            <div id="gms-sub-signals-wrap" class="gms-sub-panel active">
+            <div class="gms-toolbar">
+                <div class="gms-toolbar-group">
+                    <button id="refreshBtn-gms" class="refresh-btn" data-strategy="gms">刷新筛选</button>
+                    <button id="exportBtn-gms" class="gms-btn-outline" type="button" style="display:none;">导出 CSV</button>
+                    <button id="exportExcelBtn-gms" class="gms-btn-outline" type="button" style="display:none;">导出 Excel</button>
+                </div>
+                <div class="gms-toolbar-group gms-toolbar-search">
+                    <input type="text" id="gmsLocateInput" class="gms-search-input" placeholder="代码或名称定位">
+                    <button id="gmsLocateBtn" class="gms-btn-outline" type="button">定位</button>
+                    <button id="gmsLocateClearBtn" class="gms-btn-outline gms-btn-outline--muted" type="button" style="display:none;">清除</button>
+                </div>
+                <div class="gms-toolbar-group gms-toolbar-meta">
+                    <span id="gmsLocateHint" class="gms-meta-chip" style="display:none;"></span>
+                    <span id="searchDate-gms" class="gms-meta-text"></span>
+                </div>
             </div>
 
             <div id="loadingIndicator-gms" class="loading-indicator" style="display:none;">
@@ -967,14 +976,14 @@
 
             <div id="errorMessage-gms" class="error-message" style="display:none;"></div>
 
-            <div id="resultsContainer-gms" class="results-container">
-                <div class="results-header">
-                    <span id="resultsCount-gms" class="results-count">共找到 0 只符合条件的股票</span>
-                </div>
-                <div id="gmsPaginationBar" class="gms-pagination-bar" style="display:none;" data-total-pages="0">
-                    <button type="button" id="gmsPaginationPrev" class="gms-pagination-btn" disabled>上一页</button>
-                    <span id="gmsPaginationLabel" class="gms-pagination-label"></span>
-                    <button type="button" id="gmsPaginationNext" class="gms-pagination-btn" disabled>下一页</button>
+            <div id="resultsContainer-gms" class="results-container gms-results-card">
+                <div class="gms-table-meta-bar">
+                    <span id="resultsCount-gms" class="gms-table-meta-summary">共找到 0 只符合条件的股票</span>
+                    <div id="gmsPaginationBar" class="gms-pagination-inline" style="display:none;" data-total-pages="0">
+                        <button type="button" id="gmsPaginationPrev" class="gms-pagination-btn" disabled aria-label="上一页">上一页</button>
+                        <span id="gmsPaginationLabel" class="gms-pagination-label"></span>
+                        <button type="button" id="gmsPaginationNext" class="gms-pagination-btn" disabled aria-label="下一页">下一页</button>
+                    </div>
                 </div>
                 <div id="resultsTable-gms" class="results-table-wrapper">
                     <table class="results-table">
@@ -1004,6 +1013,46 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+            </div>
+
+            <div id="gms-sub-trade-observe-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="gmsTradeObserveRefreshBtn" class="refresh-btn">刷新列表</button>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="gmsTradeObserveCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="gmsTradeObserveError" class="error-message" style="display:none;"></div>
+                <div id="gmsTradeObserveLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载交易观察列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-gms-trade-observe" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-narrow">信号强度</th>
+                                    <th class="gms-col-narrow">买点类型</th>
+                                    <th class="gms-col-price">加入时价格</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-narrow">加入时间</th>
+                                    <th class="gms-col-actions">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gmsTradeObserveTableBody">
+                                <tr>
+                                    <td colspan="8" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

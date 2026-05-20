@@ -1474,6 +1474,7 @@ async def get_gms_strategy(
                 "symbol": code,
                 "code": code,
                 "name": name,
+                "signal_date": target_date,
                 "score_total": r["score_total"],
                 "score_accumulation": r.get("score_accumulation"),
                 "score_momentum": r.get("score_momentum"),

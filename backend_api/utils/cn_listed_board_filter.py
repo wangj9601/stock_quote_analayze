@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, TypeVar
+from typing import Dict, List, Optional, Tuple, TypeVar
 
 from sqlalchemy import Column, or_
 from sqlalchemy.orm import Query
 
-from backend_core.strategies.volume_shrink_breakout.data_loader import VSB_BOARD_PREFIX_GROUPS
+from backend_core.strategies.volume_shrink_breakout.data_loader import (
+    VSB_BOARD_PREFIX_GROUPS,
+    code_matches_vsb_boards,
+)
 
 _T = TypeVar("_T")
 
@@ -47,6 +50,59 @@ def apply_cn_board_segment_filter(query: Query[_T], code_column: Column, board_s
     if crit is None:
         return query
     return query.filter(crit)
+
+
+# 3倍量每日爆量推送 Excel：按板块分 sheet（顺序与表头展示名）
+TVO_PUSH_EXCEL_BOARD_SHEETS: List[Tuple[str, str]] = [
+    ("MAIN", "沪深主板"),
+    ("SZ_SME", "中小板"),
+    ("CYB", "创业板"),
+    ("KCB", "科创板"),
+]
+
+TVO_PUSH_EXCEL_HK_SHEET = "港股"
+
+
+def classify_tvo_excel_board_segment(code: str, market: str) -> str:
+    """
+    将观察股行归入推送 Excel 的板块键：MAIN / SZ_SME / CYB / KCB / HK / OTHER。
+    A 股按 VSB 代码段前缀；港股单独 HK。
+    """
+    m = (market or "").strip().upper()
+    if m == "HK":
+        return "HK"
+    c = str(code or "").strip()
+    if len(c) == 5 and c.isdigit():
+        c = c.zfill(6)
+    if len(c) != 6 or not c.isdigit():
+        return "OTHER"
+    for seg in ("KCB", "CYB", "SZ_SME"):
+        if code_matches_vsb_boards(c, [seg]):
+            return seg
+    if code_matches_vsb_boards(c, ["SH_MAIN", "SZ_MAIN"]):
+        return "MAIN"
+    return "OTHER"
+
+
+def group_tvo_rows_by_excel_board(
+    rows: List[Dict],
+    *,
+    code_key: str = "代码",
+    market_key: str = "市场",
+) -> Dict[str, List[Dict]]:
+    """按 classify_tvo_excel_board_segment 将行字典分桶。"""
+    buckets: Dict[str, List[Dict]] = {seg: [] for seg, _ in TVO_PUSH_EXCEL_BOARD_SHEETS}
+    buckets["HK"] = []
+    buckets["OTHER"] = []
+    for row in rows:
+        seg = classify_tvo_excel_board_segment(
+            str(row.get(code_key, "")),
+            str(row.get(market_key, "")),
+        )
+        if seg not in buckets:
+            seg = "OTHER"
+        buckets[seg].append(row)
+    return buckets
 
 
 def filter_query_by_market_and_board(
