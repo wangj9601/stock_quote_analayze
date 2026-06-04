@@ -28,6 +28,7 @@ from backend_api.models import (
     IndexRealtimeQuotes,
     HistoricalQuotes,
     IndustryBoardRealtimeQuotes,
+    IndustryBoardConstituent,
     StockRealtimeQuoteHK,
     HistoricalQuotesHK,
     HKIndexRealtimeQuotes,
@@ -891,6 +892,83 @@ async def delete_ashare_industry_realtime_quotes(
         "success": True,
         "data": {"deleted": deleted},
         "message": f"已删除 {deleted} 条记录",
+    }
+
+
+class SyncIndustryBoardConstituentsBody(BaseModel):
+    """触发行业板块成分股全量同步（后台执行 AKShare 采集）。"""
+
+    board_codes: Optional[List[str]] = Field(
+        None, description="仅同步指定板块代码；空则同步全部"
+    )
+
+
+@router.post("/realtime/industries/constituents/sync")
+async def sync_industry_board_constituents(
+    body: SyncIndustryBoardConstituentsBody,
+    current_user: Any = Depends(get_current_admin),
+):
+    """管理端：同步东财行业板块成分股到 industry_board_constituents。"""
+    try:
+        from backend_core.data_collectors.akshare.industry_board_constituents_ak import (
+            IndustryBoardConstituentsCollector,
+        )
+
+        collector = IndustryBoardConstituentsCollector()
+        codes = body.board_codes if body.board_codes else None
+        collector.run(board_codes=codes)
+        uname = getattr(current_user, "username", None) or "admin"
+        return {
+            "success": True,
+            "message": f"成分股同步任务已执行（操作人 {uname}）",
+        }
+    except Exception as e:
+        logging.exception("成分股同步失败")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
+
+
+class DeleteIndustryBoardConstituentsBody(BaseModel):
+    scope: Literal["single", "all"]
+    code: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_scope(self):
+        if self.scope == "single" and not (self.code or "").strip():
+            raise ValueError("选择「单个板块」时必须填写板块代码")
+        return self
+
+
+@router.post("/realtime/industries/constituents/delete")
+async def delete_industry_board_constituents(
+    body: DeleteIndustryBoardConstituentsBody,
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """删除 industry_board_constituents 成分股记录。"""
+    q = db.query(IndustryBoardConstituent)
+    if body.scope == "single":
+        bcode = _normalize_board_code(body.code)
+        if not bcode:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="板块代码无效")
+        q = q.filter(IndustryBoardConstituent.board_code == bcode)
+    deleted = q.delete(synchronize_session=False)
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    _try_append_operation_log(
+        db,
+        log_type="industry_board_constituents_delete",
+        log_message=f"删除成分股 scope={body.scope} board={body.code or '-'} by {uname}",
+        affected_count=deleted,
+        log_status="成功",
+        error_info=None,
+    )
+    return {
+        "success": True,
+        "data": {"deleted": deleted},
+        "message": f"已删除 {deleted} 条成分股",
     }
 
 

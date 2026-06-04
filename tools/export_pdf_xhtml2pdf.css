@@ -1,0 +1,23 @@
+/* xhtml2pdf 专用：字体名须与 reportlab 注册的 CJKFont 一致 */
+@page {
+    size: a4;
+    margin: 2cm;
+}
+body, p, h1, h2, h3, h4, h5, h6, li, td, th, span, div, a, blockquote {
+    font-family: CJKFont;
+    font-size: 11pt;
+    line-height: 1.5;
+    color: #222;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+th, td {
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+}
+code, pre {
+    font-family: CJKFont;
+    font-size: 9pt;
+}

@@ -10,6 +10,17 @@ from dataclasses import dataclass
 from .models import MarketData, Signal, CalculationException, DataInsufficientException
 from .strategy_engine import StrategyEngine
 
+try:
+    from backend_api.database import SessionLocal
+    from backend_api.utils.industry_board_query import (
+        get_board_names_by_stock_code,
+        stock_matches_industry_filter,
+    )
+except ImportError:
+    SessionLocal = None  # type: ignore
+    get_board_names_by_stock_code = None  # type: ignore
+    stock_matches_industry_filter = None  # type: ignore
+
 
 @dataclass
 class SelectionResult:
@@ -272,14 +283,11 @@ class StockScreener:
                 if config.exclude_st_stocks and self._is_st_stock(symbol):
                     continue
                 
-                # 行业过滤（如果配置了行业信息）
+                # 行业板块过滤（board_code 或 board_name）
                 if config.include_industries or config.exclude_industries:
-                    stock_industry = self._get_stock_industry(symbol)
-                    
-                    if config.include_industries and stock_industry not in config.include_industries:
-                        continue
-                    
-                    if config.exclude_industries and stock_industry in config.exclude_industries:
+                    if not self._stock_matches_industry_filter(
+                        symbol, config.include_industries, config.exclude_industries
+                    ):
                         continue
                 
                 filtered_stocks[symbol] = filtered_data
@@ -464,18 +472,34 @@ class StockScreener:
         # 简单的ST股票判断逻辑，实际应用中可能需要更复杂的判断
         return 'ST' in symbol.upper()
     
+    def _stock_matches_industry_filter(
+        self,
+        symbol: str,
+        include: Optional[List[str]],
+        exclude: Optional[List[str]],
+    ) -> bool:
+        if SessionLocal is None or stock_matches_industry_filter is None:
+            return True
+        session = SessionLocal()
+        try:
+            return stock_matches_industry_filter(session, symbol, include, exclude)
+        except Exception:
+            return True
+        finally:
+            session.close()
+
     def _get_stock_industry(self, symbol: str) -> Optional[str]:
-        """获取股票行业信息
-        
-        Args:
-            symbol: 股票代码
-            
-        Returns:
-            Optional[str]: 行业信息，如果无法获取则返回None
-        """
-        # 这里应该连接到实际的股票信息数据库
-        # 目前返回None，表示暂不支持行业过滤
-        return None
+        """获取股票所属东财行业板块名称（多个以逗号连接）。"""
+        if SessionLocal is None or get_board_names_by_stock_code is None:
+            return None
+        session = SessionLocal()
+        try:
+            names = get_board_names_by_stock_code(session, symbol)
+            return ",".join(names) if names else None
+        except Exception:
+            return None
+        finally:
+            session.close()
     
     def _get_market_cap(self, symbol: str, price: float) -> Optional[float]:
         """获取市值信息

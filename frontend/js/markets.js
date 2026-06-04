@@ -770,10 +770,9 @@ const MarketsPage = {
         const changePercent = parseFloat(sector.change_percent || 0);
         const isPositive = changePercent >= 0;
 
-        // 模拟上涨、下跌、平盘数量（实际数据中可能没有这些字段）
-        const upCount = Math.floor(Math.random() * 50) + 20;
-        const downCount = Math.floor(Math.random() * 30) + 5;
-        const flatCount = Math.floor(Math.random() * 5) + 1;
+        const upCount = sector.up_count != null ? Number(sector.up_count) : '--';
+        const downCount = sector.down_count != null ? Number(sector.down_count) : '--';
+        const flatCount = '--'; // 东方财富行业板块接口不提供平盘家数
 
         // 处理龙头股信息
         const leadingStockName = sector.leading_stock_name || '--';
@@ -794,6 +793,7 @@ const MarketsPage = {
                     board_code: sector.board_code,
                     board_name: sector.board_name || ''
                 });
+                params.set('limit', '10');
                 const response = await fetch(`${this.API_BASE_URL}/api/market/industry_board/${sector.board_code}/top_stocks?${params}`);
                 const result = await response.json();
                 if (result.success && result.data.top_stocks) {

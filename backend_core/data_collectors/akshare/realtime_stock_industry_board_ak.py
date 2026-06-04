@@ -3,9 +3,18 @@ import pandas as pd
 import traceback
 from datetime import datetime
 import sys
-import os
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.database.db import SessionLocal
+from backend_core.data_collectors.akshare.industry_board_normalize import (
+    enrich_leading_stock_codes,
+    industry_board_to_english_df,
+    normalize_ths_industry_df,
+)
+
+try:
+    from backend_api.utils.industry_board_query import lookup_leading_code_from_constituents
+except ImportError:
+    lookup_leading_code_from_constituents = None  # type: ignore
 from sqlalchemy import text
 
 class RealtimeStockIndustryBoardCollector:
@@ -99,61 +108,51 @@ class RealtimeStockIndustryBoardCollector:
         except Exception as e:
             print(f"[采集] 东方财富接口调用失败: {e}，尝试调用同花顺接口...")
             try:
-                import pandas as pd
                 df = ak.stock_board_industry_summary_ths()
-                # 映射同花顺字段到东方财富字段
-                # THS: ['序号', '板块', '涨跌幅', '总成交量', '总成交额', '净流入', '上涨家数', '下跌家数', '均价', '领涨股', '领涨股-最新价', '领涨股-涨跌幅']
-                # EM: ['板块代码', '板块名称', '最新价', '涨跌额', '涨跌幅', '总市值', '成交量', '成交额', '换手率', '上涨家数', '下跌家数', '领涨股', '领涨股涨跌幅', '领涨股代码']
-                
-                rename_map = {
-                    '板块': '板块名称',
-                    '均价': '最新价',
-                    '总成交量': '成交量',
-                    '总成交额': '成交额',
-                    '领涨股-涨跌幅': '领涨股涨跌幅'
-                }
-                df = df.rename(columns=rename_map)
-                
-                # 补充缺失字段
-                if '板块代码' not in df.columns:
-                    # 同花顺接口不返回代码，暂时使用名称作为代码，或者生成临时代码
-                    # 注意：这可能会导致与EM数据的代码不一致
-                    df['板块代码'] = df['板块名称'] 
-                
-                missing_cols = ['涨跌额', '总市值', '换手率', '领涨股代码']
-                for col in missing_cols:
-                    df[col] = None
-                    
-                return df
+                return normalize_ths_industry_df(df)
             except Exception as e2:
                 print(f"[采集] 同花顺接口调用也失败: {e2}")
                 raise e # 抛出原始异常或新异常
 
+    def _load_stock_name_code_map(self, session) -> dict:
+        try:
+            rows = session.execute(
+                text(
+                    "SELECT code, name FROM stock_basic_info "
+                    "WHERE name IS NOT NULL AND code IS NOT NULL"
+                )
+            ).fetchall()
+            return {str(name).strip(): str(code).strip() for code, name in rows if name and code}
+        except Exception as e:
+            print(f"[采集] 读取 stock_basic_info 失败，跳过领涨股代码补全: {e}")
+            return {}
+
     def save_to_db(self, df):
         session = SessionLocal()
         try:
-            # 字段映射：中文->英文
-            col_map = {
-                "板块代码": "board_code",
-                "板块名称": "board_name",
-                "最新价": "latest_price",
-                "涨跌额": "change_amount",
-                "涨跌幅": "change_percent",
-                "总市值": "total_market_value",
-                "成交量": "volume",
-                "成交额": "amount",
-                "换手率": "turnover_rate",
-                "上涨家数": "up_count",
-                "下跌家数": "down_count",
-                "领涨股": "leading_stock_name",
-                "领涨股涨跌幅": "leading_stock_change_percent",
-                "领涨股代码": "leading_stock_code"
-            }
-            # 只保留映射字段
             now = datetime.now().replace(microsecond=0)
-            keep_cols = [k for k in col_map.keys() if k in df.columns]
-            df = df[keep_cols].rename(columns=col_map)
-            df['update_time'] = now
+            df = industry_board_to_english_df(df)
+            if df.empty:
+                return False, "归一化后数据为空"
+            name_code_map = self._load_stock_name_code_map(session)
+            df = enrich_leading_stock_codes(df, name_code_map)
+            if lookup_leading_code_from_constituents and "leading_stock_name" in df.columns:
+                if "leading_stock_code" not in df.columns:
+                    df["leading_stock_code"] = None
+                for idx, row in df.iterrows():
+                    existing = row.get("leading_stock_code")
+                    if existing is not None and not pd.isna(existing) and str(existing).strip():
+                        continue
+                    bcode = row.get("board_code")
+                    lname = row.get("leading_stock_name")
+                    if pd.isna(bcode) or pd.isna(lname):
+                        continue
+                    code = lookup_leading_code_from_constituents(
+                        session, str(bcode).strip(), str(lname).strip()
+                    )
+                    if code:
+                        df.at[idx, "leading_stock_code"] = code
+            df["update_time"] = now
             
             # 更新行业板块基本信息表
             # 使用 executemany 优化性能? 或者简单的循环
@@ -189,11 +188,15 @@ class RealtimeStockIndustryBoardCollector:
             session.execute(text(f"DELETE FROM {self.table_name}"))
             # 插入新数据（upsert）
             for _, row in df.iterrows():
+                if pd.isna(row.get("board_code")) or str(row.get("board_code", "")).strip() == "":
+                    continue
                 value_dict = {}
                 for col in columns:
                     v = row[col]
                     if hasattr(v, 'item'):
                         v = v.item()
+                    if pd.isna(v):
+                        v = None
                     if str(type(v)).endswith("Timestamp'>"):
                         v = v.to_pydatetime().isoformat()
                     if col == 'update_time' and not isinstance(v, str):

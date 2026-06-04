@@ -18,6 +18,7 @@ from backend_core.data_collectors.tushare.realtime import RealtimeQuoteCollector
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.data_collectors.akshare.realtime_index_spot_ak import RealtimeIndexSpotAkCollector
 from backend_core.data_collectors.akshare.realtime_stock_industry_board_ak import RealtimeStockIndustryBoardCollector
+from backend_core.data_collectors.akshare.industry_board_constituents_ak import IndustryBoardConstituentsCollector
 from backend_core.data_collectors.akshare.realtime_stock_notice_report_ak import AkshareStockNoticeReportCollector
 from backend_core.data_collectors.akshare.hk_realtime import HKRealtimeQuoteCollector
 from backend_core.data_collectors.akshare.hk_historical import HKHistoricalQuoteCollector
@@ -70,6 +71,7 @@ tushare_hist_collector = HistoricalQuoteCollector(DATA_COLLECTORS.get('tushare',
 tushare_realtime_collector = RealtimeQuoteCollector(DATA_COLLECTORS.get('tushare', {}))
 index_collector = RealtimeIndexSpotAkCollector()
 industry_board_collector = RealtimeStockIndustryBoardCollector()
+industry_board_constituents_collector = IndustryBoardConstituentsCollector()
 notice_collector = AkshareStockNoticeReportCollector(DATA_COLLECTORS.get('akshare', {}))
 news_collector = NewsCollector()
 hk_realtime_collector = HKRealtimeQuoteCollector(DATA_COLLECTORS.get('akshare', {}))
@@ -198,11 +200,27 @@ def collect_tushare_realtime():
 
 def collect_akshare_industry_board_realtime():
     try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] 今日 A 股休市，跳过行业板块实时行情采集")
+            return
         logging.info("[定时任务] 行业板块实时行情采集开始...")
         industry_board_collector.run()
         logging.info("[定时任务] 行业板块实时行情采集完成")
     except Exception as e:
         logging.error(f"[定时任务] 行业板块实时行情采集异常: {e}")
+
+
+def collect_akshare_industry_board_constituents():
+    try:
+        if _cn_session_closed_today():
+            logging.info("[定时任务] 今日 A 股休市，跳过行业板块成分股同步")
+            return
+        logging.info("[定时任务] 行业板块成分股同步开始...")
+        industry_board_constituents_collector.run()
+        logging.info("[定时任务] 行业板块成分股同步完成")
+    except Exception as e:
+        logging.error(f"[定时任务] 行业板块成分股同步异常: {e}")
+
 
 def collect_akshare_stock_notices():
     try:
@@ -791,6 +809,11 @@ scheduler.add_job(collect_akshare_industry_board_realtime, 'cron',
     hour=_cron('SCHED_AKSHARE_INDUSTRY_HOUR', '11,16'),
     minute=_cron_int('SCHED_AKSHARE_INDUSTRY_MINUTE', 3),
     id='akshare_industry_board_realtime')
+scheduler.add_job(collect_akshare_industry_board_constituents, 'cron',
+    day_of_week=_cron('SCHED_INDUSTRY_CONS_DOW', 'mon-fri'),
+    hour=_cron('SCHED_INDUSTRY_CONS_HOUR', '16'),
+    minute=_cron_int('SCHED_INDUSTRY_CONS_MINUTE', 30),
+    id='akshare_industry_board_constituents')
 # scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
 if _env_bool("SCHED_AKSHARE_TURNOVER_ENABLED", False):
     scheduler.add_job(collect_akshare_turnover_rate, 'cron',

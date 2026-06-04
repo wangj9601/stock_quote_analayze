@@ -1,6 +1,6 @@
 # backend_api/market_routes.py
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 import akshare as ak
 from datetime import datetime
 from fastapi.responses import JSONResponse
@@ -9,10 +9,17 @@ import traceback
 import pandas as pd
 import numpy as np
 import sqlite3
+from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from backend_api.database import get_db
-from backend_api.models import IndexRealtimeQuotes, IndustryBoardRealtimeQuotes, HKIndexRealtimeQuotes
+from backend_api.models import (
+    IndexRealtimeQuotes,
+    IndustryBoardRealtimeQuotes,
+    IndustryBoardConstituent,
+    HKIndexRealtimeQuotes,
+)
+from backend_api.utils.industry_board_query import get_boards_by_stock_code
 
 
 
@@ -36,6 +43,74 @@ def row_to_dict(row):
         else:
             d[c.name] = v
     return d
+
+
+def _normalize_stock_code(code: str) -> str:
+    s = str(code).strip()
+    if s.isdigit() and len(s) < 6:
+        return s.zfill(6)
+    return s
+
+
+def _latest_ashare_trade_date(db: Session) -> Optional[str]:
+    row = db.execute(
+        text(
+            """
+            SELECT MAX(trade_date) AS latest_date
+            FROM stock_realtime_quote
+            WHERE change_percent IS NOT NULL
+            """
+        )
+    ).fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def _fetch_board_constituents_with_quotes(
+    db: Session, board_code: str, limit: int, sort_desc: bool = True
+) -> List[dict]:
+    """成分股 + 最新实时涨跌幅。"""
+    cons = (
+        db.query(IndustryBoardConstituent)
+        .filter(IndustryBoardConstituent.board_code == board_code)
+        .all()
+    )
+    if not cons:
+        return []
+    trade_date = _latest_ashare_trade_date(db)
+    codes = [_normalize_stock_code(c.stock_code) for c in cons]
+    quote_map = {}
+    if trade_date and codes:
+        placeholders = ",".join([f":c{i}" for i in range(len(codes))])
+        params = {f"c{i}": codes[i] for i in range(len(codes))}
+        params["trade_date"] = trade_date
+        sql = text(
+            f"""
+            SELECT code, name, current_price, change_percent
+            FROM stock_realtime_quote
+            WHERE trade_date = :trade_date AND code IN ({placeholders})
+            """
+        )
+        for row in db.execute(sql, params).fetchall():
+            quote_map[str(row[0])] = {
+                "name_rt": row[1],
+                "current_price": row[2],
+                "change_percent": float(row[3]) if row[3] is not None else None,
+            }
+    items = []
+    for c in cons:
+        code = _normalize_stock_code(c.stock_code)
+        q = quote_map.get(code, {})
+        items.append({
+            "code": code,
+            "name": c.stock_name or q.get("name_rt") or code,
+            "change_percent": q.get("change_percent"),
+            "current_price": q.get("current_price"),
+        })
+    items.sort(
+        key=lambda x: x["change_percent"] if x["change_percent"] is not None else -1e9,
+        reverse=sort_desc,
+    )
+    return items[:limit]
 
 # 获取市场指数数据(修改为从数据库 index_realtime_quotes 表中获取)
 @router.get("/indices")
@@ -119,6 +194,8 @@ def get_industry_board(db: Session = Depends(get_db)):
             "volume": row.volume,
             "amount": row.amount,
             "turnover_rate": row.turnover_rate,
+            "up_count": row.up_count,
+            "down_count": row.down_count,
             "leading_stock_name": row.leading_stock_name,
             "leading_stock_code": row.leading_stock_code,
             "leading_stock_change_percent": row.leading_stock_change_percent,
@@ -198,58 +275,124 @@ def get_hk_market_indices(db: Session = Depends(get_db)):
             'traceback': tb
         }, status_code=500)
 
-# 获取行业板块内涨幅领先的股票
-@router.get("/industry_board/{board_code}/top_stocks")
-def get_industry_board_top_stocks(board_code: str, board_name: str = None, db: Session = Depends(get_db)):
-    """获取指定行业板块内涨幅领先的股票（从数据库表获取真实数据）"""
+@router.get("/industry_board/{board_code}/stocks")
+def get_industry_board_stocks(
+    board_code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """板块成分股列表（分页，按涨跌幅降序）。"""
     try:
-        # 直接从 industry_board_realtime_quotes 表获取领涨股信息
-        board_data = db.query(IndustryBoardRealtimeQuotes).filter(
-            IndustryBoardRealtimeQuotes.board_code == board_code
-        ).first()
-        
-        if not board_data:
-            return JSONResponse({
-                'success': False,
-                'message': f'未找到板块代码 {board_code} 的数据'
-            })
-        
-        # 检查是否有领涨股信息
-        if not board_data.leading_stock_name or not board_data.leading_stock_code:
-            return JSONResponse({
-                'success': False,
-                'message': f'板块 {board_data.board_name} 暂无领涨股数据'
-            })
-        
-        # 构建领涨股数据
-        leading_stock = {
-            'code': board_data.leading_stock_code,
-            'name': board_data.leading_stock_name,
-            'change_percent': board_data.leading_stock_change_percent or 0.0,
-            'data_source': 'database_realtime'
-        }
-        
-        # 目前数据库表只存储了一只领涨股，返回单只股票
-        top_stocks = [leading_stock]
-        
+        board_data = (
+            db.query(IndustryBoardRealtimeQuotes)
+            .filter(IndustryBoardRealtimeQuotes.board_code == board_code)
+            .first()
+        )
+        board_name = board_data.board_name if board_data else board_code
+        all_items = _fetch_board_constituents_with_quotes(db, board_code, limit=10000)
+        total = len(all_items)
+        start = (page - 1) * page_size
+        items = all_items[start : start + page_size]
         return JSONResponse({
-            'success': True,
-            'data': {
-                'board_code': board_code,
-                'board_name': board_data.board_name,
-                'top_stocks': top_stocks,
-                'total_stocks': 1,  # 目前只返回一只领涨股
-                'data_source': 'database_realtime',
-                'message': '数据来源：industry_board_realtime_quotes 表'
-            }
+            "success": True,
+            "data": {
+                "board_code": board_code,
+                "board_name": board_name,
+                "stocks": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "data_source": "industry_board_constituents",
+            },
         })
-        
     except Exception as e:
-        import traceback
         tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取板块成分股失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/industry_board/{board_code}/top_stocks")
+def get_industry_board_top_stocks(
+    board_code: str,
+    board_name: str = None,
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """板块内涨幅领先股票（优先成分股表 + 实时行情）。"""
+    try:
+        board_data = (
+            db.query(IndustryBoardRealtimeQuotes)
+            .filter(IndustryBoardRealtimeQuotes.board_code == board_code)
+            .first()
+        )
+        display_name = (board_data.board_name if board_data else None) or board_name or board_code
+
+        top_stocks = _fetch_board_constituents_with_quotes(db, board_code, limit=limit)
+        data_source = "industry_board_constituents"
+
+        if not top_stocks and board_data and board_data.leading_stock_name:
+            top_stocks = [{
+                "code": board_data.leading_stock_code or "",
+                "name": board_data.leading_stock_name,
+                "change_percent": board_data.leading_stock_change_percent or 0.0,
+            }]
+            data_source = "industry_board_realtime_quotes"
+
+        if not top_stocks:
+            return JSONResponse({
+                "success": False,
+                "message": f"板块 {display_name} 暂无成分股数据，请先运行成分股同步",
+            })
+
         return JSONResponse({
-            'success': False,
-            'message': '获取板块龙头股数据失败',
-            'error': str(e),
-            'traceback': tb
-        }, status_code=500)
+            "success": True,
+            "data": {
+                "board_code": board_code,
+                "board_name": display_name,
+                "top_stocks": top_stocks,
+                "total_stocks": len(top_stocks),
+                "data_source": data_source,
+            },
+        })
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取板块龙头股数据失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/stock/{code}/industry_boards")
+def get_stock_industry_boards(code: str, db: Session = Depends(get_db)):
+    """个股所属东财行业板块列表。"""
+    try:
+        stock_code = _normalize_stock_code(code)
+        boards = get_boards_by_stock_code(db, stock_code)
+        return JSONResponse({
+            "success": True,
+            "data": {"stock_code": stock_code, "boards": boards},
+        })
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取个股行业板块失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )

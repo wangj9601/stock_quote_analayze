@@ -469,6 +469,15 @@ class IndexRealtimeQuotes(Base):
     collect_time = Column(String)  # 添加缺失的字段
     index_spot_type = Column(Integer)  # 添加缺失的字段
 
+class IndustryBoardConstituent(Base):
+    """东财行业板块成分股（board_code ↔ stock_code 多对多）。"""
+    __tablename__ = "industry_board_constituents"
+    board_code = Column(String(20), primary_key=True)
+    stock_code = Column(String(20), primary_key=True)
+    stock_name = Column(String(100))
+    updated_at = Column(DateTime, default=datetime.now)
+
+
 class IndustryBoardRealtimeQuotes(Base):
     __tablename__ = "industry_board_realtime_quotes"
     board_code = Column(String(20), primary_key=True)
@@ -480,6 +489,8 @@ class IndustryBoardRealtimeQuotes(Base):
     volume = Column(Float)
     amount = Column(Float)
     turnover_rate = Column(Float)
+    up_count = Column(Integer)
+    down_count = Column(Integer)
     leading_stock_name = Column(String(100))
     leading_stock_code = Column(String(20))
     leading_stock_change_percent = Column(Float)

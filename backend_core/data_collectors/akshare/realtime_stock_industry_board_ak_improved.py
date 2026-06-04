@@ -2,9 +2,11 @@ import akshare as ak
 import traceback
 from datetime import datetime
 import sys
-import os
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.database.db import SessionLocal
+from backend_core.data_collectors.akshare.industry_board_normalize import (
+    industry_board_to_english_df,
+)
 from sqlalchemy import text
 import pandas as pd
 
@@ -25,7 +27,7 @@ class ImprovedRealtimeStockIndustryBoardCollector:
             print(f"[采集] 列名: {list(df.columns)}")
             
             # 检查关键字段
-            key_fields = ["领涨股", "领涨股涨跌幅", "领涨股代码"]
+            key_fields = ["领涨股票", "领涨股票-涨跌幅", "领涨股", "领涨股涨跌幅", "领涨股代码"]
             for field in key_fields:
                 if field in df.columns:
                     non_null_count = df[field].notna().sum()

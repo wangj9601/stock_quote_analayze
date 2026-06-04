@@ -1080,6 +1080,7 @@ const StockPage = {
 
                 this.updateStockInfo();
                 this.updateStockDetails();
+                this.loadIndustryBoards();
 
                 // 同步更新关键价位的当前价格
                 this.updateKeyLevelsCurrentPrice();
@@ -1093,6 +1094,29 @@ const StockPage = {
         } catch (e) {
             console.error('[loadStockData] 请求异常:', e);
             CommonUtils.showToast('实时行情请求异常', 'error');
+        }
+    },
+
+    async loadIndustryBoards() {
+        const wrap = document.getElementById('stockIndustryBoards');
+        const listEl = document.getElementById('stockIndustryBoardsList');
+        if (!wrap || !listEl || !this.stockCode) return;
+        try {
+            const url = `${API_BASE_URL}/api/market/stock/${encodeURIComponent(this.stockCode)}/industry_boards`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data.success && data.data && data.data.boards && data.data.boards.length > 0) {
+                wrap.style.display = 'block';
+                listEl.innerHTML = data.data.boards.map(b => {
+                    const name = b.board_name || b.board_code;
+                    return `<a href="markets.html" class="industry-board-tag" title="${b.board_code}">${name}</a>`;
+                }).join(' ');
+            } else {
+                wrap.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn('[loadIndustryBoards]', e);
+            wrap.style.display = 'none';
         }
     },
 
