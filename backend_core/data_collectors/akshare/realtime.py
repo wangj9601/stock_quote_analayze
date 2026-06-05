@@ -5,7 +5,8 @@
 
 import akshare as ak
 import pandas as pd
-from typing import Optional, Dict, Any
+import time
+from typing import Optional, Dict, Any, List, Set, Tuple
 from pathlib import Path
 import logging
 from datetime import datetime
@@ -16,6 +17,27 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
 A_SHARE_LOT_SIZE = 100  # A股1手=100股
+DEFAULT_BATCH_SIZE = 500
+
+
+def normalize_stock_code(code: Any, data_source: str = "em") -> Optional[str]:
+    """统一 A 股代码为 6 位字符串。"""
+    if code is None or (isinstance(code, float) and pd.isna(code)):
+        return None
+    s = str(code).strip()
+    if not s or s.lower() == "nan":
+        return None
+    if data_source == "sina" and len(s) > 2 and s[:2].isalpha():
+        s = s[2:]
+    if s.isdigit():
+        return s.zfill(6)
+    return s
+
+
+def should_collect_stock(code: str, disabled_codes: Set[str]) -> bool:
+    """collect_enabled=false 的已登记股票跳过；未登记的新股允许写入。"""
+    return code not in disabled_codes
+
 
 class AkshareRealtimeQuoteCollector(AKShareCollector):
     """沪深京A股实时行情数据采集器"""
@@ -151,11 +173,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
 
     def _calculate_turnover_rate_from_shares(
         self,
-        session,
         code: str,
         volume_hand: Optional[float],
         current_price: Optional[float],
         circulating_market_value: Optional[float],
+        free_float_by_code: Optional[Dict[str, float]] = None,
     ) -> Optional[float]:
         """
         当上游未提供换手率时，按股本口径回退计算。
@@ -170,25 +192,14 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 return None
 
             free_float_shares = None
-            row = session.execute(
-                text(
-                    """
-                    SELECT free_float_shares
-                    FROM stock_basic_info
-                    WHERE code = :code
-                    """
-                ),
-                {"code": code},
-            ).fetchone()
-            if row and row[0] is not None and float(row[0]) > 0:
-                free_float_shares = float(row[0])
+            if free_float_by_code and code in free_float_by_code:
+                free_float_shares = free_float_by_code[code]
             elif (
                 circulating_market_value is not None
                 and current_price is not None
                 and float(circulating_market_value) > 0
                 and float(current_price) > 0
             ):
-                # 回退：用流通市值 / 现价 推算流通股本（股）
                 free_float_shares = float(circulating_market_value) / float(current_price)
 
             if free_float_shares is None or free_float_shares <= 0:
@@ -199,7 +210,176 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
         except Exception as e:
             self.logger.debug(f"换手率回退计算失败: code={code}, err={e}")
             return None
-    
+
+    def _load_collect_policy(self, session) -> Tuple[Set[str], Dict[str, float]]:
+        """返回 (collect_enabled=false 的代码集合, 流通股本映射)。"""
+        disabled: Set[str] = set()
+        free_float: Dict[str, float] = {}
+        rows = session.execute(
+            text(
+                """
+                SELECT code, collect_enabled, free_float_shares
+                FROM stock_basic_info
+                """
+            )
+        ).fetchall()
+        for row in rows:
+            code = normalize_stock_code(row[0]) or str(row[0]).strip()
+            if row[1] is False:
+                disabled.add(code)
+            if row[2] is not None:
+                try:
+                    fv = float(row[2])
+                    if fv > 0:
+                        free_float[code] = fv
+                except (TypeError, ValueError):
+                    pass
+        return disabled, free_float
+
+    def _bulk_upsert_with_retry(
+        self,
+        session,
+        sql: str,
+        params_list: List[Dict[str, Any]],
+        label: str,
+        batch_size: int,
+    ) -> int:
+        if not params_list:
+            return 0
+        max_retries = self.config.get("max_retries", 3)
+        total = 0
+        for start in range(0, len(params_list), batch_size):
+            chunk = params_list[start : start + batch_size]
+            retry = 0
+            while retry < max_retries:
+                try:
+                    session.execute(text(sql), chunk)
+                    session.commit()
+                    total += len(chunk)
+                    break
+                except Exception as e:
+                    if ("LockNotAvailable" in str(e)) or ("DeadlockDetected" in str(e)):
+                        retry += 1
+                        session.rollback()
+                        self.logger.warning(
+                            "%s 批量写入锁冲突，第 %s 次重试（batch %s-%s）: %s",
+                            label,
+                            retry,
+                            start,
+                            start + len(chunk),
+                            e,
+                        )
+                        time.sleep(0.2 * retry)
+                        continue
+                    session.rollback()
+                    raise
+            else:
+                self.logger.error(
+                    "%s 批量写入重试 %s 次仍失败，跳过本批 %s 条",
+                    label,
+                    max_retries,
+                    len(chunk),
+                )
+        return total
+
+    def _build_rows_from_df(
+        self,
+        df: pd.DataFrame,
+        data_source: str,
+        disabled_codes: Set[str],
+        free_float_by_code: Dict[str, float],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
+        """解析接口数据，返回 (basic_info 行, quote 行, 跳过数)。"""
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+        update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        basic_rows: List[Dict[str, Any]] = []
+        quote_rows: List[Dict[str, Any]] = []
+        skipped = 0
+
+        for _, row in df.iterrows():
+            code = normalize_stock_code(row.get("代码"), data_source)
+            if not code:
+                skipped += 1
+                continue
+            name = row.get("名称")
+            if "退" in (name or ""):
+                skipped += 1
+                continue
+            if not should_collect_stock(code, disabled_codes):
+                skipped += 1
+                continue
+
+            raw_vol = self._safe_value(row.get("成交量"))
+            volume = (
+                (raw_vol / 100)
+                if (data_source == "sina" and raw_vol is not None)
+                else raw_vol
+            )
+            current_price = self._safe_value(row.get("最新价"))
+            if current_price is None or float(current_price) <= 0:
+                skipped += 1
+                continue
+
+            turnover_rate = (
+                self._safe_value(row.get("换手率"))
+                if "换手率" in row.index
+                else None
+            )
+            if data_source == "sina" and turnover_rate is None:
+                turnover_rate = self._calculate_turnover_rate_from_shares(
+                    code=code,
+                    volume_hand=volume,
+                    current_price=current_price,
+                    circulating_market_value=self._safe_value(row.get("流通市值"))
+                    if "流通市值" in row.index
+                    else None,
+                    free_float_by_code=free_float_by_code,
+                )
+
+            basic_rows.append(
+                {"code": code, "name": name, "create_date": update_time}
+            )
+            quote_rows.append(
+                {
+                    "code": code,
+                    "trade_date": trade_date,
+                    "name": name,
+                    "current_price": current_price,
+                    "change_percent": self._safe_value(row.get("涨跌幅")),
+                    "volume": volume,
+                    "amount": self._safe_value(row.get("成交额")),
+                    "high": self._safe_value(row.get("最高")),
+                    "low": self._safe_value(row.get("最低")),
+                    "open": self._safe_value(row.get("今开")),
+                    "pre_close": self._safe_value(row.get("昨收")),
+                    "turnover_rate": turnover_rate,
+                    "pe_dynamic": (
+                        self._safe_value(row.get("市盈率-动态"))
+                        if "市盈率-动态" in row.index
+                        else self._safe_value(row.get("市盈率"))
+                        if "市盈率" in row.index
+                        else None
+                    ),
+                    "total_market_value": (
+                        self._safe_value(row.get("总市值"))
+                        if "总市值" in row.index
+                        else None
+                    ),
+                    "pb_ratio": (
+                        self._safe_value(row.get("市净率"))
+                        if "市净率" in row.index
+                        else None
+                    ),
+                    "circulating_market_value": (
+                        self._safe_value(row.get("流通市值"))
+                        if "流通市值" in row.index
+                        else None
+                    ),
+                    "update_time": update_time,
+                }
+            )
+        return basic_rows, quote_rows, skipped
+
     def collect_quotes(self) -> bool:
         """
         采集实时行情数据
@@ -233,146 +413,71 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 return False
             self.logger.info("采集到 %d 条股票行情数据", len(df))
 
-            for _, row in df.iterrows():
-                code = row['代码']
-                if data_source == "sina":
-                    # 如果新浪数据源，则过滤掉code前2位字母
-                    code = code[2:] if isinstance(code, str) and len(code) > 2 else code
-                name = row['名称']
-                # 名称含「退」的股票（退市等）不再写入实时、历史行情表
-                if '退' in (name or ''):
-                    continue
-                # 获取当前交易日期
-                trade_date = datetime.now().strftime('%Y-%m-%d')
-                # 成交量统一按「手」存库。东方财富=手(原样)，新浪=股(÷100 转为手)
-                raw_vol = self._safe_value(row['成交量'])
-                volume = (raw_vol / 100) if (data_source == "sina" and raw_vol is not None) else raw_vol
-                data = {
-                    'code': code,
-                    'name': name,
-                    'trade_date': trade_date,
-                    'current_price': self._safe_value(row['最新价']),
-                    'change_percent': self._safe_value(row['涨跌幅']),
-                    'volume': volume,
-                    'amount': self._safe_value(row['成交额']),
-                    'high': self._safe_value(row['最高']),
-                    'low': self._safe_value(row['最低']),
-                    'open': self._safe_value(row['今开']),
-                    'pre_close': self._safe_value(row['昨收']),
-                    # 如果是新浪数据源，不采集换手率字段
-                    'turnover_rate': self._safe_value(row['换手率']) if '换手率' in row else None,
-                    # akshare主数据源和新浪数据源市盈率字段兼容处理（新浪无'市盈率-动态'，只有'市盈率'）
-                    'pe_dynamic': self._safe_value(row['市盈率-动态']) if '市盈率-动态' in row else self._safe_value(row['市盈率']) if '市盈率' in row else None,
-                    'total_market_value': self._safe_value(row['总市值']) if '总市值' in row else None,
-                    'pb_ratio': self._safe_value(row['市净率']) if '市净率' in row else None,
-                    'circulating_market_value': self._safe_value(row['流通市值']) if '流通市值' in row else None,
-                    'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
+            disabled_codes, free_float_by_code = self._load_collect_policy(session)
+            if disabled_codes:
+                self.logger.info(
+                    "collect_enabled=false 已登记股票 %d 只，将跳过实时写入",
+                    len(disabled_codes),
+                )
 
-                # 现价为空/0/非正数时跳过，不写入数据库
-                if data['current_price'] is None or float(data['current_price']) <= 0:
-                    self.logger.debug(f"跳过无效现价数据: code={code}, name={name}, current_price={data['current_price']}")
-                    continue
+            basic_rows, quote_rows, skipped = self._build_rows_from_df(
+                df, data_source, disabled_codes, free_float_by_code
+            )
+            batch_size = int(self.config.get("batch_size", DEFAULT_BATCH_SIZE))
 
-                # 新浪源通常不提供换手率：按手->股口径回退计算
-                if data_source == "sina" and (data['turnover_rate'] is None):
-                    data['turnover_rate'] = self._calculate_turnover_rate_from_shares(
-                        session=session,
-                        code=str(code),
-                        volume_hand=data['volume'],
-                        current_price=data['current_price'],
-                        circulating_market_value=data['circulating_market_value'],
-                    )
+            basic_sql = """
+                INSERT INTO stock_basic_info (code, name, create_date)
+                VALUES (:code, :name, :create_date)
+                ON CONFLICT (code) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    create_date = EXCLUDED.create_date
+            """
+            quote_sql = """
+                INSERT INTO stock_realtime_quote
+                (code, trade_date, name, current_price, change_percent, volume, amount,
+                 high, low, open, pre_close, turnover_rate, pe_dynamic,
+                 total_market_value, pb_ratio, circulating_market_value, update_time)
+                VALUES (
+                    :code, :trade_date, :name, :current_price, :change_percent, :volume, :amount,
+                    :high, :low, :open, :pre_close, :turnover_rate, :pe_dynamic,
+                    :total_market_value, :pb_ratio, :circulating_market_value, :update_time
+                )
+                ON CONFLICT (code, trade_date) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    current_price = EXCLUDED.current_price,
+                    change_percent = EXCLUDED.change_percent,
+                    volume = EXCLUDED.volume,
+                    amount = EXCLUDED.amount,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    open = EXCLUDED.open,
+                    pre_close = EXCLUDED.pre_close,
+                    turnover_rate = EXCLUDED.turnover_rate,
+                    pe_dynamic = EXCLUDED.pe_dynamic,
+                    total_market_value = EXCLUDED.total_market_value,
+                    pb_ratio = EXCLUDED.pb_ratio,
+                    circulating_market_value = EXCLUDED.circulating_market_value,
+                    update_time = EXCLUDED.update_time
+            """
 
-                # --- 重试机制插入 stock_basic_info ---
-                max_retries = 3
-                retry_count = 0
-                while retry_count < max_retries:
-                    try:
-                        session.execute(text('''
-                            INSERT INTO stock_basic_info (code, name, create_date)
-                            VALUES (:code, :name, :create_date)
-                            ON CONFLICT (code) DO UPDATE SET
-                                name = EXCLUDED.name,
-                                create_date = EXCLUDED.create_date
-                        '''), {'code': code, 'name': name, 'create_date': data['update_time']})
-                        break
-                    except Exception as e:
-                        if ("LockNotAvailable" in str(e)) or ("DeadlockDetected" in str(e)):
-                            retry_count += 1
-                            session.rollback()
-                            self.logger.warning(f"stock_basic_info插入锁冲突，第{retry_count}次重试: {e}")
-                            import time
-                            time.sleep(0.2 * retry_count)
-                            continue
-                        else:
-                            session.rollback()
-                            raise
-                if retry_count >= max_retries:
-                    self.logger.error(f"stock_basic_info插入锁冲突重试{max_retries}次仍失败: code={code}, name={name}")
-                    continue
+            self._bulk_upsert_with_retry(
+                session, basic_sql, basic_rows, "stock_basic_info", batch_size
+            )
+            affected_rows = self._bulk_upsert_with_retry(
+                session, quote_sql, quote_rows, "stock_realtime_quote", batch_size
+            )
 
-                # --- 重试机制插入 stock_realtime_quote ---
-                retry_count = 0
-                while retry_count < max_retries:
-                    try:
-                        session.execute(    
-                            text('''
-                                INSERT INTO stock_realtime_quote
-                                (code, trade_date, name, current_price, change_percent, volume, amount,
-                                high, low, open, pre_close, turnover_rate, pe_dynamic,
-                                total_market_value, pb_ratio, circulating_market_value,
-                                update_time)
-                                VALUES (
-                                    :code, :trade_date, :name, :current_price, :change_percent, :volume, :amount,
-                                    :high, :low, :open, :pre_close, :turnover_rate, :pe_dynamic,
-                                    :total_market_value, :pb_ratio, :circulating_market_value,
-                                    :update_time
-                                )
-                                ON CONFLICT (code, trade_date) DO UPDATE SET
-                                    name = EXCLUDED.name,
-                                    current_price = EXCLUDED.current_price,
-                                    change_percent = EXCLUDED.change_percent,
-                                    volume = EXCLUDED.volume,
-                                    amount = EXCLUDED.amount,
-                                    high = EXCLUDED.high,
-                                    low = EXCLUDED.low,
-                                    open = EXCLUDED.open,
-                                    pre_close = EXCLUDED.pre_close,
-                                    turnover_rate = EXCLUDED.turnover_rate,
-                                    pe_dynamic = EXCLUDED.pe_dynamic,
-                                    total_market_value = EXCLUDED.total_market_value,
-                                    pb_ratio = EXCLUDED.pb_ratio,
-                                    circulating_market_value = EXCLUDED.circulating_market_value,
-                                    update_time = EXCLUDED.update_time
-                            '''), 
-                            {'code': code, 'trade_date': data['trade_date'], 'name': name, 'current_price': data['current_price'], 'change_percent': data['change_percent'], 'volume': data['volume'], 'amount': data['amount'], 'high': data['high'], 'low': data['low'], 'open': data['open'], 'pre_close': data['pre_close'], 'turnover_rate': data['turnover_rate'], 'pe_dynamic': data['pe_dynamic'], 'total_market_value': data['total_market_value'], 'pb_ratio': data['pb_ratio'], 'circulating_market_value': data['circulating_market_value'], 'update_time': data['update_time']})
-                        break
-                    except Exception as e:
-                        if ("LockNotAvailable" in str(e)) or ("DeadlockDetected" in str(e)):
-                            retry_count += 1
-                            session.rollback()
-                            self.logger.warning(f"stock_realtime_quote插入锁冲突，第{retry_count}次重试: {e}")
-                            import time
-                            time.sleep(0.2 * retry_count)
-                            continue
-                        else:
-                            session.rollback()
-                            raise
-                if retry_count >= max_retries:
-                    self.logger.error(f"stock_realtime_quote插入锁冲突重试{max_retries}次仍失败: code={code}, name={name}")
-                    continue
-
-                affected_rows += 1
-
-            # 记录操作日志
+            desc = (
+                f"接口 {len(df)} 条，写入 {affected_rows} 条实时行情"
+                f"（跳过 {skipped} 条，含 collect_enabled=false/无效价/退市）"
+            )
             session.execute(text('''
                 INSERT INTO realtime_collect_operation_logs 
                 (operation_type, operation_desc, affected_rows, status, error_message, collect_source, created_at)
                 VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source, :created_at)
             '''), {
                 'operation_type': 'realtime_quote_collect',
-                'operation_desc': f'采集并更新{len(df)}条股票实时行情数据',
+                'operation_desc': desc,
                 'affected_rows': affected_rows,
                 'status': 'success',
                 'error_message': None,
@@ -381,7 +486,7 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
             })
             session.commit()
             session.close()
-            self.logger.info("全部股票行情数据采集并入库完成")
+            self.logger.info("批量入库完成: %s", desc)
             return True
         except Exception as e:
             error_msg = str(e)

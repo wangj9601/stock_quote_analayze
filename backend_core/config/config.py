@@ -55,6 +55,7 @@ DATA_COLLECTORS = {
         'random_delay_range': (1, 3),
         'ssl_verify': os.getenv('AKSHARE_SSL_VERIFY', 'false').lower() in ('true', '1', 'yes'),
         'use_fallback_sources': os.getenv('AKSHARE_USE_FALLBACK_SOURCES', 'true').lower() in ('true', '1', 'yes'),
+        'batch_size': _env_int('AKSHARE_REALTIME_BATCH_SIZE', 500),
     }
 }
 

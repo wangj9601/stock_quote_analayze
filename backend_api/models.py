@@ -1024,6 +1024,7 @@ class RealtimeCollectionRequest(BaseModel):
     """实时数据采集请求模型"""
     market: str = 'CN'  # CN: A股, HK: 港股
     stock_code: Optional[str] = None  # 单个股票采集时填写
+    stock_codes: Optional[List[str]] = None  # 前端单股采集以数组形式传入，保持兼容
     full_collection_mode: bool = False  # 全量采集
 
 class RealtimeCollectionResponse(BaseModel):

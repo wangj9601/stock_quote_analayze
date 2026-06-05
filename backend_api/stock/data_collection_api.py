@@ -3308,7 +3308,12 @@ async def start_realtime_collection(
         if market not in ['CN', 'HK']:
             raise HTTPException(status_code=400, detail='market只支持CN/HK')
 
+        requested_codes = [str(c).strip() for c in (request.stock_codes or []) if str(c).strip()]
         single_code = (request.stock_code or '').strip() or None
+        if not single_code and requested_codes:
+            if len(requested_codes) > 1:
+                raise HTTPException(status_code=400, detail='实时采集当前仅支持单股或全量，stock_codes只能传1个代码')
+            single_code = requested_codes[0]
         full_mode = bool(request.full_collection_mode)
         if single_code and full_mode:
             raise HTTPException(status_code=400, detail='单股采集与全量采集不可同时指定')

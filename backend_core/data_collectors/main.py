@@ -123,7 +123,11 @@ def collect_akshare_realtime():
             logging.info(f"[定时任务] A股 {today_str} 为休市日（周末或 trading_calendar），跳过实时行情采集。")
             return
         logging.info("[定时任务] AKShare 实时行情采集开始...")
-        df = ak_collector.collect_quotes()
+        ok = ak_collector.collect_quotes()
+        if ok:
+            logging.info("[定时任务] AKShare 实时行情采集完成")
+        else:
+            logging.warning("[定时任务] AKShare 实时行情采集失败或数据为空")
     except Exception as e:
         logging.error(f"[定时任务] AKShare 实时行情采集异常: {e}")
 
