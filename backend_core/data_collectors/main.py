@@ -216,9 +216,6 @@ def collect_akshare_industry_board_realtime():
 
 def collect_akshare_industry_board_constituents():
     try:
-        if _cn_session_closed_today():
-            logging.info("[定时任务] 今日 A 股休市，跳过行业板块成分股同步")
-            return
         logging.info("[定时任务] 行业板块成分股同步开始...")
         industry_board_constituents_collector.run()
         logging.info("[定时任务] 行业板块成分股同步完成")
@@ -661,6 +658,31 @@ def _resolve_optional_project_path(rel_or_abs: str) -> str:
     return str(_project_root / pp)
 
 
+def _register_industry_board_constituents_job():
+    """
+    注册行业板块成分股同步任务（每月一次）。
+
+    .env 参数：
+    - SCHED_INDUSTRY_CONS_DAY：每月几号执行（1-31，默认 1）
+    - SCHED_INDUSTRY_CONS_HOUR / SCHED_INDUSTRY_CONS_MINUTE
+    """
+    day = min(31, max(1, _cron_int("SCHED_INDUSTRY_CONS_DAY", 1)))
+    hour = _cron("SCHED_INDUSTRY_CONS_HOUR", "16")
+    minute = _cron_int("SCHED_INDUSTRY_CONS_MINUTE", 30)
+    scheduler.add_job(
+        collect_akshare_industry_board_constituents,
+        "cron",
+        day=day,
+        hour=hour,
+        minute=minute,
+        id="akshare_industry_board_constituents",
+    )
+    logging.info(
+        "已注册行业板块成分股同步任务：每月 %s 日 %s:%s",
+        day, hour, minute,
+    )
+
+
 def _register_stock_shares_job():
     """
     注册股本同步任务，支持 weekly/monthly/quarterly 三种模式。
@@ -813,11 +835,7 @@ scheduler.add_job(collect_akshare_industry_board_realtime, 'cron',
     hour=_cron('SCHED_AKSHARE_INDUSTRY_HOUR', '11,16'),
     minute=_cron_int('SCHED_AKSHARE_INDUSTRY_MINUTE', 3),
     id='akshare_industry_board_realtime')
-scheduler.add_job(collect_akshare_industry_board_constituents, 'cron',
-    day_of_week=_cron('SCHED_INDUSTRY_CONS_DOW', 'mon-fri'),
-    hour=_cron('SCHED_INDUSTRY_CONS_HOUR', '16'),
-    minute=_cron_int('SCHED_INDUSTRY_CONS_MINUTE', 30),
-    id='akshare_industry_board_constituents')
+_register_industry_board_constituents_job()
 # scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
 if _env_bool("SCHED_AKSHARE_TURNOVER_ENABLED", False):
     scheduler.add_job(collect_akshare_turnover_rate, 'cron',
