@@ -27,11 +27,13 @@
         <el-table-column prop="created_at" label="完成时间" width="180">
           <template #default="scope">{{ formatDateTimeBeijing(scope.row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" min-width="268" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="viewReport(scope.row)">查看</el-button>
-            <el-button size="small" type="success" @click="downloadReport(scope.row)">下载明细</el-button>
-            <el-button size="small" @click="downloadReport(scope.row, 'csv')">下载CSV</el-button>
+            <div class="report-row-actions">
+              <el-button size="small" link type="primary" @click="viewReport(scope.row)">查看</el-button>
+              <el-button size="small" type="success" @click="downloadReport(scope.row)">下载明细</el-button>
+              <el-button size="small" type="danger" plain @click="deleteReport(scope.row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -89,7 +91,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
 
@@ -152,7 +154,31 @@ async function downloadReport(row: any, variant?: 'csv' | 'xlsx') {
   }
 }
 
-defineEmits<{ (e: 'report-generated', report: any): void }>()
+async function deleteReport(row: any) {
+  const name = row.name || row.report_id?.slice(0, 8) || '该报告'
+  try {
+    await ElMessageBox.confirm(`确定要删除报告「${name}」吗？删除后不可恢复。`, '确认删除', {
+      type: 'warning',
+    })
+    await gmsApi.deleteReport(row.report_id)
+    ElMessage.success('报告已删除')
+    if (detailVisible.value && currentReport.value?.report_id === row.report_id) {
+      detailVisible.value = false
+      currentReport.value = null
+    }
+    await refresh()
+    emit('report-deleted', row)
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error('删除报告失败')
+    }
+  }
+}
+
+const emit = defineEmits<{
+  (e: 'report-generated', report: any): void
+  (e: 'report-deleted', report: any): void
+}>()
 defineExpose({ refresh })
 
 onMounted(() => refresh())
@@ -160,4 +186,18 @@ onMounted(() => refresh())
 
 <style scoped>
 .report-header { margin-bottom: 12px; }
+
+.report-row-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.report-row-actions :deep(.el-button) {
+  margin: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
 </style>

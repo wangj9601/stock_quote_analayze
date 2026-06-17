@@ -324,6 +324,28 @@ def list_reports(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         db.close()
 
 
+def delete_report(report_id: str) -> bool:
+    """删除已完成任务的报告（删除整条任务记录及库内明细）。"""
+    rid = normalize_gms_task_id(report_id)
+    if not rid:
+        return False
+    with _INDEX_LOCK:
+        db = _session()
+        try:
+            row = db.query(GMSBacktestTask).filter(GMSBacktestTask.task_id == rid).first()
+            if not row or row.status != "completed":
+                return False
+            db.delete(row)
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            logger.warning("删除报告失败 %s: %s", rid, e)
+            return False
+        finally:
+            db.close()
+
+
 def get_report(report_id: str) -> Optional[Dict[str, Any]]:
     """报告详情。"""
     rid = normalize_gms_task_id(report_id)

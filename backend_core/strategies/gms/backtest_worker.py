@@ -70,6 +70,9 @@ def _run_task(task_id: str) -> None:
             backtest_storage.fail_task(task_id, "缺少 start_date 或 end_date")
             return
 
+        strategy_config_id = config.get("strategy_config_id")
+        config_params_snapshot = config.get("config_params_snapshot")
+
         def progress_cb(percent: int, message: str) -> None:
             backtest_storage.update_task_progress(task_id, percent, message, log_line=message)
 
@@ -108,6 +111,8 @@ def _run_task(task_id: str) -> None:
             stock_pool=stock_pool,
             progress_callback=progress_cb,
             cancel_check=cancel_check,
+            strategy_config_id=strategy_config_id,
+            config_params_snapshot=config_params_snapshot,
         )
         summary = result.get("summary") or {}
         details = result.get("details") or []

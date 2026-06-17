@@ -4,28 +4,28 @@ overview: 在现有 GMS 单份全局配置（gms_runtime_config）基础上，�
 todos:
   - id: schema-migration
     content: 新建 gms_strategy_configs 表、扩展 gms_signal_trace.config_id、编写迁移脚本（gms_runtime_config → 默认版本）
-    status: pending
+    status: completed
   - id: config-manager
     content: 重构 GMSConfigManager：按 config_id 加载/CRUD/设默认/克隆；保留 /config 兼容层
-    status: pending
+    status: completed
   - id: admin-api
     content: gms_admin_routes 新增 /strategy-configs CRUD；BacktestCreateBody 增加 strategy_config_id + snapshot
-    status: pending
+    status: completed
   - id: compute-trace
     content: frontend_interface / scheduled_precompute / screening API 贯通 config_id 与 should_use_trace
-    status: pending
+    status: completed
   - id: backtest
     content: backtest_worker + backtest_runner 使用版本配置与快照；报告展示版本信息
-    status: pending
+    status: completed
   - id: admin-ui
     content: 重构 StrategyConfiguration.vue 为版本列表+分栏表单；BacktestManagement / GmsScreeningResults 增加版本选择
-    status: pending
+    status: completed
   - id: watchlist-bind
     content: 观察股分组可选绑定 config_id；gms_watchlist 选股自动带入
-    status: pending
+    status: completed
   - id: tests-docs
     content: 新增 test_gms_strategy_config_versions.py；更新 GMS 使用手册与 .env.example
-    status: pending
+    status: completed
 isProject: false
 ---
 

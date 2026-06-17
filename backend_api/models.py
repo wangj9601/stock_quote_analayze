@@ -717,12 +717,38 @@ class MeanFrequencyResonanceIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class GMSStrategyConfig(Base):
+    """GMS 策略参数版本表：多版本 JSON 快照，支持默认版本与预计算标记。"""
+
+    __tablename__ = "gms_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    version_label = Column(String(32), nullable=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    precompute_enabled = Column(Boolean, nullable=False, default=False, index=True)
+    parent_id = Column(Integer, ForeignKey("gms_strategy_configs.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
 class GMSSignalTrace(Base):
-    """GMS 信号追溯记录表：存储每只股票每日的 GMS 策略指标与信号"""
+    """GMS 信号追溯记录表：存储每只股票每日的 GMS 策略指标与信号（按 config_id 隔离）"""
     __tablename__ = 'gms_signal_trace'
     code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String(20), primary_key=True)
     market_type = Column(String(10), primary_key=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("gms_strategy_configs.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+        default=1,
+    )
 
     score_total = Column(Float, nullable=True)
     score_accumulation = Column(Float, nullable=True)
@@ -759,7 +785,7 @@ class GMSSignalTrace(Base):
 
 
 class GMSStrategyVersion(Base):
-    """GMS策略版本表：用于管理不同策略配置版本。"""
+    """GMS 观察股分组表（非参数版本）；可选绑定 gms_strategy_configs。"""
     __tablename__ = "gms_strategy_versions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -767,6 +793,7 @@ class GMSStrategyVersion(Base):
     version_name = Column(String(100), nullable=False)
     version_no = Column(Integer, nullable=False)
     description = Column(Text, nullable=True)
+    config_id = Column(Integer, ForeignKey("gms_strategy_configs.id", ondelete="SET NULL"), nullable=True, index=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_by = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
@@ -1220,6 +1247,26 @@ class GmsTradeObserveStock(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "market", "code", name="uq_gms_trade_observe_user_market_code"),
     )
+
+
+class GmsTradeObserveHistory(Base):
+    """用户 GMS 交易观察股移除归档：从交易观察列表移除时写入。"""
+
+    __tablename__ = "gms_trade_observe_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    observe_created_at = Column(DateTime, nullable=True)
+    observe_updated_at = Column(DateTime, nullable=True)
+    source_observe_id = Column(Integer, nullable=True)
+    removed_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User", backref="gms_trade_observe_history")
 
 
 class VsbObserveStock(Base):

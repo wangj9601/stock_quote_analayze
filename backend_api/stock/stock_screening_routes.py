@@ -1100,6 +1100,11 @@ async def get_gms_strategy(
         False,
         description="为 true 时仅从 gms_signal_trace 读缓存，不触发缺失股票的实时计算（前端可先快显再二次请求全量）",
     ),
+    config_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="GMS 策略参数版本 ID，不传则用默认版本；gms_watchlist 可自动使用观察股分组绑定的版本",
+    ),
     use_pagination: bool = Query(
         False,
         description="为 true 时对返回列表分页（仍先完成全量选股与组装，再截取当前页）；默认 false 保持与其它客户端兼容",
@@ -1237,6 +1242,18 @@ async def get_gms_strategy(
                     func.lower(func.trim(func.coalesce(GMSStrategyVersionStock.status, ""))) == "active",
                 )
             )
+            if config_id is None:
+                bound_ver = (
+                    db.query(GMSStrategyVersion)
+                    .filter(
+                        GMSStrategyVersion.is_active == True,
+                        GMSStrategyVersion.config_id.isnot(None),
+                    )
+                    .order_by(GMSStrategyVersion.id.asc())
+                    .first()
+                )
+                if bound_ver and bound_ver.config_id:
+                    config_id = int(bound_ver.config_id)
             if mraw in ("cn", "a"):
                 q_gms = q_gms.filter(GMSStrategyVersionStock.market == "A")
             elif mraw in ("hk", "h"):
@@ -1276,7 +1293,9 @@ async def get_gms_strategy(
         else:
             market = "all"
 
-        config = GMSConfigManagerCls().get_config() if GMS_AVAILABLE else {}
+        config_mgr = GMSConfigManagerCls()
+        resolved_config_id = config_mgr.resolve_config_id(config_id)
+        config = config_mgr.get_config(resolved_config_id) if GMS_AVAILABLE else {}
         # 以前端传入参数覆盖 config（前后端共用同一套参数）
         if accumulation_fz_min is not None:
             config.setdefault("scoring", {})["accumulation_fz_min"] = accumulation_fz_min
@@ -1326,13 +1345,14 @@ async def get_gms_strategy(
         def _run_gms(
             _target_date: str,
             _config: dict,
+            _config_id: int,
             _min_score: float,
             _max_results: int,
             _trace_only: bool,
         ):
             session = SessionLocal()
             try:
-                gms_if = GMSFrontendInterface(session, _config)
+                gms_if = GMSFrontendInterface(session, _config, config_id=_config_id)
                 gms_if.set_selection_config(min_score=_min_score, max_results=_max_results)
                 return gms_if.get_selection_results(
                     _target_date,
@@ -1349,7 +1369,9 @@ async def get_gms_strategy(
         selection_results, gms_meta = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
-                lambda: _run_gms(target_date, config, min_score, max_results, trace_only),
+                lambda: _run_gms(
+                    target_date, config, resolved_config_id, min_score, max_results, trace_only
+                ),
             ),
             timeout=GMS_SCREENING_TIMEOUT,
         )
@@ -1370,7 +1392,12 @@ async def get_gms_strategy(
                             loop.run_in_executor(
                                 None,
                                 lambda: _run_gms(
-                                    fallback_date_str, config, min_score, max_results, trace_only
+                                    fallback_date_str,
+                                    config,
+                                    resolved_config_id,
+                                    min_score,
+                                    max_results,
+                                    trace_only,
                                 ),
                             ),
                             timeout=GMS_SCREENING_TIMEOUT,

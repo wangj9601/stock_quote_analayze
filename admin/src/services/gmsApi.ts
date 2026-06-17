@@ -27,10 +27,26 @@ export interface GMSStrategyVersion {
   version_name: string
   version_no: number
   description?: string
+  config_id?: number | null
   is_active: boolean
   created_by?: string
   created_at?: string
   updated_at?: string
+}
+
+export interface GMSStrategyConfig {
+  id: number
+  name: string
+  version_label?: string | null
+  description?: string | null
+  config_params?: Record<string, any>
+  is_active: boolean
+  is_default: boolean
+  precompute_enabled: boolean
+  parent_id?: number | null
+  created_by?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface GMSStrategyVersionStock {
@@ -106,6 +122,7 @@ class GMSApiService {
     stock_code?: string
     stock_pool?: string[]
     watchlist_user_id?: number
+    strategy_config_id?: number
   }) {
     const res = await this.request<{ success: boolean; data: { task_id: string } }>(`${PREFIX}/backtests`, {
       method: 'POST',
@@ -179,6 +196,11 @@ class GMSApiService {
     return res.data
   }
 
+  /** 删除历史报告 */
+  async deleteReport(reportId: string) {
+    await this.request(`${PREFIX}/reports/${reportId}/delete`, { method: 'POST' })
+  }
+
   /**
    * 下载报告明细
    * @param variant 不传：与报告记录一致（新任务多为 xlsx）；csv / xlsx 强制格式（CSV 为 UTF-8 中文表头，与 Excel 列一致）
@@ -217,19 +239,99 @@ class GMSApiService {
     return { blob, filename }
   }
 
-  /** 读取 GMS 策略配置 */
-  async getConfig() {
-    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/config`)
-    return res.data
+  /** 读取 GMS 默认策略配置（兼容旧接口） */
+  async getConfig(): Promise<{ data: Record<string, any>; config_id?: number }> {
+    const res = await this.request<{ success: boolean; data: any; config_id?: number }>(`${PREFIX}/config`)
+    return { data: res.data, config_id: res.config_id }
   }
 
-  /** 更新 GMS 策略配置 */
+  /** 更新 GMS 默认策略配置 */
   async saveConfig(config: Record<string, any>) {
-    // 兼容生产环境，优先使用 POST /update
-    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/config/update`, {
+    const res = await this.request<{ success: boolean; data: any; config_id?: number }>(`${PREFIX}/config/update`, {
       method: 'POST',
       body: JSON.stringify({ config }),
     })
+    return res.data
+  }
+
+  /** 策略参数版本列表 */
+  async listStrategyConfigs(activeOnly = false): Promise<GMSStrategyConfig[]> {
+    const q = activeOnly ? '?active_only=true' : ''
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig[] }>(`${PREFIX}/strategy-configs${q}`)
+    return res.data || []
+  }
+
+  async getStrategyConfig(configId: number): Promise<GMSStrategyConfig> {
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig }>(`${PREFIX}/strategy-configs/${configId}`)
+    return res.data
+  }
+
+  async createStrategyConfig(body: {
+    name: string
+    version_label?: string
+    description?: string
+    config_params?: Record<string, any>
+    is_active?: boolean
+    is_default?: boolean
+    precompute_enabled?: boolean
+    created_by?: string
+  }) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig }>(`${PREFIX}/strategy-configs`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    return res.data
+  }
+
+  async updateStrategyConfig(
+    configId: number,
+    body: {
+      name?: string
+      version_label?: string
+      description?: string
+      config?: Record<string, any>
+      is_active?: boolean
+      precompute_enabled?: boolean
+      change_note?: string
+    }
+  ) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig }>(
+      `${PREFIX}/strategy-configs/${configId}/update`,
+      { method: 'POST', body: JSON.stringify(body) }
+    )
+    return res.data
+  }
+
+  async cloneStrategyConfig(configId: number, newName: string, precomputeEnabled = false) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig }>(
+      `${PREFIX}/strategy-configs/${configId}/clone`,
+      { method: 'POST', body: JSON.stringify({ new_name: newName, precompute_enabled: precomputeEnabled }) }
+    )
+    return res.data
+  }
+
+  async setStrategyConfigDefault(configId: number) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig }>(
+      `${PREFIX}/strategy-configs/${configId}/default`,
+      { method: 'PATCH' }
+    )
+    return res.data
+  }
+
+  async compareStrategyConfigs(configIdA: number, configIdB: number) {
+    const q = new URLSearchParams({
+      config_id_a: String(configIdA),
+      config_id_b: String(configIdB),
+    })
+    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/strategy-configs/compare?${q}`)
+    return res.data
+  }
+
+  async deactivateStrategyConfig(configId: number) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyConfig }>(
+      `${PREFIX}/strategy-configs/${configId}/deactivate`,
+      { method: 'POST' }
+    )
     return res.data
   }
 
@@ -251,6 +353,7 @@ class GMSApiService {
     version_name: string
     version_no: number
     description?: string
+    config_id?: number | null
     is_active?: boolean
     created_by?: string
   }) {

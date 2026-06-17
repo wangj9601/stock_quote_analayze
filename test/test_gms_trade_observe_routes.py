@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_trade_observe_routes import router
-from backend_api.models import GmsTradeObserveStock, User
+from backend_api.models import GmsTradeObserveHistory, GmsTradeObserveStock, User
 
 
 @pytest.fixture
@@ -28,6 +28,7 @@ def memory_db():
     )
     User.__table__.create(bind=engine)
     GmsTradeObserveStock.__table__.create(bind=engine)
+    GmsTradeObserveHistory.__table__.create(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:
@@ -113,7 +114,17 @@ def test_add_list_codes_and_remove(client, memory_db, test_user):
 
     rm = client.delete(f"/api/stock/gms-trade-observe/{item_id}")
     assert rm.status_code == 200
+    rm_body = rm.json()
+    assert rm_body.get("history_id")
     assert client.get("/api/stock/gms-trade-observe/list").json()["total"] == 0
+
+    hist = client.get("/api/stock/gms-trade-observe/history")
+    assert hist.status_code == 200
+    hist_data = hist.json()
+    assert hist_data["total"] == 1
+    assert hist_data["items"][0]["code"] == "600519"
+    assert hist_data["items"][0]["source_observe_id"] == item_id
+    assert hist_data["items"][0]["snapshot"]["buy_type"] == "更新"
 
 
 def test_remove_not_found(client):

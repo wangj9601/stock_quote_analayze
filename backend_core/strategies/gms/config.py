@@ -1,20 +1,24 @@
 """
-GMS 策略配置管理（PostgreSQL gms_runtime_config，兼容首次从 gms_config.json 引导）
+GMS 策略配置管理（PostgreSQL gms_strategy_configs 多版本 + gms_runtime_config 兼容层）
 """
 
+from __future__ import annotations
+
+import copy
 import json
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_ROW_NAME = "default"
+_CACHE: Dict[int, Dict] = {}
 
 
 class GMSConfigManager:
-    """GMS 配置管理器"""
+    """GMS 配置管理器：支持多版本参数快照。"""
 
     def __init__(self, config_file: str = "gms_config.json"):
         self.config_file = config_file
@@ -22,10 +26,9 @@ class GMSConfigManager:
             os.path.dirname(__file__),
             self.config_file,
         )
-        self._config: Optional[Dict] = None
 
     def get_default_config(self) -> Dict:
-        """获取默认策略参数"""
+        """获取代码内置默认策略参数。"""
         return {
             "observation_period": 20,
             "ratio_indicators": {
@@ -33,23 +36,23 @@ class GMSConfigManager:
                 "use_ratio_d_for_exit": False,
             },
             "left_buy": {
-                "ratio_d20_abs_max": 0.015,  # |Δ/d₂₀| < 1.5%
-                "volume_ratio_max": 0.8,  # m₂₀ < 0.8m
-                "min_accumulation_score": 0,  # 左侧额外要求均值收敛态得分下限，0=关闭
+                "ratio_d20_abs_max": 0.015,
+                "volume_ratio_max": 0.8,
+                "min_accumulation_score": 0,
             },
             "right_buy": {
-                "volume_ratio_min": 1.5,  # m₂₀ > 1.5m
+                "volume_ratio_min": 1.5,
             },
             "scoring": {
-                "accumulation_fz_min": 1.5,  # F/Z > 1.5 → 蓄势 30
-                "balance_ratio_max": 0.01,  # |Δ/d₂₀| < 1% → 平衡 40
-                "momentum_volume_ratio_min": 1.5,  # Δ>0 且量比>1.5 → 动量 30
+                "accumulation_fz_min": 1.5,
+                "balance_ratio_max": 0.01,
+                "momentum_volume_ratio_min": 1.5,
                 "watch_threshold": 60,
                 "alert_threshold": 90,
             },
             "exit": {
                 "trend_break_days": 3,
-                "overbought_ratio": 0.15,  # Δ/d₂₀ > 15%
+                "overbought_ratio": 0.15,
             },
         }
 
@@ -64,70 +67,7 @@ class GMSConfigManager:
             logger.warning("读取本地 gms_config.json 失败: %s", e)
         return None
 
-    def _persist_default_row(self, merged: Dict) -> None:
-        from backend_api.database import SessionLocal
-        from backend_api.models import GMSRuntimeConfig
-
-        db = SessionLocal()
-        try:
-            row = db.query(GMSRuntimeConfig).filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME).first()
-            if row is None:
-                db.add(
-                    GMSRuntimeConfig(
-                        name=_DEFAULT_ROW_NAME,
-                        config_params=merged,
-                        updated_at=datetime.now(),
-                    )
-                )
-            else:
-                row.config_params = merged
-                row.updated_at = datetime.now()
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
-
-    def load_config(self) -> Dict:
-        """加载配置：优先数据库；无记录时合并默认与本地 json（若存在）并写入数据库。"""
-        if self._config is not None:
-            return self._config
-
-        try:
-            from backend_api.database import SessionLocal
-            from backend_api.models import GMSRuntimeConfig
-
-            db = SessionLocal()
-            try:
-                row = db.query(GMSRuntimeConfig).filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME).first()
-                if row and row.config_params is not None:
-                    default = self.get_default_config()
-                    self._config = self._deep_merge(default, dict(row.config_params))
-                    return self._config
-            finally:
-                db.close()
-        except Exception as e:
-            logger.warning("从数据库加载 GMS 配置失败，尝试本地文件: %s", e)
-
-        file_merged = self._load_from_json_file()
-        if file_merged is not None:
-            self._config = file_merged
-            try:
-                self._persist_default_row(file_merged)
-            except Exception as e:
-                logger.warning("将本地配置写入数据库失败（仍使用内存合并结果）: %s", e)
-            return self._config
-
-        self._config = self.get_default_config()
-        try:
-            self._persist_default_row(self._config)
-        except Exception as e:
-            logger.warning("写入默认 GMS 配置到数据库失败: %s", e)
-        return self._config
-
     def _deep_merge(self, base: Dict, override: Dict) -> Dict:
-        """深度合并字典"""
         result = base.copy()
         for k, v in override.items():
             if k in result and isinstance(result[k], dict) and isinstance(v, dict):
@@ -136,38 +76,438 @@ class GMSConfigManager:
                 result[k] = v
         return result
 
-    def get_config(self) -> Dict:
-        """获取当前配置"""
-        return self.load_config()
+    def _invalidate_cache(self, config_id: Optional[int] = None) -> None:
+        if config_id is None:
+            _CACHE.clear()
+        else:
+            _CACHE.pop(config_id, None)
+
+    def _session(self):
+        from backend_api.database import SessionLocal
+
+        return SessionLocal()
+
+    def _ensure_default_row_exists(self, db) -> int:
+        from backend_api.models import GMSStrategyConfig, GMSRuntimeConfig
+
+        row = (
+            db.query(GMSStrategyConfig)
+            .filter(GMSStrategyConfig.is_default == True)  # noqa: E712
+            .order_by(GMSStrategyConfig.id.asc())
+            .first()
+        )
+        if row:
+            return int(row.id)
+
+        params = None
+        runtime = (
+            db.query(GMSRuntimeConfig)
+            .filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME)
+            .first()
+        )
+        if runtime and runtime.config_params:
+            params = dict(runtime.config_params)
+        if params is None:
+            file_merged = self._load_from_json_file()
+            params = file_merged if file_merged is not None else self.get_default_config()
+        else:
+            params = self._deep_merge(self.get_default_config(), params)
+
+        row = GMSStrategyConfig(
+            name="default",
+            version_label="1.0.0",
+            description="系统默认 GMS 策略参数",
+            config_params=params,
+            is_active=True,
+            is_default=True,
+            precompute_enabled=True,
+            created_by="system",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        db.add(row)
+        db.flush()
+        self._sync_runtime_config_mirror(db, params)
+        db.commit()
+        return int(row.id)
+
+    def _sync_runtime_config_mirror(self, db, config: Dict) -> None:
+        """保持 gms_runtime_config.default 与默认版本镜像同步（兼容旧接口）。"""
+        from backend_api.models import GMSRuntimeConfig
+
+        row = (
+            db.query(GMSRuntimeConfig)
+            .filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME)
+            .first()
+        )
+        if row is None:
+            db.add(
+                GMSRuntimeConfig(
+                    name=_DEFAULT_ROW_NAME,
+                    config_params=config,
+                    updated_at=datetime.now(),
+                )
+            )
+        else:
+            row.config_params = config
+            row.updated_at = datetime.now()
+
+    def resolve_config_id(self, config_id: Optional[int] = None) -> int:
+        if config_id is not None:
+            return int(config_id)
+        db = self._session()
+        try:
+            return self._ensure_default_row_exists(db)
+        finally:
+            db.close()
+
+    def should_use_trace(self, config_id: Optional[int] = None) -> bool:
+        cid = self.resolve_config_id(config_id)
+        db = self._session()
+        try:
+            from backend_api.models import GMSStrategyConfig
+
+            row = db.query(GMSStrategyConfig).filter(GMSStrategyConfig.id == cid).first()
+            if not row:
+                return False
+            return bool(row.is_default or row.precompute_enabled)
+        finally:
+            db.close()
+
+    def get_config_row(self, config_id: int):
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            return db.query(GMSStrategyConfig).filter(GMSStrategyConfig.id == config_id).first()
+        finally:
+            db.close()
+
+    def get_config(self, config_id: Optional[int] = None) -> Dict:
+        cid = self.resolve_config_id(config_id)
+        if cid in _CACHE:
+            return copy.deepcopy(_CACHE[cid])
+
+        db = self._session()
+        try:
+            from backend_api.models import GMSStrategyConfig
+
+            row = db.query(GMSStrategyConfig).filter(GMSStrategyConfig.id == cid).first()
+            if not row or row.config_params is None:
+                if config_id is None:
+                    cid = self._ensure_default_row_exists(db)
+                    row = db.query(GMSStrategyConfig).filter(GMSStrategyConfig.id == cid).first()
+                if not row or row.config_params is None:
+                    merged = self.get_default_config()
+                    _CACHE[cid] = merged
+                    return copy.deepcopy(merged)
+
+            merged = self._deep_merge(self.get_default_config(), dict(row.config_params))
+            _CACHE[cid] = merged
+            return copy.deepcopy(merged)
+        finally:
+            db.close()
+
+    def list_configs(self, active_only: bool = False) -> List[Dict[str, Any]]:
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            q = db.query(GMSStrategyConfig).order_by(
+                GMSStrategyConfig.is_default.desc(),
+                GMSStrategyConfig.id.asc(),
+            )
+            if active_only:
+                q = q.filter(GMSStrategyConfig.is_active == True)  # noqa: E712
+            return [self._serialize_config_row(r) for r in q.all()]
+        finally:
+            db.close()
+
+    def list_precompute_config_ids(self) -> List[int]:
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            rows = (
+                db.query(GMSStrategyConfig.id)
+                .filter(
+                    GMSStrategyConfig.is_active == True,  # noqa: E712
+                    (GMSStrategyConfig.is_default == True)  # noqa: E712
+                    | (GMSStrategyConfig.precompute_enabled == True),  # noqa: E712
+                )
+                .order_by(GMSStrategyConfig.id.asc())
+                .all()
+            )
+            return [int(r[0]) for r in rows]
+        finally:
+            db.close()
+
+    @staticmethod
+    def _serialize_config_row(row) -> Dict[str, Any]:
+        return {
+            "id": row.id,
+            "name": row.name,
+            "version_label": row.version_label,
+            "description": row.description,
+            "config_params": row.config_params,
+            "is_active": bool(row.is_active),
+            "is_default": bool(row.is_default),
+            "precompute_enabled": bool(row.precompute_enabled),
+            "parent_id": row.parent_id,
+            "created_by": row.created_by,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    def create_config(
+        self,
+        name: str,
+        config_params: Dict,
+        *,
+        version_label: Optional[str] = None,
+        description: Optional[str] = None,
+        is_active: bool = True,
+        is_default: bool = False,
+        precompute_enabled: bool = False,
+        parent_id: Optional[int] = None,
+        created_by: Optional[str] = None,
+    ) -> int:
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            merged = self._deep_merge(self.get_default_config(), config_params or {})
+            row = GMSStrategyConfig(
+                name=name.strip(),
+                version_label=version_label,
+                description=description,
+                config_params=merged,
+                is_active=is_active,
+                is_default=False,
+                precompute_enabled=precompute_enabled,
+                parent_id=parent_id,
+                created_by=created_by,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(row)
+            db.flush()
+            if is_default:
+                self._set_default_in_tx(db, int(row.id))
+            db.commit()
+            self._invalidate_cache()
+            return int(row.id)
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def update_config(
+        self,
+        config_id: int,
+        partial: Dict,
+        *,
+        name: Optional[str] = None,
+        version_label: Optional[str] = None,
+        description: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        precompute_enabled: Optional[bool] = None,
+        change_note: Optional[str] = None,
+    ) -> bool:
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            row = db.query(GMSStrategyConfig).filter(GMSStrategyConfig.id == config_id).first()
+            if not row:
+                return False
+            if name is not None:
+                row.name = name.strip()
+            if version_label is not None:
+                row.version_label = version_label
+            if description is not None:
+                row.description = description
+            if is_active is not None:
+                if row.is_default and not is_active:
+                    raise ValueError("不能禁用默认版本，请先指定新的默认版本")
+                row.is_active = is_active
+            if precompute_enabled is not None:
+                row.precompute_enabled = precompute_enabled
+            if partial:
+                current = dict(row.config_params or {})
+                row.config_params = self._deep_merge(current, partial)
+            row.updated_at = datetime.now()
+            if row.is_default:
+                self._sync_runtime_config_mirror(db, dict(row.config_params or {}))
+            db.commit()
+            self._invalidate_cache(config_id)
+            if change_note:
+                logger.info("GMS config %s updated: %s", config_id, change_note)
+            return True
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def clone_config(
+        self,
+        config_id: int,
+        new_name: str,
+        *,
+        created_by: Optional[str] = None,
+        precompute_enabled: bool = False,
+    ) -> int:
+        row = self.get_config_row(config_id)
+        if not row:
+            raise ValueError("源配置不存在")
+        return self.create_config(
+            name=new_name,
+            config_params=copy.deepcopy(row.config_params or {}),
+            version_label=row.version_label,
+            description=(row.description or "") + "（克隆）",
+            is_active=True,
+            is_default=False,
+            precompute_enabled=precompute_enabled,
+            parent_id=config_id,
+            created_by=created_by,
+        )
+
+    def _set_default_in_tx(self, db, config_id: int) -> None:
+        from backend_api.models import GMSStrategyConfig
+
+        db.query(GMSStrategyConfig).filter(GMSStrategyConfig.is_default == True).update(  # noqa: E712
+            {"is_default": False},
+            synchronize_session=False,
+        )
+        row = db.query(GMSStrategyConfig).filter(GMSStrategyConfig.id == config_id).first()
+        if not row:
+            raise ValueError("配置不存在")
+        row.is_default = True
+        row.is_active = True
+        row.precompute_enabled = True
+        self._sync_runtime_config_mirror(db, dict(row.config_params or {}))
+
+    def set_default(self, config_id: int) -> bool:
+        db = self._session()
+        try:
+            self._set_default_in_tx(db, config_id)
+            db.commit()
+            self._invalidate_cache()
+            return True
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def deactivate_config(self, config_id: int) -> bool:
+        row = self.get_config_row(config_id)
+        if not row:
+            return False
+        if row.is_default:
+            raise ValueError("不能禁用默认版本")
+        return self.update_config(config_id, {}, is_active=False)
 
     def save_config(self, config: Dict) -> bool:
-        """保存配置到数据库，并清除缓存。"""
-        try:
-            from backend_api.database import SessionLocal
-            from backend_api.models import GMSRuntimeConfig
+        """保存到默认版本（兼容旧 /api/admin/gms/config 接口）。"""
+        default_id = self.resolve_config_id(None)
+        return self.update_config(default_id, config, change_note="save_config compat")
 
-            db = SessionLocal()
-            try:
-                row = db.query(GMSRuntimeConfig).filter(GMSRuntimeConfig.name == _DEFAULT_ROW_NAME).first()
-                if row is None:
-                    db.add(
-                        GMSRuntimeConfig(
-                            name=_DEFAULT_ROW_NAME,
-                            config_params=config,
-                            updated_at=datetime.now(),
-                        )
-                    )
-                else:
-                    row.config_params = config
-                    row.updated_at = datetime.now()
-                db.commit()
-                self._config = None
-                return True
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
-        except Exception as e:
-            logger.warning("保存 GMS 配置失败: %s", e)
-            return False
+    def load_config(self) -> Dict:
+        """兼容旧接口：返回默认版本配置。"""
+        return self.get_config(None)
+
+    def compare_configs(self, config_id_a: int, config_id_b: int) -> Dict[str, Any]:
+        cfg_a = self.get_config(config_id_a)
+        cfg_b = self.get_config(config_id_b)
+        diffs: List[Dict[str, Any]] = []
+
+        def _walk(path: str, a: Any, b: Any) -> None:
+            if isinstance(a, dict) and isinstance(b, dict):
+                keys = set(a.keys()) | set(b.keys())
+                for k in sorted(keys):
+                    _walk(f"{path}.{k}" if path else k, a.get(k), b.get(k))
+                return
+            if a != b:
+                diffs.append({"path": path, "a": a, "b": b})
+
+        _walk("", cfg_a, cfg_b)
+        return {"config_id_a": config_id_a, "config_id_b": config_id_b, "diffs": diffs}
+
+    @staticmethod
+    def config_to_flat_form(config: Dict) -> Dict[str, Any]:
+        """将嵌套 config_params 转为网站/管理端选股表单使用的扁平字段。"""
+        scoring = config.get("scoring") or {}
+        left = config.get("left_buy") or {}
+        right = config.get("right_buy") or {}
+        exit_ = config.get("exit") or {}
+        return {
+            "observation_period": config.get("observation_period", 20),
+            "ratio_d20_max": left.get("ratio_d20_abs_max"),
+            "volume_ratio_max": left.get("volume_ratio_max"),
+            "left_buy_min_accumulation": left.get("min_accumulation_score", 0),
+            "volume_ratio_min": right.get("volume_ratio_min", scoring.get("momentum_volume_ratio_min")),
+            "accumulation_fz_min": scoring.get("accumulation_fz_min"),
+            "balance_ratio_max": scoring.get("balance_ratio_max"),
+            "watch_threshold": scoring.get("watch_threshold"),
+            "alert_threshold": scoring.get("alert_threshold"),
+            "overbought_ratio": exit_.get("overbought_ratio"),
+            "accumulation_s_threshold": scoring.get("accumulation_s_threshold"),
+            "accumulation_a_threshold": scoring.get("accumulation_a_threshold"),
+            "momentum_full_threshold": scoring.get("momentum_full_threshold"),
+            "momentum_batch_threshold": scoring.get("momentum_batch_threshold"),
+            "instant_deviation_stable_days": scoring.get("instant_deviation_stable_days"),
+            "weight_acc_fz": scoring.get("weight_acc_fz"),
+            "weight_acc_balance": scoring.get("weight_acc_balance"),
+            "weight_acc_volume": scoring.get("weight_acc_volume"),
+            "weight_mom_ratio_d1": scoring.get("weight_mom_ratio_d1"),
+            "weight_mom_deviation": scoring.get("weight_mom_deviation"),
+            "weight_mom_volume": scoring.get("weight_mom_volume"),
+        }
+
+    @staticmethod
+    def flat_form_to_config_patch(flat: Dict[str, Any]) -> Dict[str, Any]:
+        """扁平表单字段 → 嵌套 config 片段（用于深度合并）。"""
+        patch: Dict[str, Any] = {}
+        if flat.get("observation_period") is not None:
+            patch["observation_period"] = flat["observation_period"]
+        left: Dict[str, Any] = {}
+        if flat.get("ratio_d20_max") is not None:
+            left["ratio_d20_abs_max"] = flat["ratio_d20_max"]
+        if flat.get("volume_ratio_max") is not None:
+            left["volume_ratio_max"] = flat["volume_ratio_max"]
+        if flat.get("left_buy_min_accumulation") is not None:
+            left["min_accumulation_score"] = flat["left_buy_min_accumulation"]
+        if left:
+            patch["left_buy"] = left
+        if flat.get("volume_ratio_min") is not None:
+            patch["right_buy"] = {"volume_ratio_min": flat["volume_ratio_min"]}
+        scoring: Dict[str, Any] = {}
+        for fk, sk in (
+            ("accumulation_fz_min", "accumulation_fz_min"),
+            ("balance_ratio_max", "balance_ratio_max"),
+            ("watch_threshold", "watch_threshold"),
+            ("alert_threshold", "alert_threshold"),
+            ("accumulation_s_threshold", "accumulation_s_threshold"),
+            ("accumulation_a_threshold", "accumulation_a_threshold"),
+            ("momentum_full_threshold", "momentum_full_threshold"),
+            ("momentum_batch_threshold", "momentum_batch_threshold"),
+            ("instant_deviation_stable_days", "instant_deviation_stable_days"),
+            ("weight_acc_fz", "weight_acc_fz"),
+            ("weight_acc_balance", "weight_acc_balance"),
+            ("weight_acc_volume", "weight_acc_volume"),
+            ("weight_mom_ratio_d1", "weight_mom_ratio_d1"),
+            ("weight_mom_deviation", "weight_mom_deviation"),
+            ("weight_mom_volume", "weight_mom_volume"),
+        ):
+            if flat.get(fk) is not None:
+                scoring[sk] = flat[fk]
+        if flat.get("volume_ratio_min") is not None:
+            scoring["momentum_volume_ratio_min"] = flat["volume_ratio_min"]
+        if scoring:
+            patch["scoring"] = scoring
+        if flat.get("overbought_ratio") is not None:
+            patch["exit"] = {"overbought_ratio": flat["overbought_ratio"]}
+        return patch

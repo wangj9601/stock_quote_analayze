@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.models import GmsTradeObserveStock, User
+from backend_api.models import GmsTradeObserveHistory, GmsTradeObserveStock, User
 
 router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-observe"])
 
@@ -61,6 +61,26 @@ class GmsTradeObserveListResponse(BaseModel):
     page: int
     page_size: int
     items: List[GmsTradeObserveItem]
+
+
+class GmsTradeObserveHistoryItem(BaseModel):
+    id: int
+    market: str
+    code: str
+    name: Optional[str]
+    signal_date: Optional[str]
+    snapshot: Optional[Dict[str, Any]]
+    observe_created_at: Optional[str]
+    observe_updated_at: Optional[str]
+    removed_at: str
+    source_observe_id: Optional[int]
+
+
+class GmsTradeObserveHistoryListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[GmsTradeObserveHistoryItem]
 
 
 def _resolve_signal_date_str(
@@ -113,6 +133,47 @@ def _row_to_item(r: GmsTradeObserveStock) -> GmsTradeObserveItem:
         snapshot=snap,
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
+    )
+
+
+def _archive_trade_observe_row(
+    db: Session,
+    row: GmsTradeObserveStock,
+    *,
+    removed_at: Optional[datetime] = None,
+) -> GmsTradeObserveHistory:
+    """将当前观察记录写入历史表后由调用方删除原记录。"""
+    now = removed_at or datetime.now()
+    hist = GmsTradeObserveHistory(
+        user_id=row.user_id,
+        market=row.market,
+        code=row.code,
+        name=row.name,
+        signal_snapshot_json=row.signal_snapshot_json,
+        signal_date=row.signal_date,
+        observe_created_at=row.created_at,
+        observe_updated_at=row.updated_at,
+        source_observe_id=row.id,
+        removed_at=now,
+    )
+    db.add(hist)
+    return hist
+
+
+def _history_row_to_item(r: GmsTradeObserveHistory) -> GmsTradeObserveHistoryItem:
+    snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
+    sd = _resolve_signal_date_str(r.signal_date, snap)
+    return GmsTradeObserveHistoryItem(
+        id=r.id,
+        market=r.market or "CN",
+        code=r.code,
+        name=r.name,
+        signal_date=sd,
+        snapshot=snap,
+        observe_created_at=r.observe_created_at.isoformat() if r.observe_created_at else None,
+        observe_updated_at=r.observe_updated_at.isoformat() if r.observe_updated_at else None,
+        removed_at=r.removed_at.isoformat() if r.removed_at else "",
+        source_observe_id=r.source_observe_id,
     )
 
 
@@ -207,6 +268,32 @@ def add_gms_trade_observe(
     return _row_to_item(row)
 
 
+@router.get("/history", response_model=GmsTradeObserveHistoryListResponse)
+def list_gms_trade_observe_history(
+    page: int = 1,
+    page_size: int = 200,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """已移出交易观察的归档列表。"""
+    page = max(1, int(page))
+    page_size = min(500, max(1, int(page_size)))
+    q = db.query(GmsTradeObserveHistory).filter(GmsTradeObserveHistory.user_id == user.id)
+    total = q.count()
+    rows = (
+        q.order_by(GmsTradeObserveHistory.removed_at.desc(), GmsTradeObserveHistory.code)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return GmsTradeObserveHistoryListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[_history_row_to_item(r) for r in rows],
+    )
+
+
 @router.delete("/{item_id}")
 def remove_gms_trade_observe(
     item_id: int,
@@ -220,6 +307,12 @@ def remove_gms_trade_observe(
     )
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
+    hist = _archive_trade_observe_row(db, row)
     db.delete(row)
     db.commit()
-    return {"success": True, "message": "已移出交易观察列表"}
+    db.refresh(hist)
+    return {
+        "success": True,
+        "message": "已移出交易观察列表并归档",
+        "history_id": hist.id,
+    }

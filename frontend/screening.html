@@ -807,6 +807,17 @@
             <!-- GMS 策略参数（可配置） -->
             <div class="strategy-params-card" id="gmsStrategyParamsCard">
                 <h3>⚙️ GMS 策略参数</h3>
+                <div class="parameter-group" style="margin-bottom: 12px; max-width: 480px;">
+                    <label for="gms-config_id">参数版本（服务端）</label>
+                    <select id="gms-config_id" class="param-input">
+                        <option value="">加载中…</option>
+                    </select>
+                    <span class="param-rule">与回测管理中心「策略配置」同源；切换版本会从服务端同步下方参数</span>
+                    <label style="display:block;margin-top:8px;font-size:13px;cursor:pointer;">
+                        <input type="checkbox" id="gms-param-override" style="margin-right:6px;">
+                        临时用下方表单覆盖服务端参数（高级）
+                    </label>
+                </div>
                 <div class="params-grid gms-params-grid">
                     <div class="parameter-group">
                         <label for="gms-start_date">策略起始交易日期</label>
@@ -938,7 +949,8 @@
                     </div>
                 </div>
                 <div class="parameter-actions" style="margin-top: 12px;">
-                    <button type="button" id="gmsParamsSaveBtn" class="refresh-btn">保存参数</button>
+                    <button type="button" id="gmsParamsSyncBtn" class="gms-btn-outline" type="button">从服务端同步</button>
+                    <button type="button" id="gmsParamsSaveBtn" class="refresh-btn">保存到本地</button>
                     <span id="gmsParamsSaveStatus" class="search-date" style="margin-left: 8px;"></span>
                 </div>
             </div>

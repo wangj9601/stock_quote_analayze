@@ -20,6 +20,20 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
+            <el-form-item label="策略参数版本">
+              <el-select v-model="strategyConfigId" placeholder="默认版本" clearable class="w-full" filterable>
+                <el-option
+                  v-for="c in strategyConfigs"
+                  :key="c.id"
+                  :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
+                  :value="c.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
             <el-form-item label="开始日期" prop="start_date">
               <el-date-picker
                 v-model="form.start_date"
@@ -356,6 +370,11 @@
           <template #default="scope">{{ (scope.row.task_id || '').slice(0, 8) }}</template>
         </el-table-column>
         <el-table-column prop="name" label="任务名称" min-width="140" />
+        <el-table-column label="参数版本" width="120">
+          <template #default="scope">
+            {{ scope.row.config?.strategy_config_name || '—' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="90">
           <template #default="scope">
             <el-tag :type="statusTagType(scope.row.status)">{{ scope.row.status }}</el-tag>
@@ -421,6 +440,9 @@ function getDefaultBacktestDateRange(): { start_date: string; end_date: string }
 }
 
 const defaultBacktestDates = getDefaultBacktestDateRange()
+
+const strategyConfigs = ref<any[]>([])
+const strategyConfigId = ref<number | undefined>(undefined)
 
 const formRef = ref()
 const loading = ref(false)
@@ -670,6 +692,7 @@ async function createTask() {
     if (form.stock_pool_mode === 'watchlist' && watchlistScope.value === 'user' && watchlistUserId.value) {
       body.watchlist_user_id = watchlistUserId.value
     }
+    if (strategyConfigId.value) body.strategy_config_id = strategyConfigId.value
     const taskId = await gmsApi.createBacktest(body)
     ElMessage.success('任务已创建: ' + taskId.slice(0, 8))
     resetForm()
@@ -773,6 +796,13 @@ const emit = defineEmits<{ (e: 'task-created', task: any): void; (e: 'task-updat
 defineExpose({ refresh })
 
 onMounted(async () => {
+  try {
+    strategyConfigs.value = await gmsApi.listStrategyConfigs(true)
+    const def = strategyConfigs.value.find((c: any) => c.is_default)
+    if (def) strategyConfigId.value = def.id
+  } catch {
+    /* ignore */
+  }
   await Promise.all([refresh(), loadWatchlistUsers()])
   const d = getDefaultBacktestDateRange()
   form.start_date = d.start_date

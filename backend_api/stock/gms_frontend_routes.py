@@ -29,16 +29,78 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/frontend/gms", tags=["GMS前端接口"])
 
 
+@router.get("/strategy-configs")
+async def list_gms_strategy_configs_public():
+    """公开：列出启用的 GMS 策略参数版本（供网站选股页选择）。"""
+    try:
+        from backend_core.strategies.gms.config import GMSConfigManager
+
+        mgr = GMSConfigManager()
+        rows = mgr.list_configs(active_only=True)
+        data = [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "version_label": r.get("version_label"),
+                "is_default": r.get("is_default"),
+                "precompute_enabled": r.get("precompute_enabled"),
+            }
+            for r in rows
+        ]
+        default_id = mgr.resolve_config_id(None)
+        return JSONResponse({"success": True, "data": data, "default_config_id": default_id})
+    except Exception as e:
+        logger.error("GMS strategy-configs list 失败: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/strategy-configs/{config_id}/form-params")
+async def get_gms_strategy_config_form_params(config_id: int):
+    """公开：返回某版本的扁平化表单参数（与 screening 页字段一致）。"""
+    try:
+        from backend_core.strategies.gms.config import GMSConfigManager
+
+        mgr = GMSConfigManager()
+        row = mgr.get_config_row(config_id)
+        if not row or not row.is_active:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在或已禁用")
+        cfg = mgr.get_config(config_id)
+        flat = mgr.config_to_flat_form(cfg)
+        return JSONResponse(
+            {
+                "success": True,
+                "data": {
+                    "config_id": config_id,
+                    "name": row.name,
+                    "is_default": bool(row.is_default),
+                    "form_params": flat,
+                    "config_params": cfg,
+                },
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("GMS strategy-config form-params 失败: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/selection-results")
 async def get_gms_selection_results(
     date: Optional[str] = Query(None, description="目标日期 YYYY-MM-DD，不传则使用 gms_signal_trace 表内最新日期"),
     limit: Optional[int] = Query(None, ge=1, description="最大返回条数"),
     min_strength: float = Query(0.3, ge=0.0, le=1.0, description="最低信号强度 0~1"),
+    config_id: Optional[int] = Query(None, ge=1, description="GMS 策略参数版本 ID，不传则用默认版本"),
     db: Session = Depends(get_db),
 ):
     """选股结果列表，数据来自 **gms_signal_trace**。"""
     try:
-        payload, fallback_message = query_gms_signal_trace_selection(db, date, min_strength, limit)
+        from backend_core.strategies.gms.config import GMSConfigManager
+
+        resolved_config_id = GMSConfigManager().resolve_config_id(config_id)
+        payload, fallback_message = query_gms_signal_trace_selection(
+            db, date, min_strength, limit, config_id=resolved_config_id
+        )
         if fallback_message:
             payload["message"] = fallback_message
         return JSONResponse(payload)
@@ -52,11 +114,21 @@ async def get_gms_selection_results(
 
 
 @router.get("/selection-summary")
-async def get_gms_selection_summary(db: Session = Depends(get_db)):
+async def get_gms_selection_summary(
+    config_id: Optional[int] = Query(None, ge=1, description="GMS 策略参数版本 ID"),
+    db: Session = Depends(get_db),
+):
     """GMS 选股汇总（基于 gms_signal_trace 最新一日）。"""
     try:
-        logger.info("获取 GMS 选股汇总 (gms_signal_trace)")
-        latest_date = db.query(func.max(GMSSignalTrace.date)).scalar()
+        from backend_core.strategies.gms.config import GMSConfigManager
+
+        resolved_config_id = GMSConfigManager().resolve_config_id(config_id)
+        logger.info("获取 GMS 选股汇总 (gms_signal_trace) config_id=%s", resolved_config_id)
+        latest_date = (
+            db.query(func.max(GMSSignalTrace.date))
+            .filter(GMSSignalTrace.config_id == resolved_config_id)
+            .scalar()
+        )
         if not latest_date:
             return JSONResponse({
                 "success": True,
@@ -70,11 +142,13 @@ async def get_gms_selection_summary(db: Session = Depends(get_db)):
             })
 
         total_count = db.query(func.count(GMSSignalTrace.code)).filter(
-            GMSSignalTrace.date == latest_date
+            GMSSignalTrace.date == latest_date,
+            GMSSignalTrace.config_id == resolved_config_id,
         ).scalar()
 
         strong_count = db.query(func.count(GMSSignalTrace.code)).filter(
             GMSSignalTrace.date == latest_date,
+            GMSSignalTrace.config_id == resolved_config_id,
             or_(
                 GMSSignalTrace.score_total >= 70,
                 GMSSignalTrace.accumulation_grade == "S",

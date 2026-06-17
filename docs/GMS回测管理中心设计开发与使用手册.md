@@ -119,14 +119,34 @@ backend_core (策略与任务执行)
 - **GET** `/api/admin/gms/reports/{report_id}/download`
   - 下载明细 CSV 文件
 
-#### 3.1.4 策略配置
+#### 3.1.4 策略参数版本（多版本管理）
+
+表：`gms_strategy_configs`（参数快照）；`gms_signal_trace` 主键含 `config_id` 隔离缓存。
+
+- **GET** `/api/admin/gms/strategy-configs` — 版本列表（`?active_only=true` 仅启用）
+- **GET** `/api/admin/gms/strategy-configs/{id}` — 版本详情（含 merge 后 `config_params`）
+- **POST** `/api/admin/gms/strategy-configs` — 新建版本
+- **POST** `/api/admin/gms/strategy-configs/{id}/update` — 更新（深度合并 `config`）
+- **POST** `/api/admin/gms/strategy-configs/{id}/clone` — 克隆
+- **PATCH** `/api/admin/gms/strategy-configs/{id}/default` — 设为默认（同步 `gms_runtime_config`）
+- **GET** `/api/admin/gms/strategy-configs/compare?config_id_a=&config_id_b=` — 字段 diff
+
+回测创建 body 增加 `strategy_config_id`；任务 `config` 内固化 `config_params_snapshot` 保证可复现。
+
+选股/公开接口支持 `config_id` Query；观察股分组（`gms_strategy_versions`）可绑定 `config_id`，`scope=gms_watchlist` 时自动带入。
+
+仅 `is_default=true` 或 `precompute_enabled=true` 的版本读写 `gms_signal_trace`；其它版本按需实时计算。
+
+迁移：`python migrations/add_gms_strategy_configs.py`
+
+#### 3.1.5 策略配置（兼容旧接口）
 
 - **GET** `/api/admin/gms/config`
-  - 返回：`gms_config.json`（默认配置与文件配置深度合并）
+  - 返回：默认参数版本的 merge 结果，并带 `config_id`
 
 - **PUT** `/api/admin/gms/config`
   - body：`{ "config": { ... } }`
-  - 行为：与当前配置深度合并后写回 `backend_core/strategies/gms/gms_config.json`
+  - 行为：更新 **默认版本**（写 `gms_strategy_configs` + 镜像 `gms_runtime_config`）
 
 ### 3.2 任务与报告存储（文件系统）
 

@@ -79,7 +79,7 @@
         />
       </el-tab-pane>
       <el-tab-pane label="报告与分析" name="reports">
-        <ReportAnalysis ref="reportRef" @report-generated="handleReportGenerated" />
+        <ReportAnalysis ref="reportRef" @report-generated="handleReportGenerated" @report-deleted="handleReportDeleted" />
       </el-tab-pane>
       <el-tab-pane label="策略配置" name="config">
         <StrategyConfiguration ref="configRef" @config-saved="handleConfigSaved" />
@@ -133,13 +133,13 @@ let statusTimer: ReturnType<typeof setInterval> | null = null
 provide('gmsApi', gmsApiService)
 provide('authStore', authStore)
 
-const refreshSystemStatus = async () => {
+const refreshSystemStatus = async (silent = false) => {
   try {
     const data = await gmsApiService.getSystemStatus()
     systemStatus.runningBacktests = data.runningBacktests ?? 0
     systemStatus.totalReports = data.totalReports ?? 0
     systemStatus.systemHealth = data.systemHealth ?? 'ok'
-    ElMessage.success('系统状态已刷新')
+    if (!silent) ElMessage.success('系统状态已刷新')
   } catch (e) {
     ElMessage.error('获取系统状态失败')
     console.error(e)
@@ -165,7 +165,11 @@ const handleTaskUpdated = (task: any) => {
 
 const handleReportGenerated = (_report: any) => {
   showNotification('info', '报告', '新报告已生成')
-  refreshSystemStatus()
+  refreshSystemStatus(true)
+}
+
+const handleReportDeleted = () => {
+  refreshSystemStatus(true)
 }
 
 const handleConfigSaved = () => {

@@ -3,7 +3,7 @@
     <el-card class="toolbar">
       <el-row :gutter="12" align="middle">
         <el-col :span="6">
-          <el-select v-model="selectedVersionId" placeholder="选择策略版本" filterable @change="handleVersionChange">
+          <el-select v-model="selectedVersionId" placeholder="选择观察股分组" filterable @change="handleVersionChange">
             <el-option v-for="v in versions" :key="v.id" :label="`${v.strategy_code}-V${v.version_no} ${v.version_name}`" :value="v.id" />
           </el-select>
         </el-col>
@@ -17,7 +17,7 @@
           <el-input v-model="keyword" placeholder="代码/名称" clearable @keyup.enter="refresh" />
         </el-col>
         <el-col :span="10" class="actions">
-          <el-button type="primary" @click="openVersionDialog()">新增版本</el-button>
+          <el-button type="primary" @click="openVersionDialog()">新增分组</el-button>
           <el-button type="success" :disabled="!selectedVersionId" @click="openStockDialog()">新增观察股</el-button>
           <el-button :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
           <el-button :disabled="!selectedVersionId" @click="openImportDialog">批量导入</el-button>
@@ -66,11 +66,21 @@
       @size-change="refresh"
     />
 
-    <el-dialog v-model="versionDialogVisible" title="策略版本" @opened="() => versionStrategyCodeRef?.focus()">
-      <el-form :model="versionForm" label-width="90px">
+    <el-dialog v-model="versionDialogVisible" title="观察股分组" @opened="() => versionStrategyCodeRef?.focus()">
+      <el-form :model="versionForm" label-width="120px">
         <el-form-item label="策略编码"><el-input ref="versionStrategyCodeRef" v-model="versionForm.strategy_code" @keyup.enter="saveVersion" /></el-form-item>
-        <el-form-item label="版本名称"><el-input v-model="versionForm.version_name" @keyup.enter="saveVersion" /></el-form-item>
-        <el-form-item label="版本号"><el-input-number v-model="versionForm.version_no" :min="1" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="分组名称"><el-input v-model="versionForm.version_name" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="分组序号"><el-input-number v-model="versionForm.version_no" :min="1" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="参数版本">
+          <el-select v-model="versionForm.config_id" clearable placeholder="不绑定（使用默认参数）" class="w-full">
+            <el-option
+              v-for="c in strategyConfigs"
+              :key="c.id"
+              :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
+              :value="c.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="启用"><el-switch v-model="versionForm.is_active" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="versionForm.description" type="textarea" /></el-form-item>
       </el-form>
@@ -117,7 +127,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { gmsApiService, type GMSStrategyVersionStock, type GMSStrategyVersion } from '@/services/gmsApi'
+import { gmsApiService, type GMSStrategyVersionStock, type GMSStrategyVersion, type GMSStrategyConfig } from '@/services/gmsApi'
 
 const stockCodeRef = ref<any>(null)
 const versionStrategyCodeRef = ref<any>(null)
@@ -125,6 +135,7 @@ const importInputRef = ref<any>(null)
 
 const loading = ref(false)
 const versions = ref<GMSStrategyVersion[]>([])
+const strategyConfigs = ref<GMSStrategyConfig[]>([])
 const selectedVersionId = ref<number>()
 const stocks = ref<GMSStrategyVersionStock[]>([])
 const selectedIds = ref<number[]>([])
@@ -136,7 +147,15 @@ const total = ref(0)
 
 const versionDialogVisible = ref(false)
 const editingVersionId = ref<number | null>(null)
-const versionForm = ref({ strategy_code: 'GMS', version_name: '', version_no: 1, description: '', is_active: true, created_by: 'admin' })
+const versionForm = ref({
+  strategy_code: 'GMS',
+  version_name: '',
+  version_no: 1,
+  description: '',
+  config_id: undefined as number | undefined,
+  is_active: true,
+  created_by: 'admin',
+})
 
 const stockDialogVisible = ref(false)
 const editingStockId = ref<number | null>(null)
@@ -192,7 +211,15 @@ const onSelectionChange = (rows: GMSStrategyVersionStock[]) => {
 
 const openVersionDialog = () => {
   editingVersionId.value = null
-  versionForm.value = { strategy_code: 'GMS', version_name: '', version_no: 1, description: '', is_active: true, created_by: 'admin' }
+  versionForm.value = {
+    strategy_code: 'GMS',
+    version_name: '',
+    version_no: 1,
+    description: '',
+    config_id: undefined,
+    is_active: true,
+    created_by: 'admin',
+  }
   versionDialogVisible.value = true
 }
 
@@ -366,6 +393,11 @@ const handleExport = async () => {
 defineExpose({ refresh })
 
 onMounted(async () => {
+  try {
+    strategyConfigs.value = await gmsApiService.listStrategyConfigs(true)
+  } catch {
+    strategyConfigs.value = []
+  }
   await loadVersions()
   await refresh()
 })

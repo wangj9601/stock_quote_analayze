@@ -54,8 +54,10 @@ try:
         VolumeShrinkBreakoutSignal = getattr(models_module, 'VolumeShrinkBreakoutSignal', None)
         VsbObserveStock = getattr(models_module, 'VsbObserveStock', None)
         GmsTradeObserveStock = getattr(models_module, 'GmsTradeObserveStock', None)
+        GmsTradeObserveHistory = getattr(models_module, 'GmsTradeObserveHistory', None)
         GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
         GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
+        GMSStrategyConfig = getattr(models_module, 'GMSStrategyConfig', None)
         GMSRuntimeConfig = getattr(models_module, 'GMSRuntimeConfig', None)
         GMSBacktestTask = getattr(models_module, 'GMSBacktestTask', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
@@ -151,6 +153,7 @@ except Exception as e:
     VolumeShrinkBreakoutSignal = None
     VsbObserveStock = None
     GmsTradeObserveStock = None
+    GmsTradeObserveHistory = None
     GMSStrategyVersion = None
     GMSStrategyVersionStock = None
     GMSRuntimeConfig = None
@@ -251,6 +254,7 @@ __all__ = [
     'VolumeShrinkBreakoutSignal',
     'VsbObserveStock',
     'GmsTradeObserveStock',
+    'GmsTradeObserveHistory',
     'GMSStrategyVersion',
     'GMSStrategyVersionStock',
     'GMSRuntimeConfig',

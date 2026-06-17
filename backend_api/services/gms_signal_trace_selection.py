@@ -94,6 +94,7 @@ def query_gms_signal_trace_selection(
     date: Optional[str],
     min_strength: float,
     limit: Optional[int],
+    config_id: Optional[int] = None,
 ) -> Tuple[Dict[str, Any], Optional[str]]:
     """
     从 gms_signal_trace 查询选股列表，按 score_total 降序。
@@ -101,10 +102,17 @@ def query_gms_signal_trace_selection(
     Returns:
         (payload_dict, fallback_message)
     """
+    from backend_core.strategies.gms.config import GMSConfigManager
+
+    resolved_config_id = GMSConfigManager().resolve_config_id(config_id)
     requested_date = date
     target_date: Optional[str] = None
     if not requested_date:
-        max_row = db.query(func.max(GMSSignalTrace.date)).scalar()
+        max_row = (
+            db.query(func.max(GMSSignalTrace.date))
+            .filter(GMSSignalTrace.config_id == resolved_config_id)
+            .scalar()
+        )
         target_date = str(max_row).strip()[:10] if max_row else None
     else:
         target_date = str(requested_date).strip()[:10]
@@ -118,6 +126,7 @@ def query_gms_signal_trace_selection(
                 "search_date": None,
                 "strategy_name": "GMS均值引力动量策略",
                 "data_source": "gms_signal_trace",
+                "config_id": resolved_config_id,
                 "timestamp": datetime.now().isoformat(),
                 "message": "策略结果表中无数据",
             },
@@ -125,7 +134,10 @@ def query_gms_signal_trace_selection(
         )
 
     min_score = float(min_strength) * 100.0
-    query = db.query(GMSSignalTrace).filter(GMSSignalTrace.date == target_date)
+    query = db.query(GMSSignalTrace).filter(
+        GMSSignalTrace.date == target_date,
+        GMSSignalTrace.config_id == resolved_config_id,
+    )
     if min_strength > 0:
         query = query.filter(GMSSignalTrace.score_total >= min_score)
     query = query.order_by(desc(GMSSignalTrace.score_total))
@@ -135,10 +147,17 @@ def query_gms_signal_trace_selection(
 
     fallback_message: Optional[str] = None
     if not selection_results and requested_date:
-        latest_date = db.query(func.max(GMSSignalTrace.date)).scalar()
+        latest_date = (
+            db.query(func.max(GMSSignalTrace.date))
+            .filter(GMSSignalTrace.config_id == resolved_config_id)
+            .scalar()
+        )
         if latest_date and str(latest_date).strip()[:10] != target_date:
             target_date = str(latest_date).strip()[:10]
-            query = db.query(GMSSignalTrace).filter(GMSSignalTrace.date == target_date)
+            query = db.query(GMSSignalTrace).filter(
+                GMSSignalTrace.date == target_date,
+                GMSSignalTrace.config_id == resolved_config_id,
+            )
             if min_strength > 0:
                 query = query.filter(GMSSignalTrace.score_total >= min_score)
             query = query.order_by(desc(GMSSignalTrace.score_total))
@@ -233,6 +252,7 @@ def query_gms_signal_trace_selection(
         "search_date": target_date,
         "strategy_name": "GMS均值引力动量策略",
         "data_source": "gms_signal_trace",
+        "config_id": resolved_config_id,
         "timestamp": datetime.now().isoformat(),
     }
     return payload, fallback_message

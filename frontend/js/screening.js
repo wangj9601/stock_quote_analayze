@@ -17,6 +17,8 @@ const ScreeningPage = {
     gmsTradeObserveCodeSet: new Set(),
     /** 最近一次 GMS 筛选基准交易日（与接口 search_date 一致） */
     lastGmsSearchDate: null,
+    /** 当前选中的 GMS 策略参数版本 ID（服务端） */
+    gmsConfigId: null,
 
     // 初始化
     async init() {
@@ -80,7 +82,7 @@ const ScreeningPage = {
         }
         // 切换到 GMS 时加载策略参数
         if (strategy === 'gms') {
-            this.loadGmsParams();
+            void this.initGmsStrategyConfig();
             this.syncGmsWatchlistMarketWrap();
             this.syncGmsSingleStockWrap();
             void this.loadGmsTradeObserveCodes();
@@ -1036,10 +1038,22 @@ const ScreeningPage = {
             });
         }
 
-        // GMS 策略参数：保存按钮
+        // GMS 策略参数：保存 / 同步
         const gmsParamsSaveBtn = document.getElementById('gmsParamsSaveBtn');
         if (gmsParamsSaveBtn) {
             gmsParamsSaveBtn.addEventListener('click', () => this.saveGmsParams());
+        }
+        const gmsParamsSyncBtn = document.getElementById('gmsParamsSyncBtn');
+        if (gmsParamsSyncBtn) {
+            gmsParamsSyncBtn.addEventListener('click', () => this.syncGmsParamsFromServer());
+        }
+        const gmsConfigSelect = document.getElementById('gms-config_id');
+        if (gmsConfigSelect) {
+            gmsConfigSelect.addEventListener('change', () => {
+                const v = gmsConfigSelect.value;
+                this.gmsConfigId = v ? parseInt(v, 10) : null;
+                void this.syncGmsParamsFromServer(this.gmsConfigId);
+            });
         }
 
         // GMS 得分明细：点击「得分明细」展开/收起（事件委托）
@@ -1184,27 +1198,38 @@ const ScreeningPage = {
             const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
         }
-        if (gmsParams.start_date) q.set('date', gmsParams.start_date);
-        if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
-        if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);
-        if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
-        if (gmsParams.ratio_d20_max != null) q.set('ratio_d20_max', gmsParams.ratio_d20_max);
-        if (gmsParams.volume_ratio_max != null) q.set('volume_ratio_max', gmsParams.volume_ratio_max);
-        if (gmsParams.left_buy_min_accumulation != null) q.set('left_buy_min_accumulation', gmsParams.left_buy_min_accumulation);
-        if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
-        if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
-        if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
-        if (gmsParams.accumulation_s_threshold != null) q.set('accumulation_s_threshold', gmsParams.accumulation_s_threshold);
-        if (gmsParams.accumulation_a_threshold != null) q.set('accumulation_a_threshold', gmsParams.accumulation_a_threshold);
-        if (gmsParams.momentum_full_threshold != null) q.set('momentum_full_threshold', gmsParams.momentum_full_threshold);
-        if (gmsParams.momentum_batch_threshold != null) q.set('momentum_batch_threshold', gmsParams.momentum_batch_threshold);
-        if (gmsParams.instant_deviation_stable_days != null) q.set('instant_deviation_stable_days', gmsParams.instant_deviation_stable_days);
-        if (gmsParams.weight_acc_fz != null) q.set('weight_acc_fz', gmsParams.weight_acc_fz);
-        if (gmsParams.weight_acc_balance != null) q.set('weight_acc_balance', gmsParams.weight_acc_balance);
-        if (gmsParams.weight_acc_volume != null) q.set('weight_acc_volume', gmsParams.weight_acc_volume);
-        if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
-        if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
-        if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
+        const configEl = document.getElementById('gms-config_id');
+        const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
+        if (configId) {
+            q.set('config_id', String(configId));
+        }
+        const overrideEl = document.getElementById('gms-param-override');
+        const useOverride = overrideEl && overrideEl.checked;
+        if (useOverride) {
+            if (gmsParams.start_date) q.set('date', gmsParams.start_date);
+            if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
+            if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);
+            if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
+            if (gmsParams.ratio_d20_max != null) q.set('ratio_d20_max', gmsParams.ratio_d20_max);
+            if (gmsParams.volume_ratio_max != null) q.set('volume_ratio_max', gmsParams.volume_ratio_max);
+            if (gmsParams.left_buy_min_accumulation != null) q.set('left_buy_min_accumulation', gmsParams.left_buy_min_accumulation);
+            if (gmsParams.watch_threshold != null) q.set('watch_threshold', gmsParams.watch_threshold);
+            if (gmsParams.alert_threshold != null) q.set('alert_threshold', gmsParams.alert_threshold);
+            if (gmsParams.overbought_ratio != null) q.set('overbought_ratio', gmsParams.overbought_ratio);
+            if (gmsParams.accumulation_s_threshold != null) q.set('accumulation_s_threshold', gmsParams.accumulation_s_threshold);
+            if (gmsParams.accumulation_a_threshold != null) q.set('accumulation_a_threshold', gmsParams.accumulation_a_threshold);
+            if (gmsParams.momentum_full_threshold != null) q.set('momentum_full_threshold', gmsParams.momentum_full_threshold);
+            if (gmsParams.momentum_batch_threshold != null) q.set('momentum_batch_threshold', gmsParams.momentum_batch_threshold);
+            if (gmsParams.instant_deviation_stable_days != null) q.set('instant_deviation_stable_days', gmsParams.instant_deviation_stable_days);
+            if (gmsParams.weight_acc_fz != null) q.set('weight_acc_fz', gmsParams.weight_acc_fz);
+            if (gmsParams.weight_acc_balance != null) q.set('weight_acc_balance', gmsParams.weight_acc_balance);
+            if (gmsParams.weight_acc_volume != null) q.set('weight_acc_volume', gmsParams.weight_acc_volume);
+            if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
+            if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
+            if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
+        } else if (gmsParams.start_date) {
+            q.set('date', gmsParams.start_date);
+        }
         if (scope === 'single') {
             q.set('use_pagination', 'false');
         } else if (includePagination) {
@@ -1745,7 +1770,101 @@ const ScreeningPage = {
         }
     },
 
-    // 加载 GMS 策略参数到表单（localStorage）
+    // 加载 GMS 策略参数版本列表并同步表单
+    async initGmsStrategyConfig() {
+        const statusEl = document.getElementById('gmsParamsSaveStatus');
+        const selectEl = document.getElementById('gms-config_id');
+        try {
+            let savedConfigId = null;
+            try {
+                const saved = localStorage.getItem('gmsParams');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.config_id != null) savedConfigId = parseInt(parsed.config_id, 10);
+                }
+            } catch (_) { /* ignore */ }
+
+            const res = await fetch(`${this.API_BASE_URL}/api/frontend/gms/strategy-configs`);
+            const json = await res.json();
+            if (!json.success || !selectEl) {
+                this.loadGmsParams();
+                return;
+            }
+            const list = json.data || [];
+            const defaultId = json.default_config_id;
+            selectEl.innerHTML = '';
+            list.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = String(item.id);
+                let label = item.name || `v${item.id}`;
+                if (item.version_label) label += ` (${item.version_label})`;
+                if (item.is_default) label += ' [默认]';
+                opt.textContent = label;
+                selectEl.appendChild(opt);
+            });
+            const pickId = savedConfigId || defaultId || (list[0] && list[0].id);
+            if (pickId) {
+                selectEl.value = String(pickId);
+                this.gmsConfigId = pickId;
+            }
+            await this.syncGmsParamsFromServer(this.gmsConfigId, false);
+            if (statusEl) statusEl.textContent = '已与服务端默认版本对齐';
+        } catch (e) {
+            console.error('initGmsStrategyConfig:', e);
+            this.loadGmsParams();
+        }
+    },
+
+    applyGmsFlatParamsToForm(data) {
+        const set = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.value = value != null && value !== '' ? value : '';
+        };
+        set('gms-start_date', data.start_date || '');
+        set('gms-observation_period', data.observation_period);
+        set('gms-ratio_d20_max', data.ratio_d20_max);
+        set('gms-volume_ratio_max', data.volume_ratio_max);
+        set('gms-left_buy_min_accumulation', data.left_buy_min_accumulation);
+        set('gms-volume_ratio_min', data.volume_ratio_min);
+        set('gms-accumulation_fz_min', data.accumulation_fz_min);
+        set('gms-balance_ratio_max', data.balance_ratio_max);
+        set('gms-watch_threshold', data.watch_threshold);
+        set('gms-alert_threshold', data.alert_threshold);
+        set('gms-overbought_ratio', data.overbought_ratio);
+        set('gms-accumulation_s_threshold', data.accumulation_s_threshold);
+        set('gms-accumulation_a_threshold', data.accumulation_a_threshold);
+        set('gms-momentum_full_threshold', data.momentum_full_threshold);
+        set('gms-momentum_batch_threshold', data.momentum_batch_threshold);
+        set('gms-instant_deviation_stable_days', data.instant_deviation_stable_days);
+        set('gms-weight_acc_fz', data.weight_acc_fz);
+        set('gms-weight_acc_balance', data.weight_acc_balance);
+        set('gms-weight_acc_volume', data.weight_acc_volume);
+        set('gms-weight_mom_ratio_d1', data.weight_mom_ratio_d1);
+        set('gms-weight_mom_deviation', data.weight_mom_deviation);
+        set('gms-weight_mom_volume', data.weight_mom_volume);
+    },
+
+    async syncGmsParamsFromServer(configId, showToast = true) {
+        const statusEl = document.getElementById('gmsParamsSaveStatus');
+        const cid = configId || this.gmsConfigId;
+        if (!cid) return;
+        try {
+            const res = await fetch(`${this.API_BASE_URL}/api/frontend/gms/strategy-configs/${cid}/form-params`);
+            const json = await res.json();
+            if (!json.success || !json.data) throw new Error(json.detail || '加载失败');
+            this.applyGmsFlatParamsToForm(json.data.form_params || {});
+            this.gmsConfigId = cid;
+            const selectEl = document.getElementById('gms-config_id');
+            if (selectEl) selectEl.value = String(cid);
+            if (statusEl) statusEl.textContent = `已同步：${json.data.name || cid}`;
+            if (showToast && window.CommonUtils) CommonUtils.showToast('已从服务端同步参数', 'success');
+        } catch (e) {
+            console.error('syncGmsParamsFromServer:', e);
+            if (statusEl) statusEl.textContent = '同步失败';
+        }
+    },
+
+    // 加载 GMS 策略参数到表单（localStorage 兜底）
     loadGmsParams() {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
         try {
@@ -1775,32 +1894,12 @@ const ScreeningPage = {
                 weight_mom_volume: 30
             };
             const data = saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
-            const set = (id, value) => {
-                const el = document.getElementById(id);
-                if (el) el.value = value != null ? value : '';
-            };
-            set('gms-start_date', data.start_date || '');
-            set('gms-observation_period', data.observation_period);
-            set('gms-ratio_d20_max', data.ratio_d20_max);
-            set('gms-volume_ratio_max', data.volume_ratio_max);
-            set('gms-left_buy_min_accumulation', data.left_buy_min_accumulation);
-            set('gms-volume_ratio_min', data.volume_ratio_min);
-            set('gms-accumulation_fz_min', data.accumulation_fz_min);
-            set('gms-balance_ratio_max', data.balance_ratio_max);
-            set('gms-watch_threshold', data.watch_threshold);
-            set('gms-alert_threshold', data.alert_threshold);
-            set('gms-overbought_ratio', data.overbought_ratio);
-            set('gms-accumulation_s_threshold', data.accumulation_s_threshold);
-            set('gms-accumulation_a_threshold', data.accumulation_a_threshold);
-            set('gms-momentum_full_threshold', data.momentum_full_threshold);
-            set('gms-momentum_batch_threshold', data.momentum_batch_threshold);
-            set('gms-instant_deviation_stable_days', data.instant_deviation_stable_days);
-            set('gms-weight_acc_fz', data.weight_acc_fz);
-            set('gms-weight_acc_balance', data.weight_acc_balance);
-            set('gms-weight_acc_volume', data.weight_acc_volume);
-            set('gms-weight_mom_ratio_d1', data.weight_mom_ratio_d1);
-            set('gms-weight_mom_deviation', data.weight_mom_deviation);
-            set('gms-weight_mom_volume', data.weight_mom_volume);
+            if (data.config_id != null) {
+                this.gmsConfigId = parseInt(data.config_id, 10);
+                const selectEl = document.getElementById('gms-config_id');
+                if (selectEl) selectEl.value = String(this.gmsConfigId);
+            }
+            this.applyGmsFlatParamsToForm(data);
             if (statusEl) statusEl.textContent = '';
         } catch (e) {
             console.error('loadGmsParams:', e);
@@ -1850,10 +1949,11 @@ const ScreeningPage = {
     saveGmsParams() {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
         const body = this.getGmsParams();
+        if (this.gmsConfigId) body.config_id = this.gmsConfigId;
         try {
             localStorage.setItem('gmsParams', JSON.stringify(body));
-            if (statusEl) statusEl.textContent = '已保存';
-            if (window.CommonUtils) CommonUtils.showToast('GMS 参数已保存', 'success');
+            if (statusEl) statusEl.textContent = '已保存到本地（含版本 ID）';
+            if (window.CommonUtils) CommonUtils.showToast('GMS 参数已保存到本地', 'success');
         } catch (e) {
             console.error('saveGmsParams:', e);
             if (statusEl) statusEl.textContent = '保存失败';

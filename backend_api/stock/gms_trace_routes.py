@@ -4,6 +4,7 @@ GMS 信号追溯 API 路由
 """
 
 import logging
+from copy import deepcopy
 from typing import Optional, List
 from datetime import datetime
 from collections import defaultdict
@@ -501,6 +502,7 @@ class GMSStockBacktestBody(BaseModel):
     target_pct: float = Field(0.05, description="目标涨幅，如 0.05 表示 5%")
     horizon_days: int = Field(20, ge=10, le=30, description="持有窗口交易日数")
     min_score: float = Field(0, ge=0, le=100, description="最低总分（与 GMSFrontendInterface 一致，管理端回测相同）")
+    strategy_config_id: Optional[int] = Field(None, ge=1, description="GMS 策略参数版本 ID，不传则用默认版本")
 
 
 @router.post("/gms-backtest")
@@ -530,6 +532,19 @@ async def create_gms_stock_backtest(body: GMSStockBacktestBody, db: Session = De
             "stock_pool_mode": "single",
             "stock_code": code,
         }
+        from backend_core.strategies.gms.config import GMSConfigManager
+
+        mgr = GMSConfigManager()
+        cid = mgr.resolve_config_id(body.strategy_config_id)
+        row = mgr.get_config_row(cid)
+        if body.strategy_config_id is not None and not row:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        if row and not row.is_active:
+            raise HTTPException(status_code=400, detail="策略参数版本已禁用")
+        cfg = mgr.get_config(cid)
+        config["strategy_config_id"] = cid
+        config["strategy_config_name"] = row.name if row else "default"
+        config["config_params_snapshot"] = deepcopy(cfg)
         task_name = _gms_build_task_name(db, config) if _gms_build_task_name else None
         task_id = _gms_admin_if.create_backtest(config, name=task_name or None)
         return {"success": True, "data": {"task_id": task_id}}

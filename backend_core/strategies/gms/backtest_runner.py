@@ -861,6 +861,8 @@ def run_gms_backtest(
     stock_pool: Optional[List[str]] = None,
     progress_callback: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
+    strategy_config_id: Optional[int] = None,
+    config_params_snapshot: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     执行 GMS 回测（与管理端 create_backtest 任务一致）：
@@ -966,7 +968,11 @@ def run_gms_backtest(
             )
         return _aggregate_details_to_summary([], start_str, end_str, market, target_pct, horizon_days, buy_signal_rule)
 
-    interface = GMSFrontendInterface(db)
+    interface = GMSFrontendInterface(
+        db,
+        config=config_params_snapshot,
+        config_id=strategy_config_id,
+    )
     interface.set_selection_config(min_score=min_score, max_results=10000)
 
     details: List[Dict[str, Any]] = []

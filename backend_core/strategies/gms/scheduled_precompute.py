@@ -79,44 +79,41 @@ def load_all_watchlist_stock_codes(db) -> List[str]:
         from backend_api.models import Watchlist
 
         rows = db.query(Watchlist.stock_code).distinct().all()
+        out: List[str] = []
+        for r in rows:
+            if r[0] is None:
+                continue
+            s = str(r[0]).strip()
+            if not s:
+                continue
+            if s.isdigit():
+                out.append(s.zfill(5) if len(s) <= 5 else s.zfill(6))
+            else:
+                out.append(s)
+        return list(dict.fromkeys(out))
     except Exception as e:
-        logger.warning("[GMS预计算] 读取 watchlist 失败: %s", e)
+        logger.warning("GMS 预计算加载 watchlist 失败: %s", e)
         return []
 
-    out: List[str] = []
-    seen = set()
-    for (raw,) in rows:
-        s = str(raw).strip() if raw is not None else ""
-        if not s:
-            continue
-        if s.isdigit():
-            if len(s) <= 5:
-                s = s.zfill(5)
-            else:
-                s = s.zfill(6)
-        if s not in seen:
-            seen.add(s)
-            out.append(s)
-    return out
+
+def _resolve_precompute_config_ids() -> List[int]:
+    from backend_core.strategies.gms.config import GMSConfigManager
+
+    mgr = GMSConfigManager()
+    config_ids = mgr.list_precompute_config_ids()
+    raw = _env("GMS_PRECOMPUTE_CONFIG_IDS")
+    if raw:
+        whitelist = [int(x) for x in re.split(r"[,;\s]+", raw) if x.strip().isdigit()]
+        if whitelist:
+            config_ids = [cid for cid in config_ids if cid in whitelist]
+    return config_ids
 
 
-def run_gms_precompute(
+def run_gms_precompute_for_config(
+    config_id: int,
     market: str,
     stock_pool: Optional[List[str]] = None,
-    skip_weekend: bool = True,
 ) -> None:
-    """
-    执行一次 GMS 全量扫描并写入 gms_signal_trace（已有记录会跳过计算）。
-
-    Args:
-        market: cn | hk | all（stock_pool 为 None 时有效）
-        stock_pool: 非空时按自定义列表计算，market 传 all
-        skip_weekend: 周六日跳过（与历史采集任务一致）
-    """
-    if skip_weekend and datetime.now().weekday() in (5, 6):
-        logger.info("[GMS预计算] 周末跳过 market=%s", market)
-        return
-
     from backend_core.database.db import SessionLocal
     from backend_core.strategies.gms.config import GMSConfigManager
     from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
@@ -124,9 +121,9 @@ def run_gms_precompute(
     db = SessionLocal()
     try:
         target_date = resolve_gms_trade_date(db)
-        cfg = GMSConfigManager().get_config()
-        gms = GMSFrontendInterface(db, cfg)
-        # 预计算：保留全量写入 trace，接口再按 min_score 过滤展示
+        mgr = GMSConfigManager()
+        cfg = mgr.get_config(config_id)
+        gms = GMSFrontendInterface(db, cfg, config_id=config_id)
         gms.set_selection_config(min_score=0, max_results=200000)
         mkt = "all" if stock_pool else market
         results, meta = gms.get_selection_results(
@@ -137,7 +134,8 @@ def run_gms_precompute(
             return_meta=True,
         )
         logger.info(
-            "[GMS预计算] 完成 date=%s market=%s pool=%s 返回=%s meta=%s",
+            "[GMS预计算] 完成 config_id=%s date=%s market=%s pool=%s 返回=%s meta=%s",
+            config_id,
             target_date,
             market,
             "custom" if stock_pool else "full",
@@ -145,9 +143,42 @@ def run_gms_precompute(
             meta,
         )
     except Exception as e:
-        logger.error("[GMS预计算] 失败 market=%s: %s", market, e, exc_info=True)
+        logger.error(
+            "[GMS预计算] 失败 config_id=%s market=%s: %s",
+            config_id,
+            market,
+            e,
+            exc_info=True,
+        )
     finally:
         db.close()
+
+
+def run_gms_precompute(
+    market: str,
+    stock_pool: Optional[List[str]] = None,
+    skip_weekend: bool = True,
+) -> None:
+    """
+    执行一次 GMS 全量扫描并写入 gms_signal_trace（已有记录会跳过计算）。
+    对 is_default 或 precompute_enabled 的每个参数版本分别预计算。
+
+    Args:
+        market: cn | hk | all（stock_pool 为 None 时有效）
+        stock_pool: 非空时按自定义列表计算，market 传 all
+        skip_weekend: 周六日跳过（与历史采集任务一致）
+    """
+    if skip_weekend and datetime.now().weekday() in (5, 6):
+        logger.info("[GMS预计算] 周末跳过 market=%s", market)
+        return
+
+    config_ids = _resolve_precompute_config_ids()
+    if not config_ids:
+        logger.warning("[GMS预计算] 无可用 config_id，跳过 market=%s", market)
+        return
+
+    for cid in config_ids:
+        run_gms_precompute_for_config(cid, market, stock_pool)
 
 
 def scheduled_gms_signals_cn() -> None:
@@ -161,13 +192,12 @@ def scheduled_gms_signals_hk() -> None:
 def scheduled_gms_signals_custom() -> None:
     codes = parse_gms_custom_stock_codes()
     if not codes:
-        logger.info("[GMS预计算] GMS_CUSTOM_STOCK_CODES 为空，跳过自定义池")
+        logger.info("[GMS预计算] GMS_CUSTOM_STOCK_CODES 为空，跳过 custom")
         return
     run_gms_precompute("all", stock_pool=codes)
 
 
 def scheduled_gms_signals_watchlist() -> None:
-    """全量自关注：所有用户 watchlist 中的股票代码并集，写入 gms_signal_trace。"""
     from backend_core.database.db import SessionLocal
 
     db = SessionLocal()
@@ -176,7 +206,6 @@ def scheduled_gms_signals_watchlist() -> None:
     finally:
         db.close()
     if not codes:
-        logger.info("[GMS预计算] 自关注列表(watchlist)并集为空，跳过")
+        logger.info("[GMS预计算] 全用户 watchlist 为空，跳过")
         return
-    logger.info("[GMS预计算] 自关注并集共 %s 只股票，开始写入 trace", len(codes))
     run_gms_precompute("all", stock_pool=codes)

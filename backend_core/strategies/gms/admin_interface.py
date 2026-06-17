@@ -84,6 +84,11 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
     return backtest_storage.get_report(report_id)
 
 
+def delete_report(report_id: str) -> bool:
+    """删除历史报告（已完成任务记录）。"""
+    return backtest_storage.delete_report(report_id)
+
+
 def download_report(
     report_id: str, variant: Optional[str] = None
 ) -> Optional[Tuple[bytes, str, str]]:

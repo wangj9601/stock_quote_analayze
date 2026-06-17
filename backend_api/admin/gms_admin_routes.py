@@ -3,8 +3,10 @@ GMS 回测管理端 API 路由
 前缀: /api/admin/gms
 """
 
+import copy
 import logging
 import sys
+import copy
 from typing import Optional, List, Literal, Tuple, Any
 
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
@@ -176,6 +178,48 @@ def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
     return None
 
 
+def _attach_strategy_config_snapshot(config: dict, strategy_config_id: Optional[int]) -> dict:
+    """固化 strategy_config_id 与 config_params_snapshot 到回测任务 config。"""
+    mgr = GMSConfigManager()
+    if strategy_config_id is not None:
+        row = mgr.get_config_row(int(strategy_config_id))
+        if not row:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        if not row.is_active:
+            raise HTTPException(status_code=400, detail="策略参数版本已禁用")
+        cid = int(strategy_config_id)
+    else:
+        cid = mgr.resolve_config_id(None)
+        row = mgr.get_config_row(cid)
+    cfg = mgr.get_config(cid)
+    config["strategy_config_id"] = cid
+    config["strategy_config_name"] = row.name if row else "default"
+    config["config_params_snapshot"] = copy.deepcopy(cfg)
+    return config
+
+
+def _attach_strategy_config_snapshot(config: dict, strategy_config_id: Optional[int]) -> dict:
+    """固化策略参数版本 ID 与快照，供回测可复现。"""
+    mgr = GMSConfigManager()
+    if strategy_config_id is not None:
+        row = mgr.get_config_row(int(strategy_config_id))
+        if not row:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        if not row.is_active:
+            raise HTTPException(status_code=400, detail="策略参数版本已禁用")
+        cid = int(row.id)
+        cfg_name = row.name
+    else:
+        cid = mgr.resolve_config_id(None)
+        row = mgr.get_config_row(cid)
+        cfg_name = row.name if row else "default"
+    cfg = mgr.get_config(cid)
+    config["strategy_config_id"] = cid
+    config["strategy_config_name"] = cfg_name
+    config["config_params_snapshot"] = copy.deepcopy(cfg)
+    return config
+
+
 # ---------- 请求体 ----------
 class BacktestCreateBody(BaseModel):
     task_name: Optional[str] = Field(None, description="任务名称")
@@ -231,6 +275,7 @@ class BacktestCreateBody(BaseModel):
     stock_code: Optional[str] = Field(None, description="单股回测时的股票代码，如 000001、00700")
     stock_pool: Optional[List[str]] = Field(None, description="自定义股票池代码列表")
     watchlist_user_id: Optional[int] = Field(None, description="stock_pool_mode=watchlist 时可选：指定用户ID")
+    strategy_config_id: Optional[int] = Field(None, ge=1, description="GMS 策略参数版本 ID，不传则用默认版本")
 
 
 @router.get("/watchlist-users")
@@ -286,6 +331,7 @@ async def get_gms_selection_results_from_trace(
     date: Optional[str] = Query(None, description="目标日期 YYYY-MM-DD，不传则使用 gms_signal_trace 表内最新日期"),
     limit: Optional[int] = Query(None, ge=1, description="最大返回条数"),
     min_strength: float = Query(0.3, ge=0.0, le=1.0, description="最低信号强度 0~1（对应总分 ×100）"),
+    config_id: Optional[int] = Query(None, ge=1, description="GMS 策略参数版本 ID，不传则用默认版本"),
     db: Session = Depends(get_db),
 ):
     """
@@ -293,7 +339,10 @@ async def get_gms_selection_results_from_trace(
     数据来自 **gms_signal_trace**；公开接口见 `GET /api/frontend/gms/selection-results`（同源逻辑）。
     """
     try:
-        payload, fallback_message = query_gms_signal_trace_selection(db, date, min_strength, limit)
+        resolved_config_id = GMSConfigManager().resolve_config_id(config_id)
+        payload, fallback_message = query_gms_signal_trace_selection(
+            db, date, min_strength, limit, config_id=resolved_config_id
+        )
         if fallback_message:
             payload["message"] = fallback_message
         return JSONResponse(payload)
@@ -359,6 +408,7 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
         task_name = (body.task_name or "").strip()
         if not task_name:
             task_name = _build_task_name_with_stocks(db, config)
+        _attach_strategy_config_snapshot(config, body.strategy_config_id)
         task_id = admin_interface.create_backtest(config, name=task_name or None)
         return {"success": True, "data": {"task_id": task_id}}
     except HTTPException:
@@ -473,13 +523,25 @@ async def download_report(
     return Response(content=data, media_type=media_type, headers={"Content-Disposition": disp})
 
 
+@router.delete("/reports/{report_id}")
+@router.post("/reports/{report_id}/delete")
+async def delete_report(report_id: str):
+    """删除历史报告。同时支持 DELETE 和 POST /delete 兼容生产环境。"""
+    ok = admin_interface.delete_report(report_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    return {"success": True}
+
+
 # ---------- config ----------
 @router.get("/config")
 async def get_config():
-    """读取 GMS 策略配置。"""
+    """读取 GMS 默认策略参数版本配置（兼容旧接口）。"""
     try:
-        cfg = GMSConfigManager().get_config()
-        return {"success": True, "data": cfg}
+        mgr = GMSConfigManager()
+        default_id = mgr.resolve_config_id(None)
+        cfg = mgr.get_config(default_id)
+        return {"success": True, "data": cfg, "config_id": default_id}
     except Exception as e:
         logger.exception("GMS config get 失败")
         raise HTTPException(status_code=500, detail=str(e))
@@ -509,7 +571,8 @@ async def update_config(body: ConfigUpdateBody):
         merged = deep_merge(current, body.config)
         if not mgr.save_config(merged):
             raise HTTPException(status_code=500, detail="保存配置失败")
-        return {"success": True, "data": mgr.get_config()}
+        default_id = mgr.resolve_config_id(None)
+        return {"success": True, "data": mgr.get_config(default_id), "config_id": default_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -517,21 +580,207 @@ async def update_config(body: ConfigUpdateBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---------- strategy-configs（GMS 策略参数版本） ----------
+class StrategyConfigCreateBody(BaseModel):
+    name: str = Field(..., description="版本名称，唯一")
+    version_label: Optional[str] = Field(None, description="语义版本号，如 1.0.0")
+    description: Optional[str] = Field(None, description="描述")
+    config_params: dict = Field(default_factory=dict, description="完整或部分参数，会与默认 merge")
+    is_active: bool = Field(True, description="是否启用")
+    is_default: bool = Field(False, description="是否设为默认")
+    precompute_enabled: bool = Field(False, description="是否参与定时预计算")
+    created_by: Optional[str] = Field(None, description="创建人")
+
+
+class StrategyConfigUpdateBody(BaseModel):
+    name: Optional[str] = Field(None, description="版本名称")
+    version_label: Optional[str] = Field(None, description="语义版本号")
+    description: Optional[str] = Field(None, description="描述")
+    config: Optional[dict] = Field(None, description="部分配置，深度合并")
+    is_active: Optional[bool] = Field(None, description="是否启用")
+    precompute_enabled: Optional[bool] = Field(None, description="是否参与预计算")
+    change_note: Optional[str] = Field(None, description="变更说明")
+
+
+class StrategyConfigCloneBody(BaseModel):
+    new_name: str = Field(..., description="新版本名称")
+    precompute_enabled: bool = Field(False, description="是否参与预计算")
+    created_by: Optional[str] = Field(None, description="创建人")
+
+
+@router.get("/strategy-configs")
+async def list_strategy_configs(
+    active_only: bool = Query(False, description="仅返回启用版本"),
+):
+    try:
+        mgr = GMSConfigManager()
+        return {"success": True, "data": mgr.list_configs(active_only=active_only)}
+    except Exception as e:
+        logger.exception("GMS strategy-configs list 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/strategy-configs/compare")
+async def compare_strategy_configs(
+    config_id_a: int = Query(..., ge=1),
+    config_id_b: int = Query(..., ge=1),
+):
+    try:
+        mgr = GMSConfigManager()
+        return {"success": True, "data": mgr.compare_configs(config_id_a, config_id_b)}
+    except Exception as e:
+        logger.exception("GMS strategy-configs compare 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/strategy-configs/{config_id}")
+async def get_strategy_config(config_id: int):
+    try:
+        mgr = GMSConfigManager()
+        row = mgr.get_config_row(config_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        data = mgr._serialize_config_row(row)
+        data["config_params"] = mgr.get_config(config_id)
+        return {"success": True, "data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("GMS strategy-config get 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/strategy-configs")
+async def create_strategy_config(body: StrategyConfigCreateBody):
+    try:
+        mgr = GMSConfigManager()
+        new_id = mgr.create_config(
+            name=body.name,
+            config_params=body.config_params,
+            version_label=body.version_label,
+            description=body.description,
+            is_active=body.is_active,
+            is_default=body.is_default,
+            precompute_enabled=body.precompute_enabled,
+            created_by=body.created_by,
+        )
+        row = mgr.get_config_row(new_id)
+        data = mgr._serialize_config_row(row)
+        data["config_params"] = mgr.get_config(new_id)
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.exception("GMS strategy-config create 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/strategy-configs/{config_id}")
+@router.post("/strategy-configs/{config_id}/update")
+async def update_strategy_config(config_id: int, body: StrategyConfigUpdateBody):
+    try:
+        mgr = GMSConfigManager()
+        if not mgr.get_config_row(config_id):
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        ok = mgr.update_config(
+            config_id,
+            body.config or {},
+            name=body.name,
+            version_label=body.version_label,
+            description=body.description,
+            is_active=body.is_active,
+            precompute_enabled=body.precompute_enabled,
+            change_note=body.change_note,
+        )
+        if not ok:
+            raise HTTPException(status_code=500, detail="更新失败")
+        row = mgr.get_config_row(config_id)
+        data = mgr._serialize_config_row(row)
+        data["config_params"] = mgr.get_config(config_id)
+        return {"success": True, "data": data}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("GMS strategy-config update 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/strategy-configs/{config_id}/clone")
+async def clone_strategy_config(config_id: int, body: StrategyConfigCloneBody):
+    try:
+        mgr = GMSConfigManager()
+        new_id = mgr.clone_config(
+            config_id,
+            body.new_name,
+            created_by=body.created_by,
+            precompute_enabled=body.precompute_enabled,
+        )
+        row = mgr.get_config_row(new_id)
+        data = mgr._serialize_config_row(row)
+        data["config_params"] = mgr.get_config(new_id)
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("GMS strategy-config clone 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/strategy-configs/{config_id}/default")
+async def set_strategy_config_default(config_id: int):
+    try:
+        mgr = GMSConfigManager()
+        if not mgr.get_config_row(config_id):
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        mgr.set_default(config_id)
+        row = mgr.get_config_row(config_id)
+        data = mgr._serialize_config_row(row)
+        data["config_params"] = mgr.get_config(config_id)
+        return {"success": True, "data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("GMS strategy-config set default 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/strategy-configs/{config_id}/deactivate")
+async def deactivate_strategy_config(config_id: int):
+    try:
+        mgr = GMSConfigManager()
+        mgr.deactivate_config(config_id)
+        row = mgr.get_config_row(config_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        data = mgr._serialize_config_row(row)
+        data["config_params"] = mgr.get_config(config_id)
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("GMS strategy-config deactivate 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---------- GMS 策略版本与观察股管理 ----------
 class StrategyVersionCreateBody(BaseModel):
     strategy_code: str = Field("GMS", description="策略编码")
-    version_name: str = Field(..., description="版本名称")
-    version_no: int = Field(..., ge=1, description="版本号")
-    description: Optional[str] = Field(None, description="版本描述")
+    version_name: str = Field(..., description="观察股分组名称")
+    version_no: int = Field(..., ge=1, description="分组序号")
+    description: Optional[str] = Field(None, description="分组描述")
+    config_id: Optional[int] = Field(None, ge=1, description="绑定的 GMS 策略参数版本 ID")
     is_active: bool = Field(True, description="是否启用")
     created_by: Optional[str] = Field(None, description="创建人")
 
 
 class StrategyVersionUpdateBody(BaseModel):
     strategy_code: Optional[str] = Field(None, description="策略编码")
-    version_name: Optional[str] = Field(None, description="版本名称")
-    version_no: Optional[int] = Field(None, ge=1, description="版本号")
-    description: Optional[str] = Field(None, description="版本描述")
+    version_name: Optional[str] = Field(None, description="观察股分组名称")
+    version_no: Optional[int] = Field(None, ge=1, description="分组序号")
+    description: Optional[str] = Field(None, description="分组描述")
+    config_id: Optional[int] = Field(None, ge=1, description="绑定的 GMS 策略参数版本 ID")
     is_active: Optional[bool] = Field(None, description="是否启用")
     created_by: Optional[str] = Field(None, description="创建人")
 
@@ -660,6 +909,7 @@ def _serialize_strategy_version(row: GMSStrategyVersion) -> dict:
         "version_name": row.version_name,
         "version_no": row.version_no,
         "description": row.description,
+        "config_id": getattr(row, "config_id", None),
         "is_active": bool(row.is_active),
         "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -739,6 +989,7 @@ async def create_strategy_version(body: StrategyVersionCreateBody, db: Session =
         version_name=body.version_name.strip(),
         version_no=body.version_no,
         description=body.description,
+        config_id=body.config_id,
         is_active=body.is_active,
         created_by=(body.created_by or "").strip() or None,
     )
@@ -764,6 +1015,8 @@ async def update_strategy_version(version_id: int, body: StrategyVersionUpdateBo
         row.version_no = body.version_no
     if body.description is not None:
         row.description = body.description
+    if body.config_id is not None:
+        row.config_id = body.config_id
     if body.is_active is not None:
         row.is_active = bool(body.is_active)
     if body.created_by is not None:

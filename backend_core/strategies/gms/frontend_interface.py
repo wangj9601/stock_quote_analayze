@@ -5,8 +5,10 @@ GMS 前端选股接口
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from datetime import datetime
+
+from sqlalchemy import cast, distinct, func, String
 
 from .data_loader import GMSDataLoader
 from .strategy_engine import GMSStrategyEngine
@@ -31,6 +33,87 @@ def _infer_market_type(code: str) -> str:
     if _is_etf(code):
         return "ETF"
     return "HK"
+
+
+def _normalize_cn_pool_code(code: Any) -> str:
+    if code is None:
+        return ""
+    s = str(code).strip()
+    if s.isdigit() and len(s) < 6:
+        return s.zfill(6)
+    return s
+
+
+def _normalize_hk_pool_code(code: Any) -> str:
+    if code is None:
+        return ""
+    s = str(code).strip()
+    if s.isdigit() and len(s) < 5:
+        return s.zfill(5)
+    return s
+
+
+def _normalize_etf_pool_code(code: Any) -> str:
+    return str(code).strip() if code is not None else ""
+
+
+def _resolve_pool_date_for_quotes(db, requested: str, model) -> str:
+    """
+    将请求日解析为行情表上可用的池基准日：
+    - 晚于表内最新日：钳到 MAX(date)
+    - 当日无采集记录：回退 MAX(date)
+    - 否则使用请求日
+    """
+    requested = str(requested or "").strip()[:10]
+    if not requested:
+        requested = datetime.now().strftime("%Y-%m-%d")
+
+    col = model.date
+    row_max = db.query(func.max(col)).scalar()
+    if row_max is None:
+        return requested
+    if hasattr(row_max, "strftime"):
+        max_s = row_max.strftime("%Y-%m-%d")
+    else:
+        max_s = str(row_max).strip()[:10]
+
+    if requested > max_s:
+        return max_s
+
+    exists = (
+        db.query(model.code)
+        .filter(cast(col, String) == requested)
+        .limit(1)
+        .first()
+    )
+    if exists is not None:
+        return requested
+    return max_s
+
+
+def _distinct_codes_from_quotes(
+    db,
+    model,
+    date_str: str,
+    normalize_fn: Callable[[Any], str],
+) -> List[str]:
+    """取指定交易日行情表内 DISTINCT code（即当日已采集股票）。"""
+    rows = (
+        db.query(distinct(model.code))
+        .filter(cast(model.date, String) == date_str)
+        .order_by(model.code)
+        .all()
+    )
+    out: List[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not row or row[0] is None:
+            continue
+        code = normalize_fn(row[0])
+        if code and code not in seen:
+            seen.add(code)
+            out.append(code)
+    return out
 
 
 def _trace_row_to_result(row) -> dict:
@@ -99,7 +182,7 @@ def _trace_row_to_result(row) -> dict:
     }
 
 
-def _save_result_to_trace(db, result: dict, date: str) -> None:
+def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
     """
     将 engine.screen 单条结果完整写入 gms_signal_trace，便于后续优先读表。
     回测与选股均依赖此表：优先读 trace，缺失时增量计算并回填。
@@ -115,6 +198,7 @@ def _save_result_to_trace(db, result: dict, date: str) -> None:
             code=code,
             date=date,
             market_type=market_type,
+            config_id=int(config_id),
             score_total=result.get("score_total"),
             score_accumulation=result.get("score_accumulation"),
             score_momentum=result.get("score_momentum"),
@@ -155,9 +239,17 @@ def _save_result_to_trace(db, result: dict, date: str) -> None:
 class GMSFrontendInterface:
     """GMS 选股前端接口"""
 
-    def __init__(self, db, config: Optional[dict] = None):
+    def __init__(
+        self,
+        db,
+        config: Optional[dict] = None,
+        config_id: Optional[int] = None,
+    ):
         self.db = db
-        self.config = config or GMSConfigManager().get_config()
+        self._mgr = GMSConfigManager()
+        self.config_id = self._mgr.resolve_config_id(config_id)
+        self.config = config or self._mgr.get_config(self.config_id)
+        self.use_trace = self._mgr.should_use_trace(self.config_id)
         self.min_score = 0
         self.max_results = 10000
 
@@ -231,30 +323,34 @@ class GMSFrontendInterface:
         uniq_requested = list(dict.fromkeys(requested))
         codes_in = [str(c).strip() for c, _ in uniq_requested]
         mts_in = list({str(mt or "").strip() for _, mt in uniq_requested})
-        rows = (
-            self.db.query(GMSSignalTrace)
-            .filter(
-                GMSSignalTrace.date == date,
-                GMSSignalTrace.code.in_(codes_in),
-                GMSSignalTrace.market_type.in_(mts_in),
-            )
-            .all()
-        )
-        # 统一用字符串 (code, market_type) 做 key，避免 DB 返回 int 导致 603667 与 "603667" 对不上
-        def _key(c, mt):
-            return (str(c).strip(), str(mt or "").strip())
-        have_keys = set()
         from_trace: List[dict] = []
-        for row in rows:
-            if row.score_total is None:
-                continue
-            key = _key(row.code, row.market_type)
-            if key in have_keys:
-                continue
-            have_keys.add(key)
-            from_trace.append(_trace_row_to_result(row))
+        have_keys = set()
+        if self.use_trace:
+            rows = (
+                self.db.query(GMSSignalTrace)
+                .filter(
+                    GMSSignalTrace.date == date,
+                    GMSSignalTrace.code.in_(codes_in),
+                    GMSSignalTrace.market_type.in_(mts_in),
+                    GMSSignalTrace.config_id == self.config_id,
+                )
+                .all()
+            )
+            # 统一用字符串 (code, market_type) 做 key，避免 DB 返回 int 导致 603667 与 "603667" 对不上
+            def _key(c, mt):
+                return (str(c).strip(), str(mt or "").strip())
+            for row in rows:
+                if row.score_total is None:
+                    continue
+                key = _key(row.code, row.market_type)
+                if key in have_keys:
+                    continue
+                have_keys.add(key)
+                from_trace.append(_trace_row_to_result(row))
+        else:
+            def _key(c, mt):
+                return (str(c).strip(), str(mt or "").strip())
 
-        # 2) 找出需要计算的 (code, market_type)
         missing = [(code, mt) for code, mt in uniq_requested if _key(code, mt) not in have_keys]
         computed: List[dict] = []
         if missing and not trace_only:
@@ -285,7 +381,8 @@ class GMSFrontendInterface:
                         )
                         for r in sub:
                             computed.append(r)
-                            _save_result_to_trace(self.db, r, date)
+                            if self.use_trace:
+                                _save_result_to_trace(self.db, r, date, self.config_id)
                         logger.info(
                             "GMS 策略信号计算进度 %s(%s) %s：已完成 %d/%d 只",
                             label,
@@ -326,6 +423,8 @@ class GMSFrontendInterface:
             "computed_count": len(computed),
             "requested_count": len(uniq_requested),
             "trace_complete": len(missing) == 0,
+            "config_id": self.config_id,
+            "use_trace": self.use_trace,
         }
         if return_meta:
             return combined, meta
@@ -333,61 +432,70 @@ class GMSFrontendInterface:
 
     def _get_stock_pool(self, date: str, market: str) -> List[str]:
         """
-        按数据来源获取股票池：
-        - cn（全部A股）：A 股基本信息表 stock_basic_info 全部代码
-        - hk（全部港股）：港股基本信息表 stock_basic_info_hk 全部代码
-        - etf（全部ETF）：基金基本信息表 fund_basic_info 中 collect_enabled=true 的代码
-        - all：A股 + ETF + 港股
+        按当日采集行情获取股票池（非基本信息表全量）：
+        - cn：historical_quotes 在基准日的 DISTINCT code
+        - hk：historical_quotes_hk
+        - etf：fund_historical_quotes
+        - all：三者并集
+        基准日优先使用请求 date；若该日尚无采集则回退至对应行情表最新有数据交易日。
         """
         try:
-            from backend_api.models import StockBasicInfo, StockBasicInfoHK
+            from backend_api.models import FundHistoricalQuotes, HistoricalQuotes, HistoricalQuotesHK
+
+            req_date = str(date).strip()[:10]
 
             if market == "cn":
-                rows = self.db.query(StockBasicInfo.code).all()
-                codes = [str(r[0]).zfill(6) if isinstance(r[0], int) else str(r[0]) for r in rows if r[0] is not None]
-                logger.info(f"GMS 股票池(全部A股): {len(codes)} 只")
-            elif market == "hk":
-                rows = self.db.query(StockBasicInfoHK.code).all()
-                # 港股代码统一为 5 位补零（与 mean_frequency_resonance_indicators 表一致）
-                codes = []
-                for r in rows:
-                    if r[0] is None:
-                        continue
-                    c = str(r[0]).strip()
-                    if c.isdigit():
-                        codes.append(c.zfill(5))
-                    else:
-                        codes.append(c)
-                logger.info(f"GMS 股票池(全部港股): {len(codes)} 只")
-            elif market == "etf":
-                from backend_api.models import FundBasicInfo
-                rows = self.db.query(FundBasicInfo.code).filter(
-                    FundBasicInfo.collect_enabled == True
-                ).all()
-                codes = [str(r[0]).strip() for r in rows if r[0] is not None]
-                logger.info(f"GMS 股票池(全部ETF): {len(codes)} 只")
-            elif market == "all":
-                cn_rows = self.db.query(StockBasicInfo.code).all()
-                cn_codes = [str(r[0]).zfill(6) if isinstance(r[0], int) else str(r[0]) for r in cn_rows if r[0] is not None]
-                hk_rows = self.db.query(StockBasicInfoHK.code).all()
-                hk_codes = []
-                for r in hk_rows:
-                    if r[0] is None:
-                        continue
-                    c = str(r[0]).strip()
-                    hk_codes.append(c.zfill(5) if c.isdigit() else c)
-                # ETF 基金代码
-                from backend_api.models import FundBasicInfo
-                etf_rows = self.db.query(FundBasicInfo.code).filter(
-                    FundBasicInfo.collect_enabled == True
-                ).all()
-                etf_codes = [str(r[0]).strip() for r in etf_rows if r[0] is not None]
-                codes = cn_codes + etf_codes + hk_codes
-                logger.info(f"GMS 股票池(全部A+ETF+港股): {len(codes)} 只")
-            else:
-                return []
+                eff = _resolve_pool_date_for_quotes(self.db, req_date, HistoricalQuotes)
+                codes = _distinct_codes_from_quotes(
+                    self.db, HistoricalQuotes, eff, _normalize_cn_pool_code
+                )
+                logger.info("GMS 股票池(全部A股, %s): %s 只", eff, len(codes))
+                return codes
 
-            return codes
+            if market == "hk":
+                eff = _resolve_pool_date_for_quotes(self.db, req_date, HistoricalQuotesHK)
+                codes = _distinct_codes_from_quotes(
+                    self.db, HistoricalQuotesHK, eff, _normalize_hk_pool_code
+                )
+                logger.info("GMS 股票池(全部港股, %s): %s 只", eff, len(codes))
+                return codes
+
+            if market == "etf":
+                eff = _resolve_pool_date_for_quotes(self.db, req_date, FundHistoricalQuotes)
+                codes = _distinct_codes_from_quotes(
+                    self.db, FundHistoricalQuotes, eff, _normalize_etf_pool_code
+                )
+                logger.info("GMS 股票池(全部ETF, %s): %s 只", eff, len(codes))
+                return codes
+
+            if market == "all":
+                eff_cn = _resolve_pool_date_for_quotes(self.db, req_date, HistoricalQuotes)
+                cn_codes = _distinct_codes_from_quotes(
+                    self.db, HistoricalQuotes, eff_cn, _normalize_cn_pool_code
+                )
+                eff_hk = _resolve_pool_date_for_quotes(self.db, req_date, HistoricalQuotesHK)
+                hk_codes = _distinct_codes_from_quotes(
+                    self.db, HistoricalQuotesHK, eff_hk, _normalize_hk_pool_code
+                )
+                eff_etf = _resolve_pool_date_for_quotes(self.db, req_date, FundHistoricalQuotes)
+                etf_codes = _distinct_codes_from_quotes(
+                    self.db, FundHistoricalQuotes, eff_etf, _normalize_etf_pool_code
+                )
+                codes = cn_codes + etf_codes + hk_codes
+                logger.info(
+                    "GMS 股票池(全部A+ETF+港股, 请求日=%s): %s 只 [A股 %s@%s, ETF %s@%s, 港股 %s@%s]",
+                    req_date,
+                    len(codes),
+                    len(cn_codes),
+                    eff_cn,
+                    len(etf_codes),
+                    eff_etf,
+                    len(hk_codes),
+                    eff_hk,
+                )
+                return codes
+
+            return []
         except Exception as e:
             logger.error(f"GMS 获取股票池失败: {e}", exc_info=True)
             return []

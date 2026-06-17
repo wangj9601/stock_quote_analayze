@@ -59,7 +59,24 @@
     </el-card>
 
     <el-card shadow="never">
-      <template #header><span class="font-semibold">GMS 策略参数</span></template>
+      <template #header><span class="font-semibold">GMS 策略参数版本</span></template>
+      <el-select v-model="selectedConfigId" placeholder="选择参数版本（默认）" clearable filterable class="max-w-md" @change="onConfigChange">
+        <el-option
+          v-for="c in strategyConfigs"
+          :key="c.id"
+          :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
+          :value="c.id"
+        />
+      </el-select>
+      <div class="mt-2 flex flex-wrap items-center gap-3">
+        <el-button size="small" :disabled="!selectedConfigId" @click="syncParamsFromServer">从服务端同步参数</el-button>
+        <el-checkbox v-model="paramOverride">临时用下方表单覆盖服务端参数</el-checkbox>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">默认仅传 <code>config_id</code>，与网站选股页一致；勾选覆盖后才附加下方各字段。</p>
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header><span class="font-semibold">GMS 策略参数（临时覆盖，可选）</span></template>
       <div class="params-grid">
         <div v-for="row in primaryParamRows" :key="row.k" class="param-row">
           <label class="param-label">{{ row.label }}</label>
@@ -235,7 +252,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
-import { gmsApiService, type GmsStrategyScreeningResult } from '@/services/gmsApi'
+import { gmsApiService, type GmsStrategyScreeningResult, type GMSStrategyConfig } from '@/services/gmsApi'
 import GmsScoreDetailBlock from './GmsScoreDetailBlock.vue'
 import {
   mergeGmsScoreDetail,
@@ -244,6 +261,7 @@ import {
   gmsCsvScoreDetailStr,
   type GmsStockRow,
 } from '@/utils/gmsScreeningFormat'
+import { configParamsToFlatForm } from '@/utils/gmsFlatFormParams'
 
 const STORAGE_KEY = 'adminGmsParams'
 const GMS_PAGE_SIZE = 50
@@ -253,6 +271,10 @@ const scope = ref<'cn' | 'hk' | 'etf' | 'watchlist' | 'gms_watchlist'>('cn')
 const gmsWatchlistMarket = ref<'all' | 'cn' | 'hk'>('all')
 const watchlistUserId = ref<number | undefined>(undefined)
 const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
+const strategyConfigs = ref<GMSStrategyConfig[]>([])
+const selectedConfigId = ref<number | undefined>(undefined)
+/** 为 true 时请求附带下方表单参数覆盖服务端版本 */
+const paramOverride = ref(false)
 
 const gmsForm = reactive({
   /** 非空时请求带 code=，后端仅计算该股（忽略数据来源 scope） */
@@ -341,6 +363,7 @@ function loadParams() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
     const data = JSON.parse(raw) as Record<string, unknown>
+    if (data.config_id != null) selectedConfigId.value = Number(data.config_id)
     Object.assign(gmsForm, { ...gmsForm, ...data })
   } catch {
     /* ignore */
@@ -349,7 +372,10 @@ function loadParams() {
 
 function saveParams() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(gmsForm))
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...gmsForm, config_id: selectedConfigId.value ?? null })
+    )
     saveStatus.value = '已保存到本地'
     ElMessage.success('GMS 参数已保存')
   } catch {
@@ -366,32 +392,37 @@ function buildSearchParams(includePagination: boolean): URLSearchParams {
   if (scope.value === 'gms_watchlist') {
     q.set('gms_watchlist_market', gmsWatchlistMarket.value)
   }
+  if (selectedConfigId.value) {
+    q.set('config_id', String(selectedConfigId.value))
+  }
   const f = gmsForm
   const singleCode = String(f.single_stock_code ?? '').trim()
   if (singleCode) q.set('code', singleCode)
   if (f.start_date) q.set('date', f.start_date)
-  if (f.ratio_d20_max != null) q.set('ratio_d20_max', String(f.ratio_d20_max))
-  if (f.volume_ratio_max != null) q.set('volume_ratio_max', String(f.volume_ratio_max))
-  if (f.left_buy_min_accumulation != null) q.set('left_buy_min_accumulation', String(f.left_buy_min_accumulation))
-  if (f.volume_ratio_min != null) q.set('volume_ratio_min', String(f.volume_ratio_min))
-  if (f.accumulation_fz_min != null) q.set('accumulation_fz_min', String(f.accumulation_fz_min))
-  if (f.balance_ratio_max != null) q.set('balance_ratio_max', String(f.balance_ratio_max))
-  if (f.watch_threshold != null) q.set('watch_threshold', String(f.watch_threshold))
-  if (f.alert_threshold != null) q.set('alert_threshold', String(f.alert_threshold))
-  if (f.overbought_ratio != null) q.set('overbought_ratio', String(f.overbought_ratio))
-  if (f.accumulation_s_threshold != null) q.set('accumulation_s_threshold', String(f.accumulation_s_threshold))
-  if (f.accumulation_a_threshold != null) q.set('accumulation_a_threshold', String(f.accumulation_a_threshold))
-  if (f.momentum_full_threshold != null) q.set('momentum_full_threshold', String(f.momentum_full_threshold))
-  if (f.momentum_batch_threshold != null) q.set('momentum_batch_threshold', String(f.momentum_batch_threshold))
-  if (f.instant_deviation_stable_days != null) {
-    q.set('instant_deviation_stable_days', String(f.instant_deviation_stable_days))
+  if (paramOverride.value) {
+    if (f.ratio_d20_max != null) q.set('ratio_d20_max', String(f.ratio_d20_max))
+    if (f.volume_ratio_max != null) q.set('volume_ratio_max', String(f.volume_ratio_max))
+    if (f.left_buy_min_accumulation != null) q.set('left_buy_min_accumulation', String(f.left_buy_min_accumulation))
+    if (f.volume_ratio_min != null) q.set('volume_ratio_min', String(f.volume_ratio_min))
+    if (f.accumulation_fz_min != null) q.set('accumulation_fz_min', String(f.accumulation_fz_min))
+    if (f.balance_ratio_max != null) q.set('balance_ratio_max', String(f.balance_ratio_max))
+    if (f.watch_threshold != null) q.set('watch_threshold', String(f.watch_threshold))
+    if (f.alert_threshold != null) q.set('alert_threshold', String(f.alert_threshold))
+    if (f.overbought_ratio != null) q.set('overbought_ratio', String(f.overbought_ratio))
+    if (f.accumulation_s_threshold != null) q.set('accumulation_s_threshold', String(f.accumulation_s_threshold))
+    if (f.accumulation_a_threshold != null) q.set('accumulation_a_threshold', String(f.accumulation_a_threshold))
+    if (f.momentum_full_threshold != null) q.set('momentum_full_threshold', String(f.momentum_full_threshold))
+    if (f.momentum_batch_threshold != null) q.set('momentum_batch_threshold', String(f.momentum_batch_threshold))
+    if (f.instant_deviation_stable_days != null) {
+      q.set('instant_deviation_stable_days', String(f.instant_deviation_stable_days))
+    }
+    if (f.weight_acc_fz != null) q.set('weight_acc_fz', String(f.weight_acc_fz))
+    if (f.weight_acc_balance != null) q.set('weight_acc_balance', String(f.weight_acc_balance))
+    if (f.weight_acc_volume != null) q.set('weight_acc_volume', String(f.weight_acc_volume))
+    if (f.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', String(f.weight_mom_ratio_d1))
+    if (f.weight_mom_deviation != null) q.set('weight_mom_deviation', String(f.weight_mom_deviation))
+    if (f.weight_mom_volume != null) q.set('weight_mom_volume', String(f.weight_mom_volume))
   }
-  if (f.weight_acc_fz != null) q.set('weight_acc_fz', String(f.weight_acc_fz))
-  if (f.weight_acc_balance != null) q.set('weight_acc_balance', String(f.weight_acc_balance))
-  if (f.weight_acc_volume != null) q.set('weight_acc_volume', String(f.weight_acc_volume))
-  if (f.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', String(f.weight_mom_ratio_d1))
-  if (f.weight_mom_deviation != null) q.set('weight_mom_deviation', String(f.weight_mom_deviation))
-  if (f.weight_mom_volume != null) q.set('weight_mom_volume', String(f.weight_mom_volume))
   q.set('min_score', '0')
   if (includePagination) {
     q.set('use_pagination', 'true')
@@ -467,6 +498,25 @@ function onWatchlistUserChange() {
 
 function onGmsWatchlistMarketChange() {
   clearScreeningResults()
+}
+
+function onConfigChange() {
+  void syncParamsFromServer(false)
+  saveParams()
+  clearScreeningResults()
+}
+
+async function syncParamsFromServer(showToast = true) {
+  const cid = selectedConfigId.value
+  if (!cid) return
+  try {
+    const data = await gmsApiService.getStrategyConfig(cid)
+    const flat = configParamsToFlatForm((data.config_params || {}) as Record<string, unknown>)
+    Object.assign(gmsForm, flat)
+    if (showToast) ElMessage.success(`已同步参数：${data.name || cid}`)
+  } catch (e: unknown) {
+    ElMessage.error(e instanceof Error ? e.message : '同步失败')
+  }
 }
 
 function signalStrength(row: GmsStockRow) {
@@ -664,6 +714,18 @@ async function exportExcel() {
 
 onMounted(async () => {
   loadParams()
+  try {
+    strategyConfigs.value = await gmsApiService.listStrategyConfigs(true)
+    if (selectedConfigId.value == null) {
+      const def = strategyConfigs.value.find((c) => c.is_default)
+      if (def) selectedConfigId.value = def.id
+    }
+    if (selectedConfigId.value) {
+      await syncParamsFromServer(false)
+    }
+  } catch {
+    strategyConfigs.value = []
+  }
   try {
     watchlistUsers.value = await gmsApiService.getWatchlistUsers()
   } catch {
