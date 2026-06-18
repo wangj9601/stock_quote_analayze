@@ -30,6 +30,39 @@ def _ensure_concept_tables(conn) -> None:
                 conn.execute(text(s))
 
 
+def _ensure_industry_constituents_table(conn) -> None:
+    """industry_board_constituents 可能尚未建表（仅跑过概念迁移、未跑行业成分股迁移时）。"""
+    conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS industry_board_constituents (
+                board_code VARCHAR(20) NOT NULL,
+                stock_code VARCHAR(20) NOT NULL,
+                stock_name VARCHAR(100),
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (board_code, stock_code)
+            )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_industry_board_constituents_stock_code
+            ON industry_board_constituents (stock_code)
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_industry_board_constituents_board_code
+            ON industry_board_constituents (board_code)
+            """
+        )
+    )
+
+
 def upgrade(dry_run: bool = False) -> dict:
     stats = {
         "basic_migrated": 0,
@@ -40,6 +73,7 @@ def upgrade(dry_run: bool = False) -> dict:
     }
     with engine.connect() as conn:
         _ensure_concept_tables(conn)
+        _ensure_industry_constituents_table(conn)
 
         stats["basic_migrated"] = conn.execute(
             text(
