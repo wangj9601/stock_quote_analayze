@@ -640,6 +640,13 @@ except ImportError as e:
     print(f"admin_stock_basic_router 导入失败: {e}")
     admin_stock_basic_router = None
 
+try:
+    from .admin.board_constituents import router as admin_board_constituents_router
+    print("admin_board_constituents_router 导入成功")
+except ImportError as e:
+    print(f"admin_board_constituents_router 导入失败: {e}")
+    admin_board_constituents_router = None
+
 # 尝试导入采集日历管理路由
 try:
     from .admin.trading_calendar import router as trading_calendar_router
@@ -696,6 +703,10 @@ if admin_quotes_router is not None:
 if admin_stock_basic_router is not None:
     app.include_router(admin_stock_basic_router)
     print("admin stock basic路由注册成功")
+
+if admin_board_constituents_router is not None:
+    app.include_router(admin_board_constituents_router)
+    print("admin board constituents路由注册成功")
 
 # 注册采集日历管理路由
 if trading_calendar_router is not None:

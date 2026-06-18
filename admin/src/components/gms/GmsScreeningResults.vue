@@ -69,7 +69,7 @@
         />
       </el-select>
       <div class="mt-2 flex flex-wrap items-center gap-3">
-        <el-button size="small" :disabled="!selectedConfigId" @click="syncParamsFromServer">从服务端同步参数</el-button>
+        <el-button size="small" :disabled="!selectedConfigId" @click="() => syncParamsFromServer()">从服务端同步参数</el-button>
         <el-checkbox v-model="paramOverride">临时用下方表单覆盖服务端参数</el-checkbox>
       </div>
       <p class="text-xs text-gray-500 mt-2">默认仅传 <code>config_id</code>，与网站选股页一致；勾选覆盖后才附加下方各字段。</p>

@@ -10,6 +10,7 @@ from backend_core.data_collectors.akshare.industry_board_normalize import (
     industry_board_to_english_df,
     normalize_ths_industry_df,
 )
+from backend_core.data_collectors.akshare.board_code_rules import is_concept_board_code
 
 try:
     from backend_api.utils.industry_board_query import lookup_leading_code_from_constituents
@@ -157,30 +158,55 @@ class RealtimeStockIndustryBoardCollector:
             # 更新行业板块基本信息表
             # 使用 executemany 优化性能? 或者简单的循环
             # 这里为了简单和处理冲突，使用循环
+            session.execute(text('''
+                CREATE TABLE IF NOT EXISTS concept_board_basic_info (
+                    board_code VARCHAR(20) PRIMARY KEY,
+                    board_name VARCHAR(100),
+                    create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+                )
+            '''))
+            session.commit()
+
             basic_info_count = 0
+            concept_basic_count = 0
             for _, row in df.iterrows():
                 # 确保 board_code 存在且不为空
                 if pd.isna(row.get('board_code')) or row.get('board_code') == '':
                     print(f"Skipping row with empty board_code: {row.get('board_name')}")
                     continue
-                
+
+                bcode = str(row['board_code']).strip()
                 try:
-                    session.execute(text('''
-                        INSERT INTO industry_board_basic_info (board_code, board_name, create_date)
-                        VALUES (:board_code, :board_name, :create_date)
-                        ON CONFLICT (board_code) DO UPDATE SET
-                            board_name = EXCLUDED.board_name,
-                            create_date = EXCLUDED.create_date
-                    '''), {
-                        'board_code': row['board_code'],
-                        'board_name': row['board_name'],
-                        'create_date': now
-                    })
-                    basic_info_count += 1
+                    if is_concept_board_code(bcode):
+                        session.execute(text('''
+                            INSERT INTO concept_board_basic_info (board_code, board_name, create_date)
+                            VALUES (:board_code, :board_name, :create_date)
+                            ON CONFLICT (board_code) DO UPDATE SET
+                                board_name = EXCLUDED.board_name,
+                                create_date = EXCLUDED.create_date
+                        '''), {
+                            'board_code': bcode,
+                            'board_name': row['board_name'],
+                            'create_date': now
+                        })
+                        concept_basic_count += 1
+                    else:
+                        session.execute(text('''
+                            INSERT INTO industry_board_basic_info (board_code, board_name, create_date)
+                            VALUES (:board_code, :board_name, :create_date)
+                            ON CONFLICT (board_code) DO UPDATE SET
+                                board_name = EXCLUDED.board_name,
+                                create_date = EXCLUDED.create_date
+                        '''), {
+                            'board_code': bcode,
+                            'board_name': row['board_name'],
+                            'create_date': now
+                        })
+                        basic_info_count += 1
                 except Exception as e:
                     print(f"Error inserting basic info for {row.get('board_code')}: {e}")
-            
-            print(f"Inserted/updated {basic_info_count} records in industry_board_basic_info")
+
+            print(f"Inserted/updated {basic_info_count} industry + {concept_basic_count} concept basic_info")
             session.commit()  # Commit basic info changes
             
             columns = list(df.columns)
@@ -189,6 +215,8 @@ class RealtimeStockIndustryBoardCollector:
             # 插入新数据（upsert）
             for _, row in df.iterrows():
                 if pd.isna(row.get("board_code")) or str(row.get("board_code", "")).strip() == "":
+                    continue
+                if is_concept_board_code(str(row.get("board_code"))):
                     continue
                 value_dict = {}
                 for col in columns:

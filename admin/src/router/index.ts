@@ -43,6 +43,11 @@ const routes = [
         component: () => import('@/views/StockBasicInfoView.vue')
       },
       {
+        path: 'board-constituents',
+        name: 'BoardConstituents',
+        component: () => import('@/views/BoardConstituentsView.vue')
+      },
+      {
         path: 'indicators',
         name: 'Indicators',
         component: () => import('@/views/IndicatorsView.vue')

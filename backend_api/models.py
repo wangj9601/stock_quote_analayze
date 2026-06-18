@@ -478,6 +478,15 @@ class IndustryBoardConstituent(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
 
+class ConceptBoardConstituent(Base):
+    """东财概念板块成分股（board_code ↔ stock_code 多对多）。"""
+    __tablename__ = "concept_board_constituents"
+    board_code = Column(String(20), primary_key=True)
+    stock_code = Column(String(20), primary_key=True)
+    stock_name = Column(String(100))
+    updated_at = Column(DateTime, default=datetime.now)
+
+
 class IndustryBoardRealtimeQuotes(Base):
     __tablename__ = "industry_board_realtime_quotes"
     board_code = Column(String(20), primary_key=True)

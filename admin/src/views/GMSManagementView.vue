@@ -6,7 +6,7 @@
         <p class="page-subtitle">目标命中率回测 - 任务 / 报告 / 策略配置</p>
       </div>
       <div class="header-actions">
-        <el-button type="success" @click="refreshSystemStatus">
+        <el-button type="success" @click="() => refreshSystemStatus()">
           <el-icon><Refresh /></el-icon>
           刷新状态
         </el-button>

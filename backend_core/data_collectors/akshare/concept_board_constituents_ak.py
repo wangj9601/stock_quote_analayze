@@ -1,5 +1,5 @@
 """
-东财行业板块成分股采集：industry_board_basic_info -> stock_board_industry_cons_em -> industry_board_constituents
+东财概念板块成分股采集：concept_board_basic_info -> stock_board_concept_cons_em -> concept_board_constituents
 """
 from __future__ import annotations
 
@@ -7,14 +7,15 @@ import os
 import time
 import traceback
 from datetime import datetime
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import akshare as ak
-import pandas as pd
 from sqlalchemy import text
 
+from backend_core.data_collectors.akshare.industry_board_constituents_ak import (
+    parse_cons_dataframe,
+)
 from backend_core.database.db import SessionLocal
-from backend_core.data_collectors.akshare.board_code_rules import is_industry_board_code
 
 
 def _env_float(key: str, default: float) -> float:
@@ -24,57 +25,24 @@ def _env_float(key: str, default: float) -> float:
         return default
 
 
-def normalize_stock_code(raw: Any) -> Optional[str]:
-    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
-        return None
-    s = str(raw).strip()
-    if not s or s.lower() == "nan":
-        return None
-    if s.isdigit():
-        return s.zfill(6)
-    return s
-
-
-def parse_cons_dataframe(df: pd.DataFrame) -> List[Tuple[str, str]]:
-    """解析成分股 DataFrame，返回 [(stock_code, stock_name), ...]。"""
-    if df is None or df.empty:
-        return []
-    code_col = "代码" if "代码" in df.columns else None
-    name_col = "名称" if "名称" in df.columns else None
-    if not code_col:
-        return []
-    rows: List[Tuple[str, str]] = []
-    for _, row in df.iterrows():
-        code = normalize_stock_code(row.get(code_col))
-        if not code:
-            continue
-        name = ""
-        if name_col and name_col in row.index:
-            nv = row.get(name_col)
-            if nv is not None and not pd.isna(nv):
-                name = str(nv).strip()
-        rows.append((code, name))
-    return rows
-
-
-class IndustryBoardConstituentsCollector:
+class ConceptBoardConstituentsCollector:
     log_table = "realtime_collect_operation_logs"
 
     def __init__(self) -> None:
-        self.interval_sec = _env_float("INDUSTRY_CONS_API_INTERVAL_SEC", 0.3)
-        self.max_retries = int(os.getenv("INDUSTRY_CONS_MAX_RETRIES", "2"))
+        self.interval_sec = _env_float("CONCEPT_CONS_API_INTERVAL_SEC", 0.3)
+        self.max_retries = int(os.getenv("CONCEPT_CONS_MAX_RETRIES", "2"))
 
     def _load_board_codes(self, session) -> List[Tuple[str, Optional[str]]]:
         rows = session.execute(
-            text("SELECT board_code, board_name FROM industry_board_basic_info ORDER BY board_code")
+            text("SELECT board_code, board_name FROM concept_board_basic_info ORDER BY board_code")
         ).fetchall()
-        return [(str(r[0]).strip(), r[1]) for r in rows if r[0] and is_industry_board_code(str(r[0]))]
+        return [(str(r[0]).strip(), r[1]) for r in rows if r[0]]
 
     def fetch_board_constituents(self, board_code: str) -> List[Tuple[str, str]]:
         last_err: Optional[Exception] = None
         for attempt in range(self.max_retries + 1):
             try:
-                df = ak.stock_board_industry_cons_em(symbol=board_code)
+                df = ak.stock_board_concept_cons_em(symbol=board_code)
                 return parse_cons_dataframe(df)
             except Exception as e:
                 last_err = e
@@ -86,7 +54,7 @@ class IndustryBoardConstituentsCollector:
         self, session, board_code: str, constituents: List[Tuple[str, str]], now: datetime
     ) -> int:
         session.execute(
-            text("DELETE FROM industry_board_constituents WHERE board_code = :board_code"),
+            text("DELETE FROM concept_board_constituents WHERE board_code = :board_code"),
             {"board_code": board_code},
         )
         inserted = 0
@@ -94,7 +62,7 @@ class IndustryBoardConstituentsCollector:
             session.execute(
                 text(
                     """
-                    INSERT INTO industry_board_constituents
+                    INSERT INTO concept_board_constituents
                         (board_code, stock_code, stock_name, updated_at)
                     VALUES (:board_code, :stock_code, :stock_name, :updated_at)
                     ON CONFLICT (board_code, stock_code) DO UPDATE SET
@@ -131,7 +99,7 @@ class IndustryBoardConstituentsCollector:
                     """
                 ),
                 {
-                    "operation_type": "industry_board_constituents",
+                    "operation_type": "concept_board_constituents",
                     "operation_desc": operation_desc,
                     "affected_rows": affected_rows,
                     "status": status,
@@ -157,11 +125,11 @@ class IndustryBoardConstituentsCollector:
             else:
                 boards = self._load_board_codes(session)
             if not boards:
-                print("[成分股] industry_board_basic_info 为空，请先运行行业板块实时采集")
-                self.write_log("成分股同步", 0, "fail", "无板块列表")
+                print("[概念成分股] concept_board_basic_info 为空，请先同步概念板块列表")
+                self.write_log("概念成分股同步", 0, "fail", "无板块列表")
                 return
 
-            print(f"[成分股] 开始同步 {len(boards)} 个板块，间隔 {self.interval_sec}s")
+            print(f"[概念成分股] 开始同步 {len(boards)} 个板块，间隔 {self.interval_sec}s")
             for i, (board_code, board_name) in enumerate(boards, 1):
                 label = board_name or board_code
                 try:
@@ -171,26 +139,26 @@ class IndustryBoardConstituentsCollector:
                     total_rows += n
                     ok_boards += 1
                     if i % 20 == 0 or i == len(boards):
-                        print(f"[成分股] {i}/{len(boards)} {label} -> {n} 只")
+                        print(f"[概念成分股] {i}/{len(boards)} {label} -> {n} 只")
                 except Exception as e:
                     session.rollback()
                     fail_boards.append(board_code)
-                    print(f"[成分股] 失败 {label} ({board_code}): {e}")
+                    print(f"[概念成分股] 失败 {label} ({board_code}): {e}")
                 time.sleep(self.interval_sec)
 
             msg = f"成功 {ok_boards}/{len(boards)} 板块，共 {total_rows} 条成分"
             if fail_boards:
                 msg += f"；失败 {len(fail_boards)} 个: {','.join(fail_boards[:10])}"
-            print(f"[成分股] {msg}")
+            print(f"[概念成分股] {msg}")
             self.write_log(msg, total_rows, "success" if not fail_boards else "partial", msg if fail_boards else None)
         except Exception as e:
             session.rollback()
             tb = traceback.format_exc()
-            print(f"[成分股] 异常: {e}\n{tb}")
-            self.write_log("成分股同步异常", 0, "fail", str(e) + "\n" + tb)
+            print(f"[概念成分股] 异常: {e}\n{tb}")
+            self.write_log("概念成分股同步异常", 0, "fail", str(e) + "\n" + tb)
         finally:
             session.close()
 
 
 if __name__ == "__main__":
-    IndustryBoardConstituentsCollector().run()
+    ConceptBoardConstituentsCollector().run()
