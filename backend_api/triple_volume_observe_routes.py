@@ -9,6 +9,7 @@ from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user_or_admin, get_current_admin
@@ -78,6 +79,8 @@ def _list_observe_impl(
     page: int,
     page_size: int,
     board_segment: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = None,
 ) -> ObserveListResponse:
     q = db.query(TripleVolumeObserveStock)
     q = filter_query_by_market_and_board(
@@ -90,8 +93,25 @@ def _list_observe_impl(
     if status:
         q = q.filter(TripleVolumeObserveStock.status == status)
     total = q.count()
+
+    sb = (sort_by or "").strip().lower()
+    so = (sort_order or "desc").strip().lower()
+    if so not in ("asc", "desc"):
+        so = "desc"
+    if sb == "volume_ratio":
+        col = TripleVolumeObserveStock.volume_ratio_actual
+        if so == "asc":
+            order_cols = (nulls_last(col.asc()), TripleVolumeObserveStock.code.asc())
+        else:
+            order_cols = (nulls_last(col.desc()), TripleVolumeObserveStock.code.asc())
+    else:
+        order_cols = (
+            TripleVolumeObserveStock.observe_trade_date.desc(),
+            TripleVolumeObserveStock.code.asc(),
+        )
+
     rows = (
-        q.order_by(TripleVolumeObserveStock.observe_trade_date.desc(), TripleVolumeObserveStock.code)
+        q.order_by(*order_cols)
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -180,12 +200,16 @@ def list_observe_stocks(
         description="A股代码段：CYB创业板 SZ_SME中小板 KCB科创板 MAIN沪深主板；仅 market=CN 或未传 market 时生效",
     ),
     status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(
+        None, description="排序字段：volume_ratio（量比）；默认按观察日降序"
+    ),
+    sort_order: Optional[str] = Query("desc", description="asc 或 desc，仅 sort_by 生效时有效"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     _principal: Union[User, Admin] = Depends(get_current_user_or_admin),
     db: Session = Depends(get_db),
 ):
-    return _list_observe_impl(db, market, status, page, page_size, board)
+    return _list_observe_impl(db, market, status, page, page_size, board, sort_by, sort_order)
 
 
 @admin_router.get("/list", response_model=ObserveListResponse)
@@ -193,12 +217,14 @@ def admin_list_observe_stocks(
     market: Optional[str] = Query(None, description="CN 或 HK"),
     board: Optional[str] = Query(None, description="CYB SZ_SME KCB MAIN"),
     status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None, description="排序字段：volume_ratio"),
+    sort_order: Optional[str] = Query("desc", description="asc 或 desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     _principal: Union[User, Admin] = Depends(get_current_user_or_admin),
     db: Session = Depends(get_db),
 ):
-    return _list_observe_impl(db, market, status, page, page_size, board)
+    return _list_observe_impl(db, market, status, page, page_size, board, sort_by, sort_order)
 
 
 @router.get("/export")

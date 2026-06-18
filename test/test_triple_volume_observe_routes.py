@@ -130,3 +130,48 @@ def test_export_columns_match_observe_pool_table(export_client, tvo_sample):
     assert abs(float(row["量比"]) - 3.17) < 0.001
     assert row["状态"] == "待观察"
     assert row["复核时间"] == "" or pd.isna(row["复核时间"])
+
+
+def test_list_sort_by_volume_ratio_desc(export_client, memory_db):
+    memory_db.add(
+        TripleVolumeObserveStock(
+            market="CN",
+            code="000001",
+            name="A",
+            observe_trade_date=date(2026, 6, 18),
+            volume_ratio_actual=3.1,
+            status="观察中",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+    )
+    memory_db.add(
+        TripleVolumeObserveStock(
+            market="CN",
+            code="000002",
+            name="B",
+            observe_trade_date=date(2026, 6, 17),
+            volume_ratio_actual=5.6,
+            status="观察中",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+    )
+    memory_db.commit()
+
+    res = export_client.get(
+        "/api/stock/triple-volume-observe/list",
+        params={"sort_by": "volume_ratio", "sort_order": "desc", "page_size": 50},
+    )
+    assert res.status_code == 200
+    codes = [it["code"] for it in res.json()["items"]]
+    assert codes[0] == "000002"
+    assert codes[1] == "000001"
+
+    res_asc = export_client.get(
+        "/api/stock/triple-volume-observe/list",
+        params={"sort_by": "volume_ratio", "sort_order": "asc", "page_size": 50},
+    )
+    codes_asc = [it["code"] for it in res_asc.json()["items"]]
+    assert codes_asc[0] == "000001"
+    assert codes_asc[1] == "000002"

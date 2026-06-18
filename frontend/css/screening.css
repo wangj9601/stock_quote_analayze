@@ -239,6 +239,21 @@
     flex-shrink: 0;
     margin-left: auto;
 }
+.results-table th.th-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.results-table th.th-sortable:hover {
+    color: #2563eb;
+}
+.results-table th.th-sortable.is-sorted {
+    color: #1d4ed8;
+}
+.results-table th.th-sortable .sort-indicator {
+    font-size: 0.75em;
+    opacity: 0.85;
+}
 .observe-source-panel {
     display: none;
 }
@@ -1201,7 +1216,8 @@
 }
 
 #resultsContainer-gms .action-links,
-#resultsTable-gms-trade-observe .action-links {
+#resultsTable-gms-trade-observe .action-links,
+#resultsTable-tvo-trade-observe .action-links {
     display: flex;
     justify-content: center;
     align-items: center;

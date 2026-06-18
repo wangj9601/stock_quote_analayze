@@ -15,6 +15,12 @@ const ScreeningPage = {
     gmsSubPanel: 'signals',
     /** 已加入交易观察的 CN:code / HK:code */
     gmsTradeObserveCodeSet: new Set(),
+    /** 已加入 3倍量交易观察的 CN:code / HK:code */
+    tvoTradeObserveCodeSet: new Set(),
+    /** 日终爆量列表量比排序：null=默认观察日；asc/desc=按 volume_ratio_actual */
+    dailyTvoVolumeRatioSort: null,
+    /** 最近一次日终爆量列表数据 */
+    lastDailyTvoItems: [],
     /** 最近一次 GMS 筛选基准交易日（与接口 search_date 一致） */
     lastGmsSearchDate: null,
     /** 当前选中的 GMS 策略参数版本 ID（服务端） */
@@ -89,6 +95,9 @@ const ScreeningPage = {
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');
+        }
+        if (strategy === 'volume-shrink-breakout') {
+            void this.loadTvoTradeObserveCodes();
         }
     },
 
@@ -404,14 +413,252 @@ const ScreeningPage = {
         });
     },
 
+    _tvoTradeObserveKey(market, code) {
+        const m = String(market || 'CN').trim().toUpperCase();
+        const c = String(code || '').trim();
+        return `${m}:${c}`;
+    },
+
+    async loadTvoTradeObserveCodes() {
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            this.tvoTradeObserveCodeSet = new Set();
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/triple-volume-trade-observe/codes`);
+            if (!res.ok) {
+                this.tvoTradeObserveCodeSet = new Set();
+                return;
+            }
+            const codes = await res.json();
+            this.tvoTradeObserveCodeSet = new Set(Array.isArray(codes) ? codes : []);
+        } catch (_) {
+            this.tvoTradeObserveCodeSet = new Set();
+        }
+    },
+
+    _buildTvoTradeObserveSnapshot(row) {
+        if (!row || typeof row !== 'object') return {};
+        return {
+            observe_trade_date: row.observe_trade_date,
+            prev_trade_date: row.prev_trade_date,
+            prev_volume: row.prev_volume,
+            curr_volume: row.curr_volume,
+            volume_ratio_actual: row.volume_ratio_actual,
+            status: row.status,
+            vsb_evaluated_at: row.vsb_evaluated_at,
+        };
+    },
+
+    async addTvoTradeObserveFromDailyRow(rowIndex, btnEl) {
+        const row = Array.isArray(this.lastDailyTvoItems) ? this.lastDailyTvoItems[rowIndex] : null;
+        if (!row) {
+            if (window.CommonUtils) CommonUtils.showToast('未找到该行数据，请刷新列表后重试', 'warning');
+            return;
+        }
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (window.CommonUtils) CommonUtils.showToast('请先登录后再加入交易观察', 'warning');
+            window.location.href = 'login.html';
+            return;
+        }
+        const code = String(row.code || '').trim();
+        const market = String(row.market || 'CN').trim().toUpperCase();
+        const key = this._tvoTradeObserveKey(market, code);
+        if (this.tvoTradeObserveCodeSet.has(key)) {
+            if (window.CommonUtils) CommonUtils.showToast('已在3倍量交易观察列表中', 'info');
+            return;
+        }
+        const observeDate = row.observe_trade_date ? String(row.observe_trade_date).trim().slice(0, 10) : '';
+        if (!observeDate) {
+            if (window.CommonUtils) CommonUtils.showToast('缺少观察日，无法加入交易观察', 'warning');
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.textContent = '加入中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/triple-volume-trade-observe/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code,
+                    market,
+                    name: row.name || code,
+                    observe_trade_date: observeDate,
+                    snapshot: this._buildTvoTradeObserveSnapshot(row),
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            this.tvoTradeObserveCodeSet.add(key);
+            if (window.CommonUtils) CommonUtils.showToast(`已加入3倍量交易观察：${row.name || code}`, 'success');
+            if (btnEl) {
+                btnEl.textContent = '已观察';
+                btnEl.classList.add('is-added');
+                btnEl.disabled = true;
+            }
+            if (this.vsbSubPanel === 'trade-observe') {
+                void this.refreshTvoTradeObserveList();
+            }
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '加入交易观察失败', 'error');
+            if (btnEl) {
+                btnEl.textContent = '观察';
+                btnEl.disabled = false;
+            }
+        }
+    },
+
+    async refreshTvoTradeObserveList() {
+        const errEl = document.getElementById('tvoTradeObserveError');
+        const loadingEl = document.getElementById('tvoTradeObserveLoading');
+        const tbody = document.getElementById('tvoTradeObserveTableBody');
+        const countEl = document.getElementById('tvoTradeObserveCount');
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (errEl) {
+                errEl.textContent = '请先登录后查看交易观察列表';
+                errEl.style.display = 'block';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">请先登录</td></tr>';
+            }
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+        if (errEl) {
+            errEl.style.display = 'none';
+            errEl.textContent = '';
+        }
+        if (loadingEl) loadingEl.style.display = 'flex';
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/triple-volume-trade-observe/list?page=1&page_size=500`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加载失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const items = data.items || [];
+            this.tvoTradeObserveCodeSet = new Set(
+                items.map((it) => this._tvoTradeObserveKey(it.market, it.code))
+            );
+            this.renderTvoTradeObserveTable(items);
+            if (countEl) countEl.textContent = `共 ${data.total || items.length} 只`;
+            this._refreshTvoTradeObserveButtonsInDailyTable();
+        } catch (e) {
+            if (errEl) {
+                errEl.textContent = e.message || '加载交易观察列表失败';
+                errEl.style.display = 'block';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    },
+
+    renderTvoTradeObserveTable(items) {
+        const tbody = document.getElementById('tvoTradeObserveTableBody');
+        if (!tbody) return;
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无交易观察股票，请在「观察股池 → 日终爆量」中点击「观察」加入</td></tr>';
+            return;
+        }
+        const esc = this._tvoEscapeHtml.bind(this);
+        const fmtNum = this._tvoFmtNum.bind(this);
+        const fmtDt = (iso) => {
+            if (!iso) return '--';
+            const s = String(iso);
+            return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
+        };
+        tbody.innerHTML = items.map((it) => {
+            const snap = it.snapshot || {};
+            const ratio =
+                snap.volume_ratio_actual != null && snap.volume_ratio_actual !== ''
+                    ? Number(snap.volume_ratio_actual).toFixed(2)
+                    : '--';
+            const status = snap.status || '--';
+            const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            return `
+                <tr data-observe-id="${it.id}">
+                    <td>${esc(it.market)}</td>
+                    <td><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
+                    <td>${esc(it.observe_trade_date || '--')}</td>
+                    <td>${esc(ratio)}</td>
+                    <td>${esc(status)}</td>
+                    <td>${esc(fmtDt(it.updated_at || it.created_at))}</td>
+                    <td>
+                        <div class="action-links">
+                            <a href="${href}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">行情</a>
+                            <button type="button" class="gms-op-btn tvo-trade-observe-remove" data-id="${it.id}" title="移出交易观察">移除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    async removeTvoTradeObserve(itemId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) btnEl.disabled = true;
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/triple-volume-trade-observe/${itemId}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `移除失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            if (window.CommonUtils) CommonUtils.showToast('已移出3倍量交易观察列表', 'success');
+            await this.loadTvoTradeObserveCodes();
+            void this.refreshTvoTradeObserveList();
+            this._refreshTvoTradeObserveButtonsInDailyTable();
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '移除失败', 'error');
+            if (btnEl) btnEl.disabled = false;
+        }
+    },
+
+    _refreshTvoTradeObserveButtonsInDailyTable() {
+        const tbody = document.getElementById('dailyTvoObserveTableBody');
+        if (!tbody) return;
+        tbody.querySelectorAll('.tvo-trade-observe-add').forEach((btn) => {
+            const rowIdx = parseInt(btn.getAttribute('data-row') || '-1', 10);
+            const row = Array.isArray(this.lastDailyTvoItems) ? this.lastDailyTvoItems[rowIdx] : null;
+            if (!row) return;
+            const market = String(row.market || 'CN').trim().toUpperCase();
+            const code = String(row.code || '').trim();
+            const key = this._tvoTradeObserveKey(market, code);
+            if (this.tvoTradeObserveCodeSet.has(key)) {
+                btn.textContent = '已观察';
+                btn.classList.add('is-added');
+                btn.disabled = true;
+            } else {
+                btn.textContent = '观察';
+                btn.classList.remove('is-added');
+                btn.disabled = false;
+            }
+        });
+    },
+
     initVsbIntegratedTabs() {
         const pick = document.getElementById('vsbSubTabPick');
         const obs = document.getElementById('vsbSubTabObserve');
-        [pick, obs].forEach((btn) => {
+        const tradeObs = document.getElementById('vsbSubTabTradeObserve');
+        [pick, obs, tradeObs].forEach((btn) => {
             if (!btn) return;
             btn.addEventListener('click', () => {
                 const sub = btn.getAttribute('data-vsb-sub');
-                if (sub === 'pick' || sub === 'observe') {
+                if (sub === 'pick' || sub === 'observe' || sub === 'trade-observe') {
                     this.switchVsbSubPanel(sub);
                 }
             });
@@ -432,6 +679,34 @@ const ScreeningPage = {
         if (bx) {
             bx.addEventListener('click', () => this.exportObserveActiveXlsx());
         }
+        const dailyTvoBody = document.getElementById('dailyTvoObserveTableBody');
+        if (dailyTvoBody) {
+            dailyTvoBody.addEventListener('click', (e) => {
+                const btn = e.target.closest('.tvo-trade-observe-add');
+                if (!btn || btn.disabled) return;
+                const idx = btn.getAttribute('data-row');
+                if (idx == null) return;
+                void this.addTvoTradeObserveFromDailyRow(parseInt(idx, 10), btn);
+            });
+        }
+        const tvoTradeObsRefresh = document.getElementById('tvoTradeObserveRefreshBtn');
+        if (tvoTradeObsRefresh) {
+            tvoTradeObsRefresh.addEventListener('click', () => this.refreshTvoTradeObserveList());
+        }
+        const tvoTradeObsBody = document.getElementById('tvoTradeObserveTableBody');
+        if (tvoTradeObsBody) {
+            tvoTradeObsBody.addEventListener('click', (e) => {
+                const rm = e.target.closest('.tvo-trade-observe-remove');
+                if (!rm) return;
+                e.preventDefault();
+                const id = rm.getAttribute('data-id');
+                if (id) void this.removeTvoTradeObserve(parseInt(id, 10), rm);
+            });
+        }
+        const dailyTvoSortRatio = document.getElementById('dailyTvoSortRatio');
+        if (dailyTvoSortRatio) {
+            dailyTvoSortRatio.addEventListener('click', () => this.toggleDailyTvoVolumeRatioSort());
+        }
     },
 
     applyVsbHashOnLoad() {
@@ -446,6 +721,13 @@ const ScreeningPage = {
                 this.vsbObserveSource = 'vsb';
             }
             this.switchVsbSubPanel('observe');
+            return;
+        }
+        if (h === 'vsb-trade-observe') {
+            this._vsbOpenFromHash = true;
+            this.switchStrategy('volume-shrink-breakout');
+            this._vsbOpenFromHash = false;
+            this.switchVsbSubPanel('trade-observe');
             return;
         }
         if (h === 'vsb-pick') {
@@ -464,12 +746,16 @@ const ScreeningPage = {
         document.querySelectorAll('.vsb-sub-panel').forEach((p) => {
             const show =
                 (sub === 'pick' && p.id === 'vsb-sub-pick-wrap') ||
-                (sub === 'observe' && p.id === 'vsb-sub-observe-wrap');
+                (sub === 'observe' && p.id === 'vsb-sub-observe-wrap') ||
+                (sub === 'trade-observe' && p.id === 'vsb-sub-trade-observe-wrap');
             p.classList.toggle('active', show);
         });
         if (sub === 'observe') {
             this._syncObserveInnerTabsFromState();
             this.refreshObserveActiveList();
+        }
+        if (sub === 'trade-observe') {
+            this.refreshTvoTradeObserveList();
         }
         this._replaceVsbScreeningHash();
     },
@@ -502,6 +788,8 @@ const ScreeningPage = {
             let suffix = '#vsb-pick';
             if (this.vsbSubPanel === 'observe') {
                 suffix = this.vsbObserveSource === 'daily' ? '#vsb-observe-daily' : '#vsb-observe';
+            } else if (this.vsbSubPanel === 'trade-observe') {
+                suffix = '#vsb-trade-observe';
             }
             window.history.replaceState(null, '', 'screening.html' + suffix);
         } catch (_) {}
@@ -636,6 +924,33 @@ const ScreeningPage = {
         return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
     },
 
+    toggleDailyTvoVolumeRatioSort() {
+        if (this.dailyTvoVolumeRatioSort === null) {
+            this.dailyTvoVolumeRatioSort = 'desc';
+        } else if (this.dailyTvoVolumeRatioSort === 'desc') {
+            this.dailyTvoVolumeRatioSort = 'asc';
+        } else {
+            this.dailyTvoVolumeRatioSort = null;
+        }
+        this._updateDailyTvoSortHeader();
+        if (this.vsbObserveSource === 'daily') {
+            void this.loadDailyTripleVolumeObserveList();
+        }
+    },
+
+    _updateDailyTvoSortHeader() {
+        const th = document.getElementById('dailyTvoSortRatio');
+        if (!th) return;
+        const ind = th.querySelector('.sort-indicator');
+        const order = this.dailyTvoVolumeRatioSort;
+        th.classList.toggle('is-sorted', order === 'asc' || order === 'desc');
+        th.classList.toggle('sort-desc', order === 'desc');
+        th.classList.toggle('sort-asc', order === 'asc');
+        if (ind) {
+            ind.textContent = order === 'desc' ? ' ▼' : order === 'asc' ? ' ▲' : '';
+        }
+    },
+
     async loadDailyTripleVolumeObserveList() {
         const apiBase = this.API_BASE_URL || '';
         const marketEl = document.getElementById('tvoFilterMarket');
@@ -645,11 +960,16 @@ const ScreeningPage = {
             err.style.display = 'none';
             err.textContent = '';
         }
+        await this.loadTvoTradeObserveCodes();
         const mv = marketEl ? marketEl.value : '';
         const status = statusEl ? statusEl.value : '';
         const qs = new URLSearchParams({ page: '1', page_size: '200' });
         this._applyObserveMarketBoardToQs(qs, mv);
         if (status) qs.set('status', status);
+        if (this.dailyTvoVolumeRatioSort === 'asc' || this.dailyTvoVolumeRatioSort === 'desc') {
+            qs.set('sort_by', 'volume_ratio');
+            qs.set('sort_order', this.dailyTvoVolumeRatioSort);
+        }
         const url = `${apiBase}/api/stock/triple-volume-observe/list?${qs.toString()}`;
         const fetchFn = typeof smartFetch === 'function' ? smartFetch : fetch;
         let res;
@@ -683,14 +1003,15 @@ const ScreeningPage = {
         if (!tbody) return;
         tbody.innerHTML = '';
         const items = data.items || [];
+        this.lastDailyTvoItems = items;
         if (items.length === 0) {
             const tr = document.createElement('tr');
-            tr.innerHTML = '<td colspan="11" class="empty-state">暂无数据</td>';
+            tr.innerHTML = '<td colspan="12" class="empty-state">暂无数据</td>';
             tbody.appendChild(tr);
         } else {
             const esc = this._tvoEscapeHtml.bind(this);
             const fmtNum = this._tvoFmtNum.bind(this);
-            items.forEach((row) => {
+            items.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 const up = row.updated_at
                     ? String(row.updated_at).replace('T', ' ').slice(0, 19)
@@ -702,6 +1023,13 @@ const ScreeningPage = {
                     row.volume_ratio_actual != null && row.volume_ratio_actual !== ''
                         ? Number(row.volume_ratio_actual).toFixed(2)
                         : '';
+                const market = String(row.market || 'CN').trim().toUpperCase();
+                const code = String(row.code || '').trim();
+                const observeKey = this._tvoTradeObserveKey(market, code);
+                const already = this.tvoTradeObserveCodeSet.has(observeKey);
+                const btnLabel = already ? '已观察' : '观察';
+                const btnClass = already ? ' is-added' : '';
+                const btnDisabled = already ? ' disabled' : '';
                 tr.innerHTML =
                     '<td>' + esc(row.market) + '</td>' +
                     '<td>' + esc(row.code) + '</td>' +
@@ -713,7 +1041,10 @@ const ScreeningPage = {
                     '<td>' + esc(ratio) + '</td>' +
                     '<td>' + esc(row.status) + '</td>' +
                     '<td>' + esc(ev) + '</td>' +
-                    '<td>' + esc(up) + '</td>';
+                    '<td>' + esc(up) + '</td>' +
+                    '<td><button type="button" class="gms-op-btn gms-op-btn--primary tvo-trade-observe-add' +
+                    btnClass + '" data-row="' + index + '" title="加入3倍量交易观察"' +
+                    btnDisabled + '>' + btnLabel + '</button></td>';
                 tbody.appendChild(tr);
             });
         }
@@ -721,6 +1052,7 @@ const ScreeningPage = {
         if (pager) {
             pager.textContent = '共 ' + (data.total || 0) + ' 条，本页 ' + items.length + ' 条';
         }
+        this._updateDailyTvoSortHeader();
     },
 
     async exportVsbObserveStocksXlsx() {

@@ -1278,6 +1278,30 @@ class GmsTradeObserveHistory(Base):
     user = relationship("User", backref="gms_trade_observe_history")
 
 
+class TripleVolumeTradeObserveStock(Base):
+    """用户 3倍量策略交易观察股：日终爆量列表点击「交易观察」加入。"""
+
+    __tablename__ = "triple_volume_trade_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    observe_trade_date = Column(Date, nullable=True, index=True)
+    observe_snapshot_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="triple_volume_trade_observe_stocks")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "market", "code", name="uq_tvo_trade_observe_user_market_code"
+        ),
+    )
+
+
 class VsbObserveStock(Base):
     """VSB 选股观察股：策略筛选命中后写入（与 volume_shrink_breakout_signals 同源触发）"""
 

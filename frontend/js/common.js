@@ -48,6 +48,7 @@ async function smartFetch(url, options = {}) {
         '/api/admin/',
         '/api/simtrade',
         '/api/stock/triple-volume-observe',
+        '/api/stock/triple-volume-trade-observe',
         '/api/stock/vsb-observe-stocks'
     ];
 
