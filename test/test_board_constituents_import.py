@@ -83,10 +83,26 @@ class TestBoardConstituentsImport:
         assert _normalize_eastmoney_stock_name("云从科技-UW") == "云从科技"
         assert _normalize_eastmoney_stock_name("云天励飞-U") == "云天励飞"
 
+    def test_normalize_eastmoney_name_space_and_fullwidth(self):
+        assert _normalize_eastmoney_stock_name("鲁 泰Ａ") == "鲁泰A"
+        assert _normalize_eastmoney_stock_name("张　裕Ａ") == "张裕A"
+
     def test_pick_best_code_prefers_bse_over_neeq(self):
         picked, all_codes = _pick_best_code(["430564", "920564"])
         assert picked == "920564"
         assert set(all_codes) == {"430564", "920564"}
+
+    def test_resolve_eastmoney_spaced_fullwidth_name(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.all.return_value = [
+            ("000726", "鲁泰A"),
+        ]
+        rows = [{"stock_code": "", "stock_name": "鲁 泰Ａ"}]
+        resolved, issues = resolve_rows_stock_codes(db, rows)
+        assert len(resolved) == 1
+        assert resolved[0]["stock_code"] == "000726"
+        assert resolved[0]["stock_name"] == "鲁 泰Ａ"
+        assert not issues
 
     def test_resolve_eastmoney_suffix_names(self):
         db = MagicMock()

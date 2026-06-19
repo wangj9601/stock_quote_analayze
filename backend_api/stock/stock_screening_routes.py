@@ -1057,7 +1057,7 @@ async def get_gms_strategy(
     date: str = Query(None, description="目标日期 YYYY-MM-DD"),
     limit: int = Query(None, ge=1, description="最大返回数量"),
     min_score: float = Query(0, ge=0, le=100, description="最低总分阈值"),
-    scope: str = Query("all", description="股票范围: all/cn/hk/etf/watchlist/gms_watchlist"),
+    scope: str = Query("all", description="股票范围: all/cn/hk/etf/watchlist/gms_watchlist/industry_board"),
     watchlist_user_id: Optional[int] = Query(
         None,
         ge=1,
@@ -1066,6 +1066,10 @@ async def get_gms_strategy(
     gms_watchlist_market: str = Query(
         "all",
         description="scope=gms_watchlist 时筛选市场: all(全部) / cn(A股) / hk(港股)，对应表字段 market A/HK",
+    ),
+    industry_board_code: Optional[str] = Query(
+        None,
+        description="scope=industry_board 时必填：行业板块代码（如 IT服务、半导体）",
     ),
     # 前端传入的策略参数（覆盖 gms_config.json 默认值）
     accumulation_fz_min: Optional[float] = Query(None, description="蓄势 F/Z 下限"),
@@ -1116,7 +1120,8 @@ async def get_gms_strategy(
 ):
     """
     GMS 均值引力与动量突变策略选股。
-    数据来源由 scope 决定：watchlist=当前用户自选股；gms_watchlist=管理端 GMS 观察股表（启用版本且 status=active）；cn/hk=全市场。
+    数据来源由 scope 决定：watchlist=当前用户自选股；gms_watchlist=管理端 GMS 观察股表（启用版本且 status=active）；
+    industry_board=指定行业板块成分股；cn/hk/etf=全市场对应品种。
     """
     if not GMS_AVAILABLE:
         return JSONResponse(
@@ -1284,6 +1289,47 @@ async def get_gms_strategy(
                 )
             market = "all"
             logger.info("GMS 数据来源=GMS观察股 market_filter=%s 股票数=%s", mraw, len(stock_pool))
+        elif scope == "industry_board":
+            from backend_api.models import IndustryBoardConstituent
+
+            bcode = str(industry_board_code or "").strip()
+            if not bcode:
+                raise HTTPException(status_code=400, detail="scope=industry_board 时需传 industry_board_code")
+            rows_ib = (
+                db.query(IndustryBoardConstituent)
+                .filter(IndustryBoardConstituent.board_code == bcode)
+                .all()
+            )
+            raw_codes = [
+                str(getattr(r, "stock_code", "") or "").strip()
+                for r in rows_ib
+                if getattr(r, "stock_code", None) is not None and str(getattr(r, "stock_code", "")).strip()
+            ]
+            stock_pool = list(dict.fromkeys(_normalize_stock_code_for_gms_pool(c) for c in raw_codes))
+            stock_pool = [c for c in stock_pool if c]
+            stock_pool_size = len(stock_pool)
+            if not stock_pool:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": target_date,
+                        "strategy_name": "GMS均值引力动量策略",
+                        "scope": "industry_board",
+                        "industry_board_code": bcode,
+                        "message": f"行业板块「{bcode}」成分股为空（请在管理端维护板块成分股）",
+                        "paging": {
+                            "enabled": use_pagination,
+                            "page": 1,
+                            "page_size": page_size if use_pagination else 0,
+                            "total": 0,
+                            "total_pages": 0,
+                        },
+                    }
+                )
+            market = "cn"
+            logger.info("GMS 数据来源=行业板块 board=%s 股票数=%s", bcode, len(stock_pool))
         elif scope == "cn":
             market = "cn"
         elif scope == "hk":
@@ -1637,6 +1683,7 @@ async def get_gms_strategy(
                 "min_score": min_score,
                 "scope": scope,
                 "stock_pool_size": stock_pool_size,
+                "industry_board_code": industry_board_code if scope == "industry_board" else None,
                 "use_pagination": use_pagination,
                 "page": page_eff,
                 "page_size": page_size if use_pagination else total_all,

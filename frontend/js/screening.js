@@ -25,6 +25,8 @@ const ScreeningPage = {
     lastGmsSearchDate: null,
     /** 当前选中的 GMS 策略参数版本 ID（服务端） */
     gmsConfigId: null,
+    /** 行业板块下拉是否已加载 */
+    _gmsIndustryBoardsLoaded: false,
 
     // 初始化
     async init() {
@@ -90,7 +92,9 @@ const ScreeningPage = {
         if (strategy === 'gms') {
             void this.initGmsStrategyConfig();
             this.syncGmsWatchlistMarketWrap();
+            this.syncGmsIndustryBoardWrap();
             this.syncGmsSingleStockWrap();
+            void this.loadGmsIndustryBoardOptions();
             void this.loadGmsTradeObserveCodes();
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
@@ -1141,6 +1145,50 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
+    /** 显示/隐藏「行业板块」选择行 */
+    syncGmsIndustryBoardWrap() {
+        const wrap = document.getElementById('gmsIndustryBoardWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="gmsScope"]:checked');
+        const show = checked && checked.value === 'industry_board';
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
+    /** 加载行业板块下拉选项 */
+    async loadGmsIndustryBoardOptions() {
+        const sel = document.getElementById('gmsIndustryBoardSelect');
+        if (!sel) return;
+        if (this._gmsIndustryBoardsLoaded && sel.options.length > 1) return;
+        const prev = sel.value;
+        try {
+            const res = await fetch(`${this.API_BASE_URL}/api/market/industry_board`);
+            const data = await res.json();
+            sel.innerHTML = '';
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '请选择行业板块';
+            sel.appendChild(placeholder);
+            const boards = data.success && Array.isArray(data.data) ? data.data : [];
+            boards.sort((a, b) => String(a.board_name || a.board_code).localeCompare(
+                String(b.board_name || b.board_code),
+                'zh-CN'
+            ));
+            boards.forEach((b) => {
+                const opt = document.createElement('option');
+                opt.value = b.board_code;
+                opt.textContent = b.board_name
+                    ? `${b.board_name} (${b.board_code})`
+                    : String(b.board_code || '');
+                sel.appendChild(opt);
+            });
+            if (prev) sel.value = prev;
+            this._gmsIndustryBoardsLoaded = true;
+        } catch (e) {
+            console.warn('[GMS] 加载行业板块列表失败', e);
+            sel.innerHTML = '<option value="">加载失败，请刷新页面</option>';
+        }
+    },
+
     /** 显示/隐藏「单只股票」输入行 */
     syncGmsSingleStockWrap() {
         const wrap = document.getElementById('gmsSingleStockWrap');
@@ -1339,11 +1387,16 @@ const ScreeningPage = {
         document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.syncGmsWatchlistMarketWrap();
-        this.syncGmsSingleStockWrap();
+                this.syncGmsIndustryBoardWrap();
                 this.syncGmsSingleStockWrap();
                 const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
                 if (scopeEl && scopeEl.value === 'single') {
                     return;
+                }
+                if (scopeEl && scopeEl.value === 'industry_board') {
+                    void this.loadGmsIndustryBoardOptions();
+                    const sel = document.getElementById('gmsIndustryBoardSelect');
+                    if (!sel || !sel.value) return;
                 }
                 this.loadScreeningResults('gms');
             });
@@ -1356,7 +1409,17 @@ const ScreeningPage = {
                 }
             });
         });
+        const gmsIndustryBoardSelect = document.getElementById('gmsIndustryBoardSelect');
+        if (gmsIndustryBoardSelect) {
+            gmsIndustryBoardSelect.addEventListener('change', () => {
+                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                if (scopeEl && scopeEl.value === 'industry_board' && gmsIndustryBoardSelect.value) {
+                    void this.loadScreeningResults('gms');
+                }
+            });
+        }
         this.syncGmsWatchlistMarketWrap();
+        this.syncGmsIndustryBoardWrap();
         this.syncGmsSingleStockWrap();
         const gmsSingleInput = document.getElementById('gmsSingleStockInput');
         if (gmsSingleInput) {
@@ -1530,6 +1593,11 @@ const ScreeningPage = {
             const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
         }
+        if (scope === 'industry_board') {
+            const sel = document.getElementById('gmsIndustryBoardSelect');
+            const code = sel && sel.value ? String(sel.value).trim() : '';
+            if (code) q.set('industry_board_code', code);
+        }
         const configEl = document.getElementById('gms-config_id');
         const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
         if (configId) {
@@ -1578,6 +1646,13 @@ const ScreeningPage = {
     async buildGmsQuerySearchParams(options = {}) {
         const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
+        if (scope === 'industry_board') {
+            const sel = document.getElementById('gmsIndustryBoardSelect');
+            const code = sel && sel.value ? String(sel.value).trim() : '';
+            if (!code) {
+                throw new Error('请选择行业板块');
+            }
+        }
         if (scope === 'single') {
             const inputEl = document.getElementById('gmsSingleStockInput');
             const raw = inputEl ? String(inputEl.value || '').trim() : '';

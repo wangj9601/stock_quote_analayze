@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import re
+import unicodedata
 from io import BytesIO, StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -236,8 +237,9 @@ def parse_all_constituents_file(
 
 
 def _normalize_eastmoney_stock_name(name: str) -> str:
-    """去掉东财名称后缀（-W/-UW/-U 等），便于与 stock_basic_info 简称匹配。"""
-    s = (name or "").strip()
+    """东财名称规范化：全角转半角、去空白、去 -W/-UW/-U 后缀，便于与 stock_basic_info 简称匹配。"""
+    s = unicodedata.normalize("NFKC", (name or "").strip())
+    s = re.sub(r"\s+", "", s)
     return _EASTMONEY_NAME_SUFFIX.sub("", s)
 
 
