@@ -3,7 +3,7 @@
     <div class="page-header">
       <h1 class="text-xl font-semibold">板块成分股维护</h1>
       <p class="text-sm text-gray-500 mt-1">
-        维护东财行业板块与概念板块的成分股映射；支持东财同步、Excel 导入、单个录入与手动增删。
+        维护东财行业板块与概念板块的成分股映射；支持东财同步、全量/单板 Excel 导入导出、单个录入与手动增删。
       </p>
     </div>
 
@@ -19,6 +19,12 @@
             <div class="flex flex-wrap items-center justify-between gap-2">
               <span class="font-semibold">板块列表</span>
               <div class="flex gap-2">
+                <el-button size="small" :loading="exportingAll" @click="exportAllConstituents">
+                  导出全部
+                </el-button>
+                <el-button size="small" type="primary" plain @click="openImportAllDialog">
+                  导入全部
+                </el-button>
                 <el-button size="small" :loading="syncingBoards" @click="syncAllBoards">
                   {{ boardType === 'concept' ? '同步列表+成分' : '同步全部成分' }}
                 </el-button>
@@ -142,6 +148,55 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="importAllVisible" title="全量导入成分股" width="560px" @closed="resetImportAllForm">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb-4"
+        title="文件需含「板块代码」列及「股票代码」或「名称」列；可先导出全部再编辑后回导。支持 .xlsx / .xls / .csv。"
+      />
+      <div class="mb-3 flex flex-wrap gap-2">
+        <el-button size="small" @click="downloadAllTemplate('xlsx')">下载 XLSX 模板</el-button>
+        <el-button size="small" @click="downloadAllTemplate('csv')">下载 CSV 模板</el-button>
+      </div>
+      <el-upload
+        :auto-upload="false"
+        :limit="1"
+        accept=".xlsx,.xls,.csv"
+        :on-change="onImportAllFileChange"
+        :on-remove="() => (importAllFile = null)"
+      >
+        <template #trigger>
+          <el-button type="primary" plain>选择文件</el-button>
+        </template>
+      </el-upload>
+      <el-card v-if="importAllResult" class="mt-4" shadow="never">
+        <div class="text-sm">{{ importAllResult.message }}</div>
+        <div v-if="importAllResult.board_stats?.length" class="mt-2 text-xs text-gray-500">
+          <div v-for="(bs, i) in importAllResult.board_stats.slice(0, 8)" :key="i">
+            {{ bs.board_code }}：有效 {{ bs.processed }}，新增 {{ bs.added }}
+          </div>
+        </div>
+        <div v-if="importAllResult.issues?.length" class="mt-2 text-xs text-amber-600">
+          <div v-for="(it, i) in importAllResult.issues.slice(0, 5)" :key="i">
+            第 {{ it.row_no }} 行：{{ it.message }}
+          </div>
+        </div>
+      </el-card>
+      <template #footer>
+        <el-button @click="importAllVisible = false">关闭</el-button>
+        <el-button
+          type="primary"
+          :loading="importingAll"
+          :disabled="!importAllFile"
+          @click="submitImportAll"
+        >
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="importVisible" title="Excel / CSV 导入成分股" width="520px" @closed="resetImportForm">
       <el-alert
         type="info"
@@ -212,15 +267,24 @@ const selectedRows = ref<BoardConstituentRow[]>([])
 
 const syncingBoards = ref(false)
 const syncingBoard = ref(false)
+const exportingAll = ref(false)
 const singleAddVisible = ref(false)
 const importVisible = ref(false)
+const importAllVisible = ref(false)
 const adding = ref(false)
 const importing = ref(false)
+const importingAll = ref(false)
 const singleAddForm = reactive({ stock_code: '', stock_name: '' })
 const importFile = ref<File | null>(null)
+const importAllFile = ref<File | null>(null)
 const importResult = ref<{
   message: string
   issues?: Array<{ row_no: number; message: string }>
+} | null>(null)
+const importAllResult = ref<{
+  message: string
+  issues?: Array<{ row_no: number; message: string }>
+  board_stats?: Array<{ board_code: string; processed: number; added: number }>
 } | null>(null)
 
 function onBoardTypeChange() {
@@ -283,6 +347,89 @@ function openSingleAddDialog() {
 function resetSingleAddForm() {
   singleAddForm.stock_code = ''
   singleAddForm.stock_name = ''
+}
+
+function openImportAllDialog() {
+  importAllVisible.value = true
+}
+
+function resetImportAllForm() {
+  importAllFile.value = null
+  importAllResult.value = null
+}
+
+function onImportAllFileChange(uploadFile: { raw?: File }) {
+  importAllFile.value = uploadFile.raw || null
+  importAllResult.value = null
+}
+
+async function downloadAllTemplate(format: 'csv' | 'xlsx') {
+  try {
+    const blob = await boardConstituentsService.downloadAllImportTemplate(format)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `board_constituents_all_template.${format}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('模板下载失败')
+  }
+}
+
+async function exportAllConstituents() {
+  exportingAll.value = true
+  try {
+    const blob = await boardConstituentsService.exportAll({ boardType: boardType.value, format: 'xlsx' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const prefix = boardType.value === 'industry' ? 'industry' : 'concept'
+    a.download = `${prefix}_board_constituents_all.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出完成')
+  } catch (e: unknown) {
+    ElMessage.error(e instanceof Error ? e.message : '导出失败')
+  } finally {
+    exportingAll.value = false
+  }
+}
+
+async function submitImportAll() {
+  if (!importAllFile.value) return
+  importingAll.value = true
+  try {
+    const res = await boardConstituentsService.importAllFromFile({
+      boardType: boardType.value,
+      file: importAllFile.value,
+    })
+    if (!res.success) {
+      ElMessage.warning(res.message || '导入未完成')
+      importAllResult.value = {
+        message: res.message || '导入失败',
+        issues: res.data?.issues,
+        board_stats: res.data?.board_stats,
+      }
+      return
+    }
+    importAllResult.value = {
+      message: res.message || '导入完成',
+      issues: res.data?.issues,
+      board_stats: res.data?.board_stats,
+    }
+    ElMessage.success(res.message || '导入完成')
+    await loadBoards()
+    if (selectedBoard.value) await loadConstituents()
+  } catch (e: unknown) {
+    ElMessage.error(e instanceof Error ? e.message : '导入失败')
+  } finally {
+    importingAll.value = false
+  }
 }
 
 function openImportDialog() {

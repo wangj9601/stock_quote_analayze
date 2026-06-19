@@ -17,7 +17,11 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend_api.admin.board_constituents_import import parse_constituents_file
+from backend_api.admin.board_constituents_import import (
+    parse_all_constituents_file,
+    parse_constituents_file,
+    resolve_rows_stock_codes,
+)
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
 from backend_api.models import ConceptBoardConstituent, IndustryBoardConstituent
@@ -350,6 +354,198 @@ async def sync_board_constituents(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
+@router.get("/export/all")
+async def export_all_constituents(
+    board_type: BoardType = Query(...),
+    format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """导出当前类型下全部板块成分股。"""
+    _ = current_user
+    t = _tables(board_type)
+    label = "industry" if board_type == "industry" else "concept"
+    sql = text(
+        f"""
+        SELECT
+            c.board_code,
+            COALESCE(b.board_name, '') AS board_name,
+            c.stock_code,
+            COALESCE(c.stock_name, '') AS stock_name,
+            c.updated_at
+        FROM {t['constituents']} c
+        LEFT JOIN (
+            SELECT board_code, MAX(board_name) AS board_name
+            FROM {t['basic']}
+            GROUP BY board_code
+        ) b ON b.board_code = c.board_code
+        ORDER BY c.board_code, c.stock_code
+        """
+    )
+    rows = db.execute(sql).fetchall()
+    cols = ["board_code", "board_name", "stock_code", "stock_name", "updated_at"]
+    data = [
+        [
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            r[4].strftime("%Y-%m-%d %H:%M:%S") if r[4] else "",
+        ]
+        for r in rows
+    ]
+    if format == "csv":
+        sio = StringIO()
+        writer = csv.writer(sio)
+        writer.writerow(cols)
+        writer.writerows(data)
+        return StreamingResponse(
+            iter([sio.getvalue().encode("utf-8-sig")]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={label}_board_constituents_all.csv",
+            },
+        )
+    df = pd.DataFrame(data, columns=cols)
+    bio = BytesIO()
+    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="constituents")
+    bio.seek(0)
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename={label}_board_constituents_all.xlsx",
+        },
+    )
+
+
+@router.get("/import/all/template")
+async def download_all_constituents_template(
+    format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
+    _: Any = Depends(get_current_admin),
+):
+    """下载全量成分股导入模板。"""
+    cols = ["board_code", "board_name", "stock_code", "stock_name"]
+    sample = [
+        ["IT服务", "IT服务", "000001", "平安银行"],
+        ["IT服务", "IT服务", "", "神州数码"],
+        ["半导体", "半导体", "688981", "中芯国际"],
+    ]
+    if format == "csv":
+        sio = StringIO()
+        writer = csv.writer(sio)
+        writer.writerow(cols)
+        writer.writerows(sample)
+        return StreamingResponse(
+            iter([sio.getvalue().encode("utf-8-sig")]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=board_constituents_all_template.csv",
+            },
+        )
+    df = pd.DataFrame(sample, columns=cols)
+    bio = BytesIO()
+    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="constituents")
+    bio.seek(0)
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=board_constituents_all_template.xlsx",
+        },
+    )
+
+
+@router.post("/import/all")
+async def import_all_board_constituents(
+    board_type: BoardType = Query(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """Excel/CSV 全量导入多板块成分股。"""
+    content = await file.read()
+    rows, issues = parse_all_constituents_file(file.filename or "", content)
+    if not rows:
+        return {
+            "success": False,
+            "message": "未导入任何有效数据",
+            "data": {"issues": issues[:200]},
+        }
+
+    stock_rows = [{"stock_code": r["stock_code"], "stock_name": r["stock_name"]} for r in rows]
+    resolved, resolve_issues = resolve_rows_stock_codes(db, stock_rows)
+    issues.extend(resolve_issues)
+
+    issue_row_nos = {
+        int(iss["row_no"])
+        for iss in resolve_issues
+        if iss.get("row_no") is not None
+    }
+    aligned: List[Dict[str, str]] = []
+    res_idx = 0
+    for i, src in enumerate(rows):
+        row_no = i + 2
+        if row_no in issue_row_nos:
+            continue
+        if res_idx >= len(resolved):
+            break
+        item = resolved[res_idx]
+        res_idx += 1
+        aligned.append({
+            "board_code": src["board_code"],
+            "stock_code": item["stock_code"],
+            "stock_name": item.get("stock_name") or src.get("stock_name") or "",
+        })
+
+    if not aligned:
+        return {
+            "success": False,
+            "message": "未导入任何有效数据",
+            "data": {"issues": issues[:200]},
+        }
+
+    board_stats: dict[str, dict[str, int]] = {}
+    total_processed = 0
+    total_added = 0
+    for bcode in sorted({r["board_code"] for r in aligned}):
+        group = [r for r in aligned if r["board_code"] == bcode]
+        stocks = [
+            BoardStockItem(stock_code=r["stock_code"], stock_name=r.get("stock_name") or None)
+            for r in group
+        ]
+        processed, added = _upsert_constituents(db, board_type, bcode, stocks)
+        board_stats[bcode] = {"processed": processed, "added": added}
+        total_processed += processed
+        total_added += added
+    db.commit()
+
+    uname = getattr(current_user, "username", None) or "admin"
+    msg = (
+        f"全量导入完成：{len(board_stats)} 个板块，"
+        f"有效 {total_processed} 条，新增 {total_added} 条"
+    )
+    if issues:
+        msg += f"，跳过/告警 {len(issues)} 条"
+    return {
+        "success": True,
+        "message": msg,
+        "data": {
+            "boards_processed": len(board_stats),
+            "processed": total_processed,
+            "added": total_added,
+            "skipped_issues": len(issues),
+            "issues": issues[:50],
+            "board_stats": [
+                {"board_code": k, **v} for k, v in sorted(board_stats.items())
+            ],
+            "operator": uname,
+        },
+    }
+
+
 @router.get("/import/template")
 async def download_constituents_template(
     format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
@@ -394,6 +590,8 @@ async def import_board_constituents(
         raise HTTPException(status_code=400, detail="板块代码无效")
     content = await file.read()
     rows, issues = parse_constituents_file(file.filename or "", content)
+    rows, resolve_issues = resolve_rows_stock_codes(db, rows)
+    issues.extend(resolve_issues)
     if not rows:
         return {
             "success": False,

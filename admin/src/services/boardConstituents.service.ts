@@ -107,6 +107,42 @@ class BoardConstituentsService {
     })
   }
 
+  async downloadAllImportTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {
+    return apiService.get(`/board-constituents/import/all/template?format=${format}`, {
+      responseType: 'blob',
+    })
+  }
+
+  async exportAll(params: { boardType: BoardType; format?: 'csv' | 'xlsx' }): Promise<Blob> {
+    const q = new URLSearchParams()
+    q.set('board_type', params.boardType)
+    q.set('format', params.format ?? 'xlsx')
+    return apiService.get(`/board-constituents/export/all?${q}`, {
+      responseType: 'blob',
+    })
+  }
+
+  async importAllFromFile(params: { boardType: BoardType; file: File }) {
+    const fd = new FormData()
+    fd.append('file', params.file)
+    const q = new URLSearchParams()
+    q.set('board_type', params.boardType)
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: {
+        boards_processed: number
+        processed: number
+        added: number
+        skipped_issues: number
+        issues: Array<{ row_no: number; message: string; board_code?: string; stock_code?: string }>
+        board_stats: Array<{ board_code: string; processed: number; added: number }>
+      }
+    }>(`/board-constituents/import/all?${q.toString()}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  }
+
   async importFromFile(params: {
     boardType: BoardType
     boardCode: string
