@@ -214,7 +214,9 @@
         :closable="false"
         show-icon
         class="mb-4"
-        title="文件需含「板块代码」列及「股票代码」或「名称」列；可先导出全部再编辑后回导。支持 .xlsx / .xls / .csv。"
+        :title="boardType === 'concept'
+          ? '文件需含「板块代码」列及「股票代码」或「名称」列；概念板块将同步写入基本信息表。可先导出全部再编辑后回导。'
+          : '文件需含「板块代码」列及「股票代码」或「名称」列；可先导出全部再编辑后回导。'"
       />
       <div class="mb-3 flex flex-wrap gap-2">
         <el-button size="small" @click="downloadAllTemplate('xlsx')">下载 XLSX 模板</el-button>

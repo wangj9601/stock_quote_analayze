@@ -282,6 +282,52 @@ def _assert_concept_board_name_unique(
         )
 
 
+def _sync_concept_board_basic_from_import(
+    db: Session,
+    rows: List[Dict[str, str]],
+    now: datetime,
+    issues: List[Dict[str, Any]],
+) -> int:
+    """从全量导入数据同步 concept_board_basic_info（按板块代码聚合名称）。"""
+    board_names: dict[str, str] = {}
+    for r in rows:
+        code = _normalize_board_code(r.get("board_code"))
+        if not code:
+            continue
+        name = (r.get("board_name") or "").strip()
+        if code not in board_names:
+            board_names[code] = name
+        elif name and not board_names[code]:
+            board_names[code] = name
+
+    synced = 0
+    for code in sorted(board_names.keys()):
+        raw_name = board_names[code]
+        upsert_name: Optional[str] = raw_name.strip() or None if raw_name else None
+        if upsert_name:
+            dup = db.execute(
+                text(
+                    """
+                    SELECT board_code FROM concept_board_basic_info
+                    WHERE TRIM(board_name) = :name AND board_code <> :code
+                    LIMIT 1
+                    """
+                ),
+                {"name": upsert_name, "code": code},
+            ).fetchone()
+            if dup:
+                dup_code = _normalize_board_code(dup[0])
+                issues.append({
+                    "row_no": 0,
+                    "board_code": code,
+                    "message": f"板块名称「{upsert_name}」已与 {dup_code} 重复，仅写入板块代码",
+                })
+                upsert_name = None
+        _upsert_board_basic(db, "concept", code, upsert_name, now)
+        synced += 1
+    return synced
+
+
 def _rename_board_records(
     db: Session,
     board_type: BoardType,
@@ -823,6 +869,11 @@ async def import_all_board_constituents(
             "data": {"issues": issues[:200]},
         }
 
+    now = datetime.now().replace(microsecond=0)
+    basic_synced = 0
+    if board_type == "concept":
+        basic_synced = _sync_concept_board_basic_from_import(db, rows, now, issues)
+
     board_stats: dict[str, dict[str, int]] = {}
     total_processed = 0
     total_added = 0
@@ -843,6 +894,8 @@ async def import_all_board_constituents(
         f"全量导入完成：{len(board_stats)} 个板块，"
         f"有效 {total_processed} 条，新增 {total_added} 条"
     )
+    if board_type == "concept" and basic_synced:
+        msg += f"，同步板块基本信息 {basic_synced} 个"
     if issues:
         msg += f"，跳过/告警 {len(issues)} 条"
     return {
@@ -850,6 +903,7 @@ async def import_all_board_constituents(
         "message": msg,
         "data": {
             "boards_processed": len(board_stats),
+            "basic_synced": basic_synced,
             "processed": total_processed,
             "added": total_added,
             "skipped_issues": len(issues),

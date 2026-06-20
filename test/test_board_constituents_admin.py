@@ -14,6 +14,7 @@ from backend_api.admin.board_constituents import (
     _generate_next_concept_board_code,
     _normalize_board_code,
     _normalize_stock_code,
+    _sync_concept_board_basic_from_import,
     _tables,
 )
 
@@ -96,3 +97,48 @@ class TestBoardConstituentsHelpers:
         )
         _assert_concept_board_name_unique(_DB(None), "新板块")
         _assert_concept_board_name_unique(_DB(("BK1638",)), "  ")
+
+    def test_sync_concept_board_basic_from_import(self):
+        from datetime import datetime
+
+        executed: list[dict] = []
+
+        class _DB:
+            def execute(self, sql, params=None):
+                sql_s = str(sql)
+                if "board_code <> :code" in sql_s:
+                    return type("R", (), {"fetchone": lambda self: None})()
+                return type("R", (), {"fetchone": lambda self: None})()
+
+            def _record(self, params):
+                executed.append(params)
+
+        class _DBWrap:
+            def __init__(self):
+                self.inner = _DB()
+
+            def execute(self, sql, params=None):
+                sql_s = str(sql)
+                if "INSERT INTO concept_board_basic_info" in sql_s:
+                    executed.append(params)
+                return self.inner.execute(sql, params)
+
+        issues: list = []
+        now = datetime(2026, 6, 6, 12, 0, 0)
+        count = _sync_concept_board_basic_from_import(
+            _DBWrap(),
+            [
+                {"board_code": "BK1641", "board_name": "苹果概念", "stock_code": "000001", "stock_name": "平安银行"},
+                {"board_code": "BK1641", "board_name": "苹果概念", "stock_code": "000002", "stock_name": "万科A"},
+                {"board_code": "BK1642", "board_name": "", "stock_code": "600519", "stock_name": "贵州茅台"},
+            ],
+            now,
+            issues,
+        )
+        assert count == 2
+        assert len(issues) == 0
+        assert len(executed) == 2
+        assert executed[0]["board_code"] == "BK1641"
+        assert executed[0]["board_name"] == "苹果概念"
+        assert executed[1]["board_code"] == "BK1642"
+        assert executed[1]["board_name"] is None
