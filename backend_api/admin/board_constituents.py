@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import re
 from datetime import datetime
 from io import BytesIO, StringIO
 from typing import Any, List, Literal, Optional
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/board-constituents", tags=["admin_board_constituents"])
 
 BoardType = Literal["industry", "concept"]
+
+_BK_BOARD_CODE_RE = re.compile(r"^BK(\d+)$", re.IGNORECASE)
 
 
 def _normalize_board_code(raw: Any) -> str:
@@ -145,6 +148,308 @@ class SyncBoardConstituentsBody(BaseModel):
     sync_board_list: bool = False
 
 
+def _format_bk_board_code(num: int) -> str:
+    """东财概念板块代码：BK + 至少 4 位数字。"""
+    if num < 0:
+        num = 0
+    if num < 10000:
+        return f"BK{num:04d}"
+    return f"BK{num}"
+
+
+def _generate_next_concept_board_code(
+    db: Session,
+    after_code: Optional[str] = None,
+) -> str:
+    """在已有 BK 概念板块代码基础上递增生成新编码；after_code 用于预览下一个候选。"""
+    rows = db.execute(
+        text(
+            """
+            SELECT board_code FROM concept_board_basic_info
+            WHERE UPPER(board_code) LIKE 'BK%'
+            UNION
+            SELECT DISTINCT board_code FROM concept_board_constituents
+            WHERE UPPER(board_code) LIKE 'BK%'
+            """
+        )
+    ).fetchall()
+    used_nums: set[int] = set()
+    max_num = 0
+    for (code,) in rows:
+        m = _BK_BOARD_CODE_RE.match(str(code or "").strip().upper())
+        if m:
+            n = int(m.group(1))
+            used_nums.add(n)
+            max_num = max(max_num, n)
+
+    start = max_num
+    if after_code:
+        m = _BK_BOARD_CODE_RE.match(str(after_code).strip().upper())
+        if m:
+            start = max(start, int(m.group(1)))
+
+    candidate = start + 1
+    while candidate in used_nums:
+        candidate += 1
+    return _format_bk_board_code(candidate)
+
+
+class SaveBoardInfoBody(BaseModel):
+    board_type: BoardType
+    board_code: Optional[str] = Field(None, description="保存后的板块代码；概念板块新增可留空自动生成")
+    board_name: Optional[str] = None
+    original_board_code: Optional[str] = Field(
+        None,
+        description="编辑时原板块代码；改名时与 board_code 不同",
+    )
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if self.original_board_code and not _normalize_board_code(self.original_board_code):
+            raise ValueError("原板块代码无效")
+        if self.board_code is not None and str(self.board_code).strip():
+            if not _normalize_board_code(self.board_code):
+                raise ValueError("板块代码无效")
+        if not self.original_board_code and not (self.board_code or "").strip():
+            if self.board_type != "concept":
+                raise ValueError("行业板块代码不能为空")
+        return self
+
+
+class DeleteBoardBody(BaseModel):
+    board_type: BoardType
+    board_code: str
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if not _normalize_board_code(self.board_code):
+            raise ValueError("板块代码无效")
+        return self
+
+
+def _upsert_board_basic(
+    db: Session,
+    board_type: BoardType,
+    board_code: str,
+    board_name: Optional[str],
+    now: datetime,
+) -> None:
+    t = _tables(board_type)
+    db.execute(
+        text(
+            f"""
+            INSERT INTO {t['basic']} (board_code, board_name, create_date)
+            VALUES (:board_code, :board_name, :create_date)
+            ON CONFLICT (board_code) DO UPDATE SET
+                board_name = EXCLUDED.board_name
+            """
+        ),
+        {
+            "board_code": board_code,
+            "board_name": board_name,
+            "create_date": now,
+        },
+    )
+
+
+def _assert_concept_board_name_unique(
+    db: Session,
+    board_name: str,
+    exclude_codes: Optional[list[str]] = None,
+) -> None:
+    """概念板块名称不可与其它板块重复（编辑时排除当前板块代码）。"""
+    name = (board_name or "").strip()
+    if not name:
+        return
+    excludes = {_normalize_board_code(c) for c in (exclude_codes or []) if c}
+    row = db.execute(
+        text(
+            """
+            SELECT board_code FROM concept_board_basic_info
+            WHERE TRIM(board_name) = :name
+            LIMIT 1
+            """
+        ),
+        {"name": name},
+    ).fetchone()
+    if not row:
+        return
+    code = _normalize_board_code(row[0])
+    if code not in excludes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"概念板块名称「{name}」已存在（{code}）",
+        )
+
+
+def _rename_board_records(
+    db: Session,
+    board_type: BoardType,
+    old_code: str,
+    new_code: str,
+    board_name: Optional[str],
+) -> None:
+    t = _tables(board_type)
+    exists = db.execute(
+        text(f"SELECT 1 FROM {t['basic']} WHERE board_code = :code LIMIT 1"),
+        {"code": new_code},
+    ).scalar()
+    if exists and new_code != old_code:
+        raise HTTPException(status_code=400, detail=f"板块代码「{new_code}」已存在")
+
+    cons_exists = db.execute(
+        text(f"SELECT 1 FROM {t['constituents']} WHERE board_code = :code LIMIT 1"),
+        {"code": new_code},
+    ).scalar()
+    if cons_exists and new_code != old_code:
+        raise HTTPException(status_code=400, detail=f"板块代码「{new_code}」在成分股表中已存在")
+
+    if old_code != new_code:
+        db.execute(
+            text(f"UPDATE {t['constituents']} SET board_code = :new WHERE board_code = :old"),
+            {"new": new_code, "old": old_code},
+        )
+        if board_type == "industry" and t.get("realtime"):
+            db.execute(
+                text(
+                    f"""
+                    UPDATE {t['realtime']}
+                    SET board_code = :new, board_name = COALESCE(:name, board_name)
+                    WHERE board_code = :old
+                    """
+                ),
+                {"new": new_code, "old": old_code, "name": board_name},
+            )
+        db.execute(
+            text(f"DELETE FROM {t['basic']} WHERE board_code = :old"),
+            {"old": old_code},
+        )
+
+    now = datetime.now().replace(microsecond=0)
+    _upsert_board_basic(db, board_type, new_code, board_name, now)
+    if board_type == "industry" and t.get("realtime") and board_name and old_code == new_code:
+        db.execute(
+            text(f"UPDATE {t['realtime']} SET board_name = :name WHERE board_code = :code"),
+            {"name": board_name, "code": new_code},
+        )
+
+
+@router.get("/boards/next-code")
+async def get_next_concept_board_code(
+    board_type: BoardType = Query(...),
+    after_code: Optional[str] = Query(
+        None,
+        description="当前预览编码；传入后返回其后的下一个可用 BK 编码",
+    ),
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """预览下一个概念板块 BK 编码（仅 concept）。"""
+    _ = current_user
+    if board_type != "concept":
+        raise HTTPException(status_code=400, detail="仅概念板块支持自动生成编码")
+    code = _generate_next_concept_board_code(db, after_code=after_code)
+    return {"success": True, "data": {"board_code": code}}
+
+
+@router.post("/boards/save")
+async def save_board_info(
+    body: SaveBoardInfoBody,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """新增或编辑板块基础信息（支持改名并联动成分股）。"""
+    raw_code = (body.board_code or "").strip()
+    board_name = (body.board_name or "").strip() or None
+    now = datetime.now().replace(microsecond=0)
+
+    if body.original_board_code:
+        if not raw_code:
+            raise HTTPException(status_code=400, detail="编辑时板块代码不能为空")
+        new_code = _normalize_board_code(raw_code)
+        old_code = _normalize_board_code(body.original_board_code)
+    elif raw_code:
+        new_code = _normalize_board_code(raw_code)
+        old_code = new_code
+    elif body.board_type == "concept":
+        new_code = _generate_next_concept_board_code(db)
+        old_code = new_code
+    else:
+        raise HTTPException(status_code=400, detail="行业板块代码不能为空")
+
+    if body.board_type == "concept" and board_name:
+        _assert_concept_board_name_unique(
+            db,
+            board_name,
+            exclude_codes=[c for c in {new_code, old_code} if c],
+        )
+
+    if old_code != new_code:
+        _rename_board_records(db, body.board_type, old_code, new_code, board_name)
+        action = "rename"
+    else:
+        t = _tables(body.board_type)
+        had_basic = bool(
+            db.execute(
+                text(f"SELECT 1 FROM {t['basic']} WHERE board_code = :code LIMIT 1"),
+                {"code": new_code},
+            ).scalar()
+        )
+        _upsert_board_basic(db, body.board_type, new_code, board_name, now)
+        if body.board_type == "industry" and t.get("realtime") and board_name:
+            db.execute(
+                text(f"UPDATE {t['realtime']} SET board_name = :name WHERE board_code = :code"),
+                {"name": board_name, "code": new_code},
+            )
+        if body.original_board_code:
+            action = "update"
+        else:
+            action = "update" if had_basic else "create"
+
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    return {
+        "success": True,
+        "message": "板块信息已保存",
+        "data": {
+            "action": action,
+            "board_code": new_code,
+            "board_name": board_name,
+            "original_board_code": old_code if old_code != new_code else None,
+            "operator": uname,
+        },
+    }
+
+
+@router.post("/boards/delete")
+async def delete_board_info(
+    body: DeleteBoardBody,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """删除板块基础信息及全部成分股（不删行业实时行情表记录）。"""
+    bcode = _normalize_board_code(body.board_code)
+    t = _tables(body.board_type)
+    Model = _constituent_model(body.board_type)
+    cons_deleted = db.query(Model).filter(Model.board_code == bcode).delete(synchronize_session=False)
+    basic_deleted = db.execute(
+        text(f"DELETE FROM {t['basic']} WHERE board_code = :code"),
+        {"code": bcode},
+    ).rowcount
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    return {
+        "success": True,
+        "message": f"已删除板块「{bcode}」（成分股 {cons_deleted} 条）",
+        "data": {
+            "board_code": bcode,
+            "constituents_deleted": cons_deleted,
+            "basic_deleted": basic_deleted,
+            "operator": uname,
+        },
+    }
+
+
 @router.get("/boards")
 async def list_boards_with_summary(
     board_type: BoardType = Query(..., description="industry 或 concept"),
@@ -166,21 +471,27 @@ async def list_boards_with_summary(
 
     if board_type == "industry":
         board_src_sql = f"""
-            SELECT board_code, board_name FROM {t['basic']}
+            SELECT board_code, board_name, create_date FROM {t['basic']}
             WHERE UPPER(board_code) NOT LIKE 'BK%'
-            UNION
-            SELECT DISTINCT board_code, board_name FROM {t['realtime']}
+            UNION ALL
+            SELECT DISTINCT board_code, board_name, NULL::timestamp AS create_date
+            FROM {t['realtime']}
             WHERE board_code IS NOT NULL AND board_code <> ''
               AND UPPER(board_code) NOT LIKE 'BK%'
         """
     else:
-        board_src_sql = f"SELECT board_code, board_name FROM {t['basic']}"
+        board_src_sql = f"SELECT board_code, board_name, create_date FROM {t['basic']}"
 
     count_sql = text(
         f"""
         SELECT COUNT(*) FROM (
             SELECT DISTINCT src.board_code
-            FROM ({board_src_sql}) src
+            FROM (
+                SELECT board_code, MAX(board_name) AS board_name
+                FROM ({board_src_sql}) u
+                WHERE board_code IS NOT NULL AND board_code <> ''
+                GROUP BY board_code
+            ) src
             WHERE 1=1 {kw_filter}
         ) x
         """
@@ -193,9 +504,13 @@ async def list_boards_with_summary(
             src.board_code,
             src.board_name,
             COALESCE(cnt.cnt, 0) AS constituent_count,
-            cnt.last_updated
+            cnt.last_updated,
+            src.create_date
         FROM (
-            SELECT board_code, MAX(board_name) AS board_name
+            SELECT
+                board_code,
+                MAX(board_name) AS board_name,
+                MAX(create_date) AS create_date
             FROM ({board_src_sql}) u
             WHERE board_code IS NOT NULL AND board_code <> ''
             GROUP BY board_code
@@ -206,7 +521,7 @@ async def list_boards_with_summary(
             GROUP BY board_code
         ) cnt ON cnt.board_code = src.board_code
         WHERE 1=1 {kw_filter}
-        ORDER BY src.board_code
+        ORDER BY src.create_date DESC NULLS LAST, src.board_code
         LIMIT :limit OFFSET :offset
         """
     )
@@ -217,6 +532,7 @@ async def list_boards_with_summary(
             "board_name": r[1],
             "constituent_count": int(r[2] or 0),
             "last_updated": r[3].isoformat() if r[3] else None,
+            "create_date": r[4].isoformat() if r[4] else None,
         }
         for r in rows
     ]

@@ -101,6 +101,50 @@ class BoardConstituentsService {
     })
   }
 
+  async saveBoard(body: {
+    boardType: BoardType
+    boardCode?: string
+    boardName?: string
+    originalBoardCode?: string
+  }) {
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: {
+        action: string
+        board_code: string
+        board_name: string | null
+        original_board_code?: string | null
+      }
+    }>('/board-constituents/boards/save', {
+      board_type: body.boardType,
+      board_code: body.boardCode,
+      board_name: body.boardName,
+      original_board_code: body.originalBoardCode,
+    })
+  }
+
+  async getNextBoardCode(boardType: BoardType, afterCode?: string) {
+    const q = new URLSearchParams()
+    q.set('board_type', boardType)
+    if (afterCode) q.set('after_code', afterCode)
+    return apiService.get<{
+      success: boolean
+      data: { board_code: string }
+    }>(`/board-constituents/boards/next-code?${q}`)
+  }
+
+  async deleteBoard(body: { boardType: BoardType; boardCode: string }) {
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: { constituents_deleted: number }
+    }>('/board-constituents/boards/delete', {
+      board_type: body.boardType,
+      board_code: body.boardCode,
+    })
+  }
+
   async downloadImportTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {
     return apiService.get(`/board-constituents/import/template?format=${format}`, {
       responseType: 'blob',

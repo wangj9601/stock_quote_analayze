@@ -3,7 +3,7 @@
     <div class="page-header">
       <h1 class="text-xl font-semibold">板块成分股维护</h1>
       <p class="text-sm text-gray-500 mt-1">
-        维护东财行业板块与概念板块的成分股映射；支持东财同步、全量/单板 Excel 导入导出、单个录入与手动增删。
+        维护东财行业板块与概念板块的成分股映射；支持板块信息编辑、东财同步、全量/单板 Excel 导入导出、单个录入与手动增删。
       </p>
     </div>
 
@@ -19,6 +19,7 @@
             <div class="flex flex-wrap items-center justify-between gap-2">
               <span class="font-semibold">板块列表</span>
               <div class="flex gap-2">
+                <el-button size="small" type="primary" @click="openBoardEditDialog()">新增板块</el-button>
                 <el-button size="small" :loading="exportingAll" @click="exportAllConstituents">
                   导出全部
                 </el-button>
@@ -51,8 +52,9 @@
             <el-table-column prop="board_code" label="代码" width="88" />
             <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
             <el-table-column prop="constituent_count" label="成分数" width="72" align="right" />
-            <el-table-column label="操作" width="72" fixed="right">
+            <el-table-column label="操作" width="108" fixed="right">
               <template #default="{ row }">
+                <el-button link type="primary" size="small" @click.stop="openBoardEditDialog(row)">编辑</el-button>
                 <el-button link type="primary" size="small" @click.stop="syncOneBoard(row.board_code)">同步</el-button>
               </template>
             </el-table-column>
@@ -132,6 +134,64 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog
+      v-model="boardEditVisible"
+      :title="boardEditForm.original_board_code ? '编辑板块' : '新增板块'"
+      width="460px"
+      @closed="resetBoardEditForm"
+      @opened="onBoardEditDialogOpened"
+    >
+      <el-form label-width="88px" @submit.prevent>
+        <el-form-item label="板块代码" :required="!isConceptBoardCreate">
+          <div class="flex gap-2 w-full">
+            <el-input
+              v-model="boardEditForm.board_code"
+              :placeholder="isConceptBoardCreate ? '保存时自动生成' : '如 BK0428 或 IT服务'"
+              :readonly="isConceptBoardCreate"
+              :clearable="!isConceptBoardCreate"
+              class="flex-1"
+            />
+            <el-button
+              v-if="isConceptBoardCreate"
+              size="default"
+              :loading="loadingNextBoardCode"
+              @click="refreshConceptBoardCode"
+            >
+              换一个
+            </el-button>
+          </div>
+          <p v-if="isConceptBoardCreate" class="text-xs text-gray-500 mt-1">
+            概念板块将按 BK+数字 规则自动生成，也可点「换一个」预览下一编码。
+          </p>
+        </el-form-item>
+        <el-form-item label="板块名称">
+          <el-input
+            ref="boardNameInputRef"
+            v-model="boardEditForm.board_name"
+            placeholder="展示名称"
+            clearable
+            @keyup.enter="submitBoardEdit"
+          />
+        </el-form-item>
+        <p v-if="boardEditForm.original_board_code" class="text-xs text-gray-500">
+          修改代码将同步更新该板块下全部成分股的 board_code。
+        </p>
+      </el-form>
+      <template #footer>
+        <el-button
+          v-if="boardEditForm.original_board_code"
+          type="danger"
+          plain
+          :loading="deletingBoard"
+          @click="deleteBoardInfo"
+        >
+          删除板块
+        </el-button>
+        <el-button @click="boardEditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingBoard" @click="submitBoardEdit">保存</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="singleAddVisible" title="单个录入成分股" width="420px" @closed="resetSingleAddForm">
       <el-form label-width="88px" @submit.prevent>
@@ -239,7 +299,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   boardConstituentsService,
@@ -286,6 +346,21 @@ const importAllResult = ref<{
   issues?: Array<{ row_no: number; message: string }>
   board_stats?: Array<{ board_code: string; processed: number; added: number }>
 } | null>(null)
+
+const boardEditVisible = ref(false)
+const boardNameInputRef = ref<{ focus: () => void } | null>(null)
+const savingBoard = ref(false)
+const deletingBoard = ref(false)
+const loadingNextBoardCode = ref(false)
+const boardEditForm = reactive({
+  board_code: '',
+  board_name: '',
+  original_board_code: '' as string,
+})
+
+const isConceptBoardCreate = computed(
+  () => boardType.value === 'concept' && !boardEditForm.original_board_code,
+)
 
 function onBoardTypeChange() {
   selectedBoard.value = null
@@ -337,6 +412,133 @@ async function loadConstituents() {
     ElMessage.error(e instanceof Error ? e.message : '加载成分股失败')
   } finally {
     stocksLoading.value = false
+  }
+}
+
+function openBoardEditDialog(row?: BoardSummary) {
+  if (row) {
+    boardEditForm.board_code = row.board_code
+    boardEditForm.board_name = row.board_name || ''
+    boardEditForm.original_board_code = row.board_code
+  } else {
+    boardEditForm.board_code = ''
+    boardEditForm.board_name = ''
+    boardEditForm.original_board_code = ''
+  }
+  boardEditVisible.value = true
+  if (!row && boardType.value === 'concept') {
+    void refreshConceptBoardCode()
+  }
+}
+
+function onBoardEditDialogOpened() {
+  if (boardEditForm.original_board_code) return
+  setTimeout(() => boardNameInputRef.value?.focus(), 50)
+}
+
+async function refreshConceptBoardCode() {
+  loadingNextBoardCode.value = true
+  try {
+    const after = boardEditForm.board_code.trim() || undefined
+    const res = await boardConstituentsService.getNextBoardCode('concept', after)
+    const next = res.data?.board_code || ''
+    if (next && next === after) {
+      ElMessage.info('暂无更大的可用编码，已保留当前预览')
+      return
+    }
+    boardEditForm.board_code = next
+  } catch (e: unknown) {
+    ElMessage.error(e instanceof Error ? e.message : '获取编码失败')
+  } finally {
+    loadingNextBoardCode.value = false
+  }
+}
+
+function resetBoardEditForm() {
+  boardEditForm.board_code = ''
+  boardEditForm.board_name = ''
+  boardEditForm.original_board_code = ''
+}
+
+async function submitBoardEdit() {
+  if (savingBoard.value) return
+  const code = boardEditForm.board_code.trim()
+  if (!isConceptBoardCreate.value && !code) {
+    ElMessage.warning('请填写板块代码')
+    return
+  }
+  savingBoard.value = true
+  try {
+    const res = await boardConstituentsService.saveBoard({
+      boardType: boardType.value,
+      boardCode: code || undefined,
+      boardName: boardEditForm.board_name.trim() || undefined,
+      originalBoardCode: boardEditForm.original_board_code || undefined,
+    })
+    ElMessage.success(res.message || '已保存')
+    boardEditVisible.value = false
+    const isCreate = !boardEditForm.original_board_code || res.data?.action === 'create'
+    const prevSelected = selectedBoard.value?.board_code
+    if (isCreate) {
+      boardPage.value = 1
+    }
+    await loadBoards()
+    const newCode = res.data?.board_code || code
+    if (isCreate) {
+      const hit = boards.value.find((b) => b.board_code === newCode)
+      if (hit) {
+        selectedBoard.value = hit
+        stockPage.value = 1
+        selectedRows.value = []
+        await loadConstituents()
+      }
+    } else if (
+      prevSelected &&
+      (prevSelected === boardEditForm.original_board_code || prevSelected === code)
+    ) {
+      const hit = boards.value.find((b) => b.board_code === newCode)
+      if (hit) {
+        selectedBoard.value = hit
+        await loadConstituents()
+      } else {
+        selectedBoard.value = null
+        constituents.value = []
+      }
+    }
+  } catch (e: unknown) {
+    const msg =
+      (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+      (e instanceof Error ? e.message : '保存失败')
+    ElMessage.error(msg)
+  } finally {
+    savingBoard.value = false
+  }
+}
+
+async function deleteBoardInfo() {
+  if (!boardEditForm.original_board_code) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除板块「${boardEditForm.original_board_code}」及其全部成分股？不可恢复。`,
+      '删除确认',
+      { type: 'warning' },
+    )
+    deletingBoard.value = true
+    const res = await boardConstituentsService.deleteBoard({
+      boardType: boardType.value,
+      boardCode: boardEditForm.original_board_code,
+    })
+    ElMessage.success(res.message || '已删除')
+    boardEditVisible.value = false
+    if (selectedBoard.value?.board_code === boardEditForm.original_board_code) {
+      selectedBoard.value = null
+      constituents.value = []
+    }
+    await loadBoards()
+  } catch (e: unknown) {
+    if (e !== 'cancel') ElMessage.error(e instanceof Error ? e.message : '删除失败')
+  } finally {
+    deletingBoard.value = false
   }
 }
 
