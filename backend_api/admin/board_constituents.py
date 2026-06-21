@@ -795,11 +795,10 @@ async def export_all_constituents(
                 SELECT board_code, board_name FROM {t['basic']}
                 WHERE UPPER(board_code) NOT LIKE 'BK%'
                 UNION ALL
-                SELECT board_code, MAX(board_name) AS board_name
+                SELECT DISTINCT board_code, NULL::varchar AS board_name
                 FROM {t['constituents']}
                 WHERE board_code IS NOT NULL AND board_code <> ''
                   AND UPPER(board_code) NOT LIKE 'BK%'
-                GROUP BY board_code
             ) u
             WHERE board_code IS NOT NULL AND board_code <> ''
             GROUP BY board_code

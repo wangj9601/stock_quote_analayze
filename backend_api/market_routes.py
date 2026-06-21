@@ -214,6 +214,51 @@ def get_industry_board(db: Session = Depends(get_db)):
             'traceback': tb
         }, status_code=500)
 
+# 行业板块目录（basic + 成分股 + 实时行情并集，供 GMS 筛选等下拉使用）
+@router.get("/industry_board/catalog")
+def get_industry_board_catalog(db: Session = Depends(get_db)):
+    """行业板块代码/名称列表；与管理端板块列表数据源一致，不依赖实时行情表是否有数据。"""
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT board_code, MAX(board_name) AS board_name
+                FROM (
+                    SELECT board_code, board_name FROM industry_board_basic_info
+                    WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                      AND UPPER(board_code) NOT LIKE 'BK%%'
+                    UNION ALL
+                    SELECT DISTINCT board_code, NULL::varchar AS board_name
+                    FROM industry_board_constituents
+                    WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                      AND UPPER(board_code) NOT LIKE 'BK%%'
+                    UNION ALL
+                    SELECT board_code, board_name FROM industry_board_realtime_quotes
+                    WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                      AND UPPER(board_code) NOT LIKE 'BK%%'
+                ) u
+                GROUP BY board_code
+                ORDER BY board_name NULLS LAST, board_code
+                """
+            )
+        ).fetchall()
+        data = [
+            {"board_code": row[0], "board_name": row[1]}
+            for row in rows
+        ]
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业板块列表失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
 # 获取概念板块列表（基本信息表）
 @router.get("/concept_board")
 def get_concept_board(db: Session = Depends(get_db)):

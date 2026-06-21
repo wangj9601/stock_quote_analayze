@@ -1172,8 +1172,11 @@ const ScreeningPage = {
         if (this._gmsIndustryBoardsLoaded && sel.options.length > 1) return;
         const prev = sel.value;
         try {
-            const res = await fetch(`${this.API_BASE_URL}/api/market/industry_board`);
+            const res = await fetch(`${this.API_BASE_URL}/api/market/industry_board/catalog`);
             const data = await res.json();
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || `HTTP ${res.status}`);
+            }
             sel.innerHTML = '';
             const placeholder = document.createElement('option');
             placeholder.value = '';
