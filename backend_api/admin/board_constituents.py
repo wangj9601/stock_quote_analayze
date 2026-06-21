@@ -299,6 +299,14 @@ def _assert_concept_board_name_unique(
         )
 
 
+def _clear_all_concept_boards(db: Session) -> tuple[int, int]:
+    """清空全部概念板块基本信息与成分股。"""
+    Model = _constituent_model("concept")
+    cons_deleted = db.query(Model).delete(synchronize_session=False)
+    basic_deleted = db.execute(text("DELETE FROM concept_board_basic_info")).rowcount
+    return int(cons_deleted or 0), int(basic_deleted or 0)
+
+
 def _sync_concept_board_basic_from_import(
     db: Session,
     rows: List[Dict[str, str]],
@@ -776,35 +784,58 @@ async def export_all_constituents(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """导出当前类型下全部板块成分股。"""
+    """导出当前类型下全部板块成分股（含无成分股的板块基本信息行）。"""
     _ = current_user
     t = _tables(board_type)
     label = "industry" if board_type == "industry" else "concept"
+    if board_type == "industry":
+        board_src_sql = f"""
+            SELECT board_code, MAX(board_name) AS board_name
+            FROM (
+                SELECT board_code, board_name FROM {t['basic']}
+                WHERE UPPER(board_code) NOT LIKE 'BK%'
+                UNION ALL
+                SELECT board_code, MAX(board_name) AS board_name
+                FROM {t['constituents']}
+                WHERE board_code IS NOT NULL AND board_code <> ''
+                  AND UPPER(board_code) NOT LIKE 'BK%'
+                GROUP BY board_code
+            ) u
+            WHERE board_code IS NOT NULL AND board_code <> ''
+            GROUP BY board_code
+        """
+    else:
+        board_src_sql = f"""
+            SELECT board_code, MAX(board_name) AS board_name
+            FROM (
+                SELECT board_code, board_name FROM {t['basic']}
+                UNION ALL
+                SELECT board_code, NULL AS board_name FROM {t['constituents']}
+            ) u
+            WHERE board_code IS NOT NULL AND board_code <> ''
+            GROUP BY board_code
+        """
     sql = text(
         f"""
         SELECT
-            c.board_code,
+            b.board_code,
             COALESCE(b.board_name, '') AS board_name,
-            c.stock_code,
+            COALESCE(c.stock_code, '') AS stock_code,
             COALESCE(c.stock_name, '') AS stock_name,
             c.updated_at
-        FROM {t['constituents']} c
-        LEFT JOIN (
-            SELECT board_code, MAX(board_name) AS board_name
-            FROM {t['basic']}
-            GROUP BY board_code
-        ) b ON b.board_code = c.board_code
-        ORDER BY c.board_code, c.stock_code
+        FROM ({board_src_sql}) b
+        LEFT JOIN {t['constituents']} c ON c.board_code = b.board_code
+        ORDER BY b.board_code, c.stock_code NULLS FIRST
         """
     )
     rows = db.execute(sql).fetchall()
     cols = ["board_code", "board_name", "stock_code", "stock_name", "updated_at"]
     data = [
         [
-            r[0],
-            r[1],
-            r[2],
-            r[3],
+            str(r[0] or ""),
+            str(r[1] or ""),
+            str(r[2] or ""),
+            str(r[3] or ""),
             r[4].strftime("%Y-%m-%d %H:%M:%S") if r[4] else "",
         ]
         for r in rows
@@ -880,7 +911,7 @@ async def import_all_board_constituents(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """Excel/CSV 全量导入多板块成分股。"""
+    """Excel/CSV 全量导入多板块成分股。概念板块会先清空原有数据再导入。"""
     content = await file.read()
     rows, issues = parse_all_constituents_file(file.filename or "", content)
     if not rows:
@@ -890,7 +921,16 @@ async def import_all_board_constituents(
             "data": {"issues": issues[:200]},
         }
 
-    stock_rows = [{"stock_code": r["stock_code"], "stock_name": r["stock_name"]} for r in rows]
+    cleared_cons = 0
+    cleared_basic = 0
+    if board_type == "concept":
+        cleared_cons, cleared_basic = _clear_all_concept_boards(db)
+
+    stock_rows = [
+        {"stock_code": r["stock_code"], "stock_name": r["stock_name"]}
+        for r in rows
+        if (r.get("stock_code") or "").strip() or (r.get("stock_name") or "").strip()
+    ]
     resolved, resolve_issues = resolve_rows_stock_codes(db, stock_rows)
     issues.extend(resolve_issues)
 
@@ -902,6 +942,8 @@ async def import_all_board_constituents(
     aligned: List[Dict[str, str]] = []
     res_idx = 0
     for i, src in enumerate(rows):
+        if not (src.get("stock_code") or "").strip() and not (src.get("stock_name") or "").strip():
+            continue
         row_no = i + 2
         if row_no in issue_row_nos:
             continue
@@ -915,17 +957,44 @@ async def import_all_board_constituents(
             "stock_name": item.get("stock_name") or src.get("stock_name") or "",
         })
 
+    now = datetime.now().replace(microsecond=0)
+    basic_synced = 0
+    if board_type == "concept":
+        basic_synced = _sync_concept_board_basic_from_import(db, rows, now, issues)
+
     if not aligned:
+        if basic_synced:
+            db.commit()
+            uname = getattr(current_user, "username", None) or "admin"
+            msg = f"已同步板块基本信息 {basic_synced} 个（无有效成分股行可导入）"
+            if board_type == "concept":
+                msg = (
+                    f"已清空原概念板块 {cleared_basic} 个、成分股 {cleared_cons} 条；"
+                    + msg
+                )
+            if issues:
+                msg += f"，告警 {len(issues)} 条"
+            return {
+                "success": True,
+                "message": msg,
+                "data": {
+                    "boards_processed": 0,
+                    "basic_synced": basic_synced,
+                    "cleared_basic": cleared_basic,
+                    "cleared_constituents": cleared_cons,
+                    "processed": 0,
+                    "added": 0,
+                    "skipped_issues": len(issues),
+                    "issues": issues[:50],
+                    "board_stats": [],
+                    "operator": uname,
+                },
+            }
         return {
             "success": False,
             "message": "未导入任何有效数据",
             "data": {"issues": issues[:200]},
         }
-
-    now = datetime.now().replace(microsecond=0)
-    basic_synced = 0
-    if board_type == "concept":
-        basic_synced = _sync_concept_board_basic_from_import(db, rows, now, issues)
 
     board_stats: dict[str, dict[str, int]] = {}
     total_processed = 0
@@ -947,6 +1016,11 @@ async def import_all_board_constituents(
         f"全量导入完成：{len(board_stats)} 个板块，"
         f"有效 {total_processed} 条，新增 {total_added} 条"
     )
+    if board_type == "concept":
+        msg = (
+            f"已清空原概念板块 {cleared_basic} 个、成分股 {cleared_cons} 条；"
+            + msg
+        )
     if board_type == "concept" and basic_synced:
         msg += f"，同步板块基本信息 {basic_synced} 个"
     if issues:
@@ -957,6 +1031,8 @@ async def import_all_board_constituents(
         "data": {
             "boards_processed": len(board_stats),
             "basic_synced": basic_synced,
+            "cleared_basic": cleared_basic if board_type == "concept" else 0,
+            "cleared_constituents": cleared_cons if board_type == "concept" else 0,
             "processed": total_processed,
             "added": total_added,
             "skipped_issues": len(issues),

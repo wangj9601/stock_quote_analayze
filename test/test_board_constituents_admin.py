@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from backend_api.admin.board_constituents import (
     DeleteBoardsBatchBody,
     SaveBoardInfoBody,
+    _clear_all_concept_boards,
     _assert_concept_board_name_unique,
     _format_bk_board_code,
     _generate_next_concept_board_code,
@@ -160,3 +161,26 @@ class TestBoardConstituentsHelpers:
         assert executed[0]["board_name"] == "苹果概念"
         assert executed[1]["board_code"] == "BK1642"
         assert executed[1]["board_name"] is None
+
+    def test_clear_all_concept_boards(self):
+        deleted: dict[str, int] = {"cons": 0, "basic": 0}
+
+        class _Model:
+            pass
+
+        class _Q:
+            def delete(self, synchronize_session=False):
+                deleted["cons"] = 10
+                return 10
+
+        class _DB:
+            def query(self, model):
+                return _Q()
+
+            def execute(self, sql, params=None):
+                deleted["basic"] = 5
+                return type("R", (), {"rowcount": 5})()
+
+        cons, basic = _clear_all_concept_boards(_DB())
+        assert cons == 10
+        assert basic == 5

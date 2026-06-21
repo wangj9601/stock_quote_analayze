@@ -165,7 +165,13 @@ def parse_constituents_file(filename: str, content: bytes) -> Tuple[List[Dict[st
 
 def _normalize_import_board_code(raw: str) -> str:
     s = str(raw or "").strip().upper()
-    return s.lstrip("'").lstrip("’").strip()
+    if re.match(r"^\d+\.0$", s):
+        s = s[:-2]
+    s = s.lstrip("'").lstrip("’").strip()
+    # Excel 可能把 BK1680 读成纯数字 1680
+    if re.match(r"^\d{4,}$", s):
+        s = f"BK{s}"
+    return s
 
 
 def parse_all_constituents_file(
@@ -211,6 +217,16 @@ def parse_all_constituents_file(
             issues.append({"row_no": row_no, "message": "板块代码为空，已跳过"})
             continue
         if not stock_code and not stock_name:
+            board_key = f"__board__|{board_code}"
+            if board_key in seen_keys:
+                continue
+            seen_keys.add(board_key)
+            rows.append({
+                "board_code": board_code,
+                "board_name": board_name,
+                "stock_code": "",
+                "stock_name": "",
+            })
             continue
 
         dedupe_key = f"{board_code}|{stock_code or f'name:{stock_name}'}"

@@ -146,6 +146,27 @@ class TestBoardConstituentsImport:
         assert rows[2]["board_code"] == "半导体"
         assert not issues
 
+    def test_parse_all_board_only_row(self):
+        csv_text = (
+            "board_code,board_name,stock_code,stock_name\n"
+            "BK1680,储能,,\n"
+            "BK1680,储能,000001,平安银行\n"
+        )
+        rows, issues = parse_all_constituents_file("boards.csv", csv_text.encode("utf-8-sig"))
+        assert len(rows) == 2
+        assert rows[0]["board_code"] == "BK1680"
+        assert rows[0]["stock_code"] == ""
+        assert rows[1]["stock_code"] == "000001"
+        assert not issues
+
+    def test_normalize_import_board_code_from_excel_number(self):
+        from backend_api.admin.board_constituents_import import _normalize_import_board_code
+
+        assert _normalize_import_board_code("1680") == "BK1680"
+        assert _normalize_import_board_code("1680.0") == "BK1680"
+        assert _normalize_import_board_code("BK1680") == "BK1680"
+        assert _normalize_import_board_code("IT服务") == "IT服务"
+
     def test_parse_all_constituents_missing_board_col(self):
         csv_text = "stock_code,stock_name\n000001,平安银行\n"
         rows, issues = parse_all_constituents_file("bad.csv", csv_text.encode("utf-8"))
