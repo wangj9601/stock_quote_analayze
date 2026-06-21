@@ -1057,7 +1057,7 @@ async def get_gms_strategy(
     date: str = Query(None, description="目标日期 YYYY-MM-DD"),
     limit: int = Query(None, ge=1, description="最大返回数量"),
     min_score: float = Query(0, ge=0, le=100, description="最低总分阈值"),
-    scope: str = Query("all", description="股票范围: all/cn/hk/etf/watchlist/gms_watchlist/industry_board"),
+    scope: str = Query("all", description="股票范围: all/cn/hk/etf/watchlist/gms_watchlist/industry_board/concept_board"),
     watchlist_user_id: Optional[int] = Query(
         None,
         ge=1,
@@ -1070,6 +1070,14 @@ async def get_gms_strategy(
     industry_board_code: Optional[str] = Query(
         None,
         description="scope=industry_board 时必填：行业板块代码（如 IT服务、半导体）",
+    ),
+    concept_board_code: Optional[str] = Query(
+        None,
+        description="scope=concept_board 时必填：概念板块代码（如 BK0428）",
+    ),
+    exclude_st: bool = Query(
+        False,
+        description="为 true 时剔除 A 股 ST 类股票（名称含 ST，适用于各数据来源）",
     ),
     # 前端传入的策略参数（覆盖 gms_config.json 默认值）
     accumulation_fz_min: Optional[float] = Query(None, description="蓄势 F/Z 下限"),
@@ -1121,7 +1129,7 @@ async def get_gms_strategy(
     """
     GMS 均值引力与动量突变策略选股。
     数据来源由 scope 决定：watchlist=当前用户自选股；gms_watchlist=管理端 GMS 观察股表（启用版本且 status=active）；
-    industry_board=指定行业板块成分股；cn/hk/etf=全市场对应品种。
+    industry_board=指定行业板块成分股；concept_board=指定概念板块成分股；cn/hk/etf=全市场对应品种。
     """
     if not GMS_AVAILABLE:
         return JSONResponse(
@@ -1330,6 +1338,47 @@ async def get_gms_strategy(
                 )
             market = "cn"
             logger.info("GMS 数据来源=行业板块 board=%s 股票数=%s", bcode, len(stock_pool))
+        elif scope == "concept_board":
+            from backend_api.models import ConceptBoardConstituent
+
+            bcode = str(concept_board_code or "").strip().upper()
+            if not bcode:
+                raise HTTPException(status_code=400, detail="scope=concept_board 时需传 concept_board_code")
+            rows_cb = (
+                db.query(ConceptBoardConstituent)
+                .filter(ConceptBoardConstituent.board_code == bcode)
+                .all()
+            )
+            raw_codes = [
+                str(getattr(r, "stock_code", "") or "").strip()
+                for r in rows_cb
+                if getattr(r, "stock_code", None) is not None and str(getattr(r, "stock_code", "")).strip()
+            ]
+            stock_pool = list(dict.fromkeys(_normalize_stock_code_for_gms_pool(c) for c in raw_codes))
+            stock_pool = [c for c in stock_pool if c]
+            stock_pool_size = len(stock_pool)
+            if not stock_pool:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": target_date,
+                        "strategy_name": "GMS均值引力动量策略",
+                        "scope": "concept_board",
+                        "concept_board_code": bcode,
+                        "message": f"概念板块「{bcode}」成分股为空（请在管理端维护板块成分股）",
+                        "paging": {
+                            "enabled": use_pagination,
+                            "page": 1,
+                            "page_size": page_size if use_pagination else 0,
+                            "total": 0,
+                            "total_pages": 0,
+                        },
+                    }
+                )
+            market = "cn"
+            logger.info("GMS 数据来源=概念板块 board=%s 股票数=%s", bcode, len(stock_pool))
         elif scope == "cn":
             market = "cn"
         elif scope == "hk":
@@ -1395,6 +1444,7 @@ async def get_gms_strategy(
             _min_score: float,
             _max_results: int,
             _trace_only: bool,
+            _exclude_st: bool,
         ):
             session = SessionLocal()
             try:
@@ -1406,6 +1456,7 @@ async def get_gms_strategy(
                     market,
                     trace_only=_trace_only,
                     return_meta=True,
+                    exclude_st=_exclude_st,
                 )
             finally:
                 session.close()
@@ -1416,7 +1467,7 @@ async def get_gms_strategy(
             loop.run_in_executor(
                 None,
                 lambda: _run_gms(
-                    target_date, config, resolved_config_id, min_score, max_results, trace_only
+                    target_date, config, resolved_config_id, min_score, max_results, trace_only, exclude_st
                 ),
             ),
             timeout=GMS_SCREENING_TIMEOUT,
@@ -1444,6 +1495,7 @@ async def get_gms_strategy(
                                     min_score,
                                     max_results,
                                     trace_only,
+                                    exclude_st,
                                 ),
                             ),
                             timeout=GMS_SCREENING_TIMEOUT,
@@ -1684,6 +1736,8 @@ async def get_gms_strategy(
                 "scope": scope,
                 "stock_pool_size": stock_pool_size,
                 "industry_board_code": industry_board_code if scope == "industry_board" else None,
+                "concept_board_code": concept_board_code if scope == "concept_board" else None,
+                "exclude_st": exclude_st,
                 "use_pagination": use_pagination,
                 "page": page_eff,
                 "page_size": page_size if use_pagination else total_all,

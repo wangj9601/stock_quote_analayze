@@ -741,7 +741,7 @@
             <div class="strategy-info-card">
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
-                    <li><strong>数据来源：</strong>【单只股票】输入代码或名称，仅计算该股的 GMS 策略信号；【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【行业板块】按所选行业板块成分股筛选；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
+                    <li><strong>数据来源：</strong>【单只股票】输入代码或名称，仅计算该股的 GMS 策略信号；【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【行业板块】按所选行业板块成分股筛选；【概念板块】按所选概念板块成分股筛选；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
                         股基本信息表中全部 A 股的 GMS 指标列表；【全部ETF】显示 ETF 基本信息表中全部 ETF 的 GMS 指标列表。</li>
                     <li><strong>时间范围：</strong>最近 20 个交易日</li>
                     <li><strong>双模块阶梯式评分：</strong></li>
@@ -785,6 +785,11 @@
                         <label for="gmsScopeIndustryBoard" style="cursor: pointer;">行业板块</label>
                     </div>
                     <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeConceptBoard" name="gmsScope" value="concept_board"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeConceptBoard" style="cursor: pointer;">概念板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="gmsScopeGmsWatchlist" name="gmsScope" value="gms_watchlist"
                             style="margin-right: 5px;">
                         <label for="gmsScopeGmsWatchlist" style="cursor: pointer;">GMS观察股</label>
@@ -802,6 +807,13 @@
                     </select>
                     <span style="color: #888; font-size: 12px;">选定板块后点击「刷新筛选」，仅计算该板块成分股</span>
                 </div>
+                <div id="gmsConceptBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <label for="gmsConceptBoardSelect" style="color: #666; font-size: 13px;">概念板块：</label>
+                    <select id="gmsConceptBoardSelect" class="param-input" style="min-width: 220px; max-width: 360px;">
+                        <option value="">加载中…</option>
+                    </select>
+                    <span style="color: #888; font-size: 12px;">选定板块后点击「刷新筛选」，仅计算该板块成分股</span>
+                </div>
                 <div id="gmsSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
                     <label for="gmsSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
                     <input type="text" id="gmsSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
@@ -813,6 +825,12 @@
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="all" checked style="margin-right: 5px;">全部</label>
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="cn" style="margin-right: 5px;">仅A股</label>
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="hk" style="margin-right: 5px;">仅港股</label>
+                </div>
+                <div style="padding: 10px 0 0 0;">
+                    <label for="gmsExcludeSt" style="cursor: pointer; font-size: 13px; color: #666;">
+                        <input type="checkbox" id="gmsExcludeSt" style="margin-right: 6px;">
+                        剔除 ST 相关股（含 ST、*ST、S*ST 等，适用于以上各数据来源）
+                    </label>
                 </div>
             </div>
 

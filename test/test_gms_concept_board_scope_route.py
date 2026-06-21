@@ -1,6 +1,6 @@
 """
-GMS 选股路由：行业板块 scope 最小回归测试
-验证 /api/screening/gms-strategy?scope=industry_board&industry_board_code=IT服务
+GMS 选股路由：概念板块 scope 最小回归测试
+验证 /api/screening/gms-strategy?scope=concept_board&concept_board_code=BK0428
 会按成分股池计算且 market=cn。
 """
 
@@ -17,7 +17,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from backend_api.database import get_db
-from backend_api.models import IndustryBoardConstituent
+from backend_api.models import ConceptBoardConstituent
 from backend_api.stock import stock_screening_routes
 
 
@@ -44,14 +44,14 @@ class _DummyQuery:
         return None
 
 
-class _IndustryBoardDB:
+class _ConceptBoardDB:
     def query(self, *args, **kwargs):
         if not args:
             return _DummyQuery()
-        if args[0] is IndustryBoardConstituent:
+        if args[0] is ConceptBoardConstituent:
             return _DummyQuery([
                 SimpleNamespace(stock_code="000001"),
-                SimpleNamespace(stock_code="688158"),
+                SimpleNamespace(stock_code="300750"),
             ])
         return _DummyQuery()
 
@@ -124,7 +124,7 @@ def _make_client():
     app.include_router(stock_screening_routes.router)
 
     def _override_db():
-        yield _IndustryBoardDB()
+        yield _ConceptBoardDB()
 
     app.dependency_overrides[get_db] = _override_db
     return TestClient(app)
@@ -134,9 +134,9 @@ def _make_client():
 @patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
 @patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
-def test_gms_strategy_scope_industry_board_requires_code():
+def test_gms_strategy_scope_concept_board_requires_code():
     client = _make_client()
-    resp = client.get("/api/screening/gms-strategy?scope=industry_board&date=2026-04-23")
+    resp = client.get("/api/screening/gms-strategy?scope=concept_board&date=2026-04-23")
     assert resp.status_code == 400
 
 
@@ -144,16 +144,16 @@ def test_gms_strategy_scope_industry_board_requires_code():
 @patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
 @patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
-def test_gms_strategy_scope_industry_board_uses_constituents():
+def test_gms_strategy_scope_concept_board_uses_constituents():
     client = _make_client()
     resp = client.get(
         "/api/screening/gms-strategy"
-        "?scope=industry_board&industry_board_code=IT%E6%9C%8D%E5%8A%A1&date=2026-04-23"
+        "?scope=concept_board&concept_board_code=BK0428&date=2026-04-23"
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
     assert _FakeGmsFrontendInterface.last_market == "cn"
-    assert _FakeGmsFrontendInterface.last_stock_pool == ["000001", "688158"]
+    assert _FakeGmsFrontendInterface.last_stock_pool == ["000001", "300750"]
     assert isinstance(data["data"], list)
     assert len(data["data"]) == 1

@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import HTTPException
 
 from backend_api.admin.board_constituents import (
+    DeleteBoardsBatchBody,
     SaveBoardInfoBody,
     _assert_concept_board_name_unique,
     _format_bk_board_code,
@@ -41,6 +42,23 @@ class TestBoardConstituentsHelpers:
         try:
             SaveBoardInfoBody(board_type="industry", board_name="x")
             assert False, "行业板块应要求代码"
+        except ValueError:
+            pass
+
+    def test_delete_boards_batch_body_validation(self):
+        body = DeleteBoardsBatchBody(
+            board_type="concept",
+            board_codes=["BK0428", " bk0429 ", "BK0428"],
+        )
+        assert body.board_codes == ["BK0428", "BK0429"]
+        try:
+            DeleteBoardsBatchBody(board_type="industry", board_codes=["IT服务"])
+            assert False, "行业板块不应支持批量删除"
+        except ValueError:
+            pass
+        try:
+            DeleteBoardsBatchBody(board_type="concept", board_codes=["  "])
+            assert False, "空代码应失败"
         except ValueError:
             pass
 

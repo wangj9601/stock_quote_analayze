@@ -20,6 +20,17 @@
               <span class="font-semibold">板块列表</span>
               <div class="flex gap-2">
                 <el-button size="small" type="primary" @click="openBoardEditDialog()">新增板块</el-button>
+                <el-button
+                  v-if="boardType === 'concept'"
+                  size="small"
+                  type="danger"
+                  plain
+                  :disabled="!selectedBoardRows.length"
+                  :loading="deletingBoardsBatch"
+                  @click="removeSelectedBoards"
+                >
+                  删除选中
+                </el-button>
                 <el-button size="small" :loading="exportingAll" @click="exportAllConstituents">
                   导出全部
                 </el-button>
@@ -41,14 +52,23 @@
           />
           <el-button type="primary" size="small" :loading="boardsLoading" @click="loadBoards">查询</el-button>
           <el-table
+            ref="boardTableRef"
             :data="boards"
             v-loading="boardsLoading"
             size="small"
             highlight-current-row
             class="mt-3"
             max-height="520"
+            row-key="board_code"
             @current-change="onSelectBoard"
+            @selection-change="onBoardSelectionChange"
           >
+            <el-table-column
+              v-if="boardType === 'concept'"
+              type="selection"
+              width="42"
+              reserve-selection
+            />
             <el-table-column prop="board_code" label="代码" width="88" />
             <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
             <el-table-column prop="constituent_count" label="成分数" width="72" align="right" />
@@ -303,6 +323,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { TableInstance } from 'element-plus'
 import {
   boardConstituentsService,
   type BoardType,
@@ -318,6 +339,9 @@ const boardTotal = ref(0)
 const boards = ref<BoardSummary[]>([])
 const boardsLoading = ref(false)
 const selectedBoard = ref<BoardSummary | null>(null)
+const selectedBoardRows = ref<BoardSummary[]>([])
+const deletingBoardsBatch = ref(false)
+const boardTableRef = ref<TableInstance | null>(null)
 
 const stockKeyword = ref('')
 const stockPage = ref(1)
@@ -366,9 +390,14 @@ const isConceptBoardCreate = computed(
 
 function onBoardTypeChange() {
   selectedBoard.value = null
+  selectedBoardRows.value = []
   constituents.value = []
   boardPage.value = 1
   void loadBoards()
+}
+
+function onBoardSelectionChange(rows: BoardSummary[]) {
+  selectedBoardRows.value = rows
 }
 
 async function loadBoards() {
@@ -541,6 +570,42 @@ async function deleteBoardInfo() {
     if (e !== 'cancel') ElMessage.error(e instanceof Error ? e.message : '删除失败')
   } finally {
     deletingBoard.value = false
+  }
+}
+
+async function removeSelectedBoards() {
+  if (boardType.value !== 'concept' || !selectedBoardRows.value.length) return
+  const codes = selectedBoardRows.value.map((r) => r.board_code).filter(Boolean)
+  if (!codes.length) return
+  const preview = codes.slice(0, 8).join('、')
+  const suffix = codes.length > 8 ? ` 等 ${codes.length} 个` : ''
+  try {
+    await ElMessageBox.confirm(
+      `确定删除概念板块 ${preview}${suffix} 及其全部成分股？不可恢复。`,
+      '批量删除确认',
+      { type: 'warning' },
+    )
+    deletingBoardsBatch.value = true
+    const res = await boardConstituentsService.deleteBoardsBatch({
+      boardType: 'concept',
+      boardCodes: codes,
+    })
+    ElMessage.success(res.message || '已删除')
+    const deletedSet = new Set(codes)
+    if (selectedBoard.value && deletedSet.has(selectedBoard.value.board_code)) {
+      selectedBoard.value = null
+      constituents.value = []
+    }
+    selectedBoardRows.value = []
+    boardTableRef.value?.clearSelection()
+    await loadBoards()
+  } catch (e: unknown) {
+    const msg =
+      (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+      (e instanceof Error ? e.message : '删除失败')
+    if (e !== 'cancel') ElMessage.error(msg)
+  } finally {
+    deletingBoardsBatch.value = false
   }
 }
 

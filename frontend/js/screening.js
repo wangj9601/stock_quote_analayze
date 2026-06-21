@@ -27,6 +27,8 @@ const ScreeningPage = {
     gmsConfigId: null,
     /** 行业板块下拉是否已加载 */
     _gmsIndustryBoardsLoaded: false,
+    /** 概念板块下拉是否已加载 */
+    _gmsConceptBoardsLoaded: false,
 
     // 初始化
     async init() {
@@ -1154,6 +1156,15 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
+    /** 显示/隐藏「概念板块」选择行 */
+    syncGmsConceptBoardWrap() {
+        const wrap = document.getElementById('gmsConceptBoardWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="gmsScope"]:checked');
+        const show = checked && checked.value === 'concept_board';
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
     /** 加载行业板块下拉选项 */
     async loadGmsIndustryBoardOptions() {
         const sel = document.getElementById('gmsIndustryBoardSelect');
@@ -1185,6 +1196,37 @@ const ScreeningPage = {
             this._gmsIndustryBoardsLoaded = true;
         } catch (e) {
             console.warn('[GMS] 加载行业板块列表失败', e);
+            sel.innerHTML = '<option value="">加载失败，请刷新页面</option>';
+        }
+    },
+
+    /** 加载概念板块下拉选项 */
+    async loadGmsConceptBoardOptions() {
+        const sel = document.getElementById('gmsConceptBoardSelect');
+        if (!sel) return;
+        if (this._gmsConceptBoardsLoaded && sel.options.length > 1) return;
+        const prev = sel.value;
+        try {
+            const res = await fetch(`${this.API_BASE_URL}/api/market/concept_board`);
+            const data = await res.json();
+            sel.innerHTML = '';
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '请选择概念板块';
+            sel.appendChild(placeholder);
+            const boards = data.success && Array.isArray(data.data) ? data.data : [];
+            boards.forEach((b) => {
+                const opt = document.createElement('option');
+                opt.value = b.board_code;
+                opt.textContent = b.board_name
+                    ? `${b.board_name} (${b.board_code})`
+                    : String(b.board_code || '');
+                sel.appendChild(opt);
+            });
+            if (prev) sel.value = prev;
+            this._gmsConceptBoardsLoaded = true;
+        } catch (e) {
+            console.warn('[GMS] 加载概念板块列表失败', e);
             sel.innerHTML = '<option value="">加载失败，请刷新页面</option>';
         }
     },
@@ -1388,6 +1430,7 @@ const ScreeningPage = {
             radio.addEventListener('change', () => {
                 this.syncGmsWatchlistMarketWrap();
                 this.syncGmsIndustryBoardWrap();
+                this.syncGmsConceptBoardWrap();
                 this.syncGmsSingleStockWrap();
                 const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
                 if (scopeEl && scopeEl.value === 'single') {
@@ -1396,6 +1439,11 @@ const ScreeningPage = {
                 if (scopeEl && scopeEl.value === 'industry_board') {
                     void this.loadGmsIndustryBoardOptions();
                     const sel = document.getElementById('gmsIndustryBoardSelect');
+                    if (!sel || !sel.value) return;
+                }
+                if (scopeEl && scopeEl.value === 'concept_board') {
+                    void this.loadGmsConceptBoardOptions();
+                    const sel = document.getElementById('gmsConceptBoardSelect');
                     if (!sel || !sel.value) return;
                 }
                 this.loadScreeningResults('gms');
@@ -1418,8 +1466,24 @@ const ScreeningPage = {
                 }
             });
         }
+        const gmsConceptBoardSelect = document.getElementById('gmsConceptBoardSelect');
+        if (gmsConceptBoardSelect) {
+            gmsConceptBoardSelect.addEventListener('change', () => {
+                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                if (scopeEl && scopeEl.value === 'concept_board' && gmsConceptBoardSelect.value) {
+                    void this.loadScreeningResults('gms');
+                }
+            });
+        }
+        const gmsExcludeSt = document.getElementById('gmsExcludeSt');
+        if (gmsExcludeSt) {
+            gmsExcludeSt.addEventListener('change', () => {
+                void this.loadScreeningResults('gms');
+            });
+        }
         this.syncGmsWatchlistMarketWrap();
         this.syncGmsIndustryBoardWrap();
+        this.syncGmsConceptBoardWrap();
         this.syncGmsSingleStockWrap();
         const gmsSingleInput = document.getElementById('gmsSingleStockInput');
         if (gmsSingleInput) {
@@ -1598,6 +1662,11 @@ const ScreeningPage = {
             const code = sel && sel.value ? String(sel.value).trim() : '';
             if (code) q.set('industry_board_code', code);
         }
+        if (scope === 'concept_board') {
+            const sel = document.getElementById('gmsConceptBoardSelect');
+            const code = sel && sel.value ? String(sel.value).trim() : '';
+            if (code) q.set('concept_board_code', code);
+        }
         const configEl = document.getElementById('gms-config_id');
         const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
         if (configId) {
@@ -1630,6 +1699,10 @@ const ScreeningPage = {
         } else if (gmsParams.start_date) {
             q.set('date', gmsParams.start_date);
         }
+        const excludeStEl = document.getElementById('gmsExcludeSt');
+        if (excludeStEl && excludeStEl.checked) {
+            q.set('exclude_st', 'true');
+        }
         if (scope === 'single') {
             q.set('use_pagination', 'false');
         } else if (includePagination) {
@@ -1651,6 +1724,13 @@ const ScreeningPage = {
             const code = sel && sel.value ? String(sel.value).trim() : '';
             if (!code) {
                 throw new Error('请选择行业板块');
+            }
+        }
+        if (scope === 'concept_board') {
+            const sel = document.getElementById('gmsConceptBoardSelect');
+            const code = sel && sel.value ? String(sel.value).trim() : '';
+            if (!code) {
+                throw new Error('请选择概念板块');
             }
         }
         if (scope === 'single') {

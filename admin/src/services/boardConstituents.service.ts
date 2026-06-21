@@ -145,6 +145,21 @@ class BoardConstituentsService {
     })
   }
 
+  async deleteBoardsBatch(body: { boardType: BoardType; boardCodes: string[] }) {
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: {
+        board_codes: string[]
+        boards_deleted: number
+        constituents_deleted: number
+      }
+    }>('/board-constituents/boards/delete-batch', {
+      board_type: body.boardType,
+      board_codes: body.boardCodes,
+    })
+  }
+
   async downloadImportTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {
     return apiService.get(`/board-constituents/import/template?format=${format}`, {
       responseType: 'blob',

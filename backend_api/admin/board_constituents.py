@@ -227,6 +227,23 @@ class DeleteBoardBody(BaseModel):
         return self
 
 
+class DeleteBoardsBatchBody(BaseModel):
+    board_type: BoardType
+    board_codes: List[str] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if self.board_type != "concept":
+            raise ValueError("批量删除仅支持概念板块")
+        codes = list(dict.fromkeys(
+            c for c in (_normalize_board_code(x) for x in self.board_codes) if c
+        ))
+        if not codes:
+            raise ValueError("板块代码无效")
+        self.board_codes = codes
+        return self
+
+
 def _upsert_board_basic(
     db: Session,
     board_type: BoardType,
@@ -489,6 +506,42 @@ async def delete_board_info(
         "message": f"已删除板块「{bcode}」（成分股 {cons_deleted} 条）",
         "data": {
             "board_code": bcode,
+            "constituents_deleted": cons_deleted,
+            "basic_deleted": basic_deleted,
+            "operator": uname,
+        },
+    }
+
+
+@router.post("/boards/delete-batch")
+async def delete_boards_batch(
+    body: DeleteBoardsBatchBody,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """批量删除概念板块基础信息及全部成分股。"""
+    codes = body.board_codes
+    t = _tables(body.board_type)
+    Model = _constituent_model(body.board_type)
+    cons_deleted = (
+        db.query(Model)
+        .filter(Model.board_code.in_(codes))
+        .delete(synchronize_session=False)
+    )
+    basic_deleted = 0
+    for bcode in codes:
+        basic_deleted += db.execute(
+            text(f"DELETE FROM {t['basic']} WHERE board_code = :code"),
+            {"code": bcode},
+        ).rowcount
+    db.commit()
+    uname = getattr(current_user, "username", None) or "admin"
+    return {
+        "success": True,
+        "message": f"已删除 {len(codes)} 个概念板块（成分股 {cons_deleted} 条）",
+        "data": {
+            "board_codes": codes,
+            "boards_deleted": len(codes),
             "constituents_deleted": cons_deleted,
             "basic_deleted": basic_deleted,
             "operator": uname,

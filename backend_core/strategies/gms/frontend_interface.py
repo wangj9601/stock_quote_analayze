@@ -268,6 +268,7 @@ class GMSFrontendInterface:
         market: str = "all",
         trace_only: bool = False,
         return_meta: bool = False,
+        exclude_st: bool = False,
     ) -> Union[List[dict], Tuple[List[dict], Dict[str, Any]]]:
         """
         获取选股结果。优先从 gms_signal_trace 表读取策略信号记录；
@@ -276,6 +277,7 @@ class GMSFrontendInterface:
         Args:
             trace_only: 为 True 时只读库内 trace，不对缺失股票做实时计算（用于前端先快速展示缓存）。
             return_meta: 为 True 时返回 (列表, 统计字典)，便于接口返回 trace_complete 等字段。
+            exclude_st: 为 True 时剔除 A 股 ST 类股票（名称含 ST）。
         """
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
@@ -285,6 +287,18 @@ class GMSFrontendInterface:
             stock_pool = self._get_stock_pool(date, market)
         else:
             stock_pool = list(dict.fromkeys(stock_pool))
+
+        if exclude_st and stock_pool:
+            from backend_api.utils.st_stock_filter import filter_codes_exclude_st
+
+            before = len(stock_pool)
+            stock_pool = filter_codes_exclude_st(self.db, stock_pool)
+            if before != len(stock_pool):
+                logger.info(
+                    "GMS 剔除 ST 相关股: %s -> %s 只",
+                    before,
+                    len(stock_pool),
+                )
 
         if not stock_pool:
             empty_meta = {

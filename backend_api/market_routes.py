@@ -214,6 +214,42 @@ def get_industry_board(db: Session = Depends(get_db)):
             'traceback': tb
         }, status_code=500)
 
+# 获取概念板块列表（基本信息表）
+@router.get("/concept_board")
+def get_concept_board(db: Session = Depends(get_db)):
+    """获取概念板块列表（从 concept_board_basic_info 读取，按创建时间倒序）。"""
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT board_code, board_name, create_date
+                FROM concept_board_basic_info
+                WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                ORDER BY create_date DESC NULLS LAST, board_code
+                """
+            )
+        ).fetchall()
+        data = [
+            {
+                "board_code": row[0],
+                "board_name": row[1],
+                "create_date": row[2].isoformat() if row[2] else None,
+            }
+            for row in rows
+        ]
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取概念板块列表失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
 # 获取港股指数数据
 @router.get("/hk-indices")
 def get_hk_market_indices(db: Session = Depends(get_db)):
