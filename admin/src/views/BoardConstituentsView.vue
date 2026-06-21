@@ -12,9 +12,9 @@
       <el-radio-button label="concept">概念板块</el-radio-button>
     </el-radio-group>
 
-    <el-row :gutter="16">
-      <el-col :span="9">
-        <el-card shadow="never">
+    <el-row :gutter="16" class="board-panels-row">
+      <el-col :span="9" class="board-panel-col">
+        <el-card shadow="never" class="board-panel-card">
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-2">
               <span class="font-semibold">板块列表</span>
@@ -51,18 +51,18 @@
             @keyup.enter="loadBoards"
           />
           <el-button type="primary" size="small" :loading="boardsLoading" @click="loadBoards">查询</el-button>
-          <el-table
-            ref="boardTableRef"
-            :data="boards"
-            v-loading="boardsLoading"
-            size="small"
-            highlight-current-row
-            class="mt-3"
-            max-height="520"
-            row-key="board_code"
-            @current-change="onSelectBoard"
-            @selection-change="onBoardSelectionChange"
-          >
+          <div class="board-panel-main mt-3">
+            <el-table
+              ref="boardTableRef"
+              :data="boards"
+              v-loading="boardsLoading"
+              size="small"
+              highlight-current-row
+              height="100%"
+              row-key="board_code"
+              @current-change="onSelectBoard"
+              @selection-change="onBoardSelectionChange"
+            >
             <el-table-column
               v-if="boardType === 'concept'"
               type="selection"
@@ -79,7 +79,8 @@
               </template>
             </el-table-column>
           </el-table>
-          <div class="mt-3 flex justify-end">
+          </div>
+          <div class="mt-3 flex justify-end board-panel-footer">
             <el-pagination
               v-model:current-page="boardPage"
               v-model:page-size="boardPageSize"
@@ -92,8 +93,8 @@
         </el-card>
       </el-col>
 
-      <el-col :span="15">
-        <el-card shadow="never">
+      <el-col :span="15" class="board-panel-col">
+        <el-card shadow="never" class="board-panel-card">
           <template #header>
             <div class="flex flex-wrap items-center justify-between gap-2">
               <span class="font-semibold">
@@ -115,7 +116,9 @@
             </div>
           </template>
 
-          <el-empty v-if="!selectedBoard" description="请从左侧选择板块" />
+          <div v-if="!selectedBoard" class="board-panel-main board-panel-empty">
+            <el-empty description="请从左侧选择板块" />
+          </div>
           <template v-else>
             <el-input
               v-model="stockKeyword"
@@ -125,20 +128,21 @@
               @keyup.enter="loadConstituents"
             />
             <el-button size="small" :loading="stocksLoading" @click="loadConstituents">查询</el-button>
-            <el-table
-              :data="constituents"
-              v-loading="stocksLoading"
-              size="small"
-              class="mt-3"
-              max-height="480"
-              @selection-change="(rows: BoardConstituentRow[]) => (selectedRows = rows)"
-            >
+            <div class="board-panel-main mt-3">
+              <el-table
+                :data="constituents"
+                v-loading="stocksLoading"
+                size="small"
+                height="100%"
+                @selection-change="(rows: BoardConstituentRow[]) => (selectedRows = rows)"
+              >
               <el-table-column type="selection" width="42" />
               <el-table-column prop="stock_code" label="代码" width="100" />
               <el-table-column prop="stock_name" label="名称" min-width="120" show-overflow-tooltip />
               <el-table-column prop="updated_at" label="更新时间" width="170" />
             </el-table>
-            <div class="mt-3 flex justify-end">
+            </div>
+            <div class="mt-3 flex justify-end board-panel-footer">
               <el-pagination
                 v-model:current-page="stockPage"
                 v-model:page-size="stockPageSize"
@@ -235,8 +239,8 @@
         show-icon
         class="mb-4"
         :title="boardType === 'concept'
-          ? '文件需含「板块代码」列及「股票代码」或「名称」列；概念板块导入前将清空原有全部板块与成分股，再写入本次数据。可先导出全部再编辑后回导。'
-          : '文件需含「板块代码」列及「股票代码」或「名称」列；可先导出全部再编辑后回导。'"
+          ? '请使用「导出全部」得到的 .xlsx（含 board_code 列），或下载全量模板。不支持东财单板 Table.xls（仅名称列）；单板文件请选中板块后用右侧「Excel 导入」。概念板块导入前将清空原有全部数据。'
+          : '文件需含「板块代码」列及「股票代码」或「名称」列；请先「导出全部」或使用全量模板，不支持东财单板 Table.xls。'"
       />
       <div class="mb-3 flex flex-wrap gap-2">
         <el-button size="small" @click="downloadAllTemplate('xlsx')">下载 XLSX 模板</el-button>
@@ -678,9 +682,10 @@ async function submitImportAll() {
       file: importAllFile.value,
     })
     if (!res.success) {
-      ElMessage.warning(res.message || '导入未完成')
+      const detail = res.data?.issues?.[0]?.message
+      ElMessage.warning(detail || res.message || '导入未完成')
       importAllResult.value = {
-        message: res.message || '导入失败',
+        message: detail || res.message || '导入失败',
         issues: res.data?.issues,
         board_stats: res.data?.board_stats,
       }
@@ -882,5 +887,43 @@ onMounted(() => {
 <style scoped>
 .page-header {
   margin-bottom: 0.5rem;
+}
+
+.board-panels-row {
+  align-items: stretch;
+}
+
+.board-panel-col {
+  display: flex;
+}
+
+.board-panel-card {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-panel-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 280px);
+}
+
+.board-panel-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.board-panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board-panel-footer {
+  flex-shrink: 0;
 }
 </style>

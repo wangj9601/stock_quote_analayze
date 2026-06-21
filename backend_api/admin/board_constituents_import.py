@@ -174,6 +174,23 @@ def _normalize_import_board_code(raw: str) -> str:
     return s
 
 
+def _hint_missing_board_column(columns: List[str], name_col: Optional[str], code_col: Optional[str]) -> str:
+    """全量导入缺少板块代码列时的可读提示。"""
+    cols_lower = {str(c).strip().lower() for c in columns}
+    has_name_only = bool(name_col) and not code_col
+    looks_like_eastmoney_table = (
+        has_name_only
+        or ("名称" in columns and "board_code" not in cols_lower and "板块代码" not in columns)
+    )
+    if looks_like_eastmoney_table:
+        return (
+            "当前文件为东财单板成分股格式（如 Table.xls，通常仅含「名称」列），"
+            "不能用于「导入全部」。请先在左侧选中目标板块，使用右侧「Excel 导入」；"
+            "或使用管理端「导出全部」生成的 .xlsx（含 board_code 列）进行全量导入。"
+        )
+    return "缺少板块代码列（board_code/板块代码/板块）；全量导入请使用「导出全部」文件或下载全量模板"
+
+
 def parse_all_constituents_file(
     filename: str,
     content: bytes,
@@ -198,7 +215,7 @@ def parse_all_constituents_file(
     code_col = _pick_col(list(df.columns), CODE_ALIASES)
     name_col = _pick_col(list(df.columns), NAME_ALIASES)
     if not board_col:
-        return [], [{"row_no": 0, "message": "缺少板块代码列（board_code/板块代码/板块）"}]
+        return [], [{"row_no": 0, "message": _hint_missing_board_column(list(df.columns), name_col, code_col)}]
     if not code_col and not name_col:
         return [], [{"row_no": 0, "message": "缺少股票代码列或名称列"}]
 

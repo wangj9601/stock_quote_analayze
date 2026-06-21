@@ -172,3 +172,11 @@ class TestBoardConstituentsImport:
         rows, issues = parse_all_constituents_file("bad.csv", csv_text.encode("utf-8"))
         assert not rows
         assert any("板块代码" in i.get("message", "") for i in issues)
+
+    def test_parse_all_eastmoney_table_xls_hint(self):
+        csv_text = "名称\n平安银行\n"
+        rows, issues = parse_all_constituents_file("Table.xls", csv_text.encode("gbk"))
+        assert not rows
+        assert len(issues) == 1
+        assert "Table.xls" in issues[0]["message"]
+        assert "Excel 导入" in issues[0]["message"]
