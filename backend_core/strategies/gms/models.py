@@ -3,7 +3,7 @@ GMS 策略核心数据模型
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any
 from enum import Enum
 
 
@@ -62,6 +62,10 @@ class GMSIndicators:
     score_balance: float = 0.0        # 均值收敛态-引力粘合维度得分（保留兼容）
     score_momentum: float = 0.0       # 动量溢出态总分 0-100（可含负分）
     score_total: float = 0.0          # 综合总分，用于排序
+    score_base_total: Optional[float] = None  # 减分前基础分（增强版）
+    score_penalty_deduction: float = 0.0
+    penalty_details: List[Dict[str, Any]] = field(default_factory=list)
+    scoring_mechanism: str = ""
 
     # 执行等级
     accumulation_grade: str = ""      # 均值收敛态：S / A / 空

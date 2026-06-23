@@ -715,6 +715,7 @@ class MeanFrequencyResonanceIndicators(Base):
     efficiency_m20_minus_m = Column(Float)    # 进出效率指标 (m20 - m) (Vol - MAVOL20)
     
     ma20_d = Column(Float)                    # 移动平均线 MA20 (d)
+    ma60_d = Column(Float, nullable=True)     # 移动平均线 MA60（减分规则等）
     mavol20_m = Column(Float)                 # 移动平均成交量 MAVOL20 (m)
     bias = Column(Float)                      # 乖离率 (Bias) = (Pt - d) / d
 

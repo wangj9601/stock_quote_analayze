@@ -44,6 +44,8 @@ class GMSConfigManager:
                 "volume_ratio_min": 1.5,
             },
             "scoring": {
+                "mechanism": "tiered_dual_max",
+                "penalty_rules": [],
                 "accumulation_fz_min": 1.5,
                 "balance_ratio_max": 0.01,
                 "momentum_volume_ratio_min": 1.5,
@@ -183,6 +185,15 @@ class GMSConfigManager:
         finally:
             db.close()
 
+    def get_config_row_by_name(self, name: str):
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            return db.query(GMSStrategyConfig).filter(GMSStrategyConfig.name == name.strip()).first()
+        finally:
+            db.close()
+
     def get_config(self, config_id: Optional[int] = None) -> Dict:
         cid = self.resolve_config_id(config_id)
         if cid in _CACHE:
@@ -277,6 +288,13 @@ class GMSConfigManager:
         db = self._session()
         try:
             merged = self._deep_merge(self.get_default_config(), config_params or {})
+            scoring = merged.get("scoring") or {}
+            from backend_core.strategies.gms.scoring import validate_scoring_config, normalize_scoring_defaults
+
+            merged["scoring"] = normalize_scoring_defaults(scoring)
+            errs = validate_scoring_config(merged["scoring"])
+            if errs:
+                raise ValueError("; ".join(errs))
             row = GMSStrategyConfig(
                 name=name.strip(),
                 version_label=version_label,
@@ -336,7 +354,15 @@ class GMSConfigManager:
                 row.precompute_enabled = precompute_enabled
             if partial:
                 current = dict(row.config_params or {})
-                row.config_params = self._deep_merge(current, partial)
+                merged = self._deep_merge(current, partial)
+                scoring = merged.get("scoring") or {}
+                from backend_core.strategies.gms.scoring import validate_scoring_config, normalize_scoring_defaults
+
+                merged["scoring"] = normalize_scoring_defaults(scoring)
+                errs = validate_scoring_config(merged["scoring"])
+                if errs:
+                    raise ValueError("; ".join(errs))
+                row.config_params = merged
             row.updated_at = datetime.now()
             if row.is_default:
                 self._sync_runtime_config_mirror(db, dict(row.config_params or {}))
@@ -445,6 +471,8 @@ class GMSConfigManager:
         exit_ = config.get("exit") or {}
         return {
             "observation_period": config.get("observation_period", 20),
+            "scoring_mechanism": scoring.get("mechanism", "tiered_dual_max"),
+            "penalty_rules": scoring.get("penalty_rules") or [],
             "ratio_d20_max": left.get("ratio_d20_abs_max"),
             "volume_ratio_max": left.get("volume_ratio_max"),
             "left_buy_min_accumulation": left.get("min_accumulation_score", 0),
@@ -485,6 +513,10 @@ class GMSConfigManager:
         if flat.get("volume_ratio_min") is not None:
             patch["right_buy"] = {"volume_ratio_min": flat["volume_ratio_min"]}
         scoring: Dict[str, Any] = {}
+        if flat.get("scoring_mechanism") is not None:
+            scoring["mechanism"] = flat["scoring_mechanism"]
+        if flat.get("penalty_rules") is not None:
+            scoring["penalty_rules"] = flat["penalty_rules"]
         for fk, sk in (
             ("accumulation_fz_min", "accumulation_fz_min"),
             ("balance_ratio_max", "balance_ratio_max"),

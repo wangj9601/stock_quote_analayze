@@ -135,3 +135,85 @@ def test_gms_strategy_batch_import_validation_and_dedupe():
     assert data["skip_count"] == 1
     assert data["fail_count"] == 1
     assert len(data["fail_details"]) == 1
+
+
+def test_gms_scoring_mechanisms_and_penalty_types():
+    client = _build_client()
+
+    mech_resp = client.get("/api/admin/gms/scoring-mechanisms")
+    assert mech_resp.status_code == 200
+    mech_ids = {m["id"] for m in mech_resp.json()["data"]}
+    assert "tiered_dual_max" in mech_ids
+    assert "tiered_dual_penalty" in mech_ids
+
+    penalty_resp = client.get("/api/admin/gms/penalty-rule-types")
+    assert penalty_resp.status_code == 200
+    penalty_ids = {p["id"] for p in penalty_resp.json()["data"]}
+    assert "close_below_ma60" in penalty_ids
+
+
+def test_gms_strategy_version_scoring_create_and_update():
+    client = _build_client()
+
+    create_resp = client.post(
+        "/api/admin/gms/strategy-versions",
+        json={
+            "strategy_code": "GMS",
+            "version_name": "增强打分测试",
+            "version_no": 901,
+            "scoring_mechanism": "tiered_dual_penalty",
+            "penalty_rules": [
+                {"id": "close_below_ma60", "enabled": True, "points": 10, "label": "低于MA60"},
+            ],
+            "created_by": "tester",
+        },
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    version = create_resp.json()["data"]
+    assert version["scoring_mechanism"] == "tiered_dual_penalty"
+    assert version.get("config_id")
+    version_id = version["id"]
+
+    full_resp = client.get(f"/api/admin/gms/strategy-versions/{version_id}/full")
+    assert full_resp.status_code == 200
+    full = full_resp.json()["data"]
+    assert full["config"] is not None
+    scoring = (full["config"].get("config_params") or {}).get("scoring") or {}
+    assert scoring.get("mechanism") == "tiered_dual_penalty"
+
+    update_resp = client.put(
+        f"/api/admin/gms/strategy-versions/{version_id}/scoring",
+        json={
+            "scoring_mechanism": "tiered_dual_penalty",
+            "penalty_rules": [{"id": "close_below_ma60", "enabled": True, "points": 15}],
+            "config": {"scoring": {"watch_threshold": 65}},
+        },
+    )
+    assert update_resp.status_code == 200
+    updated = update_resp.json()["data"]
+    assert updated["penalty_rules"][0]["points"] == 15
+
+    bad_resp = client.put(
+        f"/api/admin/gms/strategy-versions/{version_id}/scoring",
+        json={
+            "scoring_mechanism": "tiered_dual_max",
+            "penalty_rules": [{"id": "close_below_ma60", "enabled": True, "points": 10}],
+        },
+    )
+    assert bad_resp.status_code == 400
+
+
+def test_gms_create_penalty_version_without_rules_rejected():
+    client = _build_client()
+
+    bad_create = client.post(
+        "/api/admin/gms/strategy-versions",
+        json={
+            "strategy_code": "GMS",
+            "version_name": "无效增强版",
+            "version_no": 902,
+            "scoring_mechanism": "tiered_dual_penalty",
+            "penalty_rules": [],
+        },
+    )
+    assert bad_create.status_code == 400

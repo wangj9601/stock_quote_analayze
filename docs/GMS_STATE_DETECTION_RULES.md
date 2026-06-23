@@ -448,6 +448,37 @@ def detect_sell(self, indicators):
 }
 ```
 
+### 5.4 打分机制与减分规则（多版本）
+
+`scoring.mechanism` 决定综合分计算方式；与 `gms_strategy_versions` 1:1 绑定的 `config_id` 快照中存储。
+
+| mechanism | 名称 | 说明 |
+|-----------|------|------|
+| `tiered_dual_max` | 标准版·双模块阶梯 | 现网默认：均值收敛态与动量溢出态独立阶梯评分，综合分取两者较高者；**不允许**配置减分规则 |
+| `tiered_dual_penalty` | 增强版·阶梯+减分 | 在标准版基础分上按规则扣分，最终分限制在 0~100；**至少一条**启用的减分规则 |
+
+``` json
+{
+  "scoring": {
+    "mechanism": "tiered_dual_penalty",
+    "penalty_rules": [
+      {
+        "id": "close_below_ma60",
+        "enabled": true,
+        "points": 10,
+        "label": "收盘低于 MA60"
+      }
+    ]
+  }
+}
+```
+
+**减分规则 `close_below_ma60`**：当 `d20 < ma60_d`（收盘价低于 60 日均线）时，从基础分扣除 `points` 分。等级判定仍按**减分前**基础分（首期约定）。
+
+**数据依赖**：`mean_frequency_resonance_indicators.ma60_d`；缺失时 `data_loader` 会从 `historical_quotes` / `historical_quotes_hk` 估算补全。
+
+**管理入口**：管理端「GMS策略版本」→「打分与参数」Tab；网站选股参数版本下拉展示 `scoring_mechanism_label`。
+
 ------------------------------------------------------------------------
 
 ## 6. 判定流程图

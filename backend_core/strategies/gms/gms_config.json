@@ -13,6 +13,8 @@
     "volume_ratio_min": 1.5
   },
   "scoring": {
+    "mechanism": "tiered_dual_max",
+    "penalty_rules": [],
     "accumulation_fz_min": 1.5,
     "balance_ratio_max": 0.01,
     "momentum_volume_ratio_min": 1.5,

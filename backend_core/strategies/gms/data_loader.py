@@ -111,8 +111,11 @@ class GMSDataLoader:
                     "d1_date": getattr(item, "d1_date", None),
                     "d20": getattr(item, "d20", None),
                     "d20_date": getattr(item, "d20_date", None),
+                    "ma60_d": getattr(item, "ma60_d", None),
                 }
                 result.append(row_dict)
+
+            self._enrich_ma60_missing(result, market_type)
 
             logger.info(
                 f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}"
@@ -239,3 +242,55 @@ class GMSDataLoader:
             except Exception:
                 pass
             raise
+
+    def _enrich_ma60_missing(self, rows: List[Dict[str, Any]], market_type: str) -> None:
+        """为缺失 ma60_d 的行从行情表估算 60 日均价（仅补缺，不覆盖已有值）。"""
+        need: Dict[str, str] = {}
+        for r in rows:
+            if r.get("ma60_d") is not None:
+                continue
+            code = str(r.get("code") or "").strip()
+            dt = str(r.get("date") or "")[:10]
+            if code and dt:
+                need[code] = dt
+        if not need:
+            return
+        try:
+            from sqlalchemy import desc
+            from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
+
+            cache: Dict[str, float] = {}
+            for code, end_dt in need.items():
+                if market_type == "HK":
+                    q = (
+                        self.db.query(HistoricalQuotesHK.close)
+                        .filter(
+                            HistoricalQuotesHK.code == code,
+                            HistoricalQuotesHK.date <= end_dt,
+                        )
+                        .order_by(desc(HistoricalQuotesHK.date))
+                        .limit(60)
+                    )
+                else:
+                    q = (
+                        self.db.query(HistoricalQuotes.close)
+                        .filter(
+                            HistoricalQuotes.code == code,
+                            HistoricalQuotes.date <= end_dt,
+                        )
+                        .order_by(desc(HistoricalQuotes.date))
+                        .limit(60)
+                    )
+                closes = [float(x[0]) for x in q.all() if x[0] is not None]
+                if len(closes) >= 60:
+                    cache[code] = sum(closes[:60]) / 60.0
+                elif closes:
+                    cache[code] = sum(closes) / len(closes)
+            for r in rows:
+                if r.get("ma60_d") is not None:
+                    continue
+                code = str(r.get("code") or "").strip()
+                if code in cache:
+                    r["ma60_d"] = cache[code]
+        except Exception as e:
+            logger.warning("GMS 补全 ma60_d 失败: %s", e)

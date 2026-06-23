@@ -2,9 +2,9 @@
   <div class="gms-watchlist-page space-y-6">
     <div class="page-header">
       <div>
-        <h1>观察股管理</h1>
+        <h1>GMS 策略版本</h1>
         <p class="page-subtitle">
-          GMS 策略<strong>启用版本</strong>下的观察股维护（A/HK）；与选股管理中 GMS「GMS观察股」数据源一致。
+          统一管理 GMS 策略版本：观察股列表与打分机制（标准版 / 增强减分版）1:1 绑定参数版本；与网站选股「GMS观察股」数据源一致。
         </p>
       </div>
     </div>

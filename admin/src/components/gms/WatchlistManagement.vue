@@ -3,83 +3,168 @@
     <el-card class="toolbar">
       <el-row :gutter="12" align="middle">
         <el-col :span="6">
-          <el-select v-model="selectedVersionId" placeholder="选择观察股分组" filterable @change="handleVersionChange">
-            <el-option v-for="v in versions" :key="v.id" :label="`${v.strategy_code}-V${v.version_no} ${v.version_name}`" :value="v.id" />
+          <el-select v-model="selectedVersionId" placeholder="选择 GMS 策略版本" filterable @change="handleVersionChange">
+            <el-option
+              v-for="v in versions"
+              :key="v.id"
+              :label="versionOptionLabel(v)"
+              :value="v.id"
+            />
           </el-select>
         </el-col>
-        <el-col :span="3">
+        <el-col :span="3" v-if="activeTab === 'stocks'">
           <el-select v-model="marketFilter" placeholder="市场" clearable @change="refresh">
             <el-option label="A股" value="A" />
             <el-option label="港股" value="HK" />
           </el-select>
         </el-col>
-        <el-col :span="5">
+        <el-col :span="5" v-if="activeTab === 'stocks'">
           <el-input v-model="keyword" placeholder="代码/名称" clearable @keyup.enter="refresh" />
         </el-col>
-        <el-col :span="10" class="actions">
-          <el-button type="primary" @click="openVersionDialog()">新增分组</el-button>
-          <el-button type="success" :disabled="!selectedVersionId" @click="openStockDialog()">新增观察股</el-button>
-          <el-button :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
-          <el-button :disabled="!selectedVersionId" @click="openImportDialog">批量导入</el-button>
-          <el-button :disabled="!selectedVersionId" @click="handleExport">批量导出</el-button>
-          <el-button @click="refresh">刷新</el-button>
+        <el-col :span="activeTab === 'stocks' ? 10 : 15" class="actions">
+          <el-button type="primary" @click="openVersionDialog()">新增版本</el-button>
+          <template v-if="activeTab === 'stocks'">
+            <el-button type="success" :disabled="!selectedVersionId" @click="openStockDialog()">新增观察股</el-button>
+            <el-button :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
+            <el-button :disabled="!selectedVersionId" @click="openImportDialog">批量导入</el-button>
+            <el-button :disabled="!selectedVersionId" @click="handleExport">批量导出</el-button>
+            <el-button @click="refresh">刷新</el-button>
+          </template>
+          <template v-else>
+            <el-button type="primary" :disabled="!selectedVersionId || scoringSaving" :loading="scoringSaving" @click="saveScoring">
+              保存打分配置
+            </el-button>
+            <el-button :disabled="!selectedVersionId" @click="loadScoringPanel">刷新</el-button>
+          </template>
         </el-col>
       </el-row>
     </el-card>
 
-    <el-table v-loading="loading" :data="stocks" @selection-change="onSelectionChange">
-      <el-table-column type="selection" width="42" />
-      <el-table-column prop="market" label="市场" width="80" />
-      <el-table-column prop="stock_code" label="代码" width="120" />
-      <el-table-column prop="stock_name" label="名称" min-width="140" />
-      <el-table-column label="当前价格" width="100">
-        <template #default="scope">
-          <span v-if="scope.row.current_price != null">
-            {{ scope.row.market === 'HK' ? '$' : '¥' }}{{ scope.row.current_price.toFixed(2) }}
-          </span>
-          <span v-else class="text-gray-400">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="status" label="状态" width="100" />
-      <el-table-column label="审核" width="80">
-        <template #default="{ row }">
-          <el-switch v-model="row.is_verified" size="small" @change="(val: boolean) => toggleVerified(row, val)" />
-        </template>
-      </el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="90" />
-      <el-table-column prop="remark" label="备注" min-width="140" />
-      <el-table-column label="操作" width="180" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openStockDialog(row)">编辑</el-button>
-          <el-button link type="danger" @click="removeStock(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tab-pane label="观察股" name="stocks">
+        <el-table v-loading="loading" :data="stocks" @selection-change="onSelectionChange">
+          <el-table-column type="selection" width="42" />
+          <el-table-column prop="market" label="市场" width="80" />
+          <el-table-column prop="stock_code" label="代码" width="120" />
+          <el-table-column prop="stock_name" label="名称" min-width="140" />
+          <el-table-column label="当前价格" width="100">
+            <template #default="scope">
+              <span v-if="scope.row.current_price != null">
+                {{ scope.row.market === 'HK' ? '$' : '¥' }}{{ scope.row.current_price.toFixed(2) }}
+              </span>
+              <span v-else class="text-gray-400">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="100" />
+          <el-table-column label="审核" width="80">
+            <template #default="{ row }">
+              <el-switch v-model="row.is_verified" size="small" @change="(val: boolean) => toggleVerified(row, val)" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="sort_order" label="排序" width="90" />
+          <el-table-column prop="remark" label="备注" min-width="140" />
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openStockDialog(row)">编辑</el-button>
+              <el-button link type="danger" @click="removeStock(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
 
-    <el-pagination
-      v-model:current-page="page"
-      v-model:page-size="pageSize"
-      :total="total"
-      layout="total, prev, pager, next, sizes"
-      :page-sizes="[20, 50, 100]"
-      @current-change="refresh"
-      @size-change="refresh"
-    />
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :total="total"
+          layout="total, prev, pager, next, sizes"
+          :page-sizes="[20, 50, 100]"
+          @current-change="refresh"
+          @size-change="refresh"
+        />
+      </el-tab-pane>
 
-    <el-dialog v-model="versionDialogVisible" title="观察股分组" @opened="() => versionStrategyCodeRef?.focus()">
+      <el-tab-pane label="打分与参数" name="scoring">
+        <div v-loading="scoringLoading" class="scoring-panel">
+          <el-empty v-if="!selectedVersionId" description="请先选择 GMS 策略版本" />
+          <template v-else>
+            <el-alert
+              v-if="currentVersion?.config_id"
+              type="info"
+              :closable="false"
+              class="mb-4"
+              :title="`绑定参数版本 config_id=${currentVersion.config_id}`"
+              description="每个策略版本与参数版本 1:1 绑定；修改打分机制将写入该专用 config。"
+            />
+
+            <el-form label-width="140px" class="max-w-3xl">
+              <el-form-item label="打分机制">
+                <el-select v-model="scoringForm.scoring_mechanism" class="w-full" @change="onMechanismChange">
+                  <el-option
+                    v-for="m in scoringMechanisms"
+                    :key="m.id"
+                    :label="m.label"
+                    :value="m.id"
+                  />
+                </el-select>
+                <p v-if="selectedMechanismMeta?.description" class="text-xs text-gray-500 mt-1">
+                  {{ selectedMechanismMeta.description }}
+                </p>
+              </el-form-item>
+
+              <template v-if="scoringForm.scoring_mechanism === 'tiered_dual_penalty'">
+                <el-divider content-position="left">减分规则</el-divider>
+                <div v-for="(rule, idx) in scoringForm.penalty_rules" :key="idx" class="penalty-row">
+                  <el-checkbox v-model="rule.enabled">{{ rule.label || rule.id }}</el-checkbox>
+                  <el-input-number v-model="rule.points" :min="1" :max="100" :step="1" />
+                  <span class="text-sm text-gray-500">分</span>
+                </div>
+                <el-button size="small" @click="addPenaltyRule">添加规则</el-button>
+              </template>
+
+              <el-divider content-position="left">核心阈值</el-divider>
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="关注阈值">
+                    <el-input-number v-model="scoringForm.config.scoring.watch_threshold" :min="0" :max="100" class="w-full" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="预警阈值">
+                    <el-input-number v-model="scoringForm.config.scoring.alert_threshold" :min="0" :max="100" class="w-full" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="F/Z 下限">
+                    <el-input-number v-model="scoringForm.config.scoring.accumulation_fz_min" :step="0.1" class="w-full" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="平衡 |Δ/d| 上限">
+                    <el-input-number v-model="scoringForm.config.scoring.balance_ratio_max" :step="0.001" :precision="4" class="w-full" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </el-form>
+          </template>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-dialog v-model="versionDialogVisible" title="GMS 策略版本" @opened="() => versionStrategyCodeRef?.focus()">
       <el-form :model="versionForm" label-width="120px">
         <el-form-item label="策略编码"><el-input ref="versionStrategyCodeRef" v-model="versionForm.strategy_code" @keyup.enter="saveVersion" /></el-form-item>
-        <el-form-item label="分组名称"><el-input v-model="versionForm.version_name" @keyup.enter="saveVersion" /></el-form-item>
-        <el-form-item label="分组序号"><el-input-number v-model="versionForm.version_no" :min="1" @keyup.enter="saveVersion" /></el-form-item>
-        <el-form-item label="参数版本">
-          <el-select v-model="versionForm.config_id" clearable placeholder="不绑定（使用默认参数）" class="w-full">
-            <el-option
-              v-for="c in strategyConfigs"
-              :key="c.id"
-              :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
-              :value="c.id"
-            />
+        <el-form-item label="版本名称"><el-input v-model="versionForm.version_name" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="版本序号"><el-input-number v-model="versionForm.version_no" :min="1" @keyup.enter="saveVersion" /></el-form-item>
+        <el-form-item label="打分机制">
+          <el-select v-model="versionForm.scoring_mechanism" class="w-full" @change="onVersionDialogMechanismChange">
+            <el-option v-for="m in scoringMechanisms" :key="m.id" :label="m.label" :value="m.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="versionForm.scoring_mechanism === 'tiered_dual_penalty'" label="减分规则">
+          <div v-for="(rule, idx) in versionForm.penalty_rules" :key="idx" class="penalty-row">
+            <el-checkbox v-model="rule.enabled">{{ rule.label || rule.id }}</el-checkbox>
+            <el-input-number v-model="rule.points" :min="1" :max="100" />
+            <span class="text-sm text-gray-500">分</span>
+          </div>
         </el-form-item>
         <el-form-item label="启用"><el-switch v-model="versionForm.is_active" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="versionForm.description" type="textarea" /></el-form-item>
@@ -125,17 +210,26 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { gmsApiService, type GMSStrategyVersionStock, type GMSStrategyVersion, type GMSStrategyConfig } from '@/services/gmsApi'
+import {
+  gmsApiService,
+  type GMSScoringMechanism,
+  type GMSPenaltyRule,
+  type GMSPenaltyRuleType,
+  type GMSStrategyVersionStock,
+  type GMSStrategyVersion,
+} from '@/services/gmsApi'
 
 const stockCodeRef = ref<any>(null)
 const versionStrategyCodeRef = ref<any>(null)
 const importInputRef = ref<any>(null)
 
+const activeTab = ref<'stocks' | 'scoring'>('stocks')
 const loading = ref(false)
 const versions = ref<GMSStrategyVersion[]>([])
-const strategyConfigs = ref<GMSStrategyConfig[]>([])
+const scoringMechanisms = ref<GMSScoringMechanism[]>([])
+const penaltyRuleTypes = ref<GMSPenaltyRuleType[]>([])
 const selectedVersionId = ref<number>()
 const stocks = ref<GMSStrategyVersionStock[]>([])
 const selectedIds = ref<number[]>([])
@@ -145,6 +239,21 @@ const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 
+const scoringLoading = ref(false)
+const scoringSaving = ref(false)
+const scoringForm = ref({
+  scoring_mechanism: 'tiered_dual_max',
+  penalty_rules: [] as GMSPenaltyRule[],
+  config: {
+    scoring: {
+      watch_threshold: 60,
+      alert_threshold: 80,
+      accumulation_fz_min: 1,
+      balance_ratio_max: 0.02,
+    },
+  } as Record<string, any>,
+})
+
 const versionDialogVisible = ref(false)
 const editingVersionId = ref<number | null>(null)
 const versionForm = ref({
@@ -152,9 +261,11 @@ const versionForm = ref({
   version_name: '',
   version_no: 1,
   description: '',
-  config_id: undefined as number | undefined,
   is_active: true,
   created_by: 'admin',
+  auto_create_config: true,
+  scoring_mechanism: 'tiered_dual_max',
+  penalty_rules: [] as GMSPenaltyRule[],
 })
 
 const stockDialogVisible = ref(false)
@@ -172,13 +283,128 @@ const stockForm = ref({
 const importDialogVisible = ref(false)
 const importText = ref('')
 
+const currentVersion = computed(() => versions.value.find((v) => v.id === selectedVersionId.value))
+const selectedMechanismMeta = computed(() =>
+  scoringMechanisms.value.find((m) => m.id === scoringForm.value.scoring_mechanism)
+)
+
+function versionOptionLabel(v: GMSStrategyVersion) {
+  const tag = v.scoring_mechanism_label ? ` [${v.scoring_mechanism_label}]` : ''
+  return `${v.strategy_code}-V${v.version_no} ${v.version_name}${tag}`
+}
+
+function defaultPenaltyRules(enabledOnly = false): GMSPenaltyRule[] {
+  const types = penaltyRuleTypes.value.length
+    ? penaltyRuleTypes.value
+    : [{ id: 'close_below_ma60', label: '收盘低于 MA60', default_points: 10 }]
+  return types.map((t) => ({
+    id: t.id,
+    label: t.label,
+    enabled: enabledOnly,
+    points: t.default_points ?? 10,
+  }))
+}
+
+function onMechanismChange(mid: string) {
+  if (mid === 'tiered_dual_penalty' && !scoringForm.value.penalty_rules.length) {
+    scoringForm.value.penalty_rules = defaultPenaltyRules(true)
+  }
+  if (mid === 'tiered_dual_max') {
+    scoringForm.value.penalty_rules = []
+  }
+}
+
+function onVersionDialogMechanismChange(mid: string) {
+  if (mid === 'tiered_dual_penalty') {
+    versionForm.value.penalty_rules = defaultPenaltyRules(true)
+  } else {
+    versionForm.value.penalty_rules = []
+  }
+}
+
+function addPenaltyRule() {
+  const existing = new Set(scoringForm.value.penalty_rules.map((r) => r.id))
+  const next = penaltyRuleTypes.value.find((t) => !existing.has(t.id))
+  if (!next) {
+    ElMessage.info('已添加全部可用减分规则')
+    return
+  }
+  scoringForm.value.penalty_rules.push({
+    id: next.id,
+    label: next.label,
+    enabled: true,
+    points: next.default_points ?? 10,
+  })
+}
+
 const loadVersions = async () => {
   const res = await gmsApiService.getStrategyVersions({ page: 1, page_size: 200 })
   versions.value = res.data || []
   if (!selectedVersionId.value && versions.value.length) {
-    // 优先寻找版本号为 1 的版本
-    const v1 = versions.value.find(v => v.version_no === 1)
+    const v1 = versions.value.find((v) => v.version_no === 1)
     selectedVersionId.value = v1 ? v1.id : versions.value[0].id
+  }
+}
+
+const loadScoringPanel = async () => {
+  if (!selectedVersionId.value) return
+  scoringLoading.value = true
+  try {
+    const full = await gmsApiService.getStrategyVersionFull(selectedVersionId.value)
+    const v = full.version
+    const params = full.config?.config_params || {}
+    const scoring = (params.scoring || {}) as Record<string, any>
+    scoringForm.value = {
+      scoring_mechanism: v.scoring_mechanism || scoring.mechanism || 'tiered_dual_max',
+      penalty_rules: (v.penalty_rules?.length ? v.penalty_rules : scoring.penalty_rules) || [],
+      config: {
+        scoring: {
+          watch_threshold: scoring.watch_threshold ?? 60,
+          alert_threshold: scoring.alert_threshold ?? 80,
+          accumulation_fz_min: scoring.accumulation_fz_min ?? 1,
+          balance_ratio_max: scoring.balance_ratio_max ?? 0.02,
+        },
+      },
+    }
+    if (
+      scoringForm.value.scoring_mechanism === 'tiered_dual_penalty' &&
+      !scoringForm.value.penalty_rules.length
+    ) {
+      scoringForm.value.penalty_rules = defaultPenaltyRules(true)
+    }
+  } catch (e: any) {
+    ElMessage.error(e.message || '加载打分配置失败')
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+const saveScoring = async () => {
+  if (!selectedVersionId.value) return
+  if (scoringForm.value.scoring_mechanism === 'tiered_dual_penalty') {
+    const enabled = scoringForm.value.penalty_rules.filter((r) => r.enabled)
+    if (!enabled.length) {
+      await ElMessageBox.alert('增强版至少需一条启用的减分规则', '校验失败', { type: 'warning' })
+      return
+    }
+  }
+  scoringSaving.value = true
+  try {
+    await gmsApiService.updateStrategyVersionScoring(selectedVersionId.value, {
+      scoring_mechanism: scoringForm.value.scoring_mechanism,
+      penalty_rules:
+        scoringForm.value.scoring_mechanism === 'tiered_dual_penalty'
+          ? scoringForm.value.penalty_rules
+          : [],
+      config: scoringForm.value.config,
+    })
+    ElMessage.success('打分配置已保存')
+    await loadVersions()
+    await loadScoringPanel()
+  } catch (e: any) {
+    await ElMessageBox.alert(e.message || '保存失败', '错误', { type: 'error' })
+  } finally {
+    scoringSaving.value = false
   }
 }
 
@@ -202,7 +428,17 @@ const refresh = async () => {
 
 const handleVersionChange = async () => {
   page.value = 1
-  await refresh()
+  if (activeTab.value === 'scoring') {
+    await loadScoringPanel()
+  } else {
+    await refresh()
+  }
+}
+
+const onTabChange = async (name: string | number) => {
+  if (name === 'scoring') {
+    await loadScoringPanel()
+  }
 }
 
 const onSelectionChange = (rows: GMSStrategyVersionStock[]) => {
@@ -216,9 +452,11 @@ const openVersionDialog = () => {
     version_name: '',
     version_no: 1,
     description: '',
-    config_id: undefined,
     is_active: true,
     created_by: 'admin',
+    auto_create_config: true,
+    scoring_mechanism: 'tiered_dual_max',
+    penalty_rules: [],
   }
   versionDialogVisible.value = true
 }
@@ -226,7 +464,15 @@ const openVersionDialog = () => {
 const saveVersion = async () => {
   try {
     if (editingVersionId.value) {
-      await gmsApiService.updateStrategyVersion(editingVersionId.value, versionForm.value)
+      const { strategy_code, version_name, version_no, description, is_active, created_by } = versionForm.value
+      await gmsApiService.updateStrategyVersion(editingVersionId.value, {
+        strategy_code,
+        version_name,
+        version_no,
+        description,
+        is_active,
+        created_by,
+      })
     } else {
       await gmsApiService.createStrategyVersion(versionForm.value)
     }
@@ -279,7 +525,7 @@ const toggleVerified = async (row: GMSStrategyVersionStock, verified: boolean) =
     await gmsApiService.updateStrategyVersionStock(row.id, { is_verified: verified })
     ElMessage.success(`${row.stock_code} 审核状态已更新`)
   } catch (e: any) {
-    row.is_verified = !verified // 恢复原状态
+    row.is_verified = !verified
     ElMessage.error('更新失败: ' + (e.message || '未知错误'))
   }
 }
@@ -317,9 +563,12 @@ const submitImport = async () => {
   try {
     const data = await gmsApiService.batchImportStrategyVersionStocks({ version_id: selectedVersionId.value, items })
     if (data.fail_count > 0) {
-      const reasons = data.fail_details.map(f => `${f.stock_code}: ${f.reason}`).join('\n')
-      await ElMessageBox.alert(`导入完成：成功${data.success_count}，失败${data.fail_count}，跳过${data.skip_count}\n失败详情：\n${reasons}`, '导入结果', { type: 'warning' })
-      // 存在失败时不关闭弹窗，方便用户修改后重试
+      const reasons = data.fail_details.map((f) => `${f.stock_code}: ${f.reason}`).join('\n')
+      await ElMessageBox.alert(
+        `导入完成：成功${data.success_count}，失败${data.fail_count}，跳过${data.skip_count}\n失败详情：\n${reasons}`,
+        '导入结果',
+        { type: 'warning' }
+      )
       await refresh()
     } else {
       ElMessage.success(`导入完成：成功${data.success_count}，跳过${data.skip_count}`)
@@ -334,24 +583,23 @@ const submitImport = async () => {
 
 const handleExport = async () => {
   if (!selectedVersionId.value) return
-  
+
   try {
     loading.value = true
     let allStocks: GMSStrategyVersionStock[] = []
     let currentPage = 1
-    const size = 200 // 后端 le=200 限制
-    
-    // 循环获取所有数据
+    const size = 200
+
     while (true) {
       const res = await gmsApiService.getStrategyVersionStocks({
         version_id: selectedVersionId.value,
         page: currentPage,
-        page_size: size
+        page_size: size,
       })
-      
+
       const data = res.data || []
       allStocks = allStocks.concat(data)
-      
+
       if (allStocks.length >= (res.total || 0) || data.length < size) {
         break
       }
@@ -363,25 +611,22 @@ const handleExport = async () => {
       return
     }
 
-    // 生成文本内容
-    const content = allStocks.map(s => `${s.market},${s.stock_code},${s.stock_name || ''}`).join('\n')
-    
-    // 下载文件
+    const content = allStocks.map((s) => `${s.market},${s.stock_code},${s.stock_name || ''}`).join('\n')
+
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    
-    // 文件名包含版本信息
-    const version = versions.value.find(v => v.id === selectedVersionId.value)
-    const fileName = version 
+
+    const version = versions.value.find((v) => v.id === selectedVersionId.value)
+    const fileName = version
       ? `watch_list_${version.strategy_code}_${version.version_no}.txt`
       : 'watch_list_export.txt'
-      
+
     link.href = url
     link.download = fileName
     link.click()
     URL.revokeObjectURL(url)
-    
+
     ElMessage.success(`成功导出 ${allStocks.length} 条记录`)
   } catch (e: any) {
     ElMessage.error('导出失败: ' + (e.message || '未知错误'))
@@ -394,9 +639,14 @@ defineExpose({ refresh })
 
 onMounted(async () => {
   try {
-    strategyConfigs.value = await gmsApiService.listStrategyConfigs(true)
+    scoringMechanisms.value = await gmsApiService.getScoringMechanisms()
+    penaltyRuleTypes.value = await gmsApiService.getPenaltyRuleTypes()
   } catch {
-    strategyConfigs.value = []
+    scoringMechanisms.value = [
+      { id: 'tiered_dual_max', label: '标准版·双模块阶梯', supports_penalties: false },
+      { id: 'tiered_dual_penalty', label: '增强版·阶梯+减分', supports_penalties: true },
+    ]
+    penaltyRuleTypes.value = [{ id: 'close_below_ma60', label: '收盘低于 MA60', default_points: 10 }]
   }
   await loadVersions()
   await refresh()
@@ -404,6 +654,23 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 12px; }
-.actions { display: flex; justify-content: flex-end; gap: 8px; }
+.toolbar {
+  margin-bottom: 12px;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.scoring-panel {
+  min-height: 280px;
+  padding: 8px 0;
+}
+.penalty-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
 </style>

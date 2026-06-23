@@ -13,6 +13,7 @@ from .indicators_calculator import GMSIndicatorsCalculator
 from .signal_detector import GMSSignalDetector
 from .models import GMSIndicators
 from .config import GMSConfigManager
+from .scoring._helpers import resolve_mechanism_id
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +179,10 @@ class GMSStrategyEngine:
                     "volume_ratio": ind.volume_ratio,
                     "fz_ratio": ind.fz_ratio,
                     "instant_deviation": ind.instant_deviation,
+                    "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(self.config),
+                    "score_base_total": getattr(ind, "score_base_total", ind.score_total),
+                    "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),
+                    "penalties": getattr(ind, "penalty_details", []) or [],
                 }
 
                 results.append({

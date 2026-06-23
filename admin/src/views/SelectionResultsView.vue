@@ -6,7 +6,7 @@
         <p class="page-subtitle">
           管理端策略选股，接口与网站端
           <code class="text-xs bg-gray-100 px-1 rounded">/api/screening/*</code>
-          一致。GMS 观察股列表请在侧栏 <strong>观察股管理</strong> 中维护。
+          一致。GMS 策略版本（观察股 + 打分）请在侧栏 <strong>GMS策略版本</strong> 中维护。
         </p>
       </div>
     </div>

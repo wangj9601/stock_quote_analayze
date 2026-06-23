@@ -7,7 +7,7 @@ import copy
 import logging
 import sys
 import copy
-from typing import Optional, List, Literal, Tuple, Any
+from typing import Optional, List, Literal, Tuple, Any, Dict
 
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from fastapi.responses import JSONResponse, Response
@@ -764,25 +764,57 @@ async def deactivate_strategy_config(config_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/scoring-mechanisms")
+async def list_scoring_mechanisms():
+    try:
+        from backend_core.strategies.gms.scoring import list_mechanisms
+
+        return {"success": True, "data": list_mechanisms()}
+    except Exception as e:
+        logger.exception("GMS scoring-mechanisms list 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/penalty-rule-types")
+async def list_penalty_rule_types_api():
+    try:
+        from backend_core.strategies.gms.scoring import list_penalty_rule_types
+
+        return {"success": True, "data": list_penalty_rule_types()}
+    except Exception as e:
+        logger.exception("GMS penalty-rule-types list 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---------- GMS 策略版本与观察股管理 ----------
 class StrategyVersionCreateBody(BaseModel):
     strategy_code: str = Field("GMS", description="策略编码")
-    version_name: str = Field(..., description="观察股分组名称")
-    version_no: int = Field(..., ge=1, description="分组序号")
-    description: Optional[str] = Field(None, description="分组描述")
-    config_id: Optional[int] = Field(None, ge=1, description="绑定的 GMS 策略参数版本 ID")
+    version_name: str = Field(..., description="GMS策略版本名称")
+    version_no: int = Field(..., ge=1, description="版本序号")
+    description: Optional[str] = Field(None, description="版本描述")
+    config_id: Optional[int] = Field(None, ge=1, description="绑定的参数版本 ID（与 auto_create_config 二选一）")
     is_active: bool = Field(True, description="是否启用")
     created_by: Optional[str] = Field(None, description="创建人")
+    auto_create_config: bool = Field(True, description="未传 config_id 时自动创建专用参数版本")
+    scoring_mechanism: Optional[str] = Field("tiered_dual_max", description="打分机制")
+    penalty_rules: Optional[List[Dict[str, Any]]] = Field(None, description="减分规则（增强版）")
+    config_params: Optional[Dict[str, Any]] = Field(None, description="初始策略参数片段（合并到新建 config）")
 
 
 class StrategyVersionUpdateBody(BaseModel):
     strategy_code: Optional[str] = Field(None, description="策略编码")
-    version_name: Optional[str] = Field(None, description="观察股分组名称")
-    version_no: Optional[int] = Field(None, ge=1, description="分组序号")
-    description: Optional[str] = Field(None, description="分组描述")
+    version_name: Optional[str] = Field(None, description="GMS策略版本名称")
+    version_no: Optional[int] = Field(None, ge=1, description="版本序号")
+    description: Optional[str] = Field(None, description="版本描述")
     config_id: Optional[int] = Field(None, ge=1, description="绑定的 GMS 策略参数版本 ID")
     is_active: Optional[bool] = Field(None, description="是否启用")
     created_by: Optional[str] = Field(None, description="创建人")
+
+
+class StrategyVersionScoringUpdateBody(BaseModel):
+    scoring_mechanism: Optional[str] = Field(None, description="打分机制")
+    penalty_rules: Optional[List[Dict[str, Any]]] = Field(None, description="减分规则")
+    config: Optional[Dict[str, Any]] = Field(None, description="嵌套 config 片段（深度合并到绑定 config）")
 
 
 class StrategyVersionStockCreateBody(BaseModel):
@@ -902,8 +934,8 @@ def _resolve_stock_name(db: Session, market: str, stock_code: str) -> Tuple[bool
     return True, (str(row[0]).strip() if row[0] else "")
 
 
-def _serialize_strategy_version(row: GMSStrategyVersion) -> dict:
-    return {
+def _serialize_strategy_version(row: GMSStrategyVersion, scoring_summary: Optional[dict] = None) -> dict:
+    data = {
         "id": row.id,
         "strategy_code": row.strategy_code,
         "version_name": row.version_name,
@@ -915,6 +947,70 @@ def _serialize_strategy_version(row: GMSStrategyVersion) -> dict:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+    if scoring_summary:
+        data.update(scoring_summary)
+    return data
+
+
+def _scoring_summary_from_config(config_id: Optional[int]) -> dict:
+    if not config_id:
+        return {}
+    try:
+        mgr = GMSConfigManager()
+        cfg = mgr.get_config(int(config_id))
+        scoring = cfg.get("scoring") or {}
+        mechanism = scoring.get("mechanism") or "tiered_dual_max"
+        from backend_core.strategies.gms.scoring import get_mechanism_meta
+
+        meta = get_mechanism_meta(mechanism)
+        return {
+            "scoring_mechanism": mechanism,
+            "scoring_mechanism_label": meta.get("label"),
+            "penalty_rules": scoring.get("penalty_rules") or [],
+        }
+    except Exception:
+        return {}
+
+
+def _ensure_config_not_bound(db: Session, config_id: int, exclude_version_id: Optional[int] = None) -> None:
+    q = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.config_id == config_id)
+    if exclude_version_id:
+        q = q.filter(GMSStrategyVersion.id != exclude_version_id)
+    if q.first():
+        raise HTTPException(status_code=400, detail="该参数版本已绑定其他 GMS 策略版本（1:1 约束）")
+
+
+def _create_config_for_version(
+    strategy_code: str,
+    version_no: int,
+    version_name: str,
+    scoring_mechanism: Optional[str],
+    penalty_rules: Optional[List[Dict[str, Any]]],
+    config_params: Optional[Dict[str, Any]],
+    created_by: Optional[str],
+) -> int:
+    mgr = GMSConfigManager()
+    patch = copy.deepcopy(config_params or {})
+    scoring = dict(patch.get("scoring") or {})
+    if scoring_mechanism:
+        scoring["mechanism"] = scoring_mechanism
+    if penalty_rules is not None:
+        scoring["penalty_rules"] = penalty_rules
+    patch["scoring"] = scoring
+    safe_name = f"auto_{strategy_code}_v{version_no}".lower().replace(" ", "_")[:90]
+    suffix = 0
+    name = safe_name
+    while mgr.get_config_row_by_name(name):
+        suffix += 1
+        name = f"{safe_name}_{suffix}"[:100]
+    return mgr.create_config(
+        name=name,
+        config_params=patch,
+        description=f"GMS策略版本 {version_name} 专用参数",
+        is_active=True,
+        precompute_enabled=False,
+        created_by=created_by,
+    )
 
 
 def _serialize_strategy_version_stock(row: GMSStrategyVersionStock, price: Optional[float] = None) -> dict:
@@ -956,7 +1052,10 @@ async def list_strategy_versions(
     )
     return {
         "success": True,
-        "data": [_serialize_strategy_version(r) for r in rows],
+        "data": [
+            _serialize_strategy_version(r, _scoring_summary_from_config(getattr(r, "config_id", None)))
+            for r in rows
+        ],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -968,7 +1067,72 @@ async def get_strategy_version(version_id: int, db: Session = Depends(get_db)):
     row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="策略版本不存在")
-    return {"success": True, "data": _serialize_strategy_version(row)}
+    return {
+        "success": True,
+        "data": _serialize_strategy_version(row, _scoring_summary_from_config(getattr(row, "config_id", None))),
+    }
+
+
+@router.get("/strategy-versions/{version_id}/full")
+async def get_strategy_version_full(version_id: int, db: Session = Depends(get_db)):
+    row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+    stock_count = (
+        db.query(GMSStrategyVersionStock)
+        .filter(GMSStrategyVersionStock.version_id == version_id)
+        .count()
+    )
+    config_id = getattr(row, "config_id", None)
+    config_data = None
+    if config_id:
+        mgr = GMSConfigManager()
+        cfg_row = mgr.get_config_row(int(config_id))
+        if cfg_row:
+            config_data = mgr._serialize_config_row(cfg_row)
+            config_data["config_params"] = mgr.get_config(int(config_id))
+    return {
+        "success": True,
+        "data": {
+            "version": _serialize_strategy_version(row, _scoring_summary_from_config(config_id)),
+            "stock_count": stock_count,
+            "config": config_data,
+        },
+    }
+
+
+@router.post("/strategy-versions/{version_id}/scoring")
+@router.put("/strategy-versions/{version_id}/scoring")
+async def update_strategy_version_scoring(
+    version_id: int,
+    body: StrategyVersionScoringUpdateBody,
+    db: Session = Depends(get_db),
+):
+    row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="策略版本不存在")
+    config_id = getattr(row, "config_id", None)
+    if not config_id:
+        raise HTTPException(status_code=400, detail="该策略版本未绑定参数版本")
+    patch: Dict[str, Any] = copy.deepcopy(body.config or {})
+    scoring_patch: Dict[str, Any] = dict(patch.get("scoring") or {})
+    if body.scoring_mechanism is not None:
+        scoring_patch["mechanism"] = body.scoring_mechanism
+    if body.penalty_rules is not None:
+        scoring_patch["penalty_rules"] = body.penalty_rules
+    if scoring_patch:
+        patch["scoring"] = scoring_patch
+    mgr = GMSConfigManager()
+    try:
+        ok = mgr.update_config(int(config_id), patch, change_note="strategy_version_scoring")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=500, detail="更新打分配置失败")
+    return {
+        "success": True,
+        "data": _serialize_strategy_version(row, _scoring_summary_from_config(config_id)),
+    }
 
 
 @router.post("/strategy-versions")
@@ -984,19 +1148,41 @@ async def create_strategy_version(body: StrategyVersionCreateBody, db: Session =
     )
     if dup:
         raise HTTPException(status_code=400, detail="同策略下版本号已存在")
+    config_id = body.config_id
+    if config_id:
+        _ensure_config_not_bound(db, int(config_id))
+    elif body.auto_create_config:
+        try:
+            config_id = _create_config_for_version(
+                strategy_code,
+                body.version_no,
+                body.version_name.strip(),
+                body.scoring_mechanism,
+                body.penalty_rules,
+                body.config_params,
+                (body.created_by or "").strip() or None,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    else:
+        mgr = GMSConfigManager()
+        config_id = mgr.resolve_config_id(None)
     row = GMSStrategyVersion(
         strategy_code=strategy_code,
         version_name=body.version_name.strip(),
         version_no=body.version_no,
         description=body.description,
-        config_id=body.config_id,
+        config_id=config_id,
         is_active=body.is_active,
         created_by=(body.created_by or "").strip() or None,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {"success": True, "data": _serialize_strategy_version(row)}
+    return {
+        "success": True,
+        "data": _serialize_strategy_version(row, _scoring_summary_from_config(config_id)),
+    }
 
 
 @router.put("/strategy-versions/{version_id}")
@@ -1016,6 +1202,7 @@ async def update_strategy_version(version_id: int, body: StrategyVersionUpdateBo
     if body.description is not None:
         row.description = body.description
     if body.config_id is not None:
+        _ensure_config_not_bound(db, int(body.config_id), exclude_version_id=version_id)
         row.config_id = body.config_id
     if body.is_active is not None:
         row.is_active = bool(body.is_active)
@@ -1036,7 +1223,10 @@ async def update_strategy_version(version_id: int, body: StrategyVersionUpdateBo
 
     db.commit()
     db.refresh(row)
-    return {"success": True, "data": _serialize_strategy_version(row)}
+    return {
+        "success": True,
+        "data": _serialize_strategy_version(row, _scoring_summary_from_config(getattr(row, "config_id", None))),
+    }
 
 
 @router.patch("/strategy-versions/{version_id}/active")

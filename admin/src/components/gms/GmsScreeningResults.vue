@@ -4,7 +4,7 @@
       <template #header><span class="font-semibold">策略说明</span></template>
       <ul class="strategy-conditions text-sm text-gray-700 list-disc pl-5 space-y-1">
         <li>
-          <strong>数据来源：</strong>【GMS观察股】为管理端「观察股管理」中启用版本下的股票；【我的自选】支持指定用户（管理员）；【全部港股】【全部A股】【全部ETF】与网站端一致。
+          <strong>数据来源：</strong>【GMS观察股】为管理端「GMS策略版本」中启用版本下的股票；【我的自选】支持指定用户（管理员）；【全部港股】【全部A股】【全部ETF】与网站端一致。
         </li>
         <li><strong>时间范围：</strong>最近 20 个交易日</li>
         <li><strong>双模块阶梯式评分：</strong></li>

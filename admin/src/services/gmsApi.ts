@@ -21,6 +21,28 @@ export interface GmsStrategyScreeningResult {
   }
 }
 
+export interface GMSScoringMechanism {
+  id: string
+  label: string
+  description?: string
+  version?: string
+  supports_penalties?: boolean
+}
+
+export interface GMSPenaltyRuleType {
+  id: string
+  label: string
+  description?: string
+  default_points?: number
+}
+
+export interface GMSPenaltyRule {
+  id: string
+  enabled: boolean
+  points: number
+  label?: string
+}
+
 export interface GMSStrategyVersion {
   id: number
   strategy_code: string
@@ -32,6 +54,15 @@ export interface GMSStrategyVersion {
   created_by?: string
   created_at?: string
   updated_at?: string
+  scoring_mechanism?: string
+  scoring_mechanism_label?: string
+  penalty_rules?: GMSPenaltyRule[]
+}
+
+export interface GMSStrategyVersionFull {
+  version: GMSStrategyVersion
+  stock_count: number
+  config: GMSStrategyConfig | null
 }
 
 export interface GMSStrategyConfig {
@@ -348,6 +379,38 @@ class GMSApiService {
     return res
   }
 
+  async getScoringMechanisms(): Promise<GMSScoringMechanism[]> {
+    const res = await this.request<{ success: boolean; data: GMSScoringMechanism[] }>(`${PREFIX}/scoring-mechanisms`)
+    return res.data || []
+  }
+
+  async getPenaltyRuleTypes(): Promise<GMSPenaltyRuleType[]> {
+    const res = await this.request<{ success: boolean; data: GMSPenaltyRuleType[] }>(`${PREFIX}/penalty-rule-types`)
+    return res.data || []
+  }
+
+  async getStrategyVersionFull(versionId: number): Promise<GMSStrategyVersionFull> {
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersionFull }>(
+      `${PREFIX}/strategy-versions/${versionId}/full`
+    )
+    return res.data
+  }
+
+  async updateStrategyVersionScoring(
+    versionId: number,
+    body: {
+      scoring_mechanism?: string
+      penalty_rules?: GMSPenaltyRule[]
+      config?: Record<string, unknown>
+    }
+  ) {
+    const res = await this.request<{ success: boolean; data: GMSStrategyVersion }>(
+      `${PREFIX}/strategy-versions/${versionId}/scoring`,
+      { method: 'PUT', body: JSON.stringify(body) }
+    )
+    return res.data
+  }
+
   async createStrategyVersion(body: {
     strategy_code: string
     version_name: string
@@ -356,6 +419,10 @@ class GMSApiService {
     config_id?: number | null
     is_active?: boolean
     created_by?: string
+    auto_create_config?: boolean
+    scoring_mechanism?: string
+    penalty_rules?: GMSPenaltyRule[]
+    config_params?: Record<string, unknown>
   }) {
     const res = await this.request<{ success: boolean; data: GMSStrategyVersion }>(`${PREFIX}/strategy-versions`, {
       method: 'POST',
