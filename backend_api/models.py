@@ -1278,6 +1278,32 @@ class GmsTradeObserveHistory(Base):
     user = relationship("User", backref="gms_trade_observe_history")
 
 
+class GmsFormalTrade(Base):
+    """用户 GMS 正式交易记录：从交易观察转入，记录入场/仓位/出场等。"""
+
+    __tablename__ = "gms_formal_trades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source_observe_id = Column(Integer, nullable=True, index=True)
+    entry_price = Column(Float, nullable=False)
+    position_lots = Column(Integer, nullable=False, default=0)
+    exit_price = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="open", index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    notes = Column(Text, nullable=True)
+    entry_at = Column(DateTime, default=datetime.now, nullable=False)
+    exit_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="gms_formal_trades")
+
+
 class TripleVolumeTradeObserveStock(Base):
     """用户 3倍量策略交易观察股：日终爆量列表点击「交易观察」加入。"""
 

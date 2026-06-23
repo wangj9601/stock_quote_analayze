@@ -989,8 +989,9 @@
                 <div class="gms-segmented-tabs" role="tablist" aria-label="GMS 列表类型">
                     <button type="button" class="gms-sub-tab active" data-gms-sub="signals" id="gmsSubTabSignals">策略信号</button>
                     <button type="button" class="gms-sub-tab" data-gms-sub="trade-observe" id="gmsSubTabTradeObserve">交易观察</button>
+                    <button type="button" class="gms-sub-tab" data-gms-sub="formal-trade" id="gmsSubTabFormalTrade">正式交易</button>
                 </div>
-                <p class="gms-integrated-hint">策略信号为当前筛选结果；交易观察为您从信号中标记、便于跟进的股票。</p>
+                <p class="gms-integrated-hint">策略信号为当前筛选结果；交易观察为您从信号中标记、便于跟进的股票；正式交易记录实际入场、仓位与出场。</p>
             </div>
 
             <div id="gms-sub-signals-wrap" class="gms-sub-panel active">
@@ -1085,12 +1086,59 @@
                                     <th class="gms-col-price">加入时价格</th>
                                     <th class="gms-col-narrow">信号日</th>
                                     <th class="gms-col-narrow">加入时间</th>
-                                    <th class="gms-col-actions">操作</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="gmsTradeObserveTableBody">
                                 <tr>
                                     <td colspan="8" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="gms-sub-formal-trade-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="gmsFormalTradeRefreshBtn" class="refresh-btn">刷新列表</button>
+                        <select id="gmsFormalTradeStatusFilter" class="gms-search-input" style="width:auto; min-width:120px;">
+                            <option value="">全部状态</option>
+                            <option value="open">持仓中</option>
+                            <option value="closed">已平仓</option>
+                        </select>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="gmsFormalTradeCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="gmsFormalTradeError" class="error-message" style="display:none;"></div>
+                <div id="gmsFormalTradeLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载正式交易列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-gms-formal-trade" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-price">入场价</th>
+                                    <th class="gms-col-narrow">仓位(手)</th>
+                                    <th class="gms-col-price">出场价</th>
+                                    <th class="gms-col-narrow">盈亏%</th>
+                                    <th class="gms-col-narrow">状态</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-narrow">入场时间</th>
+                                    <th class="gms-col-narrow">出场时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gmsFormalTradeTableBody">
+                                <tr>
+                                    <td colspan="11" class="empty-state">请登录后，在「交易观察」中点击「转正式交易」，或点击「刷新列表」</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1389,6 +1437,68 @@
             }
         }
     </script>
+
+    <div id="gmsFormalTransferModal" class="gms-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="gms-modal-card" role="dialog" aria-labelledby="gmsFormalTransferTitle">
+            <div class="gms-modal-header">
+                <h3 id="gmsFormalTransferTitle">转正式交易</h3>
+                <button type="button" class="gms-modal-close" id="gmsFormalTransferClose" aria-label="关闭">×</button>
+            </div>
+            <p id="gmsFormalTransferStockLabel" class="gms-modal-stock-label"></p>
+            <div class="gms-modal-field">
+                <label for="gmsFormalTransferEntryPrice">入场价格</label>
+                <input type="number" id="gmsFormalTransferEntryPrice" class="gms-search-input" step="0.01" min="0.01" placeholder="请输入入场价">
+            </div>
+            <div class="gms-modal-field">
+                <label for="gmsFormalTransferLots">仓位（手）</label>
+                <input type="number" id="gmsFormalTransferLots" class="gms-search-input" step="1" min="1" value="1">
+            </div>
+            <div class="gms-modal-field">
+                <label for="gmsFormalTransferNotes">备注（可选）</label>
+                <textarea id="gmsFormalTransferNotes" class="gms-modal-textarea" rows="2" placeholder="交易计划、止损位等"></textarea>
+            </div>
+            <div class="gms-modal-actions">
+                <button type="button" class="gms-btn-outline" id="gmsFormalTransferCancel">取消</button>
+                <button type="button" class="refresh-btn" id="gmsFormalTransferConfirm">确认转入</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="gmsFormalEditModal" class="gms-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="gms-modal-card" role="dialog" aria-labelledby="gmsFormalEditTitle">
+            <div class="gms-modal-header">
+                <h3 id="gmsFormalEditTitle">编辑正式交易</h3>
+                <button type="button" class="gms-modal-close" id="gmsFormalEditClose" aria-label="关闭">×</button>
+            </div>
+            <p id="gmsFormalEditStockLabel" class="gms-modal-stock-label"></p>
+            <div class="gms-modal-field">
+                <label for="gmsFormalEditEntryPrice">入场价格</label>
+                <input type="number" id="gmsFormalEditEntryPrice" class="gms-search-input" step="0.01" min="0.01" placeholder="实际买入价">
+            </div>
+            <div class="gms-modal-field">
+                <label for="gmsFormalEditLots">仓位（手）</label>
+                <input type="number" id="gmsFormalEditLots" class="gms-search-input" step="1" min="1" placeholder="持股数量（手）">
+            </div>
+            <div class="gms-modal-field" id="gmsFormalEditExitField">
+                <label for="gmsFormalEditExitPrice">出场价格</label>
+                <input type="number" id="gmsFormalEditExitPrice" class="gms-search-input" step="0.01" min="0.01" placeholder="卖出价；留空表示仍持仓">
+            </div>
+            <div class="gms-modal-field gms-modal-field--inline" id="gmsFormalEditReopenWrap" style="display:none;">
+                <label class="gms-modal-checkbox">
+                    <input type="checkbox" id="gmsFormalEditReopen">
+                    清空出场价，恢复为持仓中
+                </label>
+            </div>
+            <div class="gms-modal-field">
+                <label for="gmsFormalEditNotes">备注</label>
+                <textarea id="gmsFormalEditNotes" class="gms-modal-textarea" rows="2" placeholder="可选"></textarea>
+            </div>
+            <div class="gms-modal-actions">
+                <button type="button" class="gms-btn-outline" id="gmsFormalEditCancel">取消</button>
+                <button type="button" class="refresh-btn" id="gmsFormalEditSave">保存</button>
+            </div>
+        </div>
+    </div>
 
     <script src="js/screening.js"></script>
 </body>

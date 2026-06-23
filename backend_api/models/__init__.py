@@ -55,6 +55,7 @@ try:
         VsbObserveStock = getattr(models_module, 'VsbObserveStock', None)
         GmsTradeObserveStock = getattr(models_module, 'GmsTradeObserveStock', None)
         GmsTradeObserveHistory = getattr(models_module, 'GmsTradeObserveHistory', None)
+        GmsFormalTrade = getattr(models_module, 'GmsFormalTrade', None)
         TripleVolumeTradeObserveStock = getattr(models_module, 'TripleVolumeTradeObserveStock', None)
         GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
         GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
@@ -156,6 +157,7 @@ except Exception as e:
     VsbObserveStock = None
     GmsTradeObserveStock = None
     GmsTradeObserveHistory = None
+    GmsFormalTrade = None
     TripleVolumeTradeObserveStock = None
     GMSStrategyVersion = None
     GMSStrategyVersionStock = None
@@ -259,6 +261,7 @@ __all__ = [
     'VsbObserveStock',
     'GmsTradeObserveStock',
     'GmsTradeObserveHistory',
+    'GmsFormalTrade',
     'TripleVolumeTradeObserveStock',
     'GMSStrategyVersion',
     'GMSStrategyVersionStock',

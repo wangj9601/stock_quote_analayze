@@ -203,7 +203,12 @@ def get_industry_board(db: Session = Depends(get_db)):
         }
     try:
         rows = db.query(IndustryBoardRealtimeQuotes).order_by(IndustryBoardRealtimeQuotes.change_percent.desc(), IndustryBoardRealtimeQuotes.update_time.desc()).all()
-        data = [row_to_dict(row) for row in rows]
+        data = []
+        for row in rows:
+            d = row_to_dict(row)
+            if not d.get("board_name") and d.get("board_code"):
+                d["board_name"] = d["board_code"]
+            data.append(d)
         return JSONResponse({'success': True, 'data': data})
     except Exception as e:
         import traceback

@@ -266,10 +266,10 @@ async function loadSectors() {
         console.error('板块数据加载失败:', error);
         // 使用模拟数据
         const mockSectors = [
-            { name: '食品饮料', change_percent: 2.34 },
-            { name: '银行', change_percent: -0.87 },
-            { name: '电子', change_percent: 1.23 },
-            { name: '汽车', change_percent: -1.45 }
+            { board_name: '食品饮料', change_percent: 2.34 },
+            { board_name: '银行', change_percent: -0.87 },
+            { board_name: '电子', change_percent: 1.23 },
+            { board_name: '汽车', change_percent: -1.45 }
         ];
         updateSectorDisplay(mockSectors);
         console.log('使用模拟板块数据');
@@ -290,8 +290,9 @@ function updateSectorDisplay(sectors) {
         sectors.forEach(function(sector) {
             const changeClass = sector.change_percent > 0 ? 'positive' : sector.change_percent < 0 ? 'negative' : '';
             const changeSign = sector.change_percent > 0 ? '+' : '';
+            const displayName = sector.board_name || sector.name || sector.board_code || '--';
             sectorHTML += '<div class="sector-item">' +
-                '<div class="sector-name">' + (sector.board_name || '--') + '</div>' +
+                '<div class="sector-name">' + displayName + '</div>' +
                 '<div class="sector-change ' + changeClass + '">' +
                     changeSign + formatNumber(sector.change_percent, 2, '%') +
                 '</div>' +

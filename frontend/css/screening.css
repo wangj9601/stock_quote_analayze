@@ -1285,3 +1285,120 @@
     background: #f5f5f5;
     color: #757575;
 }
+
+/* GMS 交易观察 / 正式交易：操作列加宽 */
+#resultsTable-gms-trade-observe .gms-col-actions--wide,
+#resultsTable-gms-formal-trade .gms-col-actions--wide {
+    min-width: 220px;
+    width: 220px;
+    max-width: 240px;
+}
+
+#resultsTable-gms-formal-trade .gms-pnl-up {
+    color: #c62828;
+    font-weight: 600;
+}
+
+#resultsTable-gms-formal-trade .gms-pnl-down {
+    color: #2e7d32;
+    font-weight: 600;
+}
+
+.gms-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.45);
+    padding: 16px;
+}
+
+.gms-modal-card {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    padding: 20px 22px 18px;
+}
+
+.gms-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.gms-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.gms-modal-close {
+    border: none;
+    background: transparent;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    color: #64748b;
+    padding: 0 4px;
+}
+
+.gms-modal-stock-label {
+    margin: 0 0 14px;
+    font-size: 14px;
+    color: #475569;
+}
+
+.gms-modal-field {
+    margin-bottom: 12px;
+}
+
+.gms-modal-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #334155;
+}
+
+.gms-modal-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 56px;
+}
+
+.gms-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.gms-modal-field--inline {
+    margin-bottom: 8px;
+}
+
+.gms-modal-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #475569;
+    cursor: pointer;
+}
+
+.gms-modal-checkbox input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+

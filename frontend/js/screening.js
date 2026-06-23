@@ -11,10 +11,16 @@ const ScreeningPage = {
     vsbSubPanel: 'pick',
     /** 观察股池内子页：vsb=选股命中表；daily=日终爆量表 */
     vsbObserveSource: 'vsb',
-    /** GMS 子页：signals=策略信号；trade-observe=交易观察列表 */
+    /** GMS 子页：signals=策略信号；trade-observe=交易观察；formal-trade=正式交易 */
     gmsSubPanel: 'signals',
     /** 已加入交易观察的 CN:code / HK:code */
     gmsTradeObserveCodeSet: new Set(),
+    /** 转正式交易弹窗：当前观察记录 id */
+    _gmsFormalTransferObserveId: null,
+    /** 编辑正式交易弹窗：当前交易 id */
+    _gmsFormalEditTradeId: null,
+    /** 编辑弹窗打开时是否为已平仓记录 */
+    _gmsFormalEditWasClosed: false,
     /** 已加入 3倍量交易观察的 CN:code / HK:code */
     tvoTradeObserveCodeSet: new Set(),
     /** 日终爆量列表量比排序：null=默认观察日；asc/desc=按 volume_ratio_actual */
@@ -111,7 +117,7 @@ const ScreeningPage = {
         document.querySelectorAll('.gms-integrated-head .gms-sub-tab').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const sub = btn.getAttribute('data-gms-sub');
-                if (sub === 'signals' || sub === 'trade-observe') {
+                if (sub === 'signals' || sub === 'trade-observe' || sub === 'formal-trade') {
                     this.switchGmsSubPanel(sub);
                 }
             });
@@ -120,15 +126,421 @@ const ScreeningPage = {
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.refreshGmsTradeObserveList());
         }
+        const formalRefreshBtn = document.getElementById('gmsFormalTradeRefreshBtn');
+        if (formalRefreshBtn) {
+            formalRefreshBtn.addEventListener('click', () => this.refreshGmsFormalTradeList());
+        }
+        const formalStatusFilter = document.getElementById('gmsFormalTradeStatusFilter');
+        if (formalStatusFilter) {
+            formalStatusFilter.addEventListener('change', () => this.refreshGmsFormalTradeList());
+        }
         const observeBody = document.getElementById('gmsTradeObserveTableBody');
         if (observeBody) {
             observeBody.addEventListener('click', (e) => {
+                const transfer = e.target.closest('.gms-trade-observe-transfer');
+                if (transfer) {
+                    e.preventDefault();
+                    const id = transfer.getAttribute('data-id');
+                    const price = transfer.getAttribute('data-price');
+                    const code = transfer.getAttribute('data-code') || '';
+                    const name = transfer.getAttribute('data-name') || '';
+                    if (id) this.openGmsFormalTransferModal(parseInt(id, 10), code, name, price);
+                    return;
+                }
                 const rm = e.target.closest('.gms-trade-observe-remove');
                 if (!rm) return;
                 e.preventDefault();
                 const id = rm.getAttribute('data-id');
                 if (id) void this.removeGmsTradeObserve(parseInt(id, 10), rm);
             });
+        }
+        const formalBody = document.getElementById('gmsFormalTradeTableBody');
+        if (formalBody) {
+            formalBody.addEventListener('click', (e) => {
+                const editBtn = e.target.closest('.gms-formal-trade-edit');
+                if (editBtn) {
+                    e.preventDefault();
+                    const id = editBtn.getAttribute('data-id');
+                    if (id) this.openGmsFormalEditModal(parseInt(id, 10), editBtn);
+                    return;
+                }
+                const delBtn = e.target.closest('.gms-formal-trade-delete');
+                if (delBtn) {
+                    e.preventDefault();
+                    const id = delBtn.getAttribute('data-id');
+                    if (id && window.confirm('确定删除该正式交易记录？')) {
+                        void this.deleteGmsFormalTrade(parseInt(id, 10), delBtn);
+                    }
+                }
+            });
+        }
+        this._bindGmsFormalModalEvents();
+    },
+
+    _bindGmsFormalModalEvents() {
+        const bindClose = (overlayId, closeIds) => {
+            const overlay = document.getElementById(overlayId);
+            if (!overlay) return;
+            closeIds.forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('click', () => this._hideGmsModal(overlay));
+            });
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) this._hideGmsModal(overlay);
+            });
+        };
+        bindClose('gmsFormalTransferModal', ['gmsFormalTransferClose', 'gmsFormalTransferCancel']);
+        bindClose('gmsFormalEditModal', ['gmsFormalEditClose', 'gmsFormalEditCancel']);
+        const transferConfirm = document.getElementById('gmsFormalTransferConfirm');
+        if (transferConfirm) {
+            transferConfirm.addEventListener('click', () => void this.submitGmsFormalTransfer());
+        }
+        const editSave = document.getElementById('gmsFormalEditSave');
+        if (editSave) {
+            editSave.addEventListener('click', () => void this.submitGmsFormalEdit());
+        }
+        document.querySelectorAll('#gmsFormalTransferModal .gms-modal-card, #gmsFormalEditModal .gms-modal-card').forEach((card) => {
+            card.addEventListener('click', (e) => e.stopPropagation());
+        });
+        const reopenCb = document.getElementById('gmsFormalEditReopen');
+        const exitEl = document.getElementById('gmsFormalEditExitPrice');
+        if (reopenCb && exitEl) {
+            reopenCb.addEventListener('change', () => {
+                exitEl.disabled = reopenCb.checked;
+                if (reopenCb.checked) exitEl.value = '';
+            });
+        }
+    },
+
+    _parseAttrNum(raw) {
+        const s = String(raw ?? '').trim();
+        if (!s) return null;
+        const n = Number(s);
+        return Number.isFinite(n) ? n : null;
+    },
+
+    _showGmsModal(overlay) {
+        if (!overlay) return;
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    },
+
+    _hideGmsModal(overlay) {
+        if (!overlay) return;
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+    },
+
+    openGmsFormalTransferModal(observeId, code, name, defaultPrice) {
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (window.CommonUtils) CommonUtils.showToast('请先登录', 'warning');
+            return;
+        }
+        this._gmsFormalTransferObserveId = observeId;
+        const label = document.getElementById('gmsFormalTransferStockLabel');
+        if (label) label.textContent = `${code} ${name || ''}`.trim();
+        const priceEl = document.getElementById('gmsFormalTransferEntryPrice');
+        if (priceEl) {
+            const p = parseFloat(defaultPrice);
+            priceEl.value = (!isNaN(p) && p > 0) ? p.toFixed(2) : '';
+        }
+        const lotsEl = document.getElementById('gmsFormalTransferLots');
+        if (lotsEl) lotsEl.value = '1';
+        const notesEl = document.getElementById('gmsFormalTransferNotes');
+        if (notesEl) notesEl.value = '';
+        this._showGmsModal(document.getElementById('gmsFormalTransferModal'));
+    },
+
+    async submitGmsFormalTransfer() {
+        const observeId = this._gmsFormalTransferObserveId;
+        if (!observeId) return;
+        const priceEl = document.getElementById('gmsFormalTransferEntryPrice');
+        const lotsEl = document.getElementById('gmsFormalTransferLots');
+        const notesEl = document.getElementById('gmsFormalTransferNotes');
+        const entryPrice = parseFloat(priceEl?.value);
+        const positionLots = parseInt(lotsEl?.value, 10);
+        if (!entryPrice || entryPrice <= 0) {
+            if (window.CommonUtils) CommonUtils.showToast('请输入有效的入场价格', 'warning');
+            return;
+        }
+        if (!positionLots || positionLots < 1) {
+            if (window.CommonUtils) CommonUtils.showToast('仓位至少为 1 手', 'warning');
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        const confirmBtn = document.getElementById('gmsFormalTransferConfirm');
+        try {
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = '提交中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-formal-trade/from-observe/${observeId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    entry_price: entryPrice,
+                    position_lots: positionLots,
+                    notes: notesEl?.value?.trim() || null,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `转入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            this._hideGmsModal(document.getElementById('gmsFormalTransferModal'));
+            this._gmsFormalTransferObserveId = null;
+            if (window.CommonUtils) CommonUtils.showToast('已转入正式交易', 'success');
+            if (this.gmsSubPanel === 'formal-trade') {
+                void this.refreshGmsFormalTradeList();
+            } else {
+                this.switchGmsSubPanel('formal-trade');
+            }
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '转入正式交易失败', 'error');
+        } finally {
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = '确认转入';
+            }
+        }
+    },
+
+    async refreshGmsFormalTradeList() {
+        const errEl = document.getElementById('gmsFormalTradeError');
+        const loadingEl = document.getElementById('gmsFormalTradeLoading');
+        const tbody = document.getElementById('gmsFormalTradeTableBody');
+        const countEl = document.getElementById('gmsFormalTradeCount');
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (errEl) {
+                errEl.style.display = '';
+                errEl.textContent = '请先登录后查看正式交易列表';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="11" class="empty-state">请先登录</td></tr>';
+            }
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+        if (loadingEl) loadingEl.style.display = '';
+        const statusFilter = document.getElementById('gmsFormalTradeStatusFilter');
+        const status = statusFilter ? statusFilter.value : '';
+        const qs = status ? `&status=${encodeURIComponent(status)}` : '';
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-formal-trade/list?page=1&page_size=500${qs}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加载失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const items = data.items || [];
+            this.renderGmsFormalTradeTable(items);
+            if (countEl) countEl.textContent = `共 ${data.total != null ? data.total : items.length} 笔正式交易`;
+        } catch (e) {
+            if (errEl) {
+                errEl.style.display = '';
+                errEl.textContent = e.message || '加载正式交易列表失败';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="11" class="empty-state">加载失败</td></tr>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    },
+
+    renderGmsFormalTradeTable(items) {
+        const tbody = document.getElementById('gmsFormalTradeTableBody');
+        if (!tbody) return;
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无正式交易记录，请在「交易观察」中点击「转正式交易」</td></tr>';
+            return;
+        }
+        const esc = (s) => String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+        const fmtPrice = (v) => (v != null && !isNaN(v)) ? Number(v).toFixed(2) : '--';
+        const fmtDt = (iso) => {
+            if (!iso) return '--';
+            const s = String(iso);
+            return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
+        };
+        const fmtPnl = (v) => {
+            if (v == null || isNaN(v)) return '--';
+            const n = Number(v);
+            const cls = n > 0 ? 'gms-pnl-up' : (n < 0 ? 'gms-pnl-down' : '');
+            const sign = n > 0 ? '+' : '';
+            return `<span class="${cls}">${sign}${n.toFixed(2)}%</span>`;
+        };
+        const fmtStatus = (st) => (st === 'closed' ? '已平仓' : '持仓中');
+        tbody.innerHTML = items.map((it) => {
+            const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            const notesAttr = esc(it.notes || '');
+            return `
+                <tr data-trade-id="${it.id}">
+                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
+                    <td class="gms-col-price">${fmtPrice(it.entry_price)}</td>
+                    <td class="gms-col-narrow">${esc(it.position_lots)}</td>
+                    <td class="gms-col-price">${fmtPrice(it.exit_price)}</td>
+                    <td class="gms-col-narrow">${fmtPnl(it.pnl_percent)}</td>
+                    <td class="gms-col-narrow">${fmtStatus(it.status)}</td>
+                    <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
+                    <td class="gms-col-narrow">${fmtDt(it.entry_at)}</td>
+                    <td class="gms-col-narrow">${fmtDt(it.exit_at)}</td>
+                    <td class="gms-col-actions gms-col-actions--wide">
+                        <div class="action-links">
+                            <button type="button" class="gms-op-btn gms-op-btn--primary gms-formal-trade-edit"
+                                data-id="${it.id}"
+                                data-code="${esc(it.code)}"
+                                data-name="${esc(it.name || '')}"
+                                data-entry-price="${it.entry_price != null ? esc(it.entry_price) : ''}"
+                                data-position-lots="${esc(it.position_lots)}"
+                                data-exit-price="${it.exit_price != null ? esc(it.exit_price) : ''}"
+                                data-status="${esc(it.status)}"
+                                data-notes="${notesAttr}"
+                                title="编辑或平仓">编辑</button>
+                            <button type="button" class="gms-op-btn gms-formal-trade-delete" data-id="${it.id}" title="删除记录">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    openGmsFormalEditModal(tradeId, btnEl) {
+        if (!btnEl) return;
+        const status = btnEl.getAttribute('data-status') || 'open';
+        const item = {
+            id: tradeId,
+            code: btnEl.getAttribute('data-code') || '',
+            name: btnEl.getAttribute('data-name') || '',
+            entry_price: this._parseAttrNum(btnEl.getAttribute('data-entry-price')),
+            position_lots: this._parseAttrNum(btnEl.getAttribute('data-position-lots')),
+            exit_price: this._parseAttrNum(btnEl.getAttribute('data-exit-price')),
+            status,
+            notes: btnEl.getAttribute('data-notes') || '',
+        };
+        this._gmsFormalEditTradeId = tradeId;
+        this._gmsFormalEditWasClosed = status === 'closed';
+        const label = document.getElementById('gmsFormalEditStockLabel');
+        if (label) label.textContent = `${item.code} ${item.name || ''}`.trim();
+        const title = document.getElementById('gmsFormalEditTitle');
+        if (title) title.textContent = '编辑正式交易';
+        const entryEl = document.getElementById('gmsFormalEditEntryPrice');
+        if (entryEl) entryEl.value = item.entry_price != null ? item.entry_price.toFixed(2) : '';
+        const lotsEl = document.getElementById('gmsFormalEditLots');
+        if (lotsEl) lotsEl.value = String(item.position_lots != null ? item.position_lots : 1);
+        const exitEl = document.getElementById('gmsFormalEditExitPrice');
+        const reopenCb = document.getElementById('gmsFormalEditReopen');
+        const reopenWrap = document.getElementById('gmsFormalEditReopenWrap');
+        if (exitEl) {
+            exitEl.value = item.exit_price != null ? item.exit_price.toFixed(2) : '';
+            exitEl.disabled = false;
+        }
+        if (reopenCb) reopenCb.checked = false;
+        if (reopenWrap) reopenWrap.style.display = this._gmsFormalEditWasClosed ? '' : 'none';
+        const notesEl = document.getElementById('gmsFormalEditNotes');
+        if (notesEl) notesEl.value = item.notes || '';
+        this._showGmsModal(document.getElementById('gmsFormalEditModal'));
+        if (entryEl) entryEl.focus();
+    },
+
+    async submitGmsFormalEdit() {
+        const tradeId = this._gmsFormalEditTradeId;
+        if (!tradeId) return;
+        const entryEl = document.getElementById('gmsFormalEditEntryPrice');
+        const lotsEl = document.getElementById('gmsFormalEditLots');
+        const exitEl = document.getElementById('gmsFormalEditExitPrice');
+        const notesEl = document.getElementById('gmsFormalEditNotes');
+        const entryPrice = parseFloat(entryEl?.value);
+        const positionLots = parseInt(lotsEl?.value, 10);
+        const exitRaw = (exitEl?.value || '').trim();
+        const exitPrice = exitRaw ? parseFloat(exitRaw) : null;
+        const reopenCb = document.getElementById('gmsFormalEditReopen');
+        const reopen = !!(reopenCb && reopenCb.checked);
+        if (!entryPrice || entryPrice <= 0) {
+            if (window.CommonUtils) CommonUtils.showToast('请输入有效的入场价格', 'warning');
+            return;
+        }
+        if (!positionLots || positionLots < 1) {
+            if (window.CommonUtils) CommonUtils.showToast('仓位至少为 1 手', 'warning');
+            return;
+        }
+        if (!reopen && exitPrice != null && (isNaN(exitPrice) || exitPrice <= 0)) {
+            if (window.CommonUtils) CommonUtils.showToast('出场价格无效', 'warning');
+            return;
+        }
+        const body = {
+            entry_price: entryPrice,
+            position_lots: positionLots,
+            notes: notesEl?.value?.trim() || null,
+        };
+        if (reopen) {
+            body.reopen = true;
+        } else if (exitPrice != null) {
+            body.exit_price = exitPrice;
+        } else if (this._gmsFormalEditWasClosed) {
+            if (window.CommonUtils) CommonUtils.showToast('已平仓记录请填写出场价，或勾选恢复为持仓中', 'warning');
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        const saveBtn = document.getElementById('gmsFormalEditSave');
+        try {
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = '保存中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-formal-trade/${tradeId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `保存失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            this._hideGmsModal(document.getElementById('gmsFormalEditModal'));
+            this._gmsFormalEditTradeId = null;
+            this._gmsFormalEditWasClosed = false;
+            if (window.CommonUtils) {
+                const msg = reopen ? '已恢复为持仓中' : (exitPrice != null ? '已保存并记为平仓' : '已保存');
+                CommonUtils.showToast(msg, 'success');
+            }
+            void this.refreshGmsFormalTradeList();
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '保存失败', 'error');
+        } finally {
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '保存';
+            }
+        }
+    },
+
+    async deleteGmsFormalTrade(tradeId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) btnEl.disabled = true;
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-formal-trade/${tradeId}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `删除失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            if (window.CommonUtils) CommonUtils.showToast('已删除正式交易记录', 'success');
+            void this.refreshGmsFormalTradeList();
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '删除失败', 'error');
+            if (btnEl) btnEl.disabled = false;
         }
     },
 
@@ -140,11 +552,14 @@ const ScreeningPage = {
         document.querySelectorAll('.gms-sub-panel').forEach((p) => {
             const show =
                 (sub === 'signals' && p.id === 'gms-sub-signals-wrap') ||
-                (sub === 'trade-observe' && p.id === 'gms-sub-trade-observe-wrap');
+                (sub === 'trade-observe' && p.id === 'gms-sub-trade-observe-wrap') ||
+                (sub === 'formal-trade' && p.id === 'gms-sub-formal-trade-wrap');
             p.classList.toggle('active', show);
         });
         if (sub === 'trade-observe') {
             this.refreshGmsTradeObserveList();
+        } else if (sub === 'formal-trade') {
+            this.refreshGmsFormalTradeList();
         }
     },
 
@@ -300,9 +715,10 @@ const ScreeningPage = {
                     <td class="gms-col-price">${fmtPrice(snap.current_price)}</td>
                     <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
                     <td class="gms-col-narrow">${fmtDt(it.updated_at || it.created_at)}</td>
-                    <td class="gms-col-actions">
+                    <td class="gms-col-actions gms-col-actions--wide">
                         <div class="action-links">
                             <a href="${traceHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
+                            <button type="button" class="gms-op-btn gms-op-btn--primary gms-trade-observe-transfer" data-id="${it.id}" data-code="${esc(it.code)}" data-name="${esc(it.name || '')}" data-price="${snap.current_price != null ? esc(snap.current_price) : ''}" title="转入正式交易">转正式交易</button>
                             <button type="button" class="gms-op-btn gms-trade-observe-remove" data-id="${it.id}" title="移出交易观察">移除</button>
                         </div>
                     </td>
