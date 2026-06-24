@@ -1168,7 +1168,7 @@ async def get_gms_strategy(
         description="为 true 时对返回列表分页（仍先完成全量选股与组装，再截取当前页）；默认 false 保持与其它客户端兼容",
     ),
     page: int = Query(1, ge=1, description="分页页码，从 1 开始"),
-    page_size: int = Query(50, ge=1, le=500, description="每页条数，默认 50"),
+    page_size: int = Query(100, ge=1, le=500, description="每页条数，默认 100"),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
