@@ -265,7 +265,7 @@ import {
 import { configParamsToFlatForm } from '@/utils/gmsFlatFormParams'
 
 const STORAGE_KEY = 'adminGmsParams'
-const GMS_PAGE_SIZE = 50
+const GMS_PAGE_SIZE = 100
 
 const scope = ref<'cn' | 'hk' | 'etf' | 'watchlist' | 'gms_watchlist'>('cn')
 /** scope=gms_watchlist 时传给后端的 gms_watchlist_market */

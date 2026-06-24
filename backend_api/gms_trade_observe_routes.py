@@ -243,6 +243,11 @@ def add_gms_trade_observe(
         .first()
     )
     now = datetime.now()
+
+    from backend_api.services.gms_strategy_watchlist import ensure_gms_strategy_watchlist_stock
+
+    ensure_gms_strategy_watchlist_stock(db, market=market, code=code, name=body.name)
+
     if existing:
         existing.name = body.name or existing.name
         existing.signal_snapshot_json = body.snapshot if body.snapshot is not None else existing.signal_snapshot_json

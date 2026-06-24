@@ -16,7 +16,14 @@ from sqlalchemy.pool import StaticPool
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_trade_observe_routes import router
-from backend_api.models import GmsTradeObserveHistory, GmsTradeObserveStock, User
+from backend_api.models import (
+    GmsTradeObserveHistory,
+    GmsTradeObserveStock,
+    GMSStrategyVersion,
+    GMSStrategyVersionStock,
+    StockBasicInfo,
+    User,
+)
 
 
 @pytest.fixture
@@ -29,6 +36,9 @@ def memory_db():
     User.__table__.create(bind=engine)
     GmsTradeObserveStock.__table__.create(bind=engine)
     GmsTradeObserveHistory.__table__.create(bind=engine)
+    GMSStrategyVersion.__table__.create(bind=engine)
+    GMSStrategyVersionStock.__table__.create(bind=engine)
+    StockBasicInfo.__table__.create(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:
@@ -130,6 +140,42 @@ def test_add_list_codes_and_remove(client, memory_db, test_user):
 def test_remove_not_found(client):
     r = client.delete("/api/stock/gms-trade-observe/99999")
     assert r.status_code == 404
+
+
+def test_add_syncs_gms_strategy_watchlist(client, memory_db):
+    memory_db.add(
+        GMSStrategyVersion(
+            strategy_code="GMS",
+            version_name="V1",
+            version_no=1,
+            is_active=True,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+    )
+    memory_db.add(StockBasicInfo(code="000001", name="平安银行"))
+    memory_db.commit()
+
+    r = client.post(
+        "/api/stock/gms-trade-observe/add",
+        json={
+            "code": "000001",
+            "market": "CN",
+            "name": "平安银行",
+            "signal_date": "2026-05-15",
+            "snapshot": {"signal_strength": 0.7},
+        },
+    )
+    assert r.status_code == 200
+
+    row = (
+        memory_db.query(GMSStrategyVersionStock)
+        .filter(GMSStrategyVersionStock.stock_code == "000001")
+        .first()
+    )
+    assert row is not None
+    assert row.market == "A"
+    assert row.status == "active"
 
 
 def test_add_requires_signal_date(client):

@@ -5,7 +5,7 @@ const ScreeningPage = {
     lastResults: {}, // 存储最近一次筛选结果，用于导出
     /** GMS 列表分页（选股页） */
     gmsPage: 1,
-    GMS_PAGE_SIZE: 50,
+    GMS_PAGE_SIZE: 100,
     gmsLocateActive: false,
     _vsbOpenFromHash: false,
     vsbSubPanel: 'pick',
