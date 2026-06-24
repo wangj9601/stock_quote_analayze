@@ -4,7 +4,7 @@
       <div>
         <h1>GMS 策略版本</h1>
         <p class="page-subtitle">
-          统一管理 GMS 策略版本：观察股列表与打分机制（标准版 / 增强减分版）1:1 绑定参数版本；与网站选股「GMS观察股」数据源一致。
+          统一管理 GMS 策略版本与观察股；打分参数仅两个共享版本：<strong>default</strong>（标准版）与 <strong>gms_penalty</strong>（减分版），修改原地保存不新建版本。
         </p>
       </div>
     </div>

@@ -2717,9 +2717,10 @@ const ScreeningPage = {
             list.forEach((item) => {
                 const opt = document.createElement('option');
                 opt.value = String(item.id);
-                let label = item.name || `v${item.id}`;
-                if (item.version_label) label += ` (${item.version_label})`;
+                const nameLabels = { default: '标准版', gms_penalty: '减分版' };
+                let label = nameLabels[item.name] || item.name || `v${item.id}`;
                 if (item.scoring_mechanism_label) label += ` · ${item.scoring_mechanism_label}`;
+                else if (item.version_label) label += ` (${item.version_label})`;
                 if (item.is_default) label += ' [默认]';
                 opt.textContent = label;
                 selectEl.appendChild(opt);

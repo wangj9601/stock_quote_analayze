@@ -723,14 +723,16 @@ class ETFCollector:
                 continue
             date_str = date_obj.strftime('%Y-%m-%d') if hasattr(date_obj, 'strftime') else str(date_obj)
             try:
+                from backend_core.strategies.gms.ma60_source import lookup_ma60_d
+
                 self.session.execute(text("""
                     INSERT INTO mean_frequency_resonance_indicators
                     (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1,
                      instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m,
-                     ma20_d, mavol20_m, bias, d1, d1_date, d20, d20_date, created_at)
+                     ma20_d, ma60_d, mavol20_m, bias, d1, d1_date, d20, d20_date, created_at)
                     VALUES (:code, :date, :mt, :delta, :amplitude, :ratio_d20, :ratio_d1,
                             :instant_deviation, :z, :f, :efficiency,
-                            :ma20, :mavol20, :bias, :d1, :d1_date, :d20, :d20_date, :created_at)
+                            :ma20, :ma60_d, :mavol20, :bias, :d1, :d1_date, :d20, :d20_date, :created_at)
                     ON CONFLICT (code, date, market_type) DO UPDATE SET
                         macro_displacement_delta = EXCLUDED.macro_displacement_delta,
                         amplitude = EXCLUDED.amplitude,
@@ -741,6 +743,7 @@ class ETFCollector:
                         falling_days_f = EXCLUDED.falling_days_f,
                         efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
                         ma20_d = EXCLUDED.ma20_d,
+                        ma60_d = EXCLUDED.ma60_d,
                         mavol20_m = EXCLUDED.mavol20_m,
                         bias = EXCLUDED.bias,
                         d1 = EXCLUDED.d1,
@@ -757,7 +760,8 @@ class ETFCollector:
                     'instant_deviation': res['instant_deviation'],
                     'z': res['rising_days_z'], 'f': res['falling_days_f'],
                     'efficiency': res['efficiency_m20_minus_m'],
-                    'ma20': res['ma20_d'], 'mavol20': res['mavol20_m'],
+                    'ma20': res['ma20_d'],
+                    'ma60_d': lookup_ma60_d(self.session, etf_code, date_str, self.MARKET_TYPE),
                     'bias': res['bias'],
                     'd1': res.get('d1'), 'd1_date': res.get('d1_date'),
                     'd20': res.get('d20'), 'd20_date': res.get('d20_date'),

@@ -60,11 +60,12 @@
 
     <el-card shadow="never">
       <template #header><span class="font-semibold">GMS 策略参数版本</span></template>
-      <el-select v-model="selectedConfigId" placeholder="选择参数版本（默认）" clearable filterable class="max-w-md" @change="onConfigChange">
+      <p class="text-xs text-gray-500 mb-2">仅 <strong>default</strong>（标准版）与 <strong>gms_penalty</strong>（减分版）两个共享版本。</p>
+      <el-select v-model="selectedConfigId" placeholder="选择参数版本" class="max-w-md" @change="onConfigChange">
         <el-option
           v-for="c in strategyConfigs"
           :key="c.id"
-          :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
+          :label="configOptionLabel(c)"
           :value="c.id"
         />
       </el-select>
@@ -273,6 +274,15 @@ const watchlistUserId = ref<number | undefined>(undefined)
 const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
 const strategyConfigs = ref<GMSStrategyConfig[]>([])
 const selectedConfigId = ref<number | undefined>(undefined)
+
+function configOptionLabel(c: GMSStrategyConfig) {
+  const nameLabels: Record<string, string> = { default: '标准版', gms_penalty: '减分版' }
+  let label = nameLabels[c.name] || c.name
+  const mech = (c as GMSStrategyConfig & { scoring_mechanism_label?: string }).scoring_mechanism_label
+  if (mech) label += ` · ${mech}`
+  if (c.is_default) label += ' [默认]'
+  return label
+}
 /** 为 true 时请求附带下方表单参数覆盖服务端版本 */
 const paramOverride = ref(false)
 

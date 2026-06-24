@@ -515,19 +515,22 @@ def _calculate_indicators_after_collect(db: Session, stock_code: str, market_typ
     try:
         pvfrs_calc = MeanFrequencyResonanceCalculator()
         pvfrs_results = pvfrs_calc.calculate(closes, volumes, dates=dates, window=20)
+        from backend_core.strategies.gms.ma60_source import lookup_ma60_d
+
         for i, res in enumerate(pvfrs_results):
             if res is None or i >= len(dates) or not in_range(dates[i]):
                 continue
             date_str = dates[i]
             db.execute(text("""
                 INSERT INTO mean_frequency_resonance_indicators
-                (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, mavol20_m, bias, created_at)
-                VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :created_at)
+                (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, ma60_d, mavol20_m, bias, created_at)
+                VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :ma60_d, :mavol20, :bias, :created_at)
                 ON CONFLICT (code, date, market_type) DO UPDATE SET
                     macro_displacement_delta = EXCLUDED.macro_displacement_delta, amplitude = EXCLUDED.amplitude,
                     ratio_d20 = EXCLUDED.ratio_d20, ratio_d1 = EXCLUDED.ratio_d1, instant_deviation = EXCLUDED.instant_deviation,
                     rising_days_z = EXCLUDED.rising_days_z, falling_days_f = EXCLUDED.falling_days_f,
-                    efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m, ma20_d = EXCLUDED.ma20_d, mavol20_m = EXCLUDED.mavol20_m,
+                    efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m, ma20_d = EXCLUDED.ma20_d,
+                    ma60_d = EXCLUDED.ma60_d, mavol20_m = EXCLUDED.mavol20_m,
                     bias = EXCLUDED.bias, created_at = EXCLUDED.created_at
             """), {
                 'code': stock_code, 'date': date_str, 'market_type': market_type,
@@ -535,7 +538,8 @@ def _calculate_indicators_after_collect(db: Session, stock_code: str, market_typ
                 'ratio_d20': res.get('ratio_d20'), 'ratio_d1': res.get('ratio_d1'),
                 'instant_deviation': res.get('instant_deviation'), 'z': res.get('rising_days_z'),
                 'f': res.get('falling_days_f'), 'efficiency': res.get('efficiency_m20_minus_m'),
-                'ma20': res.get('ma20_d'), 'mavol20': res.get('mavol20_m'), 'bias': res.get('bias'),
+                'ma20': res.get('ma20_d'), 'ma60_d': lookup_ma60_d(db, stock_code, date_str, market_type),
+                'mavol20': res.get('mavol20_m'), 'bias': res.get('bias'),
                 'created_at': now
             })
         db.commit()

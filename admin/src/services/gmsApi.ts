@@ -74,6 +74,8 @@ export interface GMSStrategyConfig {
   is_active: boolean
   is_default: boolean
   precompute_enabled: boolean
+  scoring_mechanism?: string
+  scoring_mechanism_label?: string
   parent_id?: number | null
   created_by?: string | null
   created_at?: string | null
@@ -285,9 +287,12 @@ class GMSApiService {
     return res.data
   }
 
-  /** 策略参数版本列表 */
-  async listStrategyConfigs(activeOnly = false): Promise<GMSStrategyConfig[]> {
-    const q = activeOnly ? '?active_only=true' : ''
+  /** 策略参数版本列表（默认仅共享版本 default / gms_penalty） */
+  async listStrategyConfigs(activeOnly = false, canonicalOnly = true): Promise<GMSStrategyConfig[]> {
+    const params = new URLSearchParams()
+    if (activeOnly) params.set('active_only', 'true')
+    if (canonicalOnly) params.set('canonical_only', 'true')
+    const q = params.toString() ? `?${params.toString()}` : ''
     const res = await this.request<{ success: boolean; data: GMSStrategyConfig[] }>(`${PREFIX}/strategy-configs${q}`)
     return res.data || []
   }

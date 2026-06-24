@@ -87,12 +87,11 @@
           <el-empty v-if="!selectedVersionId" description="请先选择 GMS 策略版本" />
           <template v-else>
             <el-alert
-              v-if="currentVersion?.config_id"
               type="info"
               :closable="false"
               class="mb-4"
-              :title="`绑定参数版本 config_id=${currentVersion.config_id}`"
-              description="每个策略版本与参数版本 1:1 绑定；修改打分机制将写入该专用 config。"
+              :title="`保存目标：共享参数「${canonicalTargetLabel}」${currentVersion?.config_id ? ` (config_id=${currentVersion.config_id})` : ''}`"
+              description="全系统仅两个 GMS 参数版本：default（标准版）与 gms_penalty（减分版）。修改会原地更新对应共享配置，不会新建 auto_gms_* 版本。"
             />
 
             <el-form label-width="140px" class="max-w-3xl">
@@ -112,10 +111,15 @@
 
               <template v-if="scoringForm.scoring_mechanism === 'tiered_dual_penalty'">
                 <el-divider content-position="left">减分规则</el-divider>
+                <p class="text-xs text-gray-500 mb-2">
+                  增强版在基础分上按规则扣分；勾选启用并设置每条规则的扣分分值（1～100），保存后选股明细即时生效。
+                </p>
                 <div v-for="(rule, idx) in scoringForm.penalty_rules" :key="idx" class="penalty-row">
                   <el-checkbox v-model="rule.enabled">{{ rule.label || rule.id }}</el-checkbox>
+                  <span class="text-sm text-gray-600">扣分</span>
                   <el-input-number v-model="rule.points" :min="1" :max="100" :step="1" />
                   <span class="text-sm text-gray-500">分</span>
+                  <span v-if="penaltyRuleHint(rule.id)" class="text-xs text-gray-400">{{ penaltyRuleHint(rule.id) }}</span>
                 </div>
                 <el-button size="small" @click="addPenaltyRule">添加规则</el-button>
               </template>
@@ -162,6 +166,7 @@
         <el-form-item v-if="versionForm.scoring_mechanism === 'tiered_dual_penalty'" label="减分规则">
           <div v-for="(rule, idx) in versionForm.penalty_rules" :key="idx" class="penalty-row">
             <el-checkbox v-model="rule.enabled">{{ rule.label || rule.id }}</el-checkbox>
+            <span class="text-sm text-gray-600">扣分</span>
             <el-input-number v-model="rule.points" :min="1" :max="100" />
             <span class="text-sm text-gray-500">分</span>
           </div>
@@ -288,6 +293,12 @@ const selectedMechanismMeta = computed(() =>
   scoringMechanisms.value.find((m) => m.id === scoringForm.value.scoring_mechanism)
 )
 
+const canonicalTargetLabel = computed(() =>
+  scoringForm.value.scoring_mechanism === 'tiered_dual_penalty'
+    ? 'gms_penalty · 增强版·阶梯+减分'
+    : 'default · 标准版·双模块阶梯'
+)
+
 function versionOptionLabel(v: GMSStrategyVersion) {
   const tag = v.scoring_mechanism_label ? ` [${v.scoring_mechanism_label}]` : ''
   return `${v.strategy_code}-V${v.version_no} ${v.version_name}${tag}`
@@ -303,6 +314,12 @@ function defaultPenaltyRules(enabledOnly = false): GMSPenaltyRule[] {
     enabled: enabledOnly,
     points: t.default_points ?? 10,
   }))
+}
+
+function penaltyRuleHint(ruleId?: string): string {
+  if (!ruleId) return ''
+  const meta = penaltyRuleTypes.value.find((t) => t.id === ruleId)
+  return meta?.description || (ruleId === 'close_below_ma60' ? '条件：收盘价 d₂₀ < MA60' : '')
 }
 
 function onMechanismChange(mid: string) {

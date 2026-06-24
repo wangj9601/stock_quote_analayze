@@ -450,7 +450,14 @@ def detect_sell(self, indicators):
 
 ### 5.4 打分机制与减分规则（多版本）
 
-`scoring.mechanism` 决定综合分计算方式；与 `gms_strategy_versions` 1:1 绑定的 `config_id` 快照中存储。
+`scoring.mechanism` 决定综合分计算方式。全系统仅两个**共享**参数版本（`gms_strategy_configs`）：
+
+| 配置名 | mechanism | 名称 |
+|--------|-----------|------|
+| `default` | `tiered_dual_max` | 标准版·双模块阶梯 |
+| `gms_penalty` | `tiered_dual_penalty` | 增强版·阶梯+减分 |
+
+管理端「打分与参数」与网站选股下拉均只展示以上两者；**修改扣分值等参数会原地更新对应 config，不会新建 `auto_gms_v*` 版本**。观察股策略版本（`gms_strategy_versions`）按所选机制绑定到上述共享 config。
 
 | mechanism | 名称 | 说明 |
 |-----------|------|------|
@@ -475,7 +482,7 @@ def detect_sell(self, indicators):
 
 **减分规则 `close_below_ma60`**：当 `d20 < ma60_d`（收盘价低于 60 日均线）时，从基础分扣除 `points` 分。等级判定仍按**减分前**基础分（首期约定）。
 
-**数据依赖**：`mean_frequency_resonance_indicators.ma60_d`；缺失时 `data_loader` 会从 `historical_quotes` / `historical_quotes_hk` 估算补全。
+**数据依赖**：GMS 使用的 MA60 以 **`ma_indicators.ma60`** 为唯一权威源（同 `code` + `date` + `market_type`）。指标写入时同步到 `mean_frequency_resonance_indicators.ma60_d`；读取时若 `ma60_d` 缺失，`data_loader` 会从 `ma_indicators` 补全。**不再**用行情表估算。若 MA 指标未生成则 `ma60_d` 为空，增强版 `close_below_ma60` 减分不生效。
 
 **管理入口**：管理端「GMS策略版本」→「打分与参数」Tab；网站选股参数版本下拉展示 `scoring_mechanism_label`。
 

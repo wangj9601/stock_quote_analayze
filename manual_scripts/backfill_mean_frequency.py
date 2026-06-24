@@ -13,6 +13,7 @@ sys.path.insert(0, project_root)
 
 from backend_api.models import Base, HistoricalQuotes, HistoricalQuotesHK, MeanFrequencyResonanceIndicators
 from backend_api.database import SessionLocal, engine
+from backend_core.strategies.gms.ma60_source import batch_lookup_ma60_d, ma60_key
 
 def get_db():
     db = SessionLocal()
@@ -134,6 +135,14 @@ def calculate_and_save_indicators(db, stock_code, market_type, force_update=True
             "created_at": datetime.now()
         }
         records.append(record)
+
+    ma60_cache = batch_lookup_ma60_d(
+        db, [ma60_key(stock_code, r["date"], market_type) for r in records]
+    )
+    for record in records:
+        k = ma60_key(record["code"], record["date"], record["market_type"])
+        if k in ma60_cache:
+            record["ma60_d"] = ma60_cache[k]
     
     # Batch insert to avoid huge packet size if history is long
     batch_size = 1000

@@ -35,10 +35,8 @@ async def list_gms_strategy_configs_public():
     try:
         from backend_core.strategies.gms.config import GMSConfigManager
 
-        from backend_core.strategies.gms.scoring import get_mechanism_meta
-
         mgr = GMSConfigManager()
-        rows = mgr.list_configs(active_only=True)
+        rows = mgr.list_canonical_configs(active_only=True)
         data = []
         for r in rows:
             item = {
@@ -47,17 +45,11 @@ async def list_gms_strategy_configs_public():
                 "version_label": r.get("version_label"),
                 "is_default": r.get("is_default"),
                 "precompute_enabled": r.get("precompute_enabled"),
+                "scoring_mechanism": r.get("scoring_mechanism"),
+                "scoring_mechanism_label": r.get("scoring_mechanism_label"),
             }
-            try:
-                cfg = mgr.get_config(int(r["id"]))
-                mechanism = (cfg.get("scoring") or {}).get("mechanism") or "tiered_dual_max"
-                meta = get_mechanism_meta(mechanism)
-                item["scoring_mechanism"] = mechanism
-                item["scoring_mechanism_label"] = meta.get("label")
-            except Exception:
-                pass
             data.append(item)
-        default_id = mgr.resolve_config_id(None)
+        default_id = mgr.resolve_canonical_config_id("tiered_dual_max")
         return JSONResponse({"success": True, "data": data, "default_config_id": default_id})
     except Exception as e:
         logger.error("GMS strategy-configs list 失败: %s", e)

@@ -1200,14 +1200,17 @@ class AkshareDataCollector:
                 }
                 
                 # 插入或更新PVFRS指标数据
+                from backend_core.strategies.gms.ma60_source import lookup_ma60_d
+
+                data['ma60_d'] = lookup_ma60_d(self.session, stock_code, d, market_type)
                 self.session.execute(text("""
                     INSERT INTO mean_frequency_resonance_indicators
                     (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1,
                      instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, 
-                     ma20_d, mavol20_m, bias)
+                     ma20_d, ma60_d, mavol20_m, bias)
                     VALUES (:code, :date, :market_type, :macro_displacement_delta, :amplitude, :ratio_d20, :ratio_d1,
                             :instant_deviation, :rising_days_z, :falling_days_f, :efficiency_m20_minus_m,
-                            :ma20_d, :mavol20_m, :bias)
+                            :ma20_d, :ma60_d, :mavol20_m, :bias)
                     ON CONFLICT (code, date, market_type) DO UPDATE SET
                         macro_displacement_delta = EXCLUDED.macro_displacement_delta,
                         amplitude = EXCLUDED.amplitude,
@@ -1218,6 +1221,7 @@ class AkshareDataCollector:
                         falling_days_f = EXCLUDED.falling_days_f,
                         efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
                         ma20_d = EXCLUDED.ma20_d,
+                        ma60_d = EXCLUDED.ma60_d,
                         mavol20_m = EXCLUDED.mavol20_m,
                         bias = EXCLUDED.bias
                 """), data)

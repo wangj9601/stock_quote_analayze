@@ -611,10 +611,11 @@ class StrategyConfigCloneBody(BaseModel):
 @router.get("/strategy-configs")
 async def list_strategy_configs(
     active_only: bool = Query(False, description="仅返回启用版本"),
+    canonical_only: bool = Query(True, description="仅返回共享参数版本 default / gms_penalty"),
 ):
     try:
         mgr = GMSConfigManager()
-        return {"success": True, "data": mgr.list_configs(active_only=active_only)}
+        return {"success": True, "data": mgr.list_configs(active_only=active_only, canonical_only=canonical_only)}
     except Exception as e:
         logger.exception("GMS strategy-configs list 失败")
         raise HTTPException(status_code=500, detail=str(e))
@@ -795,7 +796,7 @@ class StrategyVersionCreateBody(BaseModel):
     config_id: Optional[int] = Field(None, ge=1, description="绑定的参数版本 ID（与 auto_create_config 二选一）")
     is_active: bool = Field(True, description="是否启用")
     created_by: Optional[str] = Field(None, description="创建人")
-    auto_create_config: bool = Field(True, description="未传 config_id 时自动创建专用参数版本")
+    auto_create_config: bool = Field(True, description="未传 config_id 时按打分机制绑定共享参数版本（不再新建 auto_gms_*）")
     scoring_mechanism: Optional[str] = Field("tiered_dual_max", description="打分机制")
     penalty_rules: Optional[List[Dict[str, Any]]] = Field(None, description="减分规则（增强版）")
     config_params: Optional[Dict[str, Any]] = Field(None, description="初始策略参数片段（合并到新建 config）")
@@ -973,6 +974,9 @@ def _scoring_summary_from_config(config_id: Optional[int]) -> dict:
 
 
 def _ensure_config_not_bound(db: Session, config_id: int, exclude_version_id: Optional[int] = None) -> None:
+    mgr = GMSConfigManager()
+    if mgr.is_canonical_config(config_id):
+        return
     q = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.config_id == config_id)
     if exclude_version_id:
         q = q.filter(GMSStrategyVersion.id != exclude_version_id)
@@ -980,37 +984,56 @@ def _ensure_config_not_bound(db: Session, config_id: int, exclude_version_id: Op
         raise HTTPException(status_code=400, detail="该参数版本已绑定其他 GMS 策略版本（1:1 约束）")
 
 
-def _create_config_for_version(
-    strategy_code: str,
-    version_no: int,
-    version_name: str,
-    scoring_mechanism: Optional[str],
-    penalty_rules: Optional[List[Dict[str, Any]]],
-    config_params: Optional[Dict[str, Any]],
-    created_by: Optional[str],
+def _canonical_config_label(mechanism: Optional[str]) -> str:
+    from backend_core.strategies.gms.config import GMS_CANONICAL_PENALTY_NAME, GMS_CANONICAL_STANDARD_NAME
+
+    mech = (mechanism or "tiered_dual_max").strip()
+    if mech == "tiered_dual_penalty":
+        return GMS_CANONICAL_PENALTY_NAME
+    return GMS_CANONICAL_STANDARD_NAME
+
+
+def _resolve_version_config_id(
+    db: Session,
+    row: GMSStrategyVersion,
+    body: "StrategyVersionScoringUpdateBody",
 ) -> int:
+    """按打分机制绑定共享参数版本（default / gms_penalty），修改时原地更新，不新建版本。"""
+    mechanism = (body.scoring_mechanism or "tiered_dual_max").strip()
     mgr = GMSConfigManager()
-    patch = copy.deepcopy(config_params or {})
-    scoring = dict(patch.get("scoring") or {})
-    if scoring_mechanism:
-        scoring["mechanism"] = scoring_mechanism
+    config_id = mgr.resolve_canonical_config_id(mechanism)
+    if getattr(row, "config_id", None) != config_id:
+        row.config_id = config_id
+        db.commit()
+        db.refresh(row)
+        logger.info(
+            "策略版本 %s 绑定共享参数 %s (config_id=%s)",
+            row.id,
+            _canonical_config_label(mechanism),
+            config_id,
+        )
+    return int(config_id)
+
+
+def _bind_canonical_config_for_mechanism(
+    scoring_mechanism: Optional[str],
+    penalty_rules: Optional[List[Dict[str, Any]]] = None,
+    config_params: Optional[Dict[str, Any]] = None,
+) -> int:
+    """新建策略版本时绑定共享参数，不创建 auto_gms_v*。"""
+    mgr = GMSConfigManager()
+    mechanism = (scoring_mechanism or "tiered_dual_max").strip()
+    config_id = mgr.resolve_canonical_config_id(mechanism)
+    patch: Dict[str, Any] = copy.deepcopy(config_params or {})
+    scoring_patch: Dict[str, Any] = dict(patch.get("scoring") or {})
+    scoring_patch["mechanism"] = mechanism
     if penalty_rules is not None:
-        scoring["penalty_rules"] = penalty_rules
-    patch["scoring"] = scoring
-    safe_name = f"auto_{strategy_code}_v{version_no}".lower().replace(" ", "_")[:90]
-    suffix = 0
-    name = safe_name
-    while mgr.get_config_row_by_name(name):
-        suffix += 1
-        name = f"{safe_name}_{suffix}"[:100]
-    return mgr.create_config(
-        name=name,
-        config_params=patch,
-        description=f"GMS策略版本 {version_name} 专用参数",
-        is_active=True,
-        precompute_enabled=False,
-        created_by=created_by,
-    )
+        scoring_patch["penalty_rules"] = penalty_rules
+    if scoring_patch:
+        patch["scoring"] = scoring_patch
+    if patch:
+        mgr.update_config(int(config_id), patch, change_note="strategy_version_bind")
+    return int(config_id)
 
 
 def _serialize_strategy_version_stock(row: GMSStrategyVersionStock, price: Optional[float] = None) -> dict:
@@ -1111,9 +1134,7 @@ async def update_strategy_version_scoring(
     row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="策略版本不存在")
-    config_id = getattr(row, "config_id", None)
-    if not config_id:
-        raise HTTPException(status_code=400, detail="该策略版本未绑定参数版本")
+    config_id = _resolve_version_config_id(db, row, body)
     patch: Dict[str, Any] = copy.deepcopy(body.config or {})
     scoring_patch: Dict[str, Any] = dict(patch.get("scoring") or {})
     if body.scoring_mechanism is not None:
@@ -1153,14 +1174,10 @@ async def create_strategy_version(body: StrategyVersionCreateBody, db: Session =
         _ensure_config_not_bound(db, int(config_id))
     elif body.auto_create_config:
         try:
-            config_id = _create_config_for_version(
-                strategy_code,
-                body.version_no,
-                body.version_name.strip(),
+            config_id = _bind_canonical_config_for_mechanism(
                 body.scoring_mechanism,
                 body.penalty_rules,
                 body.config_params,
-                (body.created_by or "").strip() or None,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))

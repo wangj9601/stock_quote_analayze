@@ -278,7 +278,9 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "d20_date": getattr(row, "d20_date", None),
             "ma60_d": getattr(row, "ma60_d", None),
         }
-        GMSDataLoader(db)._enrich_ma60_missing([calc_row], market_type)
+        from backend_core.strategies.gms.ma60_source import enrich_rows_ma60_d
+
+        enrich_rows_ma60_d(db, [calc_row])
 
         # 站稳 N 日：取最近 N 日的 instant_deviation 序列（最后一项为当日）
         stable_days = int((config.get("scoring") or {}).get("instant_deviation_stable_days", 3) or 3)

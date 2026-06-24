@@ -204,7 +204,7 @@ def _print_report(
     print(f"低于 MA60: {len(below_cases)} 只  |  高于/等于 MA60: {len(above_cases)} 只")
     print("=" * 72)
     if not picked:
-        print("未找到同时具备 ma60_d 的有效样本，请检查指标表或行情补全链路。")
+        print("未找到同时具备 ma60_d 的有效样本，请先确保 ma_indicators.ma60 已生成并执行 migrations/sync_mfr_ma60_d_from_ma_indicators.py。")
         return
 
     header = (

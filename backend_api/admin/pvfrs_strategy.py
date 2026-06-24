@@ -313,7 +313,11 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
                 history_rows = _get_history_rows(code, market_type)
                 if len(history_rows) >= 20:
                     data = calculator.calculate_for_dataframe(history_rows)
+                    from backend_core.strategies.gms.ma60_source import lookup_ma60_d
+
                     for _, row in data.iterrows():
+                        date_val = row['date']
+                        date_str = date_val.strftime('%Y-%m-%d') if hasattr(date_val, 'strftime') else str(date_val)[:10]
                         indicator = MeanFrequencyResonanceIndicators(
                             code=code,
                             date=row['date'],
@@ -326,6 +330,7 @@ async def execute_backtest_task(task_id: str, request: BacktestRequest, stock_fi
                             falling_days_f=row['falling_days_f'],
                             efficiency_m20_minus_m=row['efficiency_m20_minus_m'],
                             ma20_d=row['ma20_d'],
+                            ma60_d=lookup_ma60_d(db, code, date_str, market_type),
                             mavol20_m=row['mavol20_m'],
                             bias=row['bias']
                         )

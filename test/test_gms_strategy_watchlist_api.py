@@ -203,6 +203,56 @@ def test_gms_strategy_version_scoring_create_and_update():
     assert bad_resp.status_code == 400
 
 
+def _unbind_version_config(client, version_id: int) -> None:
+    """模拟迁移遗留：策略版本未绑定 config_id。"""
+    override = client.app.dependency_overrides[gms_admin_routes.get_db]
+    gen = override()
+    db = next(gen)
+    try:
+        from backend_api.models import GMSStrategyVersion
+
+        row = db.query(GMSStrategyVersion).filter(GMSStrategyVersion.id == version_id).first()
+        assert row is not None
+        row.config_id = None
+        db.commit()
+    finally:
+        gen.close()
+
+
+def test_gms_strategy_version_scoring_auto_bind_config():
+    """未绑定 config 的历史版本，保存打分时自动绑定或创建 config。"""
+    client = _build_client()
+
+    create_resp = client.post(
+        "/api/admin/gms/strategy-versions",
+        json={
+            "strategy_code": "GMS",
+            "version_name": "未绑定测试",
+            "version_no": 88,
+            "created_by": "tester",
+        },
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    version_id = create_resp.json()["data"]["id"]
+    _unbind_version_config(client, version_id)
+
+    save_resp = client.put(
+        f"/api/admin/gms/strategy-versions/{version_id}/scoring",
+        json={
+            "scoring_mechanism": "tiered_dual_penalty",
+            "penalty_rules": [
+                {"id": "close_below_ma60", "enabled": True, "points": 20, "label": "低于MA60"},
+            ],
+            "config": {"scoring": {"watch_threshold": 60}},
+        },
+    )
+    assert save_resp.status_code == 200, save_resp.text
+    saved = save_resp.json()["data"]
+    assert saved.get("config_id")
+    assert saved["scoring_mechanism"] == "tiered_dual_penalty"
+    assert saved["penalty_rules"][0]["points"] == 20
+
+
 def test_gms_create_penalty_version_without_rules_rejected():
     client = _build_client()
 

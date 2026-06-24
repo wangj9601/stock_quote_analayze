@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _DEFAULT_ROW_NAME = "default"
+GMS_CANONICAL_STANDARD_NAME = "default"
+GMS_CANONICAL_PENALTY_NAME = "gms_penalty"
+CANONICAL_CONFIG_NAMES = frozenset({GMS_CANONICAL_STANDARD_NAME, GMS_CANONICAL_PENALTY_NAME})
 _CACHE: Dict[int, Dict] = {}
 
 
@@ -219,7 +222,9 @@ class GMSConfigManager:
         finally:
             db.close()
 
-    def list_configs(self, active_only: bool = False) -> List[Dict[str, Any]]:
+    def list_configs(self, active_only: bool = False, canonical_only: bool = False) -> List[Dict[str, Any]]:
+        if canonical_only:
+            return self.list_canonical_configs(active_only=active_only)
         from backend_api.models import GMSStrategyConfig
 
         db = self._session()
@@ -231,6 +236,116 @@ class GMSConfigManager:
             if active_only:
                 q = q.filter(GMSStrategyConfig.is_active == True)  # noqa: E712
             return [self._serialize_config_row(r) for r in q.all()]
+        finally:
+            db.close()
+
+    def is_canonical_config(self, config_id: Optional[int]) -> bool:
+        if not config_id:
+            return False
+        row = self.get_config_row(int(config_id))
+        return bool(row and row.name in CANONICAL_CONFIG_NAMES)
+
+    def resolve_canonical_config_id(self, mechanism: Optional[str] = None) -> int:
+        """按打分机制返回共享参数版本：标准版 default / 减分版 gms_penalty。"""
+        ids = self.ensure_canonical_configs()
+        mech = (mechanism or "tiered_dual_max").strip()
+        if mech == "tiered_dual_penalty":
+            return int(ids[GMS_CANONICAL_PENALTY_NAME])
+        return int(ids[GMS_CANONICAL_STANDARD_NAME])
+
+    def ensure_canonical_configs(self) -> Dict[str, int]:
+        """确保 default 与 gms_penalty 两个共享参数版本存在。"""
+        db = self._session()
+        try:
+            default_id = self._ensure_default_row_exists(db)
+        finally:
+            db.close()
+
+        penalty_row = self.get_config_row_by_name(GMS_CANONICAL_PENALTY_NAME)
+        if penalty_row:
+            penalty_id = int(penalty_row.id)
+            if not penalty_row.is_active:
+                self.update_config(penalty_id, {}, is_active=True, change_note="reactivate_canonical_penalty")
+            return {GMS_CANONICAL_STANDARD_NAME: default_id, GMS_CANONICAL_PENALTY_NAME: penalty_id}
+
+        legacy = self.get_config_row_by_name("auto_gms_v901")
+        if legacy and legacy.config_params:
+            params = copy.deepcopy(dict(legacy.config_params))
+        else:
+            params = self.get_default_config()
+        scoring = dict(params.get("scoring") or {})
+        scoring["mechanism"] = "tiered_dual_penalty"
+        if not scoring.get("penalty_rules"):
+            scoring["penalty_rules"] = [
+                {
+                    "id": "close_below_ma60",
+                    "enabled": True,
+                    "points": 10,
+                    "label": "收盘低于60日均线",
+                }
+            ]
+        params["scoring"] = scoring
+        penalty_id = self.create_config(
+            name=GMS_CANONICAL_PENALTY_NAME,
+            config_params=params,
+            version_label="1.0.0",
+            description="GMS 增强版（阶梯+减分）共享参数",
+            precompute_enabled=True,
+            created_by="system",
+        )
+        return {GMS_CANONICAL_STANDARD_NAME: default_id, GMS_CANONICAL_PENALTY_NAME: penalty_id}
+
+    def list_canonical_configs(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """仅返回选股/管理端使用的两个共享参数版本。"""
+        from backend_core.strategies.gms.scoring import get_mechanism_meta
+
+        ids = self.ensure_canonical_configs()
+        out: List[Dict[str, Any]] = []
+        for name in (GMS_CANONICAL_STANDARD_NAME, GMS_CANONICAL_PENALTY_NAME):
+            row = self.get_config_row(ids[name])
+            if not row:
+                continue
+            if active_only and not row.is_active:
+                continue
+            item = self._serialize_config_row(row)
+            try:
+                cfg = self.get_config(int(row.id))
+                mechanism = (cfg.get("scoring") or {}).get("mechanism") or "tiered_dual_max"
+                meta = get_mechanism_meta(mechanism)
+                item["scoring_mechanism"] = mechanism
+                item["scoring_mechanism_label"] = meta.get("label")
+            except Exception:
+                pass
+            out.append(item)
+        return out
+
+    def deactivate_non_canonical_configs(self) -> int:
+        """停用历史 auto_gms_* 等冗余参数版本（保留 default / gms_penalty）。"""
+        from backend_api.models import GMSStrategyConfig
+
+        db = self._session()
+        try:
+            rows = (
+                db.query(GMSStrategyConfig)
+                .filter(
+                    GMSStrategyConfig.is_active == True,  # noqa: E712
+                    ~GMSStrategyConfig.name.in_(list(CANONICAL_CONFIG_NAMES)),
+                )
+                .all()
+            )
+            n = 0
+            for row in rows:
+                if row.is_default:
+                    continue
+                row.is_active = False
+                row.updated_at = datetime.now()
+                n += 1
+            db.commit()
+            self._invalidate_cache()
+            return n
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 

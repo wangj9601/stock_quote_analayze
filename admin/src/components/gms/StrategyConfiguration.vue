@@ -2,11 +2,11 @@
   <div class="strategy-configuration">
     <el-row :gutter="16">
       <el-col :span="7">
-        <el-card header="参数版本列表">
+        <el-card header="共享参数版本">
+          <p class="text-xs text-gray-500 mb-3">
+            仅维护 <strong>default</strong>（标准版）与 <strong>gms_penalty</strong>（减分版）；修改原地保存，不新建版本。
+          </p>
           <div class="mb-3 flex flex-wrap gap-2">
-            <el-button type="primary" size="small" @click="openCreateDialog">新建</el-button>
-            <el-button size="small" :disabled="!selectedId" @click="handleClone">克隆</el-button>
-            <el-button size="small" :disabled="!selectedId || selected?.is_default" @click="handleSetDefault">设为默认</el-button>
             <el-button size="small" @click="loadVersions">刷新</el-button>
           </div>
           <el-table
@@ -142,28 +142,15 @@
 
           <el-input v-else v-model="configJson" type="textarea" :rows="22" class="font-mono text-sm" />
         </el-card>
-        <el-empty v-else description="请选择或新建参数版本" />
+        <el-empty v-else description="请选择参数版本" />
       </el-col>
     </el-row>
-
-    <el-dialog v-model="createVisible" title="新建参数版本" width="480px">
-      <el-form label-width="100px">
-        <el-form-item label="名称" required><el-input v-model="createForm.name" /></el-form-item>
-        <el-form-item label="版本号"><el-input v-model="createForm.version_label" placeholder="如 1.0.0" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="createForm.description" type="textarea" /></el-form-item>
-        <el-form-item label="预计算"><el-switch v-model="createForm.precompute_enabled" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="submitCreate">创建</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, inject } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import type { GMSStrategyConfig } from '@/services/gmsApi'
 
 const gmsApi = inject<any>('gmsApi')
@@ -172,16 +159,8 @@ const versions = ref<GMSStrategyConfig[]>([])
 const selectedId = ref<number | null>(null)
 const listLoading = ref(false)
 const saving = ref(false)
-const creating = ref(false)
 const showJson = ref(false)
 const configJson = ref('{}')
-const createVisible = ref(false)
-const createForm = reactive({
-  name: '',
-  version_label: '1.0.0',
-  description: '',
-  precompute_enabled: false,
-})
 
 const editMeta = reactive({ precompute_enabled: false })
 
@@ -253,68 +232,6 @@ function onSelectVersion(row: GMSStrategyConfig | null) {
   if (!row) return
   selectedId.value = row.id
   void loadDetail(row.id)
-}
-
-function openCreateDialog() {
-  createForm.name = ''
-  createForm.version_label = '1.0.0'
-  createForm.description = ''
-  createForm.precompute_enabled = false
-  createVisible.value = true
-}
-
-async function submitCreate() {
-  if (!createForm.name.trim()) {
-    ElMessage.warning('请填写名称')
-    return
-  }
-  creating.value = true
-  try {
-    const data = await gmsApi.createStrategyConfig({
-      name: createForm.name.trim(),
-      version_label: createForm.version_label,
-      description: createForm.description,
-      config_params: defaultForm(),
-      precompute_enabled: createForm.precompute_enabled,
-    })
-    createVisible.value = false
-    await loadVersions()
-    selectedId.value = data.id
-    await loadDetail(data.id)
-    ElMessage.success('已创建')
-  } catch (e: any) {
-    ElMessage.error(e?.message || '创建失败')
-  } finally {
-    creating.value = false
-  }
-}
-
-async function handleClone() {
-  if (!selectedId.value) return
-  const { value } = await ElMessageBox.prompt('请输入新版本名称', '克隆参数版本', {
-    inputValue: `${selected.value?.name || 'copy'}-clone`,
-  })
-  if (!value?.trim()) return
-  try {
-    const data = await gmsApi.cloneStrategyConfig(selectedId.value, value.trim())
-    await loadVersions()
-    selectedId.value = data.id
-    await loadDetail(data.id)
-    ElMessage.success('克隆成功')
-  } catch (e: any) {
-    if (e !== 'cancel') ElMessage.error(e?.message || '克隆失败')
-  }
-}
-
-async function handleSetDefault() {
-  if (!selectedId.value) return
-  try {
-    await gmsApi.setStrategyConfigDefault(selectedId.value)
-    await loadVersions()
-    ElMessage.success('已设为默认版本')
-  } catch (e: any) {
-    ElMessage.error(e?.message || '操作失败')
-  }
 }
 
 async function saveVersion() {

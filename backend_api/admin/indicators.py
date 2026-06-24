@@ -26,6 +26,7 @@ from backend_api.admin.quotes import (
     _normalize_code,
     _normalize_hk_stock_code,
 )
+from backend_core.strategies.gms.ma60_source import lookup_ma60_d
 
 router = APIRouter(prefix="/api/admin/indicators", tags=["admin_indicators"])
 
@@ -990,6 +991,7 @@ async def generate_batch_watchlist_indicators(
                                         falling_days_f=row.get('falling_days_f'),
                                         efficiency_m20_minus_m=row.get('efficiency_m20_minus_m'),
                                         ma20_d=row.get('ma20_d'),
+                                        ma60_d=lookup_ma60_d(db, stock_code, row['date'], market_type),
                                         mavol20_m=row.get('mavol20_m'),
                                         bias=row.get('bias')
                                     )
@@ -1287,6 +1289,7 @@ async def generate_batch_all_a_shares_indicators(
                                         falling_days_f=row.get('falling_days_f'),
                                         efficiency_m20_minus_m=row.get('efficiency_m20_minus_m'),
                                         ma20_d=row.get('ma20_d'),
+                                        ma60_d=lookup_ma60_d(db, stock_code, date_str, market_type),
                                         mavol20_m=row.get('mavol20_m'),
                                         bias=row.get('bias'),
                                         d1=row.get('d1'),
@@ -1538,6 +1541,7 @@ async def generate_indicators(
                                 date=date_str,
                                 market_type=market_type,
                                 ma20_d=pvfrs_item.get('ma20_d'),
+                                ma60_d=lookup_ma60_d(db, code, date_str, market_type),
                                 mavol20_m=pvfrs_item.get('mavol20_m'),
                                 macro_displacement_delta=pvfrs_item.get('macro_displacement_delta'),
                                 amplitude=pvfrs_item.get('amplitude'),
