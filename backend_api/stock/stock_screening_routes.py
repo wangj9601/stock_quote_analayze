@@ -188,6 +188,41 @@ def _fallback_gms_indicator_market_type(symbol: str, scope: str, cn_codes: set) 
     return "CN"
 
 
+def _gms_strategy_config_meta(config_mgr, config_id: int, config: dict) -> dict:
+    """当前 GMS 策略参数版本摘要（供前端得分明细展示）。"""
+    row = config_mgr.get_config_row(int(config_id)) if config_id else None
+    mechanism = (config.get("scoring") or {}).get("mechanism") or "tiered_dual_max"
+    label = mechanism
+    try:
+        from backend_core.strategies.gms.scoring import get_mechanism_meta
+
+        label = get_mechanism_meta(mechanism).get("label") or mechanism
+    except Exception:
+        pass
+    return {
+        "config_id": int(config_id),
+        "config_name": (row.name if row else "") or "",
+        "scoring_mechanism": mechanism,
+        "scoring_mechanism_label": label,
+        "strategy_config_id": int(config_id),
+        "strategy_config_name": (row.name if row else "") or "",
+    }
+
+
+def _inject_gms_score_detail_meta(sd: Optional[dict], meta: dict) -> dict:
+    if not isinstance(sd, dict):
+        sd = {}
+    for k in (
+        "strategy_config_id",
+        "strategy_config_name",
+        "scoring_mechanism",
+        "scoring_mechanism_label",
+    ):
+        if meta.get(k) is not None and sd.get(k) in (None, ""):
+            sd[k] = meta[k]
+    return sd
+
+
 def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_type: str, config: dict) -> Optional[Dict[str, Any]]:
     """
     兜底：当 score_detail 为空或得分字段缺失时，使用指标表 + 当前配置重新计算得分明细。
@@ -196,6 +231,8 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
         from sqlalchemy import desc
         from backend_core.strategies.gms.indicators_calculator import GMSIndicatorsCalculator
         from backend_core.strategies.gms.signal_detector import GMSSignalDetector
+        from backend_core.strategies.gms.data_loader import GMSDataLoader
+        from backend_core.strategies.gms.scoring._helpers import resolve_mechanism_id
 
         date_str = str(target_date).strip()[:10]
         row = (
@@ -239,7 +276,9 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "d1_date": getattr(row, "d1_date", None),
             "d20": getattr(row, "d20", None),
             "d20_date": getattr(row, "d20_date", None),
+            "ma60_d": getattr(row, "ma60_d", None),
         }
+        GMSDataLoader(db)._enrich_ma60_missing([calc_row], market_type)
 
         # 站稳 N 日：取最近 N 日的 instant_deviation 序列（最后一项为当日）
         stable_days = int((config.get("scoring") or {}).get("instant_deviation_stable_days", 3) or 3)
@@ -320,6 +359,11 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "volume_ratio": ind.volume_ratio,
             "fz_ratio": ind.fz_ratio,
             "instant_deviation": ind.instant_deviation,
+            "ma60_d": calc_row.get("ma60_d"),
+            "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(config),
+            "score_base_total": getattr(ind, "score_base_total", ind.score_total),
+            "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),
+            "penalties": getattr(ind, "penalty_details", []) or [],
         }
 
         return {
@@ -1391,6 +1435,7 @@ async def get_gms_strategy(
         config_mgr = GMSConfigManagerCls()
         resolved_config_id = config_mgr.resolve_config_id(config_id)
         config = config_mgr.get_config(resolved_config_id) if GMS_AVAILABLE else {}
+        gms_config_meta = _gms_strategy_config_meta(config_mgr, resolved_config_id, config) if GMS_AVAILABLE else {}
         # 以前端传入参数覆盖 config（前后端共用同一套参数）
         if accumulation_fz_min is not None:
             config.setdefault("scoring", {})["accumulation_fz_min"] = accumulation_fz_min
@@ -1462,8 +1507,8 @@ async def get_gms_strategy(
                 session.close()
 
         loop = asyncio.get_event_loop()
-        gms_meta: dict = {}
-        selection_results, gms_meta = await asyncio.wait_for(
+        gms_meta: dict = dict(gms_config_meta)
+        selection_results, gms_meta_run = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
                 lambda: _run_gms(
@@ -1472,6 +1517,7 @@ async def get_gms_strategy(
             ),
             timeout=GMS_SCREENING_TIMEOUT,
         )
+        gms_meta.update(gms_meta_run or {})
 
         # 当指定日期无数据时，回退到指标表最新可用日期
         user_specified_date = bool(date)
@@ -1669,12 +1715,17 @@ async def get_gms_strategy(
                 or all(v is None or v == "" for v in sd.values())
             )
             score_detail_missing_keys = False
+            _mechanism = (config.get("scoring") or {}).get("mechanism") or "tiered_dual_max"
             if isinstance(sd, dict):
                 required_keys = ("ratio_d", "avg_volume_20d", "current_volume")
                 for k in required_keys:
                     if sd.get(k) is None or sd.get(k) == "":
                         score_detail_missing_keys = True
                         break
+                if sd.get("ma60_d") is None:
+                    score_detail_missing_keys = True
+                if _mechanism == "tiered_dual_penalty" and sd.get("score_penalty_deduction") is None:
+                    score_detail_missing_keys = True
 
             if score_detail_empty or score_detail_missing_keys:
                 score_fallback = _fill_gms_score_fallback(db, item.get("symbol"), target_date, mt, config)
@@ -1702,6 +1753,8 @@ async def get_gms_strategy(
                         bool(item.get("left_buy_signal")),
                         bool(item.get("right_buy_signal")),
                     )
+
+            item["score_detail"] = _inject_gms_score_detail_meta(item.get("score_detail"), gms_config_meta)
 
         # 按信号强度由高到低排列
         def _gms_signal_sort_key(x):

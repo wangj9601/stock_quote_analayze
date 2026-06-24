@@ -179,6 +179,7 @@ class GMSStrategyEngine:
                     "volume_ratio": ind.volume_ratio,
                     "fz_ratio": ind.fz_ratio,
                     "instant_deviation": ind.instant_deviation,
+                    "ma60_d": (ind.raw_row.get("ma60_d") if ind.raw_row else None),
                     "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(self.config),
                     "score_base_total": getattr(ind, "score_base_total", ind.score_total),
                     "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),
