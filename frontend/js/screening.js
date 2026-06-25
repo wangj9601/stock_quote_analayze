@@ -294,6 +294,9 @@ const ScreeningPage = {
             this._hideGmsModal(document.getElementById('gmsFormalTransferModal'));
             this._gmsFormalTransferObserveId = null;
             if (window.CommonUtils) CommonUtils.showToast('已转入正式交易', 'success');
+            await this.loadGmsTradeObserveCodes();
+            void this.refreshGmsTradeObserveList();
+            this._refreshGmsTradeObserveButtonsInSignalTable();
             if (this.gmsSubPanel === 'formal-trade') {
                 void this.refreshGmsFormalTradeList();
             } else {

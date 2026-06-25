@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.gms_trade_observe_routes import _resolve_signal_date_str
+from backend_api.gms_trade_observe_routes import (
+    _archive_trade_observe_row,
+    _resolve_signal_date_str,
+)
 from backend_api.models import GmsFormalTrade, GmsTradeObserveStock, User
 
 router = APIRouter(prefix="/api/stock/gms-formal-trade", tags=["gms-formal-trade"])
@@ -135,12 +138,13 @@ def create_from_observe(
     if not observe:
         raise HTTPException(status_code=404, detail="交易观察记录不存在")
     now = datetime.now()
+    source_observe_id = observe.id
     row = GmsFormalTrade(
         user_id=user.id,
         market=observe.market,
         code=observe.code,
         name=observe.name,
-        source_observe_id=observe.id,
+        source_observe_id=source_observe_id,
         entry_price=float(body.entry_price),
         position_lots=int(body.position_lots),
         exit_price=None,
@@ -154,6 +158,8 @@ def create_from_observe(
         updated_at=now,
     )
     db.add(row)
+    _archive_trade_observe_row(db, observe, removed_at=now)
+    db.delete(observe)
     db.commit()
     db.refresh(row)
     return _row_to_item(row)

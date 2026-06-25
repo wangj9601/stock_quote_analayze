@@ -16,7 +16,12 @@ from sqlalchemy.pool import StaticPool
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_formal_trade_routes import router
-from backend_api.models import GmsFormalTrade, GmsTradeObserveStock, User
+from backend_api.models import (
+    GmsFormalTrade,
+    GmsTradeObserveHistory,
+    GmsTradeObserveStock,
+    User,
+)
 
 
 @pytest.fixture
@@ -28,6 +33,7 @@ def memory_db():
     )
     User.__table__.create(bind=engine)
     GmsTradeObserveStock.__table__.create(bind=engine)
+    GmsTradeObserveHistory.__table__.create(bind=engine)
     GmsFormalTrade.__table__.create(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
@@ -104,6 +110,15 @@ def test_from_observe_list_update_close_and_delete(client, memory_db, test_user)
     assert item["status"] == "open"
     assert item["source_observe_id"] == observe.id
     trade_id = item["id"]
+
+    assert memory_db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.id == observe.id).first() is None
+    hist = (
+        memory_db.query(GmsTradeObserveHistory)
+        .filter(GmsTradeObserveHistory.source_observe_id == observe.id)
+        .first()
+    )
+    assert hist is not None
+    assert hist.code == "600519"
 
     lst = client.get("/api/stock/gms-formal-trade/list")
     assert lst.status_code == 200
