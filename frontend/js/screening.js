@@ -597,6 +597,7 @@ const ScreeningPage = {
         const signalDate = this._resolveGmsSignalDate(stock);
         return {
             signal_date: signalDate,
+            industry: stock.industry,
             signal_strength: stock.signal_strength,
             score_total: stock.score_total,
             buy_type: stock.buy_type,
@@ -647,7 +648,7 @@ const ScreeningPage = {
                 errEl.textContent = '请先登录后查看交易观察列表';
             }
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">请先登录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">请先登录</td></tr>';
             }
             if (countEl) countEl.textContent = '';
             return;
@@ -674,7 +675,7 @@ const ScreeningPage = {
                 errEl.textContent = e.message || '加载交易观察列表失败';
             }
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">加载失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">加载失败</td></tr>';
             }
         } finally {
             if (loadingEl) loadingEl.style.display = 'none';
@@ -685,7 +686,7 @@ const ScreeningPage = {
         const tbody = document.getElementById('gmsTradeObserveTableBody');
         if (!tbody) return;
         if (!items || items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
             return;
         }
         const esc = (s) => String(s ?? '')
@@ -715,6 +716,7 @@ const ScreeningPage = {
                 <tr data-observe-id="${it.id}">
                     <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
                     <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
+                    <td class="gms-col-industry"><span class="stock-industry" title="${esc(it.industry || snap.industry || '')}">${esc(it.industry || snap.industry || '--')}</span></td>
                     <td class="gms-col-narrow">${fmtStrength(snap)}</td>
                     <td class="gms-col-narrow"><span class="${buyClass}">${esc(buyType)}</span></td>
                     <td class="gms-col-price">${fmtPrice(snap.current_price)}</td>

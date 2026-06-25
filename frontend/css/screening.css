@@ -1324,6 +1324,19 @@
     color: #757575;
 }
 
+#resultsTable-gms-trade-observe .gms-col-industry {
+    max-width: 7rem;
+    width: 7rem;
+    overflow: hidden;
+}
+
+#resultsTable-gms-trade-observe .gms-col-industry .stock-industry {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* GMS 交易观察 / 正式交易：操作列加宽 */
 #resultsTable-gms-trade-observe .gms-col-actions--wide,
 #resultsTable-gms-formal-trade .gms-col-actions--wide {

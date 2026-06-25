@@ -84,6 +84,15 @@ def client(memory_db, test_user):
 
 
 def test_add_list_codes_and_remove(client, memory_db, test_user):
+    memory_db.add(
+        StockBasicInfo(
+            code="600519",
+            name="贵州茅台",
+            industry="白酒",
+        )
+    )
+    memory_db.commit()
+
     r = client.post(
         "/api/stock/gms-trade-observe/add",
         json={
@@ -108,6 +117,7 @@ def test_add_list_codes_and_remove(client, memory_db, test_user):
     data = lst.json()
     assert data["total"] == 1
     assert data["items"][0]["snapshot"]["buy_type"] == "左侧"
+    assert data["items"][0]["industry"] == "白酒"
 
     r2 = client.post(
         "/api/stock/gms-trade-observe/add",

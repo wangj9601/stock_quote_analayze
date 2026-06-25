@@ -9,11 +9,18 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.models import GmsTradeObserveHistory, GmsTradeObserveStock, User
+from backend_api.models import (
+    GmsTradeObserveHistory,
+    GmsTradeObserveStock,
+    StockBasicInfo,
+    StockBasicInfoHK,
+    User,
+)
 
 router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-observe"])
 
@@ -50,6 +57,7 @@ class GmsTradeObserveItem(BaseModel):
     market: str
     code: str
     name: Optional[str]
+    industry: Optional[str] = None
     signal_date: Optional[str]
     snapshot: Optional[Dict[str, Any]]
     created_at: str
@@ -121,14 +129,105 @@ def _signal_date_from_body(body: GmsTradeObserveAddRequest) -> Optional[date]:
     return None
 
 
-def _row_to_item(r: GmsTradeObserveStock) -> GmsTradeObserveItem:
+def _observe_row_key(row: GmsTradeObserveStock) -> tuple[str, str]:
+    market = (row.market or "CN").upper()
+    return market, _normalize_code(row.code)
+
+
+def _industry_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(snapshot, dict):
+        return None
+    for key in ("industry", "所属行业"):
+        raw = snapshot.get(key)
+        if raw is not None and str(raw).strip():
+            return str(raw).strip()
+    return None
+
+
+def _batch_resolve_industries(
+    db: Session, rows: List[GmsTradeObserveStock]
+) -> Dict[tuple[str, str], str]:
+    """批量解析观察股所属行业：snapshot → 基础信息表 → 行业板块成分。"""
+    out: Dict[tuple[str, str], str] = {}
+    need_cn: List[str] = []
+    need_hk: List[str] = []
+
+    for row in rows:
+        key = _observe_row_key(row)
+        snap_val = _industry_from_snapshot(
+            row.signal_snapshot_json if isinstance(row.signal_snapshot_json, dict) else None
+        )
+        if snap_val:
+            out[key] = snap_val
+            continue
+        market, code = key
+        if market == "HK":
+            need_hk.append(code)
+        else:
+            need_cn.append(code)
+
+    if need_cn:
+        uniq = list(dict.fromkeys(need_cn))
+        for code, industry in (
+            db.query(StockBasicInfo.code, StockBasicInfo.industry)
+            .filter(StockBasicInfo.code.in_(uniq))
+            .all()
+        ):
+            if industry and str(industry).strip():
+                out.setdefault(("CN", str(code).strip()), str(industry).strip())
+
+    if need_hk:
+        uniq = list(dict.fromkeys(need_hk))
+        for code, industry in (
+            db.query(StockBasicInfoHK.code, StockBasicInfoHK.industry)
+            .filter(StockBasicInfoHK.code.in_(uniq))
+            .all()
+        ):
+            if industry and str(industry).strip():
+                out.setdefault(("HK", str(code).strip()), str(industry).strip())
+
+    missing_cn = [c for c in need_cn if ("CN", c) not in out]
+    if missing_cn:
+        uniq = list(dict.fromkeys(missing_cn))
+        try:
+            stmt = text(
+                """
+                SELECT c.stock_code, COALESCE(b.board_name, c.board_code) AS board_name
+                FROM industry_board_constituents c
+                LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+                WHERE c.stock_code IN :codes
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+            board_rows = db.execute(stmt, {"codes": uniq}).fetchall()
+            grouped: Dict[str, List[str]] = {}
+            for stock_code, board_name in board_rows:
+                sc = str(stock_code).strip()
+                bn = str(board_name).strip() if board_name else sc
+                grouped.setdefault(sc, []).append(bn)
+            for code, names in grouped.items():
+                key = ("CN", code)
+                if key not in out and names:
+                    out[key] = ",".join(dict.fromkeys(names))
+        except Exception:
+            pass
+
+    return out
+
+
+def _row_to_item(
+    r: GmsTradeObserveStock,
+    *,
+    industry: Optional[str] = None,
+) -> GmsTradeObserveItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
+    resolved_industry = industry or _industry_from_snapshot(snap)
     return GmsTradeObserveItem(
         id=r.id,
         market=r.market or "CN",
         code=r.code,
         name=r.name,
+        industry=resolved_industry,
         signal_date=sd,
         snapshot=snap,
         created_at=r.created_at.isoformat() if r.created_at else "",
@@ -194,11 +293,15 @@ def list_gms_trade_observe(
         .limit(page_size)
         .all()
     )
+    industries = _batch_resolve_industries(db, rows)
     return GmsTradeObserveListResponse(
         total=total,
         page=page,
         page_size=page_size,
-        items=[_row_to_item(r) for r in rows],
+        items=[
+            _row_to_item(r, industry=industries.get(_observe_row_key(r)))
+            for r in rows
+        ],
     )
 
 
@@ -255,7 +358,8 @@ def add_gms_trade_observe(
         existing.updated_at = now
         db.commit()
         db.refresh(existing)
-        return _row_to_item(existing)
+        industries = _batch_resolve_industries(db, [existing])
+        return _row_to_item(existing, industry=industries.get(_observe_row_key(existing)))
 
     row = GmsTradeObserveStock(
         user_id=user.id,
@@ -270,7 +374,8 @@ def add_gms_trade_observe(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return _row_to_item(row)
+    industries = _batch_resolve_industries(db, [row])
+    return _row_to_item(row, industry=industries.get(_observe_row_key(row)))
 
 
 @router.get("/history", response_model=GmsTradeObserveHistoryListResponse)
