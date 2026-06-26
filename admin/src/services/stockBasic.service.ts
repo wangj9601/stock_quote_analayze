@@ -2,10 +2,13 @@ import { apiService } from './api'
 
 export type StockBasicMarket = 'CN' | 'HK'
 
+export type DelistedFilter = 'all' | 'only' | 'exclude'
+
 export interface StockBasicQueryParams {
   market: 'ALL' | StockBasicMarket
   keyword?: string
   empty_shares?: boolean
+  delisted_filter?: DelistedFilter
   collect_enabled?: boolean | null
   page: number
   page_size: number
@@ -41,6 +44,9 @@ class StockBasicService {
     q.set('page_size', String(params.page_size))
     if (params.keyword) q.set('keyword', params.keyword)
     if (params.empty_shares) q.set('empty_shares', 'true')
+    if (params.delisted_filter && params.delisted_filter !== 'all') {
+      q.set('delisted_filter', params.delisted_filter)
+    }
     if (params.collect_enabled !== undefined && params.collect_enabled !== null) {
       q.set('collect_enabled', String(params.collect_enabled))
     }
@@ -53,6 +59,18 @@ class StockBasicService {
     q.set('code', code)
     q.set('collect_enabled', String(collectEnabled))
     return apiService.post(`/stock-basic/collect-flag?${q.toString()}`)
+  }
+
+  async batchUpdateCollectFlag(
+    market: StockBasicMarket,
+    codes: string[],
+    collectEnabled: boolean
+  ): Promise<{ success: boolean; data: { affected: number } }> {
+    return apiService.post('/stock-basic/collect-flag/batch', {
+      market,
+      codes,
+      collect_enabled: collectEnabled,
+    })
   }
 
   async downloadTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {
@@ -94,19 +112,38 @@ class StockBasicService {
   async exportShares(
     market: StockBasicMarket,
     format: 'csv' | 'xlsx',
-    opts?: { keyword?: string; empty_shares?: boolean; collect_enabled?: boolean | null }
+    opts?: {
+      keyword?: string
+      empty_shares?: boolean
+      delisted_filter?: DelistedFilter
+      collect_enabled?: boolean | null
+    }
   ): Promise<Blob> {
     const q = new URLSearchParams()
     q.set('market', market)
     q.set('format', format)
     if (opts?.keyword) q.set('keyword', opts.keyword)
     if (opts?.empty_shares) q.set('empty_shares', 'true')
+    if (opts?.delisted_filter && opts.delisted_filter !== 'all') {
+      q.set('delisted_filter', opts.delisted_filter)
+    }
     if (opts?.collect_enabled !== undefined && opts?.collect_enabled !== null) {
       q.set('collect_enabled', String(opts.collect_enabled))
     }
     return apiService.get(`/stock-basic/export/shares?${q.toString()}`, {
       responseType: 'blob'
     })
+  }
+
+  /** 从行业板块表同步 A 股 industry 到 stock_basic_info */
+  async syncIndustryFromBoards(opts?: { only_empty?: boolean }): Promise<{
+    success: boolean
+    data: { updated: number; matched: number }
+  }> {
+    const q = new URLSearchParams()
+    q.set('market', 'CN')
+    if (opts?.only_empty === false) q.set('only_empty', 'false')
+    return apiService.post(`/stock-basic/sync-industry?${q.toString()}`)
   }
 }
 

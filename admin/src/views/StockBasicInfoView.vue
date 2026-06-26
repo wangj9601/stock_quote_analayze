@@ -13,25 +13,47 @@
       <el-tab-pane label="基本信息查询" name="query">
         <el-card>
           <el-row :gutter="12" class="mb-4">
-            <el-col :span="8">
+            <el-col :span="7">
               <el-input v-model="currentQuery.keyword" placeholder="代码/名称" clearable />
             </el-col>
-            <el-col :span="4">
+            <el-col :span="5">
               <el-checkbox v-model="currentQuery.empty_shares">仅缺股本</el-checkbox>
             </el-col>
-            <el-col :span="5">
+            <el-col :span="4">
+              <el-select v-model="currentQuery.delisted_filter" style="width: 100%" placeholder="退市筛选">
+                <el-option label="全部股票" value="all" />
+                <el-option label="仅退市" value="only" />
+                <el-option label="排除退市" value="exclude" />
+              </el-select>
+            </el-col>
+            <el-col :span="4">
               <el-select v-model="currentCollectFilter" style="width: 100%" placeholder="采集标志">
                 <el-option label="全部" value="all" />
                 <el-option label="启用" value="enabled" />
                 <el-option label="停用" value="disabled" />
               </el-select>
             </el-col>
-            <el-col :span="7">
+            <el-col :span="8">
               <el-button type="primary" :loading="loading" @click="loadList">查询</el-button>
+              <el-button
+                v-if="mainTab === 'CN'"
+                type="success"
+                plain
+                :loading="syncingIndustry"
+                @click="syncIndustry"
+              >
+                同步行业
+              </el-button>
             </el-col>
           </el-row>
 
-          <el-table :data="rows" :loading="loading" stripe>
+          <div class="mb-3 flex gap-2 flex-wrap">
+            <el-button :disabled="!selectedRows.length" @click="batchSetCollect(true)">批量启用采集</el-button>
+            <el-button :disabled="!selectedRows.length" @click="batchSetCollect(false)">批量停用采集</el-button>
+          </div>
+
+          <el-table ref="tableRef" :data="rows" :loading="loading" stripe @selection-change="onSelectionChange">
+            <el-table-column type="selection" width="42" />
             <el-table-column prop="code" label="代码" width="100" />
             <el-table-column prop="name" label="名称" min-width="120" />
             <el-table-column prop="total_shares" label="总股本" min-width="110" />
@@ -153,6 +175,13 @@
               <el-checkbox v-model="currentExportFilters.empty_shares">仅缺股本</el-checkbox>
             </el-col>
             <el-col :span="6">
+              <el-select v-model="currentExportFilters.delisted_filter" style="width: 100%" placeholder="退市筛选">
+                <el-option label="全部股票" value="all" />
+                <el-option label="仅退市" value="only" />
+                <el-option label="排除退市" value="exclude" />
+              </el-select>
+            </el-col>
+            <el-col :span="6">
               <el-select v-model="currentExportCollectFilter" style="width: 100%" placeholder="采集标志">
                 <el-option label="全部" value="all" />
                 <el-option label="启用" value="enabled" />
@@ -172,17 +201,20 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { stockBasicService, type StockBasicMarket } from '@/services/stockBasic.service'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { stockBasicService, type DelistedFilter, type StockBasicMarket } from '@/services/stockBasic.service'
 
 const mainTab = ref<StockBasicMarket>('CN')
 const subTab = ref('query')
 const loading = ref(false)
+const syncingIndustry = ref(false)
 const validating = ref(false)
 const executing = ref(false)
 const exporting = ref(false)
 const rows = ref<any[]>([])
 const total = ref(0)
+const selectedRows = ref<any[]>([])
+const tableRef = ref()
 const pipelineStatus = ref<any>(null)
 
 type CollectFilter = 'all' | 'enabled' | 'disabled'
@@ -190,12 +222,14 @@ type CollectFilter = 'all' | 'enabled' | 'disabled'
 const queryCN = reactive({
   keyword: '',
   empty_shares: false,
+  delisted_filter: 'all' as DelistedFilter,
   page: 1,
   page_size: 20
 })
 const queryHK = reactive({
   keyword: '',
   empty_shares: false,
+  delisted_filter: 'all' as DelistedFilter,
   page: 1,
   page_size: 20
 })
@@ -222,8 +256,8 @@ const currentImportFile = computed(() => (mainTab.value === 'CN' ? fileCN.value 
 const currentValidateResult = computed(() => (mainTab.value === 'CN' ? validateCN.value : validateHK.value))
 const currentExecuteResult = computed(() => (mainTab.value === 'CN' ? executeCN.value : executeHK.value))
 
-const exportFiltersCN = reactive({ keyword: '', empty_shares: false })
-const exportFiltersHK = reactive({ keyword: '', empty_shares: false })
+const exportFiltersCN = reactive({ keyword: '', empty_shares: false, delisted_filter: 'all' as DelistedFilter })
+const exportFiltersHK = reactive({ keyword: '', empty_shares: false, delisted_filter: 'all' as DelistedFilter })
 const exportCollectFilterCN = ref<CollectFilter>('all')
 const exportCollectFilterHK = ref<CollectFilter>('all')
 
@@ -261,6 +295,7 @@ const loadList = async () => {
       market: m,
       keyword: q.keyword,
       empty_shares: q.empty_shares,
+      delisted_filter: q.delisted_filter,
       collect_enabled: collectEnabledFromFilter(cf),
       page: q.page,
       page_size: q.page_size
@@ -274,6 +309,20 @@ const loadList = async () => {
   }
 }
 
+const syncIndustry = async () => {
+  syncingIndustry.value = true
+  try {
+    const res = await stockBasicService.syncIndustryFromBoards({ only_empty: true })
+    const updated = res.data?.updated ?? 0
+    ElMessage.success(`已同步 ${updated} 条 A 股行业`)
+    await loadList()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '同步行业失败')
+  } finally {
+    syncingIndustry.value = false
+  }
+}
+
 const toggleCollectFlag = async (row: any, value: boolean) => {
   try {
     await stockBasicService.updateCollectFlag(row.market, row.code, value)
@@ -282,6 +331,33 @@ const toggleCollectFlag = async (row: any, value: boolean) => {
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '更新失败')
     loadList()
+  }
+}
+
+const onSelectionChange = (selection: any[]) => {
+  selectedRows.value = selection
+}
+
+const batchSetCollect = async (enabled: boolean) => {
+  if (!selectedRows.value.length) return
+  const label = enabled ? '启用' : '停用'
+  try {
+    await ElMessageBox.confirm(
+      `确定对选中的 ${selectedRows.value.length} 只股票批量${label}采集/处理吗？`,
+      `批量${label}采集`,
+      { type: 'warning' }
+    )
+    const codes = selectedRows.value.map((r) => r.code)
+    const res = await stockBasicService.batchUpdateCollectFlag(mainTab.value, codes, enabled)
+    const affected = res.data?.affected ?? 0
+    ElMessage.success(`已${label} ${affected} 条`)
+    selectedRows.value = []
+    tableRef.value?.clearSelection?.()
+    await loadList()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.detail || e?.message || '批量更新失败')
+    }
   }
 }
 
@@ -368,6 +444,7 @@ const doExport = async (format: 'csv' | 'xlsx') => {
     const blob = await stockBasicService.exportShares(mainTab.value, format, {
       keyword: ef.keyword || undefined,
       empty_shares: ef.empty_shares,
+      delisted_filter: ef.delisted_filter,
       collect_enabled: collectEnabledFromFilter(ecf)
     })
     const url = URL.createObjectURL(blob)

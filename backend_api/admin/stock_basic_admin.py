@@ -4,16 +4,22 @@ import csv
 import math
 from datetime import date, datetime
 from io import BytesIO, StringIO
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import text
+from pydantic import BaseModel, Field
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
+from backend_api.utils.industry_board_query import (
+    batch_industry_board_names_by_stock_codes,
+    resolve_cn_industry_display,
+    sync_a_stock_industry_from_boards,
+)
 from backend_core.utils.stock_basic_importer import (
     ensure_share_columns,
     execute_import_rows,
@@ -22,6 +28,43 @@ from backend_core.utils.stock_basic_importer import (
 )
 
 router = APIRouter(prefix="/api/admin/stock-basic", tags=["admin-stock-basic"])
+
+
+class BatchCollectFlagBody(BaseModel):
+    market: str = Field(..., pattern="^(CN|HK)$", description="市场")
+    codes: List[str] = Field(..., min_length=1, description="股票代码列表")
+    collect_enabled: bool = Field(..., description="采集/处理开关")
+
+
+DelistedFilter = Literal["all", "only", "exclude"]
+
+
+def _exclude_delisted_name_condition() -> str:
+    """与采集链路一致：名称含「退」视为退市等。"""
+    return "name NOT LIKE '%退%'"
+
+
+def _only_delisted_name_condition() -> str:
+    return "name LIKE '%退%'"
+
+
+def _append_common_filters(
+    where_parts: list[str],
+    *,
+    empty_shares: bool,
+    collect_enabled: Optional[bool],
+    delisted_filter: DelistedFilter,
+    params: Dict[str, Any],
+) -> None:
+    if empty_shares:
+        where_parts.append("(total_shares IS NULL OR free_float_shares IS NULL)")
+    if collect_enabled is not None:
+        where_parts.append("COALESCE(collect_enabled, TRUE) = :collect_enabled")
+        params["collect_enabled"] = collect_enabled
+    if delisted_filter == "only":
+        where_parts.append(_only_delisted_name_condition())
+    elif delisted_filter == "exclude":
+        where_parts.append(_exclude_delisted_name_condition())
 
 
 def _normalize_optional_text(v: Any) -> Optional[str]:
@@ -135,6 +178,9 @@ async def list_stock_basic(
     keyword: str = Query("", description="代码或名称关键字"),
     empty_shares: bool = Query(False, description="仅显示缺少股本"),
     collect_enabled: Optional[bool] = Query(None, description="采集处理开关筛选"),
+    delisted_filter: DelistedFilter = Query(
+        "all", description="退市筛选：all=全部, only=仅退市, exclude=排除退市"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -151,14 +197,20 @@ async def list_stock_basic(
         where_cn.append("(CAST(code AS TEXT) ILIKE :kw OR name ILIKE :kw)")
         where_hk.append("(code ILIKE :kw OR name ILIKE :kw)")
         params["kw"] = f"%{kw}%"
-    if empty_shares:
-        cond = "(total_shares IS NULL OR free_float_shares IS NULL)"
-        where_cn.append(cond)
-        where_hk.append(cond)
-    if collect_enabled is not None:
-        where_cn.append("COALESCE(collect_enabled, TRUE) = :collect_enabled")
-        where_hk.append("COALESCE(collect_enabled, TRUE) = :collect_enabled")
-        params["collect_enabled"] = collect_enabled
+    _append_common_filters(
+        where_cn,
+        empty_shares=empty_shares,
+        collect_enabled=collect_enabled,
+        delisted_filter=delisted_filter,
+        params=params,
+    )
+    _append_common_filters(
+        where_hk,
+        empty_shares=empty_shares,
+        collect_enabled=collect_enabled,
+        delisted_filter=delisted_filter,
+        params=params,
+    )
     where_cn_sql = (" WHERE " + " AND ".join(where_cn)) if where_cn else ""
     where_hk_sql = (" WHERE " + " AND ".join(where_hk)) if where_hk else ""
 
@@ -212,6 +264,12 @@ async def list_stock_basic(
         }
         for r in rows
     ]
+    if market in ("ALL", "CN") and data:
+        cn_codes = [d["code"] for d in data if d["market"] == "CN"]
+        board_map = batch_industry_board_names_by_stock_codes(db, cn_codes)
+        for d in data:
+            if d["market"] == "CN":
+                d["industry"] = resolve_cn_industry_display(d.get("industry"), board_map.get(d["code"]))
     return {"success": True, "data": data, "total": total, "page": page, "page_size": page_size}
 
 
@@ -220,6 +278,7 @@ def _build_shares_export_where(
     keyword: str,
     empty_shares: bool,
     collect_enabled: Optional[bool],
+    delisted_filter: DelistedFilter = "all",
 ) -> tuple[str, Dict[str, Any]]:
     """单市场（CN 或 HK）的 WHERE 子句与参数。"""
     where: list[str] = []
@@ -231,11 +290,13 @@ def _build_shares_export_where(
         else:
             where.append("(code ILIKE :kw OR name ILIKE :kw)")
         params["kw"] = f"%{kw}%"
-    if empty_shares:
-        where.append("(total_shares IS NULL OR free_float_shares IS NULL)")
-    if collect_enabled is not None:
-        where.append("COALESCE(collect_enabled, TRUE) = :collect_enabled")
-        params["collect_enabled"] = collect_enabled
+    _append_common_filters(
+        where,
+        empty_shares=empty_shares,
+        collect_enabled=collect_enabled,
+        delisted_filter=delisted_filter,
+        params=params,
+    )
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     return where_sql, params
 
@@ -247,12 +308,17 @@ async def export_shares(
     keyword: str = Query("", description="代码或名称关键字"),
     empty_shares: bool = Query(False, description="仅导出缺少股本"),
     collect_enabled: Optional[bool] = Query(None, description="采集处理开关筛选"),
+    delisted_filter: DelistedFilter = Query(
+        "all", description="退市筛选：all=全部, only=仅退市, exclude=排除退市"
+    ),
     db: Session = Depends(get_db),
     _: Any = Depends(get_current_admin),
 ):
     """导出指定市场股本相关字段（CSV/XLSX），列与导入模板对齐。"""
     ensure_share_columns(db)
-    where_sql, params = _build_shares_export_where(market, keyword, empty_shares, collect_enabled)
+    where_sql, params = _build_shares_export_where(
+        market, keyword, empty_shares, collect_enabled, delisted_filter
+    )
     table = "stock_basic_info" if market == "CN" else "stock_basic_info_hk"
     code_expr = "LPAD(CAST(code AS TEXT), 6, '0')" if market == "CN" else "code"
     sql = f"""
@@ -264,6 +330,9 @@ async def export_shares(
         ORDER BY code
     """
     rows = db.execute(text(sql), params).fetchall()
+    board_map: Dict[str, str] = {}
+    if market == "CN" and rows:
+        board_map = batch_industry_board_names_by_stock_codes(db, [str(r[0]) for r in rows])
     cols = [
         "code",
         "name",
@@ -277,6 +346,7 @@ async def export_shares(
     ]
     data_rows = []
     for r in rows:
+        industry = resolve_cn_industry_display(_normalize_optional_text(r[4]), board_map.get(str(r[0])))
         data_rows.append(
             [
                 r[0],
@@ -285,7 +355,7 @@ async def export_shares(
                 r[2],
                 r[3],
                 _normalize_optional_text(r[5]) or "",
-                _normalize_optional_text(r[4]) or "",
+                industry or "",
                 r[6].isoformat() if r[6] else None,
                 bool(r[7]) if r[7] is not None else True,
             ]
@@ -356,6 +426,86 @@ async def update_collect_flag(
         affected=result.rowcount or 0,
     )
     return {"success": True, "affected": result.rowcount or 0}
+
+
+@router.post("/collect-flag/batch")
+async def batch_update_collect_flag(
+    body: BatchCollectFlagBody,
+    db: Session = Depends(get_db),
+    admin: Any = Depends(get_current_admin),
+):
+    """批量更新采集/处理开关。"""
+    ensure_share_columns(db)
+    market = body.market.upper()
+    codes = list(dict.fromkeys(str(c).strip() for c in body.codes if str(c).strip()))
+    if not codes:
+        raise HTTPException(status_code=400, detail="codes 不能为空")
+
+    if market == "CN":
+        norm_codes = [c.zfill(6) for c in codes]
+        stmt = text(
+            """
+            UPDATE stock_basic_info
+            SET collect_enabled = :collect_enabled
+            WHERE LPAD(CAST(code AS TEXT), 6, '0') IN :codes
+            """
+        ).bindparams(bindparam("codes", expanding=True))
+        result = db.execute(
+            stmt,
+            {"collect_enabled": body.collect_enabled, "codes": norm_codes},
+        )
+    else:
+        stmt = text(
+            """
+            UPDATE stock_basic_info_hk
+            SET collect_enabled = :collect_enabled
+            WHERE code IN :codes
+            """
+        ).bindparams(bindparam("codes", expanding=True))
+        result = db.execute(
+            stmt,
+            {"collect_enabled": body.collect_enabled, "codes": codes},
+        )
+
+    db.commit()
+    affected = int(result.rowcount or 0)
+    _write_operation_log(
+        db,
+        log_type="stock_collect_flag_batch",
+        message=(
+            f"批量更新采集处理标志 market={market} enabled={body.collect_enabled} "
+            f"count={len(codes)} by {getattr(admin, 'username', 'admin')}"
+        ),
+        status="成功",
+        affected=affected,
+    )
+    return {"success": True, "data": {"affected": affected}}
+
+
+@router.post("/sync-industry")
+async def sync_industry_from_boards(
+    market: str = Query("CN", pattern="^(CN)$", description="当前仅支持 A 股"),
+    only_empty: bool = Query(True, description="True=仅补空行业；False=按板块映射全量覆盖"),
+    db: Session = Depends(get_db),
+    admin: Any = Depends(get_current_admin),
+):
+    """从行业板块成分股 + 基本信息表同步 industry 到 stock_basic_info。"""
+    ensure_share_columns(db)
+    try:
+        stats = sync_a_stock_industry_from_boards(db, only_empty=only_empty)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"同步行业失败: {e}") from e
+    _write_operation_log(
+        db,
+        log_type="stock_basic_industry_sync",
+        message=(
+            f"同步A股行业 from industry_board only_empty={only_empty} "
+            f"by {getattr(admin, 'username', 'admin')}"
+        ),
+        status="成功",
+        affected=stats.get("updated", 0),
+    )
+    return {"success": True, "data": stats}
 
 
 @router.get("/import/template")

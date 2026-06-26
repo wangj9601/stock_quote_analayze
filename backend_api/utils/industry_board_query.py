@@ -1,7 +1,7 @@
 """行业板块成分股查询工具。"""
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
@@ -141,6 +141,100 @@ def batch_industry_board_names_by_stock_codes(
         if bn not in bucket:
             bucket.append(bn)
     return {code: ",".join(names) for code, names in grouped.items() if names}
+
+
+def sync_a_stock_industry_from_boards(
+    db: Session,
+    *,
+    only_empty: bool = True,
+    stock_codes: Optional[List[str]] = None,
+) -> Dict[str, int]:
+    """
+    将行业板块成分映射写回 stock_basic_info.industry（A 股）。
+    only_empty=True 时仅更新 industry 为空/无效占位的记录。
+    """
+    params: Dict[str, Any] = {}
+    code_filter = ""
+    if stock_codes:
+        codes = list(dict.fromkeys(_normalize_code(c) for c in stock_codes if c and str(c).strip()))
+        if not codes:
+            return {"updated": 0, "matched": 0}
+        params["codes"] = codes
+        code_filter = "AND c.stock_code IN :codes"
+
+    empty_filter = ""
+    if only_empty:
+        empty_filter = """
+            AND (
+                s.industry IS NULL
+                OR TRIM(s.industry) = ''
+                OR LOWER(TRIM(s.industry)) IN ('nan', 'none', 'null', '<na>', 'nat')
+            )
+        """
+
+    sql = text(
+        f"""
+        WITH dedup AS (
+            SELECT DISTINCT
+                c.stock_code,
+                COALESCE(b.board_name, c.board_code) AS board_name
+            FROM industry_board_constituents c
+            LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+            WHERE 1 = 1 {code_filter}
+        ),
+        board_agg AS (
+            SELECT
+                stock_code,
+                string_agg(board_name, ',' ORDER BY board_name) AS industry_name
+            FROM dedup
+            GROUP BY stock_code
+        )
+        UPDATE stock_basic_info AS s
+        SET industry = board_agg.industry_name
+        FROM board_agg
+        WHERE LPAD(CAST(s.code AS TEXT), 6, '0') = board_agg.stock_code
+          {empty_filter}
+        """
+    )
+    if stock_codes:
+        sql = sql.bindparams(bindparam("codes", expanding=True))
+
+    try:
+        matched = db.execute(
+            text(
+                f"""
+                SELECT COUNT(DISTINCT c.stock_code)
+                FROM industry_board_constituents c
+                WHERE 1 = 1 {code_filter}
+                """
+            ).bindparams(bindparam("codes", expanding=True)) if stock_codes else text(
+                "SELECT COUNT(DISTINCT stock_code) FROM industry_board_constituents"
+            ),
+            params,
+        ).scalar() or 0
+        result = db.execute(sql, params)
+        db.commit()
+        return {"updated": int(result.rowcount or 0), "matched": int(matched)}
+    except Exception:
+        db.rollback()
+        raise
+
+
+def resolve_cn_industry_display(
+    stored: Optional[str], board_industry: Optional[str]
+) -> Optional[str]:
+    """A 股列表展示：优先行业板块名称，其次库内 industry。"""
+    if board_industry and str(board_industry).strip():
+        return str(board_industry).strip()
+    if stored is None:
+        return None
+    s = str(stored).strip()
+    if not s:
+        return None
+    low = s.lower()
+    if low in ("nan", "none", "null", "<na>", "nat"):
+        return None
+    return s
 
 
 def stock_matches_industry_filter(
