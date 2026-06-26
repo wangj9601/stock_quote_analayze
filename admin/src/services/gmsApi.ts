@@ -88,6 +88,7 @@ export interface GMSStrategyVersionStock {
   market: 'A' | 'HK'
   stock_code: string
   stock_name?: string
+  industry?: string | null
   sort_order: number
   status: string
   is_verified: boolean
@@ -212,6 +213,18 @@ class GMSApiService {
   async deleteBacktestTask(taskId: string) {
     // 兼容生产环境，优先使用 POST /delete
     await this.request(`${PREFIX}/backtests/${taskId}/delete`, { method: 'POST' })
+  }
+
+  /** 批量删除任务 */
+  async batchDeleteBacktestTasks(taskIds: string[]) {
+    const res = await this.request<{ success: boolean; data: { deleted: number; failed?: string[]; failed_count?: number } }>(
+      `${PREFIX}/backtests/batch-delete`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ task_ids: taskIds }),
+      }
+    )
+    return res.data
   }
 
   /** 报告列表 */

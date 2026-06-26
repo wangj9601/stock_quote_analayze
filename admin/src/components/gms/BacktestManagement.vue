@@ -356,6 +356,9 @@
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
+        <el-button type="danger" plain :disabled="!selectedTaskIds.length" @click="batchDeleteTasks">
+          批量删除
+        </el-button>
         <el-select v-model="statusFilter" placeholder="状态" clearable style="width:120px">
           <el-option label="全部" value="" />
           <el-option label="等待中" value="pending" />
@@ -365,7 +368,14 @@
           <el-option label="已取消" value="cancelled" />
         </el-select>
       </div>
-      <el-table :data="filteredTasks" v-loading="loading" stripe>
+      <el-table
+        ref="taskTableRef"
+        :data="filteredTasks"
+        v-loading="loading"
+        stripe
+        @selection-change="onSelectionChange"
+      >
+        <el-table-column type="selection" width="42" />
         <el-table-column prop="task_id" label="任务ID" width="100">
           <template #default="scope">{{ (scope.row.task_id || '').slice(0, 8) }}</template>
         </el-table-column>
@@ -449,6 +459,8 @@ const loading = ref(false)
 const creating = ref(false)
 const detailVisible = ref(false)
 const selectedTaskId = ref('')
+const selectedTaskIds = ref<string[]>([])
+const taskTableRef = ref()
 
 const form = reactive({
   task_name: '',
@@ -773,6 +785,33 @@ async function deleteTask(row: any) {
     await refresh()
   } catch (e) {
     if ((e as string) !== 'cancel') ElMessage.error('删除失败')
+  }
+}
+
+function onSelectionChange(rows: any[]) {
+  selectedTaskIds.value = rows.map((r) => r.task_id).filter(Boolean)
+}
+
+async function batchDeleteTasks() {
+  if (!selectedTaskIds.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定批量删除选中的 ${selectedTaskIds.value.length} 个任务及其报告？`,
+      '批量删除确认',
+      { type: 'warning' }
+    )
+    const data = await gmsApi.batchDeleteBacktestTasks(selectedTaskIds.value)
+    const deleted = data?.deleted ?? selectedTaskIds.value.length
+    if (data?.failed_count) {
+      ElMessage.warning(`已删除 ${deleted} 个，${data.failed_count} 个删除失败`)
+    } else {
+      ElMessage.success(`已删除 ${deleted} 个任务`)
+    }
+    selectedTaskIds.value = []
+    taskTableRef.value?.clearSelection?.()
+    await refresh()
+  } catch (e) {
+    if ((e as string) !== 'cancel') ElMessage.error('批量删除失败')
   }
 }
 

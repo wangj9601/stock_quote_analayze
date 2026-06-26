@@ -93,3 +93,21 @@ def test_create_backtest_watchlist_ignores_body_stock_pool(mock_create):
     cfg = mock_create.call_args[0][0]
     assert cfg["stock_pool"] == ["300001"]
     assert "stock_code" not in cfg
+
+
+@patch.object(gms_admin_routes.admin_interface, "delete_tasks_batch", return_value={"deleted": 2, "failed": [], "failed_count": 0})
+def test_batch_delete_backtests(mock_batch):
+    client = _make_client(MagicMock())
+    r = client.post(
+        "/api/admin/gms/backtests/batch-delete",
+        json={"task_ids": ["task-a", "task-b"]},
+    )
+    assert r.status_code == 200
+    assert r.json()["data"]["deleted"] == 2
+    mock_batch.assert_called_once_with(["task-a", "task-b"])
+
+
+def test_batch_delete_backtests_empty_ids_returns_400():
+    client = _make_client(MagicMock())
+    r = client.post("/api/admin/gms/backtests/batch-delete", json={"task_ids": ["", "  "]})
+    assert r.status_code == 400

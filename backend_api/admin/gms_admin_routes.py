@@ -22,8 +22,14 @@ from backend_api.models import (
     User,
     GMSStrategyVersion,
     GMSStrategyVersionStock,
+    StockBasicInfo,
+    StockBasicInfoHK,
     StockRealtimeQuote,
     StockRealtimeQuoteHK,
+)
+from backend_api.utils.industry_board_query import (
+    batch_industry_board_names_by_stock_codes,
+    get_industry_board_name_by_stock_code,
 )
 from backend_api.services.gms_signal_trace_selection import query_gms_signal_trace_selection
 from backend_core.strategies.gms import admin_interface
@@ -278,6 +284,10 @@ class BacktestCreateBody(BaseModel):
     strategy_config_id: Optional[int] = Field(None, ge=1, description="GMS 策略参数版本 ID，不传则用默认版本")
 
 
+class BatchDeleteBacktestsBody(BaseModel):
+    task_ids: List[str] = Field(..., min_length=1, description="回测任务 ID 列表")
+
+
 @router.get("/watchlist-users")
 async def list_watchlist_users(db: Session = Depends(get_db)):
     """返回有自选股的用户列表（用于“自选股”按用户筛选）。"""
@@ -480,6 +490,16 @@ async def delete_backtest(task_id: str):
     """删除任务。同时支持 DELETE 和 POST /delete 兼容生产环境。"""
     admin_interface.delete_task(task_id)
     return {"success": True}
+
+
+@router.post("/backtests/batch-delete")
+async def batch_delete_backtests(body: BatchDeleteBacktestsBody):
+    """批量删除回测任务及关联报告。"""
+    task_ids = [str(t).strip() for t in body.task_ids if str(t).strip()]
+    if not task_ids:
+        raise HTTPException(status_code=400, detail="task_ids 不能为空")
+    data = admin_interface.delete_tasks_batch(task_ids)
+    return {"success": True, "data": data}
 
 
 # ---------- reports ----------
@@ -1036,13 +1056,18 @@ def _bind_canonical_config_for_mechanism(
     return int(config_id)
 
 
-def _serialize_strategy_version_stock(row: GMSStrategyVersionStock, price: Optional[float] = None) -> dict:
+def _serialize_strategy_version_stock(
+    row: GMSStrategyVersionStock,
+    price: Optional[float] = None,
+    industry: Optional[str] = None,
+) -> dict:
     return {
         "id": row.id,
         "version_id": row.version_id,
         "market": row.market,
         "stock_code": _as_text_stock_code(row.stock_code),
         "stock_name": row.stock_name,
+        "industry": industry,
         "sort_order": row.sort_order,
         "status": row.status,
         "is_verified": bool(row.is_verified),
@@ -1051,6 +1076,39 @@ def _serialize_strategy_version_stock(row: GMSStrategyVersionStock, price: Optio
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+
+
+def _lookup_stock_industry(db: Session, market: str, stock_code: str) -> Optional[str]:
+    code = _as_text_stock_code(stock_code)
+    if not code:
+        return None
+    if market == "A":
+        return get_industry_board_name_by_stock_code(db, code)
+    row = db.query(StockBasicInfoHK.industry).filter(StockBasicInfoHK.code == code).first()
+    if not row or row[0] is None:
+        return None
+    s = str(row[0]).strip()
+    return s or None
+
+
+def _batch_stock_industries(
+    db: Session, rows: List[GMSStrategyVersionStock]
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    a_codes = list({str(r.stock_code).strip() for r in rows if r.market == "A" and r.stock_code})
+    hk_codes = list({str(r.stock_code).strip() for r in rows if r.market == "HK" and r.stock_code})
+    a_map = batch_industry_board_names_by_stock_codes(db, a_codes)
+    hk_map: Dict[str, str] = {}
+    if hk_codes:
+        for code, industry in (
+            db.query(StockBasicInfoHK.code, StockBasicInfoHK.industry)
+            .filter(StockBasicInfoHK.code.in_(hk_codes))
+            .all()
+        ):
+            if industry:
+                s = str(industry).strip()
+                if s:
+                    hk_map[str(code).strip()] = s
+    return a_map, hk_map
 
 
 @router.get("/strategy-versions")
@@ -1330,13 +1388,19 @@ async def list_strategy_version_stocks(
             ).all()
             hk_prices = {r[0]: r[1] for r in p_rows}
 
+    a_industries, hk_industries = _batch_stock_industries(db, rows)
+
     return {
         "success": True,
         "data": [
             _serialize_strategy_version_stock(
-                r, 
-                a_prices.get(r.stock_code) if r.market == 'A' else hk_prices.get(r.stock_code)
-            ) for r in rows
+                r,
+                a_prices.get(r.stock_code) if r.market == "A" else hk_prices.get(r.stock_code),
+                a_industries.get(str(r.stock_code).strip())
+                if r.market == "A"
+                else hk_industries.get(str(r.stock_code).strip()),
+            )
+            for r in rows
         ],
         "total": total,
         "page": page,
@@ -1401,7 +1465,12 @@ async def create_strategy_version_stock(body: StrategyVersionStockCreateBody, db
         row.stock_code,
         row.stock_name,
     )
-    return {"success": True, "data": _serialize_strategy_version_stock(row)}
+    return {
+        "success": True,
+        "data": _serialize_strategy_version_stock(
+            row, industry=_lookup_stock_industry(db, row.market, row.stock_code)
+        ),
+    }
 
 
 @router.put("/strategy-version-stocks/{stock_id}")
@@ -1451,7 +1520,12 @@ async def update_strategy_version_stock(
 
     db.commit()
     db.refresh(row)
-    return {"success": True, "data": _serialize_strategy_version_stock(row)}
+    return {
+        "success": True,
+        "data": _serialize_strategy_version_stock(
+            row, industry=_lookup_stock_industry(db, row.market, row.stock_code)
+        ),
+    }
 
 
 @router.delete("/strategy-version-stocks/{stock_id}")
@@ -1533,7 +1607,11 @@ async def batch_import_strategy_version_stocks(body: BatchImportStocksBody, db: 
             )
             db.add(row)
             db.flush()
-            created_items.append(_serialize_strategy_version_stock(row))
+            created_items.append(
+                _serialize_strategy_version_stock(
+                    row, industry=_lookup_stock_industry(db, row.market, row.stock_code)
+                )
+            )
             success_count += 1
         except Exception as e:
             fail_count += 1

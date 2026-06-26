@@ -46,7 +46,13 @@
           <el-table-column type="selection" width="42" />
           <el-table-column prop="market" label="市场" width="80" />
           <el-table-column prop="stock_code" label="代码" width="120" />
-          <el-table-column prop="stock_name" label="名称" min-width="140" />
+          <el-table-column prop="stock_name" label="名称" min-width="120" />
+          <el-table-column prop="industry" label="行业" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.industry">{{ row.industry }}</span>
+              <span v-else class="text-gray-400">-</span>
+            </template>
+          </el-table-column>
           <el-table-column label="当前价格" width="100">
             <template #default="scope">
               <span v-if="scope.row.current_price != null">

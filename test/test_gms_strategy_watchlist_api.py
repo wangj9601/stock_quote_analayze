@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,6 +14,7 @@ from backend_api.models import (  # noqa: E402
     Base,
     StockBasicInfo,
     StockBasicInfoHK,
+    IndustryBoardConstituent,
     GMSRuntimeConfig,
     GMSBacktestTask,
 )
@@ -30,9 +31,26 @@ def _build_client():
     Base.metadata.create_all(bind=engine)
 
     db = TestingSessionLocal()
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS industry_board_basic_info (
+                board_code TEXT PRIMARY KEY,
+                board_name TEXT
+            )
+            """
+        )
+    )
     db.add(StockBasicInfo(code="000001", name="平安银行"))
     db.add(StockBasicInfo(code="600000", name="浦发银行"))
-    db.add(StockBasicInfoHK(code="00700", name="腾讯控股"))
+    db.add(StockBasicInfoHK(code="00700", name="腾讯控股", industry="互联网"))
+    db.add(IndustryBoardConstituent(board_code="BK0479", stock_code="000001", stock_name="平安银行"))
+    db.add(IndustryBoardConstituent(board_code="BK0479", stock_code="600000", stock_name="浦发银行"))
+    db.execute(
+        text(
+            "INSERT INTO industry_board_basic_info (board_code, board_name) VALUES ('BK0479', '银行')"
+        )
+    )
     db.commit()
     db.close()
 
@@ -78,6 +96,7 @@ def test_gms_strategy_version_and_stock_crud():
     )
     assert create_stock_resp.status_code == 200
     stock_id = create_stock_resp.json()["data"]["id"]
+    assert create_stock_resp.json()["data"].get("industry") == "银行"
 
     # JSON 中股票代码为数字时也应能写入（库表 code 为字符串，后端须绑定 str）
     create_num = client.post(
@@ -96,6 +115,9 @@ def test_gms_strategy_version_and_stock_crud():
     list_resp = client.get(f"/api/admin/gms/strategy-version-stocks?version_id={version_id}&page=1&page_size=20")
     assert list_resp.status_code == 200
     assert list_resp.json()["total"] == 2
+    industries = {item["stock_code"]: item.get("industry") for item in list_resp.json()["data"]}
+    assert industries.get("000001") == "银行"
+    assert industries.get("600000") == "银行"
 
     update_resp = client.put(
         f"/api/admin/gms/strategy-version-stocks/{stock_id}",

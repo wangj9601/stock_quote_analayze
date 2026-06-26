@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Set
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_api.models import IndustryBoardConstituent
@@ -83,6 +83,64 @@ def get_boards_by_stock_code(db: Session, stock_code: str) -> List[Dict]:
 def get_board_names_by_stock_code(db: Session, stock_code: str) -> List[str]:
     boards = get_boards_by_stock_code(db, stock_code)
     return [b["board_name"] for b in boards if b.get("board_name")]
+
+
+def get_industry_board_name_by_stock_code(db: Session, stock_code: str) -> Optional[str]:
+    """A 股：从行业板块成分股 + 基本信息表取板块名称（不含概念板块）。"""
+    code = _normalize_code(stock_code)
+    if not code:
+        return None
+    sql = text(
+        """
+        SELECT COALESCE(b.board_name, c.board_code) AS board_name
+        FROM industry_board_constituents c
+        LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+        WHERE c.stock_code = :stock_code
+        ORDER BY board_name, c.board_code
+        """
+    )
+    try:
+        rows = db.execute(sql, {"stock_code": code}).fetchall()
+    except Exception:
+        return None
+    names: List[str] = []
+    for row in rows:
+        bn = str(row[0]).strip() if row and row[0] else ""
+        if bn and bn not in names:
+            names.append(bn)
+    return ",".join(names) if names else None
+
+
+def batch_industry_board_names_by_stock_codes(
+    db: Session, stock_codes: List[str]
+) -> Dict[str, str]:
+    """批量 A 股行业板块名称（stock_code -> 逗号分隔的 board_name）。"""
+    if not stock_codes:
+        return {}
+    codes = list(dict.fromkeys(_normalize_code(c) for c in stock_codes if c and str(c).strip()))
+    if not codes:
+        return {}
+    stmt = text(
+        """
+        SELECT c.stock_code, COALESCE(b.board_name, c.board_code) AS board_name
+        FROM industry_board_constituents c
+        LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+        WHERE c.stock_code IN :codes
+        ORDER BY c.stock_code, board_name, c.board_code
+        """
+    ).bindparams(bindparam("codes", expanding=True))
+    try:
+        board_rows = db.execute(stmt, {"codes": codes}).fetchall()
+    except Exception:
+        return {}
+    grouped: Dict[str, List[str]] = {}
+    for stock_code, board_name in board_rows:
+        sc = _normalize_code(str(stock_code))
+        bn = str(board_name).strip() if board_name else sc
+        bucket = grouped.setdefault(sc, [])
+        if bn not in bucket:
+            bucket.append(bn)
+    return {code: ",".join(names) for code, names in grouped.items() if names}
 
 
 def stock_matches_industry_filter(

@@ -74,6 +74,26 @@ def delete_task(task_id: str) -> bool:
     return backtest_storage.delete_task(task_id)
 
 
+def delete_tasks_batch(task_ids: List[str]) -> Dict[str, Any]:
+    """批量删除回测任务。"""
+    deleted = 0
+    failed: List[str] = []
+    seen: set[str] = set()
+    for raw in task_ids or []:
+        tid = str(raw).strip()
+        if not tid or tid in seen:
+            continue
+        seen.add(tid)
+        try:
+            if delete_task(tid):
+                deleted += 1
+            else:
+                failed.append(tid)
+        except Exception:
+            failed.append(tid)
+    return {"deleted": deleted, "failed": failed, "failed_count": len(failed)}
+
+
 def list_reports(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     """报告列表。"""
     return backtest_storage.list_reports(limit=limit, offset=offset)
