@@ -4,7 +4,8 @@
 CREATE TABLE IF NOT EXISTS concept_board_basic_info (
     board_code VARCHAR(20) PRIMARY KEY,
     board_name VARCHAR(100),
-    create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS concept_board_constituents (

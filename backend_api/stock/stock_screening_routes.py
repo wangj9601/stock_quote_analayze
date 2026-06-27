@@ -1136,7 +1136,7 @@ async def get_gms_strategy(
     ),
     industry_board_code: Optional[List[str]] = Query(
         None,
-        description="scope=industry_board 时必填：行业板块代码，可传多个（如 IT服务、半导体）",
+        description="scope=industry_board 时必填：行业板块 BK 编码，可传多个（兼容历史名称，将自动解析）",
     ),
     concept_board_code: Optional[List[str]] = Query(
         None,
@@ -1242,6 +1242,7 @@ async def get_gms_strategy(
 
         stock_pool = None
         market = "all"
+        resolved_industry_board_codes: Optional[List[str]] = None
         stock_pool_size = 0
         if code:
             resolved_code = _resolve_gms_stock_code_from_input(db, code)
@@ -1366,10 +1367,18 @@ async def get_gms_strategy(
             logger.info("GMS 数据来源=GMS观察股 market_filter=%s 股票数=%s", mraw, len(stock_pool))
         elif scope == "industry_board":
             from backend_api.models import IndustryBoardConstituent
+            from backend_api.utils.bk_board_code import resolve_industry_board_codes
 
-            bcodes = _normalize_gms_board_codes(industry_board_code)
+            bcodes = resolve_industry_board_codes(
+                db, _normalize_gms_board_codes(industry_board_code)
+            )
+            resolved_industry_board_codes = bcodes
             if not bcodes:
-                raise HTTPException(status_code=400, detail="scope=industry_board 时需传 industry_board_code")
+                raw = _normalize_gms_board_codes(industry_board_code)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"未找到行业板块：{('、'.join(raw) if raw else '请传 industry_board_code')}",
+                )
             rows_ib = (
                 db.query(IndustryBoardConstituent)
                 .filter(IndustryBoardConstituent.board_code.in_(bcodes))
@@ -1843,12 +1852,12 @@ async def get_gms_strategy(
                 "scope": scope,
                 "stock_pool_size": stock_pool_size,
                 "industry_board_code": (
-                    _normalize_gms_board_codes(industry_board_code)[0]
-                    if scope == "industry_board" and _normalize_gms_board_codes(industry_board_code)
+                    resolved_industry_board_codes[0]
+                    if scope == "industry_board" and resolved_industry_board_codes
                     else None
                 ),
                 "industry_board_codes": (
-                    _normalize_gms_board_codes(industry_board_code)
+                    resolved_industry_board_codes
                     if scope == "industry_board"
                     else None
                 ),

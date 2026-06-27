@@ -14,7 +14,6 @@ import pandas as pd
 from sqlalchemy import text
 
 from backend_core.database.db import SessionLocal
-from backend_core.data_collectors.akshare.board_code_rules import is_industry_board_code
 
 
 def _env_float(key: str, default: float) -> float:
@@ -68,13 +67,16 @@ class IndustryBoardConstituentsCollector:
         rows = session.execute(
             text("SELECT board_code, board_name FROM industry_board_basic_info ORDER BY board_code")
         ).fetchall()
-        return [(str(r[0]).strip(), r[1]) for r in rows if r[0] and is_industry_board_code(str(r[0]))]
+        return [(str(r[0]).strip(), r[1]) for r in rows if r[0]]
 
-    def fetch_board_constituents(self, board_code: str) -> List[Tuple[str, str]]:
+    def fetch_board_constituents(
+        self, board_code: str, board_name: Optional[str] = None
+    ) -> List[Tuple[str, str]]:
+        symbol = (board_name or board_code or "").strip()
         last_err: Optional[Exception] = None
         for attempt in range(self.max_retries + 1):
             try:
-                df = ak.stock_board_industry_cons_em(symbol=board_code)
+                df = ak.stock_board_industry_cons_em(symbol=symbol)
                 return parse_cons_dataframe(df)
             except Exception as e:
                 last_err = e
@@ -153,7 +155,15 @@ class IndustryBoardConstituentsCollector:
         fail_boards: List[str] = []
         try:
             if board_codes:
-                boards = [(c, None) for c in board_codes]
+                boards = []
+                for c in board_codes:
+                    name_row = session.execute(
+                        text(
+                            "SELECT board_name FROM industry_board_basic_info WHERE board_code = :code LIMIT 1"
+                        ),
+                        {"code": c},
+                    ).fetchone()
+                    boards.append((c, name_row[0] if name_row else None))
             else:
                 boards = self._load_board_codes(session)
             if not boards:
@@ -165,7 +175,7 @@ class IndustryBoardConstituentsCollector:
             for i, (board_code, board_name) in enumerate(boards, 1):
                 label = board_name or board_code
                 try:
-                    cons = self.fetch_board_constituents(board_code)
+                    cons = self.fetch_board_constituents(board_code, board_name)
                     n = self.save_board_constituents(session, board_code, cons, now)
                     session.commit()
                     total_rows += n

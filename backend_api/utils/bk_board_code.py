@@ -1,0 +1,230 @@
+"""东财板块 BK 编码：行业/概念共用格式，全局不可重复。"""
+from __future__ import annotations
+
+import re
+from typing import Iterable, List, Optional, Set
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+BK_BOARD_CODE_RE = re.compile(r"^BK(\d+)$", re.IGNORECASE)
+
+_BK_USAGE_SQL = """
+    SELECT board_code FROM concept_board_basic_info
+    WHERE UPPER(board_code) LIKE 'BK%%'
+    UNION
+    SELECT DISTINCT board_code FROM concept_board_constituents
+    WHERE UPPER(board_code) LIKE 'BK%%'
+    UNION
+    SELECT board_code FROM industry_board_basic_info
+    WHERE UPPER(board_code) LIKE 'BK%%'
+    UNION
+    SELECT DISTINCT board_code FROM industry_board_constituents
+    WHERE UPPER(board_code) LIKE 'BK%%'
+"""
+
+
+def format_bk_board_code(num: int) -> str:
+    """BK + 至少 4 位数字。"""
+    if num < 0:
+        num = 0
+    if num < 10000:
+        return f"BK{num:04d}"
+    return f"BK{num}"
+
+
+def normalize_bk_board_code(raw: object) -> str:
+    s = str(raw or "").strip()
+    s = s.lstrip("'").lstrip("’").strip()
+    if not s:
+        return ""
+    if BK_BOARD_CODE_RE.match(s.upper()):
+        return s.upper()
+    return ""
+
+
+def is_valid_bk_board_code(code: object) -> bool:
+    return bool(normalize_bk_board_code(code))
+
+
+def parse_bk_num(code: object) -> Optional[int]:
+    m = BK_BOARD_CODE_RE.match(normalize_bk_board_code(code))
+    if not m:
+        return None
+    return int(m.group(1))
+
+
+def collect_used_bk_numbers(db: Session) -> Set[int]:
+    rows = db.execute(text(_BK_USAGE_SQL)).fetchall()
+    used: Set[int] = set()
+    for (code,) in rows:
+        n = parse_bk_num(code)
+        if n is not None:
+            used.add(n)
+    return used
+
+
+def collect_used_bk_codes(db: Session) -> Set[str]:
+    rows = db.execute(text(_BK_USAGE_SQL)).fetchall()
+    return {normalize_bk_board_code(c) for (c,) in rows if normalize_bk_board_code(c)}
+
+
+def collect_concept_bk_codes(db: Session) -> Set[str]:
+    rows = db.execute(
+        text(
+            """
+            SELECT board_code FROM concept_board_basic_info
+            WHERE UPPER(board_code) LIKE 'BK%%'
+            UNION
+            SELECT DISTINCT board_code FROM concept_board_constituents
+            WHERE UPPER(board_code) LIKE 'BK%%'
+            """
+        )
+    ).fetchall()
+    return {normalize_bk_board_code(c) for (c,) in rows if normalize_bk_board_code(c)}
+
+
+def collect_industry_bk_codes(db: Session) -> Set[str]:
+    rows = db.execute(
+        text(
+            """
+            SELECT board_code FROM industry_board_basic_info
+            WHERE UPPER(board_code) LIKE 'BK%%'
+            UNION
+            SELECT DISTINCT board_code FROM industry_board_constituents
+            WHERE UPPER(board_code) LIKE 'BK%%'
+            """
+        )
+    ).fetchall()
+    return {normalize_bk_board_code(c) for (c,) in rows if normalize_bk_board_code(c)}
+
+
+def generate_next_bk_board_code(
+    db: Session,
+    after_code: Optional[str] = None,
+    exclude_codes: Optional[Iterable[str]] = None,
+) -> str:
+    """生成全局未占用的 BK 编码（行业/概念均计入，exclude_codes 含尚未落库的预留编码）。"""
+    used = collect_used_bk_numbers(db)
+    for raw in exclude_codes or []:
+        n = parse_bk_num(raw)
+        if n is not None:
+            used.add(n)
+    max_num = max(used) if used else 0
+    start = max_num
+    if after_code:
+        n = parse_bk_num(after_code)
+        if n is not None:
+            start = max(start, n)
+    candidate = start + 1
+    while candidate in used:
+        candidate += 1
+    return format_bk_board_code(candidate)
+
+
+def allocate_bk_board_code(
+    db: Session,
+    preferred: Optional[str] = None,
+    *,
+    exclude: Optional[Iterable[str]] = None,
+) -> str:
+    """优先使用 preferred（未被占用且不在 exclude 中），否则自动分配。"""
+    excluded = {normalize_bk_board_code(c) for c in (exclude or []) if normalize_bk_board_code(c)}
+    used = collect_used_bk_codes(db) | excluded
+    pref = normalize_bk_board_code(preferred)
+    if pref and pref not in used:
+        return pref
+    return generate_next_bk_board_code(db, exclude_codes=used)
+
+
+def assert_bk_available_for_board_type(
+    db: Session,
+    board_type: str,
+    code: str,
+    *,
+    exclude_codes: Optional[Iterable[str]] = None,
+) -> None:
+    """保存前校验 BK 编码不与对侧板块类型冲突。"""
+    from fastapi import HTTPException
+
+    bcode = normalize_bk_board_code(code)
+    if not bcode:
+        raise HTTPException(status_code=400, detail="板块代码须为 BK+数字 格式")
+    excludes = {normalize_bk_board_code(c) for c in (exclude_codes or []) if normalize_bk_board_code(c)}
+    if board_type == "industry":
+        in_concept = db.execute(
+            text(
+                """
+                SELECT 1 FROM concept_board_basic_info WHERE board_code = :code
+                UNION ALL
+                SELECT 1 FROM concept_board_constituents WHERE board_code = :code
+                LIMIT 1
+                """
+            ),
+            {"code": bcode},
+        ).scalar()
+        if in_concept and bcode not in excludes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"板块代码「{bcode}」已被概念板块占用，请使用其它编码",
+            )
+    elif board_type == "concept":
+        in_industry = db.execute(
+            text(
+                """
+                SELECT 1 FROM industry_board_basic_info WHERE board_code = :code
+                UNION ALL
+                SELECT 1 FROM industry_board_constituents WHERE board_code = :code
+                LIMIT 1
+                """
+            ),
+            {"code": bcode},
+        ).scalar()
+        if in_industry and bcode not in excludes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"板块代码「{bcode}」已被行业板块占用，请使用其它编码",
+            )
+
+
+def resolve_industry_board_codes(db: Session, raw_codes: List[str]) -> List[str]:
+    """将 BK 编码或历史中文名称解析为行业板块 BK 代码。"""
+    out: List[str] = []
+    for raw in raw_codes:
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        bk = normalize_bk_board_code(s)
+        if is_valid_bk_board_code(bk):
+            hit = db.execute(
+                text(
+                    """
+                    SELECT board_code FROM industry_board_basic_info WHERE board_code = :code
+                    UNION
+                    SELECT DISTINCT board_code FROM industry_board_constituents
+                    WHERE board_code = :code LIMIT 1
+                    """
+                ),
+                {"code": bk},
+            ).fetchone()
+            if hit:
+                code = normalize_bk_board_code(hit[0])
+                if code and code not in out:
+                    out.append(code)
+                continue
+        row = db.execute(
+            text(
+                """
+                SELECT board_code FROM industry_board_basic_info
+                WHERE TRIM(board_name) = :name OR board_code = :name
+                ORDER BY CASE WHEN UPPER(board_code) LIKE 'BK%%' THEN 0 ELSE 1 END
+                LIMIT 1
+                """
+            ),
+            {"name": s},
+        ).fetchone()
+        if row:
+            code = normalize_bk_board_code(row[0])
+            if code and code not in out:
+                out.append(code)
+    return out

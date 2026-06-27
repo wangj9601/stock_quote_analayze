@@ -45,7 +45,7 @@
           </template>
           <el-input
             v-model="boardKeyword"
-            placeholder="板块代码/名称"
+            placeholder="板块代码/名称（BK 编码）"
             clearable
             class="mb-3"
             @keyup.enter="loadBoards"
@@ -69,9 +69,22 @@
               width="42"
               reserve-selection
             />
-            <el-table-column prop="board_code" label="代码" width="88" />
+            <el-table-column prop="board_code" label="代码" min-width="100" show-overflow-tooltip />
             <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
             <el-table-column prop="constituent_count" label="成分数" width="72" align="right" />
+            <el-table-column label="交易观察" width="88" align="center">
+              <template #default="{ row }">
+                <el-switch
+                  :model-value="!!row.trade_observe_flag"
+                  size="small"
+                  inline-prompt
+                  active-text="是"
+                  inactive-text="否"
+                  @click.stop
+                  @change="(val: boolean) => toggleBoardTradeObserve(row, val)"
+                />
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="108" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openBoardEditDialog(row)">编辑</el-button>
@@ -167,26 +180,26 @@
       @opened="onBoardEditDialogOpened"
     >
       <el-form label-width="88px" @submit.prevent>
-        <el-form-item label="板块代码" :required="!isConceptBoardCreate">
+        <el-form-item label="板块代码" :required="!isBoardCreateAutoCode">
           <div class="flex gap-2 w-full">
             <el-input
               v-model="boardEditForm.board_code"
-              :placeholder="isConceptBoardCreate ? '保存时自动生成' : '如 BK0428 或 IT服务'"
-              :readonly="isConceptBoardCreate"
-              :clearable="!isConceptBoardCreate"
+              :placeholder="isBoardCreateAutoCode ? '保存时自动生成 BK 编码' : 'BK+数字，如 BK0428'"
+              :readonly="isBoardCreateAutoCode"
+              :clearable="!isBoardCreateAutoCode"
               class="flex-1"
             />
             <el-button
-              v-if="isConceptBoardCreate"
+              v-if="isBoardCreateAutoCode"
               size="default"
               :loading="loadingNextBoardCode"
-              @click="refreshConceptBoardCode"
+              @click="refreshBoardCode"
             >
               换一个
             </el-button>
           </div>
-          <p v-if="isConceptBoardCreate" class="text-xs text-gray-500 mt-1">
-            概念板块将按 BK+数字 规则自动生成，也可点「换一个」预览下一编码。
+          <p v-if="isBoardCreateAutoCode" class="text-xs text-gray-500 mt-1">
+            行业/概念板块均使用 BK+数字 编码，且全局不可与对侧板块重复；保存时自动生成，也可点「换一个」预览。
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
@@ -197,6 +210,15 @@
             clearable
             @keyup.enter="submitBoardEdit"
           />
+        </el-form-item>
+        <el-form-item label="交易观察">
+          <el-switch
+            v-model="boardEditForm.trade_observe_flag"
+            inline-prompt
+            active-text="是"
+            inactive-text="否"
+          />
+          <p class="text-xs text-gray-500 mt-1">标记后可在 GMS 等板块筛选中作为重点关注来源。</p>
         </el-form-item>
         <p v-if="boardEditForm.original_board_code" class="text-xs text-gray-500">
           修改代码将同步更新该板块下全部成分股的 board_code。
@@ -385,12 +407,12 @@ const loadingNextBoardCode = ref(false)
 const boardEditForm = reactive({
   board_code: '',
   board_name: '',
+  trade_observe_flag: false,
   original_board_code: '' as string,
 })
+const togglingTradeObserve = ref<string | null>(null)
 
-const isConceptBoardCreate = computed(
-  () => boardType.value === 'concept' && !boardEditForm.original_board_code,
-)
+const isBoardCreateAutoCode = computed(() => !boardEditForm.original_board_code)
 
 function onBoardTypeChange() {
   selectedBoard.value = null
@@ -454,15 +476,17 @@ function openBoardEditDialog(row?: BoardSummary) {
   if (row) {
     boardEditForm.board_code = row.board_code
     boardEditForm.board_name = row.board_name || ''
+    boardEditForm.trade_observe_flag = !!row.trade_observe_flag
     boardEditForm.original_board_code = row.board_code
   } else {
     boardEditForm.board_code = ''
     boardEditForm.board_name = ''
+    boardEditForm.trade_observe_flag = false
     boardEditForm.original_board_code = ''
   }
   boardEditVisible.value = true
-  if (!row && boardType.value === 'concept') {
-    void refreshConceptBoardCode()
+  if (!row) {
+    void refreshBoardCode()
   }
 }
 
@@ -471,11 +495,11 @@ function onBoardEditDialogOpened() {
   setTimeout(() => boardNameInputRef.value?.focus(), 50)
 }
 
-async function refreshConceptBoardCode() {
+async function refreshBoardCode() {
   loadingNextBoardCode.value = true
   try {
     const after = boardEditForm.board_code.trim() || undefined
-    const res = await boardConstituentsService.getNextBoardCode('concept', after)
+    const res = await boardConstituentsService.getNextBoardCode(boardType.value, after)
     const next = res.data?.board_code || ''
     if (next && next === after) {
       ElMessage.info('暂无更大的可用编码，已保留当前预览')
@@ -492,14 +516,41 @@ async function refreshConceptBoardCode() {
 function resetBoardEditForm() {
   boardEditForm.board_code = ''
   boardEditForm.board_name = ''
+  boardEditForm.trade_observe_flag = false
   boardEditForm.original_board_code = ''
+}
+
+async function toggleBoardTradeObserve(row: BoardSummary, val: boolean) {
+  if (togglingTradeObserve.value === row.board_code) return
+  const prev = !!row.trade_observe_flag
+  row.trade_observe_flag = val
+  togglingTradeObserve.value = row.board_code
+  try {
+    await boardConstituentsService.setBoardTradeObserve({
+      boardType: boardType.value,
+      boardCode: row.board_code,
+      tradeObserveFlag: val,
+    })
+    if (selectedBoard.value?.board_code === row.board_code) {
+      selectedBoard.value.trade_observe_flag = val
+    }
+  } catch (e: unknown) {
+    row.trade_observe_flag = prev
+    ElMessage.error(e instanceof Error ? e.message : '更新交易观察标志失败')
+  } finally {
+    togglingTradeObserve.value = null
+  }
 }
 
 async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
-  if (!isConceptBoardCreate.value && !code) {
+  if (!isBoardCreateAutoCode && !code) {
     ElMessage.warning('请填写板块代码')
+    return
+  }
+  if (!isBoardCreateAutoCode && !/^BK\d+$/i.test(code)) {
+    ElMessage.warning('板块代码须为 BK+数字 格式')
     return
   }
   savingBoard.value = true
@@ -509,6 +560,7 @@ async function submitBoardEdit() {
       boardCode: code || undefined,
       boardName: boardEditForm.board_name.trim() || undefined,
       originalBoardCode: boardEditForm.original_board_code || undefined,
+      tradeObserveFlag: boardEditForm.trade_observe_flag,
     })
     ElMessage.success(res.message || '已保存')
     boardEditVisible.value = false

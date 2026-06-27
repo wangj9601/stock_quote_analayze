@@ -15,8 +15,8 @@ class TestBoardCodeRules:
     def test_concept_bk_prefix(self):
         assert is_concept_board_code("BK0479") is True
         assert is_concept_board_code("bk1623") is True
-        assert is_industry_board_code("BK0479") is False
 
-    def test_industry_non_bk(self):
+    def test_industry_bk_format(self):
+        assert is_industry_board_code("BK0479") is True
+        assert is_industry_board_code("贵金属") is False
         assert is_concept_board_code("贵金属") is False
-        assert is_industry_board_code("贵金属") is True

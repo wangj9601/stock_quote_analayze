@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import csv
 import logging
-import re
 from datetime import datetime
 from io import BytesIO, StringIO
 from typing import Any, List, Literal, Optional
@@ -26,6 +25,12 @@ from backend_api.admin.board_constituents_import import (
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
 from backend_api.models import ConceptBoardConstituent, IndustryBoardConstituent
+from backend_api.utils.bk_board_code import (
+    assert_bk_available_for_board_type,
+    generate_next_bk_board_code,
+    is_valid_bk_board_code,
+    normalize_bk_board_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +38,23 @@ router = APIRouter(prefix="/api/admin/board-constituents", tags=["admin_board_co
 
 BoardType = Literal["industry", "concept"]
 
-_BK_BOARD_CODE_RE = re.compile(r"^BK(\d+)$", re.IGNORECASE)
-
 
 def _normalize_board_code(raw: Any) -> str:
-    s = str(raw or "").strip().upper()
-    s = s.lstrip("'").lstrip("’").strip()
-    return s
+    return normalize_bk_board_code(raw)
+
+
+def _industry_board_src_sql(t: dict[str, str]) -> str:
+    """管理端行业板块列表数据源（BK 编码）。"""
+    return f"""
+        SELECT board_code, board_name, create_date,
+               COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
+        FROM {t['basic']}
+        UNION ALL
+        SELECT DISTINCT board_code, board_name, NULL::timestamp AS create_date,
+               FALSE AS trade_observe_flag
+        FROM {t['realtime']}
+        WHERE board_code IS NOT NULL AND board_code <> ''
+    """
 
 
 def _normalize_stock_code(raw: Any) -> str:
@@ -148,56 +163,37 @@ class SyncBoardConstituentsBody(BaseModel):
     sync_board_list: bool = False
 
 
-def _format_bk_board_code(num: int) -> str:
-    """东财概念板块代码：BK + 至少 4 位数字。"""
-    if num < 0:
-        num = 0
-    if num < 10000:
-        return f"BK{num:04d}"
-    return f"BK{num}"
-
-
 def _generate_next_concept_board_code(
     db: Session,
     after_code: Optional[str] = None,
 ) -> str:
-    """在已有 BK 概念板块代码基础上递增生成新编码；after_code 用于预览下一个候选。"""
-    rows = db.execute(
-        text(
-            """
-            SELECT board_code FROM concept_board_basic_info
-            WHERE UPPER(board_code) LIKE 'BK%'
-            UNION
-            SELECT DISTINCT board_code FROM concept_board_constituents
-            WHERE UPPER(board_code) LIKE 'BK%'
-            """
+    """兼容旧名：生成全局未占用的 BK 编码。"""
+    return generate_next_bk_board_code(db, after_code=after_code)
+
+
+def _generate_next_industry_board_code(
+    db: Session,
+    after_code: Optional[str] = None,
+) -> str:
+    return generate_next_bk_board_code(db, after_code=after_code)
+
+
+def _assert_board_code_format(board_type: BoardType, code: str) -> None:
+    if not is_valid_bk_board_code(code):
+        raise HTTPException(
+            status_code=400,
+            detail="板块代码须为 BK+数字 格式（如 BK0428）",
         )
-    ).fetchall()
-    used_nums: set[int] = set()
-    max_num = 0
-    for (code,) in rows:
-        m = _BK_BOARD_CODE_RE.match(str(code or "").strip().upper())
-        if m:
-            n = int(m.group(1))
-            used_nums.add(n)
-            max_num = max(max_num, n)
-
-    start = max_num
-    if after_code:
-        m = _BK_BOARD_CODE_RE.match(str(after_code).strip().upper())
-        if m:
-            start = max(start, int(m.group(1)))
-
-    candidate = start + 1
-    while candidate in used_nums:
-        candidate += 1
-    return _format_bk_board_code(candidate)
 
 
 class SaveBoardInfoBody(BaseModel):
     board_type: BoardType
     board_code: Optional[str] = Field(None, description="保存后的板块代码；概念板块新增可留空自动生成")
     board_name: Optional[str] = None
+    trade_observe_flag: Optional[bool] = Field(
+        None,
+        description="交易观察标志；编辑保存时传入则更新",
+    )
     original_board_code: Optional[str] = Field(
         None,
         description="编辑时原板块代码；改名时与 board_code 不同",
@@ -211,8 +207,22 @@ class SaveBoardInfoBody(BaseModel):
             if not _normalize_board_code(self.board_code):
                 raise ValueError("板块代码无效")
         if not self.original_board_code and not (self.board_code or "").strip():
-            if self.board_type != "concept":
-                raise ValueError("行业板块代码不能为空")
+            pass
+        elif self.board_code is not None and str(self.board_code).strip():
+            if not is_valid_bk_board_code(_normalize_board_code(self.board_code)):
+                raise ValueError("板块代码须为 BK+数字 格式")
+        return self
+
+
+class SetBoardTradeObserveBody(BaseModel):
+    board_type: BoardType
+    board_code: str
+    trade_observe_flag: bool
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if not _normalize_board_code(self.board_code):
+            raise ValueError("板块代码无效")
         return self
 
 
@@ -244,19 +254,50 @@ class DeleteBoardsBatchBody(BaseModel):
         return self
 
 
+def _read_board_trade_observe_flag(db: Session, board_type: BoardType, board_code: str) -> bool:
+    t = _tables(board_type)
+    row = db.execute(
+        text(f"SELECT trade_observe_flag FROM {t['basic']} WHERE board_code = :code LIMIT 1"),
+        {"code": board_code},
+    ).fetchone()
+    if not row or row[0] is None:
+        return False
+    return bool(row[0])
+
+
 def _upsert_board_basic(
     db: Session,
     board_type: BoardType,
     board_code: str,
     board_name: Optional[str],
     now: datetime,
+    trade_observe_flag: Optional[bool] = None,
 ) -> None:
     t = _tables(board_type)
+    if trade_observe_flag is not None:
+        db.execute(
+            text(
+                f"""
+                INSERT INTO {t['basic']} (board_code, board_name, create_date, trade_observe_flag)
+                VALUES (:board_code, :board_name, :create_date, :trade_observe_flag)
+                ON CONFLICT (board_code) DO UPDATE SET
+                    board_name = COALESCE(EXCLUDED.board_name, {t['basic']}.board_name),
+                    trade_observe_flag = EXCLUDED.trade_observe_flag
+                """
+            ),
+            {
+                "board_code": board_code,
+                "board_name": board_name,
+                "create_date": now,
+                "trade_observe_flag": trade_observe_flag,
+            },
+        )
+        return
     db.execute(
         text(
             f"""
-            INSERT INTO {t['basic']} (board_code, board_name, create_date)
-            VALUES (:board_code, :board_name, :create_date)
+            INSERT INTO {t['basic']} (board_code, board_name, create_date, trade_observe_flag)
+            VALUES (:board_code, :board_name, :create_date, FALSE)
             ON CONFLICT (board_code) DO UPDATE SET
                 board_name = EXCLUDED.board_name
             """
@@ -359,6 +400,7 @@ def _rename_board_records(
     old_code: str,
     new_code: str,
     board_name: Optional[str],
+    trade_observe_flag: Optional[bool] = None,
 ) -> None:
     t = _tables(board_type)
     exists = db.execute(
@@ -374,6 +416,9 @@ def _rename_board_records(
     ).scalar()
     if cons_exists and new_code != old_code:
         raise HTTPException(status_code=400, detail=f"板块代码「{new_code}」在成分股表中已存在")
+
+    preserved_flag = _read_board_trade_observe_flag(db, board_type, old_code)
+    flag_to_save = trade_observe_flag if trade_observe_flag is not None else preserved_flag
 
     if old_code != new_code:
         db.execute(
@@ -397,7 +442,14 @@ def _rename_board_records(
         )
 
     now = datetime.now().replace(microsecond=0)
-    _upsert_board_basic(db, board_type, new_code, board_name, now)
+    _upsert_board_basic(
+        db,
+        board_type,
+        new_code,
+        board_name,
+        now,
+        trade_observe_flag=flag_to_save,
+    )
     if board_type == "industry" and t.get("realtime") and board_name and old_code == new_code:
         db.execute(
             text(f"UPDATE {t['realtime']} SET board_name = :name WHERE board_code = :code"),
@@ -406,7 +458,7 @@ def _rename_board_records(
 
 
 @router.get("/boards/next-code")
-async def get_next_concept_board_code(
+async def get_next_board_code(
     board_type: BoardType = Query(...),
     after_code: Optional[str] = Query(
         None,
@@ -415,11 +467,9 @@ async def get_next_concept_board_code(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """预览下一个概念板块 BK 编码（仅 concept）。"""
+    """预览下一个可用 BK 编码（行业/概念均全局唯一）。"""
     _ = current_user
-    if board_type != "concept":
-        raise HTTPException(status_code=400, detail="仅概念板块支持自动生成编码")
-    code = _generate_next_concept_board_code(db, after_code=after_code)
+    code = generate_next_bk_board_code(db, after_code=after_code)
     return {"success": True, "data": {"board_code": code}}
 
 
@@ -442,11 +492,24 @@ async def save_board_info(
     elif raw_code:
         new_code = _normalize_board_code(raw_code)
         old_code = new_code
-    elif body.board_type == "concept":
-        new_code = _generate_next_concept_board_code(db)
+    elif body.board_type in ("concept", "industry"):
+        gen = (
+            _generate_next_industry_board_code
+            if body.board_type == "industry"
+            else _generate_next_concept_board_code
+        )
+        new_code = gen(db)
         old_code = new_code
     else:
-        raise HTTPException(status_code=400, detail="行业板块代码不能为空")
+        raise HTTPException(status_code=400, detail="板块代码无效")
+
+    _assert_board_code_format(body.board_type, new_code)
+    assert_bk_available_for_board_type(
+        db,
+        body.board_type,
+        new_code,
+        exclude_codes=[c for c in {new_code, old_code} if c],
+    )
 
     if body.board_type == "concept" and board_name:
         _assert_concept_board_name_unique(
@@ -456,7 +519,14 @@ async def save_board_info(
         )
 
     if old_code != new_code:
-        _rename_board_records(db, body.board_type, old_code, new_code, board_name)
+        _rename_board_records(
+            db,
+            body.board_type,
+            old_code,
+            new_code,
+            board_name,
+            trade_observe_flag=body.trade_observe_flag,
+        )
         action = "rename"
     else:
         t = _tables(body.board_type)
@@ -466,7 +536,14 @@ async def save_board_info(
                 {"code": new_code},
             ).scalar()
         )
-        _upsert_board_basic(db, body.board_type, new_code, board_name, now)
+        _upsert_board_basic(
+            db,
+            body.board_type,
+            new_code,
+            board_name,
+            now,
+            trade_observe_flag=body.trade_observe_flag,
+        )
         if body.board_type == "industry" and t.get("realtime") and board_name:
             db.execute(
                 text(f"UPDATE {t['realtime']} SET board_name = :name WHERE board_code = :code"),
@@ -479,6 +556,11 @@ async def save_board_info(
 
     db.commit()
     uname = getattr(current_user, "username", None) or "admin"
+    saved_flag = (
+        body.trade_observe_flag
+        if body.trade_observe_flag is not None
+        else _read_board_trade_observe_flag(db, body.board_type, new_code)
+    )
     return {
         "success": True,
         "message": "板块信息已保存",
@@ -486,8 +568,53 @@ async def save_board_info(
             "action": action,
             "board_code": new_code,
             "board_name": board_name,
+            "trade_observe_flag": saved_flag,
             "original_board_code": old_code if old_code != new_code else None,
             "operator": uname,
+        },
+    }
+
+
+@router.post("/boards/trade-observe")
+async def set_board_trade_observe_flag(
+    body: SetBoardTradeObserveBody,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """设置板块交易观察标志（列表内快捷开关）。"""
+    _ = current_user
+    bcode = _normalize_board_code(body.board_code)
+    now = datetime.now().replace(microsecond=0)
+    t = _tables(body.board_type)
+    existing_name = db.execute(
+        text(f"SELECT board_name FROM {t['basic']} WHERE board_code = :code LIMIT 1"),
+        {"code": bcode},
+    ).scalar()
+    if existing_name is None and body.board_type == "industry" and t.get("realtime"):
+        existing_name = db.execute(
+            text(
+                f"""
+                SELECT MAX(board_name) FROM {t['realtime']}
+                WHERE board_code = :code
+                """
+            ),
+            {"code": bcode},
+        ).scalar()
+    _upsert_board_basic(
+        db,
+        body.board_type,
+        bcode,
+        (str(existing_name).strip() if existing_name else None) or None,
+        now,
+        trade_observe_flag=body.trade_observe_flag,
+    )
+    db.commit()
+    return {
+        "success": True,
+        "message": "交易观察标志已更新",
+        "data": {
+            "board_code": bcode,
+            "trade_observe_flag": body.trade_observe_flag,
         },
     }
 
@@ -577,17 +704,13 @@ async def list_boards_with_summary(
         params["kw"] = f"%{kw}%"
 
     if board_type == "industry":
-        board_src_sql = f"""
-            SELECT board_code, board_name, create_date FROM {t['basic']}
-            WHERE UPPER(board_code) NOT LIKE 'BK%'
-            UNION ALL
-            SELECT DISTINCT board_code, board_name, NULL::timestamp AS create_date
-            FROM {t['realtime']}
-            WHERE board_code IS NOT NULL AND board_code <> ''
-              AND UPPER(board_code) NOT LIKE 'BK%'
-        """
+        board_src_sql = _industry_board_src_sql(t)
     else:
-        board_src_sql = f"SELECT board_code, board_name, create_date FROM {t['basic']}"
+        board_src_sql = f"""
+            SELECT board_code, board_name, create_date,
+                   COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
+            FROM {t['basic']}
+        """
 
     count_sql = text(
         f"""
@@ -612,12 +735,14 @@ async def list_boards_with_summary(
             src.board_name,
             COALESCE(cnt.cnt, 0) AS constituent_count,
             cnt.last_updated,
-            src.create_date
+            src.create_date,
+            src.trade_observe_flag
         FROM (
             SELECT
                 board_code,
                 MAX(board_name) AS board_name,
-                MAX(create_date) AS create_date
+                MAX(create_date) AS create_date,
+                BOOL_OR(trade_observe_flag) AS trade_observe_flag
             FROM ({board_src_sql}) u
             WHERE board_code IS NOT NULL AND board_code <> ''
             GROUP BY board_code
@@ -640,6 +765,7 @@ async def list_boards_with_summary(
             "constituent_count": int(r[2] or 0),
             "last_updated": r[3].isoformat() if r[3] else None,
             "create_date": r[4].isoformat() if r[4] else None,
+            "trade_observe_flag": bool(r[5]),
         }
         for r in rows
     ]
@@ -793,12 +919,14 @@ async def export_all_constituents(
             SELECT board_code, MAX(board_name) AS board_name
             FROM (
                 SELECT board_code, board_name FROM {t['basic']}
-                WHERE UPPER(board_code) NOT LIKE 'BK%'
                 UNION ALL
                 SELECT DISTINCT board_code, NULL::varchar AS board_name
                 FROM {t['constituents']}
                 WHERE board_code IS NOT NULL AND board_code <> ''
-                  AND UPPER(board_code) NOT LIKE 'BK%'
+                UNION ALL
+                SELECT DISTINCT board_code, board_name
+                FROM {t['realtime']}
+                WHERE board_code IS NOT NULL AND board_code <> ''
             ) u
             WHERE board_code IS NOT NULL AND board_code <> ''
             GROUP BY board_code

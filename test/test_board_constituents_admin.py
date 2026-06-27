@@ -7,16 +7,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import HTTPException
 
+from backend_api.utils.bk_board_code import format_bk_board_code as _format_bk_board_code
 from backend_api.admin.board_constituents import (
     DeleteBoardsBatchBody,
     SaveBoardInfoBody,
+    SetBoardTradeObserveBody,
     _clear_all_concept_boards,
     _assert_concept_board_name_unique,
-    _format_bk_board_code,
     _generate_next_concept_board_code,
+    _industry_board_src_sql,
     _normalize_board_code,
     _normalize_stock_code,
+    _read_board_trade_observe_flag,
     _sync_concept_board_basic_from_import,
+    _upsert_board_basic,
     _tables,
 )
 
@@ -24,6 +28,9 @@ from backend_api.admin.board_constituents import (
 class TestBoardConstituentsHelpers:
     def test_normalize_board_code(self):
         assert _normalize_board_code(" bk0479 ") == "BK0479"
+        assert _normalize_board_code("玻璃玻纤") == ""
+        assert _normalize_board_code("IT服务") == ""
+        assert _normalize_board_code("bk0428") == "BK0428"
 
     def test_normalize_stock_code(self):
         assert _normalize_stock_code("sz000001") == "000001"
@@ -35,16 +42,61 @@ class TestBoardConstituentsHelpers:
         con = _tables("concept")
         assert con["constituents"] == "concept_board_constituents"
 
+    def test_industry_board_src_sql_includes_bk(self):
+        sql = _industry_board_src_sql(_tables("industry"))
+        assert "industry_board_basic_info" in sql
+        assert "NOT LIKE 'BK%'" not in sql.upper()
+
     def test_save_board_body_validation(self):
         body = SaveBoardInfoBody(board_type="concept", board_code="BK0428", board_name="电力")
         assert body.board_code == "BK0428"
-        empty_concept = SaveBoardInfoBody(board_type="concept", board_name="测试概念")
-        assert empty_concept.board_code is None
+        body = SaveBoardInfoBody(
+            board_type="industry",
+            board_name="电力",
+        )
+        assert body.board_code is None
+
+    def test_set_board_trade_observe_body_validation(self):
+        body = SetBoardTradeObserveBody(
+            board_type="concept",
+            board_code="BK0428",
+            trade_observe_flag=True,
+        )
+        assert body.trade_observe_flag is True
         try:
-            SaveBoardInfoBody(board_type="industry", board_name="x")
-            assert False, "行业板块应要求代码"
+            SetBoardTradeObserveBody(board_type="concept", board_code=" ", trade_observe_flag=False)
+            assert False, "空代码应失败"
         except ValueError:
             pass
+
+    def test_upsert_board_basic_preserves_flag_when_not_provided(self):
+        executed: list[dict] = []
+
+        class _DB:
+            def execute(self, sql, params=None):
+                executed.append({"sql": str(sql), "params": params or {}})
+
+        now = __import__("datetime").datetime(2026, 6, 6, 12, 0, 0)
+        _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now)
+        assert "trade_observe_flag" in executed[0]["sql"]
+        assert executed[0]["params"]["board_code"] == "BK0428"
+
+        executed.clear()
+        _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now, trade_observe_flag=True)
+        assert executed[0]["params"]["trade_observe_flag"] is True
+
+    def test_read_board_trade_observe_flag(self):
+        class _DB:
+            def execute(self, sql, params=None):
+                return type("R", (), {"fetchone": lambda self: (True,)})()
+
+        assert _read_board_trade_observe_flag(_DB(), "industry", "IT服务") is True
+
+        class _DBEmpty:
+            def execute(self, sql, params=None):
+                return type("R", (), {"fetchone": lambda self: None})()
+
+        assert _read_board_trade_observe_flag(_DBEmpty(), "industry", "IT服务") is False
 
     def test_delete_boards_batch_body_validation(self):
         body = DeleteBoardsBatchBody(

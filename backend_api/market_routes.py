@@ -231,16 +231,13 @@ def get_industry_board_catalog(db: Session = Depends(get_db)):
                 FROM (
                     SELECT board_code, board_name FROM industry_board_basic_info
                     WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                      AND UPPER(board_code) NOT LIKE 'BK%%'
                     UNION ALL
                     SELECT DISTINCT board_code, NULL::varchar AS board_name
                     FROM industry_board_constituents
                     WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                      AND UPPER(board_code) NOT LIKE 'BK%%'
                     UNION ALL
                     SELECT board_code, board_name FROM industry_board_realtime_quotes
                     WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                      AND UPPER(board_code) NOT LIKE 'BK%%'
                 ) u
                 GROUP BY board_code
                 ORDER BY board_name NULLS LAST, board_code

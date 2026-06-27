@@ -10,7 +10,11 @@ from backend_core.data_collectors.akshare.industry_board_normalize import (
     industry_board_to_english_df,
     normalize_ths_industry_df,
 )
-from backend_core.data_collectors.akshare.board_code_rules import is_concept_board_code
+from backend_api.utils.bk_board_code import (
+    allocate_bk_board_code,
+    is_valid_bk_board_code,
+    normalize_bk_board_code,
+)
 
 try:
     from backend_api.utils.industry_board_query import lookup_leading_code_from_constituents
@@ -34,9 +38,14 @@ class RealtimeStockIndustryBoardCollector:
                 CREATE TABLE IF NOT EXISTS industry_board_basic_info (
                     board_code TEXT PRIMARY KEY,
                     board_name TEXT,
-                    create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE
                 )
             '''))
+            session.commit()
+            session.execute(text(
+                "ALTER TABLE industry_board_basic_info ADD COLUMN IF NOT EXISTS trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
             session.commit()
             print("Created industry_board_basic_info.")
         except Exception as e:
@@ -168,55 +177,62 @@ class RealtimeStockIndustryBoardCollector:
             session.commit()
 
             basic_info_count = 0
-            concept_basic_count = 0
+            em_to_stored: dict[str, str] = {}
             for _, row in df.iterrows():
-                # 确保 board_code 存在且不为空
                 if pd.isna(row.get('board_code')) or row.get('board_code') == '':
                     print(f"Skipping row with empty board_code: {row.get('board_name')}")
                     continue
 
-                bcode = str(row['board_code']).strip()
+                em_code = str(row['board_code']).strip()
+                board_name = row.get('board_name')
+                name_key = str(board_name).strip() if board_name is not None and not pd.isna(board_name) else ""
                 try:
-                    if is_concept_board_code(bcode):
-                        session.execute(text('''
-                            INSERT INTO concept_board_basic_info (board_code, board_name, create_date)
-                            VALUES (:board_code, :board_name, :create_date)
-                            ON CONFLICT (board_code) DO UPDATE SET
-                                board_name = EXCLUDED.board_name,
-                                create_date = EXCLUDED.create_date
-                        '''), {
-                            'board_code': bcode,
-                            'board_name': row['board_name'],
-                            'create_date': now
-                        })
-                        concept_basic_count += 1
+                    existing = None
+                    if name_key:
+                        existing = session.execute(
+                            text(
+                                """
+                                SELECT board_code FROM industry_board_basic_info
+                                WHERE TRIM(board_name) = :name
+                                LIMIT 1
+                                """
+                            ),
+                            {"name": name_key},
+                        ).scalar()
+                    if existing:
+                        stored_code = normalize_bk_board_code(existing)
+                    elif em_code in em_to_stored:
+                        stored_code = em_to_stored[em_code]
                     else:
-                        session.execute(text('''
-                            INSERT INTO industry_board_basic_info (board_code, board_name, create_date)
-                            VALUES (:board_code, :board_name, :create_date)
-                            ON CONFLICT (board_code) DO UPDATE SET
-                                board_name = EXCLUDED.board_name,
-                                create_date = EXCLUDED.create_date
-                        '''), {
-                            'board_code': bcode,
-                            'board_name': row['board_name'],
-                            'create_date': now
-                        })
-                        basic_info_count += 1
+                        preferred = em_code if is_valid_bk_board_code(em_code) else None
+                        stored_code = allocate_bk_board_code(session, preferred=preferred)
+                    em_to_stored[em_code] = stored_code
+                    session.execute(text('''
+                        INSERT INTO industry_board_basic_info (board_code, board_name, create_date)
+                        VALUES (:board_code, :board_name, :create_date)
+                        ON CONFLICT (board_code) DO UPDATE SET
+                            board_name = EXCLUDED.board_name,
+                            create_date = EXCLUDED.create_date
+                    '''), {
+                        'board_code': stored_code,
+                        'board_name': board_name,
+                        'create_date': now
+                    })
+                    basic_info_count += 1
                 except Exception as e:
                     print(f"Error inserting basic info for {row.get('board_code')}: {e}")
 
-            print(f"Inserted/updated {basic_info_count} industry + {concept_basic_count} concept basic_info")
-            session.commit()  # Commit basic info changes
+            print(f"Inserted/updated {basic_info_count} industry basic_info")
+            session.commit()
             
             columns = list(df.columns)
-            # 清空旧数据（可选，或用upsert）
             session.execute(text(f"DELETE FROM {self.table_name}"))
-            # 插入新数据（upsert）
             for _, row in df.iterrows():
                 if pd.isna(row.get("board_code")) or str(row.get("board_code", "")).strip() == "":
                     continue
-                if is_concept_board_code(str(row.get("board_code"))):
+                em_code = str(row.get("board_code")).strip()
+                stored_code = em_to_stored.get(em_code)
+                if not stored_code:
                     continue
                 value_dict = {}
                 for col in columns:
@@ -230,6 +246,7 @@ class RealtimeStockIndustryBoardCollector:
                     if col == 'update_time' and not isinstance(v, str):
                         v = v.isoformat()
                     value_dict[col] = v
+                value_dict["board_code"] = stored_code
                 placeholders = ','.join([f':{col}' for col in columns])
                 col_names = ','.join([f'"{col}"' for col in columns])
                 # 构造upsert SQL

@@ -60,9 +60,15 @@ class ConceptBoardBasicCollector:
                     CREATE TABLE IF NOT EXISTS concept_board_basic_info (
                         board_code VARCHAR(20) PRIMARY KEY,
                         board_name VARCHAR(100),
-                        create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+                        create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                        trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE
                     )
                     """
+                )
+            )
+            session.execute(
+                text(
+                    "ALTER TABLE concept_board_basic_info ADD COLUMN IF NOT EXISTS trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE"
                 )
             )
             session.commit()

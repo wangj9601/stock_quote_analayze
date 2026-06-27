@@ -26,28 +26,27 @@ def get_stock_codes_by_board_codes(
     if not codes:
         return set()
     out: Set[str] = set()
-    industry_codes = [c for c in codes if not str(c).upper().startswith("BK")]
-    concept_codes = [c for c in codes if str(c).upper().startswith("BK")]
-    if industry_codes:
-        rows = (
-            db.query(IndustryBoardConstituent.stock_code)
-            .filter(IndustryBoardConstituent.board_code.in_(industry_codes))
-            .distinct()
-            .all()
-        )
-        out |= {str(r[0]).strip() for r in rows if r[0]}
-    if concept_codes:
-        rows = db.execute(
-            text(
-                """
-                SELECT DISTINCT stock_code
-                FROM concept_board_constituents
-                WHERE board_code = ANY(:codes)
-                """
-            ),
-            {"codes": concept_codes},
-        ).fetchall()
-        out |= {str(r[0]).strip() for r in rows if r[0]}
+    normalized = [str(c).strip() for c in codes if c and str(c).strip()]
+    if not normalized:
+        return set()
+    rows = (
+        db.query(IndustryBoardConstituent.stock_code)
+        .filter(IndustryBoardConstituent.board_code.in_(normalized))
+        .distinct()
+        .all()
+    )
+    out |= {str(r[0]).strip() for r in rows if r[0]}
+    rows_con = db.execute(
+        text(
+            """
+            SELECT DISTINCT stock_code
+            FROM concept_board_constituents
+            WHERE board_code = ANY(:codes)
+            """
+        ),
+        {"codes": normalized},
+    ).fetchall()
+    out |= {str(r[0]).strip() for r in rows_con if r[0]}
     return {_normalize_code(c) for c in out if c}
 
 

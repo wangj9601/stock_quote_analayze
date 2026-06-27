@@ -7,6 +7,7 @@ export interface BoardSummary {
   board_name: string | null
   constituent_count: number
   last_updated: string | null
+  trade_observe_flag?: boolean
 }
 
 export interface BoardConstituentRow {
@@ -106,6 +107,7 @@ class BoardConstituentsService {
     boardCode?: string
     boardName?: string
     originalBoardCode?: string
+    tradeObserveFlag?: boolean
   }) {
     return apiService.post<{
       success: boolean
@@ -114,6 +116,7 @@ class BoardConstituentsService {
         action: string
         board_code: string
         board_name: string | null
+        trade_observe_flag?: boolean
         original_board_code?: string | null
       }
     }>('/board-constituents/boards/save', {
@@ -121,6 +124,23 @@ class BoardConstituentsService {
       board_code: body.boardCode,
       board_name: body.boardName,
       original_board_code: body.originalBoardCode,
+      trade_observe_flag: body.tradeObserveFlag,
+    })
+  }
+
+  async setBoardTradeObserve(body: {
+    boardType: BoardType
+    boardCode: string
+    tradeObserveFlag: boolean
+  }) {
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: { board_code: string; trade_observe_flag: boolean }
+    }>('/board-constituents/boards/trade-observe', {
+      board_type: body.boardType,
+      board_code: body.boardCode,
+      trade_observe_flag: body.tradeObserveFlag,
     })
   }
 

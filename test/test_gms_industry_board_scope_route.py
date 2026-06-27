@@ -143,11 +143,25 @@ def test_gms_strategy_scope_industry_board_requires_code():
     assert resp.status_code == 400
 
 
+def _fake_resolve_industry_board_codes(_db, codes):
+    mapping = {"IT服务": "BK9001", "半导体": "BK9002"}
+    out = []
+    for c in codes:
+        v = mapping.get(c, c)
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+@patch(
+    "backend_api.utils.bk_board_code.resolve_industry_board_codes",
+    side_effect=_fake_resolve_industry_board_codes,
+)
 @patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
 @patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
 @patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
-def test_gms_strategy_scope_industry_board_uses_constituents():
+def test_gms_strategy_scope_industry_board_uses_constituents(_mock_resolve):
     client = _make_client()
     resp = client.get(
         "/api/screening/gms-strategy"
@@ -160,14 +174,18 @@ def test_gms_strategy_scope_industry_board_uses_constituents():
     assert _FakeGmsFrontendInterface.last_stock_pool == ["000001", "688158"]
     assert isinstance(data["data"], list)
     assert len(data["data"]) == 1
-    assert data["parameters"]["industry_board_codes"] == ["IT服务"]
+    assert data["parameters"]["industry_board_codes"] == ["BK9001"]
 
 
+@patch(
+    "backend_api.utils.bk_board_code.resolve_industry_board_codes",
+    side_effect=_fake_resolve_industry_board_codes,
+)
 @patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
 @patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
 @patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
-def test_gms_strategy_scope_industry_board_accepts_multiple_codes():
+def test_gms_strategy_scope_industry_board_accepts_multiple_codes(_mock_resolve):
     client = _make_client()
     resp = client.get(
         "/api/screening/gms-strategy"
@@ -178,4 +196,4 @@ def test_gms_strategy_scope_industry_board_accepts_multiple_codes():
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["parameters"]["industry_board_codes"] == ["IT服务", "半导体"]
+    assert data["parameters"]["industry_board_codes"] == ["BK9001", "BK9002"]
