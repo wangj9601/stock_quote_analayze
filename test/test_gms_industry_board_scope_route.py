@@ -63,6 +63,9 @@ class _FakeConfigManager:
     def get_config(self, config_id=None):
         return {}
 
+    def get_config_row(self, config_id):
+        return None
+
 
 class _FakeSession:
     def close(self):
@@ -157,3 +160,22 @@ def test_gms_strategy_scope_industry_board_uses_constituents():
     assert _FakeGmsFrontendInterface.last_stock_pool == ["000001", "688158"]
     assert isinstance(data["data"], list)
     assert len(data["data"]) == 1
+    assert data["parameters"]["industry_board_codes"] == ["IT服务"]
+
+
+@patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
+@patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
+@patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
+@patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
+def test_gms_strategy_scope_industry_board_accepts_multiple_codes():
+    client = _make_client()
+    resp = client.get(
+        "/api/screening/gms-strategy"
+        "?scope=industry_board"
+        "&industry_board_code=IT%E6%9C%8D%E5%8A%A1"
+        "&industry_board_code=%E5%8D%8A%E5%AF%BC%E4%BD%93"
+        "&date=2026-04-23"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["parameters"]["industry_board_codes"] == ["IT服务", "半导体"]

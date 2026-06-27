@@ -1050,6 +1050,27 @@ def _normalize_stock_code_for_gms_pool(c: str) -> str:
     return s
 
 
+def _normalize_gms_board_codes(
+    raw: Optional[List[str]],
+    *,
+    upper: bool = False,
+) -> List[str]:
+    """解析 GMS 行业/概念板块代码列表（支持重复 query 参数或逗号分隔）。"""
+    if not raw:
+        return []
+    out: List[str] = []
+    for item in raw:
+        for part in str(item or "").split(","):
+            code = part.strip()
+            if not code:
+                continue
+            if upper:
+                code = code.upper()
+            if code not in out:
+                out.append(code)
+    return out
+
+
 def _resolve_gms_stock_code_from_input(db: Session, raw: str) -> Optional[str]:
     """
     将用户输入的代码或名称解析为 GMS 可用的证券代码。
@@ -1113,13 +1134,13 @@ async def get_gms_strategy(
         "all",
         description="scope=gms_watchlist 时筛选市场: all(全部) / cn(A股) / hk(港股)，对应表字段 market A/HK",
     ),
-    industry_board_code: Optional[str] = Query(
+    industry_board_code: Optional[List[str]] = Query(
         None,
-        description="scope=industry_board 时必填：行业板块代码（如 IT服务、半导体）",
+        description="scope=industry_board 时必填：行业板块代码，可传多个（如 IT服务、半导体）",
     ),
-    concept_board_code: Optional[str] = Query(
+    concept_board_code: Optional[List[str]] = Query(
         None,
-        description="scope=concept_board 时必填：概念板块代码（如 BK0428）",
+        description="scope=concept_board 时必填：概念板块代码，可传多个（如 BK0428）",
     ),
     exclude_st: bool = Query(
         False,
@@ -1346,12 +1367,12 @@ async def get_gms_strategy(
         elif scope == "industry_board":
             from backend_api.models import IndustryBoardConstituent
 
-            bcode = str(industry_board_code or "").strip()
-            if not bcode:
+            bcodes = _normalize_gms_board_codes(industry_board_code)
+            if not bcodes:
                 raise HTTPException(status_code=400, detail="scope=industry_board 时需传 industry_board_code")
             rows_ib = (
                 db.query(IndustryBoardConstituent)
-                .filter(IndustryBoardConstituent.board_code == bcode)
+                .filter(IndustryBoardConstituent.board_code.in_(bcodes))
                 .all()
             )
             raw_codes = [
@@ -1363,6 +1384,7 @@ async def get_gms_strategy(
             stock_pool = [c for c in stock_pool if c]
             stock_pool_size = len(stock_pool)
             if not stock_pool:
+                board_label = "、".join(bcodes)
                 return JSONResponse(
                     {
                         "success": True,
@@ -1371,8 +1393,9 @@ async def get_gms_strategy(
                         "search_date": target_date,
                         "strategy_name": "GMS均值引力动量策略",
                         "scope": "industry_board",
-                        "industry_board_code": bcode,
-                        "message": f"行业板块「{bcode}」成分股为空（请在管理端维护板块成分股）",
+                        "industry_board_code": bcodes[0] if len(bcodes) == 1 else None,
+                        "industry_board_codes": bcodes,
+                        "message": f"行业板块「{board_label}」成分股为空（请在管理端维护板块成分股）",
                         "paging": {
                             "enabled": use_pagination,
                             "page": 1,
@@ -1383,16 +1406,16 @@ async def get_gms_strategy(
                     }
                 )
             market = "cn"
-            logger.info("GMS 数据来源=行业板块 board=%s 股票数=%s", bcode, len(stock_pool))
+            logger.info("GMS 数据来源=行业板块 boards=%s 股票数=%s", bcodes, len(stock_pool))
         elif scope == "concept_board":
             from backend_api.models import ConceptBoardConstituent
 
-            bcode = str(concept_board_code or "").strip().upper()
-            if not bcode:
+            bcodes = _normalize_gms_board_codes(concept_board_code, upper=True)
+            if not bcodes:
                 raise HTTPException(status_code=400, detail="scope=concept_board 时需传 concept_board_code")
             rows_cb = (
                 db.query(ConceptBoardConstituent)
-                .filter(ConceptBoardConstituent.board_code == bcode)
+                .filter(ConceptBoardConstituent.board_code.in_(bcodes))
                 .all()
             )
             raw_codes = [
@@ -1404,6 +1427,7 @@ async def get_gms_strategy(
             stock_pool = [c for c in stock_pool if c]
             stock_pool_size = len(stock_pool)
             if not stock_pool:
+                board_label = "、".join(bcodes)
                 return JSONResponse(
                     {
                         "success": True,
@@ -1412,8 +1436,9 @@ async def get_gms_strategy(
                         "search_date": target_date,
                         "strategy_name": "GMS均值引力动量策略",
                         "scope": "concept_board",
-                        "concept_board_code": bcode,
-                        "message": f"概念板块「{bcode}」成分股为空（请在管理端维护板块成分股）",
+                        "concept_board_code": bcodes[0] if len(bcodes) == 1 else None,
+                        "concept_board_codes": bcodes,
+                        "message": f"概念板块「{board_label}」成分股为空（请在管理端维护板块成分股）",
                         "paging": {
                             "enabled": use_pagination,
                             "page": 1,
@@ -1424,7 +1449,7 @@ async def get_gms_strategy(
                     }
                 )
             market = "cn"
-            logger.info("GMS 数据来源=概念板块 board=%s 股票数=%s", bcode, len(stock_pool))
+            logger.info("GMS 数据来源=概念板块 boards=%s 股票数=%s", bcodes, len(stock_pool))
         elif scope == "cn":
             market = "cn"
         elif scope == "hk":
@@ -1790,8 +1815,26 @@ async def get_gms_strategy(
                 "min_score": min_score,
                 "scope": scope,
                 "stock_pool_size": stock_pool_size,
-                "industry_board_code": industry_board_code if scope == "industry_board" else None,
-                "concept_board_code": concept_board_code if scope == "concept_board" else None,
+                "industry_board_code": (
+                    _normalize_gms_board_codes(industry_board_code)[0]
+                    if scope == "industry_board" and _normalize_gms_board_codes(industry_board_code)
+                    else None
+                ),
+                "industry_board_codes": (
+                    _normalize_gms_board_codes(industry_board_code)
+                    if scope == "industry_board"
+                    else None
+                ),
+                "concept_board_code": (
+                    _normalize_gms_board_codes(concept_board_code, upper=True)[0]
+                    if scope == "concept_board" and _normalize_gms_board_codes(concept_board_code, upper=True)
+                    else None
+                ),
+                "concept_board_codes": (
+                    _normalize_gms_board_codes(concept_board_code, upper=True)
+                    if scope == "concept_board"
+                    else None
+                ),
                 "exclude_st": exclude_st,
                 "use_pagination": use_pagination,
                 "page": page_eff,

@@ -37,6 +37,22 @@ const ScreeningPage = {
     _gmsIndustryBoardsLoaded: false,
     /** 概念板块下拉是否已加载 */
     _gmsConceptBoardsLoaded: false,
+    /** 行业/概念板块选项缓存 */
+    gmsIndustryBoardCatalog: [],
+    gmsConceptBoardCatalog: [],
+    /** 已选板块代码 */
+    gmsSelectedIndustryBoardCodes: [],
+    gmsSelectedConceptBoardCodes: [],
+    /** 板块选择弹窗：industry | concept */
+    _gmsBoardPickerKind: null,
+    _gmsBoardPickerDraft: new Set(),
+
+    /** 提示用户需手动点击「刷新筛选」 */
+    _hintGmsClickRefreshFilter() {
+        if (window.CommonUtils) {
+            CommonUtils.showToast('请点击「刷新筛选」开始 GMS 策略打分选股', 'info');
+        }
+    },
 
     // 初始化
     async init() {
@@ -177,6 +193,59 @@ const ScreeningPage = {
             });
         }
         this._bindGmsFormalModalEvents();
+        this._bindGmsBoardPickerEvents();
+    },
+
+    _bindGmsBoardPickerEvents() {
+        const overlay = document.getElementById('gmsBoardPickerModal');
+        if (!overlay) return;
+        const closeIds = ['gmsBoardPickerClose', 'gmsBoardPickerCancel'];
+        closeIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', () => this._hideGmsModal(overlay));
+        });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._hideGmsModal(overlay);
+        });
+        const card = overlay.querySelector('.gms-modal-card');
+        if (card) card.addEventListener('click', (e) => e.stopPropagation());
+
+        const industryBtn = document.getElementById('gmsIndustryBoardPickBtn');
+        if (industryBtn) {
+            industryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry'));
+        }
+        const conceptBtn = document.getElementById('gmsConceptBoardPickBtn');
+        if (conceptBtn) {
+            conceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept'));
+        }
+
+        const confirmBtn = document.getElementById('gmsBoardPickerConfirm');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => this.confirmGmsBoardPicker());
+        }
+        const selectAllBtn = document.getElementById('gmsBoardPickerSelectAll');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => this._gmsBoardPickerSelectAllVisible());
+        }
+        const clearBtn = document.getElementById('gmsBoardPickerClear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this._gmsBoardPickerClearVisible());
+        }
+        const searchEl = document.getElementById('gmsBoardPickerSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', () => this._renderGmsBoardPickerList());
+        }
+        const listEl = document.getElementById('gmsBoardPickerList');
+        if (listEl) {
+            listEl.addEventListener('change', (e) => {
+                const cb = e.target.closest('input[type="checkbox"]');
+                if (!cb) return;
+                const code = String(cb.value || '').trim();
+                if (!code) return;
+                if (cb.checked) this._gmsBoardPickerDraft.add(code);
+                else this._gmsBoardPickerDraft.delete(code);
+            });
+        }
     },
 
     _bindGmsFormalModalEvents() {
@@ -1570,6 +1639,152 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
+    /** 已选行业板块代码 */
+    getGmsSelectedIndustryBoardCodes() {
+        return Array.isArray(this.gmsSelectedIndustryBoardCodes)
+            ? this.gmsSelectedIndustryBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    /** 已选概念板块代码 */
+    getGmsSelectedConceptBoardCodes() {
+        return Array.isArray(this.gmsSelectedConceptBoardCodes)
+            ? this.gmsSelectedConceptBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    _gmsBoardCatalogByKind(kind) {
+        return kind === 'industry' ? this.gmsIndustryBoardCatalog : this.gmsConceptBoardCatalog;
+    },
+
+    _gmsBoardLabel(board) {
+        const code = String(board?.board_code || '').trim();
+        const name = String(board?.board_name || '').trim();
+        return name || code;
+    },
+
+    updateGmsIndustryBoardSummary() {
+        const el = document.getElementById('gmsIndustryBoardSummary');
+        if (!el) return;
+        const codes = this.getGmsSelectedIndustryBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
+            return b?.board_name || code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    updateGmsConceptBoardSummary() {
+        const el = document.getElementById('gmsConceptBoardSummary');
+        if (!el) return;
+        const codes = this.getGmsSelectedConceptBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
+            return b?.board_name || code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    async openGmsBoardPickerModal(kind) {
+        if (kind === 'industry') await this.loadGmsIndustryBoardOptions();
+        else await this.loadGmsConceptBoardOptions();
+
+        this._gmsBoardPickerKind = kind;
+        const selected = kind === 'industry'
+            ? this.getGmsSelectedIndustryBoardCodes()
+            : this.getGmsSelectedConceptBoardCodes();
+        this._gmsBoardPickerDraft = new Set(selected);
+
+        const titleEl = document.getElementById('gmsBoardPickerTitle');
+        if (titleEl) {
+            titleEl.textContent = kind === 'industry' ? '选择行业板块' : '选择概念板块';
+        }
+        const searchEl = document.getElementById('gmsBoardPickerSearch');
+        if (searchEl) searchEl.value = '';
+        this._renderGmsBoardPickerList();
+        this._showGmsModal(document.getElementById('gmsBoardPickerModal'));
+    },
+
+    _renderGmsBoardPickerList() {
+        const listEl = document.getElementById('gmsBoardPickerList');
+        if (!listEl) return;
+        const kind = this._gmsBoardPickerKind;
+        const catalog = this._gmsBoardCatalogByKind(kind);
+        const draft = this._gmsBoardPickerDraft;
+        const filter = String(document.getElementById('gmsBoardPickerSearch')?.value || '').trim().toLowerCase();
+        const esc = (s) => String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+
+        const filtered = catalog.filter((b) => {
+            if (!filter) return true;
+            const name = String(b.board_name || '').toLowerCase();
+            const code = String(b.board_code || '').toLowerCase();
+            return name.includes(filter) || code.includes(filter);
+        });
+
+        if (!filtered.length) {
+            listEl.innerHTML = '<div class="gms-board-picker-empty">无匹配板块</div>';
+            return;
+        }
+
+        listEl.innerHTML = filtered.map((b) => {
+            const code = String(b.board_code || '').trim();
+            const label = this._gmsBoardLabel(b);
+            const checked = draft.has(code) ? ' checked' : '';
+            return `<label class="gms-board-picker-item" title="${esc(label)}"><input type="checkbox" value="${esc(code)}"${checked}><span>${esc(label)}</span></label>`;
+        }).join('');
+    },
+
+    _gmsBoardPickerSelectAllVisible() {
+        const listEl = document.getElementById('gmsBoardPickerList');
+        if (!listEl) return;
+        listEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+            cb.checked = true;
+            const code = String(cb.value || '').trim();
+            if (code) this._gmsBoardPickerDraft.add(code);
+        });
+    },
+
+    _gmsBoardPickerClearVisible() {
+        const listEl = document.getElementById('gmsBoardPickerList');
+        if (!listEl) return;
+        listEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+            cb.checked = false;
+            const code = String(cb.value || '').trim();
+            if (code) this._gmsBoardPickerDraft.delete(code);
+        });
+    },
+
+    confirmGmsBoardPicker() {
+        const kind = this._gmsBoardPickerKind;
+        const codes = Array.from(this._gmsBoardPickerDraft);
+        if (kind === 'industry') {
+            this.gmsSelectedIndustryBoardCodes = codes;
+            this.updateGmsIndustryBoardSummary();
+        } else if (kind === 'concept') {
+            this.gmsSelectedConceptBoardCodes = codes;
+            this.updateGmsConceptBoardSummary();
+        }
+        this._hideGmsModal(document.getElementById('gmsBoardPickerModal'));
+        if (codes.length) {
+            this._hintGmsClickRefreshFilter();
+        }
+    },
+
     /** 显示/隐藏「行业板块」选择行 */
     syncGmsIndustryBoardWrap() {
         const wrap = document.getElementById('gmsIndustryBoardWrap');
@@ -1588,72 +1803,50 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
-    /** 加载行业板块下拉选项 */
+    /** 加载行业板块选项 */
     async loadGmsIndustryBoardOptions() {
-        const sel = document.getElementById('gmsIndustryBoardSelect');
-        if (!sel) return;
-        if (this._gmsIndustryBoardsLoaded && sel.options.length > 1) return;
-        const prev = sel.value;
+        if (this._gmsIndustryBoardsLoaded && this.gmsIndustryBoardCatalog.length) return;
         try {
             const res = await fetch(`${this.API_BASE_URL}/api/market/industry_board/catalog`);
             const data = await res.json();
             if (!res.ok || data.success === false) {
                 throw new Error(data.message || `HTTP ${res.status}`);
             }
-            sel.innerHTML = '';
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = '请选择行业板块';
-            sel.appendChild(placeholder);
             const boards = data.success && Array.isArray(data.data) ? data.data : [];
             boards.sort((a, b) => String(a.board_name || a.board_code).localeCompare(
                 String(b.board_name || b.board_code),
                 'zh-CN'
             ));
-            boards.forEach((b) => {
-                const opt = document.createElement('option');
-                opt.value = b.board_code;
-                opt.textContent = b.board_name
-                    ? `${b.board_name} (${b.board_code})`
-                    : String(b.board_code || '');
-                sel.appendChild(opt);
-            });
-            if (prev) sel.value = prev;
+            this.gmsIndustryBoardCatalog = boards;
             this._gmsIndustryBoardsLoaded = true;
+            this.updateGmsIndustryBoardSummary();
         } catch (e) {
             console.warn('[GMS] 加载行业板块列表失败', e);
-            sel.innerHTML = '<option value="">加载失败，请刷新页面</option>';
+            this.gmsIndustryBoardCatalog = [];
+            const summary = document.getElementById('gmsIndustryBoardSummary');
+            if (summary) summary.textContent = '加载失败，请刷新页面';
         }
     },
 
-    /** 加载概念板块下拉选项 */
+    /** 加载概念板块选项 */
     async loadGmsConceptBoardOptions() {
-        const sel = document.getElementById('gmsConceptBoardSelect');
-        if (!sel) return;
-        if (this._gmsConceptBoardsLoaded && sel.options.length > 1) return;
-        const prev = sel.value;
+        if (this._gmsConceptBoardsLoaded && this.gmsConceptBoardCatalog.length) return;
         try {
             const res = await fetch(`${this.API_BASE_URL}/api/market/concept_board`);
             const data = await res.json();
-            sel.innerHTML = '';
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = '请选择概念板块';
-            sel.appendChild(placeholder);
             const boards = data.success && Array.isArray(data.data) ? data.data : [];
-            boards.forEach((b) => {
-                const opt = document.createElement('option');
-                opt.value = b.board_code;
-                opt.textContent = b.board_name
-                    ? `${b.board_name} (${b.board_code})`
-                    : String(b.board_code || '');
-                sel.appendChild(opt);
-            });
-            if (prev) sel.value = prev;
+            boards.sort((a, b) => String(a.board_name || a.board_code).localeCompare(
+                String(b.board_name || b.board_code),
+                'zh-CN'
+            ));
+            this.gmsConceptBoardCatalog = boards;
             this._gmsConceptBoardsLoaded = true;
+            this.updateGmsConceptBoardSummary();
         } catch (e) {
             console.warn('[GMS] 加载概念板块列表失败', e);
-            sel.innerHTML = '<option value="">加载失败，请刷新页面</option>';
+            this.gmsConceptBoardCatalog = [];
+            const summary = document.getElementById('gmsConceptBoardSummary');
+            if (summary) summary.textContent = '加载失败，请刷新页面';
         }
     },
 
@@ -1851,7 +2044,7 @@ const ScreeningPage = {
             });
         });
 
-        // 绑定 GMS 策略范围切换事件
+        // 绑定 GMS 策略范围切换事件（仅更新 UI，不自动触发选股计算）
         document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.syncGmsWatchlistMarketWrap();
@@ -1859,52 +2052,29 @@ const ScreeningPage = {
                 this.syncGmsConceptBoardWrap();
                 this.syncGmsSingleStockWrap();
                 const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
-                if (scopeEl && scopeEl.value === 'single') {
-                    return;
-                }
                 if (scopeEl && scopeEl.value === 'industry_board') {
                     void this.loadGmsIndustryBoardOptions();
-                    const sel = document.getElementById('gmsIndustryBoardSelect');
-                    if (!sel || !sel.value) return;
                 }
                 if (scopeEl && scopeEl.value === 'concept_board') {
                     void this.loadGmsConceptBoardOptions();
-                    const sel = document.getElementById('gmsConceptBoardSelect');
-                    if (!sel || !sel.value) return;
                 }
-                this.loadScreeningResults('gms');
+                if (scopeEl && scopeEl.value !== 'single') {
+                    this._hintGmsClickRefreshFilter();
+                }
             });
         });
         document.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
                 if (scopeEl && scopeEl.value === 'gms_watchlist') {
-                    this.loadScreeningResults('gms');
+                    this._hintGmsClickRefreshFilter();
                 }
             });
         });
-        const gmsIndustryBoardSelect = document.getElementById('gmsIndustryBoardSelect');
-        if (gmsIndustryBoardSelect) {
-            gmsIndustryBoardSelect.addEventListener('change', () => {
-                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
-                if (scopeEl && scopeEl.value === 'industry_board' && gmsIndustryBoardSelect.value) {
-                    void this.loadScreeningResults('gms');
-                }
-            });
-        }
-        const gmsConceptBoardSelect = document.getElementById('gmsConceptBoardSelect');
-        if (gmsConceptBoardSelect) {
-            gmsConceptBoardSelect.addEventListener('change', () => {
-                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
-                if (scopeEl && scopeEl.value === 'concept_board' && gmsConceptBoardSelect.value) {
-                    void this.loadScreeningResults('gms');
-                }
-            });
-        }
         const gmsExcludeSt = document.getElementById('gmsExcludeSt');
         if (gmsExcludeSt) {
             gmsExcludeSt.addEventListener('change', () => {
-                void this.loadScreeningResults('gms');
+                this._hintGmsClickRefreshFilter();
             });
         }
         this.syncGmsWatchlistMarketWrap();
@@ -1917,9 +2087,28 @@ const ScreeningPage = {
                 if (e.key === 'Enter') {
                     const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
                     if (scopeEl && scopeEl.value === 'single') {
-                        void this.loadScreeningResults('gms');
+                        e.preventDefault();
+                        this._hintGmsClickRefreshFilter();
                     }
                 }
+            });
+        }
+
+        const gmsParamOverride = document.getElementById('gms-param-override');
+        if (gmsParamOverride) {
+            gmsParamOverride.addEventListener('change', () => {
+                this._hintGmsClickRefreshFilter();
+            });
+        }
+        const gmsParamsGrid = document.getElementById('gmsStrategyParamsCard');
+        if (gmsParamsGrid) {
+            gmsParamsGrid.querySelectorAll('.param-input').forEach((el) => {
+                el.addEventListener('change', () => {
+                    const overrideEl = document.getElementById('gms-param-override');
+                    if (overrideEl && overrideEl.checked) {
+                        this._hintGmsClickRefreshFilter();
+                    }
+                });
             });
         }
 
@@ -1938,6 +2127,7 @@ const ScreeningPage = {
                 const v = gmsConfigSelect.value;
                 this.gmsConfigId = v ? parseInt(v, 10) : null;
                 void this.syncGmsParamsFromServer(this.gmsConfigId);
+                this._hintGmsClickRefreshFilter();
             });
         }
 
@@ -2084,14 +2274,10 @@ const ScreeningPage = {
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
         }
         if (scope === 'industry_board') {
-            const sel = document.getElementById('gmsIndustryBoardSelect');
-            const code = sel && sel.value ? String(sel.value).trim() : '';
-            if (code) q.set('industry_board_code', code);
+            this.getGmsSelectedIndustryBoardCodes().forEach((code) => q.append('industry_board_code', code));
         }
         if (scope === 'concept_board') {
-            const sel = document.getElementById('gmsConceptBoardSelect');
-            const code = sel && sel.value ? String(sel.value).trim() : '';
-            if (code) q.set('concept_board_code', code);
+            this.getGmsSelectedConceptBoardCodes().forEach((code) => q.append('concept_board_code', code));
         }
         const configEl = document.getElementById('gms-config_id');
         const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
@@ -2146,17 +2332,13 @@ const ScreeningPage = {
         const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
         if (scope === 'industry_board') {
-            const sel = document.getElementById('gmsIndustryBoardSelect');
-            const code = sel && sel.value ? String(sel.value).trim() : '';
-            if (!code) {
-                throw new Error('请选择行业板块');
+            if (this.getGmsSelectedIndustryBoardCodes().length === 0) {
+                throw new Error('请选择至少一个行业板块');
             }
         }
         if (scope === 'concept_board') {
-            const sel = document.getElementById('gmsConceptBoardSelect');
-            const code = sel && sel.value ? String(sel.value).trim() : '';
-            if (!code) {
-                throw new Error('请选择概念板块');
+            if (this.getGmsSelectedConceptBoardCodes().length === 0) {
+                throw new Error('请选择至少一个概念板块');
             }
         }
         if (scope === 'single') {

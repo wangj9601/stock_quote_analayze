@@ -1324,6 +1324,128 @@
     color: #757575;
 }
 
+.gms-params-refresh-hint {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.45;
+}
+
+.gms-board-picker-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+    min-width: 280px;
+}
+
+.gms-board-pick-btn {
+    flex-shrink: 0;
+}
+
+.gms-board-picker-summary {
+    font-size: 13px;
+    color: #475569;
+    line-height: 1.45;
+}
+
+.gms-modal-card.gms-board-picker-modal {
+    width: clamp(320px, 50vw, 1100px);
+    max-width: calc(100vw - 32px);
+    max-height: min(88vh, 780px);
+    display: flex;
+    flex-direction: column;
+    padding: 18px 22px 16px;
+}
+
+.gms-board-picker-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.gms-board-picker-search {
+    flex: 1;
+    min-width: 180px;
+}
+
+.gms-board-picker-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: 4px 14px;
+    flex: 1;
+    min-height: 240px;
+    max-height: min(58vh, 560px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    background: #fafafa;
+    align-content: start;
+}
+
+.gms-board-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #334155;
+    border-radius: 4px;
+    min-width: 0;
+}
+
+.gms-board-picker-item:hover {
+    background: #f1f5f9;
+}
+
+.gms-board-picker-item input {
+    flex-shrink: 0;
+    margin: 0;
+}
+
+.gms-board-picker-item span {
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.gms-board-picker-empty {
+    grid-column: 1 / -1;
+    padding: 24px 8px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+@media (min-width: 1200px) {
+    .gms-board-picker-list {
+        grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .gms-modal-card.gms-board-picker-modal {
+        width: calc(100vw - 24px);
+        max-height: 92vh;
+    }
+
+    .gms-board-picker-list {
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+        min-height: 200px;
+        max-height: min(52vh, 420px);
+    }
+}
+
 #resultsTable-gms-trade-observe .gms-col-industry {
     max-width: 7rem;
     width: 7rem;
