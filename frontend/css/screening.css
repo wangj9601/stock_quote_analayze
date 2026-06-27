@@ -1202,6 +1202,19 @@
     white-space: nowrap;
 }
 
+#resultsContainer-gms .gms-col-industry {
+    max-width: 6.5rem;
+    width: 6.5rem;
+    overflow: hidden;
+}
+
+#resultsContainer-gms .gms-col-industry .stock-industry {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 #resultsContainer-gms .gms-col-narrow {
     max-width: 4.2rem;
     white-space: nowrap;

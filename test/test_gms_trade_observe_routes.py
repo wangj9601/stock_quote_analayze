@@ -17,6 +17,7 @@ from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_trade_observe_routes import router
 from backend_api.models import (
+    GmsFormalTrade,
     GmsTradeObserveHistory,
     GmsTradeObserveStock,
     GMSStrategyVersion,
@@ -36,6 +37,7 @@ def memory_db():
     User.__table__.create(bind=engine)
     GmsTradeObserveStock.__table__.create(bind=engine)
     GmsTradeObserveHistory.__table__.create(bind=engine)
+    GmsFormalTrade.__table__.create(bind=engine)
     GMSStrategyVersion.__table__.create(bind=engine)
     GMSStrategyVersionStock.__table__.create(bind=engine)
     StockBasicInfo.__table__.create(bind=engine)
@@ -213,3 +215,40 @@ def test_list_signal_date_from_snapshot(memory_db, test_user):
 
     item = _row_to_item(row)
     assert item.signal_date == "2026-05-15"
+
+
+def test_list_purges_observe_when_formal_trade_exists(client, memory_db, test_user):
+    """历史遗留：已有正式交易但观察未删时，列表应自动清理。"""
+    observe = GmsTradeObserveStock(
+        user_id=test_user.id,
+        market="CN",
+        code="603226",
+        name="菲林格尔",
+        signal_date=date(2026, 6, 24),
+        signal_snapshot_json={"signal_strength": 0.7},
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    memory_db.add(observe)
+    memory_db.add(
+        GmsFormalTrade(
+            user_id=test_user.id,
+            market="CN",
+            code="603226",
+            name="菲林格尔",
+            source_observe_id=999,
+            entry_price=52.64,
+            position_lots=1,
+            status="open",
+            entry_at=datetime.now(),
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+    )
+    memory_db.commit()
+
+    lst = client.get("/api/stock/gms-trade-observe/list")
+    assert lst.status_code == 200
+    assert lst.json()["total"] == 0
+    assert memory_db.query(GmsTradeObserveStock).count() == 0
+    assert memory_db.query(GmsTradeObserveHistory).count() == 1

@@ -1783,6 +1783,33 @@ async def get_gms_strategy(
 
             item["score_detail"] = _inject_gms_score_detail_meta(item.get("score_detail"), gms_config_meta)
 
+        from backend_api.gms_trade_observe_routes import (
+            _normalize_code as _gms_industry_norm_code,
+            batch_resolve_industries_by_pairs,
+        )
+
+        _gms_industry_pairs: List[tuple[str, str]] = []
+        for item in results_data:
+            code = str(item.get("symbol") or item.get("code") or "").strip()
+            if not code:
+                continue
+            mt = code_to_gms_mt.get(code)
+            if mt not in ("CN", "HK", "ETF"):
+                mt = _fallback_gms_indicator_market_type(code, scope, cn_code_set)
+            market = "HK" if mt == "HK" else "CN"
+            _gms_industry_pairs.append((market, code))
+        _gms_industry_map = batch_resolve_industries_by_pairs(db, _gms_industry_pairs)
+        for item in results_data:
+            code = str(item.get("symbol") or item.get("code") or "").strip()
+            if not code:
+                item["industry"] = None
+                continue
+            mt = code_to_gms_mt.get(code)
+            if mt not in ("CN", "HK", "ETF"):
+                mt = _fallback_gms_indicator_market_type(code, scope, cn_code_set)
+            market = "HK" if mt == "HK" else "CN"
+            item["industry"] = _gms_industry_map.get((market, _gms_industry_norm_code(code)))
+
         # 按信号强度由高到低排列
         def _gms_signal_sort_key(x):
             s = x.get("signal_strength")

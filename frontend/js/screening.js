@@ -3126,7 +3126,7 @@ const ScreeningPage = {
             } else if (strategy === 'pvfrs') {
                 colSpan = 12;
             } else if (strategy === 'gms') {
-                colSpan = 16;
+                colSpan = 17;
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
             } else {
@@ -3559,11 +3559,18 @@ const ScreeningPage = {
                 const gmsScopeElement = document.querySelector('input[name="gmsScope"]:checked');
                 const gmsScope = gmsScopeElement ? gmsScopeElement.value : 'all';
                 const canShowWatchlistAction = gmsScope !== 'watchlist';
+                const gmsIndustry = stock.industry || '--';
+                const gmsIndustryAttr = String(gmsIndustry)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/</g, '&lt;');
                 const gmsDetailHref = `stock.html?code=${encodeURIComponent(gmsCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 html += `
                     <tr data-gms-row="${index}">
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${gmsDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${gmsCode}</a></td>
                         <td class="gms-col-name"><span class="stock-name" title="${gmsTitleAttr}">${gmsName}</span></td>
+                        <td class="gms-col-industry"><span class="stock-industry" title="${gmsIndustryAttr}">${gmsIndustry === '--' ? '--' : gmsIndustryAttr}</span></td>
                         <td style="display:none;"><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-narrow"><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td class="gms-col-narrow"><span class="${buyTypeClass}">${buyType}</span></td>
@@ -3587,7 +3594,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="16" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                        <td colspan="17" class="gms-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
@@ -3779,7 +3786,7 @@ const ScreeningPage = {
             filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'gms') {
             headers = [
-                '股票代码', '股票名称', '信号强度', '买点类型', '当前价格',
+                '股票代码', '股票名称', '所属行业', '信号强度', '买点类型', '当前价格',
                 'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
                 'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
             ];
@@ -3812,6 +3819,7 @@ const ScreeningPage = {
                 return [
                     `\u2060${stock.symbol || stock.code}`,
                     stock.name || '',
+                    stock.industry || '',
                     (sig * 100).toFixed(1) + '%',
                     stock.buy_type || '',
                     stock.current_price != null ? stock.current_price.toFixed(2) : '',
@@ -4239,7 +4247,7 @@ const ScreeningPage = {
             return;
         }
         const headers = [
-            '股票代码', '股票名称', '信号强度', '买点类型', '当前价格',
+            '股票代码', '股票名称', '所属行业', '信号强度', '买点类型', '当前价格',
             'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
             'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
         ];
@@ -4265,6 +4273,7 @@ const ScreeningPage = {
             aoa.push([
                 '\u2060' + (stock.symbol || stock.code),
                 stock.name || '',
+                stock.industry || '',
                 (sig * 100).toFixed(1) + '%',
                 stock.buy_type || '',
                 stock.current_price != null ? stock.current_price.toFixed(2) : '',

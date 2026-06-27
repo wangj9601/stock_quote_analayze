@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.models import (
+    GmsFormalTrade,
     GmsTradeObserveHistory,
     GmsTradeObserveStock,
     StockBasicInfo,
@@ -134,6 +135,41 @@ def _observe_row_key(row: GmsTradeObserveStock) -> tuple[str, str]:
     return market, _normalize_code(row.code)
 
 
+def _formal_trade_keys_for_user(db: Session, user_id: int) -> set[tuple[str, str]]:
+    rows = (
+        db.query(GmsFormalTrade.market, GmsFormalTrade.code)
+        .filter(GmsFormalTrade.user_id == user_id)
+        .all()
+    )
+    return {
+        ((m or "CN").upper(), _normalize_code(c))
+        for m, c in rows
+        if c
+    }
+
+
+def _purge_observe_rows_already_formal_traded(db: Session, user_id: int) -> int:
+    """已转入正式交易但观察记录仍残留时，归档并删除（兼容历史数据）。"""
+    formal_keys = _formal_trade_keys_for_user(db, user_id)
+    if not formal_keys:
+        return 0
+    rows = (
+        db.query(GmsTradeObserveStock)
+        .filter(GmsTradeObserveStock.user_id == user_id)
+        .all()
+    )
+    removed = 0
+    now = datetime.now()
+    for row in rows:
+        if _observe_row_key(row) in formal_keys:
+            _archive_trade_observe_row(db, row, removed_at=now)
+            db.delete(row)
+            removed += 1
+    if removed:
+        db.commit()
+    return removed
+
+
 def _industry_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
     if not isinstance(snapshot, dict):
         return None
@@ -149,9 +185,7 @@ def _batch_resolve_industries(
 ) -> Dict[tuple[str, str], str]:
     """批量解析观察股所属行业：snapshot → 基础信息表 → 行业板块成分。"""
     out: Dict[tuple[str, str], str] = {}
-    need_cn: List[str] = []
-    need_hk: List[str] = []
-
+    need_pairs: List[tuple[str, str]] = []
     for row in rows:
         key = _observe_row_key(row)
         snap_val = _industry_from_snapshot(
@@ -160,11 +194,35 @@ def _batch_resolve_industries(
         if snap_val:
             out[key] = snap_val
             continue
-        market, code = key
-        if market == "HK":
-            need_hk.append(code)
+        need_pairs.append(key)
+    if need_pairs:
+        out.update(batch_resolve_industries_by_pairs(db, need_pairs))
+    return out
+
+
+def batch_resolve_industries_by_pairs(
+    db: Session,
+    pairs: List[tuple[str, str]],
+) -> Dict[tuple[str, str], str]:
+    """按 (market, code) 批量解析所属行业：基础信息表 → 行业板块成分。"""
+    out: Dict[tuple[str, str], str] = {}
+    need_cn: List[str] = []
+    need_hk: List[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    for market, code in pairs:
+        m = (market or "CN").upper()
+        c = _normalize_code(str(code or ""))
+        if not c:
+            continue
+        key = (m, c)
+        if key in seen:
+            continue
+        seen.add(key)
+        if m == "HK":
+            need_hk.append(c)
         else:
-            need_cn.append(code)
+            need_cn.append(c)
 
     if need_cn:
         uniq = list(dict.fromkeys(need_cn))
@@ -285,6 +343,7 @@ def list_gms_trade_observe(
 ):
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
+    _purge_observe_rows_already_formal_traded(db, user.id)
     q = db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.user_id == user.id)
     total = q.count()
     rows = (
@@ -311,6 +370,7 @@ def list_gms_trade_observe_codes(
     db: Session = Depends(get_db),
 ):
     """当前用户已加入观察的 code 列表（用于信号列表按钮态）。"""
+    _purge_observe_rows_already_formal_traded(db, user.id)
     rows = (
         db.query(GmsTradeObserveStock.code, GmsTradeObserveStock.market)
         .filter(GmsTradeObserveStock.user_id == user.id)

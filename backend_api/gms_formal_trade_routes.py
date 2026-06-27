@@ -138,6 +138,20 @@ def create_from_observe(
     if not observe:
         raise HTTPException(status_code=404, detail="交易观察记录不存在")
     now = datetime.now()
+    existing_trade = (
+        db.query(GmsFormalTrade)
+        .filter(
+            GmsFormalTrade.user_id == user.id,
+            GmsFormalTrade.market == observe.market,
+            GmsFormalTrade.code == observe.code,
+        )
+        .first()
+    )
+    if existing_trade:
+        _archive_trade_observe_row(db, observe, removed_at=now)
+        db.delete(observe)
+        db.commit()
+        return _row_to_item(existing_trade)
     source_observe_id = observe.id
     row = GmsFormalTrade(
         user_id=user.id,

@@ -163,3 +163,33 @@ def test_from_observe_not_found(client):
         json={"entry_price": 10.0, "position_lots": 1},
     )
     assert r.status_code == 404
+
+
+def test_from_observe_cleans_stale_observe_when_formal_trade_exists(client, memory_db, test_user):
+    observe = _seed_observe(memory_db, test_user, code="601699")
+    now = datetime.now()
+    trade = GmsFormalTrade(
+        user_id=test_user.id,
+        market="CN",
+        code="601699",
+        name="潞安环能",
+        source_observe_id=observe.id,
+        entry_price=15.7,
+        position_lots=2,
+        status="open",
+        entry_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    memory_db.add(trade)
+    memory_db.commit()
+    memory_db.refresh(trade)
+
+    r = client.post(
+        f"/api/stock/gms-formal-trade/from-observe/{observe.id}",
+        json={"entry_price": 16.0, "position_lots": 1},
+    )
+    assert r.status_code == 200
+    assert r.json()["id"] == trade.id
+    assert memory_db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.id == observe.id).first() is None
+    assert client.get("/api/stock/gms-formal-trade/list").json()["total"] == 1
