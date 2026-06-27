@@ -8,7 +8,7 @@ import csv
 import logging
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import Any, List, Literal, Optional
+from typing import Any, Iterable, List, Literal, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -29,7 +29,9 @@ from backend_api.utils.bk_board_code import (
     assert_bk_available_for_board_type,
     generate_next_bk_board_code,
     is_valid_bk_board_code,
+    is_valid_industry_board_code,
     normalize_bk_board_code,
+    normalize_industry_board_code,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,17 +45,45 @@ def _normalize_board_code(raw: Any) -> str:
     return normalize_bk_board_code(raw)
 
 
+def _normalize_board_code_for_type(board_type: BoardType, raw: Any) -> str:
+    if board_type == "industry":
+        return normalize_industry_board_code(raw)
+    return normalize_bk_board_code(raw)
+
+
+def _is_valid_board_code_for_type(board_type: BoardType, code: str) -> bool:
+    if board_type == "industry":
+        return is_valid_industry_board_code(code)
+    return is_valid_bk_board_code(code)
+
+
+def _resolve_delete_board_code(board_type: BoardType, raw: Any) -> str:
+    """删除时使用：行业板块走统一规范化；概念板块仅 BK。"""
+    if board_type == "industry":
+        return normalize_industry_board_code(raw)
+    return _normalize_board_code(raw)
+
+
+def _delete_industry_realtime_quotes(db: Session, board_codes: Iterable[str]) -> int:
+    """删除行业板块实时行情（维护删板时可选清理，列表不读 realtime）。"""
+    deleted = 0
+    for bcode in board_codes:
+        code = str(bcode or "").strip()
+        if not code:
+            continue
+        deleted += db.execute(
+            text("DELETE FROM industry_board_realtime_quotes WHERE board_code = :code"),
+            {"code": code},
+        ).rowcount or 0
+    return deleted
+
+
 def _industry_board_src_sql(t: dict[str, str]) -> str:
-    """管理端行业板块列表数据源（BK 编码）。"""
+    """管理端行业板块列表：仅 industry_board_basic_info，不含实时行情表。"""
     return f"""
         SELECT board_code, board_name, create_date,
                COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
         FROM {t['basic']}
-        UNION ALL
-        SELECT DISTINCT board_code, board_name, NULL::timestamp AS create_date,
-               FALSE AS trade_observe_flag
-        FROM {t['realtime']}
-        WHERE board_code IS NOT NULL AND board_code <> ''
     """
 
 
@@ -96,7 +126,7 @@ def _upsert_constituents(
     stocks: List[BoardStockItem],
 ) -> tuple[int, int]:
     """返回 (处理条数, 新增条数)。"""
-    bcode = _normalize_board_code(board_code)
+    bcode = _normalize_board_code_for_type(board_type, board_code)
     Model = _constituent_model(board_type)
     now = datetime.now().replace(microsecond=0)
     added = 0
@@ -137,8 +167,10 @@ class AddBoardConstituentsBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if not _normalize_board_code(self.board_code):
+        code = _normalize_board_code_for_type(self.board_type, self.board_code)
+        if not code:
             raise ValueError("板块代码无效")
+        self.board_code = code
         return self
 
 
@@ -150,8 +182,10 @@ class RemoveBoardConstituentsBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if not _normalize_board_code(self.board_code):
+        code = _normalize_board_code_for_type(self.board_type, self.board_code)
+        if not code:
             raise ValueError("板块代码无效")
+        self.board_code = code
         if self.scope == "selected" and not self.stock_codes:
             raise ValueError("请选择要删除的成分股")
         return self
@@ -179,11 +213,13 @@ def _generate_next_industry_board_code(
 
 
 def _assert_board_code_format(board_type: BoardType, code: str) -> None:
-    if not is_valid_bk_board_code(code):
-        raise HTTPException(
-            status_code=400,
-            detail="板块代码须为 BK+数字 格式（如 BK0428）",
-        )
+    if _is_valid_board_code_for_type(board_type, code):
+        return
+    if board_type == "industry":
+        detail = "行业板块代码须为 BK+数字、中文或英文字符（1~20 位）"
+    else:
+        detail = "板块代码须为 BK+数字 格式（如 BK0428）"
+    raise HTTPException(status_code=400, detail=detail)
 
 
 class SaveBoardInfoBody(BaseModel):
@@ -201,16 +237,21 @@ class SaveBoardInfoBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if self.original_board_code and not _normalize_board_code(self.original_board_code):
-            raise ValueError("原板块代码无效")
+        bt = self.board_type
+        if self.original_board_code:
+            old = _normalize_board_code_for_type(bt, self.original_board_code)
+            if not old:
+                raise ValueError("原板块代码无效")
+            self.original_board_code = old
         if self.board_code is not None and str(self.board_code).strip():
-            if not _normalize_board_code(self.board_code):
+            code = _normalize_board_code_for_type(bt, self.board_code)
+            if not code:
                 raise ValueError("板块代码无效")
-        if not self.original_board_code and not (self.board_code or "").strip():
-            pass
-        elif self.board_code is not None and str(self.board_code).strip():
-            if not is_valid_bk_board_code(_normalize_board_code(self.board_code)):
+            if not _is_valid_board_code_for_type(bt, code):
+                if bt == "industry":
+                    raise ValueError("行业板块代码须为 BK+数字、中文或英文字符")
                 raise ValueError("板块代码须为 BK+数字 格式")
+            self.board_code = code
         return self
 
 
@@ -221,8 +262,10 @@ class SetBoardTradeObserveBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if not _normalize_board_code(self.board_code):
+        code = _normalize_board_code_for_type(self.board_type, self.board_code)
+        if not code:
             raise ValueError("板块代码无效")
+        self.board_code = code
         return self
 
 
@@ -232,8 +275,10 @@ class DeleteBoardBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if not _normalize_board_code(self.board_code):
+        code = _resolve_delete_board_code(self.board_type, self.board_code)
+        if not code:
             raise ValueError("板块代码无效")
+        self.board_code = code
         return self
 
 
@@ -243,10 +288,9 @@ class DeleteBoardsBatchBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if self.board_type != "concept":
-            raise ValueError("批量删除仅支持概念板块")
         codes = list(dict.fromkeys(
-            c for c in (_normalize_board_code(x) for x in self.board_codes) if c
+            c for x in self.board_codes
+            if (c := _resolve_delete_board_code(self.board_type, x))
         ))
         if not codes:
             raise ValueError("板块代码无效")
@@ -487,29 +531,29 @@ async def save_board_info(
     if body.original_board_code:
         if not raw_code:
             raise HTTPException(status_code=400, detail="编辑时板块代码不能为空")
-        new_code = _normalize_board_code(raw_code)
-        old_code = _normalize_board_code(body.original_board_code)
+        new_code = _normalize_board_code_for_type(body.board_type, raw_code)
+        old_code = _normalize_board_code_for_type(body.board_type, body.original_board_code)
     elif raw_code:
-        new_code = _normalize_board_code(raw_code)
+        new_code = _normalize_board_code_for_type(body.board_type, raw_code)
         old_code = new_code
-    elif body.board_type in ("concept", "industry"):
-        gen = (
-            _generate_next_industry_board_code
-            if body.board_type == "industry"
-            else _generate_next_concept_board_code
-        )
-        new_code = gen(db)
+    elif body.board_type == "concept":
+        new_code = _generate_next_concept_board_code(db)
+        old_code = new_code
+    elif body.board_type == "industry":
+        name_code = normalize_industry_board_code(board_name) if board_name else ""
+        new_code = name_code or _generate_next_industry_board_code(db)
         old_code = new_code
     else:
         raise HTTPException(status_code=400, detail="板块代码无效")
 
     _assert_board_code_format(body.board_type, new_code)
-    assert_bk_available_for_board_type(
-        db,
-        body.board_type,
-        new_code,
-        exclude_codes=[c for c in {new_code, old_code} if c],
-    )
+    if is_valid_bk_board_code(new_code):
+        assert_bk_available_for_board_type(
+            db,
+            body.board_type,
+            new_code,
+            exclude_codes=[c for c in {new_code, old_code} if c],
+        )
 
     if body.board_type == "concept" and board_name:
         _assert_concept_board_name_unique(
@@ -583,7 +627,7 @@ async def set_board_trade_observe_flag(
 ):
     """设置板块交易观察标志（列表内快捷开关）。"""
     _ = current_user
-    bcode = _normalize_board_code(body.board_code)
+    bcode = body.board_code
     now = datetime.now().replace(microsecond=0)
     t = _tables(body.board_type)
     existing_name = db.execute(
@@ -625,8 +669,8 @@ async def delete_board_info(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """删除板块基础信息及全部成分股（不删行业实时行情表记录）。"""
-    bcode = _normalize_board_code(body.board_code)
+    """删除板块基础信息、成分股；行业板块同时删实时行情表。"""
+    bcode = body.board_code
     t = _tables(body.board_type)
     Model = _constituent_model(body.board_type)
     cons_deleted = db.query(Model).filter(Model.board_code == bcode).delete(synchronize_session=False)
@@ -634,15 +678,20 @@ async def delete_board_info(
         text(f"DELETE FROM {t['basic']} WHERE board_code = :code"),
         {"code": bcode},
     ).rowcount
+    realtime_deleted = 0
+    if body.board_type == "industry":
+        realtime_deleted = _delete_industry_realtime_quotes(db, [bcode])
     db.commit()
     uname = getattr(current_user, "username", None) or "admin"
+    extra = f"，实时行情 {realtime_deleted} 条" if body.board_type == "industry" else ""
     return {
         "success": True,
-        "message": f"已删除板块「{bcode}」（成分股 {cons_deleted} 条）",
+        "message": f"已删除板块「{bcode}」（成分股 {cons_deleted} 条{extra}）",
         "data": {
             "board_code": bcode,
             "constituents_deleted": cons_deleted,
             "basic_deleted": basic_deleted,
+            "realtime_deleted": realtime_deleted,
             "operator": uname,
         },
     }
@@ -654,7 +703,7 @@ async def delete_boards_batch(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """批量删除概念板块基础信息及全部成分股。"""
+    """批量删除板块基础信息、成分股；行业板块同时删实时行情表。"""
     codes = body.board_codes
     t = _tables(body.board_type)
     Model = _constituent_model(body.board_type)
@@ -669,16 +718,22 @@ async def delete_boards_batch(
             text(f"DELETE FROM {t['basic']} WHERE board_code = :code"),
             {"code": bcode},
         ).rowcount
+    realtime_deleted = 0
+    if body.board_type == "industry":
+        realtime_deleted = _delete_industry_realtime_quotes(db, codes)
     db.commit()
     uname = getattr(current_user, "username", None) or "admin"
+    label = "行业板块" if body.board_type == "industry" else "概念板块"
+    extra = f"，实时行情 {realtime_deleted} 条" if body.board_type == "industry" else ""
     return {
         "success": True,
-        "message": f"已删除 {len(codes)} 个概念板块（成分股 {cons_deleted} 条）",
+        "message": f"已删除 {len(codes)} 个{label}（成分股 {cons_deleted} 条{extra}）",
         "data": {
             "board_codes": codes,
             "boards_deleted": len(codes),
             "constituents_deleted": cons_deleted,
             "basic_deleted": basic_deleted,
+            "realtime_deleted": realtime_deleted,
             "operator": uname,
         },
     }
@@ -784,7 +839,7 @@ async def list_board_constituents(
 ):
     """某板块成分股分页列表。"""
     _ = current_user
-    bcode = _normalize_board_code(board_code)
+    bcode = _normalize_board_code_for_type(board_type, board_code)
     if not bcode:
         raise HTTPException(status_code=400, detail="板块代码无效")
     Model = _constituent_model(board_type)
@@ -826,9 +881,7 @@ async def add_board_constituents(
     current_user: Any = Depends(get_current_admin),
 ):
     """手动添加成分股（存在则更新名称）。"""
-    bcode = _normalize_board_code(body.board_code)
-    if not bcode:
-        raise HTTPException(status_code=400, detail="板块代码无效")
+    bcode = body.board_code
     processed, added = _upsert_constituents(db, body.board_type, bcode, body.stocks)
     db.commit()
     uname = getattr(current_user, "username", None) or "admin"
@@ -846,7 +899,7 @@ async def remove_board_constituents(
     current_user: Any = Depends(get_current_admin),
 ):
     """删除成分股（选中或整板清空）。"""
-    bcode = _normalize_board_code(body.board_code)
+    bcode = body.board_code
     Model = _constituent_model(body.board_type)
     q = db.query(Model).filter(Model.board_code == bcode)
     if body.scope == "selected":
@@ -922,10 +975,6 @@ async def export_all_constituents(
                 UNION ALL
                 SELECT DISTINCT board_code, NULL::varchar AS board_name
                 FROM {t['constituents']}
-                WHERE board_code IS NOT NULL AND board_code <> ''
-                UNION ALL
-                SELECT DISTINCT board_code, board_name
-                FROM {t['realtime']}
                 WHERE board_code IS NOT NULL AND board_code <> ''
             ) u
             WHERE board_code IS NOT NULL AND board_code <> ''
@@ -1040,7 +1089,7 @@ async def import_all_board_constituents(
 ):
     """Excel/CSV 全量导入多板块成分股。概念板块会先清空原有数据再导入。"""
     content = await file.read()
-    rows, issues = parse_all_constituents_file(file.filename or "", content)
+    rows, issues = parse_all_constituents_file(file.filename or "", content, board_type=board_type)
     if not rows:
         return {
             "success": False,
@@ -1211,7 +1260,7 @@ async def import_board_constituents(
     current_user: Any = Depends(get_current_admin),
 ):
     """Excel/CSV 导入成分股到指定板块。"""
-    bcode = _normalize_board_code(board_code)
+    bcode = _normalize_board_code_for_type(board_type, board_code)
     if not bcode:
         raise HTTPException(status_code=400, detail="板块代码无效")
     content = await file.read()

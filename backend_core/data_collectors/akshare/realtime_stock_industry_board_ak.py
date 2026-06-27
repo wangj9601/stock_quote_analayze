@@ -14,6 +14,7 @@ from backend_api.utils.bk_board_code import (
     allocate_bk_board_code,
     is_valid_bk_board_code,
     normalize_bk_board_code,
+    normalize_industry_board_code,
 )
 
 try:
@@ -200,9 +201,11 @@ class RealtimeStockIndustryBoardCollector:
                             {"name": name_key},
                         ).scalar()
                     if existing:
-                        stored_code = normalize_bk_board_code(existing)
+                        stored_code = normalize_industry_board_code(existing) or str(existing).strip()
                     elif em_code in em_to_stored:
                         stored_code = em_to_stored[em_code]
+                    elif name_key and normalize_industry_board_code(name_key):
+                        stored_code = normalize_industry_board_code(name_key)
                     else:
                         preferred = em_code if is_valid_bk_board_code(em_code) else None
                         stored_code = allocate_bk_board_code(session, preferred=preferred)

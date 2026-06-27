@@ -21,7 +21,6 @@
               <div class="flex gap-2">
                 <el-button size="small" type="primary" @click="openBoardEditDialog()">新增板块</el-button>
                 <el-button
-                  v-if="boardType === 'concept'"
                   size="small"
                   type="danger"
                   plain
@@ -45,7 +44,7 @@
           </template>
           <el-input
             v-model="boardKeyword"
-            placeholder="板块代码/名称（BK 编码）"
+            placeholder="板块代码/名称（BK 或中文/英文）"
             clearable
             class="mb-3"
             @keyup.enter="loadBoards"
@@ -64,7 +63,6 @@
               @selection-change="onBoardSelectionChange"
             >
             <el-table-column
-              v-if="boardType === 'concept'"
               type="selection"
               width="42"
               reserve-selection
@@ -184,7 +182,9 @@
           <div class="flex gap-2 w-full">
             <el-input
               v-model="boardEditForm.board_code"
-              :placeholder="isBoardCreateAutoCode ? '保存时自动生成 BK 编码' : 'BK+数字，如 BK0428'"
+              :placeholder="boardType === 'industry'
+                ? (isBoardCreateAutoCode ? '如 医疗服务、IT服务 或 BK0428' : '中文/英文/BK编码')
+                : (isBoardCreateAutoCode ? '保存时自动生成 BK 编码' : 'BK+数字，如 BK0428')"
               :readonly="isBoardCreateAutoCode"
               :clearable="!isBoardCreateAutoCode"
               class="flex-1"
@@ -199,7 +199,12 @@
             </el-button>
           </div>
           <p v-if="isBoardCreateAutoCode" class="text-xs text-gray-500 mt-1">
-            行业/概念板块均使用 BK+数字 编码，且全局不可与对侧板块重复；保存时自动生成，也可点「换一个」预览。
+            <template v-if="boardType === 'concept'">
+              概念板块使用 BK+数字 编码，且全局不可与行业板块重复；保存时自动生成，也可点「换一个」预览。
+            </template>
+            <template v-else>
+              请填写板块代码（中文/英文/BK 均可，1~20 位）；也可留空由名称推断或自动生成 BK 编码。
+            </template>
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
@@ -357,6 +362,22 @@ import {
   type BoardConstituentRow,
 } from '@/services/boardConstituents.service'
 
+function formatApiError(e: unknown, fallback: string): string {
+  if (e === 'cancel') return ''
+  const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === 'object' && 'msg' in item) return String((item as { msg: string }).msg)
+        return String(item)
+      })
+      .join('；')
+  }
+  if (e instanceof Error && e.message) return e.message
+  return fallback
+}
+
 const boardType = ref<BoardType>('industry')
 const boardKeyword = ref('')
 const boardPage = ref(1)
@@ -412,7 +433,19 @@ const boardEditForm = reactive({
 })
 const togglingTradeObserve = ref<string | null>(null)
 
-const isBoardCreateAutoCode = computed(() => !boardEditForm.original_board_code)
+const isBoardCreateAutoCode = computed(
+  () => boardType.value === 'concept' && !boardEditForm.original_board_code,
+)
+
+function isValidBoardCode(type: BoardType, code: string): boolean {
+  const c = code.trim()
+  if (!c) return false
+  if (/^BK\d+$/i.test(c)) return true
+  if (type === 'industry') {
+    return /^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9._\-·]{0,19}$/.test(c)
+  }
+  return false
+}
 
 function onBoardTypeChange() {
   selectedBoard.value = null
@@ -485,7 +518,7 @@ function openBoardEditDialog(row?: BoardSummary) {
     boardEditForm.original_board_code = ''
   }
   boardEditVisible.value = true
-  if (!row) {
+  if (!row && boardType.value === 'concept') {
     void refreshBoardCode()
   }
 }
@@ -545,12 +578,19 @@ async function toggleBoardTradeObserve(row: BoardSummary, val: boolean) {
 async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
+  const name = boardEditForm.board_name.trim()
   if (!isBoardCreateAutoCode && !code) {
-    ElMessage.warning('请填写板块代码')
-    return
+    if (!(boardType.value === 'industry' && !boardEditForm.original_board_code && name)) {
+      ElMessage.warning('请填写板块代码')
+      return
+    }
   }
-  if (!isBoardCreateAutoCode && !/^BK\d+$/i.test(code)) {
-    ElMessage.warning('板块代码须为 BK+数字 格式')
+  if (code && !isBoardCreateAutoCode && !isValidBoardCode(boardType.value, code)) {
+    ElMessage.warning(
+      boardType.value === 'industry'
+        ? '行业板块代码须为 BK+数字、中文或英文字符'
+        : '板块代码须为 BK+数字 格式',
+    )
     return
   }
   savingBoard.value = true
@@ -623,27 +663,29 @@ async function deleteBoardInfo() {
     }
     await loadBoards()
   } catch (e: unknown) {
-    if (e !== 'cancel') ElMessage.error(e instanceof Error ? e.message : '删除失败')
+    const msg = formatApiError(e, '删除失败')
+    if (msg) ElMessage.error(msg)
   } finally {
     deletingBoard.value = false
   }
 }
 
 async function removeSelectedBoards() {
-  if (boardType.value !== 'concept' || !selectedBoardRows.value.length) return
+  if (!selectedBoardRows.value.length) return
   const codes = selectedBoardRows.value.map((r) => r.board_code).filter(Boolean)
   if (!codes.length) return
+  const label = boardType.value === 'industry' ? '行业板块' : '概念板块'
   const preview = codes.slice(0, 8).join('、')
   const suffix = codes.length > 8 ? ` 等 ${codes.length} 个` : ''
   try {
     await ElMessageBox.confirm(
-      `确定删除概念板块 ${preview}${suffix} 及其全部成分股？不可恢复。`,
+      `确定删除${label} ${preview}${suffix} 及其全部成分股？不可恢复。`,
       '批量删除确认',
       { type: 'warning' },
     )
     deletingBoardsBatch.value = true
     const res = await boardConstituentsService.deleteBoardsBatch({
-      boardType: 'concept',
+      boardType: boardType.value,
       boardCodes: codes,
     })
     ElMessage.success(res.message || '已删除')
@@ -656,10 +698,8 @@ async function removeSelectedBoards() {
     boardTableRef.value?.clearSelection()
     await loadBoards()
   } catch (e: unknown) {
-    const msg =
-      (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-      (e instanceof Error ? e.message : '删除失败')
-    if (e !== 'cancel') ElMessage.error(msg)
+    const msg = formatApiError(e, '删除失败')
+    if (msg) ElMessage.error(msg)
   } finally {
     deletingBoardsBatch.value = false
   }

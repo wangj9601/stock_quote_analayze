@@ -16,6 +16,8 @@ from backend_api.admin.board_constituents import (
     _assert_concept_board_name_unique,
     _generate_next_concept_board_code,
     _industry_board_src_sql,
+    _delete_industry_realtime_quotes,
+    _resolve_delete_board_code,
     _normalize_board_code,
     _normalize_stock_code,
     _read_board_trade_observe_flag,
@@ -32,6 +34,26 @@ class TestBoardConstituentsHelpers:
         assert _normalize_board_code("IT服务") == ""
         assert _normalize_board_code("bk0428") == "BK0428"
 
+    def test_delete_industry_realtime_quotes(self):
+        deleted: list[str] = []
+
+        class _DB:
+            def execute(self, sql, params=None):
+                if "industry_board_realtime_quotes" in str(sql):
+                    deleted.append(params["code"])
+                    return type("R", (), {"rowcount": 2})()
+                return type("R", (), {"rowcount": 0})()
+
+        n = _delete_industry_realtime_quotes(_DB(), ["医疗服务", "BK0420", ""])
+        assert n == 4
+        assert deleted == ["医疗服务", "BK0420"]
+
+    def test_resolve_delete_board_code(self):
+        assert _resolve_delete_board_code("industry", "BK0420") == "BK0420"
+        assert _resolve_delete_board_code("industry", "医疗服务") == "医疗服务"
+        assert _resolve_delete_board_code("concept", "BK0428") == "BK0428"
+        assert _resolve_delete_board_code("concept", "医疗服务") == ""
+
     def test_normalize_stock_code(self):
         assert _normalize_stock_code("sz000001") == "000001"
         assert _normalize_stock_code("300668") == "300668"
@@ -42,10 +64,11 @@ class TestBoardConstituentsHelpers:
         con = _tables("concept")
         assert con["constituents"] == "concept_board_constituents"
 
-    def test_industry_board_src_sql_includes_bk(self):
+    def test_industry_board_src_sql_basic_only(self):
         sql = _industry_board_src_sql(_tables("industry"))
         assert "industry_board_basic_info" in sql
-        assert "NOT LIKE 'BK%'" not in sql.upper()
+        assert "industry_board_realtime_quotes" not in sql
+        assert "UNION" not in sql.upper()
 
     def test_save_board_body_validation(self):
         body = SaveBoardInfoBody(board_type="concept", board_code="BK0428", board_name="电力")
@@ -104,11 +127,21 @@ class TestBoardConstituentsHelpers:
             board_codes=["BK0428", " bk0429 ", "BK0428"],
         )
         assert body.board_codes == ["BK0428", "BK0429"]
-        try:
-            DeleteBoardsBatchBody(board_type="industry", board_codes=["IT服务"])
-            assert False, "行业板块不应支持批量删除"
-        except ValueError:
-            pass
+        industry_body = DeleteBoardsBatchBody(
+            board_type="industry",
+            board_codes=["BK0420", " bk0421 "],
+        )
+        assert industry_body.board_codes == ["BK0420", "BK0421"]
+        legacy = DeleteBoardsBatchBody(
+            board_type="industry",
+            board_codes=["医疗服务", "BK0420"],
+        )
+        assert legacy.board_codes == ["医疗服务", "BK0420"]
+        SaveBoardInfoBody(
+            board_type="industry",
+            board_code="医疗服务",
+            board_name="医疗服务",
+        )
         try:
             DeleteBoardsBatchBody(board_type="concept", board_codes=["  "])
             assert False, "空代码应失败"

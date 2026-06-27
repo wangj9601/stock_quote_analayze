@@ -1663,6 +1663,29 @@ const ScreeningPage = {
         return name || code;
     },
 
+    /** 行业板块同名去重（优先 BK 编码；兼容旧缓存/接口） */
+    _dedupeGmsIndustryBoardCatalog(boards) {
+        const list = Array.isArray(boards) ? boards : [];
+        const buckets = new Map();
+        list.forEach((b) => {
+            const code = String(b?.board_code || '').trim();
+            if (!code) return;
+            const name = String(b?.board_name || '').trim() || code;
+            const prev = buckets.get(name);
+            const isBk = /^BK\d+$/i.test(code);
+            if (!prev) {
+                buckets.set(name, b);
+                return;
+            }
+            const prevBk = /^BK\d+$/i.test(String(prev.board_code || ''));
+            if (!prevBk && isBk) buckets.set(name, b);
+        });
+        return Array.from(buckets.values()).sort((a, b) => String(a.board_name || a.board_code).localeCompare(
+            String(b.board_name || b.board_code),
+            'zh-CN',
+        ));
+    },
+
     updateGmsIndustryBoardSummary() {
         const el = document.getElementById('gmsIndustryBoardSummary');
         if (!el) return;
@@ -1813,11 +1836,7 @@ const ScreeningPage = {
                 throw new Error(data.message || `HTTP ${res.status}`);
             }
             const boards = data.success && Array.isArray(data.data) ? data.data : [];
-            boards.sort((a, b) => String(a.board_name || a.board_code).localeCompare(
-                String(b.board_name || b.board_code),
-                'zh-CN'
-            ));
-            this.gmsIndustryBoardCatalog = boards;
+            this.gmsIndustryBoardCatalog = this._dedupeGmsIndustryBoardCatalog(boards);
             this._gmsIndustryBoardsLoaded = true;
             this.updateGmsIndustryBoardSummary();
         } catch (e) {

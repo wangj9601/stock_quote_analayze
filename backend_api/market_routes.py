@@ -19,7 +19,10 @@ from backend_api.models import (
     IndustryBoardConstituent,
     HKIndexRealtimeQuotes,
 )
-from backend_api.utils.industry_board_query import get_boards_by_stock_code
+from backend_api.utils.industry_board_query import (
+    fetch_industry_board_catalog,
+    get_boards_by_stock_code,
+)
 
 
 
@@ -219,35 +222,12 @@ def get_industry_board(db: Session = Depends(get_db)):
             'traceback': tb
         }, status_code=500)
 
-# 行业板块目录（basic + 成分股 + 实时行情并集，供 GMS 筛选等下拉使用）
+# 行业板块目录（仅 basic_info，供 GMS 筛选等下拉使用）
 @router.get("/industry_board/catalog")
 def get_industry_board_catalog(db: Session = Depends(get_db)):
-    """行业板块代码/名称列表；与管理端板块列表数据源一致，不依赖实时行情表是否有数据。"""
+    """行业板块代码/名称列表；与管理端一致，仅 industry_board_basic_info，同名去重。"""
     try:
-        rows = db.execute(
-            text(
-                """
-                SELECT board_code, MAX(board_name) AS board_name
-                FROM (
-                    SELECT board_code, board_name FROM industry_board_basic_info
-                    WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                    UNION ALL
-                    SELECT DISTINCT board_code, NULL::varchar AS board_name
-                    FROM industry_board_constituents
-                    WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                    UNION ALL
-                    SELECT board_code, board_name FROM industry_board_realtime_quotes
-                    WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                ) u
-                GROUP BY board_code
-                ORDER BY board_name NULLS LAST, board_code
-                """
-            )
-        ).fetchall()
-        data = [
-            {"board_code": row[0], "board_name": row[1]}
-            for row in rows
-        ]
+        data = fetch_industry_board_catalog(db)
         return JSONResponse({"success": True, "data": data})
     except Exception as e:
         tb = traceback.format_exc()

@@ -8,6 +8,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 BK_BOARD_CODE_RE = re.compile(r"^BK(\d+)$", re.IGNORECASE)
+INDUSTRY_BOARD_CODE_MAX_LEN = 20
+# 行业板块：BK 编码，或含中文/英文字母的业务代码（可含数字与 ._-·）
+INDUSTRY_TEXT_BOARD_CODE_RE = re.compile(
+    r"^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9._\-·]{0,19}$"
+)
 
 _BK_USAGE_SQL = """
     SELECT board_code FROM concept_board_basic_info
@@ -45,6 +50,24 @@ def normalize_bk_board_code(raw: object) -> str:
 
 def is_valid_bk_board_code(code: object) -> bool:
     return bool(normalize_bk_board_code(code))
+
+
+def normalize_industry_board_code(raw: object) -> str:
+    """行业板块代码：BK+数字，或中文/英文字符组成的业务编码。"""
+    bk = normalize_bk_board_code(raw)
+    if bk:
+        return bk
+    s = str(raw or "").strip()
+    s = s.lstrip("'").lstrip("’").strip()
+    if not s or len(s) > INDUSTRY_BOARD_CODE_MAX_LEN:
+        return ""
+    if INDUSTRY_TEXT_BOARD_CODE_RE.fullmatch(s):
+        return s
+    return ""
+
+
+def is_valid_industry_board_code(code: object) -> bool:
+    return bool(normalize_industry_board_code(code))
 
 
 def parse_bk_num(code: object) -> Optional[int]:
@@ -188,14 +211,14 @@ def assert_bk_available_for_board_type(
 
 
 def resolve_industry_board_codes(db: Session, raw_codes: List[str]) -> List[str]:
-    """将 BK 编码或历史中文名称解析为行业板块 BK 代码。"""
+    """将 BK 编码、中文/英文板块代码或板块名称解析为 industry_board_basic_info 中的 board_code。"""
     out: List[str] = []
     for raw in raw_codes:
         s = str(raw or "").strip()
         if not s:
             continue
-        bk = normalize_bk_board_code(s)
-        if is_valid_bk_board_code(bk):
+        code = normalize_industry_board_code(s)
+        if code:
             hit = db.execute(
                 text(
                     """
@@ -205,12 +228,12 @@ def resolve_industry_board_codes(db: Session, raw_codes: List[str]) -> List[str]
                     WHERE board_code = :code LIMIT 1
                     """
                 ),
-                {"code": bk},
+                {"code": code},
             ).fetchone()
             if hit:
-                code = normalize_bk_board_code(hit[0])
-                if code and code not in out:
-                    out.append(code)
+                resolved = normalize_industry_board_code(hit[0])
+                if resolved and resolved not in out:
+                    out.append(resolved)
                 continue
         row = db.execute(
             text(
@@ -224,7 +247,7 @@ def resolve_industry_board_codes(db: Session, raw_codes: List[str]) -> List[str]
             {"name": s},
         ).fetchone()
         if row:
-            code = normalize_bk_board_code(row[0])
-            if code and code not in out:
-                out.append(code)
+            resolved = normalize_industry_board_code(row[0])
+            if resolved and resolved not in out:
+                out.append(resolved)
     return out

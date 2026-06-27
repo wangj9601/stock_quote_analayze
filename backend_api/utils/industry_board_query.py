@@ -9,6 +9,50 @@ from sqlalchemy.orm import Session
 from backend_api.models import IndustryBoardConstituent
 
 
+def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """同名板块只保留一条：优先 BK 编码，避免 GMS 选择器出现重复名称。"""
+    from backend_api.utils.bk_board_code import is_valid_bk_board_code
+
+    buckets: Dict[str, List[Dict[str, str]]] = {}
+    for raw in items:
+        code = str(raw.get("board_code") or "").strip()
+        if not code:
+            continue
+        name = str(raw.get("board_name") or "").strip() or code
+        buckets.setdefault(name, []).append({"board_code": code, "board_name": name})
+
+    out: List[Dict[str, str]] = []
+    for name, group in buckets.items():
+        if len(group) == 1:
+            out.append(group[0])
+            continue
+        group.sort(
+            key=lambda x: (
+                0 if is_valid_bk_board_code(x["board_code"]) else 1,
+                x["board_code"],
+            )
+        )
+        out.append(group[0])
+    out.sort(key=lambda x: (x["board_name"], x["board_code"]))
+    return out
+
+
+def fetch_industry_board_catalog(db: Session) -> List[Dict[str, str]]:
+    """GMS 等行业板块选择器：仅 basic_info，并按展示名称去重。"""
+    rows = db.execute(
+        text(
+            """
+            SELECT board_code, board_name
+            FROM industry_board_basic_info
+            WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+            ORDER BY board_name NULLS LAST, board_code
+            """
+        )
+    ).fetchall()
+    items = [{"board_code": str(r[0]), "board_name": r[1]} for r in rows]
+    return dedupe_industry_board_catalog(items)
+
+
 def _normalize_code(code: str) -> str:
     s = str(code).strip()
     if s.isdigit() and len(s) < 6:

@@ -165,7 +165,8 @@ class TestBoardConstituentsImport:
         assert _normalize_import_board_code("1680") == "BK1680"
         assert _normalize_import_board_code("1680.0") == "BK1680"
         assert _normalize_import_board_code("BK1680") == "BK1680"
-        assert _normalize_import_board_code("IT服务") == "IT服务"
+        assert _normalize_import_board_code("IT服务", board_type="industry") == "IT服务"
+        assert _normalize_import_board_code("医疗服务", board_type="industry") == "医疗服务"
 
     def test_parse_all_constituents_missing_board_col(self):
         csv_text = "stock_code,stock_name\n000001,平安银行\n"

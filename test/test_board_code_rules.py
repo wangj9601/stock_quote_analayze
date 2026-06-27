@@ -18,5 +18,6 @@ class TestBoardCodeRules:
 
     def test_industry_bk_format(self):
         assert is_industry_board_code("BK0479") is True
-        assert is_industry_board_code("贵金属") is False
+        assert is_industry_board_code("贵金属") is True
+        assert is_industry_board_code("IT服务") is True
         assert is_concept_board_code("贵金属") is False

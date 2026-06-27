@@ -163,12 +163,25 @@ def parse_constituents_file(filename: str, content: bytes) -> Tuple[List[Dict[st
     return rows, issues
 
 
-def _normalize_import_board_code(raw: str) -> str:
-    s = str(raw or "").strip().upper()
+def _normalize_import_board_code(raw: str, board_type: str = "concept") -> str:
+    s = str(raw or "").strip()
+    s = s.lstrip("'").lstrip("’").strip()
+    if board_type == "industry":
+        from backend_api.utils.bk_board_code import normalize_industry_board_code
+
+        code = normalize_industry_board_code(s)
+        if code:
+            return code
+        su = s.upper()
+        if re.match(r"^\d+\.0$", su):
+            su = su[:-2]
+        if re.match(r"^\d{4,}$", su):
+            return normalize_industry_board_code(f"BK{su}") or f"BK{su}"
+        return ""
+    s = s.upper()
     if re.match(r"^\d+\.0$", s):
         s = s[:-2]
     s = s.lstrip("'").lstrip("’").strip()
-    # Excel 可能把 BK1680 读成纯数字 1680
     if re.match(r"^\d{4,}$", s):
         s = f"BK{s}"
     return s
@@ -194,6 +207,7 @@ def _hint_missing_board_column(columns: List[str], name_col: Optional[str], code
 def parse_all_constituents_file(
     filename: str,
     content: bytes,
+    board_type: str = "concept",
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]]]:
     """
     解析全量成分股导入文件，返回 (有效行, 错误/跳过行)。
@@ -225,7 +239,7 @@ def parse_all_constituents_file(
 
     for idx, row in df.iterrows():
         row_no = int(idx) + 2
-        board_code = _normalize_import_board_code(_cell_str(row.get(board_col)))
+        board_code = _normalize_import_board_code(_cell_str(row.get(board_col)), board_type=board_type)
         board_name = _cell_str(row.get(board_name_col)) if board_name_col else ""
         stock_name = _cell_str(row.get(name_col)) if name_col else ""
         stock_code = _cell_str(row.get(code_col)) if code_col else ""
