@@ -13,6 +13,15 @@ class StockGMSTracePage {
         this.backtestPollCount = 0;
         this.backtestTaskId = '';
         this.maxBacktestPolls = 900;
+        this.traceConfigId = null;
+        this.traceConfigOptions = [];
+        /** 当前策略版本摘要（得分明细展示，与选股页一致） */
+        this.gmsConfigMeta = null;
+        this.forceComputeRunning = false;
+        this.forceComputePollTimer = null;
+        this.forceComputeTaskId = '';
+        this.forceComputePollCount = 0;
+        this.maxForceComputePolls = 3600;
         this.init();
     }
 
@@ -50,7 +59,10 @@ class StockGMSTracePage {
     }
 
     bindEvents() {
-        document.getElementById('searchBtn').addEventListener('click', () => this.fetchData());
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            if (this.forceComputeRunning) return;
+            this.fetchData();
+        });
         document.getElementById('forceComputeBtn').addEventListener('click', () => this.forceCompute());
         document.getElementById('firstPage').addEventListener('click', () => this.goToPage(1));
         document.getElementById('prevPage').addEventListener('click', () => this.goToPage(this.currentPage - 1));
@@ -118,11 +130,20 @@ class StockGMSTracePage {
         const empty = document.getElementById('emptyMsg');
         loading.style.display = 'block';
         empty.style.display = 'none';
+        if (!forceCompute) {
+            loading.textContent = '正在加载 GMS 信号追溯，请稍候…';
+        }
 
         let url = `${this.getApiBase()}/api/stock/gms-signal-trace?code=${encodeURIComponent(this.currentStockCode)}`;
         if (startDate) url += `&start_date=${startDate}`;
         if (endDate) url += `&end_date=${endDate}`;
-        if (forceCompute) url += '&force_compute=1';
+        if (forceCompute) {
+            this.syncActiveConfigFromTabs();
+            url += '&force_compute=1';
+        }
+        if (this.traceConfigId != null && this.traceConfigId !== '') {
+            url += `&config_id=${encodeURIComponent(String(this.traceConfigId))}`;
+        }
 
         try {
             const resp = await fetch(url);
@@ -134,11 +155,27 @@ class StockGMSTracePage {
                     '<tr><td colspan="13">加载失败: ' + (json.message || '未知错误') + '</td></tr>';
                 return;
             }
+            this.traceConfigOptions = Array.isArray(json.configs) ? json.configs : [];
+            if (json.config_id != null) {
+                this.traceConfigId = json.config_id;
+            }
+            if (json.gms_config_meta && typeof json.gms_config_meta === 'object') {
+                this.gmsConfigMeta = json.gms_config_meta;
+            } else {
+                const cfgName = json.config_name || this.getActiveConfigLabel();
+                this.gmsConfigMeta = {
+                    strategy_config_id: json.config_id || this.traceConfigId,
+                    strategy_config_name: cfgName,
+                    scoring_mechanism: '',
+                    scoring_mechanism_label: '',
+                };
+            }
+            this.renderConfigTabs();
             this.allData = json.data || [];
-            if (json.message) {
+            if (json.message && !forceCompute) {
                 empty.textContent = json.message;
                 empty.style.display = this.allData.length === 0 ? 'block' : 'none';
-            } else {
+            } else if (!json.message) {
                 empty.style.display = this.allData.length === 0 ? 'block' : 'none';
             }
             this.totalPages = Math.max(1, Math.ceil(this.allData.length / this.pageSize));
@@ -153,7 +190,210 @@ class StockGMSTracePage {
     }
 
     forceCompute() {
-        this.fetchData(true);
+        if (this.forceComputeRunning) return;
+        this.syncActiveConfigFromTabs();
+        const label = this.getActiveConfigLabel();
+        if (!confirm(`将按「${label}」重新计算该股全部交易日的 GMS 信号（仅影响该策略版本），是否继续？`)) {
+            return;
+        }
+        void this.startForceComputeTask();
+    }
+
+    clearForceComputePoll() {
+        if (this.forceComputePollTimer) {
+            clearInterval(this.forceComputePollTimer);
+            this.forceComputePollTimer = null;
+        }
+        this.forceComputePollCount = 0;
+    }
+
+    setForceComputeRunning(running) {
+        this.forceComputeRunning = !!running;
+        const btn = document.getElementById('forceComputeBtn');
+        const searchBtn = document.getElementById('searchBtn');
+        if (btn) {
+            btn.disabled = this.forceComputeRunning;
+            btn.textContent = this.forceComputeRunning ? '正在重新计算…' : '强制重新计算';
+        }
+        if (searchBtn) searchBtn.disabled = this.forceComputeRunning;
+        const tabs = document.getElementById('gmsTraceConfigTabs');
+        if (tabs) {
+            tabs.querySelectorAll('[data-config-id]').forEach((el) => {
+                el.disabled = this.forceComputeRunning;
+            });
+        }
+    }
+
+    renderForceComputeProgress(task) {
+        const area = document.getElementById('forceComputeProgress');
+        if (!area) return;
+        area.style.display = 'block';
+        const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
+        const msg = task.message || '';
+        const total = task.total != null && task.total > 0
+            ? ` · ${task.current || 0}/${task.total}`
+            : '';
+        const statusLabel = task.status === 'completed' ? '已完成'
+            : (task.status === 'failed' ? '失败' : '计算中');
+        area.innerHTML = `
+            <div>GMS 信号重算: <strong>${escapeHtml(statusLabel)}</strong>${msg ? ` · ${escapeHtml(String(msg))}${total}` : ''}</div>
+            <div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>
+        `;
+    }
+
+    async startForceComputeTask() {
+        if (!this.currentStockCode) {
+            alert('请先选择股票');
+            return;
+        }
+        this.clearForceComputePoll();
+        this.setForceComputeRunning(true);
+        const area = document.getElementById('forceComputeProgress');
+        if (area) {
+            area.style.display = 'block';
+            area.innerHTML = '<div>正在提交重算任务…</div><div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:5%"></div></div>';
+        }
+        const loading = document.getElementById('loadingMsg');
+        if (loading) loading.style.display = 'none';
+
+        const url = `${this.getApiBase()}/api/stock/gms-signal-trace/recompute`;
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: this.currentStockCode,
+                    config_id: this.traceConfigId,
+                }),
+            });
+            const json = await resp.json().catch(() => ({}));
+            if (!resp.ok || !json.success) {
+                throw new Error(json.message || json.detail || resp.statusText || '提交失败');
+            }
+            this.forceComputeTaskId = json.data?.task_id || '';
+            if (!this.forceComputeTaskId) {
+                throw new Error('未返回任务 ID');
+            }
+            if (json.data?.already_running) {
+                this.renderForceComputeProgress({
+                    status: 'running',
+                    progress: 0,
+                    message: json.message || '任务进行中',
+                });
+            }
+            await this.pollForceComputeOnce();
+            this.forceComputePollTimer = setInterval(() => this.pollForceComputeOnce(), 1000);
+        } catch (e) {
+            this.clearForceComputePoll();
+            this.setForceComputeRunning(false);
+            if (area) {
+                area.style.display = 'block';
+                area.innerHTML = `<span class="gms-recompute-error">提交失败: ${escapeHtml(e.message || String(e))}</span>`;
+            }
+        }
+    }
+
+    async pollForceComputeOnce() {
+        if (!this.forceComputeTaskId) return;
+        this.forceComputePollCount += 1;
+        if (this.forceComputePollCount > this.maxForceComputePolls) {
+            this.clearForceComputePoll();
+            this.setForceComputeRunning(false);
+            const area = document.getElementById('forceComputeProgress');
+            if (area) {
+                area.innerHTML = '<span class="gms-recompute-error">等待超时，请刷新页面后重试</span>';
+            }
+            return;
+        }
+        const url = `${this.getApiBase()}/api/stock/gms-signal-trace/recompute/${encodeURIComponent(this.forceComputeTaskId)}`;
+        try {
+            const resp = await fetch(url);
+            const json = await resp.json().catch(() => ({}));
+            if (!resp.ok || !json.success) {
+                throw new Error(json.detail || json.message || resp.statusText);
+            }
+            const task = json.data;
+            if (!task) return;
+            this.renderForceComputeProgress(task);
+            const st = task.status;
+            if (st === 'completed' || st === 'failed') {
+                this.clearForceComputePoll();
+                this.setForceComputeRunning(false);
+                if (st === 'completed') {
+                    if (window.CommonUtils && task.message) {
+                        CommonUtils.showToast(task.message, 'success');
+                    }
+                    await this.fetchData(false);
+                    const area = document.getElementById('forceComputeProgress');
+                    if (area && task.message) {
+                        area.style.display = 'block';
+                        this.renderForceComputeProgress({ ...task, progress: 100 });
+                    }
+                } else {
+                    const area = document.getElementById('forceComputeProgress');
+                    if (area) {
+                        area.innerHTML = `<span class="gms-recompute-error">${escapeHtml(task.error || task.message || '计算失败')}</span>`;
+                    }
+                }
+            }
+        } catch (e) {
+            this.clearForceComputePoll();
+            this.setForceComputeRunning(false);
+            const area = document.getElementById('forceComputeProgress');
+            if (area) {
+                area.innerHTML = `<span class="gms-recompute-error">查询进度失败: ${escapeHtml(e.message || String(e))}</span>`;
+            }
+        }
+    }
+
+    syncActiveConfigFromTabs() {
+        const active = document.querySelector('#gmsTraceConfigTabs .gms-trace-config-tab.active');
+        if (active) {
+            const cid = parseInt(active.getAttribute('data-config-id'), 10);
+            if (cid) this.traceConfigId = cid;
+            return;
+        }
+        if (this.traceConfigId == null && this.traceConfigOptions.length) {
+            const def = this.traceConfigOptions.find((o) => o.is_default) || this.traceConfigOptions[0];
+            if (def) this.traceConfigId = def.config_id;
+        }
+    }
+
+    getActiveConfigLabel() {
+        const opt = (this.traceConfigOptions || []).find(
+            (o) => String(o.config_id) === String(this.traceConfigId),
+        );
+        return opt ? (opt.display_name || opt.name || `配置${opt.config_id}`) : '当前策略版本';
+    }
+
+    renderConfigTabs() {
+        const wrap = document.getElementById('gmsTraceConfigTabs');
+        if (!wrap) return;
+        const options = this.traceConfigOptions || [];
+        if (options.length <= 1) {
+            wrap.style.display = 'none';
+            wrap.innerHTML = '';
+            return;
+        }
+        wrap.style.display = 'flex';
+        const activeId = this.traceConfigId;
+        wrap.innerHTML = options.map((opt) => {
+            const id = opt.config_id;
+            const label = escapeHtml(opt.display_name || opt.name || `配置${id}`);
+            const cnt = opt.record_count != null ? ` (${opt.record_count})` : '';
+            const cls = String(id) === String(activeId) ? 'gms-trace-config-tab active' : 'gms-trace-config-tab';
+            return `<button type="button" class="${cls}" data-config-id="${id}">${label}${cnt}</button>`;
+        }).join('') + '<span class="gms-trace-config-tab-hint">切换版本查看；「强制重新计算」仅重算当前选中版本</span>';
+        wrap.querySelectorAll('[data-config-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (this.forceComputeRunning) return;
+                const cid = parseInt(btn.getAttribute('data-config-id'), 10);
+                if (!cid || String(cid) === String(this.traceConfigId)) return;
+                this.traceConfigId = cid;
+                this.currentPage = 1;
+                void this.fetchData(false);
+            });
+        });
     }
 
     fmtPct(v) {
@@ -173,103 +413,33 @@ class StockGMSTracePage {
         return grade ? `${s} (${grade})` : s;
     }
 
-    /** 构建得分明细 HTML（参考 GMS 筛选主页） */
-    buildScoreDetailHtml(sd) {
-        const accS = (sd.accumulation_s_threshold != null && !isNaN(sd.accumulation_s_threshold)) ? sd.accumulation_s_threshold : 85;
-        const accA = (sd.accumulation_a_threshold != null && !isNaN(sd.accumulation_a_threshold)) ? sd.accumulation_a_threshold : 70;
-        const momFull = (sd.momentum_full_threshold != null && !isNaN(sd.momentum_full_threshold)) ? sd.momentum_full_threshold : 90;
-        const momBatch = (sd.momentum_batch_threshold != null && !isNaN(sd.momentum_batch_threshold)) ? sd.momentum_batch_threshold : 80;
-        const fzTiers = sd.acc_fz_tiers || [2.5, 1.5];
-        const balTiers = sd.balance_tiers || [0.01, 0.015];
-        const volShrink = sd.vol_shrink_tiers || [0.6, 0.8];
-        const ratioD1Tiers = sd.ratio_d1_tiers || [0.001, 0.03];
-        const volAttack = sd.vol_attack_tiers || [2.0, 1.5];
-        const wAccFz = (sd.weight_acc_fz != null && !isNaN(sd.weight_acc_fz)) ? sd.weight_acc_fz : 30;
-        const wAccBal = (sd.weight_acc_balance != null && !isNaN(sd.weight_acc_balance)) ? sd.weight_acc_balance : 40;
-        const wAccVol = (sd.weight_acc_volume != null && !isNaN(sd.weight_acc_volume)) ? sd.weight_acc_volume : 30;
-        const wMomD1 = (sd.weight_mom_ratio_d1 != null && !isNaN(sd.weight_mom_ratio_d1)) ? sd.weight_mom_ratio_d1 : 40;
-        const wMomDev = (sd.weight_mom_deviation != null && !isNaN(sd.weight_mom_deviation)) ? sd.weight_mom_deviation : 30;
-        const wMomVol = (sd.weight_mom_volume != null && !isNaN(sd.weight_mom_volume)) ? sd.weight_mom_volume : 30;
-        let gmsDominantHint = '';
-        const _acc = sd.score_accumulation;
-        const _mom = sd.score_momentum;
-        const _an = (_acc != null && !isNaN(_acc)) ? Number(_acc) : NaN;
-        const _mn = (_mom != null && !isNaN(_mom)) ? Number(_mom) : NaN;
-        if (!isNaN(_an) || !isNaN(_mn)) {
-            if (!isNaN(_an) && !isNaN(_mn)) {
-                if (_an > _mn) gmsDominantHint = '当前主导：均值收敛态（蓄势）。';
-                else if (_mn > _an) gmsDominantHint = '当前主导：动量溢出态。';
-                else gmsDominantHint = '两模块小计相同。';
-            } else if (!isNaN(_an)) gmsDominantHint = '当前主导：均值收敛态（蓄势）。';
-            else gmsDominantHint = '当前主导：动量溢出态。';
-        }
-        const gmsFmt = (v, type) => {
-            if (v == null || (typeof v === 'number' && isNaN(v))) return '--';
-            if (type === 'pct') return (v * 100).toFixed(2) + '%';
-            if (type === 'int') return String(Math.round(v));
-            if (type === 'vol') return (v >= 10000 ? (v / 10000).toFixed(2) + '万手' : Number(v).toFixed(0) + '手');
-            if (type === 'price') return typeof v === 'number' ? v.toFixed(2) : String(v);
-            if (type === 'ratio') return typeof v === 'number' ? v.toFixed(2) : String(v);
-            if (type === 'num') return typeof v === 'number' ? v.toFixed(4) : String(v);
-            return String(v);
+    /** 构建得分明细 HTML（与 GMS 选股页共用 GmsScoreDetail） */
+    buildScoreDetailHtml(row) {
+        const sd = {
+            ratio_d: row.ratio_d,
+            avg_volume_20d: row.avg_volume_20d,
+            current_volume: row.current_volume,
+            ratio_d20: row.ratio_d20,
+            ratio_d1: row.ratio_d1,
+            delta: row.delta,
+            d: row.d,
+            rising_days: row.rising_days,
+            falling_days: row.falling_days,
+            fz_ratio: row.fz_ratio,
+            instant_deviation: row.instant_deviation,
+            volume_ratio: row.volume_ratio,
+            score_accumulation: row.score_accumulation,
+            score_momentum: row.score_momentum,
+            score_total: row.score_total,
+            accumulation_grade: row.accumulation_grade,
+            momentum_grade: row.momentum_grade,
+            ...(row.score_detail || {}),
+            ...(this.gmsConfigMeta || {}),
         };
-        return `
-            <div class="gms-score-detail-inner">
-                <div class="gms-score-detail-section">
-                    <strong>【均值收敛态】得分明细</strong>
-                    <table class="gms-weight-table">
-                        <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
-                        <tbody>
-                            <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
-                            <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0] * 100).toFixed(1)}%→满分; ≤${(balTiers[1] * 100).toFixed(1)}%→1/2</td></tr>
-                            <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
-                            <tr><td>均值收敛态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="gms-score-detail-section">
-                    <strong>【动量溢出态】得分明细</strong>
-                    <table class="gms-weight-table">
-                        <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
-                        <tbody>
-                            <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1] * 100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
-                            <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
-                            <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
-                            <tr><td>动量溢出态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="gms-score-detail-section">
-                    <strong>综合</strong> 总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}；信号强度=总分/100
-                    <p class="gms-total-hint-text" style="font-size:12px;color:#666;margin:6px 0 0 0;line-height:1.45;">
-                        总分 = max(均值收敛态小计, 动量溢出态小计)，非两模块分数相加。
-                        ${gmsDominantHint ? '<br>' + gmsDominantHint : ''}
-                    </p>
-                </div>
-                <div class="gms-score-detail-section gms-indicators-section">
-                    <strong>计算指标细项</strong>
-                    <table class="gms-weight-table gms-indicators-table">
-                        <tbody>
-                            <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格${sd.d1_date ? '，交易日期 ' + sd.d1_date : ''}</td></tr>
-                            <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格${sd.d20_date ? '，交易日期 ' + sd.d20_date : ''}</td></tr>
-                            <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
-                            <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
-                            <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
-                            <tr><td>Δ/d₂₀（宏观位移/收盘价）</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>左侧买点粘合用 |Δ/d₂₀|；≠ 下方均线乖离 Δ₂₀/d</td></tr>
-                            <tr><td>Δ/d₁（突变率）</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
-                            <tr><td>Δ₂₀/d（均线乖离）</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>(d₂₀−d)/d；不是左侧判定用的 Δ/d₂₀</td></tr>
-                            <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
-                            <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
-                            <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>
-                            <tr><td>m₂₀ (当日成交量)</td><td>${gmsFmt(sd.current_volume, 'vol')}</td><td>当日成交量</td></tr>
-                            <tr><td>量比 (m₂₀/m)</td><td>${gmsFmt(sd.volume_ratio, 'ratio')}</td><td>放量/地量判断</td></tr>
-                            <tr><td>F/Z (数方比)</td><td>${gmsFmt(sd.fz_ratio, 'ratio')}</td><td>蓄势判断</td></tr>
-                            <tr><td>d₂₀ - d (价格vs均线)</td><td>${gmsFmt(sd.instant_deviation, 'num')}</td><td>价格相对均线偏离</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
+        if (typeof GmsScoreDetail !== 'undefined' && GmsScoreDetail.buildHtml) {
+            return GmsScoreDetail.buildHtml(sd, this.gmsConfigMeta, this.traceConfigId);
+        }
+        return '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
     }
 
     renderTable() {

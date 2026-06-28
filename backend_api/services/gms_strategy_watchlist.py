@@ -91,9 +91,6 @@ def ensure_gms_strategy_watchlist_stock(
     若该股不在 GMS 策略观察股表中，则写入主启用策略版本。
     返回 True 表示本次新写入（未 commit，由调用方统一提交）。
     """
-    if is_in_gms_strategy_watchlist(db, market=market, code=code):
-        return False
-
     wl_market = _watchlist_market(market)
     wl_code = _watchlist_code(wl_market, code)
     if not wl_code:
@@ -103,6 +100,18 @@ def ensure_gms_strategy_watchlist_stock(
     version = _resolve_primary_active_version(db)
     if not version:
         logger.warning("GMS 观察股同步跳过：无启用的策略版本")
+        return False
+
+    already = (
+        db.query(GMSStrategyVersionStock.id)
+        .filter(
+            GMSStrategyVersionStock.version_id == int(version.id),
+            GMSStrategyVersionStock.market == wl_market,
+            GMSStrategyVersionStock.stock_code == wl_code,
+        )
+        .first()
+    )
+    if already or is_in_gms_strategy_watchlist(db, market=market, code=code):
         return False
 
     stock_name = (name or "").strip() or _lookup_stock_name(db, wl_market, wl_code) or wl_code

@@ -1817,7 +1817,40 @@ async def get_gms_strategy(
             if mt not in ("CN", "HK", "ETF"):
                 mt = _fallback_gms_indicator_market_type(code, scope, cn_code_set)
             market = "HK" if mt == "HK" else "CN"
+            item["market"] = market
             item["industry"] = _gms_industry_map.get((market, _gms_industry_norm_code(code)))
+
+        observe_code_keys: set[str] = set()
+        if token:
+            try:
+                from backend_api.models import User
+                from backend_api.gms_trade_observe_routes import list_user_trade_observe_code_keys
+
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                username = payload.get("sub")
+                if username:
+                    observe_user = db.query(User).filter(User.username == username).first()
+                    if observe_user:
+                        observe_code_keys = set(
+                            list_user_trade_observe_code_keys(db, int(observe_user.id))
+                        )
+            except (JWTError, Exception):
+                observe_code_keys = set()
+        for item in results_data:
+            code = str(item.get("symbol") or item.get("code") or "").strip()
+            if not code:
+                item["in_trade_observe"] = False
+                continue
+            mt = item.get("market")
+            if not mt:
+                mt = code_to_gms_mt.get(code)
+                if mt not in ("CN", "HK", "ETF"):
+                    mt = _fallback_gms_indicator_market_type(code, scope, cn_code_set)
+                mt = "HK" if mt == "HK" else "CN"
+                item["market"] = mt
+            market = "HK" if str(mt).upper() == "HK" else "CN"
+            key = f"{market}:{_gms_industry_norm_code(code)}"
+            item["in_trade_observe"] = key in observe_code_keys
 
         # 按信号强度由高到低排列
         def _gms_signal_sort_key(x):

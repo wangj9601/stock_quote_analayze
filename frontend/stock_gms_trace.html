@@ -28,6 +28,8 @@
                     <button id="forceComputeBtn" class="btn-secondary">强制重新计算</button>
                 </div>
             </div>
+            <div id="gmsTraceConfigTabs" class="gms-trace-config-tabs" style="display:none;"></div>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
             <div id="loadingMsg" class="loading-msg" style="display:none;">正在计算信号追溯，请稍候...</div>
             <div id="emptyMsg" class="empty-msg" style="display:none;">该股票暂无 GMS 指标数据</div>
             <div class="table-wrapper">
@@ -100,6 +102,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/gms_score_detail.js"></script>
     <script src="js/stock_gms_trace.js"></script>
 
     <footer class="icp-footer">

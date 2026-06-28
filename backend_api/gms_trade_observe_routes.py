@@ -364,19 +364,28 @@ def list_gms_trade_observe(
     )
 
 
+def list_user_trade_observe_code_keys(db: Session, user_id: int) -> List[str]:
+    """当前用户交易观察 code 键（CN:000001，code 已归一化），供信号列表按钮态。"""
+    _purge_observe_rows_already_formal_traded(db, user_id)
+    rows = (
+        db.query(GmsTradeObserveStock.market, GmsTradeObserveStock.code)
+        .filter(GmsTradeObserveStock.user_id == user_id)
+        .all()
+    )
+    return [
+        f"{(m or 'CN').upper()}:{_normalize_code(c)}"
+        for m, c in rows
+        if c
+    ]
+
+
 @router.get("/codes", response_model=List[str])
 def list_gms_trade_observe_codes(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """当前用户已加入观察的 code 列表（用于信号列表按钮态）。"""
-    _purge_observe_rows_already_formal_traded(db, user.id)
-    rows = (
-        db.query(GmsTradeObserveStock.code, GmsTradeObserveStock.market)
-        .filter(GmsTradeObserveStock.user_id == user.id)
-        .all()
-    )
-    return [f"{(m or 'CN').upper()}:{c}" for c, m in rows]
+    return list_user_trade_observe_code_keys(db, user.id)
 
 
 @router.post("/add", response_model=GmsTradeObserveItem)

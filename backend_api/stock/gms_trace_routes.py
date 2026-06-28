@@ -4,8 +4,10 @@ GMS 信号追溯 API 路由
 """
 
 import logging
+import threading
+import uuid
 from copy import deepcopy
-from typing import Optional, List
+from typing import Optional, List, Dict, Callable
 from datetime import datetime
 from collections import defaultdict
 
@@ -13,6 +15,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from backend_api.database import get_db
 from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators
@@ -20,6 +23,93 @@ from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stock", tags=["GMS信号追溯"])
+
+# 强制重新计算：内存任务状态（单进程内有效）
+_trace_recompute_lock = threading.Lock()
+_trace_recompute_tasks: Dict[str, dict] = {}
+
+
+def _find_running_trace_recompute(code: str, config_id: int) -> Optional[str]:
+    with _trace_recompute_lock:
+        for tid, task in _trace_recompute_tasks.items():
+            if (
+                task.get("status") == "running"
+                and task.get("code") == code
+                and int(task.get("config_id") or 0) == int(config_id)
+            ):
+                return tid
+    return None
+
+
+def _update_trace_recompute_task(task_id: str, **fields) -> None:
+    with _trace_recompute_lock:
+        if task_id in _trace_recompute_tasks:
+            _trace_recompute_tasks[task_id].update(fields)
+
+
+def _get_trace_recompute_task(task_id: str) -> Optional[dict]:
+    with _trace_recompute_lock:
+        task = _trace_recompute_tasks.get(task_id)
+        return dict(task) if task else None
+
+
+class GmsTraceRecomputeRequest(BaseModel):
+    code: str = Field(..., description="股票代码")
+    config_id: Optional[int] = Field(None, ge=1, description="GMS 策略参数版本 ID")
+
+
+def _run_trace_recompute_background(
+    task_id: str,
+    code: str,
+    market_type: str,
+    config_id: int,
+    config: dict,
+    config_display: str,
+) -> None:
+    from backend_api.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        _update_trace_recompute_task(task_id, status="running", message="正在清除旧记录…", progress=0)
+
+        db.query(GMSSignalTrace).filter(
+            GMSSignalTrace.code == code,
+            GMSSignalTrace.market_type == market_type,
+            GMSSignalTrace.config_id == config_id,
+        ).delete(synchronize_session=False)
+        db.commit()
+
+        def progress_cb(current: int, total: int, msg: str) -> None:
+            pct = int(round(current * 100 / total)) if total else 0
+            _update_trace_recompute_task(
+                task_id,
+                progress=min(99, pct),
+                message=msg,
+                current=current,
+                total=total,
+            )
+
+        count = _compute_gms_trace_for_stock(
+            db, code, market_type, config, config_id, progress_cb=progress_cb
+        )
+        _update_trace_recompute_task(
+            task_id,
+            status="completed",
+            progress=100,
+            saved_count=count,
+            message=f"已按「{config_display}」重新计算，写入 {count} 条",
+        )
+        logger.info("GMS 追溯异步重算完成: %s config_id=%s, 写入 %s 条", code, config_id, count)
+    except Exception as e:
+        logger.exception("GMS 追溯异步重算失败 task_id=%s", task_id)
+        _update_trace_recompute_task(
+            task_id,
+            status="failed",
+            error=str(e),
+            message=f"计算失败: {e}",
+        )
+    finally:
+        db.close()
 
 
 def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
@@ -83,6 +173,135 @@ def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
             out["ratio_d"] = float(bias)
         except (TypeError, ValueError):
             pass
+    ma60_d = getattr(row, "ma60_d", None)
+    if ma60_d is not None:
+        try:
+            out["ma60_d"] = float(ma60_d)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _calculator_score_detail_meta(config: dict) -> dict:
+    """从 GMSIndicatorsCalculator 提取权重/阈值等，供得分明细展示。"""
+    from backend_core.strategies.gms.indicators_calculator import GMSIndicatorsCalculator
+
+    calc = GMSIndicatorsCalculator(config)
+    return {
+        "accumulation_fz_min": calc.accumulation_fz_min,
+        "balance_ratio_max": calc.balance_ratio_max,
+        "momentum_volume_ratio_min": calc.momentum_volume_ratio_min,
+        "accumulation_s_threshold": calc.acc_s_threshold,
+        "accumulation_a_threshold": calc.acc_a_threshold,
+        "momentum_full_threshold": calc.mom_full_threshold,
+        "momentum_batch_threshold": calc.mom_batch_threshold,
+        "acc_fz_tiers": calc.acc_fz_tiers,
+        "balance_tiers": calc.balance_tiers,
+        "vol_shrink_tiers": calc.vol_shrink_tiers,
+        "ratio_d1_tiers": calc.ratio_d1_tiers,
+        "vol_attack_tiers": calc.vol_attack_tiers,
+        "weight_acc_fz": calc.weight_acc_fz,
+        "weight_acc_balance": calc.weight_acc_balance,
+        "weight_acc_volume": calc.weight_acc_volume,
+        "weight_mom_ratio_d1": calc.weight_mom_ratio_d1,
+        "weight_mom_deviation": calc.weight_mom_deviation,
+        "weight_mom_volume": calc.weight_mom_volume,
+    }
+
+
+def _row_dict_to_score_detail(row_dict: dict, calc_meta: dict, config: dict) -> dict:
+    """将 trace 扁平行 + 计算器参数组装为与选股页一致的 score_detail。"""
+    mechanism = (config.get("scoring") or {}).get("mechanism") or "tiered_dual_max"
+    acc = row_dict.get("score_accumulation")
+    mom = row_dict.get("score_momentum")
+    base_total = max(float(acc or 0), float(mom or 0)) if acc is not None or mom is not None else None
+    sd = {
+        "score_accumulation": row_dict.get("score_accumulation"),
+        "score_momentum": row_dict.get("score_momentum"),
+        "score_total": row_dict.get("score_total"),
+        "accumulation_grade": row_dict.get("accumulation_grade") or "",
+        "momentum_grade": row_dict.get("momentum_grade") or "",
+        "score_acc_fz": row_dict.get("score_acc_fz"),
+        "score_acc_balance": row_dict.get("score_acc_balance"),
+        "score_acc_volume": row_dict.get("score_acc_volume"),
+        "score_mom_ratio_d1": row_dict.get("score_mom_ratio_d1"),
+        "score_mom_deviation": row_dict.get("score_mom_deviation"),
+        "score_mom_volume": row_dict.get("score_mom_volume"),
+        "acc_fz_judge": row_dict.get("acc_fz_judge") or "",
+        "acc_balance_judge": row_dict.get("acc_balance_judge") or "",
+        "acc_volume_judge": row_dict.get("acc_volume_judge") or "",
+        "mom_ratio_d1_judge": row_dict.get("mom_ratio_d1_judge") or "",
+        "mom_deviation_judge": row_dict.get("mom_deviation_judge") or "",
+        "mom_volume_judge": row_dict.get("mom_volume_judge") or "",
+        "delta": row_dict.get("delta"),
+        "d": row_dict.get("d"),
+        "d1": row_dict.get("d1"),
+        "d20": row_dict.get("d20"),
+        "d1_date": row_dict.get("d1_date"),
+        "d20_date": row_dict.get("d20_date"),
+        "ratio_d20": row_dict.get("ratio_d20"),
+        "ratio_d1": row_dict.get("ratio_d1"),
+        "ratio_d": row_dict.get("ratio_d"),
+        "rising_days": row_dict.get("rising_days"),
+        "falling_days": row_dict.get("falling_days"),
+        "avg_volume_20d": row_dict.get("avg_volume_20d"),
+        "current_volume": row_dict.get("current_volume"),
+        "volume_ratio": row_dict.get("volume_ratio"),
+        "fz_ratio": row_dict.get("fz_ratio"),
+        "instant_deviation": row_dict.get("instant_deviation"),
+        "ma60_d": row_dict.get("ma60_d"),
+        "scoring_mechanism": mechanism,
+        "score_base_total": base_total,
+        "score_penalty_deduction": row_dict.get("score_penalty_deduction"),
+        "penalties": row_dict.get("penalties") if isinstance(row_dict.get("penalties"), list) else [],
+    }
+    sd.update(calc_meta)
+    return sd
+
+
+def _attach_trace_score_detail(
+    db: Session,
+    row_dict: dict,
+    config: dict,
+    gms_config_meta: dict,
+    calc_meta: dict,
+) -> dict:
+    """为追溯行附加完整 score_detail（与 GMS 选股页一致）。"""
+    from backend_api.stock.stock_screening_routes import (
+        _fill_gms_score_fallback,
+        _inject_gms_score_detail_meta,
+    )
+
+    out = dict(row_dict)
+    mechanism = (config.get("scoring") or {}).get("mechanism") or "tiered_dual_max"
+    code = out.get("code")
+    date_str = str(out.get("date", ""))[:10]
+    market_type = out.get("market_type", "CN")
+
+    need_fallback = (
+        out.get("ma60_d") is None
+        or out.get("ratio_d") is None
+        or out.get("avg_volume_20d") is None
+        or out.get("current_volume") is None
+        or (mechanism == "tiered_dual_penalty" and out.get("score_penalty_deduction") is None)
+    )
+    score_detail = _row_dict_to_score_detail(out, calc_meta, config)
+    if need_fallback and code and date_str:
+        fb = _fill_gms_score_fallback(db, code, date_str, market_type, config)
+        if fb and isinstance(fb.get("score_detail"), dict):
+            fb_sd = fb["score_detail"]
+            for k, v in fb_sd.items():
+                if score_detail.get(k) in (None, "") and v is not None:
+                    score_detail[k] = v
+            if score_detail.get("score_penalty_deduction") is None:
+                score_detail["score_penalty_deduction"] = fb_sd.get("score_penalty_deduction", 0.0)
+            if not score_detail.get("penalties") and fb_sd.get("penalties"):
+                score_detail["penalties"] = fb_sd["penalties"]
+            if score_detail.get("score_base_total") is None and fb_sd.get("score_base_total") is not None:
+                score_detail["score_base_total"] = fb_sd["score_base_total"]
+
+    score_detail = _inject_gms_score_detail_meta(score_detail, gms_config_meta)
+    out["score_detail"] = score_detail
     return out
 
 try:
@@ -229,10 +448,99 @@ def _infer_market_type(code: str) -> str:
     return "HK"
 
 
-def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, config: dict) -> int:
+def _config_display_name(row) -> str:
+    if not row:
+        return "未知版本"
+    label = (getattr(row, "version_label", None) or "").strip()
+    name = (getattr(row, "name", None) or "").strip()
+    if label and name and label != name:
+        return f"{name} · {label}"
+    return label or name or f"配置#{getattr(row, 'id', '?')}"
+
+
+def _list_stock_trace_config_options(db: Session, code: str, market_type: str) -> List[dict]:
+    """策略版本标签：canonical 版本始终展示；record_count 来自该股票 trace 表。"""
+    count_rows = (
+        db.query(GMSSignalTrace.config_id, func.count(GMSSignalTrace.date))
+        .filter(
+            GMSSignalTrace.code == code,
+            GMSSignalTrace.market_type == market_type,
+        )
+        .group_by(GMSSignalTrace.config_id)
+        .all()
+    )
+    counts: Dict[int, int] = {int(cid): int(cnt or 0) for cid, cnt in count_rows}
+    mgr = GMSConfigManager()
+    merged: Dict[int, dict] = {}
+
+    def _append_option(cid: int, row, *, is_default: bool = False, mechanism_label: str = "") -> None:
+        merged[cid] = {
+            "config_id": cid,
+            "name": getattr(row, "name", None) or str(cid),
+            "version_label": getattr(row, "version_label", None) or "",
+            "display_name": _config_display_name(row),
+            "is_default": is_default or bool(getattr(row, "is_default", False)),
+            "record_count": counts.get(cid, 0),
+            "scoring_mechanism_label": mechanism_label or "",
+        }
+
+    for meta in mgr.list_canonical_configs(active_only=True):
+        cid = int(meta["id"])
+        row = mgr.get_config_row(cid)
+        _append_option(
+            cid,
+            row,
+            is_default=bool(meta.get("is_default")),
+            mechanism_label=str(meta.get("scoring_mechanism_label") or ""),
+        )
+
+    for cid, cnt in counts.items():
+        if cid in merged:
+            merged[cid]["record_count"] = cnt
+            continue
+        row = mgr.get_config_row(cid)
+        _append_option(cid, row)
+
+    options = list(merged.values())
+    options.sort(key=lambda x: (0 if x.get("is_default") else 1, x["config_id"]))
+    return options
+
+
+def _resolve_trace_config_id(
+    db: Session,
+    code: str,
+    market_type: str,
+    requested_config_id: Optional[int],
+) -> int:
+    mgr = GMSConfigManager()
+    if requested_config_id is not None:
+        cid = mgr.resolve_config_id(requested_config_id)
+        row = mgr.get_config_row(cid)
+        if not row:
+            raise HTTPException(status_code=404, detail="策略参数版本不存在")
+        if not row.is_active:
+            raise HTTPException(status_code=400, detail="策略参数版本已禁用")
+        return cid
+    options = _list_stock_trace_config_options(db, code, market_type)
+    if options:
+        for opt in options:
+            if opt.get("is_default"):
+                return int(opt["config_id"])
+        return int(options[0]["config_id"])
+    return mgr.resolve_config_id(None)
+
+
+def _compute_gms_trace_for_stock(
+    db: Session,
+    code: str,
+    market_type: str,
+    config: dict,
+    config_id: int,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
+) -> int:
     """
     对单只股票从 mean_frequency_resonance_indicators 的首日到最新日执行 GMS 追溯计算，
-    并写入 gms_signal_trace 表。
+    并写入 gms_signal_trace 表（指定 config_id）。
     返回写入条数。
     """
     if not GMS_AVAILABLE:
@@ -252,6 +560,7 @@ def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, confi
     if not dates:
         return 0
 
+    total_dates = len(dates)
     loader = GMSDataLoader(db)
     engine = GMSStrategyEngine(loader, config)
     stable_days = int(config.get("scoring", {}).get("instant_deviation_stable_days", 3))
@@ -259,6 +568,8 @@ def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, confi
     saved = 0
 
     for i, target_date in enumerate(dates):
+        if progress_cb:
+            progress_cb(i + 1, total_dates, f"正在计算 {target_date}（{i + 1}/{total_dates}）")
         try:
             # 加载当日指标（精确日期，不用 use_latest）
             rows_data = loader.load_indicators(codes, target_date, market_type, use_latest_per_stock=False)
@@ -293,6 +604,7 @@ def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, confi
                 code=code,
                 date=target_date,
                 market_type=market_type,
+                config_id=int(config_id),
                 score_total=ind.score_total,
                 score_accumulation=ind.score_accumulation,
                 score_momentum=ind.score_momentum,
@@ -335,18 +647,99 @@ def _compute_gms_trace_for_stock(db: Session, code: str, market_type: str, confi
     return saved
 
 
+@router.post("/gms-signal-trace/recompute")
+async def start_gms_signal_trace_recompute(
+    body: GmsTraceRecomputeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    异步强制重新计算单股 GMS 信号追溯（当前 config_id）。
+    返回 task_id，前端轮询 GET /gms-signal-trace/recompute/{task_id} 获取进度。
+    """
+    if not GMS_AVAILABLE:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "GMS 策略暂不可用"},
+        )
+
+    code = str(body.code).strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+
+    market_type = _infer_market_type(code)
+    code_norm = _normalize_code(code, market_type)
+
+    mgr = GMSConfigManager()
+    resolved_config_id = _resolve_trace_config_id(db, code_norm, market_type, body.config_id)
+    config = mgr.get_config(resolved_config_id)
+    config_row = mgr.get_config_row(resolved_config_id)
+    config_display = _config_display_name(config_row)
+
+    existing = _find_running_trace_recompute(code_norm, resolved_config_id)
+    if existing:
+        return JSONResponse({
+            "success": True,
+            "data": {"task_id": existing, "already_running": True},
+            "message": "该股票当前策略版本正在重新计算，请稍候",
+        })
+
+    task_id = f"gms_trace_recompute_{uuid.uuid4().hex[:12]}"
+    with _trace_recompute_lock:
+        _trace_recompute_tasks[task_id] = {
+            "task_id": task_id,
+            "status": "pending",
+            "progress": 0,
+            "message": "任务已创建，等待执行…",
+            "code": code_norm,
+            "market_type": market_type,
+            "config_id": resolved_config_id,
+            "config_name": config_display,
+            "current": 0,
+            "total": 0,
+            "saved_count": None,
+            "error": None,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    thread = threading.Thread(
+        target=_run_trace_recompute_background,
+        args=(task_id, code_norm, market_type, resolved_config_id, config, config_display),
+        daemon=True,
+    )
+    thread.start()
+
+    return JSONResponse({
+        "success": True,
+        "data": {
+            "task_id": task_id,
+            "config_id": resolved_config_id,
+            "config_name": config_display,
+        },
+    })
+
+
+@router.get("/gms-signal-trace/recompute/{task_id}")
+async def get_gms_signal_trace_recompute_status(task_id: str):
+    """查询 GMS 信号追溯强制重算任务进度。"""
+    task = _get_trace_recompute_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+    return JSONResponse({"success": True, "data": task})
+
+
 @router.get("/gms-signal-trace")
 async def get_gms_signal_trace(
     code: str = Query(..., description="股票代码"),
     start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    config_id: Optional[int] = Query(None, ge=1, description="GMS 策略参数版本 ID"),
     force_compute: Optional[int] = Query(None, description="1 时强制重新计算"),
     db: Session = Depends(get_db),
 ):
     """
-    查询某股票的 GMS 信号追溯记录。
-    若表中无该股票记录且未传 force_compute：先执行追溯计算并入库，再返回。
-    force_compute=1：重新全量计算后返回。
+    查询某股票的 GMS 信号追溯记录（按 config_id 隔离，避免多版本混显重复）。
+    若该版本无记录且未传 force_compute：先执行追溯计算并入库，再返回。
+    force_compute=1：仅重算当前 config_id 对应版本。
     """
     if not GMS_AVAILABLE:
         return JSONResponse(
@@ -358,36 +751,45 @@ async def get_gms_signal_trace(
     if not code:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
 
-    # 判断市场类型（A股/ETF/港股）
     market_type = _infer_market_type(code)
     code_norm = _normalize_code(code, market_type)
 
     try:
-        config = GMSConfigManager().get_config()
+        mgr = GMSConfigManager()
+        resolved_config_id = _resolve_trace_config_id(db, code_norm, market_type, config_id)
+        config = mgr.get_config(resolved_config_id)
+        config_row = mgr.get_config_row(resolved_config_id)
+        config_options = _list_stock_trace_config_options(db, code_norm, market_type)
+        recompute_message: Optional[str] = None
 
         if force_compute == 1:
-            # 先删除该股票已有追溯记录
             db.query(GMSSignalTrace).filter(
                 GMSSignalTrace.code == code_norm,
                 GMSSignalTrace.market_type == market_type,
-            ).delete()
+                GMSSignalTrace.config_id == resolved_config_id,
+            ).delete(synchronize_session=False)
             db.commit()
-            logger.info(f"GMS 追溯 强制重新计算: {code_norm}")
-            count = _compute_gms_trace_for_stock(db, code_norm, market_type, config)
-            logger.info(f"GMS 追溯 计算完成: {code_norm}, 写入 {count} 条")
+            logger.info("GMS 追溯 强制重新计算: %s config_id=%s", code_norm, resolved_config_id)
+            count = _compute_gms_trace_for_stock(
+                db, code_norm, market_type, config, resolved_config_id
+            )
+            logger.info("GMS 追溯 计算完成: %s config_id=%s, 写入 %s 条", code_norm, resolved_config_id, count)
+            config_options = _list_stock_trace_config_options(db, code_norm, market_type)
+            recompute_message = (
+                f"已按「{_config_display_name(config_row)}」重新计算，写入 {count} 条"
+            )
 
         else:
-            # 检查是否有记录
             exists = (
                 db.query(GMSSignalTrace)
                 .filter(
                     GMSSignalTrace.code == code_norm,
                     GMSSignalTrace.market_type == market_type,
+                    GMSSignalTrace.config_id == resolved_config_id,
                 )
                 .first()
             )
             if not exists:
-                # 检查 mean_frequency_resonance_indicators 是否有该股票数据
                 has_mfr = (
                     db.query(MeanFrequencyResonanceIndicators)
                     .filter(
@@ -401,19 +803,24 @@ async def get_gms_signal_trace(
                         "success": True,
                         "data": [],
                         "total": 0,
+                        "config_id": resolved_config_id,
+                        "config_name": _config_display_name(config_row),
+                        "configs": config_options,
                         "message": "该股票暂无 GMS 指标数据",
                     })
-                # 执行追溯计算
-                logger.info(f"GMS 追溯 首次计算: {code_norm}")
-                count = _compute_gms_trace_for_stock(db, code_norm, market_type, config)
-                logger.info(f"GMS 追溯 计算完成: {code_norm}, 写入 {count} 条")
+                logger.info("GMS 追溯 首次计算: %s config_id=%s", code_norm, resolved_config_id)
+                count = _compute_gms_trace_for_stock(
+                    db, code_norm, market_type, config, resolved_config_id
+                )
+                logger.info("GMS 追溯 计算完成: %s config_id=%s, 写入 %s 条", code_norm, resolved_config_id, count)
+                config_options = _list_stock_trace_config_options(db, code_norm, market_type)
 
-        # 查询返回
         q = (
             db.query(GMSSignalTrace)
             .filter(
                 GMSSignalTrace.code == code_norm,
                 GMSSignalTrace.market_type == market_type,
+                GMSSignalTrace.config_id == resolved_config_id,
             )
         )
         if start_date:
@@ -428,6 +835,7 @@ async def get_gms_signal_trace(
                 "code": r.code,
                 "date": r.date,
                 "market_type": r.market_type,
+                "config_id": getattr(r, "config_id", resolved_config_id),
                 "score_total": r.score_total,
                 "score_accumulation": r.score_accumulation,
                 "score_momentum": r.score_momentum,
@@ -461,15 +869,26 @@ async def get_gms_signal_trace(
                 "mom_volume_judge": getattr(r, "mom_volume_judge", None) or "",
             }
 
+        from backend_api.stock.stock_screening_routes import _gms_strategy_config_meta
+
+        gms_config_meta = _gms_strategy_config_meta(mgr, resolved_config_id, config)
+        calc_meta = _calculator_score_detail_meta(config)
+
         data = [to_dict(r) for r in rows]
-        # 合并指标表中的 d1/d20 与交易日期；再对缺失得分明细的历史记录做 enrichment
+        # 合并指标表中的 d1/d20/ma60 等；补全得分；附加与选股页一致的 score_detail
         for i, item in enumerate(data):
             merged = _merge_mfr_d1_d20_into_trace_dict(db, item)
-            data[i] = _enrich_trace_row_score_detail(db, merged, config)
+            enriched = _enrich_trace_row_score_detail(db, merged, config)
+            data[i] = _attach_trace_score_detail(db, enriched, config, gms_config_meta, calc_meta)
         return JSONResponse({
             "success": True,
             "data": data,
             "total": len(data),
+            "config_id": resolved_config_id,
+            "config_name": _config_display_name(config_row),
+            "gms_config_meta": gms_config_meta,
+            "configs": config_options,
+            "message": recompute_message,
         })
     except Exception as e:
         logger.exception("GMS 信号追溯查询失败")
