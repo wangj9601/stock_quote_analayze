@@ -193,3 +193,26 @@ def test_from_observe_cleans_stale_observe_when_formal_trade_exists(client, memo
     assert r.json()["id"] == trade.id
     assert memory_db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.id == observe.id).first() is None
     assert client.get("/api/stock/gms-formal-trade/list").json()["total"] == 1
+
+
+def test_formal_trade_codes_for_signal_button(client, memory_db, test_user):
+    now = datetime.now()
+    memory_db.add(
+        GmsFormalTrade(
+            user_id=test_user.id,
+            market="CN",
+            code="002709",
+            name="天赐材料",
+            entry_price=50.0,
+            position_lots=1,
+            status="open",
+            entry_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    memory_db.commit()
+
+    r = client.get("/api/stock/gms-formal-trade/codes")
+    assert r.status_code == 200
+    assert "CN:002709" in r.json()

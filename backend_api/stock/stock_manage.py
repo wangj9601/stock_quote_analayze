@@ -14,6 +14,17 @@ import pandas as pd
 import math
 from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 
+# ma_indicators 表 market_type：新数据为 CN/HK，历史数据可能为 A股/港股
+MA_MARKET_TYPES_CN = ('CN', 'A股')
+MA_MARKET_TYPES_HK = ('HK', '港股')
+
+
+def _normalize_indicator_date(value) -> str:
+    if value is None:
+        return ''
+    s = value.strftime('%Y-%m-%d') if hasattr(value, 'strftime') else str(value)
+    return s.strip()[:10]
+
 # 简单内存缓存实现,缓存600秒。
 class DataFrameCache:
     def __init__(self, expire_seconds=600):
@@ -972,7 +983,7 @@ async def get_kline_hist(
             try:
                 ma_query = db.query(MAIndicators).filter(
                     MAIndicators.code == code,
-                    MAIndicators.market_type == 'A股',
+                    MAIndicators.market_type.in_(MA_MARKET_TYPES_CN),
                     MAIndicators.date >= start_date,
                     MAIndicators.date <= end_date
                 ).order_by(MAIndicators.date.asc())
@@ -980,7 +991,7 @@ async def get_kline_hist(
                 ma_records = ma_query.all()
                 ma_dict = {}
                 for record in ma_records:
-                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                    date_str = _normalize_indicator_date(record.date)
                     ma_dict[date_str] = {
                         "ma5": round(float(record.ma5), 4) if record.ma5 is not None else None,
                         "ma10": round(float(record.ma10), 4) if record.ma10 is not None else None,
@@ -1347,7 +1358,7 @@ async def get_ma(
         # 查询MA数据
         ma_query = db.query(MAIndicators).filter(
             MAIndicators.code == code,
-            MAIndicators.market_type == 'A股',
+            MAIndicators.market_type.in_(MA_MARKET_TYPES_CN),
             MAIndicators.date >= start_date,
             MAIndicators.date <= end_date
         ).order_by(MAIndicators.date.asc())
@@ -1356,7 +1367,7 @@ async def get_ma(
         
         result = []
         for record in ma_records:
-            date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+            date_str = _normalize_indicator_date(record.date)
             result.append({
                 "date": date_str,
                 "code": record.code,

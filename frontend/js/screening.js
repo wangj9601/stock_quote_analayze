@@ -15,6 +15,8 @@ const ScreeningPage = {
     gmsSubPanel: 'signals',
     /** 已加入交易观察的 CN:code / HK:code */
     gmsTradeObserveCodeSet: new Set(),
+    /** 已在正式交易中的 CN:code / HK:code（策略信号页也显示「已观察」） */
+    gmsFormalTradeCodeSet: new Set(),
     /** 转正式交易弹窗：当前观察记录 id */
     _gmsFormalTransferObserveId: null,
     /** 编辑正式交易弹窗：当前交易 id */
@@ -121,7 +123,7 @@ const ScreeningPage = {
             this.syncGmsIndustryBoardWrap();
             this.syncGmsSingleStockWrap();
             void this.loadGmsIndustryBoardOptions();
-            void this.loadGmsTradeObserveCodes();
+            void this.loadGmsObservedCodeSets();
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');
@@ -363,7 +365,7 @@ const ScreeningPage = {
             this._hideGmsModal(document.getElementById('gmsFormalTransferModal'));
             this._gmsFormalTransferObserveId = null;
             if (window.CommonUtils) CommonUtils.showToast('已转入正式交易', 'success');
-            await this.loadGmsTradeObserveCodes();
+            await this.loadGmsObservedCodeSets();
             void this.refreshGmsTradeObserveList();
             this._refreshGmsTradeObserveButtonsInSignalTable();
             if (this.gmsSubPanel === 'formal-trade') {
@@ -611,7 +613,9 @@ const ScreeningPage = {
                 throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
             }
             if (window.CommonUtils) CommonUtils.showToast('已删除正式交易记录', 'success');
+            await this.loadGmsObservedCodeSets();
             void this.refreshGmsFormalTradeList();
+            this._refreshGmsTradeObserveButtonsInSignalTable();
         } catch (e) {
             if (window.CommonUtils) CommonUtils.showToast(e.message || '删除失败', 'error');
             if (btnEl) btnEl.disabled = false;
@@ -664,7 +668,15 @@ const ScreeningPage = {
         if (stock && stock.in_trade_observe === true) return true;
         const m = market || this._gmsMarketFromStock(stock);
         const c = code || String(stock?.symbol || stock?.code || '').trim();
-        return this.gmsTradeObserveCodeSet.has(this._gmsTradeObserveKey(m, c));
+        const key = this._gmsTradeObserveKey(m, c);
+        return this.gmsTradeObserveCodeSet.has(key) || this.gmsFormalTradeCodeSet.has(key);
+    },
+
+    async loadGmsObservedCodeSets() {
+        await Promise.all([
+            this.loadGmsTradeObserveCodes(),
+            this.loadGmsFormalTradeCodes(),
+        ]);
     },
 
     _resolveGmsSignalDate(stock) {
@@ -700,6 +712,34 @@ const ScreeningPage = {
             falling_days: stock.falling_days,
             score_detail: sd,
         };
+    },
+
+    async loadGmsFormalTradeCodes() {
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            this.gmsFormalTradeCodeSet = new Set();
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-formal-trade/codes`);
+            if (!res.ok) {
+                this.gmsFormalTradeCodeSet = new Set();
+                return;
+            }
+            const codes = await res.json();
+            const normalized = (Array.isArray(codes) ? codes : []).map((raw) => {
+                const s = String(raw || '');
+                const idx = s.indexOf(':');
+                if (idx <= 0) return s;
+                const m = s.slice(0, idx).toUpperCase();
+                const c = s.slice(idx + 1);
+                return this._gmsTradeObserveKey(m, c);
+            });
+            this.gmsFormalTradeCodeSet = new Set(normalized);
+        } catch (_) {
+            this.gmsFormalTradeCodeSet = new Set();
+        }
     },
 
     async loadGmsTradeObserveCodes() {
@@ -845,7 +885,13 @@ const ScreeningPage = {
         const market = this._gmsMarketFromStock(stock);
         const key = this._gmsTradeObserveKey(market, code);
         if (this._isGmsInTradeObserve(stock, market, code)) {
-            if (window.CommonUtils) CommonUtils.showToast('已在交易观察列表中', 'info');
+            if (window.CommonUtils) {
+                const inFormal = this.gmsFormalTradeCodeSet.has(key);
+                CommonUtils.showToast(
+                    inFormal ? '该股票已在正式交易中' : '已在交易观察列表中',
+                    'info'
+                );
+            }
             if (btnEl) {
                 btnEl.textContent = '已观察';
                 btnEl.classList.add('is-added');
@@ -894,7 +940,7 @@ const ScreeningPage = {
             }
         } catch (e) {
             if (window.CommonUtils) CommonUtils.showToast(e.message || '加入交易观察失败', 'error');
-            await this.loadGmsTradeObserveCodes();
+            await this.loadGmsObservedCodeSets();
             const stillIn = this._isGmsInTradeObserve(stock, market, code);
             if (btnEl) {
                 if (stillIn) {
@@ -922,7 +968,7 @@ const ScreeningPage = {
                 throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
             }
             if (window.CommonUtils) CommonUtils.showToast('已移出交易观察列表', 'success');
-            await this.loadGmsTradeObserveCodes();
+            await this.loadGmsObservedCodeSets();
             void this.refreshGmsTradeObserveList();
             this._refreshGmsTradeObserveButtonsInSignalTable();
         } catch (e) {
@@ -940,9 +986,8 @@ const ScreeningPage = {
             const key = this._gmsTradeObserveKey(market, code);
             const rowIdx = parseInt(btn.getAttribute('data-row'), 10);
             const stock = Array.isArray(this.lastResults.gms) ? this.lastResults.gms[rowIdx] : null;
-            const observed = this._isGmsInTradeObserve(stock, market, code) || this.gmsTradeObserveCodeSet.has(key);
+            const observed = this._isGmsInTradeObserve(stock, market, code);
             if (observed) {
-                this.gmsTradeObserveCodeSet.add(key);
                 btn.textContent = '已观察';
                 btn.classList.add('is-added');
                 btn.disabled = true;
@@ -2467,7 +2512,7 @@ const ScreeningPage = {
             if (result.search_date) {
                 this.lastGmsSearchDate = String(result.search_date).slice(0, 10);
             }
-            await this.loadGmsTradeObserveCodes();
+            await this.loadGmsObservedCodeSets();
             this.renderResults([hit], result.search_date, 'gms', null, { enabled: false });
             this._refreshGmsTradeObserveButtonsInSignalTable();
             this.updateGmsPaginationUi({ enabled: false });
@@ -2768,7 +2813,7 @@ const ScreeningPage = {
                 const emptyMsg = (result.data.length === 0 && result.message) ? result.message : null;
                 const gmsPaging = strategy === 'gms' ? result.paging : null;
                 if (strategy === 'gms') {
-                    await this.loadGmsTradeObserveCodes();
+                    await this.loadGmsObservedCodeSets();
                 }
                 this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
                 if (strategy === 'gms') {

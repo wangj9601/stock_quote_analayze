@@ -575,6 +575,11 @@ const StockPage = {
                 },
                 { name: 'MA5', type: 'line', data: [], smooth: true, lineStyle: { width: 2, color: '#fbbf24' }, showSymbol: false },
                 { name: 'MA10', type: 'line', data: [], smooth: true, lineStyle: { width: 2, color: '#3b82f6' }, showSymbol: false },
+                { name: 'MA20', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#a855f7' }, showSymbol: false },
+                { name: 'MA30', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#ec4899' }, showSymbol: false },
+                { name: 'MA60', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#10b981' }, showSymbol: false },
+                { name: 'MA120', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#f59e0b' }, showSymbol: false },
+                { name: 'MA200', type: 'line', data: [], smooth: true, lineStyle: { width: 1.5, color: '#6366f1' }, showSymbol: false },
                 {
                     name: '成交量',
                     type: 'bar',
@@ -2410,16 +2415,15 @@ const StockPage = {
             await this.loadKlineData();
         } else {
             const option = this.klineChart.getOption();
-            // 清除现有的技术指标线
-            this.clearTechnicalIndicators(option);
+            this.clearTechnicalIndicators(option, { keepMA: indicator === 'ma' });
 
             if (indicator === 'ma') {
-                this.addMAIndicators(option);
+                this.updateMAIndicators(option, this._lastMaBundle);
             } else if (indicator === 'ema') {
                 this.addEMAIndicators(option);
             }
 
-            this.klineChart.setOption(option);
+            this.refreshSubCharts(option);
         }
 
         CommonUtils.showToast(`已切换到${this.getIndicatorName(indicator)}`, 'success');
@@ -2478,8 +2482,10 @@ const StockPage = {
                 const isActive = activeNames.includes(s.name);
                 s.show = isActive;
 
-                // 如果是副图系列，设置其坐标轴
-                if (subSeries.includes(s.name) || bollSeries.includes(s.name)) {
+                if (mainSeries.includes(s.name)) {
+                    s.xAxisIndex = 0;
+                    s.yAxisIndex = 0;
+                } else if (subSeries.includes(s.name) || bollSeries.includes(s.name)) {
                     if (sub1Names.includes(s.name)) {
                         s.xAxisIndex = 1;
                         s.yAxisIndex = 1;
@@ -2487,7 +2493,6 @@ const StockPage = {
                         s.xAxisIndex = 2;
                         s.yAxisIndex = 2;
                     } else if (this.currentMainIndicator === 'boll' && bollSeries.includes(s.name)) {
-                        // 主图的BOLL
                         s.xAxisIndex = 0;
                         s.yAxisIndex = 0;
                     }
@@ -2529,7 +2534,7 @@ const StockPage = {
 
         // 应用
         if (shouldSetOption) {
-            this.klineChart.setOption(option, { notMerge: true });
+            this.klineChart.setOption(option, { replaceMerge: ['series'] });
         }
     },
 
@@ -2561,9 +2566,13 @@ const StockPage = {
             }
         };
 
-        let activeNames = ['K线', 'MA5', 'MA10']; // 基础
+        let activeNames = ['K线'];
         if (this.currentMainIndicator === 'boll') {
-            activeNames = ['K线', '布林带中线', '布林带上轨', '布林带下轨'];
+            activeNames.push('布林带中线', '布林带上轨', '布林带下轨');
+        } else if (this.currentMainIndicator === 'ma') {
+            activeNames.push('MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200');
+        } else if (this.currentMainIndicator === 'ema') {
+            activeNames.push('EMA12', 'EMA26');
         }
 
         activeNames.push(...getSeriesNames(this.subIndicator1));
@@ -2773,6 +2782,9 @@ const StockPage = {
                     return [open, close, low, high];
                 });
 
+                const maBundle = this.buildMaDataFromKline(list, kline);
+                this._lastMaBundle = maBundle;
+
                 // 更新option - 根据数据量调整显示效果
                 const option = this.klineChart.getOption();
 
@@ -2812,6 +2824,10 @@ const StockPage = {
                 }
 
                 // 设置副图系列数据
+                const mavol5 = list.map(item => item.mavol5 !== null && item.mavol5 !== undefined ? parseFloat(item.mavol5) : null);
+                const mavol10 = list.map(item => item.mavol10 !== null && item.mavol10 !== undefined ? parseFloat(item.mavol10) : null);
+                const mavol20 = list.map(item => item.mavol20 !== null && item.mavol20 !== undefined ? parseFloat(item.mavol20) : null);
+
                 const sVol = option.series.find(s => s.name === '成交量');
                 const sMAVol5 = option.series.find(s => s.name === 'MAVOL5');
                 const sMAVol10 = option.series.find(s => s.name === 'MAVOL10');
@@ -2879,10 +2895,9 @@ const StockPage = {
                     this.bollData = null;
                 }
 
-                // 清除之前的技术指标线并根据当前主图设置应用新指标
-                this.clearTechnicalIndicators(option);
+                this.clearTechnicalIndicators(option, { keepMA: this.currentMainIndicator === 'ma' });
                 if (this.currentMainIndicator === 'ma') {
-                    this.addMAIndicators(option);
+                    this.updateMAIndicators(option, maBundle);
                 } else if (this.currentMainIndicator === 'ema') {
                     this.addEMAIndicators(option);
                 }
@@ -2959,7 +2974,7 @@ const StockPage = {
 
                 // 应用配置到图表
                 // 强制重新渲染以确保所有配置（尤其是多轴同步）生效
-                this.klineChart.setOption(option, { notMerge: true, lazyUpdate: false });
+                this.klineChart.setOption(option, { replaceMerge: ['series'], lazyUpdate: false });
                 setTimeout(() => {
                     if (this.klineChart) this.klineChart.resize();
                 }, 100);
@@ -3076,57 +3091,93 @@ const StockPage = {
         console.log('[测试] 关键价位更新完成');
     },
 
-    // 清除技术指标线
-    clearTechnicalIndicators(option) {
-        const mainTechNames = ['MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', 'EMA12', 'EMA26', '布林带中线', '布林带上轨', '布林带下轨', '布林带区域', '布林带区域填充'];
-        option.series = option.series.filter(series => {
-            return !mainTechNames.includes(series.name);
+    clearTechnicalIndicators(option, { keepMA = false } = {}) {
+        const maNames = ['MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200'];
+        let mainTechNames = ['MA5', 'MA10', 'MA20', 'MA30', 'MA60', 'MA120', 'MA200', 'EMA12', 'EMA26', '布林带中线', '布林带上轨', '布林带下轨', '布林带区域', '布林带区域填充'];
+        if (keepMA) {
+            mainTechNames = mainTechNames.filter(n => !maNames.includes(n));
+        }
+        option.series = option.series.filter(series => !mainTechNames.includes(series.name));
+    },
+
+    getMaLineDefs() {
+        return [
+            { name: 'MA5', period: 5, width: 2, color: '#fbbf24' },
+            { name: 'MA10', period: 10, width: 2, color: '#3b82f6' },
+            { name: 'MA20', period: 20, width: 1.5, color: '#a855f7' },
+            { name: 'MA30', period: 30, width: 1.5, color: '#ec4899' },
+            { name: 'MA60', period: 60, width: 1.5, color: '#10b981' },
+            { name: 'MA120', period: 120, width: 1.5, color: '#f59e0b' },
+            { name: 'MA200', period: 200, width: 1.5, color: '#6366f1' }
+        ];
+    },
+
+    buildMaSeriesForPeriod(list, closes, period) {
+        const field = 'ma' + period;
+        const calculated = this.calculateMA(closes, period);
+        return list.map((item, i) => {
+            const v = item[field];
+            if (v !== null && v !== undefined && !isNaN(parseFloat(v))) {
+                return parseFloat(v);
+            }
+            return calculated[i];
         });
     },
 
-    // 添加MA均线
-    addMAIndicators(option) {
-        const klineData = option.series[0].data;
+    buildMaDataFromKline(list, kline) {
+        const closes = kline.map(item => item[1]);
+        const bundle = {};
+        for (const def of this.getMaLineDefs()) {
+            const field = 'ma' + def.period;
+            bundle[field] = this.buildMaSeriesForPeriod(list, closes, def.period);
+        }
+        return bundle;
+    },
+
+    resolveMaSeriesData(closes, maBundle, period) {
+        const field = 'ma' + period;
+        if (maBundle && maBundle[field] && maBundle[field].length) {
+            return maBundle[field];
+        }
+        return this.calculateMA(closes, period);
+    },
+
+    updateMAIndicators(option, maBundle) {
+        const klineSeries = option.series.find(s => s.name === 'K线');
+        const klineData = klineSeries?.data;
         if (!klineData || klineData.length === 0) {
             console.warn('[MA均线] 没有K线数据');
             return;
         }
 
-        // 计算收盘价
-        const closes = klineData.map(item => item[1]); // 收盘价
+        const closes = klineData.map(item => item[1]);
+        const bundle = maBundle || this._lastMaBundle;
+        const klineIdx = option.series.findIndex(s => s.name === 'K线');
+        let insertOffset = 0;
 
-        // 计算MA5, MA10, MA20
-        const ma5 = this.calculateMA(closes, 5);
-        const ma10 = this.calculateMA(closes, 10);
-        const ma20 = this.calculateMA(closes, 20);
+        for (const def of this.getMaLineDefs()) {
+            const data = this.resolveMaSeriesData(closes, bundle, def.period);
+            const seriesConfig = {
+                name: def.name,
+                type: 'line',
+                data,
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                smooth: true,
+                lineStyle: { width: def.width, color: def.color },
+                showSymbol: false,
+                show: true,
+                z: 5
+            };
 
-        // 添加MA线
-        option.series.push({
-            name: 'MA5',
-            type: 'line',
-            data: ma5,
-            smooth: true,
-            lineStyle: { width: 1, color: '#fbbf24' },
-            showSymbol: false
-        });
-
-        option.series.push({
-            name: 'MA10',
-            type: 'line',
-            data: ma10,
-            smooth: true,
-            lineStyle: { width: 1, color: '#3b82f6' },
-            showSymbol: false
-        });
-
-        option.series.push({
-            name: 'MA20',
-            type: 'line',
-            data: ma20,
-            smooth: true,
-            lineStyle: { width: 1, color: '#8b5cf6' },
-            showSymbol: false
-        });
+            let s = option.series.find(ser => ser.name === def.name);
+            if (s) {
+                Object.assign(s, seriesConfig);
+            } else {
+                option.series.splice(klineIdx + 1 + insertOffset, 0, seriesConfig);
+                insertOffset++;
+            }
+        }
     },
 
     // 添加EMA均线

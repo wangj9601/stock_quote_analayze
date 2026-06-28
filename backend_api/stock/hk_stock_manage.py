@@ -13,6 +13,7 @@ import pandas as pd
 import akshare as ak
 from sqlalchemy import text, create_engine, func
 from backend_api.models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
+from backend_api.stock.stock_manage import MA_MARKET_TYPES_HK, _normalize_indicator_date
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口
@@ -718,7 +719,7 @@ async def get_hk_kline_hist(
             try:
                 ma_query = db.query(MAIndicators).filter(
                     MAIndicators.code == code,
-                    MAIndicators.market_type == '港股',
+                    MAIndicators.market_type.in_(MA_MARKET_TYPES_HK),
                     MAIndicators.date >= start_date,
                     MAIndicators.date <= end_date
                 ).order_by(MAIndicators.date.asc())
@@ -726,7 +727,7 @@ async def get_hk_kline_hist(
                 ma_records = ma_query.all()
                 ma_dict = {}
                 for record in ma_records:
-                    date_str = record.date.strftime('%Y-%m-%d') if hasattr(record.date, 'strftime') else str(record.date)
+                    date_str = _normalize_indicator_date(record.date)
                     ma_dict[date_str] = {
                         "ma5": round(float(record.ma5), 4) if record.ma5 is not None else None,
                         "ma10": round(float(record.ma10), 4) if record.ma10 is not None else None,

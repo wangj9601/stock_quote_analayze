@@ -15,6 +15,7 @@ from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_trade_observe_routes import (
     _archive_trade_observe_row,
+    _normalize_code,
     _resolve_signal_date_str,
 )
 from backend_api.models import GmsFormalTrade, GmsTradeObserveStock, User
@@ -120,6 +121,29 @@ def list_gms_formal_trades(
         page_size=page_size,
         items=[_row_to_item(r) for r in rows],
     )
+
+
+def list_user_formal_trade_code_keys(db: Session, user_id: int) -> List[str]:
+    """当前用户正式交易 code 键（CN:000001，code 已归一化），供信号列表按钮态。"""
+    rows = (
+        db.query(GmsFormalTrade.market, GmsFormalTrade.code)
+        .filter(GmsFormalTrade.user_id == user_id)
+        .all()
+    )
+    return [
+        f"{(m or 'CN').upper()}:{_normalize_code(c)}"
+        for m, c in rows
+        if c
+    ]
+
+
+@router.get("/codes", response_model=List[str])
+def list_gms_formal_trade_codes(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """当前用户正式交易 code 列表（用于信号列表「已观察」按钮态）。"""
+    return list_user_formal_trade_code_keys(db, user.id)
 
 
 @router.post("/from-observe/{observe_id}", response_model=GmsFormalTradeItem)
