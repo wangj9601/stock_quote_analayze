@@ -115,6 +115,19 @@ def _tables(board_type: BoardType) -> dict[str, str]:
     }
 
 
+def ensure_board_trade_observe_columns(db: Session) -> None:
+    """确保行业/概念板块基础表存在 trade_observe_flag 列（兼容未跑迁移的库）。"""
+    for table in ("industry_board_basic_info", "concept_board_basic_info"):
+        db.execute(
+            text(
+                f"""
+                ALTER TABLE {table}
+                ADD COLUMN IF NOT EXISTS trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE
+                """
+            )
+        )
+
+
 def _constituent_model(board_type: BoardType):
     return IndustryBoardConstituent if board_type == "industry" else ConceptBoardConstituent
 
@@ -299,6 +312,7 @@ class DeleteBoardsBatchBody(BaseModel):
 
 
 def _read_board_trade_observe_flag(db: Session, board_type: BoardType, board_code: str) -> bool:
+    ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     row = db.execute(
         text(f"SELECT trade_observe_flag FROM {t['basic']} WHERE board_code = :code LIMIT 1"),
@@ -317,6 +331,7 @@ def _upsert_board_basic(
     now: datetime,
     trade_observe_flag: Optional[bool] = None,
 ) -> None:
+    ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     if trade_observe_flag is not None:
         db.execute(
@@ -750,6 +765,7 @@ async def list_boards_with_summary(
 ):
     """板块列表及成分股数量统计。"""
     _ = current_user
+    ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     kw = (keyword or "").strip()
     kw_filter = ""

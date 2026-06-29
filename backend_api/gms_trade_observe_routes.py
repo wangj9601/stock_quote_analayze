@@ -22,6 +22,10 @@ from backend_api.models import (
     StockBasicInfoHK,
     User,
 )
+from backend_api.utils.industry_board_query import (
+    batch_industry_board_names_by_stock_codes,
+    normalize_industry_text,
+)
 
 router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-observe"])
 
@@ -175,8 +179,9 @@ def _industry_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[str]
         return None
     for key in ("industry", "所属行业"):
         raw = snapshot.get(key)
-        if raw is not None and str(raw).strip():
-            return str(raw).strip()
+        valid = normalize_industry_text(raw)
+        if valid:
+            return valid
     return None
 
 
@@ -204,7 +209,7 @@ def batch_resolve_industries_by_pairs(
     db: Session,
     pairs: List[tuple[str, str]],
 ) -> Dict[tuple[str, str], str]:
-    """按 (market, code) 批量解析所属行业：基础信息表 → 行业板块成分。"""
+    """按 (market, code) 批量解析所属行业：A 股优先行业板块表，其次基础信息表。"""
     out: Dict[tuple[str, str], str] = {}
     need_cn: List[str] = []
     need_hk: List[str] = []
@@ -226,13 +231,22 @@ def batch_resolve_industries_by_pairs(
 
     if need_cn:
         uniq = list(dict.fromkeys(need_cn))
-        for code, industry in (
-            db.query(StockBasicInfo.code, StockBasicInfo.industry)
-            .filter(StockBasicInfo.code.in_(uniq))
-            .all()
-        ):
-            if industry and str(industry).strip():
-                out.setdefault(("CN", str(code).strip()), str(industry).strip())
+        board_map = batch_industry_board_names_by_stock_codes(db, uniq)
+        for code, industry in board_map.items():
+            valid = normalize_industry_text(industry)
+            if valid:
+                out[("CN", code)] = valid
+
+        still_missing = [c for c in uniq if ("CN", c) not in out]
+        if still_missing:
+            for code, industry in (
+                db.query(StockBasicInfo.code, StockBasicInfo.industry)
+                .filter(StockBasicInfo.code.in_(still_missing))
+                .all()
+            ):
+                valid = normalize_industry_text(industry)
+                if valid:
+                    out.setdefault(("CN", str(code).strip()), valid)
 
     if need_hk:
         uniq = list(dict.fromkeys(need_hk))
@@ -241,33 +255,9 @@ def batch_resolve_industries_by_pairs(
             .filter(StockBasicInfoHK.code.in_(uniq))
             .all()
         ):
-            if industry and str(industry).strip():
-                out.setdefault(("HK", str(code).strip()), str(industry).strip())
-
-    missing_cn = [c for c in need_cn if ("CN", c) not in out]
-    if missing_cn:
-        uniq = list(dict.fromkeys(missing_cn))
-        try:
-            stmt = text(
-                """
-                SELECT c.stock_code, COALESCE(b.board_name, c.board_code) AS board_name
-                FROM industry_board_constituents c
-                LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
-                WHERE c.stock_code IN :codes
-                """
-            ).bindparams(bindparam("codes", expanding=True))
-            board_rows = db.execute(stmt, {"codes": uniq}).fetchall()
-            grouped: Dict[str, List[str]] = {}
-            for stock_code, board_name in board_rows:
-                sc = str(stock_code).strip()
-                bn = str(board_name).strip() if board_name else sc
-                grouped.setdefault(sc, []).append(bn)
-            for code, names in grouped.items():
-                key = ("CN", code)
-                if key not in out and names:
-                    out[key] = ",".join(dict.fromkeys(names))
-        except Exception:
-            pass
+            valid = normalize_industry_text(industry)
+            if valid:
+                out.setdefault(("HK", str(code).strip()), valid)
 
     return out
 

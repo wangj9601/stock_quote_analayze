@@ -267,15 +267,20 @@ def resolve_cn_industry_display(
     stored: Optional[str], board_industry: Optional[str]
 ) -> Optional[str]:
     """A 股列表展示：优先行业板块名称，其次库内 industry。"""
-    if board_industry and str(board_industry).strip():
-        return str(board_industry).strip()
-    if stored is None:
+    board = normalize_industry_text(board_industry)
+    if board:
+        return board
+    return normalize_industry_text(stored)
+
+
+def normalize_industry_text(value: Any) -> Optional[str]:
+    """过滤 None、空串及 nan/none 等无效占位。"""
+    if value is None:
         return None
-    s = str(stored).strip()
+    s = str(value).strip()
     if not s:
         return None
-    low = s.lower()
-    if low in ("nan", "none", "null", "<na>", "nat"):
+    if s.lower() in ("nan", "none", "null", "<na>", "nat"):
         return None
     return s
 

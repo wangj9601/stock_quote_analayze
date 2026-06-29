@@ -12,6 +12,21 @@ def _fmt_date(d):
     return s[:10] if len(s) >= 10 else s
 
 
+def _safe_float(value, default=None):
+    """将行情字段转为 float；None/无效值返回 default。"""
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class MeanFrequencyResonanceCalculator:
     """
     均值频率共振量化交易指标计算器
@@ -112,8 +127,8 @@ class MeanFrequencyResonanceCalculator:
                     'amplitude': abs(delta),
                     'ratio_d20': ratio_d20,
                     'ratio_d1': ratio_d1,
-                    'instant_deviation': float(df['instant_deviation'].iloc[i]),
-                    'efficiency_m20_minus_m': float(df['efficiency'].iloc[i]),
+                    'instant_deviation': _safe_float(df['instant_deviation'].iloc[i], 0.0),
+                    'efficiency_m20_minus_m': _safe_float(df['efficiency'].iloc[i], 0.0),
                     'rising_days_z': int(df['z'].iloc[i]),
                     'falling_days_f': int(df['f'].iloc[i]),
                     'bias': float((df['close'].iloc[i] - df['ma20'].iloc[i]) / df['ma20'].iloc[i]) if df['ma20'].iloc[i] != 0 else 0.0
@@ -151,9 +166,16 @@ class MeanFrequencyResonanceCalculator:
         volumes = []
         
         for row in history_rows:
+            close = _safe_float(getattr(row, 'close', None))
+            volume = _safe_float(getattr(row, 'volume', None))
+            if close is None or volume is None:
+                continue
             dates.append(row.date)
-            closes.append(float(row.close))
-            volumes.append(float(row.volume))
+            closes.append(close)
+            volumes.append(volume)
+        
+        if len(closes) < window + 1:
+            return pd.DataFrame()
         
         # 使用现有的 calculate 方法计算指标（传入 dates 以输出 d1_date、d20_date）
         results = self.calculate(closes, volumes, dates=dates, window=window)

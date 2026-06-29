@@ -689,13 +689,22 @@ const ScreeningPage = {
         return this.lastGmsSearchDate || null;
     },
 
+    _gmsDisplayIndustry(raw) {
+        if (raw == null || raw === '') return '--';
+        const s = String(raw).trim();
+        if (!s) return '--';
+        const low = s.toLowerCase();
+        if (low === 'nan' || low === 'none' || low === 'null' || low === '<na>' || low === 'nat') return '--';
+        return s;
+    },
+
     _buildGmsTradeObserveSnapshot(stock) {
         if (!stock || typeof stock !== 'object') return {};
         const sd = stock.score_detail || stock.indicators?.score_detail || {};
         const signalDate = this._resolveGmsSignalDate(stock);
         return {
             signal_date: signalDate,
-            industry: stock.industry,
+            industry: this._gmsDisplayIndustry(stock.industry) === '--' ? null : this._gmsDisplayIndustry(stock.industry),
             signal_strength: stock.signal_strength,
             score_total: stock.score_total,
             buy_type: stock.buy_type,
@@ -850,7 +859,7 @@ const ScreeningPage = {
                 <tr data-observe-id="${it.id}">
                     <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
                     <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
-                    <td class="gms-col-industry"><span class="stock-industry" title="${esc(it.industry || snap.industry || '')}">${esc(it.industry || snap.industry || '--')}</span></td>
+                    <td class="gms-col-industry"><span class="stock-industry" title="${esc(this._gmsDisplayIndustry(it.industry || snap.industry))}">${esc(this._gmsDisplayIndustry(it.industry || snap.industry))}</span></td>
                     <td class="gms-col-narrow">${fmtStrength(snap)}</td>
                     <td class="gms-col-narrow"><span class="${buyClass}">${esc(buyType)}</span></td>
                     <td class="gms-col-price">${fmtPrice(snap.current_price)}</td>
@@ -3669,7 +3678,7 @@ const ScreeningPage = {
                 const gmsScopeElement = document.querySelector('input[name="gmsScope"]:checked');
                 const gmsScope = gmsScopeElement ? gmsScopeElement.value : 'all';
                 const canShowWatchlistAction = gmsScope !== 'watchlist';
-                const gmsIndustry = stock.industry || '--';
+                const gmsIndustry = this._gmsDisplayIndustry(stock.industry);
                 const gmsIndustryAttr = String(gmsIndustry)
                     .replace(/&/g, '&amp;')
                     .replace(/"/g, '&quot;')
@@ -3929,7 +3938,7 @@ const ScreeningPage = {
                 return [
                     `\u2060${stock.symbol || stock.code}`,
                     stock.name || '',
-                    stock.industry || '',
+                    this._gmsDisplayIndustry(stock.industry) === '--' ? '' : this._gmsDisplayIndustry(stock.industry),
                     (sig * 100).toFixed(1) + '%',
                     stock.buy_type || '',
                     stock.current_price != null ? stock.current_price.toFixed(2) : '',
@@ -4240,7 +4249,7 @@ const ScreeningPage = {
             aoa.push([
                 '\u2060' + (stock.symbol || stock.code),
                 stock.name || '',
-                stock.industry || '',
+                this._gmsDisplayIndustry(stock.industry) === '--' ? '' : this._gmsDisplayIndustry(stock.industry),
                 (sig * 100).toFixed(1) + '%',
                 stock.buy_type || '',
                 stock.current_price != null ? stock.current_price.toFixed(2) : '',
