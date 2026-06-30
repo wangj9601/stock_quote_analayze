@@ -36,9 +36,15 @@ def test_batch_resolve_industries_by_pairs_cn_board_first_and_skip_nan():
         )
         db.add(StockBasicInfo(code="000566", name="海南海药", industry="nan"))
         db.add(IndustryBoardConstituent(board_code="BK0479", stock_code="000566", stock_name="海南海药"))
+        db.add(IndustryBoardConstituent(board_code="BK1019", stock_code="000566", stock_name="海南海药"))
         db.execute(
             text(
                 "INSERT INTO industry_board_basic_info (board_code, board_name) VALUES ('BK0479', '化学制药')"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT INTO industry_board_basic_info (board_code, board_name) VALUES ('BK1019', '化学制药')"
             )
         )
         db.commit()

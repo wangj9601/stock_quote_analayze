@@ -9,6 +9,7 @@ from io import BytesIO, StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_api.models import StockBasicInfo
@@ -243,6 +244,8 @@ def parse_all_constituents_file(
         board_name = _cell_str(row.get(board_name_col)) if board_name_col else ""
         stock_name = _cell_str(row.get(name_col)) if name_col else ""
         stock_code = _cell_str(row.get(code_col)) if code_col else ""
+        if stock_code:
+            stock_code = _normalize_import_code(stock_code)
 
         if not board_code:
             issues.append({"row_no": row_no, "message": "板块代码为空，已跳过"})
@@ -363,9 +366,149 @@ def _build_name_to_codes(
     return name_to_codes
 
 
+def _collapse_spaces(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip())
+
+
+def _build_industry_board_index_from_rows(rows: List[Dict[str, str]]) -> Dict[str, str]:
+    """从导入文件行构建 板块名称/原始代码 -> 规范化 board_code 索引。"""
+    index: Dict[str, str] = {}
+    for r in rows:
+        raw_code = _cell_str(r.get("board_code"))
+        board_name = _cell_str(r.get("board_name"))
+        norm = _normalize_import_board_code(raw_code, board_type="industry")
+        if not norm:
+            continue
+        index[norm] = norm
+        if board_name:
+            index[board_name] = norm
+            collapsed = _collapse_spaces(board_name)
+            if collapsed:
+                index[collapsed] = norm
+    return index
+
+
+def _resolve_industry_board_code_for_import(
+    db: Session,
+    raw_code: str,
+    board_name: str,
+    file_index: Dict[str, str],
+) -> str:
+    norm = _normalize_import_board_code(raw_code, board_type="industry")
+    if norm:
+        return norm
+    for key in (board_name, raw_code):
+        k = _collapse_spaces(key)
+        if not k:
+            continue
+        if k in file_index:
+            return file_index[k]
+        row = db.execute(
+            text(
+                """
+                SELECT board_code FROM industry_board_basic_info
+                WHERE TRIM(board_name) = :name OR board_code = :name
+                ORDER BY CASE WHEN UPPER(board_code) LIKE 'BK%%' THEN 0 ELSE 1 END
+                LIMIT 1
+                """
+            ),
+            {"name": k},
+        ).fetchone()
+        if row:
+            resolved = _normalize_import_board_code(str(row[0]), board_type="industry")
+            if resolved:
+                return resolved
+    return ""
+
+
+def align_all_import_constituent_rows(
+    db: Session,
+    rows: List[Dict[str, str]],
+    board_type: str,
+    issues: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, str]], int, int]:
+    """
+    全量导入对齐：行业板块代码支持按名称回退；股票代码逐行解析（允许跨板块重复）。
+    返回 (aligned_rows, board_only_count, stock_row_count)。
+    """
+    file_index = _build_industry_board_index_from_rows(rows) if board_type == "industry" else {}
+    board_only_count = 0
+    stock_row_count = 0
+    stock_rows: List[Dict[str, str]] = []
+    stock_meta: List[Dict[str, Any]] = []
+
+    for i, src in enumerate(rows):
+        row_no = i + 2
+        raw_board = _cell_str(src.get("board_code"))
+        board_name = _cell_str(src.get("board_name"))
+        stock_name = _cell_str(src.get("stock_name"))
+        stock_code = _cell_str(src.get("stock_code"))
+
+        if board_type == "industry":
+            board_code = _resolve_industry_board_code_for_import(
+                db, raw_board, board_name, file_index
+            )
+        else:
+            board_code = _normalize_import_board_code(raw_board, board_type="concept")
+
+        if not board_code:
+            issues.append({"row_no": row_no, "message": "板块代码为空或无法识别，已跳过"})
+            continue
+        if not stock_code and not stock_name:
+            board_only_count += 1
+            continue
+
+        stock_row_count += 1
+        stock_rows.append({
+            "stock_code": stock_code,
+            "stock_name": stock_name,
+            "_row_no": row_no,
+        })
+        stock_meta.append({
+            "row_no": row_no,
+            "board_code": board_code,
+            "board_name": board_name,
+            "stock_code": stock_code,
+            "stock_name": stock_name,
+        })
+
+    resolved, resolve_issues = resolve_rows_stock_codes(
+        db, stock_rows, allow_duplicate_codes=True
+    )
+    issues.extend(resolve_issues)
+    issue_row_nos = {
+        int(iss["row_no"])
+        for iss in resolve_issues
+        if iss.get("row_no") is not None
+    }
+
+    aligned: List[Dict[str, str]] = []
+    seen_board_stock: set[str] = set()
+    res_idx = 0
+    for meta in stock_meta:
+        if meta["row_no"] in issue_row_nos:
+            continue
+        if res_idx >= len(resolved):
+            break
+        item = resolved[res_idx]
+        res_idx += 1
+        dedupe_key = f"{meta['board_code']}|{item['stock_code']}"
+        if dedupe_key in seen_board_stock:
+            continue
+        seen_board_stock.add(dedupe_key)
+        aligned.append({
+            "board_code": meta["board_code"],
+            "stock_code": item["stock_code"],
+            "stock_name": item.get("stock_name") or meta.get("stock_name") or "",
+        })
+    return aligned, board_only_count, stock_row_count
+
+
 def resolve_rows_stock_codes(
     db: Session,
     rows: List[Dict[str, str]],
+    *,
+    allow_duplicate_codes: bool = False,
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]]]:
     """
     对仅有名称的行，从 stock_basic_info 匹配名称获取代码。
@@ -403,7 +546,7 @@ def resolve_rows_stock_codes(
     seen_codes: set[str] = set()
 
     for i, r in enumerate(rows):
-        row_no = i + 2
+        row_no = int(r.get("_row_no") or (i + 2))
         stock_name = (r.get("stock_name") or "").strip()
         raw_code = (r.get("stock_code") or "").strip()
         code = _normalize_import_code(raw_code) if raw_code else ""
@@ -427,7 +570,7 @@ def resolve_rows_stock_codes(
                 continue
             code = picked
 
-        if code in seen_codes:
+        if not allow_duplicate_codes and code in seen_codes:
             issues.append({
                 "row_no": row_no,
                 "stock_code": code,
@@ -435,7 +578,8 @@ def resolve_rows_stock_codes(
                 "message": "解析后重复代码，已跳过",
             })
             continue
-        seen_codes.add(code)
+        if not allow_duplicate_codes:
+            seen_codes.add(code)
         resolved.append({"stock_code": code, "stock_name": stock_name})
 
     if not resolved and rows:

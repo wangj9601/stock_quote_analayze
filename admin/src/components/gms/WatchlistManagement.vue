@@ -61,7 +61,18 @@
               <span v-else class="text-gray-400">-</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="100" />
+          <el-table-column label="状态" width="88" align="center">
+            <template #default="{ row }">
+              <el-switch
+                :model-value="row.status === 'active'"
+                size="small"
+                inline-prompt
+                active-text="启用"
+                inactive-text="停用"
+                @change="(val: boolean) => toggleStatus(row, val)"
+              />
+            </template>
+          </el-table-column>
           <el-table-column label="审核" width="80">
             <template #default="{ row }">
               <el-switch v-model="row.is_verified" size="small" @change="(val: boolean) => toggleVerified(row, val)" />
@@ -204,7 +215,17 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importDialogVisible" title="批量导入观察股">
+    <el-dialog v-model="importDialogVisible" title="批量导入观察股" @closed="resetImportForm">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb-3"
+        title="每行一个，格式：市场,代码,名称（名称可省略），例如：A,000001,平安银行"
+      />
+      <el-checkbox v-model="importClearExisting" class="mb-3">
+        导入前清空当前策略版本下全部观察股
+      </el-checkbox>
       <el-input
         ref="importInputRef"
         v-model="importText"
@@ -293,6 +314,7 @@ const stockForm = ref({
 
 const importDialogVisible = ref(false)
 const importText = ref('')
+const importClearExisting = ref(false)
 
 const currentVersion = computed(() => versions.value.find((v) => v.id === selectedVersionId.value))
 const selectedMechanismMeta = computed(() =>
@@ -553,6 +575,19 @@ const toggleVerified = async (row: GMSStrategyVersionStock, verified: boolean) =
   }
 }
 
+const toggleStatus = async (row: GMSStrategyVersionStock, active: boolean) => {
+  const next = active ? 'active' : 'inactive'
+  const prev = row.status
+  try {
+    await gmsApiService.updateStrategyVersionStock(row.id, { status: next })
+    row.status = next
+    ElMessage.success(`${row.stock_code} 已${active ? '启用' : '停用'}`)
+  } catch (e: any) {
+    row.status = prev
+    ElMessage.error('更新失败: ' + (e.message || '未知错误'))
+  }
+}
+
 const removeStock = async (row: GMSStrategyVersionStock) => {
   await ElMessageBox.confirm(`确认删除 ${row.stock_code} 吗？`, '删除确认', { type: 'warning' })
   await gmsApiService.deleteStrategyVersionStock(row.id)
@@ -569,12 +604,31 @@ const batchDelete = async () => {
 }
 
 const openImportDialog = () => {
-  importText.value = ''
+  resetImportForm()
   importDialogVisible.value = true
+}
+
+const resetImportForm = () => {
+  importText.value = ''
+  importClearExisting.value = false
 }
 
 const submitImport = async () => {
   if (!selectedVersionId.value) return
+  if (importClearExisting.value) {
+    const verLabel = currentVersion.value
+      ? `${currentVersion.value.strategy_code}-V${currentVersion.value.version_no}`
+      : `版本 ${selectedVersionId.value}`
+    try {
+      await ElMessageBox.confirm(
+        `将清空「${verLabel}」下全部观察股后再导入，此操作不可恢复，是否继续？`,
+        '清空并导入确认',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
   const items = importText.value
     .split('\n')
     .map((line) => line.trim())
@@ -584,17 +638,22 @@ const submitImport = async () => {
       return { market, stock_code, stock_name }
     })
   try {
-    const data = await gmsApiService.batchImportStrategyVersionStocks({ version_id: selectedVersionId.value, items })
+    const data = await gmsApiService.batchImportStrategyVersionStocks({
+      version_id: selectedVersionId.value,
+      items,
+      clear_existing: importClearExisting.value,
+    })
+    const clearedTip = data.cleared_count ? `，已清空 ${data.cleared_count} 条` : ''
     if (data.fail_count > 0) {
       const reasons = data.fail_details.map((f) => `${f.stock_code}: ${f.reason}`).join('\n')
       await ElMessageBox.alert(
-        `导入完成：成功${data.success_count}，失败${data.fail_count}，跳过${data.skip_count}\n失败详情：\n${reasons}`,
+        `导入完成：成功${data.success_count}，失败${data.fail_count}，跳过${data.skip_count}${clearedTip}\n失败详情：\n${reasons}`,
         '导入结果',
         { type: 'warning' }
       )
       await refresh()
     } else {
-      ElMessage.success(`导入完成：成功${data.success_count}，跳过${data.skip_count}`)
+      ElMessage.success(`导入完成：成功${data.success_count}，跳过${data.skip_count}${clearedTip}`)
       importDialogVisible.value = false
       await refresh()
     }

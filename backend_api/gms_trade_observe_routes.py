@@ -24,6 +24,7 @@ from backend_api.models import (
 )
 from backend_api.utils.industry_board_query import (
     batch_industry_board_names_by_stock_codes,
+    clean_industry_display_text,
     normalize_industry_text,
 )
 
@@ -179,7 +180,7 @@ def _industry_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[str]
         return None
     for key in ("industry", "所属行业"):
         raw = snapshot.get(key)
-        valid = normalize_industry_text(raw)
+        valid = clean_industry_display_text(raw)
         if valid:
             return valid
     return None
@@ -233,7 +234,7 @@ def batch_resolve_industries_by_pairs(
         uniq = list(dict.fromkeys(need_cn))
         board_map = batch_industry_board_names_by_stock_codes(db, uniq)
         for code, industry in board_map.items():
-            valid = normalize_industry_text(industry)
+            valid = clean_industry_display_text(industry)
             if valid:
                 out[("CN", code)] = valid
 
@@ -244,7 +245,7 @@ def batch_resolve_industries_by_pairs(
                 .filter(StockBasicInfo.code.in_(still_missing))
                 .all()
             ):
-                valid = normalize_industry_text(industry)
+                valid = clean_industry_display_text(industry)
                 if valid:
                     out.setdefault(("CN", str(code).strip()), valid)
 
@@ -255,7 +256,7 @@ def batch_resolve_industries_by_pairs(
             .filter(StockBasicInfoHK.code.in_(uniq))
             .all()
         ):
-            valid = normalize_industry_text(industry)
+            valid = clean_industry_display_text(industry)
             if valid:
                 out.setdefault(("HK", str(code).strip()), valid)
 

@@ -422,7 +422,12 @@
       </el-table>
     </el-card>
 
-    <TaskDetail v-model="detailVisible" :task-id="selectedTaskId" @closed="selectedTaskId = ''" />
+    <TaskDetail
+      v-model="detailVisible"
+      :task-id="selectedTaskId"
+      @closed="selectedTaskId = ''"
+      @task-updated="onDetailTaskUpdated"
+    />
   </div>
 </template>
 
@@ -763,6 +768,10 @@ async function loadWatchlistUsers() {
 function viewDetail(row: any) {
   selectedTaskId.value = row.task_id
   detailVisible.value = true
+}
+
+async function onDetailTaskUpdated() {
+  await refresh()
 }
 
 async function cancelTask(row: any) {

@@ -21,6 +21,16 @@ def test_resolve_cn_industry_display_prefers_board():
     assert resolve_cn_industry_display("旧行业", "银行") == "银行"
     assert resolve_cn_industry_display("旧行业", None) == "旧行业"
     assert resolve_cn_industry_display("nan", None) is None
+    assert resolve_cn_industry_display("BK1019,化学制药", None) == "化学制药"
+    assert resolve_cn_industry_display(None, "BK0457") is None
+
+
+def test_clean_industry_display_text_strips_bk_codes():
+    from backend_api.utils.industry_board_query import clean_industry_display_text
+
+    assert clean_industry_display_text("BK1019,化学制药") == "化学制药"
+    assert clean_industry_display_text("BK1019") is None
+    assert clean_industry_display_text("化学制药,电网设备") == "化学制药,电网设备"
 
 
 def test_append_common_filters_only_delisted():

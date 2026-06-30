@@ -38,6 +38,27 @@ class BoardConstituentsService {
     }>(`/board-constituents/boards?${q}`)
   }
 
+  async listBoardsByStock(params: { boardType: BoardType; stock: string }) {
+    const q = new URLSearchParams()
+    q.set('board_type', params.boardType)
+    q.set('stock', params.stock.trim())
+    return apiService.get<{
+      success: boolean
+      message?: string
+      data: {
+        stock_codes: string[]
+        stock_names: string[]
+        boards: Array<{
+          board_code: string
+          board_name: string | null
+          last_updated: string | null
+          trade_observe_flag?: boolean
+        }>
+        total: number
+      }
+    }>(`/board-constituents/boards/by-stock?${q}`)
+  }
+
   async listConstituents(params: {
     boardType: BoardType
     boardCode: string
@@ -201,16 +222,23 @@ class BoardConstituentsService {
     })
   }
 
-  async importAllFromFile(params: { boardType: BoardType; file: File }) {
+  async importAllFromFile(params: { boardType: BoardType; file: File; clearExisting?: boolean }) {
     const fd = new FormData()
     fd.append('file', params.file)
     const q = new URLSearchParams()
     q.set('board_type', params.boardType)
+    if (params.clearExisting) {
+      q.set('clear_existing', 'true')
+    }
     return apiService.post<{
       success: boolean
       message?: string
       data?: {
         boards_processed: number
+        basic_synced?: number
+        cleared_basic?: number
+        cleared_constituents?: number
+        cleared_realtime?: number
         processed: number
         added: number
         skipped_issues: number

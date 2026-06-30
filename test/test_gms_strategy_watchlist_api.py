@@ -159,6 +159,47 @@ def test_gms_strategy_batch_import_validation_and_dedupe():
     assert len(data["fail_details"]) == 1
 
 
+def test_gms_strategy_batch_import_clear_existing():
+    client = _build_client()
+
+    create_version_resp = client.post(
+        "/api/admin/gms/strategy-versions",
+        json={"strategy_code": "GMS", "version_name": "清空导入版本", "version_no": 3},
+    )
+    version_id = create_version_resp.json()["data"]["id"]
+
+    seed_resp = client.post(
+        "/api/admin/gms/strategy-version-stocks/batch-import",
+        json={
+            "version_id": version_id,
+            "items": [{"market": "A", "stock_code": "000001"}],
+        },
+    )
+    assert seed_resp.status_code == 200
+    assert seed_resp.json()["data"]["success_count"] == 1
+
+    import_resp = client.post(
+        "/api/admin/gms/strategy-version-stocks/batch-import",
+        json={
+            "version_id": version_id,
+            "clear_existing": True,
+            "items": [{"market": "A", "stock_code": "600000"}],
+        },
+    )
+    assert import_resp.status_code == 200
+    data = import_resp.json()["data"]
+    assert data["cleared_count"] == 1
+    assert data["success_count"] == 1
+
+    list_resp = client.get(
+        f"/api/admin/gms/strategy-version-stocks?version_id={version_id}&page=1&page_size=50"
+    )
+    assert list_resp.status_code == 200
+    rows = list_resp.json()["data"]
+    codes = {r["stock_code"] for r in rows}
+    assert codes == {"600000"}
+
+
 def test_gms_scoring_mechanisms_and_penalty_types():
     client = _build_client()
 

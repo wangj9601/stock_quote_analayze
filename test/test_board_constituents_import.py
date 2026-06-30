@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend_api.admin.board_constituents_import import (
     _normalize_eastmoney_stock_name,
     _pick_best_code,
+    align_all_import_constituent_rows,
     parse_all_constituents_file,
     parse_constituents_file,
     resolve_rows_stock_codes,
@@ -181,3 +182,43 @@ class TestBoardConstituentsImport:
         assert len(issues) == 1
         assert "Table.xls" in issues[0]["message"]
         assert "Excel 导入" in issues[0]["message"]
+
+    def test_align_all_import_board_only_rows(self):
+        class _DB:
+            def execute(self, sql, params=None):
+                return None
+
+        rows = [
+            {"board_code": "BK1028", "board_name": "燃气II", "stock_code": "", "stock_name": ""},
+            {"board_code": "BK1046", "board_name": "游戏II", "stock_code": "", "stock_name": ""},
+        ]
+        issues: list = []
+        aligned, board_only, stock_rows = align_all_import_constituent_rows(
+            _DB(), rows, "industry", issues
+        )
+        assert not aligned
+        assert board_only == 2
+        assert stock_rows == 0
+
+    def test_align_all_import_allows_duplicate_stock_across_boards(self):
+        class _DB:
+            def query(self, model):
+                return self
+
+            def filter(self, *args, **kwargs):
+                return self
+
+            def all(self):
+                return []
+
+        rows = [
+            {"board_code": "BK1028", "board_name": "燃气II", "stock_code": "000001", "stock_name": "平安银行"},
+            {"board_code": "BK1046", "board_name": "游戏II", "stock_code": "000001", "stock_name": "平安银行"},
+        ]
+        issues: list = []
+        aligned, board_only, stock_rows = align_all_import_constituent_rows(
+            _DB(), rows, "industry", issues
+        )
+        assert stock_rows == 2
+        assert len(aligned) == 2
+        assert {a["board_code"] for a in aligned} == {"BK1028", "BK1046"}

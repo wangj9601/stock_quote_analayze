@@ -13,6 +13,7 @@ from backend_api.admin.board_constituents import (
     SaveBoardInfoBody,
     SetBoardTradeObserveBody,
     _clear_all_concept_boards,
+    _clear_all_industry_boards,
     _assert_concept_board_name_unique,
     _generate_next_concept_board_code,
     _industry_board_src_sql,
@@ -23,6 +24,7 @@ from backend_api.admin.board_constituents import (
     _read_board_trade_observe_flag,
     _sync_concept_board_basic_from_import,
     _upsert_board_basic,
+    _resolve_stock_lookup_codes,
     _tables,
 )
 
@@ -269,3 +271,61 @@ class TestBoardConstituentsHelpers:
         cons, basic = _clear_all_concept_boards(_DB())
         assert cons == 10
         assert basic == 5
+
+    def test_clear_all_industry_boards(self):
+        deleted: dict[str, int] = {"cons": 0, "basic": 0, "realtime": 0}
+
+        class _Q:
+            def delete(self, synchronize_session=False):
+                deleted["cons"] = 12
+                return 12
+
+        class _DB:
+            def query(self, model):
+                return _Q()
+
+            def execute(self, sql, params=None):
+                sql_text = str(sql)
+                if "industry_board_basic_info" in sql_text:
+                    deleted["basic"] = 6
+                    return type("R", (), {"rowcount": 6})()
+                if "industry_board_realtime_quotes" in sql_text:
+                    deleted["realtime"] = 3
+                    return type("R", (), {"rowcount": 3})()
+                return type("R", (), {"rowcount": 0})()
+
+        cons, basic, realtime = _clear_all_industry_boards(_DB())
+        assert cons == 12
+        assert basic == 6
+        assert realtime == 3
+
+    def test_resolve_stock_lookup_codes_by_code(self):
+        class _DB:
+            def execute(self, sql, params=None):
+                if "stock_basic_info" in str(sql):
+                    return type("R", (), {"fetchone": lambda self: ("深圳机场",)})()
+                return type("R", (), {"fetchall": lambda self: []})()
+
+        codes, names, err = _resolve_stock_lookup_codes(_DB(), "000089")
+        assert err is None
+        assert codes == ["000089"]
+        assert names == ["深圳机场"]
+
+    def test_resolve_stock_lookup_codes_empty(self):
+        codes, names, err = _resolve_stock_lookup_codes(object(), "   ")
+        assert codes == []
+        assert err == "请输入股票代码或名称"
+
+    def test_resolve_stock_lookup_codes_by_name(self):
+        class _DB:
+            def execute(self, sql, params=None):
+                if "stock_basic_info" in str(sql):
+                    return type("R", (), {
+                        "fetchall": lambda self: [("000089", "深圳机场")],
+                    })()
+                return type("R", (), {"fetchall": lambda self: []})()
+
+        codes, names, err = _resolve_stock_lookup_codes(_DB(), "深圳机场")
+        assert err is None
+        assert codes == ["000089"]
+        assert "深圳机场" in names

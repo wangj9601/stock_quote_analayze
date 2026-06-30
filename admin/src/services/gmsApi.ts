@@ -548,10 +548,12 @@ class GMSApiService {
       status?: string
       remark?: string
     }>
+    clear_existing?: boolean
   }) {
     const res = await this.request<{
       success: boolean
       data: {
+        cleared_count?: number
         success_count: number
         skip_count: number
         fail_count: number

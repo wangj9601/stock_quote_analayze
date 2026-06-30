@@ -3,7 +3,7 @@
     <div class="page-header">
       <h1 class="text-xl font-semibold">板块成分股维护</h1>
       <p class="text-sm text-gray-500 mt-1">
-        维护东财行业板块与概念板块的成分股映射；支持板块信息编辑、东财同步、全量/单板 Excel 导入导出、单个录入与手动增删。
+        维护东财行业板块与概念板块的成分股映射；支持板块信息编辑、东财同步、全量/单板 Excel 导入导出、单个录入与手动增删；可按股票代码/名称反查所属板块。
       </p>
     </div>
 
@@ -11,6 +11,47 @@
       <el-radio-button label="industry">行业板块</el-radio-button>
       <el-radio-button label="concept">概念板块</el-radio-button>
     </el-radio-group>
+
+    <el-card shadow="never" class="stock-lookup-card">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm text-gray-600 shrink-0">股票反查所属板块：</span>
+        <el-input
+          v-model="stockLookupKeyword"
+          placeholder="股票代码或名称"
+          clearable
+          class="max-w-xs"
+          @keyup.enter="lookupBoardsByStock"
+        />
+        <el-button type="primary" plain size="small" :loading="stockLookupLoading" @click="lookupBoardsByStock">
+          查询
+        </el-button>
+        <span v-if="stockLookupHint" class="text-sm text-gray-500">{{ stockLookupHint }}</span>
+      </div>
+      <el-table
+        v-if="stockLookupBoards.length"
+        :data="stockLookupBoards"
+        size="small"
+        class="mt-3"
+        highlight-current-row
+        max-height="200"
+        @row-click="onStockLookupBoardClick"
+      >
+        <el-table-column prop="board_code" label="板块代码" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="board_name" label="板块名称" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="last_updated" label="成分更新时间" width="170" />
+        <el-table-column label="操作" width="72" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click.stop="onStockLookupBoardClick(row)">定位</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty
+        v-else-if="stockLookupSearched && !stockLookupLoading"
+        description="未找到所属板块"
+        :image-size="56"
+        class="mt-2 py-2"
+      />
+    </el-card>
 
     <el-row :gutter="16" class="board-panels-row">
       <el-col :span="9" class="board-panel-col">
@@ -267,8 +308,15 @@
         class="mb-4"
         :title="boardType === 'concept'
           ? '请使用「导出全部」得到的 .xlsx（含 board_code 列），或下载全量模板。不支持东财单板 Table.xls（仅名称列）；单板文件请选中板块后用右侧「Excel 导入」。概念板块导入前将清空原有全部数据。'
-          : '文件需含「板块代码」列及「股票代码」或「名称」列；请先「导出全部」或使用全量模板，不支持东财单板 Table.xls。'"
+          : '文件需含 board_code、stock_code/stock_name 列（与「导出全部」格式一致，见示意图）。板块代码须与列表中一致：若列表为 BK1028 等新编码，文件中 BK0420 等旧编码将导入到对应旧板块行，不会填充 BK1028。导入后可在列表搜索 board_code 核对成分数。'"
       />
+      <el-checkbox
+        v-if="boardType === 'industry'"
+        v-model="importAllClearExisting"
+        class="mb-3"
+      >
+        导入前清空全部行业板块数据（基础信息、成分股、实时行情）
+      </el-checkbox>
       <div class="mb-3 flex flex-wrap gap-2">
         <el-button size="small" @click="downloadAllTemplate('xlsx')">下载 XLSX 模板</el-button>
         <el-button size="small" @click="downloadAllTemplate('csv')">下载 CSV 模板</el-button>
@@ -390,6 +438,12 @@ const selectedBoardRows = ref<BoardSummary[]>([])
 const deletingBoardsBatch = ref(false)
 const boardTableRef = ref<TableInstance | null>(null)
 
+const stockLookupKeyword = ref('')
+const stockLookupLoading = ref(false)
+const stockLookupBoards = ref<BoardSummary[]>([])
+const stockLookupHint = ref('')
+const stockLookupSearched = ref(false)
+
 const stockKeyword = ref('')
 const stockPage = ref(1)
 const stockPageSize = ref(50)
@@ -410,6 +464,7 @@ const importingAll = ref(false)
 const singleAddForm = reactive({ stock_code: '', stock_name: '' })
 const importFile = ref<File | null>(null)
 const importAllFile = ref<File | null>(null)
+const importAllClearExisting = ref(false)
 const importResult = ref<{
   message: string
   issues?: Array<{ row_no: number; message: string }>
@@ -452,6 +507,9 @@ function onBoardTypeChange() {
   selectedBoardRows.value = []
   constituents.value = []
   boardPage.value = 1
+  stockLookupBoards.value = []
+  stockLookupHint.value = ''
+  stockLookupSearched.value = false
   void loadBoards()
 }
 
@@ -475,6 +533,58 @@ async function loadBoards() {
   } finally {
     boardsLoading.value = false
   }
+}
+
+async function lookupBoardsByStock() {
+  const kw = stockLookupKeyword.value.trim()
+  if (!kw) {
+    ElMessage.warning('请输入股票代码或名称')
+    return
+  }
+  stockLookupLoading.value = true
+  stockLookupSearched.value = true
+  try {
+    const res = await boardConstituentsService.listBoardsByStock({
+      boardType: boardType.value,
+      stock: kw,
+    })
+    const codes = res.data?.stock_codes || []
+    const names = res.data?.stock_names || []
+    const namePart = names.length ? names.join('、') : ''
+    const codePart = codes.join('、')
+    stockLookupHint.value = namePart
+      ? `股票 ${codePart}（${namePart}）— ${res.message || ''}`
+      : `股票 ${codePart} — ${res.message || ''}`
+    stockLookupBoards.value = (res.data?.boards || []).map((b) => ({
+      board_code: b.board_code,
+      board_name: b.board_name,
+      constituent_count: 0,
+      last_updated: b.last_updated,
+      trade_observe_flag: b.trade_observe_flag,
+    }))
+    if (!stockLookupBoards.value.length) {
+      ElMessage.info(stockLookupHint.value || '未找到所属板块')
+    }
+  } catch (e: unknown) {
+    stockLookupBoards.value = []
+    stockLookupHint.value = ''
+    ElMessage.error(formatApiError(e, '反查失败'))
+  } finally {
+    stockLookupLoading.value = false
+  }
+}
+
+async function onStockLookupBoardClick(row: BoardSummary) {
+  boardKeyword.value = row.board_code
+  boardPage.value = 1
+  await loadBoards()
+  let found = boards.value.find((b) => b.board_code === row.board_code)
+  if (!found) {
+    found = row
+    boards.value = [row, ...boards.value]
+  }
+  boardTableRef.value?.setCurrentRow(found)
+  onSelectBoard(found)
 }
 
 function onSelectBoard(row: BoardSummary | null) {
@@ -720,6 +830,7 @@ function openImportAllDialog() {
 
 function resetImportAllForm() {
   importAllFile.value = null
+  importAllClearExisting.value = false
   importAllResult.value = null
 }
 
@@ -767,11 +878,23 @@ async function exportAllConstituents() {
 
 async function submitImportAll() {
   if (!importAllFile.value) return
+  if (boardType.value === 'industry' && importAllClearExisting.value) {
+    try {
+      await ElMessageBox.confirm(
+        '将清空全部行业板块的基础信息、成分股与实时行情，再导入文件数据。此操作不可恢复，是否继续？',
+        '清空并导入确认',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
   importingAll.value = true
   try {
     const res = await boardConstituentsService.importAllFromFile({
       boardType: boardType.value,
       file: importAllFile.value,
+      clearExisting: boardType.value === 'industry' ? importAllClearExisting.value : undefined,
     })
     if (!res.success) {
       const detail = res.data?.issues?.[0]?.message

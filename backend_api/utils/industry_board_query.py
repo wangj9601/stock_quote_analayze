@@ -7,6 +7,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_api.models import IndustryBoardConstituent
+from backend_api.utils.bk_board_code import is_valid_bk_board_code
 
 
 def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -135,11 +136,11 @@ def get_industry_board_name_by_stock_code(db: Session, stock_code: str) -> Optio
         return None
     sql = text(
         """
-        SELECT COALESCE(b.board_name, c.board_code) AS board_name
+        SELECT c.board_code, b.board_name
         FROM industry_board_constituents c
         LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
         WHERE c.stock_code = :stock_code
-        ORDER BY board_name, c.board_code
+        ORDER BY b.board_name NULLS LAST, c.board_code
         """
     )
     try:
@@ -147,17 +148,18 @@ def get_industry_board_name_by_stock_code(db: Session, stock_code: str) -> Optio
     except Exception:
         return None
     names: List[str] = []
-    for row in rows:
-        bn = str(row[0]).strip() if row and row[0] else ""
-        if bn and bn not in names:
-            names.append(bn)
+    name_map = _load_industry_board_name_map(db)
+    for board_code, board_name in rows:
+        display = _resolve_industry_board_display_name(board_code, board_name, name_map)
+        if display and display not in names:
+            names.append(display)
     return ",".join(names) if names else None
 
 
 def batch_industry_board_names_by_stock_codes(
     db: Session, stock_codes: List[str]
 ) -> Dict[str, str]:
-    """批量 A 股行业板块名称（stock_code -> 逗号分隔的 board_name）。"""
+    """批量 A 股行业板块名称（stock_code -> 逗号分隔的可读板块名，不含 BK 编码）。"""
     if not stock_codes:
         return {}
     codes = list(dict.fromkeys(_normalize_code(c) for c in stock_codes if c and str(c).strip()))
@@ -165,24 +167,27 @@ def batch_industry_board_names_by_stock_codes(
         return {}
     stmt = text(
         """
-        SELECT c.stock_code, COALESCE(b.board_name, c.board_code) AS board_name
+        SELECT c.stock_code, c.board_code, b.board_name
         FROM industry_board_constituents c
         LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
         WHERE c.stock_code IN :codes
-        ORDER BY c.stock_code, board_name, c.board_code
+        ORDER BY c.stock_code, b.board_name NULLS LAST, c.board_code
         """
     ).bindparams(bindparam("codes", expanding=True))
     try:
         board_rows = db.execute(stmt, {"codes": codes}).fetchall()
     except Exception:
         return {}
+    name_map = _load_industry_board_name_map(db)
     grouped: Dict[str, List[str]] = {}
-    for stock_code, board_name in board_rows:
+    for stock_code, board_code, board_name in board_rows:
         sc = _normalize_code(str(stock_code))
-        bn = str(board_name).strip() if board_name else sc
+        display = _resolve_industry_board_display_name(board_code, board_name, name_map)
+        if not display:
+            continue
         bucket = grouped.setdefault(sc, [])
-        if bn not in bucket:
-            bucket.append(bn)
+        if display not in bucket:
+            bucket.append(display)
     return {code: ",".join(names) for code, names in grouped.items() if names}
 
 
@@ -220,10 +225,12 @@ def sync_a_stock_industry_from_boards(
         WITH dedup AS (
             SELECT DISTINCT
                 c.stock_code,
-                COALESCE(b.board_name, c.board_code) AS board_name
+                TRIM(b.board_name) AS board_name
             FROM industry_board_constituents c
-            LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
-            WHERE 1 = 1 {code_filter}
+            INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
+            WHERE TRIM(COALESCE(b.board_name, '')) <> ''
+              AND UPPER(TRIM(b.board_name)) NOT LIKE 'BK%%'
+              {code_filter}
         ),
         board_agg AS (
             SELECT
@@ -263,16 +270,6 @@ def sync_a_stock_industry_from_boards(
         raise
 
 
-def resolve_cn_industry_display(
-    stored: Optional[str], board_industry: Optional[str]
-) -> Optional[str]:
-    """A 股列表展示：优先行业板块名称，其次库内 industry。"""
-    board = normalize_industry_text(board_industry)
-    if board:
-        return board
-    return normalize_industry_text(stored)
-
-
 def normalize_industry_text(value: Any) -> Optional[str]:
     """过滤 None、空串及 nan/none 等无效占位。"""
     if value is None:
@@ -283,6 +280,79 @@ def normalize_industry_text(value: Any) -> Optional[str]:
     if s.lower() in ("nan", "none", "null", "<na>", "nat"):
         return None
     return s
+
+
+def is_board_code_display_token(value: Any) -> bool:
+    """BK 板块编码不应作为「所属行业」展示。"""
+    s = str(value or "").strip()
+    if not s:
+        return True
+    return is_valid_bk_board_code(s)
+
+
+def _load_industry_board_name_map(db: Session) -> Dict[str, str]:
+    """board_code -> 可读板块名称。"""
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT board_code, board_name
+                FROM industry_board_basic_info
+                WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                """
+            )
+        ).fetchall()
+    except Exception:
+        return {}
+    out: Dict[str, str] = {}
+    for code, name in rows:
+        c = str(code or "").strip()
+        n = normalize_industry_text(name)
+        if c and n and not is_board_code_display_token(n):
+            out[c] = n
+    return out
+
+
+def _resolve_industry_board_display_name(
+    board_code: Any,
+    raw_name: Any,
+    name_map: Dict[str, str],
+) -> Optional[str]:
+    """将成分股行的板块编码/名称解析为可展示的行业名。"""
+    code = str(board_code or "").strip()
+    candidate = normalize_industry_text(raw_name)
+    if candidate and not is_board_code_display_token(candidate):
+        return candidate
+    if code:
+        mapped = normalize_industry_text(name_map.get(code))
+        if mapped and not is_board_code_display_token(mapped):
+            return mapped
+    return None
+
+
+def clean_industry_display_text(value: Any) -> Optional[str]:
+    """展示用行业：去掉 BK 编码，仅保留可读名称（支持逗号拼接的历史脏数据）。"""
+    base = normalize_industry_text(value)
+    if not base:
+        return None
+    parts = [p.strip() for p in base.split(",") if p.strip()]
+    names: List[str] = []
+    for part in parts:
+        if is_board_code_display_token(part):
+            continue
+        if part not in names:
+            names.append(part)
+    return ",".join(names) if names else None
+
+
+def resolve_cn_industry_display(
+    stored: Optional[str], board_industry: Optional[str]
+) -> Optional[str]:
+    """A 股列表展示：优先行业板块名称，其次库内 industry；均过滤 BK 编码。"""
+    board = clean_industry_display_text(board_industry)
+    if board:
+        return board
+    return clean_industry_display_text(stored)
 
 
 def stock_matches_industry_filter(

@@ -16,7 +16,16 @@
             {{ task.status }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="进度">{{ displayProgress(task.progress) }}%</el-descriptions-item>
+        <el-descriptions-item label="进度">
+          <div v-if="isActiveTask" class="progress-cell">
+            <el-progress
+              :percentage="displayProgress(task.progress)"
+              :stroke-width="14"
+              :status="task.status === 'running' ? undefined : 'success'"
+            />
+          </div>
+          <span v-else>{{ displayProgress(task.progress) }}%</span>
+        </el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDateTimeBeijing(task.created_at) }}</el-descriptions-item>
         <template v-if="task.config">
           <el-descriptions-item label="任务类型">{{ backtestTypeLabel }}</el-descriptions-item>
@@ -105,7 +114,7 @@
       </template>
 
       <h4 class="mt-4 mb-2">日志</h4>
-      <div class="log-box">
+      <div ref="logBoxRef" class="log-box">
         <div v-for="(log, i) in logs" :key="i" class="log-line">{{ log.text }}</div>
         <div v-if="logs.length === 0" class="text-gray-400">暂无日志</div>
       </div>
@@ -114,12 +123,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, inject } from 'vue'
+import { ref, watch, computed, inject, onUnmounted, nextTick } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
 
+const POLL_INTERVAL_MS = 3000
+
 const props = defineProps<{ modelValue: boolean; taskId: string }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'closed'): void }>()
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: boolean): void
+  (e: 'closed'): void
+  (e: 'task-updated', task: any): void
+}>()
 
 const gmsApi = inject<any>('gmsApi')
 const visible = computed({
@@ -130,6 +145,10 @@ const visible = computed({
 const task = ref<any>(null)
 const logs = ref<any[]>([])
 const loading = ref(false)
+const logBoxRef = ref<HTMLElement | null>(null)
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const isActiveTask = computed(() => isActiveStatus(task.value?.status))
 const isTradeSimulation = computed(() => {
   const t = String(task.value?.config?.backtest_type || task.value?.summary?.backtest_type || 'signal_hit_rate')
   return t === 'trade_simulation'
@@ -218,21 +237,61 @@ function num(v: unknown): string {
   return n.toFixed(3)
 }
 
+function isActiveStatus(status: unknown): boolean {
+  return status === 'running' || status === 'pending'
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+function scrollLogsToBottom() {
+  nextTick(() => {
+    const el = logBoxRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+async function refreshTaskData() {
+  if (!props.taskId) return
+  const prevStatus = task.value?.status
+  task.value = await gmsApi.getBacktestTask(props.taskId)
+  const logList = await gmsApi.getBacktestLogs(props.taskId)
+  logs.value = Array.isArray(logList) ? logList : []
+  scrollLogsToBottom()
+  if (prevStatus && isActiveStatus(prevStatus) && !isActiveStatus(task.value?.status)) {
+    emit('task-updated', task.value)
+    stopPolling()
+  }
+}
+
+function startPolling() {
+  stopPolling()
+  if (!visible.value || !props.taskId || !isActiveTask.value) return
+  pollTimer = setInterval(() => {
+    void refreshTaskData().catch(() => {})
+  }, POLL_INTERVAL_MS)
+}
+
 async function load() {
   if (!props.taskId) return
   loading.value = true
   task.value = null
   logs.value = []
+  stopPolling()
   try {
-    task.value = await gmsApi.getBacktestTask(props.taskId)
-    const logList = await gmsApi.getBacktestLogs(props.taskId)
-    logs.value = Array.isArray(logList) ? logList : []
+    await refreshTaskData()
+    if (isActiveTask.value) startPolling()
   } finally {
     loading.value = false
   }
 }
 
 function handleClose() {
+  stopPolling()
   emit('closed')
 }
 
@@ -240,12 +299,18 @@ watch(
   () => [props.modelValue, props.taskId],
   ([v, id]) => {
     if (v && id) load()
+    else stopPolling()
   },
   { immediate: true }
 )
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped>
+.progress-cell { min-width: 180px; }
 .log-box { max-height: 200px; overflow-y: auto; border: 1px solid var(--el-border-color); border-radius: 4px; padding: 8px; font-size: 12px; }
 .log-line { padding: 2px 0; }
 .mt-4 { margin-top: 1rem; }

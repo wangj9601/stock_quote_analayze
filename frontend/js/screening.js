@@ -695,7 +695,10 @@ const ScreeningPage = {
         if (!s) return '--';
         const low = s.toLowerCase();
         if (low === 'nan' || low === 'none' || low === 'null' || low === '<na>' || low === 'nat') return '--';
-        return s;
+        const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+        const names = parts.filter((p) => !/^BK\d+$/i.test(p));
+        if (!names.length) return '--';
+        return names.join(',');
     },
 
     _buildGmsTradeObserveSnapshot(stock) {

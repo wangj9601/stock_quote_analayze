@@ -900,6 +900,7 @@ class BatchImportItem(BaseModel):
 class BatchImportStocksBody(BaseModel):
     version_id: int = Field(..., ge=1, description="策略版本ID")
     items: List[BatchImportItem] = Field(default_factory=list, description="批量导入观察股条目")
+    clear_existing: bool = Field(False, description="导入前清空该策略版本下全部观察股")
 
 
 def _as_text_stock_code(code: Any) -> str:
@@ -1573,6 +1574,15 @@ async def batch_import_strategy_version_stocks(body: BatchImportStocksBody, db: 
     if not version:
         raise HTTPException(status_code=404, detail="策略版本不存在")
 
+    cleared_count = 0
+    if body.clear_existing:
+        cleared_count = (
+            db.query(GMSStrategyVersionStock)
+            .filter(GMSStrategyVersionStock.version_id == body.version_id)
+            .delete(synchronize_session=False)
+        )
+        db.flush()
+
     success_count = 0
     skip_count = 0
     fail_count = 0
@@ -1626,6 +1636,7 @@ async def batch_import_strategy_version_stocks(body: BatchImportStocksBody, db: 
     return {
         "success": True,
         "data": {
+            "cleared_count": cleared_count,
             "success_count": success_count,
             "skip_count": skip_count,
             "fail_count": fail_count,
