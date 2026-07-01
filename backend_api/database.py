@@ -11,12 +11,14 @@ from backend_api.config import DATABASE_CONFIG
 from fastapi import Depends
 from typing import Generator
 
-# 创建数据库引擎
+# 创建数据库引擎（pool_pre_ping：取连接前探测，库重启后自动丢弃死连接并重连）
 engine = create_engine(
     DATABASE_CONFIG["url"],
     pool_size=DATABASE_CONFIG["pool_size"],
     max_overflow=DATABASE_CONFIG["max_overflow"],
-    echo=DATABASE_CONFIG["echo"]
+    echo=DATABASE_CONFIG["echo"],
+    pool_pre_ping=True,
+    pool_recycle=1800,
 )
 
 print("数据库连接URL:", repr(DATABASE_CONFIG["url"]))
