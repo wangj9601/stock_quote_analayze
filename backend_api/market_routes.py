@@ -249,9 +249,11 @@ def get_concept_board(db: Session = Depends(get_db)):
         rows = db.execute(
             text(
                 """
-                SELECT board_code, board_name, create_date
+                SELECT board_code, board_name, create_date,
+                       COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
                 FROM concept_board_basic_info
                 WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                  AND COALESCE(frontend_visible_flag, TRUE) = TRUE
                 ORDER BY create_date DESC NULLS LAST, board_code
                 """
             )
@@ -261,6 +263,7 @@ def get_concept_board(db: Session = Depends(get_db)):
                 "board_code": row[0],
                 "board_name": row[1],
                 "create_date": row[2].isoformat() if row[2] else None,
+                "trade_observe_flag": bool(row[3]),
             }
             for row in rows
         ]

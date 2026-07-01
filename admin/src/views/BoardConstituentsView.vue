@@ -124,6 +124,19 @@
                 />
               </template>
             </el-table-column>
+            <el-table-column label="前端显示" width="88" align="center">
+              <template #default="{ row }">
+                <el-switch
+                  :model-value="row.frontend_visible_flag !== false"
+                  size="small"
+                  inline-prompt
+                  active-text="是"
+                  inactive-text="否"
+                  @click.stop
+                  @change="(val: boolean) => toggleBoardFrontendVisible(row, val)"
+                />
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="108" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openBoardEditDialog(row)">编辑</el-button>
@@ -265,6 +278,15 @@
             inactive-text="否"
           />
           <p class="text-xs text-gray-500 mt-1">标记后可在 GMS 等板块筛选中作为重点关注来源。</p>
+        </el-form-item>
+        <el-form-item label="前端显示">
+          <el-switch
+            v-model="boardEditForm.frontend_visible_flag"
+            inline-prompt
+            active-text="是"
+            inactive-text="否"
+          />
+          <p class="text-xs text-gray-500 mt-1">关闭后网站 GMS 选股页的行业/概念板块选择器中不再展示该板块。</p>
         </el-form-item>
         <p v-if="boardEditForm.original_board_code" class="text-xs text-gray-500">
           修改代码将同步更新该板块下全部成分股的 board_code。
@@ -484,9 +506,11 @@ const boardEditForm = reactive({
   board_code: '',
   board_name: '',
   trade_observe_flag: false,
+  frontend_visible_flag: true,
   original_board_code: '' as string,
 })
 const togglingTradeObserve = ref<string | null>(null)
+const togglingFrontendVisible = ref<string | null>(null)
 
 const isBoardCreateAutoCode = computed(
   () => boardType.value === 'concept' && !boardEditForm.original_board_code,
@@ -620,11 +644,13 @@ function openBoardEditDialog(row?: BoardSummary) {
     boardEditForm.board_code = row.board_code
     boardEditForm.board_name = row.board_name || ''
     boardEditForm.trade_observe_flag = !!row.trade_observe_flag
+    boardEditForm.frontend_visible_flag = row.frontend_visible_flag !== false
     boardEditForm.original_board_code = row.board_code
   } else {
     boardEditForm.board_code = ''
     boardEditForm.board_name = ''
     boardEditForm.trade_observe_flag = false
+    boardEditForm.frontend_visible_flag = true
     boardEditForm.original_board_code = ''
   }
   boardEditVisible.value = true
@@ -660,6 +686,7 @@ function resetBoardEditForm() {
   boardEditForm.board_code = ''
   boardEditForm.board_name = ''
   boardEditForm.trade_observe_flag = false
+  boardEditForm.frontend_visible_flag = true
   boardEditForm.original_board_code = ''
 }
 
@@ -682,6 +709,28 @@ async function toggleBoardTradeObserve(row: BoardSummary, val: boolean) {
     ElMessage.error(e instanceof Error ? e.message : '更新交易观察标志失败')
   } finally {
     togglingTradeObserve.value = null
+  }
+}
+
+async function toggleBoardFrontendVisible(row: BoardSummary, val: boolean) {
+  if (togglingFrontendVisible.value === row.board_code) return
+  const prev = row.frontend_visible_flag !== false
+  row.frontend_visible_flag = val
+  togglingFrontendVisible.value = row.board_code
+  try {
+    await boardConstituentsService.setBoardFrontendVisible({
+      boardType: boardType.value,
+      boardCode: row.board_code,
+      frontendVisibleFlag: val,
+    })
+    if (selectedBoard.value?.board_code === row.board_code) {
+      selectedBoard.value.frontend_visible_flag = val
+    }
+  } catch (e: unknown) {
+    row.frontend_visible_flag = prev
+    ElMessage.error(e instanceof Error ? e.message : '更新前端显示标志失败')
+  } finally {
+    togglingFrontendVisible.value = null
   }
 }
 
@@ -711,6 +760,7 @@ async function submitBoardEdit() {
       boardName: boardEditForm.board_name.trim() || undefined,
       originalBoardCode: boardEditForm.original_board_code || undefined,
       tradeObserveFlag: boardEditForm.trade_observe_flag,
+      frontendVisibleFlag: boardEditForm.frontend_visible_flag,
     })
     ElMessage.success(res.message || '已保存')
     boardEditVisible.value = false

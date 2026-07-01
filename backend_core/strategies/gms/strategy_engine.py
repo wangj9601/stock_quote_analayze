@@ -60,9 +60,9 @@ class GMSStrategyEngine:
         results = []
 
         def _is_a_share(c: str) -> bool:
-            s = str(c).strip()
-            # 6 位数字：6/0/3 为 A 股，9 为沪市 B 股（指标表按 CN 存储），均按 CN 查指标
-            return len(s) >= 6 and s.isdigit() and s[0] in "6039"
+            from backend_api.utils.cn_listed_board_filter import is_cn_listed_equity_code
+
+            return is_cn_listed_equity_code(c)
 
         def _is_etf(c: str) -> bool:
             s = str(c).strip()

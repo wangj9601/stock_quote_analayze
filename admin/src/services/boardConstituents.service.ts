@@ -8,6 +8,7 @@ export interface BoardSummary {
   constituent_count: number
   last_updated: string | null
   trade_observe_flag?: boolean
+  frontend_visible_flag?: boolean
 }
 
 export interface BoardConstituentRow {
@@ -129,6 +130,7 @@ class BoardConstituentsService {
     boardName?: string
     originalBoardCode?: string
     tradeObserveFlag?: boolean
+    frontendVisibleFlag?: boolean
   }) {
     return apiService.post<{
       success: boolean
@@ -138,6 +140,7 @@ class BoardConstituentsService {
         board_code: string
         board_name: string | null
         trade_observe_flag?: boolean
+        frontend_visible_flag?: boolean
         original_board_code?: string | null
       }
     }>('/board-constituents/boards/save', {
@@ -146,6 +149,7 @@ class BoardConstituentsService {
       board_name: body.boardName,
       original_board_code: body.originalBoardCode,
       trade_observe_flag: body.tradeObserveFlag,
+      frontend_visible_flag: body.frontendVisibleFlag,
     })
   }
 
@@ -162,6 +166,22 @@ class BoardConstituentsService {
       board_type: body.boardType,
       board_code: body.boardCode,
       trade_observe_flag: body.tradeObserveFlag,
+    })
+  }
+
+  async setBoardFrontendVisible(body: {
+    boardType: BoardType
+    boardCode: string
+    frontendVisibleFlag: boolean
+  }) {
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: { board_code: string; frontend_visible_flag: boolean }
+    }>('/board-constituents/boards/frontend-visible', {
+      board_type: body.boardType,
+      board_code: body.boardCode,
+      frontend_visible_flag: body.frontendVisibleFlag,
     })
   }
 

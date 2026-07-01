@@ -19,6 +19,7 @@ def normalize_list_board_segment(raw: Optional[str]) -> List[str]:
     """
     将单个查询参数转为板块键列表。
     MAIN = 沪深主板（SH_MAIN + SZ_MAIN），与前端「主板」对应。
+  BJ / BSE = 北交所/北证。
     """
     if raw is None:
         return []
@@ -27,9 +28,25 @@ def normalize_list_board_segment(raw: Optional[str]) -> List[str]:
         return []
     if k == "MAIN":
         return ["SH_MAIN", "SZ_MAIN"]
+    if k in ("BSE", "北证"):
+        return ["BJ"]
     if k in VSB_BOARD_PREFIX_GROUPS:
         return [k]
     return []
+
+
+def is_cn_listed_equity_code(code: str) -> bool:
+    """沪深京 A 股代码（含北交所），用于 GMS 等市场类型判定。"""
+    c = str(code or "").strip()
+    if len(c) == 5 and c.isdigit():
+        return False
+    if len(c) < 6 and c.isdigit():
+        c = c.zfill(6)
+    if len(c) != 6 or not c.isdigit():
+        return False
+    if c[0] in "6039":
+        return True
+    return code_matches_vsb_boards(c, ["BJ"])
 
 
 def board_keys_to_code_prefix_or(code_column: Column, board_keys: List[str]):

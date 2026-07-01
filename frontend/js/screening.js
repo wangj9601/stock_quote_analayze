@@ -49,13 +49,6 @@ const ScreeningPage = {
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
 
-    /** 提示用户需手动点击「刷新筛选」 */
-    _hintGmsClickRefreshFilter() {
-        if (window.CommonUtils) {
-            CommonUtils.showToast('请点击「刷新筛选」开始 GMS 策略打分选股', 'info');
-        }
-    },
-
     // 初始化
     async init() {
         await this.loadHeader();
@@ -120,6 +113,7 @@ const ScreeningPage = {
         if (strategy === 'gms') {
             void this.initGmsStrategyConfig();
             this.syncGmsWatchlistMarketWrap();
+            this.syncGmsCnBoardWrap();
             this.syncGmsIndustryBoardWrap();
             this.syncGmsSingleStockWrap();
             void this.loadGmsIndustryBoardOptions();
@@ -1739,6 +1733,15 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
+    /** 显示/隐藏「全部A股」下的板块筛选行 */
+    syncGmsCnBoardWrap() {
+        const wrap = document.getElementById('gmsCnBoardWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="gmsScope"]:checked');
+        const show = checked && checked.value === 'cn';
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
     /** 已选行业板块代码 */
     getGmsSelectedIndustryBoardCodes() {
         return Array.isArray(this.gmsSelectedIndustryBoardCodes)
@@ -1763,6 +1766,44 @@ const ScreeningPage = {
         return name || code;
     },
 
+    /** 板块目录中已标记交易观察的板块代码 */
+    _gmsBoardTradeObserveCodes(kind) {
+        return this._gmsBoardCatalogByKind(kind)
+            .filter((b) => b.trade_observe_flag === true)
+            .map((b) => String(b.board_code || '').trim())
+            .filter(Boolean);
+    },
+
+    /** 将交易观察板块并入已选集合 */
+    _mergeGmsTradeObserveBoardSelection(kind, selected) {
+        const set = selected instanceof Set
+            ? new Set(selected)
+            : new Set(Array.isArray(selected) ? selected : []);
+        this._gmsBoardTradeObserveCodes(kind).forEach((code) => set.add(code));
+        return set;
+    },
+
+    /** 将交易观察板块写入 GMS 数据来源已选列表 */
+    _applyGmsTradeObserveBoardDefaults(kind) {
+        if (kind === 'industry') {
+            const merged = this._mergeGmsTradeObserveBoardSelection(
+                kind,
+                this.getGmsSelectedIndustryBoardCodes(),
+            );
+            this.gmsSelectedIndustryBoardCodes = Array.from(merged);
+            this.updateGmsIndustryBoardSummary();
+            return;
+        }
+        if (kind === 'concept') {
+            const merged = this._mergeGmsTradeObserveBoardSelection(
+                kind,
+                this.getGmsSelectedConceptBoardCodes(),
+            );
+            this.gmsSelectedConceptBoardCodes = Array.from(merged);
+            this.updateGmsConceptBoardSummary();
+        }
+    },
+
     /** 行业板块同名去重（优先 BK 编码；兼容旧缓存/接口） */
     _dedupeGmsIndustryBoardCatalog(boards) {
         const list = Array.isArray(boards) ? boards : [];
@@ -1773,12 +1814,17 @@ const ScreeningPage = {
             const name = String(b?.board_name || '').trim() || code;
             const prev = buckets.get(name);
             const isBk = /^BK\d+$/i.test(code);
+            const observeFlag = !!(b?.trade_observe_flag || prev?.trade_observe_flag);
             if (!prev) {
-                buckets.set(name, b);
+                buckets.set(name, { ...b, trade_observe_flag: !!b?.trade_observe_flag });
                 return;
             }
             const prevBk = /^BK\d+$/i.test(String(prev.board_code || ''));
-            if (!prevBk && isBk) buckets.set(name, b);
+            if (!prevBk && isBk) {
+                buckets.set(name, { ...b, trade_observe_flag: observeFlag });
+            } else {
+                buckets.set(name, { ...prev, trade_observe_flag: observeFlag });
+            }
         });
         return Array.from(buckets.values()).sort((a, b) => String(a.board_name || a.board_code).localeCompare(
             String(b.board_name || b.board_code),
@@ -1828,7 +1874,7 @@ const ScreeningPage = {
         const selected = kind === 'industry'
             ? this.getGmsSelectedIndustryBoardCodes()
             : this.getGmsSelectedConceptBoardCodes();
-        this._gmsBoardPickerDraft = new Set(selected);
+        this._gmsBoardPickerDraft = this._mergeGmsTradeObserveBoardSelection(kind, selected);
 
         const titleEl = document.getElementById('gmsBoardPickerTitle');
         if (titleEl) {
@@ -1903,9 +1949,6 @@ const ScreeningPage = {
             this.updateGmsConceptBoardSummary();
         }
         this._hideGmsModal(document.getElementById('gmsBoardPickerModal'));
-        if (codes.length) {
-            this._hintGmsClickRefreshFilter();
-        }
     },
 
     /** 显示/隐藏「行业板块」选择行 */
@@ -1938,7 +1981,7 @@ const ScreeningPage = {
             const boards = data.success && Array.isArray(data.data) ? data.data : [];
             this.gmsIndustryBoardCatalog = this._dedupeGmsIndustryBoardCatalog(boards);
             this._gmsIndustryBoardsLoaded = true;
-            this.updateGmsIndustryBoardSummary();
+            this._applyGmsTradeObserveBoardDefaults('industry');
         } catch (e) {
             console.warn('[GMS] 加载行业板块列表失败', e);
             this.gmsIndustryBoardCatalog = [];
@@ -1960,7 +2003,7 @@ const ScreeningPage = {
             ));
             this.gmsConceptBoardCatalog = boards;
             this._gmsConceptBoardsLoaded = true;
-            this.updateGmsConceptBoardSummary();
+            this._applyGmsTradeObserveBoardDefaults('concept');
         } catch (e) {
             console.warn('[GMS] 加载概念板块列表失败', e);
             this.gmsConceptBoardCatalog = [];
@@ -2167,36 +2210,25 @@ const ScreeningPage = {
         document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.syncGmsWatchlistMarketWrap();
+                this.syncGmsCnBoardWrap();
                 this.syncGmsIndustryBoardWrap();
                 this.syncGmsConceptBoardWrap();
                 this.syncGmsSingleStockWrap();
                 const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
                 if (scopeEl && scopeEl.value === 'industry_board') {
-                    void this.loadGmsIndustryBoardOptions();
+                    void this.loadGmsIndustryBoardOptions().then(() => {
+                        this._applyGmsTradeObserveBoardDefaults('industry');
+                    });
                 }
                 if (scopeEl && scopeEl.value === 'concept_board') {
-                    void this.loadGmsConceptBoardOptions();
-                }
-                if (scopeEl && scopeEl.value !== 'single') {
-                    this._hintGmsClickRefreshFilter();
-                }
-            });
-        });
-        document.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach(radio => {
-            radio.addEventListener('change', () => {
-                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
-                if (scopeEl && scopeEl.value === 'gms_watchlist') {
-                    this._hintGmsClickRefreshFilter();
+                    void this.loadGmsConceptBoardOptions().then(() => {
+                        this._applyGmsTradeObserveBoardDefaults('concept');
+                    });
                 }
             });
         });
-        const gmsExcludeSt = document.getElementById('gmsExcludeSt');
-        if (gmsExcludeSt) {
-            gmsExcludeSt.addEventListener('change', () => {
-                this._hintGmsClickRefreshFilter();
-            });
-        }
         this.syncGmsWatchlistMarketWrap();
+        this.syncGmsCnBoardWrap();
         this.syncGmsIndustryBoardWrap();
         this.syncGmsConceptBoardWrap();
         this.syncGmsSingleStockWrap();
@@ -2210,24 +2242,6 @@ const ScreeningPage = {
                         void this.loadScreeningResults('gms');
                     }
                 }
-            });
-        }
-
-        const gmsParamOverride = document.getElementById('gms-param-override');
-        if (gmsParamOverride) {
-            gmsParamOverride.addEventListener('change', () => {
-                this._hintGmsClickRefreshFilter();
-            });
-        }
-        const gmsParamsGrid = document.getElementById('gmsStrategyParamsCard');
-        if (gmsParamsGrid) {
-            gmsParamsGrid.querySelectorAll('.param-input').forEach((el) => {
-                el.addEventListener('change', () => {
-                    const overrideEl = document.getElementById('gms-param-override');
-                    if (overrideEl && overrideEl.checked) {
-                        this._hintGmsClickRefreshFilter();
-                    }
-                });
             });
         }
 
@@ -2246,7 +2260,6 @@ const ScreeningPage = {
                 const v = gmsConfigSelect.value;
                 this.gmsConfigId = v ? parseInt(v, 10) : null;
                 void this.syncGmsParamsFromServer(this.gmsConfigId);
-                this._hintGmsClickRefreshFilter();
             });
         }
 
@@ -2391,6 +2404,13 @@ const ScreeningPage = {
         if (scope === 'gms_watchlist') {
             const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
+        }
+        if (scope === 'cn') {
+            const segEl = document.querySelector('input[name="gmsCnBoardSegment"]:checked');
+            const seg = segEl ? segEl.value : 'ALL';
+            if (seg && seg !== 'ALL') {
+                q.set('cn_board_segment', seg);
+            }
         }
         if (scope === 'industry_board') {
             this.getGmsSelectedIndustryBoardCodes().forEach((code) => q.append('industry_board_code', code));

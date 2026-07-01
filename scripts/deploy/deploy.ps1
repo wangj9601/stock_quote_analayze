@@ -46,6 +46,21 @@ function Invoke-DeployCommand {
     }
 }
 
+function Test-IsDeployExcludedArchiveFile([string]$FileName) {
+    $ext = [System.IO.Path]::GetExtension($FileName).ToLowerInvariant()
+    return $ext -in @(
+        '.log',
+        '.xls', '.xlsx', '.xlsm', '.xlsb', '.xltx', '.xltm',
+        '.ppt', '.pptx', '.pptm', '.potx', '.potm', '.pps', '.ppsx', '.ppsm'
+    )
+}
+
+$script:DeployZipExcludeFilePatterns = @(
+    '*.log',
+    '*.xls', '*.xlsx', '*.xlsm', '*.xlsb', '*.xltx', '*.xltm',
+    '*.ppt', '*.pptx', '*.pptm', '*.potx', '*.potm', '*.pps', '*.ppsx', '*.ppsm'
+)
+
 if ($RemoteDeploy) {
     if ([string]::IsNullOrWhiteSpace($ServerHost) -or [string]::IsNullOrWhiteSpace($ServerUser)) {
         throw "-RemoteDeploy requires -ServerHost and -ServerUser."
@@ -110,12 +125,14 @@ if (Test-Path -LiteralPath $localPackage) {
     Remove-Item -LiteralPath $localPackage -Force
 }
 
-# Top-level excludes for zip; subtree and log rules also in robocopy args below.
+# Top-level excludes for zip; subtree rules also in robocopy /XD and /XF (log, Excel, PPT).
 $zipExcludePart1 = '.agent', '.auth', '.cursor', '.gemini', '.git', '.github', '.hypothesis', '.idea', '.kiro', '.pytest_cache', '.qoder', '.vs', '.venv', '.vscode', 'demo', 'dist'
 $zipExcludePart2 = 'docs', 'env', 'image', 'logs', 'manual_scripts', 'node_modules', 'test', 'test-results', 'venv'
 $zipExcludeTopLevel = $zipExcludePart1 + $zipExcludePart2
 $rootPath = $projectRoot.Path
-$zipEntries = [array](Get-ChildItem -LiteralPath $rootPath -Force | Where-Object { ($zipExcludeTopLevel -notcontains $_.Name) -and ($_.Name -notlike '*.log') })
+$zipEntries = [array](Get-ChildItem -LiteralPath $rootPath -Force | Where-Object {
+    ($zipExcludeTopLevel -notcontains $_.Name) -and (-not (Test-IsDeployExcludedArchiveFile $_.Name))
+})
 if ($zipEntries.Count -eq 0) {
     throw "Nothing to archive (all top-level entries excluded?)."
 }
@@ -134,9 +151,8 @@ try {
                 $entry.FullName, $targetPath,
                 '/E',
                 '/XD', 'node_modules', '__pycache__', '.pytest_cache', '.mypy_cache', '.git', '.agent', '.auth', '.cursor', '.gemini', '.github', '.hypothesis', '.kiro', '.qoder', '.vscode', 'test', 'tests', 'demo', 'docs', 'image', 'logs', 'manual_scripts', 'test-results',
-                '/XF', '*.log',
-                '/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np'
-            )
+                '/XF'
+            ) + $script:DeployZipExcludeFilePatterns + @('/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np')
             & robocopy @robocopyArgs
             if ($LASTEXITCODE -ge 8) {
                 throw ("robocopy failed for {0} exit {1}" -f $entry.Name, $LASTEXITCODE)

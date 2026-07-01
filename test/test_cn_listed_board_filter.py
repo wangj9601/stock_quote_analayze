@@ -20,8 +20,28 @@ def test_normalize_main_expands():
 
 def test_normalize_single_board():
     assert normalize_list_board_segment("CYB") == ["CYB"]
+    assert normalize_list_board_segment("BJ") == ["BJ"]
+    assert normalize_list_board_segment("BSE") == ["BJ"]
     assert normalize_list_board_segment("") == []
     assert normalize_list_board_segment(None) == []
+
+
+def test_bj_matches_prefixes():
+    keys = normalize_list_board_segment("BJ")
+    assert code_matches_vsb_boards("430047", keys)
+    assert code_matches_vsb_boards("830799", keys)
+    assert code_matches_vsb_boards("920799", keys)
+    assert not code_matches_vsb_boards("600000", keys)
+
+
+def test_is_cn_listed_equity_code_bj():
+    from backend_api.utils.cn_listed_board_filter import is_cn_listed_equity_code
+
+    assert is_cn_listed_equity_code("430047")
+    assert is_cn_listed_equity_code("830799")
+    assert is_cn_listed_equity_code("920799")
+    assert is_cn_listed_equity_code("600000")
+    assert not is_cn_listed_equity_code("00700")
 
 
 def test_main_matches_prefixes():

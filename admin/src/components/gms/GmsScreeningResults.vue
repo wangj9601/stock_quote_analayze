@@ -4,7 +4,7 @@
       <template #header><span class="font-semibold">策略说明</span></template>
       <ul class="strategy-conditions text-sm text-gray-700 list-disc pl-5 space-y-1">
         <li>
-          <strong>数据来源：</strong>【GMS观察股】为管理端「GMS策略版本」中启用版本下的股票；【我的自选】支持指定用户（管理员）；【全部港股】【全部A股】【全部ETF】与网站端一致。
+          <strong>数据来源：</strong>【GMS观察股】为管理端「GMS策略版本」中启用版本下的股票；【我的自选】支持指定用户（管理员）；【全部港股】【全部A股】【全部ETF】与网站端一致；【全部A股】可进一步限定主板、创业板、中小板、科创板或北证。
         </li>
         <li><strong>时间范围：</strong>最近 20 个交易日</li>
         <li><strong>双模块阶梯式评分：</strong></li>
@@ -30,6 +30,17 @@
         <el-radio label="watchlist">我的自选</el-radio>
         <el-radio label="gms_watchlist">GMS观察股</el-radio>
       </el-radio-group>
+      <div v-if="scope === 'cn'" class="mt-3">
+        <div class="text-xs text-gray-500 mb-1">A股板块（在当日有行情的股票池内按代码段筛选）</div>
+        <el-radio-group v-model="cnBoardSegment" class="flex flex-wrap gap-3">
+          <el-radio label="ALL">全部A股</el-radio>
+          <el-radio label="MAIN">主板</el-radio>
+          <el-radio label="CYB">创业板</el-radio>
+          <el-radio label="SZ_SME">中小板</el-radio>
+          <el-radio label="KCB">科创板</el-radio>
+          <el-radio label="BJ">北证</el-radio>
+        </el-radio-group>
+      </div>
       <div v-if="scope === 'gms_watchlist'" class="mt-3">
         <div class="text-xs text-gray-500 mb-1">观察股市场（来自启用策略版本且状态为 active 的观察股）</div>
         <el-radio-group v-model="gmsWatchlistMarket" class="flex flex-wrap gap-3" @change="onGmsWatchlistMarketChange">
@@ -268,6 +279,8 @@ const STORAGE_KEY = 'adminGmsParams'
 const GMS_PAGE_SIZE = 100
 
 const scope = ref<'cn' | 'hk' | 'etf' | 'watchlist' | 'gms_watchlist'>('cn')
+/** scope=cn 时传给后端的 cn_board_segment */
+const cnBoardSegment = ref<'ALL' | 'MAIN' | 'CYB' | 'SZ_SME' | 'KCB' | 'BJ'>('ALL')
 /** scope=gms_watchlist 时传给后端的 gms_watchlist_market */
 const gmsWatchlistMarket = ref<'all' | 'cn' | 'hk'>('all')
 const watchlistUserId = ref<number | undefined>(undefined)
@@ -396,6 +409,9 @@ function saveParams() {
 function buildSearchParams(includePagination: boolean): URLSearchParams {
   const q = new URLSearchParams()
   q.set('scope', scope.value)
+  if (scope.value === 'cn' && cnBoardSegment.value && cnBoardSegment.value !== 'ALL') {
+    q.set('cn_board_segment', cnBoardSegment.value)
+  }
   if (scope.value === 'watchlist' && watchlistUserId.value != null) {
     q.set('watchlist_user_id', String(watchlistUserId.value))
   }

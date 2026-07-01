@@ -12,6 +12,7 @@ from backend_api.admin.board_constituents import (
     DeleteBoardsBatchBody,
     SaveBoardInfoBody,
     SetBoardTradeObserveBody,
+    SetBoardFrontendVisibleBody,
     _clear_all_concept_boards,
     _clear_all_industry_boards,
     _assert_concept_board_name_unique,
@@ -94,26 +95,39 @@ class TestBoardConstituentsHelpers:
         except ValueError:
             pass
 
+    def test_set_board_frontend_visible_body_validation(self):
+        body = SetBoardFrontendVisibleBody(
+            board_type="concept",
+            board_code="BK0428",
+            frontend_visible_flag=False,
+        )
+        assert body.frontend_visible_flag is False
+
     def test_upsert_board_basic_preserves_flag_when_not_provided(self):
         executed: list[dict] = []
 
         class _DB:
             def execute(self, sql, params=None):
                 executed.append({"sql": str(sql), "params": params or {}})
+                if "SELECT trade_observe_flag" in str(sql):
+                    return type("R", (), {"fetchone": lambda self: None})()
+                return type("R", (), {})()
 
         now = __import__("datetime").datetime(2026, 6, 6, 12, 0, 0)
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now)
-        assert "trade_observe_flag" in executed[0]["sql"]
-        assert executed[0]["params"]["board_code"] == "BK0428"
+        assert "trade_observe_flag" in executed[-1]["sql"]
+        assert "frontend_visible_flag" in executed[-1]["sql"]
+        assert executed[-1]["params"]["board_code"] == "BK0428"
+        assert executed[-1]["params"]["frontend_visible_flag"] is True
 
         executed.clear()
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now, trade_observe_flag=True)
-        assert executed[0]["params"]["trade_observe_flag"] is True
+        assert executed[-1]["params"]["trade_observe_flag"] is True
 
     def test_read_board_trade_observe_flag(self):
         class _DB:
             def execute(self, sql, params=None):
-                return type("R", (), {"fetchone": lambda self: (True,)})()
+                return type("R", (), {"fetchone": lambda self: (True, False)})()
 
         assert _read_board_trade_observe_flag(_DB(), "industry", "IT服务") is True
 

@@ -10,19 +10,24 @@ from backend_api.models import IndustryBoardConstituent
 from backend_api.utils.bk_board_code import is_valid_bk_board_code
 
 
-def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    """同名板块只保留一条：优先 BK 编码，避免 GMS 选择器出现重复名称。"""
+def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """同名板块只保留一条：优先 BK 编码，合并 trade_observe_flag。"""
     from backend_api.utils.bk_board_code import is_valid_bk_board_code
 
-    buckets: Dict[str, List[Dict[str, str]]] = {}
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
     for raw in items:
         code = str(raw.get("board_code") or "").strip()
         if not code:
             continue
         name = str(raw.get("board_name") or "").strip() or code
-        buckets.setdefault(name, []).append({"board_code": code, "board_name": name})
+        entry = {
+            "board_code": code,
+            "board_name": name,
+            "trade_observe_flag": bool(raw.get("trade_observe_flag")),
+        }
+        buckets.setdefault(name, []).append(entry)
 
-    out: List[Dict[str, str]] = []
+    out: List[Dict[str, Any]] = []
     for name, group in buckets.items():
         if len(group) == 1:
             out.append(group[0])
@@ -33,24 +38,39 @@ def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str,
                 x["board_code"],
             )
         )
-        out.append(group[0])
+        chosen = dict(group[0])
+        chosen["trade_observe_flag"] = any(bool(x.get("trade_observe_flag")) for x in group)
+        out.append(chosen)
     out.sort(key=lambda x: (x["board_name"], x["board_code"]))
     return out
 
 
-def fetch_industry_board_catalog(db: Session) -> List[Dict[str, str]]:
+def fetch_industry_board_catalog(db: Session, *, frontend_only: bool = True) -> List[Dict[str, Any]]:
     """GMS 等行业板块选择器：仅 basic_info，并按展示名称去重。"""
+    visible_filter = (
+        "AND COALESCE(frontend_visible_flag, TRUE) = TRUE"
+        if frontend_only
+        else ""
+    )
     rows = db.execute(
         text(
-            """
-            SELECT board_code, board_name
+            f"""
+            SELECT board_code, board_name, COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
             FROM industry_board_basic_info
             WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+              {visible_filter}
             ORDER BY board_name NULLS LAST, board_code
             """
         )
     ).fetchall()
-    items = [{"board_code": str(r[0]), "board_name": r[1]} for r in rows]
+    items = [
+        {
+            "board_code": str(r[0]),
+            "board_name": r[1],
+            "trade_observe_flag": bool(r[2]),
+        }
+        for r in rows
+    ]
     return dedupe_industry_board_catalog(items)
 
 

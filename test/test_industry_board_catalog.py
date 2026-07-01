@@ -37,3 +37,26 @@ class TestIndustryBoardCatalog:
         ]
         out = dedupe_industry_board_catalog(items)
         assert len(out) == 2
+
+    def test_dedupe_merges_trade_observe_flag(self):
+        items = [
+            {"board_code": "IT服务", "board_name": "IT服务", "trade_observe_flag": True},
+            {"board_code": "BK1045", "board_name": "IT服务", "trade_observe_flag": False},
+        ]
+        out = dedupe_industry_board_catalog(items)
+        assert len(out) == 1
+        assert out[0]["board_code"] == "BK1045"
+        assert out[0]["trade_observe_flag"] is True
+
+
+def test_fetch_industry_board_catalog_filters_hidden():
+    from backend_api.utils.industry_board_query import fetch_industry_board_catalog
+
+    class _DB:
+        def execute(self, sql, params=None):
+            sql_s = str(sql)
+            assert "frontend_visible_flag" in sql_s
+            assert "COALESCE(frontend_visible_flag, TRUE) = TRUE" in sql_s
+            return type("R", (), {"fetchall": lambda self: []})()
+
+    assert fetch_industry_board_catalog(_DB()) == []

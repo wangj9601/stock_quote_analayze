@@ -178,7 +178,9 @@ def _fallback_gms_indicator_market_type(symbol: str, scope: str, cn_codes: set) 
     if s in cn_codes:
         return "CN"
     if len(s) >= 6 and s.isdigit():
-        if s[0] in "6039":
+        from backend_api.utils.cn_listed_board_filter import is_cn_listed_equity_code
+
+        if is_cn_listed_equity_code(s):
             return "CN"
         if s[0] in "518":
             return "ETF"
@@ -1071,6 +1073,29 @@ def _normalize_gms_board_codes(
     return out
 
 
+def _gms_cn_stock_pool_by_board_segment(
+    db: Session,
+    target_date: str,
+    board_segment: str,
+) -> List[str]:
+    """从当日 A 股行情池按板块代码段过滤（与 VSB boards 前缀一致）。"""
+    from backend_api.models import HistoricalQuotes
+    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+    from backend_core.strategies.gms.frontend_interface import (
+        _distinct_codes_from_quotes,
+        _normalize_cn_pool_code,
+        _resolve_pool_date_for_quotes,
+    )
+    from backend_core.strategies.volume_shrink_breakout.data_loader import code_matches_vsb_boards
+
+    keys = normalize_list_board_segment(board_segment)
+    if not keys:
+        return []
+    eff = _resolve_pool_date_for_quotes(db, target_date, HistoricalQuotes)
+    codes = _distinct_codes_from_quotes(db, HistoricalQuotes, eff, _normalize_cn_pool_code)
+    return [c for c in codes if code_matches_vsb_boards(c, keys)]
+
+
 def _resolve_gms_stock_code_from_input(db: Session, raw: str) -> Optional[str]:
     """
     将用户输入的代码或名称解析为 GMS 可用的证券代码。
@@ -1133,6 +1158,10 @@ async def get_gms_strategy(
     gms_watchlist_market: str = Query(
         "all",
         description="scope=gms_watchlist 时筛选市场: all(全部) / cn(A股) / hk(港股)，对应表字段 market A/HK",
+    ),
+    cn_board_segment: Optional[str] = Query(
+        None,
+        description="scope=cn 时可选 A 股板块: ALL(全部)/MAIN(主板)/CYB(创业板)/SZ_SME(中小板)/KCB(科创板)/BJ(北证)",
     ),
     industry_board_code: Optional[List[str]] = Query(
         None,
@@ -1461,6 +1490,46 @@ async def get_gms_strategy(
             logger.info("GMS 数据来源=概念板块 boards=%s 股票数=%s", bcodes, len(stock_pool))
         elif scope == "cn":
             market = "cn"
+            seg_raw = (cn_board_segment or "").strip().upper()
+            if seg_raw and seg_raw != "ALL":
+                from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+
+                if not normalize_list_board_segment(cn_board_segment):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
+                    )
+                stock_pool = _gms_cn_stock_pool_by_board_segment(db, target_date, seg_raw)
+                stock_pool_size = len(stock_pool)
+                if not stock_pool:
+                    seg_labels = {
+                        "MAIN": "主板",
+                        "CYB": "创业板",
+                        "SZ_SME": "中小板",
+                        "KCB": "科创板",
+                        "BJ": "北证",
+                    }
+                    seg_label = seg_labels.get(seg_raw, seg_raw)
+                    return JSONResponse(
+                        {
+                            "success": True,
+                            "data": [],
+                            "total": 0,
+                            "search_date": target_date,
+                            "strategy_name": "GMS均值引力动量策略",
+                            "scope": "cn",
+                            "cn_board_segment": seg_raw,
+                            "message": f"A股「{seg_label}」在 {target_date} 行情池中无可用股票",
+                            "paging": {
+                                "enabled": use_pagination,
+                                "page": 1,
+                                "page_size": page_size if use_pagination else 0,
+                                "total": 0,
+                                "total_pages": 0,
+                            },
+                        }
+                    )
+                logger.info("GMS 数据来源=全部A股 segment=%s 股票数=%s", seg_raw, len(stock_pool))
         elif scope == "hk":
             market = "hk"
         elif scope == "etf":
@@ -1612,8 +1681,10 @@ async def get_gms_strategy(
 
         stock_codes = [str(r["symbol"]).strip() for r in selection_results]
         code_to_gms_mt = {str(r["symbol"]).strip(): r.get("market_type") for r in selection_results}
-        # 6 位：6/0/3 为 A 股，9 为沪市 B 股，均从 A 股行情/基本信息表取数
-        cn_codes = [c for c in stock_codes if c and len(c) >= 6 and c.isdigit() and c[0] in "6039"]
+        # 6 位：沪深京 A 股（含北交所 43/83/87/88/92 等），均从 A 股行情/基本信息表取数
+        from backend_api.utils.cn_listed_board_filter import is_cn_listed_equity_code
+
+        cn_codes = [c for c in stock_codes if c and is_cn_listed_equity_code(c)]
         cn_code_set = set(cn_codes)
         hk_codes = [c for c in stock_codes if c and c not in cn_codes]
 
@@ -1913,6 +1984,11 @@ async def get_gms_strategy(
                     else None
                 ),
                 "exclude_st": exclude_st,
+                "cn_board_segment": (
+                    (cn_board_segment or "").strip().upper() or None
+                    if scope == "cn"
+                    else None
+                ),
                 "use_pagination": use_pagination,
                 "page": page_eff,
                 "page_size": page_size if use_pagination else total_all,

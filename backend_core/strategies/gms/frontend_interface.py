@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 def _is_a_share(code: str) -> bool:
-    s = str(code).strip()
-    return len(s) >= 6 and s.isdigit() and s[0] in "6039"
+    from backend_api.utils.cn_listed_board_filter import is_cn_listed_equity_code
+
+    return is_cn_listed_equity_code(code)
 
 
 def _is_etf(code: str) -> bool:
