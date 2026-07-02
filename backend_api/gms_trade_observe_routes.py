@@ -22,6 +22,7 @@ from backend_api.models import (
     StockBasicInfoHK,
     User,
 )
+from backend_api.services.gms_audit_service import write_gms_audit
 from backend_api.utils.industry_board_query import (
     batch_industry_board_names_by_stock_codes,
     clean_industry_display_text,
@@ -434,6 +435,11 @@ def add_gms_trade_observe(
     db.add(row)
     db.commit()
     db.refresh(row)
+    write_gms_audit(
+        db,
+        "gms_trade_observe_add",
+        {"user_id": user.id, "code": code, "market": market},
+    )
     industries = _batch_resolve_industries(db, [row])
     return _row_to_item(row, industry=industries.get(_observe_row_key(row)))
 
@@ -481,6 +487,11 @@ def remove_gms_trade_observe(
     db.delete(row)
     db.commit()
     db.refresh(hist)
+    write_gms_audit(
+        db,
+        "gms_trade_observe_remove",
+        {"user_id": user.id, "code": row.code, "market": row.market, "history_id": hist.id},
+    )
     return {
         "success": True,
         "message": "已移出交易观察列表并归档",

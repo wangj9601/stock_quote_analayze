@@ -1,5 +1,19 @@
 <template>
   <div class="gms-detail-block p-2 text-sm">
+    <div v-if="riskTags.length" class="mb-3">
+      <div class="font-semibold mb-1">风险提示</div>
+      <div class="flex flex-wrap gap-1">
+        <el-tag
+          v-for="t in riskTags"
+          :key="t.id"
+          :type="riskTagType(t.level)"
+          size="small"
+          :title="t.reason"
+        >
+          {{ t.label || t.id }}
+        </el-tag>
+      </div>
+    </div>
     <div class="space-y-4">
       <div>
         <div class="font-semibold mb-2">【均值收敛态】得分明细</div>
@@ -47,6 +61,19 @@ import { mergeGmsScoreDetail, gmsFmt, type GmsStockRow } from '@/utils/gmsScreen
 const props = defineProps<{ stock: GmsStockRow }>()
 
 const sd = computed(() => mergeGmsScoreDetail(props.stock) as Record<string, any>)
+
+const riskTags = computed(() => {
+  const fromStock = (props.stock as any).risk_tags
+  if (Array.isArray(fromStock) && fromStock.length) return fromStock
+  const fromSd = sd.value.risk_tags
+  return Array.isArray(fromSd) ? fromSd : []
+})
+
+function riskTagType(level?: string) {
+  if (level === 'danger') return 'danger'
+  if (level === 'warn') return 'warning'
+  return 'info'
+}
 
 const accS = computed(() =>
   sd.value.accumulation_s_threshold != null && !isNaN(Number(sd.value.accumulation_s_threshold))

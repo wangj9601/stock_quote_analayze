@@ -133,7 +133,7 @@
         </div>
       </div>
       <div class="mt-3 flex items-center gap-2">
-        <el-button type="primary" plain @click="saveParams">保存参数</el-button>
+        <el-button type="primary" plain @click="saveParams">保存筛选偏好</el-button>
         <span class="text-sm text-gray-500">{{ saveStatus }}</span>
       </div>
     </el-card>
@@ -207,6 +207,16 @@
             <span :class="buyTypeClass(row)">{{ row.buy_type || '—' }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="风险" width="120">
+          <template #default="{ row }">
+            <template v-if="riskTags(row).length">
+              <el-tooltip v-for="t in riskTags(row)" :key="t.id" :content="t.reason || t.label" placement="top">
+                <el-tag :type="riskTagType(t.level)" size="small" class="mr-1 mb-1">{{ t.label || t.id }}</el-tag>
+              </el-tooltip>
+            </template>
+            <span v-else class="text-gray-400">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="当前价格" width="92">
           <template #default="{ row }">
             {{ row.current_price != null ? Number(row.current_price).toFixed(2) : '—' }}
@@ -275,7 +285,7 @@ import {
 } from '@/utils/gmsScreeningFormat'
 import { configParamsToFlatForm } from '@/utils/gmsFlatFormParams'
 
-const STORAGE_KEY = 'adminGmsParams'
+const PREF_SESSION_KEY = 'adminGmsScreeningPrefs'
 const GMS_PAGE_SIZE = 100
 
 const scope = ref<'cn' | 'hk' | 'etf' | 'watchlist' | 'gms_watchlist'>('cn')
@@ -381,28 +391,51 @@ const searchDateStr = ref('')
 const traceHint = ref('')
 const gmsPage = ref(1)
 
-function loadParams() {
+function riskTags(row: any) {
+  const tags = row.risk_tags
+  return Array.isArray(tags) ? tags : []
+}
+
+function riskTagType(level?: string) {
+  if (level === 'danger') return 'danger'
+  if (level === 'warn') return 'warning'
+  return 'info'
+}
+
+async function loadParams() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return
-    const data = JSON.parse(raw) as Record<string, unknown>
-    if (data.config_id != null) selectedConfigId.value = Number(data.config_id)
-    Object.assign(gmsForm, { ...gmsForm, ...data })
+    const pref = await gmsApiService.getGmsScreeningPreferences()
+    if (pref.config_id != null) selectedConfigId.value = Number(pref.config_id)
+    if (pref.scope) scope.value = pref.scope as typeof scope.value
+    if (pref.cn_board_segment) cnBoardSegment.value = pref.cn_board_segment as typeof cnBoardSegment.value
   } catch {
-    /* ignore */
+    try {
+      const raw = sessionStorage.getItem(PREF_SESSION_KEY)
+      if (!raw) return
+      const data = JSON.parse(raw) as Record<string, unknown>
+      if (data.config_id != null) selectedConfigId.value = Number(data.config_id)
+      if (data.scope) scope.value = data.scope as typeof scope.value
+    } catch {
+      /* ignore */
+    }
   }
 }
 
-function saveParams() {
+async function saveParams() {
+  const prefs = {
+    config_id: selectedConfigId.value ?? null,
+    scope: scope.value,
+    cn_board_segment: cnBoardSegment.value,
+    page_size: GMS_PAGE_SIZE,
+  }
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ ...gmsForm, config_id: selectedConfigId.value ?? null })
-    )
-    saveStatus.value = '已保存到本地'
-    ElMessage.success('GMS 参数已保存')
+    await gmsApiService.putGmsScreeningPreferences(prefs)
+    saveStatus.value = '筛选偏好已保存'
+    ElMessage.success('GMS 筛选偏好已保存')
   } catch {
-    saveStatus.value = '保存失败'
+    sessionStorage.setItem(PREF_SESSION_KEY, JSON.stringify(prefs))
+    saveStatus.value = '已保存到本会话'
+    ElMessage.success('筛选偏好已保存（本会话）')
   }
 }
 
@@ -739,7 +772,7 @@ async function exportExcel() {
 }
 
 onMounted(async () => {
-  loadParams()
+  await loadParams()
   try {
     strategyConfigs.value = await gmsApiService.listStrategyConfigs(true)
     if (selectedConfigId.value == null) {

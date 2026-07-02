@@ -32,6 +32,14 @@ from backend_api.utils.industry_board_query import (
     get_industry_board_name_by_stock_code,
 )
 from backend_api.services.gms_signal_trace_selection import query_gms_signal_trace_selection
+from backend_api.services.gms_job_tracker import (
+    check_precompute_alert,
+    get_latest_precompute_runs,
+    get_recent_job_runs,
+    maybe_send_gms_alert,
+    screening_stats_summary,
+)
+from backend_api.services.gms_audit_service import write_gms_audit
 from backend_core.strategies.gms import admin_interface
 from backend_core.strategies.gms import backtest_storage as gms_backtest_storage
 from backend_core.strategies.gms.config import GMSConfigManager
@@ -318,21 +326,77 @@ async def list_watchlist_users(db: Session = Depends(get_db)):
 
 # ---------- system/status ----------
 @router.get("/system/status")
-async def get_system_status():
-    """系统状态：运行中任务数、报告总数、健康度等。"""
+async def get_system_status(db: Session = Depends(get_db)):
+    """系统状态：运行中任务数、报告总数、预计算/选股健康度等。"""
     try:
         running = gms_backtest_storage.count_running_tasks()
         total_reports = gms_backtest_storage.count_completed_reports()
+        tasks = admin_interface.list_backtest_tasks(limit=200, offset=0) or []
+        pending = sum(1 for t in tasks if str(t.get("status") or "").lower() in ("pending", "queued"))
+        failed = sum(1 for t in tasks if str(t.get("status") or "").lower() == "failed")
+        screening = screening_stats_summary()
+        precompute_runs = get_latest_precompute_runs(db, limit=8)
+        recent_jobs = get_recent_job_runs(db, limit=10)
+        alert = check_precompute_alert(db)
+        if alert:
+            maybe_send_gms_alert(db, alert)
+        health = "ok"
+        if screening.get("timeout_count", 0) > 3 or alert:
+            health = "degraded"
         return {
             "success": True,
             "data": {
                 "runningBacktests": running,
                 "totalReports": total_reports,
-                "systemHealth": "ok",
+                "pendingBacktests": pending,
+                "failedBacktests": failed,
+                "systemHealth": health,
+                "screeningStats": screening,
+                "latestPrecomputeRuns": precompute_runs,
+                "recentJobRuns": recent_jobs,
+                "alertMessage": alert,
             },
         }
     except Exception as e:
         logger.exception("GMS system/status 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/audit-logs")
+async def list_gms_audit_logs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    log_type: Optional[str] = Query(None, description="如 gms_config_update"),
+    db: Session = Depends(get_db),
+):
+    """GMS 操作审计（operation_logs 中 log_type 以 gms_ 开头）。"""
+    try:
+        where = "WHERE log_type LIKE 'gms_%'"
+        params: Dict[str, Any] = {"lim": limit, "off": offset}
+        if log_type:
+            where += " AND log_type = :lt"
+            params["lt"] = log_type if log_type.startswith("gms_") else f"gms_{log_type}"
+        rows = db.execute(
+            text(
+                f"""
+                SELECT id, log_type, log_message, affected_count, log_status, error_info, log_time
+                FROM operation_logs
+                {where}
+                ORDER BY log_time DESC
+                LIMIT :lim OFFSET :off
+                """
+            ),
+            params,
+        ).mappings().all()
+        items = []
+        for r in rows:
+            d = dict(r)
+            if d.get("log_time") and hasattr(d["log_time"], "isoformat"):
+                d["log_time"] = d["log_time"].isoformat()
+            items.append(d)
+        return {"success": True, "data": {"items": items, "limit": limit, "offset": offset}}
+    except Exception as e:
+        logger.exception("GMS audit-logs 查询失败")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -420,6 +484,12 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             task_name = _build_task_name_with_stocks(db, config)
         _attach_strategy_config_snapshot(config, body.strategy_config_id)
         task_id = admin_interface.create_backtest(config, name=task_name or None)
+        write_gms_audit(
+            db,
+            "gms_backtest_create",
+            {"task_id": task_id, "task_name": task_name, "market": body.market, "mode": mode},
+            affected_count=len(config.get("stock_pool") or []),
+        )
         return {"success": True, "data": {"task_id": task_id}}
     except HTTPException:
         raise
@@ -696,7 +766,7 @@ async def create_strategy_config(body: StrategyConfigCreateBody):
 
 @router.put("/strategy-configs/{config_id}")
 @router.post("/strategy-configs/{config_id}/update")
-async def update_strategy_config(config_id: int, body: StrategyConfigUpdateBody):
+async def update_strategy_config(config_id: int, body: StrategyConfigUpdateBody, db: Session = Depends(get_db)):
     try:
         mgr = GMSConfigManager()
         if not mgr.get_config_row(config_id):
@@ -716,6 +786,16 @@ async def update_strategy_config(config_id: int, body: StrategyConfigUpdateBody)
         row = mgr.get_config_row(config_id)
         data = mgr._serialize_config_row(row)
         data["config_params"] = mgr.get_config(config_id)
+        write_gms_audit(
+            db,
+            "gms_config_update",
+            {
+                "config_id": config_id,
+                "name": data.get("name"),
+                "change_note": body.change_note,
+                "precompute_enabled": data.get("precompute_enabled"),
+            },
+        )
         return {"success": True, "data": data}
     except HTTPException:
         raise

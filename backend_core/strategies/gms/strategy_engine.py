@@ -15,6 +15,8 @@ from .models import GMSIndicators
 from .config import GMSConfigManager
 from .scoring._helpers import resolve_mechanism_id
 
+from .risk_tags import build_risk_tags, detect_trend_break
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,6 +88,7 @@ class GMSStrategyEngine:
                 codes_sub, date, mt, use_latest_per_stock=True
             )
             dev_series_by_code: Dict[str, List[float]] = {}
+            trend_series_by_code: Dict[str, Dict[str, List[float]]] = {}
             if self.stable_days > 1:
                 multi_rows = self.data_loader.load_indicators_multi_day(
                     codes_sub, date, mt, days=self.stable_days
@@ -99,6 +102,13 @@ class GMSStrategyEngine:
                     dev_series_by_code[code] = [
                         float(r.get("instant_deviation", 0) or 0) for r in recent
                     ]
+                    d20s, ds = [], []
+                    for r in recent:
+                        d = float(r.get("d") or 0)
+                        inst = float(r.get("instant_deviation") or 0)
+                        d20s.append(d + inst)
+                        ds.append(d)
+                    trend_series_by_code[code] = {"d20": d20s, "d": ds}
 
             for row in rows:
                 code = row.get("code", "")
@@ -116,6 +126,17 @@ class GMSStrategyEngine:
                 ind.left_buy_signal = left
                 ind.right_buy_signal = right
                 ind.sell_signal = sell
+
+                ts = trend_series_by_code.get(code, {})
+                trend_break = detect_trend_break(ts.get("d20"), ts.get("d"), days=min(3, self.stable_days))
+                risk_tags = build_risk_tags(
+                    ind,
+                    config or self.config,
+                    left_buy=left,
+                    right_buy=right,
+                    sell=sell,
+                    trend_break=trend_break,
+                )
 
                 buy_type = ""
                 if left:
@@ -184,6 +205,7 @@ class GMSStrategyEngine:
                     "score_base_total": getattr(ind, "score_base_total", ind.score_total),
                     "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),
                     "penalties": getattr(ind, "penalty_details", []) or [],
+                    "risk_tags": risk_tags,
                 }
 
                 results.append({
@@ -213,6 +235,7 @@ class GMSStrategyEngine:
                     "rising_days": ind.rising_days,
                     "falling_days": ind.falling_days,
                     "score_detail": score_detail,
+                    "risk_tags": risk_tags,
                 })
 
         results.sort(key=lambda x: x["score_total"], reverse=True)

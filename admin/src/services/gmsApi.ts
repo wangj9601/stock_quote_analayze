@@ -121,8 +121,44 @@ class GMSApiService {
   }
 
   /** 系统状态 */
-  async getSystemStatus(): Promise<{ runningBacktests: number; totalReports: number; systemHealth: string }> {
+  async getSystemStatus(): Promise<{
+    runningBacktests: number
+    totalReports: number
+    systemHealth: string
+    pendingBacktests?: number
+    failedBacktests?: number
+    screeningStats?: Record<string, unknown>
+    latestPrecomputeRuns?: Array<Record<string, unknown>>
+    recentJobRuns?: Array<Record<string, unknown>>
+    alertMessage?: string | null
+  }> {
     const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/system/status`)
+    return res.data
+  }
+
+  async getAuditLogs(params?: { limit?: number; offset?: number; log_type?: string }) {
+    const q = new URLSearchParams()
+    if (params?.limit) q.set('limit', String(params.limit))
+    if (params?.offset) q.set('offset', String(params.offset))
+    if (params?.log_type) q.set('log_type', params.log_type)
+    const res = await this.request<{ success: boolean; data: { items: any[] } }>(
+      `${PREFIX}/audit-logs?${q.toString()}`
+    )
+    return res.data?.items || []
+  }
+
+  async getGmsScreeningPreferences(): Promise<Record<string, unknown>> {
+    const res = await this.request<{ success: boolean; data: Record<string, unknown> }>(
+      '/api/user/preferences/gms-screening'
+    )
+    return res.data || {}
+  }
+
+  async putGmsScreeningPreferences(body: Record<string, unknown>) {
+    const res = await this.request<{ success: boolean; data: Record<string, unknown> }>(
+      '/api/user/preferences/gms-screening',
+      { method: 'PUT', body: JSON.stringify(body) }
+    )
     return res.data
   }
 

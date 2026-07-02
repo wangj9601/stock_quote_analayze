@@ -57,15 +57,41 @@
         <el-col :span="6">
           <el-card class="status-card">
             <div class="status-item">
-              <div class="status-icon danger">
+              <div :class="['status-icon', systemStatus.systemHealth === 'ok' ? 'success' : 'danger']">
                 <el-icon><Monitor /></el-icon>
               </div>
               <div class="status-content">
-                <div class="status-value">{{ systemStatus.systemHealth }}</div>
+                <div class="status-value">{{ systemStatus.systemHealth === 'ok' ? '正常' : '降级' }}</div>
                 <div class="status-label">系统健康度</div>
               </div>
             </div>
           </el-card>
+        </el-col>
+      </el-row>
+      <el-row v-if="systemStatus.alertMessage || systemStatus.screeningStats" :gutter="20" class="mt-4">
+        <el-col :span="24">
+          <el-alert
+            v-if="systemStatus.alertMessage"
+            :title="systemStatus.alertMessage"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="mb-3"
+          />
+          <el-descriptions v-if="systemStatus.screeningStats" :column="4" border size="small" title="选股与预计算">
+            <el-descriptions-item label="选股请求">{{ systemStatus.screeningStats.request_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="超时次数">{{ systemStatus.screeningStats.timeout_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="Trace命中率均值">
+              {{
+                systemStatus.screeningStats.avg_trace_hit_rate != null
+                  ? (Number(systemStatus.screeningStats.avg_trace_hit_rate) * 100).toFixed(1) + '%'
+                  : '—'
+              }}
+            </el-descriptions-item>
+            <el-descriptions-item label="待执行/失败回测">
+              {{ systemStatus.pendingBacktests ?? 0 }} / {{ systemStatus.failedBacktests ?? 0 }}
+            </el-descriptions-item>
+          </el-descriptions>
         </el-col>
       </el-row>
     </div>
@@ -83,6 +109,9 @@
       </el-tab-pane>
       <el-tab-pane label="策略配置" name="config">
         <StrategyConfiguration ref="configRef" @config-saved="handleConfigSaved" />
+      </el-tab-pane>
+      <el-tab-pane label="操作记录" name="audit">
+        <GmsAuditLogs ref="auditRef" />
       </el-tab-pane>
     </el-tabs>
 
@@ -104,6 +133,7 @@ import { Refresh, TrendCharts, DataAnalysis, Histogram, Monitor } from '@element
 import BacktestManagement from '@/components/gms/BacktestManagement.vue'
 import ReportAnalysis from '@/components/gms/ReportAnalysis.vue'
 import StrategyConfiguration from '@/components/gms/StrategyConfiguration.vue'
+import GmsAuditLogs from '@/components/gms/GmsAuditLogs.vue'
 import { gmsApiService } from '@/services/gmsApi'
 import { useAuthStore } from '@/stores/auth'
 
@@ -113,7 +143,11 @@ const activeTab = ref('backtest')
 const systemStatus = reactive({
   runningBacktests: 0,
   totalReports: 0,
-  systemHealth: 'ok' as string
+  systemHealth: 'ok' as string,
+  pendingBacktests: 0,
+  failedBacktests: 0,
+  screeningStats: null as Record<string, unknown> | null,
+  alertMessage: null as string | null,
 })
 
 const notification = reactive({
@@ -127,6 +161,7 @@ const notification = reactive({
 const backtestRef = ref()
 const reportRef = ref()
 const configRef = ref()
+const auditRef = ref()
 
 let statusTimer: ReturnType<typeof setInterval> | null = null
 
@@ -139,6 +174,10 @@ const refreshSystemStatus = async (silent = false) => {
     systemStatus.runningBacktests = data.runningBacktests ?? 0
     systemStatus.totalReports = data.totalReports ?? 0
     systemStatus.systemHealth = data.systemHealth ?? 'ok'
+    systemStatus.pendingBacktests = data.pendingBacktests ?? 0
+    systemStatus.failedBacktests = data.failedBacktests ?? 0
+    systemStatus.screeningStats = data.screeningStats ?? null
+    systemStatus.alertMessage = data.alertMessage ?? null
     if (!silent) ElMessage.success('系统状态已刷新')
   } catch (e) {
     ElMessage.error('获取系统状态失败')
@@ -150,6 +189,7 @@ const handleTabChange = (tabName: string | number) => {
   if (tabName === 'backtest') backtestRef.value?.refresh?.()
   if (tabName === 'reports') reportRef.value?.refresh?.()
   if (tabName === 'config') configRef.value?.loadConfig?.()
+  if (tabName === 'audit') auditRef.value?.refresh?.()
 }
 
 const handleTaskCreated = (_task: any) => {
@@ -227,7 +267,7 @@ onUnmounted(() => {
 }
 
 .status-cards {
-  @apply mb-6;
+  @apply mb-6 px-6;
 }
 
 .status-card .status-item {

@@ -24,6 +24,50 @@ router = APIRouter(prefix="/api/stock/gms-formal-trade", tags=["gms-formal-trade
 
 TradeStatus = Literal["open", "closed"]
 
+# 与行情库「手」约定一致：A 股 / 港股默认 1 手 = 100 股
+_DEFAULT_LOT_SIZE = 100
+
+
+def _lot_size_for_market(market: Optional[str]) -> int:
+    _ = (market or "").strip().upper()
+    return _DEFAULT_LOT_SIZE
+
+
+def _compute_formal_trade_pnl(
+    entry_price: Optional[float],
+    exit_price: Optional[float],
+    position_lots: Optional[int],
+    market: Optional[str],
+) -> tuple[Optional[float], Optional[float]]:
+    """计算盈亏金额（元）与盈亏比例（%）。"""
+    if entry_price is None or exit_price is None:
+        return None, None
+    ep = float(entry_price)
+    xp = float(exit_price)
+    if ep <= 0:
+        return None, None
+    lots = max(0, int(position_lots or 0))
+    shares = lots * _lot_size_for_market(market)
+    pnl_amount = round((xp - ep) * shares, 2)
+    pnl_percent = round((xp - ep) / ep * 100, 2)
+    return pnl_amount, pnl_percent
+
+
+def _sync_formal_trade_pnl(row: GmsFormalTrade) -> None:
+    """平仓时写入盈亏；持仓中或重新开仓时清空。"""
+    if (row.status or "open") == "closed" and row.exit_price is not None:
+        amt, pct = _compute_formal_trade_pnl(
+            row.entry_price,
+            row.exit_price,
+            row.position_lots,
+            row.market,
+        )
+        row.pnl_amount = amt
+        row.pnl_percent = pct
+    else:
+        row.pnl_amount = None
+        row.pnl_percent = None
+
 
 class GmsFormalTradeFromObserveRequest(BaseModel):
     entry_price: float = Field(..., gt=0, description="入场价格")
@@ -57,6 +101,7 @@ class GmsFormalTradeItem(BaseModel):
     exit_at: Optional[str]
     created_at: str
     updated_at: str
+    pnl_amount: Optional[float] = None
     pnl_percent: Optional[float] = None
 
 
@@ -70,9 +115,22 @@ class GmsFormalTradeListResponse(BaseModel):
 def _row_to_item(r: GmsFormalTrade) -> GmsFormalTradeItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
-    pnl = None
-    if r.exit_price is not None and r.entry_price:
-        pnl = round((float(r.exit_price) - float(r.entry_price)) / float(r.entry_price) * 100, 2)
+    pnl_amount = r.pnl_amount
+    pnl_percent = r.pnl_percent
+    if pnl_amount is None and pnl_percent is None and r.exit_price is not None and r.entry_price:
+        pnl_amount, pnl_percent = _compute_formal_trade_pnl(
+            r.entry_price,
+            r.exit_price,
+            r.position_lots,
+            r.market,
+        )
+    elif pnl_percent is None and r.exit_price is not None and r.entry_price:
+        _, pnl_percent = _compute_formal_trade_pnl(
+            r.entry_price,
+            r.exit_price,
+            r.position_lots,
+            r.market,
+        )
     return GmsFormalTradeItem(
         id=r.id,
         market=r.market or "CN",
@@ -90,7 +148,8 @@ def _row_to_item(r: GmsFormalTrade) -> GmsFormalTradeItem:
         exit_at=r.exit_at.isoformat() if r.exit_at else None,
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
-        pnl_percent=pnl,
+        pnl_amount=float(pnl_amount) if pnl_amount is not None else None,
+        pnl_percent=float(pnl_percent) if pnl_percent is not None else None,
     )
 
 
@@ -242,6 +301,7 @@ def update_gms_formal_trade(
             row.exit_at = None
             if body.exit_price is None:
                 row.exit_price = None
+    _sync_formal_trade_pnl(row)
     row.updated_at = now
     db.commit()
     db.refresh(row)

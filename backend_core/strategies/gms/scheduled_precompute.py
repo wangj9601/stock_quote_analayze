@@ -15,6 +15,10 @@ from typing import List, Optional
 
 from sqlalchemy import func
 
+import time
+
+from backend_api.services.gms_job_tracker import record_precompute_run
+
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +123,8 @@ def run_gms_precompute_for_config(
     from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
 
     db = SessionLocal()
+    t0 = time.perf_counter()
+    target_date = ""
     try:
         target_date = resolve_gms_trade_date(db)
         mgr = GMSConfigManager()
@@ -133,6 +139,16 @@ def run_gms_precompute_for_config(
             trace_only=False,
             return_meta=True,
         )
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+        record_precompute_run(
+            db,
+            config_id,
+            market,
+            target_date,
+            "success",
+            stock_count=len(results),
+            duration_ms=duration_ms,
+        )
         logger.info(
             "[GMS预计算] 完成 config_id=%s date=%s market=%s pool=%s 返回=%s meta=%s",
             config_id,
@@ -143,6 +159,17 @@ def run_gms_precompute_for_config(
             meta,
         )
     except Exception as e:
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+        record_precompute_run(
+            db,
+            config_id,
+            market,
+            target_date or datetime.now().strftime("%Y-%m-%d"),
+            "failed",
+            stock_count=0,
+            duration_ms=duration_ms,
+            error_message=str(e)[:500],
+        )
         logger.error(
             "[GMS预计算] 失败 config_id=%s market=%s: %s",
             config_id,

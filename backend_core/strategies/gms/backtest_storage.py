@@ -426,14 +426,26 @@ def get_report_file_bytes(
             if v in ("xlsx", "excel"):
                 if not row.details_xlsx_bytes:
                     return None
+                data = row.details_xlsx_bytes
+                if row.summary and isinstance(row.summary, dict):
+                    try:
+                        data = _inject_summary_into_xlsx(data, row.summary)
+                    except Exception as e:
+                        logger.warning("注入统计摘要 sheet 失败: %s", e)
                 return (
-                    row.details_xlsx_bytes,
+                    data,
                     f"{safe_name}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             if row.details_xlsx_bytes:
+                data = row.details_xlsx_bytes
+                if row.summary and isinstance(row.summary, dict):
+                    try:
+                        data = _inject_summary_into_xlsx(data, row.summary)
+                    except Exception as e:
+                        logger.warning("注入统计摘要 sheet 失败: %s", e)
                 return (
-                    row.details_xlsx_bytes,
+                    data,
                     f"{safe_name}.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
@@ -746,7 +758,54 @@ def _build_csv_bytes(details: List[Dict[str, Any]]) -> bytes:
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")
 
 
-def _build_xlsx_bytes(details: List[Dict[str, Any]]) -> bytes:
+def _write_summary_xlsx_sheet(ws: Any, summary: Dict[str, Any]) -> None:
+    from openpyxl.styles import Font
+
+    ws.title = "统计摘要"
+    ws.append(["GMS 回测统计摘要"])
+    ws["A1"].font = Font(bold=True, size=14)
+    version = summary.get("summary_schema_version")
+    if version:
+        ws.append(["摘要版本", version])
+    for key, label in (
+        ("hit_rate", "目标命中率"),
+        ("win_rate", "胜率"),
+        ("profit_factor", "盈亏比"),
+        ("max_drawdown", "最大回撤"),
+        ("approx_annual_return_simple", "近似年化收益"),
+        ("trade_count", "交易笔数"),
+        ("signal_count", "信号数"),
+    ):
+        if summary.get(key) is not None:
+            ws.append([label, summary[key]])
+
+    hist = summary.get("holding_days_histogram") or {}
+    if hist:
+        ws.append([])
+        ws.append(["持有天数分布"])
+        ws.append(["区间", "笔数"])
+        for bucket, cnt in hist.items():
+            ws.append([bucket, cnt])
+
+    monthly = summary.get("monthly_returns") or []
+    if monthly:
+        ws.append([])
+        ws.append(["分月收益"])
+        ws.append(["月份", "收益率%", "笔数"])
+        for m in monthly:
+            ws.append([m.get("month"), m.get("return_pct"), m.get("trade_count")])
+
+    by_sig = summary.get("by_signal_type") or {}
+    if by_sig:
+        ws.append([])
+        ws.append(["信号类型对比"])
+        ws.append(["类型", "胜率", "平均R", "笔数"])
+        for sig, stats in by_sig.items():
+            if isinstance(stats, dict):
+                ws.append([sig, stats.get("win_rate"), stats.get("avg_r"), stats.get("trade_count")])
+
+
+def _build_xlsx_bytes(details: List[Dict[str, Any]], summary: Optional[Dict[str, Any]] = None) -> bytes:
     from openpyxl import Workbook
 
     sorted_details = _sort_gms_details_for_export(details)
@@ -757,16 +816,36 @@ def _build_xlsx_bytes(details: List[Dict[str, Any]]) -> bytes:
 
     wb = Workbook()
     wb.remove(wb.active)
-    ws_cn = wb.create_sheet("A股", 0)
+    sheet_idx = 0
+    if summary:
+        ws_sum = wb.create_sheet("统计摘要", sheet_idx)
+        _write_summary_xlsx_sheet(ws_sum, summary)
+        sheet_idx += 1
+    ws_cn = wb.create_sheet("A股", sheet_idx)
     _write_gms_xlsx_sheet(ws_cn, fieldnames_zh, cn_rows)
-    ws_etf = wb.create_sheet("ETF", 1)
+    ws_etf = wb.create_sheet("ETF", sheet_idx + 1)
     _write_gms_xlsx_sheet(ws_etf, fieldnames_zh, etf_rows)
-    ws_hk = wb.create_sheet("港股", 2)
+    ws_hk = wb.create_sheet("港股", sheet_idx + 2)
     _write_gms_xlsx_sheet(ws_hk, fieldnames_zh, hk_rows)
 
     bio = io.BytesIO()
     wb.save(bio)
     return bio.getvalue()
+
+
+def _inject_summary_into_xlsx(xlsx_bytes: bytes, summary: Dict[str, Any]) -> bytes:
+    """为已生成的 XLSX 注入统计摘要 sheet（下载时兼容旧任务）。"""
+    from openpyxl import load_workbook
+
+    bio_in = io.BytesIO(xlsx_bytes)
+    wb = load_workbook(bio_in)
+    if "统计摘要" in wb.sheetnames:
+        return xlsx_bytes
+    ws_sum = wb.create_sheet("统计摘要", 0)
+    _write_summary_xlsx_sheet(ws_sum, summary)
+    bio_out = io.BytesIO()
+    wb.save(bio_out)
+    return bio_out.getvalue()
 
 
 def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
@@ -789,11 +868,11 @@ def save_details_csv(task_id: str, details: List[Dict[str, Any]]) -> str:
         db.close()
 
 
-def save_details_xlsx(task_id: str, details: List[Dict[str, Any]]) -> str:
+def save_details_xlsx(task_id: str, details: List[Dict[str, Any]], summary: Optional[Dict[str, Any]] = None) -> str:
     """生成 Excel 字节并写入任务行。"""
     tid = normalize_gms_task_id(task_id) or str(task_id).strip()
     fname = f"{tid}.xlsx"
-    data = _build_xlsx_bytes(details)
+    data = _build_xlsx_bytes(details, summary=summary)
     db = _session()
     try:
         row = db.query(GMSBacktestTask).filter(GMSBacktestTask.task_id == tid).first()

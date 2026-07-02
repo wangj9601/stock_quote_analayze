@@ -5,6 +5,7 @@
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, Body
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
@@ -27,7 +28,15 @@ def _int_env(name: str, default: int) -> int:
 GMS_SCREENING_TIMEOUT = max(60, _int_env("GMS_SCREENING_TIMEOUT", 600))
 VSB_SCREENING_TIMEOUT = max(60, _int_env("VSB_SCREENING_TIMEOUT", 600))
 
-from fastapi.security import OAuth2PasswordBearer
+from backend_api.services.gms_selection_snapshot import (
+    build_param_hash,
+    build_scope_key,
+    enrich_trace_meta,
+    load_snapshot,
+    save_snapshot,
+)
+from backend_api.services.gms_job_tracker import note_screening_request, record_job_run
+
 from jose import jwt, JWTError
 
 from backend_api.auth import SECRET_KEY, ALGORITHM
@@ -1208,6 +1217,10 @@ async def get_gms_strategy(
         False,
         description="为 true 时仅从 gms_signal_trace 读缓存，不触发缺失股票的实时计算（前端可先快显再二次请求全量）",
     ),
+    use_snapshot: bool = Query(
+        True,
+        description="为 true 时优先读取当日筛选结果快照（相同 scope+参数），miss 后计算并回写",
+    ),
     config_id: Optional[int] = Query(
         None,
         ge=1,
@@ -1586,6 +1599,26 @@ async def get_gms_strategy(
             config.setdefault("scoring", {})["weight_mom_volume"] = weight_mom_volume
         max_results = limit or 10000
 
+        scope_key = build_scope_key(
+            scope,
+            cn_board_segment=cn_board_segment if scope == "cn" else None,
+            industry_board_codes=industry_board_code if scope == "industry_board" else None,
+            concept_board_codes=concept_board_code if scope == "concept_board" else None,
+            gms_watchlist_market=gms_watchlist_market if scope == "gms_watchlist" else None,
+        )
+        param_hash = build_param_hash(
+            {
+                "min_score": min_score,
+                "exclude_st": exclude_st,
+                "left_buy_min_accumulation": left_buy_min_accumulation,
+                "trace_only": trace_only,
+                "config_id": resolved_config_id,
+            }
+        )
+        snapshot_results = None
+        if use_snapshot and not code and scope in ("cn", "hk", "etf", "all", "industry_board", "concept_board"):
+            snapshot_results = load_snapshot(db, target_date, resolved_config_id, scope_key, param_hash)
+
         # 在 executor 内使用独立 Session，避免请求的 db 跨线程或已关闭导致 "identity map is no longer valid"
         def _run_gms(
             _target_date: str,
@@ -1613,16 +1646,34 @@ async def get_gms_strategy(
 
         loop = asyncio.get_event_loop()
         gms_meta: dict = dict(gms_config_meta)
-        selection_results, gms_meta_run = await asyncio.wait_for(
-            loop.run_in_executor(
-                None,
-                lambda: _run_gms(
-                    target_date, config, resolved_config_id, min_score, max_results, trace_only, exclude_st
+        if snapshot_results is not None:
+            selection_results = snapshot_results
+            gms_meta_run = enrich_trace_meta(
+                {
+                    "from_snapshot": True,
+                    "from_trace_count": len(snapshot_results),
+                    "computed_count": 0,
+                    "requested_count": len(snapshot_results),
+                    "trace_complete": True,
+                    "config_id": resolved_config_id,
+                    "cache_layer": "snapshot",
+                }
+            )
+        else:
+            selection_results, gms_meta_run = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: _run_gms(
+                        target_date, config, resolved_config_id, min_score, max_results, trace_only, exclude_st
+                    ),
                 ),
-            ),
-            timeout=GMS_SCREENING_TIMEOUT,
-        )
+                timeout=GMS_SCREENING_TIMEOUT,
+            )
         gms_meta.update(gms_meta_run or {})
+        gms_meta = enrich_trace_meta(gms_meta)
+        note_screening_request(gms_meta, timed_out=False)
+        if use_snapshot and snapshot_results is None and selection_results and not trace_only:
+            save_snapshot(db, target_date, resolved_config_id, scope_key, param_hash, selection_results)
 
         # 当指定日期无数据时，回退到指标表最新可用日期
         user_specified_date = bool(date)
@@ -1777,6 +1828,7 @@ async def get_gms_strategy(
                 "left_buy_signal": left_signal,
                 "right_buy_signal": right_signal,
                 "sell_signal": r.get("sell_signal", False),
+                "risk_tags": r.get("risk_tags") or [],
             })
 
         # 兜底补全：避免前端出现“有信号但 Δ/F/Z/d 全空白 / 得分明细为空”
@@ -2009,6 +2061,15 @@ async def get_gms_strategy(
     except HTTPException:
         raise
     except asyncio.TimeoutError:
+        note_screening_request(timed_out=True)
+        record_job_run(
+            db,
+            "screening_timeout",
+            "failed",
+            trade_date=target_date if "target_date" in dir() else None,
+            message=f"scope={scope}",
+            meta={"timeout_sec": GMS_SCREENING_TIMEOUT},
+        )
         logger.warning(f"GMS 选股超时({GMS_SCREENING_TIMEOUT}s)，scope={scope}")
         raise HTTPException(
             status_code=504,

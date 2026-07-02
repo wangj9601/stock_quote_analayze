@@ -54,6 +54,10 @@ const GmsScoreDetail = {
             ? Number(sd.score_penalty_deduction)
             : 0;
         const penalties = Array.isArray(sd.penalties) ? sd.penalties : [];
+        const riskTags = Array.isArray(sd.risk_tags) ? sd.risk_tags : [];
+        const riskTagsHtml = riskTags.length
+            ? `<div class="gms-score-detail-section"><strong>【风险提示】</strong><div class="gms-risk-tags">${riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')}</div></div>`
+            : '';
         const closePrice = sd.d20 != null ? sd.d20 : (sd.d != null && sd.instant_deviation != null ? sd.d + sd.instant_deviation : null);
         let ma60Hint = '60日移动平均线';
         if (sd.ma60_d != null && closePrice != null) {
@@ -92,6 +96,7 @@ const GmsScoreDetail = {
         return `
             <div class="gms-score-detail-inner">
                 ${versionMetaHtml}
+                ${riskTagsHtml}
                 <div class="gms-score-detail-section">
                     <strong>【均值收敛态】得分明细</strong>
                     <table class="gms-weight-table">

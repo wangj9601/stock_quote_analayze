@@ -71,3 +71,48 @@ def test_validate_standard_rejects_penalty_rules():
 def test_validate_penalty_requires_enabled_rule():
     errs = validate_scoring_config({"mechanism": "tiered_dual_penalty", "penalty_rules": []})
     assert errs
+
+
+def test_penalty_volume_shrink_after_breakout():
+    config = {
+        "scoring": {
+            "penalty_rules": [
+                {"id": "volume_shrink_after_breakout", "enabled": True, "points": 8},
+            ],
+        }
+    }
+    row = _sample_row()
+    row["volume_ratio"] = 0.5
+    row["ratio_d1"] = -0.02
+    total, details = PenaltyEngine(config).apply(row)
+    assert total == 8.0
+    assert details[0]["id"] == "volume_shrink_after_breakout"
+
+
+def test_penalty_momentum_fade():
+    config = {
+        "scoring": {
+            "momentum_batch_threshold": 80,
+            "penalty_rules": [{"id": "momentum_fade", "enabled": True, "points": 6}],
+        }
+    }
+    row = _sample_row()
+    row["score_momentum"] = 50
+    row["fz_ratio"] = 0.3
+    total, _ = PenaltyEngine(config).apply(row)
+    assert total == 6.0
+
+
+def test_penalty_excessive_deviation():
+    config = {
+        "scoring": {
+            "overbought_ratio": 0.12,
+            "penalty_rules": [{"id": "excessive_deviation", "enabled": True, "points": 12}],
+        },
+        "overbought_ratio": 0.12,
+    }
+    row = _sample_row()
+    row["ratio_d20"] = 0.2
+    total, details = PenaltyEngine(config).apply(row)
+    assert total == 12.0
+    assert details[0]["id"] == "excessive_deviation"

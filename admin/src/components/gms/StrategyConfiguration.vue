@@ -138,6 +138,28 @@
             <el-form-item label="乖离过大阈值">
               <el-input-number v-model="form.exit.overbought_ratio" :step="0.01" :precision="3" class="w-full" />
             </el-form-item>
+
+            <template v-if="showPenaltyEditor">
+              <el-divider content-position="left">减分规则（减分版）</el-divider>
+              <el-table :data="penaltyRules" border size="small" class="mb-2">
+                <el-table-column prop="label" label="规则" min-width="140">
+                  <template #default="{ row }">
+                    <div>{{ row.label }}</div>
+                    <div class="text-xs text-gray-500">{{ row.description }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="启用" width="72">
+                  <template #default="{ row }">
+                    <el-switch v-model="row.enabled" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="扣分" width="120">
+                  <template #default="{ row }">
+                    <el-input-number v-model="row.points" :min="0" :max="50" size="small" />
+                  </template>
+                </el-table-column>
+              </el-table>
+            </template>
           </el-form>
 
           <el-input v-else v-model="configJson" type="textarea" :rows="22" class="font-mono text-sm" />
@@ -204,6 +226,44 @@ const form = reactive(defaultForm())
 
 const selected = computed(() => versions.value.find((v) => v.id === selectedId.value) || null)
 
+const penaltyRuleTypes = ref<any[]>([])
+const penaltyRules = ref<any[]>([])
+
+const showPenaltyEditor = computed(
+  () =>
+    selected.value?.name === 'gms_penalty' ||
+    selected.value?.scoring_mechanism === 'tiered_dual_penalty' ||
+    (form.scoring as any).mechanism === 'tiered_dual_penalty'
+)
+
+function syncPenaltyRulesFromForm(params: Record<string, any>) {
+  const existing = (params.scoring?.penalty_rules || []) as any[]
+  const byId = Object.fromEntries(existing.map((r) => [r.id, r]))
+  penaltyRules.value = penaltyRuleTypes.value.map((meta) => {
+    const cur = byId[meta.id] || {}
+    return {
+      id: meta.id,
+      label: meta.label,
+      description: meta.description,
+      enabled: cur.enabled !== false,
+      points: cur.points != null ? cur.points : meta.default_points ?? 10,
+    }
+  })
+}
+
+function mergePenaltyRulesIntoForm(partial: Record<string, unknown>) {
+  if (!showPenaltyEditor.value || !penaltyRules.value.length) return partial
+  const scoring = { ...((partial.scoring as Record<string, unknown>) || {}) }
+  scoring.mechanism = 'tiered_dual_penalty'
+  scoring.penalty_rules = penaltyRules.value.map((r) => ({
+    id: r.id,
+    enabled: r.enabled,
+    points: r.points,
+    label: r.label,
+  }))
+  return { ...partial, scoring }
+}
+
 async function loadVersions() {
   listLoading.value = true
   try {
@@ -225,6 +285,7 @@ async function loadDetail(id: number) {
   const params = data.config_params || {}
   applyParamsToForm(params)
   editMeta.precompute_enabled = !!data.precompute_enabled
+  syncPenaltyRulesFromForm(params)
   configJson.value = JSON.stringify(params, null, 2)
 }
 
@@ -242,7 +303,7 @@ async function saveVersion() {
     if (showJson.value) {
       partial = JSON.parse(configJson.value)
     } else {
-      partial = JSON.parse(JSON.stringify(form))
+      partial = mergePenaltyRulesIntoForm(JSON.parse(JSON.stringify(form)))
     }
     await gmsApi.updateStrategyConfig(selectedId.value, {
       config: partial,
@@ -259,7 +320,14 @@ async function saveVersion() {
 }
 
 defineExpose({ loadVersions })
-onMounted(() => loadVersions())
+onMounted(async () => {
+  try {
+    penaltyRuleTypes.value = await gmsApi.getPenaltyRuleTypes()
+  } catch {
+    penaltyRuleTypes.value = []
+  }
+  await loadVersions()
+})
 </script>
 
 <style scoped>

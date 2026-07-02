@@ -15,6 +15,24 @@ PENALTY_RULE_TYPES = {
         "description": "当日收盘价 d₂₀ 低于 60 日均线 ma60_d 时扣分。",
         "default_points": 10,
     },
+    "volume_shrink_after_breakout": {
+        "id": "volume_shrink_after_breakout",
+        "label": "突破后缩量回落",
+        "description": "放量突破后量比回落至 1.0 以下且 Δ/d₁ 转弱时扣分。",
+        "default_points": 8,
+    },
+    "momentum_fade": {
+        "id": "momentum_fade",
+        "label": "动量衰减",
+        "description": "动量模块分偏低且 F/Z 比值走弱时扣分。",
+        "default_points": 6,
+    },
+    "excessive_deviation": {
+        "id": "excessive_deviation",
+        "label": "乖离过大",
+        "description": "Δ/d₂₀ 超过配置的 overbought_ratio 阈值时扣分。",
+        "default_points": 12,
+    },
 }
 
 
@@ -33,7 +51,7 @@ def _close_price(row: Dict[str, Any]) -> float:
     return 0.0
 
 
-def _eval_rule(rule_id: str, row: Dict[str, Any]) -> bool:
+def _eval_rule(rule_id: str, row: Dict[str, Any], config: Dict[str, Any]) -> bool:
     if rule_id == "close_below_ma60":
         close = _close_price(row)
         ma60 = row.get("ma60_d")
@@ -43,6 +61,28 @@ def _eval_rule(rule_id: str, row: Dict[str, Any]) -> bool:
         if close <= 0 or ma60_f <= 0:
             return False
         return close < ma60_f
+
+    if rule_id == "volume_shrink_after_breakout":
+        vol = safe_float(row.get("volume_ratio"), 0.0)
+        ratio_d1 = safe_float(row.get("ratio_d1"), 0.0)
+        # 曾放量（量比>1.2）后缩量且短期乖离转负
+        peak_hint = safe_float(row.get("_peak_volume_ratio_hint"), vol)
+        if peak_hint >= 1.2 and vol < 1.0 and ratio_d1 < 0:
+            return True
+        return vol > 0 and vol < 0.7 and ratio_d1 < -0.01
+
+    if rule_id == "momentum_fade":
+        mom = safe_float(row.get("score_momentum"), 0.0)
+        fz = safe_float(row.get("fz_ratio"), 0.0)
+        mom_th = safe_float((config.get("scoring") or {}).get("momentum_batch_threshold"), 50.0)
+        return mom > 0 and mom < mom_th and fz < 0.5
+
+    if rule_id == "excessive_deviation":
+        scoring = config.get("scoring") or {}
+        th = safe_float(scoring.get("overbought_ratio") or config.get("overbought_ratio"), 0.15)
+        ratio_d20 = safe_float(row.get("ratio_d20"), 0.0)
+        return ratio_d20 > th
+
     return False
 
 
@@ -50,7 +90,8 @@ class PenaltyEngine:
     """根据 scoring.penalty_rules 计算总减分与明细。"""
 
     def __init__(self, config: Dict[str, Any]):
-        scoring = config.get("scoring") or {}
+        self.config = config or {}
+        scoring = self.config.get("scoring") or {}
         raw_rules = scoring.get("penalty_rules") or []
         self.rules: List[Dict[str, Any]] = []
         if isinstance(raw_rules, list):
@@ -68,7 +109,7 @@ class PenaltyEngine:
             points = safe_float(rule.get("points"), 0.0)
             if points <= 0:
                 continue
-            if not _eval_rule(rid, row):
+            if not _eval_rule(rid, row, self.config):
                 continue
             meta = PENALTY_RULE_TYPES.get(rid, {})
             label = rule.get("label") or meta.get("label") or rid

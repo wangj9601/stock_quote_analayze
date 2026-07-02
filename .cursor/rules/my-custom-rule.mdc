@@ -4,5 +4,6 @@ alwaysApply: true
 ---
 
 test程序放在.\test目录下。
+word、ppt相关文件放在.\exported_docs目录下。
 总是用中文回答。
 修改程序时，请通读本功能相关前后台代码、数据模型、业务流程和规则，认真理解后再实现。

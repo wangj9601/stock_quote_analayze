@@ -136,6 +136,11 @@ def test_from_observe_list_update_close_and_delete(client, memory_db, test_user)
     assert closed_item["status"] == "closed"
     assert closed_item["exit_price"] == 1820.0
     assert closed_item["pnl_percent"] == pytest.approx(3.97, abs=0.01)
+    assert closed_item["pnl_amount"] == pytest.approx(13900.0, abs=0.01)
+
+    db_row = memory_db.query(GmsFormalTrade).filter(GmsFormalTrade.id == trade_id).first()
+    assert db_row.pnl_amount == pytest.approx(13900.0, abs=0.01)
+    assert db_row.pnl_percent == pytest.approx(3.97, abs=0.01)
 
     assert client.get("/api/stock/gms-formal-trade/list?status=closed").json()["total"] == 1
 
@@ -151,6 +156,8 @@ def test_from_observe_list_update_close_and_delete(client, memory_db, test_user)
     assert reopened.status_code == 200
     assert reopened.json()["status"] == "open"
     assert reopened.json()["exit_price"] is None
+    assert reopened.json()["pnl_amount"] is None
+    assert reopened.json()["pnl_percent"] is None
 
     rm = client.delete(f"/api/stock/gms-formal-trade/{trade_id}")
     assert rm.status_code == 200
@@ -193,6 +200,14 @@ def test_from_observe_cleans_stale_observe_when_formal_trade_exists(client, memo
     assert r.json()["id"] == trade.id
     assert memory_db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.id == observe.id).first() is None
     assert client.get("/api/stock/gms-formal-trade/list").json()["total"] == 1
+
+
+def test_compute_formal_trade_pnl():
+    from backend_api.gms_formal_trade_routes import _compute_formal_trade_pnl
+
+    amt, pct = _compute_formal_trade_pnl(10.0, 11.0, 3, "CN")
+    assert pct == pytest.approx(10.0)
+    assert amt == pytest.approx(300.0)
 
 
 def test_formal_trade_codes_for_signal_button(client, memory_db, test_user):

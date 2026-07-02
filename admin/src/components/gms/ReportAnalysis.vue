@@ -39,8 +39,10 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="报告详情" width="720px" destroy-on-close>
+    <el-dialog v-model="detailVisible" title="报告详情" width="820px" destroy-on-close>
       <div v-if="currentReport" class="report-detail">
+        <el-tabs v-model="detailTab">
+          <el-tab-pane label="摘要" name="summary">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="报告ID">{{ currentReport.report_id?.slice(0, 8) }}</el-descriptions-item>
           <el-descriptions-item label="名称">{{ currentReport.name }}</el-descriptions-item>
@@ -84,22 +86,34 @@
             <el-descriptions-item label="目标涨幅">{{ (currentReport.summary.target_pct * 100) }}%</el-descriptions-item>
           </template>
         </el-descriptions>
+          </el-tab-pane>
+          <el-tab-pane label="分布图表" name="charts" v-if="currentReport.summary">
+            <div ref="holdingChartRef" style="width:100%;height:260px;margin-bottom:16px"></div>
+            <div ref="monthlyChartRef" style="width:100%;height:260px"></div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, inject } from 'vue'
+import { ref, onMounted, inject, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
 import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
 
 const gmsApi = inject<any>('gmsApi')
 const loading = ref(false)
 const reports = ref<any[]>([])
 const detailVisible = ref(false)
+const detailTab = ref('summary')
 const currentReport = ref<any>(null)
+const holdingChartRef = ref<HTMLElement | null>(null)
+const monthlyChartRef = ref<HTMLElement | null>(null)
+let holdingChart: echarts.ECharts | null = null
+let monthlyChart: echarts.ECharts | null = null
 
 function isTradeSimulationSummary(s: Record<string, unknown> | null | undefined): boolean {
   return String(s?.backtest_type || '') === 'trade_simulation'
@@ -133,11 +147,59 @@ async function refresh() {
 async function viewReport(row: any) {
   try {
     currentReport.value = await gmsApi.getReport(row.report_id)
+    detailTab.value = 'summary'
     detailVisible.value = true
+    await nextTick()
+    if (detailTab.value === 'charts') renderCharts()
   } catch (e) {
     ElMessage.error('获取报告详情失败')
   }
 }
+
+function renderCharts() {
+  const summary = currentReport.value?.summary
+  if (!summary) return
+  const hist = summary.holding_days_histogram || {}
+  const monthly = summary.monthly_returns || []
+  if (holdingChartRef.value) {
+    holdingChart?.dispose()
+    holdingChart = echarts.init(holdingChartRef.value)
+    holdingChart.setOption({
+      title: { text: '持有天数分布', left: 'center', textStyle: { fontSize: 14 } },
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'category', data: Object.keys(hist) },
+      yAxis: { type: 'value', name: '笔数' },
+      series: [{ type: 'bar', data: Object.values(hist), itemStyle: { color: '#409eff' } }],
+    })
+  }
+  if (monthlyChartRef.value && monthly.length) {
+    monthlyChart?.dispose()
+    monthlyChart = echarts.init(monthlyChartRef.value)
+    monthlyChart.setOption({
+      title: { text: '分月收益', left: 'center', textStyle: { fontSize: 14 } },
+      tooltip: { trigger: 'axis', formatter: (p: any) => `${p[0].name}: ${Number(p[0].value).toFixed(2)}%` },
+      xAxis: { type: 'category', data: monthly.map((m: any) => m.month) },
+      yAxis: { type: 'value', name: '%', axisLabel: { formatter: '{value}%' } },
+      series: [{ type: 'line', data: monthly.map((m: any) => m.return_pct), smooth: true, itemStyle: { color: '#67c23a' } }],
+    })
+  }
+}
+
+watch(detailTab, async (tab) => {
+  if (tab === 'charts' && detailVisible.value) {
+    await nextTick()
+    renderCharts()
+  }
+})
+
+watch(detailVisible, (v) => {
+  if (!v) {
+    holdingChart?.dispose()
+    monthlyChart?.dispose()
+    holdingChart = null
+    monthlyChart = null
+  }
+})
 
 async function downloadReport(row: any, variant?: 'csv' | 'xlsx') {
   try {

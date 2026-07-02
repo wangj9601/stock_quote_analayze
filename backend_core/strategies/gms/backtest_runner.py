@@ -317,6 +317,7 @@ def _aggregate_details_to_summary(
         v["hit_rate"] = (v["hit"] / v["total"]) if v["total"] else 0.0
 
     summary: Dict[str, Any] = {
+        "summary_schema_version": 2,
         "total_samples": total_samples,
         "hit_count": hit_count,
         "hit_rate": round(hit_rate, 4),
@@ -328,6 +329,9 @@ def _aggregate_details_to_summary(
         "buy_signal_rule": buy_signal_rule,
         "by_buy_type": by_buy_type,
         "by_score_bucket": by_score_bucket,
+        "holding_days_histogram": _holding_days_histogram(
+            [{"bars_held": d.get("horizon_days") or horizon_days} for d in details]
+        ),
     }
     return {"summary": summary, "details": details}
 
@@ -505,6 +509,63 @@ def _calendar_days_inclusive(start_str: str, end_str: str) -> int:
         return 1
 
 
+def _holding_days_histogram(details: List[Dict[str, Any]]) -> Dict[str, int]:
+    buckets = {"1-3": 0, "4-10": 0, "11-20": 0, "21+": 0}
+    for d in details:
+        bars = int(d.get("bars_held") or 0)
+        if bars <= 3:
+            buckets["1-3"] += 1
+        elif bars <= 10:
+            buckets["4-10"] += 1
+        elif bars <= 20:
+            buckets["11-20"] += 1
+        else:
+            buckets["21+"] += 1
+    return buckets
+
+
+def _monthly_returns_from_details(details: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    by_month: Dict[str, List[float]] = {}
+    for d in details:
+        dt = str(d.get("exit_date") or d.get("date") or "")[:7]
+        if len(dt) < 7:
+            continue
+        pnl = float(d.get("portfolio_pnl_pct") if d.get("portfolio_pnl_pct") is not None else d.get("pnl_pct") or 0)
+        by_month.setdefault(dt, []).append(pnl)
+    out = []
+    for month in sorted(by_month.keys()):
+        vals = by_month[month]
+        out.append(
+            {
+                "month": month,
+                "return_pct": round(sum(vals), 6),
+                "trade_count": len(vals),
+            }
+        )
+    return out
+
+
+def _by_signal_type_stats(details: List[Dict[str, Any]]) -> Dict[str, Any]:
+    groups: Dict[str, Dict[str, Any]] = {}
+    for d in details:
+        sig = str(d.get("buy_type") or d.get("signal_type") or "未知").strip() or "未知"
+        if sig not in groups:
+            groups[sig] = {"count": 0, "wins": 0, "pnl_sum": 0.0, "r_sum": 0.0}
+        g = groups[sig]
+        g["count"] += 1
+        pnl = float(d.get("pnl_pct") or 0)
+        g["pnl_sum"] += pnl
+        if pnl > 0:
+            g["wins"] += 1
+        g["r_sum"] += float(d.get("r_multiple") or 0)
+    for sig, g in groups.items():
+        cnt = g["count"] or 1
+        g["win_rate"] = round(g["wins"] / cnt, 4)
+        g["avg_pnl_pct"] = round(g["pnl_sum"] / cnt, 6)
+        g["avg_r_multiple"] = round(g["r_sum"] / cnt, 6)
+    return groups
+
+
 def _annotate_trade_position_pnl(details: List[Dict[str, Any]], position_fraction: float) -> None:
     """写入 position_fraction 与 portfolio_pnl_pct（单笔收益率×仓位），供净值与导出。"""
     f = _clamp_position_fraction(position_fraction)
@@ -608,6 +669,7 @@ def _aggregate_trade_summary(
         by_exit_reason[rs] = by_exit_reason.get(rs, 0) + 1
 
     summary: Dict[str, Any] = {
+        "summary_schema_version": 2,
         "backtest_type": "trade_simulation",
         "position_fraction": round(pf, 6),
         "total_trades": total_trades,
@@ -654,6 +716,9 @@ def _aggregate_trade_summary(
         "buy_signal_rule": buy_signal_rule,
         "by_exit_reason": by_exit_reason,
         "equity_curve": equity_curve,
+        "holding_days_histogram": _holding_days_histogram(details),
+        "monthly_returns": _monthly_returns_from_details(details),
+        "by_signal_type": _by_signal_type_stats(details),
     }
     return {"summary": summary, "details": details}
 

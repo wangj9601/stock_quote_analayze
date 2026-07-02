@@ -117,7 +117,7 @@ def _run_task(task_id: str) -> None:
         summary = result.get("summary") or {}
         details = result.get("details") or []
         backtest_storage.save_details_csv(task_id, details)
-        details_path = backtest_storage.save_details_xlsx(task_id, details)
+        details_path = backtest_storage.save_details_xlsx(task_id, details, summary=summary)
         backtest_storage.complete_task(task_id, summary, details_path=details_path)
         backtest_storage.update_task_progress(task_id, 100, "回测完成", log_line="回测完成")
     except Exception as e:

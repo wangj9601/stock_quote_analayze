@@ -1053,6 +1053,24 @@
     border-radius: 4px;
     border: 1px solid #a5d6a7;
 }
+
+.gms-risk-tags,
+.gms-risk-tags-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.gms-risk-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: default;
+}
+.gms-risk-info { background: #e3f2fd; color: #1565c0; }
+.gms-risk-warn { background: #fff3e0; color: #e65100; }
+.gms-risk-danger { background: #ffebee; color: #c62828; }
 .gms-penalty-section {
     flex: 1 1 100%;
 }

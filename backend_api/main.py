@@ -174,6 +174,13 @@ except ImportError as e:
     gms_formal_trade_router = None
 
 try:
+    from .gms_user_preferences_routes import router as gms_user_preferences_router
+    print("gms_user_preferences_router 导入成功")
+except ImportError as e:
+    print(f"gms_user_preferences_router 导入失败: {e}")
+    gms_user_preferences_router = None
+
+try:
     from .triple_volume_trade_observe_routes import router as triple_volume_trade_observe_router
     print("triple_volume_trade_observe_router 导入成功")
 except ImportError as e:
@@ -547,6 +554,7 @@ _include_router(app, triple_volume_observe_admin_router, "triple_volume_observe_
 _include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")
 _include_router(app, gms_trade_observe_router, "gms_trade_observe")
 _include_router(app, gms_formal_trade_router, "gms_formal_trade")
+_include_router(app, gms_user_preferences_router, "gms_user_preferences")
 _include_router(app, triple_volume_trade_observe_router, "triple_volume_trade_observe")
 _include_router(app, screening_router, "screening")
 _include_router(app, gms_trace_router, "gms_trace")

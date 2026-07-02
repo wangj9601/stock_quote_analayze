@@ -427,7 +427,7 @@ const ScreeningPage = {
         const tbody = document.getElementById('gmsFormalTradeTableBody');
         if (!tbody) return;
         if (!items || items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无正式交易记录，请在「交易观察」中点击「转正式交易」</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="empty-state">暂无正式交易记录，请在「交易观察」中点击「转正式交易」</td></tr>';
             return;
         }
         const esc = (s) => String(s ?? '')
@@ -440,12 +440,12 @@ const ScreeningPage = {
             const s = String(iso);
             return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
         };
-        const fmtPnl = (v) => {
+        const fmtPnl = (v, suffix = '%') => {
             if (v == null || isNaN(v)) return '--';
             const n = Number(v);
             const cls = n > 0 ? 'gms-pnl-up' : (n < 0 ? 'gms-pnl-down' : '');
             const sign = n > 0 ? '+' : '';
-            return `<span class="${cls}">${sign}${n.toFixed(2)}%</span>`;
+            return `<span class="${cls}">${sign}${n.toFixed(2)}${suffix}</span>`;
         };
         const fmtStatus = (st) => (st === 'closed' ? '已平仓' : '持仓中');
         tbody.innerHTML = items.map((it) => {
@@ -458,6 +458,7 @@ const ScreeningPage = {
                     <td class="gms-col-price">${fmtPrice(it.entry_price)}</td>
                     <td class="gms-col-narrow">${esc(it.position_lots)}</td>
                     <td class="gms-col-price">${fmtPrice(it.exit_price)}</td>
+                    <td class="gms-col-narrow">${fmtPnl(it.pnl_amount, '')}</td>
                     <td class="gms-col-narrow">${fmtPnl(it.pnl_percent)}</td>
                     <td class="gms-col-narrow">${fmtStatus(it.status)}</td>
                     <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
@@ -3028,10 +3029,23 @@ const ScreeningPage = {
         try {
             let savedConfigId = null;
             try {
-                const saved = localStorage.getItem('gmsParams');
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    if (parsed.config_id != null) savedConfigId = parseInt(parsed.config_id, 10);
+                const token = localStorage.getItem('access_token');
+                if (token) {
+                    const prefRes = await fetch(`${this.API_BASE_URL}/api/user/preferences/gms-screening`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (prefRes.ok) {
+                        const prefJson = await prefRes.json();
+                        const pref = prefJson.data || {};
+                        if (pref.config_id != null) savedConfigId = parseInt(pref.config_id, 10);
+                    }
+                }
+                if (savedConfigId == null) {
+                    const saved = sessionStorage.getItem('gmsScreeningPrefs');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.config_id != null) savedConfigId = parseInt(parsed.config_id, 10);
+                    }
                 }
             } catch (_) { /* ignore */ }
 
@@ -3117,11 +3131,10 @@ const ScreeningPage = {
         }
     },
 
-    // 加载 GMS 策略参数到表单（localStorage 兜底）
+    // 加载 GMS 策略参数到表单（仅默认占位；策略参数以服务端为准）
     loadGmsParams() {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
         try {
-            const saved = localStorage.getItem('gmsParams');
             const defaults = {
                 start_date: '',
                 observation_period: 20,
@@ -3146,13 +3159,16 @@ const ScreeningPage = {
                 weight_mom_deviation: 30,
                 weight_mom_volume: 30
             };
-            const data = saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
-            if (data.config_id != null) {
-                this.gmsConfigId = parseInt(data.config_id, 10);
-                const selectEl = document.getElementById('gms-config_id');
-                if (selectEl) selectEl.value = String(this.gmsConfigId);
+            const saved = sessionStorage.getItem('gmsScreeningPrefs');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.config_id != null) {
+                    this.gmsConfigId = parseInt(parsed.config_id, 10);
+                    const selectEl = document.getElementById('gms-config_id');
+                    if (selectEl) selectEl.value = String(this.gmsConfigId);
+                }
             }
-            this.applyGmsFlatParamsToForm(data);
+            this.applyGmsFlatParamsToForm(defaults);
             if (statusEl) statusEl.textContent = '';
         } catch (e) {
             console.error('loadGmsParams:', e);
@@ -3198,15 +3214,35 @@ const ScreeningPage = {
         };
     },
 
-    // 保存 GMS 策略参数（localStorage）
-    saveGmsParams() {
+    // 保存 GMS 筛选偏好（config_id / scope 等，策略参数以服务端为准）
+    async saveGmsParams() {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
-        const body = this.getGmsParams();
-        if (this.gmsConfigId) body.config_id = this.gmsConfigId;
+        const prefs = {
+            config_id: this.gmsConfigId || undefined,
+            scope: document.getElementById('gms-scope')?.value,
+            cn_board_segment: document.getElementById('gms-cn_board_segment')?.value,
+            page_size: parseInt(document.getElementById('gms-page_size')?.value || '100', 10) || 100,
+            use_pagination: document.getElementById('gms-use_pagination')?.checked || false,
+            exclude_st: document.getElementById('gms-exclude_st')?.checked || false,
+        };
         try {
-            localStorage.setItem('gmsParams', JSON.stringify(body));
-            if (statusEl) statusEl.textContent = '已保存到本地（含版本 ID）';
-            if (window.CommonUtils) CommonUtils.showToast('GMS 参数已保存到本地', 'success');
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                const res = await fetch(`${this.API_BASE_URL}/api/user/preferences/gms-screening`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(prefs),
+                });
+                const json = await res.json().catch(() => ({}));
+                if (res.ok && json.success) {
+                    if (statusEl) statusEl.textContent = '筛选偏好已保存到账号';
+                    if (window.CommonUtils) CommonUtils.showToast('GMS 筛选偏好已保存', 'success');
+                    return;
+                }
+            }
+            sessionStorage.setItem('gmsScreeningPrefs', JSON.stringify(prefs));
+            if (statusEl) statusEl.textContent = '筛选偏好已保存到本会话';
+            if (window.CommonUtils) CommonUtils.showToast('GMS 筛选偏好已保存（本会话）', 'success');
         } catch (e) {
             console.error('saveGmsParams:', e);
             if (statusEl) statusEl.textContent = '保存失败';
@@ -3675,12 +3711,17 @@ const ScreeningPage = {
                     instant_deviation: stock.instant_deviation,
                     volume_ratio: stock.volume_ratio,
                     ...(stock.score_detail || stock.indicators?.score_detail || {}),
+                    risk_tags: stock.risk_tags || [],
                     ...(this.gmsConfigMeta || {}),
                 };
                 const fmtPct = (v) => (v != null && typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '--';
                 const scoreDetailHtml = this.buildGmsScoreDetailHtml(sd);
                 const buyType = stock.buy_type || '—';
                 const buyTypeClass = stock.left_buy_signal ? 'gms-left' : (stock.right_buy_signal ? 'gms-right' : '');
+                const riskTags = Array.isArray(stock.risk_tags) ? stock.risk_tags : [];
+                const riskHtml = riskTags.length
+                    ? riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
+                    : '—';
                 // 信号强度：优先用后端值；若为 0 但 score_detail 有总分则用总分/100（避免 trace 中 score_total=0 导致显示 0）
                 let signalStrength = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
                 if (signalStrength === 0 && sd && sd.score_total != null && sd.score_total > 0) {
@@ -3716,6 +3757,7 @@ const ScreeningPage = {
                         <td style="display:none;"><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-narrow"><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td class="gms-col-narrow"><span class="${buyTypeClass}">${buyType}</span></td>
+                        <td class="gms-col-narrow gms-col-risk"><span class="gms-risk-tags-inline">${riskHtml}</span></td>
                         <td class="gms-col-price">${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
                         <td class="gms-col-num">${stock.delta != null ? stock.delta.toFixed(4) : '--'}</td>
                         <td class="gms-col-num">${stock.falling_days != null ? stock.falling_days : '--'}</td>

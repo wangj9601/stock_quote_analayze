@@ -5,6 +5,7 @@ GMS 前端选股接口
 """
 
 import logging
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from datetime import datetime
 
@@ -14,7 +15,11 @@ from .data_loader import GMSDataLoader
 from .strategy_engine import GMSStrategyEngine
 from .config import GMSConfigManager
 
+from backend_api.services.gms_selection_snapshot import enrich_trace_meta
+
 logger = logging.getLogger(__name__)
+
+_GMS_BATCH_SIZE = max(50, int(os.getenv("GMS_SCREENING_BATCH_SIZE", "200")))
 
 
 def _is_a_share(code: str) -> bool:
@@ -159,7 +164,10 @@ def _trace_row_to_result(row) -> dict:
         "rising_days": getattr(row, "rising_days", None),
         "falling_days": getattr(row, "falling_days", None),
     }
-    return {
+    risk_tags = getattr(row, "risk_tags", None)
+    if risk_tags is None and hasattr(row, "__dict__"):
+        risk_tags = row.__dict__.get("risk_tags")
+    out = {
         "symbol": code_str,
         "code": code_str,
         "date": row.date,
@@ -180,7 +188,9 @@ def _trace_row_to_result(row) -> dict:
         "rising_days": getattr(row, "rising_days", None),
         "falling_days": getattr(row, "falling_days", None),
         "score_detail": score_detail,
+        "risk_tags": risk_tags or [],
     }
+    return out
 
 
 def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
@@ -233,6 +243,33 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
             mom_volume_judge=sd.get("mom_volume_judge") or None,
         )
         db.merge(rec)
+        rt = result.get("risk_tags")
+        sd_full = result.get("score_detail")
+        if rt is not None or sd_full is not None:
+            try:
+                import json
+                from sqlalchemy import text as sql_text
+
+                db.execute(
+                    sql_text(
+                        """
+                        UPDATE gms_signal_trace
+                        SET risk_tags = CAST(:rt AS JSONB),
+                            score_detail = COALESCE(CAST(:sd AS JSONB), score_detail)
+                        WHERE code = :code AND date = :dt AND market_type = :mt AND config_id = :cid
+                        """
+                    ),
+                    {
+                        "rt": json.dumps(rt or [], ensure_ascii=False),
+                        "sd": json.dumps(sd_full, ensure_ascii=False, default=str) if sd_full else None,
+                        "code": code,
+                        "dt": date,
+                        "mt": market_type,
+                        "cid": int(config_id),
+                    },
+                )
+            except Exception:
+                pass
     except Exception as e:
         logger.warning("回填 gms_signal_trace 失败 %s: %s", result.get("code"), e)
 
@@ -375,7 +412,7 @@ class GMSFrontendInterface:
             missing_etf = [c for c, mt in missing if mt == "ETF"]
             missing_hk = [c for c, mt in missing if mt == "HK"]
             # 大批量股票池时每 100 只一批计算并打印进度，避免长时间无日志
-            batch_size = 100
+            batch_size = _GMS_BATCH_SIZE
             pool_label = {"CN": "全部A股", "ETF": "全部ETF", "HK": "全部港股"}
             for codes_sub, mt in [(missing_cn, "CN"), (missing_etf, "ETF"), (missing_hk, "HK")]:
                 if not codes_sub:
@@ -433,14 +470,17 @@ class GMSFrontendInterface:
         if self.max_results and len(combined) > self.max_results:
             combined = sorted(combined, key=lambda x: -(x.get("score_total") or 0))[: self.max_results]
 
-        meta: Dict[str, Any] = {
-            "from_trace_count": len(from_trace),
-            "computed_count": len(computed),
-            "requested_count": len(uniq_requested),
-            "trace_complete": len(missing) == 0,
-            "config_id": self.config_id,
-            "use_trace": self.use_trace,
-        }
+        meta: Dict[str, Any] = enrich_trace_meta(
+            {
+                "from_trace_count": len(from_trace),
+                "computed_count": len(computed),
+                "requested_count": len(uniq_requested),
+                "trace_complete": len(missing) == 0,
+                "config_id": self.config_id,
+                "use_trace": self.use_trace,
+                "batch_size": _GMS_BATCH_SIZE,
+            }
+        )
         if return_meta:
             return combined, meta
         return combined

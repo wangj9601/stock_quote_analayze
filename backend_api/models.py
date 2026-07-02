@@ -792,6 +792,8 @@ class GMSSignalTrace(Base):
     mom_deviation_judge = Column(String(50), nullable=True)
     mom_volume_judge = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
+    risk_tags = Column(JSON, nullable=True)
+    score_detail = Column(JSON, nullable=True)
 
 
 class GMSStrategyVersion(Base):
@@ -1299,6 +1301,8 @@ class GmsFormalTrade(Base):
     notes = Column(Text, nullable=True)
     entry_at = Column(DateTime, default=datetime.now, nullable=False)
     exit_at = Column(DateTime, nullable=True)
+    pnl_amount = Column(Float, nullable=True)
+    pnl_percent = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
