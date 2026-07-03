@@ -1558,6 +1558,34 @@
     color: #475569;
 }
 
+.gms-price-plan-hint {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #475569;
+}
+
+.gms-price-plan-hint__title {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #334155;
+}
+
+.gms-price-plan-hint__grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-bottom: 6px;
+}
+
+.gms-price-plan-hint__meta {
+    font-size: 12px;
+    color: #64748b;
+}
+
 .gms-modal-field {
     margin-bottom: 12px;
 }

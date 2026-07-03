@@ -22,6 +22,7 @@ from backend_api.models import (
     GmsTradeObserveStock,
     GMSStrategyVersion,
     GMSStrategyVersionStock,
+    HistoricalQuotes,
     StockBasicInfo,
     User,
 )
@@ -41,6 +42,7 @@ def memory_db():
     GMSStrategyVersion.__table__.create(bind=engine)
     GMSStrategyVersionStock.__table__.create(bind=engine)
     StockBasicInfo.__table__.create(bind=engine)
+    HistoricalQuotes.__table__.create(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:
@@ -213,7 +215,7 @@ def test_list_signal_date_from_snapshot(memory_db, test_user):
     memory_db.commit()
     from backend_api.gms_trade_observe_routes import _row_to_item
 
-    item = _row_to_item(row)
+    item = _row_to_item(memory_db, row)
     assert item.signal_date == "2026-05-15"
 
 

@@ -23,6 +23,10 @@ from backend_api.models import (
     User,
 )
 from backend_api.services.gms_audit_service import write_gms_audit
+from backend_core.strategies.gms.trade_price_plan import (
+    attach_price_plan_to_snapshot,
+    compute_price_plan,
+)
 from backend_api.utils.industry_board_query import (
     batch_industry_board_names_by_stock_codes,
     clean_industry_display_text,
@@ -67,6 +71,7 @@ class GmsTradeObserveItem(BaseModel):
     industry: Optional[str] = None
     signal_date: Optional[str]
     snapshot: Optional[Dict[str, Any]]
+    price_plan: Optional[Dict[str, Any]] = None
     created_at: str
     updated_at: str
 
@@ -264,7 +269,34 @@ def batch_resolve_industries_by_pairs(
     return out
 
 
+def _price_plan_for_row(
+    db: Session,
+    r: GmsTradeObserveStock,
+    snap: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if isinstance(snap, dict) and isinstance(snap.get("price_plan"), dict):
+        return snap["price_plan"]
+    sig_date = r.signal_date
+    if sig_date is None and isinstance(snap, dict):
+        sd = _resolve_signal_date_str(None, snap)
+        if sd:
+            try:
+                sig_date = datetime.strptime(sd, "%Y-%m-%d").date()
+            except ValueError:
+                sig_date = None
+    if sig_date is None:
+        return None
+    return compute_price_plan(
+        db,
+        market=r.market or "CN",
+        code=r.code,
+        signal_date=sig_date,
+        snapshot=snap,
+    )
+
+
 def _row_to_item(
+    db: Session,
     r: GmsTradeObserveStock,
     *,
     industry: Optional[str] = None,
@@ -280,6 +312,7 @@ def _row_to_item(
         industry=resolved_industry,
         signal_date=sd,
         snapshot=snap,
+        price_plan=_price_plan_for_row(db, r, snap),
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
     )
@@ -350,7 +383,7 @@ def list_gms_trade_observe(
         page=page,
         page_size=page_size,
         items=[
-            _row_to_item(r, industry=industries.get(_observe_row_key(r)))
+            _row_to_item(db, r, industry=industries.get(_observe_row_key(r)))
             for r in rows
         ],
     )
@@ -412,22 +445,30 @@ def add_gms_trade_observe(
 
     ensure_gms_strategy_watchlist_stock(db, market=market, code=code, name=body.name)
 
+    snapshot_with_plan = attach_price_plan_to_snapshot(
+        db,
+        body.snapshot,
+        market=market,
+        code=code,
+        signal_date=sig_date,
+    )
+
     if existing:
         existing.name = body.name or existing.name
-        existing.signal_snapshot_json = body.snapshot if body.snapshot is not None else existing.signal_snapshot_json
+        existing.signal_snapshot_json = snapshot_with_plan
         existing.signal_date = sig_date
         existing.updated_at = now
         db.commit()
         db.refresh(existing)
         industries = _batch_resolve_industries(db, [existing])
-        return _row_to_item(existing, industry=industries.get(_observe_row_key(existing)))
+        return _row_to_item(db, existing, industry=industries.get(_observe_row_key(existing)))
 
     row = GmsTradeObserveStock(
         user_id=user.id,
         market=market,
         code=code,
         name=body.name,
-        signal_snapshot_json=body.snapshot,
+        signal_snapshot_json=snapshot_with_plan,
         signal_date=sig_date,
         created_at=now,
         updated_at=now,
@@ -441,7 +482,39 @@ def add_gms_trade_observe(
         {"user_id": user.id, "code": code, "market": market},
     )
     industries = _batch_resolve_industries(db, [row])
-    return _row_to_item(row, industry=industries.get(_observe_row_key(row)))
+    return _row_to_item(db, row, industry=industries.get(_observe_row_key(row)))
+
+
+@router.get("/{item_id}/price-plan")
+def get_gms_trade_observe_price_plan(
+    item_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """刷新单条观察股交易价格计划。"""
+    row = (
+        db.query(GmsTradeObserveStock)
+        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    if row.signal_date is None:
+        raise HTTPException(status_code=400, detail="缺少信号日期，无法计算价格计划")
+    snap = row.signal_snapshot_json if isinstance(row.signal_snapshot_json, dict) else {}
+    plan = compute_price_plan(
+        db,
+        market=row.market or "CN",
+        code=row.code,
+        signal_date=row.signal_date,
+        snapshot=snap,
+    )
+    snap = dict(snap)
+    snap["price_plan"] = plan
+    row.signal_snapshot_json = snap
+    row.updated_at = datetime.now()
+    db.commit()
+    return plan
 
 
 @router.get("/history", response_model=GmsTradeObserveHistoryListResponse)

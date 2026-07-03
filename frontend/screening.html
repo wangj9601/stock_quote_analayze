@@ -1100,6 +1100,10 @@
                                     <th class="gms-col-narrow">信号强度</th>
                                     <th class="gms-col-narrow">买点类型</th>
                                     <th class="gms-col-price">加入时价格</th>
+                                    <th class="gms-col-price">建议买入</th>
+                                    <th class="gms-col-price">止损价</th>
+                                    <th class="gms-col-price">止盈价</th>
+                                    <th class="gms-col-price">参考卖点</th>
                                     <th class="gms-col-narrow">信号日</th>
                                     <th class="gms-col-narrow">加入时间</th>
                                     <th class="gms-col-actions gms-col-actions--wide">操作</th>
@@ -1107,7 +1111,7 @@
                             </thead>
                             <tbody id="gmsTradeObserveTableBody">
                                 <tr>
-                                    <td colspan="9" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                    <td colspan="13" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1481,6 +1485,7 @@
                 <button type="button" class="gms-modal-close" id="gmsFormalTransferClose" aria-label="关闭">×</button>
             </div>
             <p id="gmsFormalTransferStockLabel" class="gms-modal-stock-label"></p>
+            <div id="gmsFormalTransferPricePlanHint" class="gms-price-plan-hint" style="display:none;"></div>
             <div class="gms-modal-field">
                 <label for="gmsFormalTransferEntryPrice">入场价格</label>
                 <input type="number" id="gmsFormalTransferEntryPrice" class="gms-search-input" step="0.01" min="0.01" placeholder="请输入入场价">

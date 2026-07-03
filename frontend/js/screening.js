@@ -17,6 +17,8 @@ const ScreeningPage = {
     gmsTradeObserveCodeSet: new Set(),
     /** 已在正式交易中的 CN:code / HK:code（策略信号页也显示「已观察」） */
     gmsFormalTradeCodeSet: new Set(),
+    /** 最近一次加载的交易观察列表（供转正式交易弹窗读取 price_plan） */
+    gmsTradeObserveItems: [],
     /** 转正式交易弹窗：当前观察记录 id */
     _gmsFormalTransferObserveId: null,
     /** 编辑正式交易弹窗：当前交易 id */
@@ -155,10 +157,9 @@ const ScreeningPage = {
                 if (transfer) {
                     e.preventDefault();
                     const id = transfer.getAttribute('data-id');
-                    const price = transfer.getAttribute('data-price');
                     const code = transfer.getAttribute('data-code') || '';
                     const name = transfer.getAttribute('data-name') || '';
-                    if (id) this.openGmsFormalTransferModal(parseInt(id, 10), code, name, price);
+                    if (id) this.openGmsFormalTransferModal(parseInt(id, 10), code, name);
                     return;
                 }
                 const rm = e.target.closest('.gms-trade-observe-remove');
@@ -298,7 +299,42 @@ const ScreeningPage = {
         overlay.setAttribute('aria-hidden', 'true');
     },
 
-    openGmsFormalTransferModal(observeId, code, name, defaultPrice) {
+    _fmtGmsPricePlanSource(source) {
+        const map = {
+            t_plus_1_open: 'T+1开盘价',
+            signal_close: '信号日收盘',
+            unavailable: '暂无',
+        };
+        return map[source] || source || '';
+    },
+
+    _renderGmsPricePlanHint(plan) {
+        const el = document.getElementById('gmsFormalTransferPricePlanHint');
+        if (!el) return;
+        if (!plan || typeof plan !== 'object') {
+            el.style.display = 'none';
+            el.innerHTML = '';
+            return;
+        }
+        const fmt = (v) => (v != null && !isNaN(v)) ? Number(v).toFixed(2) : '--';
+        const params = plan.params || {};
+        const tgt = params.target_pct != null ? (Number(params.target_pct) * 100).toFixed(0) : '5';
+        const stop = params.stop_loss_pct != null ? (Number(params.stop_loss_pct) * 100).toFixed(0) : '5';
+        const ob = params.overbought_ratio != null ? (Number(params.overbought_ratio) * 100).toFixed(0) : '15';
+        const src = this._fmtGmsPricePlanSource(plan.buy_price_source);
+        el.innerHTML = `
+            <div class="gms-price-plan-hint__title">系统价格参考（${src}）</div>
+            <div class="gms-price-plan-hint__grid">
+                <span>建议止损：<b>${fmt(plan.stop_loss_price)}</b></span>
+                <span>建议止盈：<b>${fmt(plan.take_profit_price)}</b></span>
+                <span>参考卖点：<b>${fmt(plan.reference_sell_price)}</b></span>
+            </div>
+            <div class="gms-price-plan-hint__meta">参数：止盈 +${tgt}% / 止损 -${stop}% / 乖离卖点 +${ob}%</div>
+        `;
+        el.style.display = '';
+    },
+
+    openGmsFormalTransferModal(observeId, code, name) {
         const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
         if (!user || !user.id) {
             if (window.CommonUtils) CommonUtils.showToast('请先登录', 'warning');
@@ -307,11 +343,16 @@ const ScreeningPage = {
         this._gmsFormalTransferObserveId = observeId;
         const label = document.getElementById('gmsFormalTransferStockLabel');
         if (label) label.textContent = `${code} ${name || ''}`.trim();
+        const item = (this.gmsTradeObserveItems || []).find((it) => it.id === observeId);
+        const plan = item?.price_plan || item?.snapshot?.price_plan || null;
+        const snap = item?.snapshot || {};
+        const defaultPrice = plan?.buy_price_suggested ?? snap.current_price;
         const priceEl = document.getElementById('gmsFormalTransferEntryPrice');
         if (priceEl) {
             const p = parseFloat(defaultPrice);
             priceEl.value = (!isNaN(p) && p > 0) ? p.toFixed(2) : '';
         }
+        this._renderGmsPricePlanHint(plan);
         const lotsEl = document.getElementById('gmsFormalTransferLots');
         if (lotsEl) lotsEl.value = '1';
         const notesEl = document.getElementById('gmsFormalTransferNotes');
@@ -708,6 +749,7 @@ const ScreeningPage = {
             buy_type: stock.buy_type,
             left_buy_signal: stock.left_buy_signal,
             right_buy_signal: stock.right_buy_signal,
+            sell_signal: stock.sell_signal,
             current_price: stock.current_price,
             change_percent: stock.change_percent,
             delta: stock.delta,
@@ -826,8 +868,9 @@ const ScreeningPage = {
     renderGmsTradeObserveTable(items) {
         const tbody = document.getElementById('gmsTradeObserveTableBody');
         if (!tbody) return;
+        this.gmsTradeObserveItems = Array.isArray(items) ? items : [];
         if (!items || items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
             return;
         }
         const esc = (s) => String(s ?? '')
@@ -849,8 +892,11 @@ const ScreeningPage = {
         };
         tbody.innerHTML = items.map((it) => {
             const snap = it.snapshot || {};
+            const plan = it.price_plan || snap.price_plan || {};
             const buyType = snap.buy_type || '—';
             const buyClass = snap.left_buy_signal ? 'gms-left' : (snap.right_buy_signal ? 'gms-right' : '');
+            const buySrc = this._fmtGmsPricePlanSource(plan.buy_price_source);
+            const buyTitle = buySrc ? `title="${esc(buySrc)}"` : '';
             const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             const traceHref = `stock_gms_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             return `
@@ -861,12 +907,16 @@ const ScreeningPage = {
                     <td class="gms-col-narrow">${fmtStrength(snap)}</td>
                     <td class="gms-col-narrow"><span class="${buyClass}">${esc(buyType)}</span></td>
                     <td class="gms-col-price">${fmtPrice(snap.current_price)}</td>
+                    <td class="gms-col-price" ${buyTitle}>${fmtPrice(plan.buy_price_suggested)}</td>
+                    <td class="gms-col-price">${fmtPrice(plan.stop_loss_price)}</td>
+                    <td class="gms-col-price">${fmtPrice(plan.take_profit_price)}</td>
+                    <td class="gms-col-price">${fmtPrice(plan.reference_sell_price)}</td>
                     <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
                     <td class="gms-col-narrow">${fmtDt(it.updated_at || it.created_at)}</td>
                     <td class="gms-col-actions gms-col-actions--wide">
                         <div class="action-links">
                             <a href="${traceHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
-                            <button type="button" class="gms-op-btn gms-op-btn--primary gms-trade-observe-transfer" data-id="${it.id}" data-code="${esc(it.code)}" data-name="${esc(it.name || '')}" data-price="${snap.current_price != null ? esc(snap.current_price) : ''}" title="转入正式交易">转正式交易</button>
+                            <button type="button" class="gms-op-btn gms-op-btn--primary gms-trade-observe-transfer" data-id="${it.id}" data-code="${esc(it.code)}" data-name="${esc(it.name || '')}" title="转入正式交易">转正式交易</button>
                             <button type="button" class="gms-op-btn gms-trade-observe-remove" data-id="${it.id}" title="移出交易观察">移除</button>
                         </div>
                     </td>
@@ -3026,7 +3076,24 @@ const ScreeningPage = {
     async initGmsStrategyConfig() {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
         const selectEl = document.getElementById('gms-config_id');
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">加载中…</option>';
         try {
+            const res = await fetch(`${this.API_BASE_URL}/api/frontend/gms/strategy-configs`);
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+            const json = await res.json();
+            if (!json.success) {
+                throw new Error(json.detail || json.message || '接口返回失败');
+            }
+            const list = json.data || [];
+            if (!list.length) {
+                selectEl.innerHTML = '<option value="">暂无可用参数版本</option>';
+                if (statusEl) statusEl.textContent = '服务端无启用的 GMS 参数版本';
+                return;
+            }
+            const defaultId = json.default_config_id;
             let savedConfigId = null;
             try {
                 const token = localStorage.getItem('access_token');
@@ -3049,14 +3116,6 @@ const ScreeningPage = {
                 }
             } catch (_) { /* ignore */ }
 
-            const res = await fetch(`${this.API_BASE_URL}/api/frontend/gms/strategy-configs`);
-            const json = await res.json();
-            if (!json.success || !selectEl) {
-                this.loadGmsParams();
-                return;
-            }
-            const list = json.data || [];
-            const defaultId = json.default_config_id;
             selectEl.innerHTML = '';
             list.forEach((item) => {
                 const opt = document.createElement('option');
@@ -3078,6 +3137,8 @@ const ScreeningPage = {
             if (statusEl) statusEl.textContent = '已与服务端默认版本对齐';
         } catch (e) {
             console.error('initGmsStrategyConfig:', e);
+            selectEl.innerHTML = '<option value="">加载失败（请确认后端 API 已启动）</option>';
+            if (statusEl) statusEl.textContent = '参数版本加载失败，请刷新页面或检查后端';
             this.loadGmsParams();
         }
     },
