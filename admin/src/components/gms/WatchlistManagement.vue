@@ -139,6 +139,34 @@
                   <span v-if="penaltyRuleHint(rule.id)" class="text-xs text-gray-400">{{ penaltyRuleHint(rule.id) }}</span>
                 </div>
                 <el-button size="small" @click="addPenaltyRule">添加规则</el-button>
+                <el-divider content-position="left">MA60 走平判定</el-divider>
+                <p class="text-xs text-gray-500 mb-2">
+                  收盘低于 MA60 时，若 MA60 在回看周期内变化率低于阈值，减分取半。回看周期默认与 GMS 观察周期（20 天）一致。
+                </p>
+                <el-row :gutter="16">
+                  <el-col :span="12">
+                    <el-form-item label="回看周期(天)">
+                      <el-input-number
+                        v-model="scoringForm.config.scoring.ma60_flat_lookback_days"
+                        :min="1"
+                        :max="120"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item label="变化率阈值">
+                      <el-input-number
+                        v-model="scoringForm.config.scoring.ma60_flat_tol"
+                        :min="0.001"
+                        :max="0.1"
+                        :step="0.001"
+                        :precision="4"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
               </template>
 
               <el-divider content-position="left">核心阈值</el-divider>
@@ -282,6 +310,8 @@ const scoringForm = ref({
       alert_threshold: 80,
       accumulation_fz_min: 1,
       balance_ratio_max: 0.02,
+      ma60_flat_lookback_days: 20,
+      ma60_flat_tol: 0.015,
     },
   } as Record<string, any>,
 })
@@ -408,6 +438,9 @@ const loadScoringPanel = async () => {
           alert_threshold: scoring.alert_threshold ?? 80,
           accumulation_fz_min: scoring.accumulation_fz_min ?? 1,
           balance_ratio_max: scoring.balance_ratio_max ?? 0.02,
+          ma60_flat_lookback_days:
+            scoring.ma60_flat_lookback_days ?? (params as Record<string, any>).observation_period ?? 20,
+          ma60_flat_tol: scoring.ma60_flat_tol ?? 0.015,
         },
       },
     }

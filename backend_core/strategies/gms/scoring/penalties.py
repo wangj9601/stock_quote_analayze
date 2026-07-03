@@ -12,7 +12,7 @@ PENALTY_RULE_TYPES = {
     "close_below_ma60": {
         "id": "close_below_ma60",
         "label": "收盘低于60日均线",
-        "description": "当日收盘价 d₂₀ 低于 60 日均线 ma60_d 时扣分。",
+        "description": "当日收盘价 d₂₀ 低于 60 日均线 ma60_d 时扣分；若 MA60 走平（默认回看 observation_period 个交易日，变化率 < 1.5%）则扣分减半。",
         "default_points": 10,
     },
     "volume_shrink_after_breakout": {
@@ -86,6 +86,40 @@ def _eval_rule(rule_id: str, row: Dict[str, Any], config: Dict[str, Any]) -> boo
     return False
 
 
+def _ma60_is_flat(row: Dict[str, Any], config: Dict[str, Any]) -> bool:
+    if row.get("ma60_flat") is not None:
+        return bool(row.get("ma60_flat"))
+    from ..ma60_source import DEFAULT_MA60_FLAT_TOL, is_ma60_flat
+
+    scoring = config.get("scoring") or {}
+    tol = safe_float(scoring.get("ma60_flat_tol"), DEFAULT_MA60_FLAT_TOL)
+    return is_ma60_flat(row.get("ma60_d"), row.get("ma60_d_lag"), tol)
+
+
+def _effective_penalty_points(
+    rule_id: str,
+    rule: Dict[str, Any],
+    row: Dict[str, Any],
+    config: Dict[str, Any],
+    base_points: float,
+) -> Tuple[float, Dict[str, Any]]:
+    extra: Dict[str, Any] = {"base_points": base_points}
+    if rule_id != "close_below_ma60":
+        return base_points, extra
+    half_when_flat = rule.get("half_when_ma60_flat", True)
+    ma60_flat = _ma60_is_flat(row, config)
+    extra["ma60_flat"] = ma60_flat
+    extra["half_when_ma60_flat"] = bool(half_when_flat)
+    if row.get("ma60_d_lag") is not None:
+        extra["ma60_d_lag"] = row.get("ma60_d_lag")
+    if row.get("ma60_flat_change_pct") is not None:
+        extra["ma60_flat_change_pct"] = row.get("ma60_flat_change_pct")
+    effective = base_points
+    if half_when_flat and ma60_flat:
+        effective = base_points * 0.5
+    return effective, extra
+
+
 class PenaltyEngine:
     """根据 scoring.penalty_rules 计算总减分与明细。"""
 
@@ -113,13 +147,16 @@ class PenaltyEngine:
                 continue
             meta = PENALTY_RULE_TYPES.get(rid, {})
             label = rule.get("label") or meta.get("label") or rid
-            total += points
-            details.append(
-                {
-                    "id": rid,
-                    "label": label,
-                    "points": points,
-                    "applied": True,
-                }
+            effective_points, extra = _effective_penalty_points(
+                rid, rule, row, self.config, points
             )
+            total += effective_points
+            detail = {
+                "id": rid,
+                "label": label,
+                "points": effective_points,
+                "applied": True,
+            }
+            detail.update(extra)
+            details.append(detail)
         return total, details

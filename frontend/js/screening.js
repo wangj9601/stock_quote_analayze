@@ -4269,7 +4269,14 @@ const ScreeningPage = {
             lines.push('【减分项】');
             if (penalties.length) {
                 penalties.forEach((p) => {
-                    lines.push((p.label || p.id || '减分') + '\t' + (p.applied !== false ? '命中 -' + (p.points || 0) : '未命中'));
+                    let line = (p.label || p.id || '减分') + '\t' + (p.applied !== false ? '命中 -' + (p.points || 0) : '未命中');
+                    if (p.id === 'close_below_ma60' && p.ma60_flat) {
+                        line += '\tMA60走平，扣分减半';
+                        if (p.base_points != null && p.points != null && Number(p.points) !== Number(p.base_points)) {
+                            line += `（${p.base_points}→${p.points}）`;
+                        }
+                    }
+                    lines.push(line);
                 });
             } else {
                 lines.push('未触发减分规则');
@@ -4281,7 +4288,15 @@ const ScreeningPage = {
         lines.push('计算指标细项');
         lines.push('d₁ (首日收盘价)\t' + gmsFmt(sd.d1, 'price') + '\t周期起点价格' + (sd.d1_date ? '，交易日期 ' + sd.d1_date : ''));
         lines.push('d₂₀ (末日收盘价)\t' + gmsFmt(sd.d20, 'price') + '\t周期末位/当日价格' + (sd.d20_date ? '，交易日期 ' + sd.d20_date : ''));
-        lines.push('MA60 (60日均价)\t' + gmsFmt(sd.ma60_d, 'price') + '\t减分规则 close_below_ma60 参照');
+        const ma60FlatLookback = sd.ma60_flat_lookback_days != null ? sd.ma60_flat_lookback_days : 20;
+        let ma60LineHint = '减分规则 close_below_ma60 参照';
+        if (sd.ma60_flat === true) {
+            const chg = sd.ma60_flat_change_pct != null ? (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%' : '--';
+            ma60LineHint += '；MA60走平（' + ma60FlatLookback + '日变化 ' + chg + '）';
+        } else if (sd.ma60_flat === false && sd.ma60_flat_change_pct != null) {
+            ma60LineHint += '；MA60非走平（' + ma60FlatLookback + '日变化 ' + (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%）';
+        }
+        lines.push('MA60 (60日均价)\t' + gmsFmt(sd.ma60_d, 'price') + '\t' + ma60LineHint);
         lines.push('d (20日均价)\t' + gmsFmt(sd.d, 'price') + '\t周期均价');
         lines.push('Δ (d₂₀ - d₁)\t' + gmsFmt(sd.delta, 'num') + '\t宏观位移');
         lines.push('Δ/d\t' + (sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--') + '\t宏观位移相对均价');

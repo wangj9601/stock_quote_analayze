@@ -30,6 +30,7 @@ class GMSStrategyEngine:
     ):
         self.data_loader = data_loader
         cfg = config or GMSConfigManager().get_config()
+        self.config = cfg
         self.calculator = GMSIndicatorsCalculator(cfg)
         self.detector = GMSSignalDetector(cfg)
         self.watch_threshold = float(cfg.get("scoring", {}).get("watch_threshold", 60))
@@ -84,8 +85,9 @@ class GMSStrategyEngine:
                 continue
 
             # 无目标日行情时使用该股票最近可用日数据作为筛选条件
+            active_cfg = config if config is not None else self.config
             rows = self.data_loader.load_indicators(
-                codes_sub, date, mt, use_latest_per_stock=True
+                codes_sub, date, mt, use_latest_per_stock=True, gms_config=active_cfg
             )
             dev_series_by_code: Dict[str, List[float]] = {}
             trend_series_by_code: Dict[str, Dict[str, List[float]]] = {}
@@ -201,6 +203,10 @@ class GMSStrategyEngine:
                     "fz_ratio": ind.fz_ratio,
                     "instant_deviation": ind.instant_deviation,
                     "ma60_d": (ind.raw_row.get("ma60_d") if ind.raw_row else None),
+                    "ma60_d_lag": (ind.raw_row.get("ma60_d_lag") if ind.raw_row else None),
+                    "ma60_flat": (ind.raw_row.get("ma60_flat") if ind.raw_row else None),
+                    "ma60_flat_change_pct": (ind.raw_row.get("ma60_flat_change_pct") if ind.raw_row else None),
+                    "ma60_flat_lookback_days": (ind.raw_row.get("ma60_flat_lookback_days") if ind.raw_row else None),
                     "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(self.config),
                     "score_base_total": getattr(ind, "score_base_total", ind.score_total),
                     "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),

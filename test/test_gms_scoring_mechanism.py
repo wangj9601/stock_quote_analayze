@@ -61,6 +61,63 @@ def test_penalty_ma60_deducts_points():
     assert penalized.score_base_total == base.score_total
 
 
+def test_penalty_ma60_flat_halves_deduction():
+    config = {
+        "scoring": {
+            "mechanism": "tiered_dual_penalty",
+            "penalty_rules": [
+                {"id": "close_below_ma60", "enabled": True, "points": 10, "half_when_ma60_flat": True},
+            ],
+        }
+    }
+    row = _sample_row(close=10.0, ma60=12.0)
+    row["ma60_flat"] = True
+    row["ma60_d_lag"] = 11.9
+    penalized = TieredDualPenaltyScorer(config).calculate(row)
+    assert penalized is not None
+    assert penalized.score_penalty_deduction == 5.0
+    assert penalized.penalty_details[0]["base_points"] == 10.0
+    assert penalized.penalty_details[0]["ma60_flat"] is True
+
+
+def test_penalty_ma60_not_flat_full_deduction():
+    config = {
+        "scoring": {
+            "penalty_rules": [{"id": "close_below_ma60", "enabled": True, "points": 10}],
+        }
+    }
+    row = _sample_row(close=10.0, ma60=12.0)
+    row["ma60_flat"] = False
+    total, details = PenaltyEngine(config).apply(row)
+    assert total == 10.0
+    assert details[0]["ma60_flat"] is False
+
+
+def test_penalty_ma60_missing_lag_full_deduction():
+    config = {
+        "scoring": {
+            "penalty_rules": [{"id": "close_below_ma60", "enabled": True, "points": 10}],
+        }
+    }
+    row = _sample_row(close=10.0, ma60=12.0)
+    total, details = PenaltyEngine(config).apply(row)
+    assert total == 10.0
+    assert details[0].get("ma60_flat") is False
+
+
+def test_validate_penalty_ma60_flat_params():
+    errs = validate_scoring_config(
+        {
+            "mechanism": "tiered_dual_penalty",
+            "ma60_flat_lookback_days": 0,
+            "ma60_flat_tol": 0.2,
+            "penalty_rules": [{"id": "close_below_ma60", "enabled": True, "points": 10}],
+        }
+    )
+    assert any("ma60_flat_lookback_days" in e for e in errs)
+    assert any("ma60_flat_tol" in e for e in errs)
+
+
 def test_validate_standard_rejects_penalty_rules():
     errs = validate_scoring_config(
         {"mechanism": "tiered_dual_max", "penalty_rules": [{"id": "close_below_ma60", "enabled": True, "points": 10}]}

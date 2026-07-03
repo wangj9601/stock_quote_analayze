@@ -93,6 +93,22 @@ def validate_scoring_config(scoring: Dict[str, Any]) -> List[str]:
                         errors.append(f"减分规则 {rid} 的 points 须在 (0, 100]")
                 except (TypeError, ValueError):
                     errors.append(f"减分规则 {rid} 的 points 无效")
+        lookback = scoring.get("ma60_flat_lookback_days")
+        if lookback is not None:
+            try:
+                lb = int(lookback)
+                if lb < 1:
+                    errors.append("ma60_flat_lookback_days 须 >= 1")
+            except (TypeError, ValueError):
+                errors.append("ma60_flat_lookback_days 无效")
+        tol = scoring.get("ma60_flat_tol")
+        if tol is not None:
+            try:
+                t = float(tol)
+                if t <= 0 or t > 0.1:
+                    errors.append("ma60_flat_tol 须在 (0, 0.1] 范围内")
+            except (TypeError, ValueError):
+                errors.append("ma60_flat_tol 无效")
     return errors
 
 
@@ -103,4 +119,6 @@ def normalize_scoring_defaults(scoring: Dict[str, Any]) -> Dict[str, Any]:
         out["mechanism"] = DEFAULT_MECHANISM
     if out.get("penalty_rules") is None:
         out["penalty_rules"] = []
+    if out.get("ma60_flat_tol") is None:
+        out["ma60_flat_tol"] = 0.015
     return out
