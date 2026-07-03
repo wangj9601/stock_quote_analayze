@@ -59,10 +59,27 @@ const GmsScoreDetail = {
             ? `<div class="gms-score-detail-section"><strong>【风险提示】</strong><div class="gms-risk-tags">${riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')}</div></div>`
             : '';
         const closePrice = sd.d20 != null ? sd.d20 : (sd.d != null && sd.instant_deviation != null ? sd.d + sd.instant_deviation : null);
+        const ma60FlatLookback = sd.ma60_flat_lookback_days != null ? sd.ma60_flat_lookback_days : 20;
         let ma60Hint = '60日移动平均线';
         if (sd.ma60_d != null && closePrice != null) {
             ma60Hint += closePrice < sd.ma60_d ? '；当前收盘低于 MA60' : '；当前收盘高于/等于 MA60';
         }
+        if (sd.ma60_flat === true) {
+            const chg = sd.ma60_flat_change_pct != null ? (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%' : '--';
+            ma60Hint += `；MA60 走平（${ma60FlatLookback}日变化 ${chg}）`;
+        } else if (sd.ma60_flat === false) {
+            const chg = sd.ma60_flat_change_pct != null ? (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%' : '--';
+            ma60Hint += `；MA60 非走平（${ma60FlatLookback}日变化 ${chg}）`;
+        }
+        const formatPenaltyCondition = (p) => {
+            if (p.id !== 'close_below_ma60') return '—';
+            let cond = 'd₂₀ &lt; ma60_d';
+            if (p.ma60_flat) cond += '；MA60 走平，扣分减半';
+            if (p.base_points != null && p.points != null && Number(p.points) !== Number(p.base_points)) {
+                cond += `（${p.base_points}→${p.points}）`;
+            }
+            return cond;
+        };
         const versionMetaHtml = `
             <div class="gms-score-detail-section gms-score-detail-meta">
                 <strong>策略参数版本</strong>
@@ -78,7 +95,7 @@ const GmsScoreDetail = {
                 ? penalties.map((p) => {
                     const applied = p.applied !== false;
                     const pts = p.points != null ? p.points : 0;
-                    return `<tr><td>${p.label || p.id || '减分规则'}</td><td>${applied ? '命中' : '未命中'}</td><td>${applied ? '-' + pts : '0'}</td><td>${p.id === 'close_below_ma60' ? 'd₂₀ &lt; ma60_d' : '—'}</td></tr>`;
+                    return `<tr><td>${p.label || p.id || '减分规则'}</td><td>${applied ? '命中' : '未命中'}</td><td>${applied ? '-' + pts : '0'}</td><td>${formatPenaltyCondition(p)}</td></tr>`;
                 }).join('')
                 : `<tr><td colspan="4" class="gms-muted">未触发减分规则</td></tr>`;
             penaltySectionHtml = `

@@ -22,6 +22,8 @@ class GMSDataLoader:
         date: str,
         market_type: str = "CN",
         use_latest_per_stock: bool = False,
+        scoring_config: Optional[Dict[str, Any]] = None,
+        gms_config: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         批量加载指定日期、市场的指标数据。
@@ -116,6 +118,7 @@ class GMSDataLoader:
                 result.append(row_dict)
 
             self._enrich_ma60_missing(result, market_type)
+            self._enrich_ma60_flat(result, scoring_config, gms_config)
 
             logger.info(
                 f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}"
@@ -248,3 +251,33 @@ class GMSDataLoader:
         from .ma60_source import enrich_rows_ma60_d
 
         enrich_rows_ma60_d(self.db, rows)
+
+    def _enrich_ma60_flat(
+        self,
+        rows: List[Dict[str, Any]],
+        scoring_config: Optional[Dict[str, Any]] = None,
+        gms_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """补全 MA60 走平判定字段（ma60_d_lag / ma60_flat）。"""
+        from .ma60_source import (
+            DEFAULT_MA60_FLAT_TOL,
+            enrich_rows_ma60_flat,
+            resolve_ma60_flat_lookback_days,
+        )
+
+        merged_cfg: Dict[str, Any] = dict(gms_config or {})
+        if scoring_config:
+            merged_cfg.setdefault("scoring", {})
+            if isinstance(merged_cfg["scoring"], dict):
+                merged_cfg["scoring"] = {**merged_cfg["scoring"], **scoring_config}
+            else:
+                merged_cfg["scoring"] = dict(scoring_config)
+        elif not merged_cfg.get("scoring") and scoring_config is not None:
+            merged_cfg["scoring"] = scoring_config
+
+        scoring = merged_cfg.get("scoring") or scoring_config or {}
+        lookback = resolve_ma60_flat_lookback_days(merged_cfg if merged_cfg else {"scoring": scoring})
+        tol = float(scoring.get("ma60_flat_tol") or DEFAULT_MA60_FLAT_TOL)
+        enrich_rows_ma60_flat(self.db, rows, lookback_days=lookback, tol=tol)
+        for r in rows:
+            r["ma60_flat_lookback_days"] = lookback

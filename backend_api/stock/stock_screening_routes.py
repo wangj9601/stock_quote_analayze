@@ -289,9 +289,22 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "d20_date": getattr(row, "d20_date", None),
             "ma60_d": getattr(row, "ma60_d", None),
         }
-        from backend_core.strategies.gms.ma60_source import enrich_rows_ma60_d
+        from backend_core.strategies.gms.ma60_source import (
+            DEFAULT_MA60_FLAT_TOL,
+            enrich_rows_ma60_d,
+            enrich_rows_ma60_flat,
+            resolve_ma60_flat_lookback_days,
+        )
 
         enrich_rows_ma60_d(db, [calc_row])
+        lookback = resolve_ma60_flat_lookback_days(config)
+        enrich_rows_ma60_flat(
+            db,
+            [calc_row],
+            lookback_days=lookback,
+            tol=float((config.get("scoring") or {}).get("ma60_flat_tol") or DEFAULT_MA60_FLAT_TOL),
+        )
+        calc_row["ma60_flat_lookback_days"] = lookback
 
         # 站稳 N 日：取最近 N 日的 instant_deviation 序列（最后一项为当日）
         stable_days = int((config.get("scoring") or {}).get("instant_deviation_stable_days", 3) or 3)
@@ -373,6 +386,10 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "fz_ratio": ind.fz_ratio,
             "instant_deviation": ind.instant_deviation,
             "ma60_d": calc_row.get("ma60_d"),
+            "ma60_d_lag": calc_row.get("ma60_d_lag"),
+            "ma60_flat": calc_row.get("ma60_flat"),
+            "ma60_flat_change_pct": calc_row.get("ma60_flat_change_pct"),
+            "ma60_flat_lookback_days": calc_row.get("ma60_flat_lookback_days"),
             "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(config),
             "score_base_total": getattr(ind, "score_base_total", ind.score_total),
             "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),

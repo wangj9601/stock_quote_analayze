@@ -159,6 +159,21 @@
                   </template>
                 </el-table-column>
               </el-table>
+              <el-divider content-position="left">MA60 走平判定（低于 MA60 减分减半）</el-divider>
+              <el-row :gutter="12">
+                <el-col :span="12">
+                  <el-form-item label="回看周期(天)">
+                    <el-input-number v-model="form.scoring.ma60_flat_lookback_days" :min="1" :max="120" class="w-full" />
+                    <div class="text-xs text-gray-500">默认与观察周期一致（{{ form.observation_period }} 天）</div>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="变化率阈值">
+                    <el-input-number v-model="form.scoring.ma60_flat_tol" :min="0.001" :max="0.1" :step="0.001" :precision="4" class="w-full" />
+                    <div class="text-xs text-gray-500">|MA60今-MA60_N日前|/MA60_N日前 &lt; 阈值视为走平，默认 1.5%</div>
+                  </el-form-item>
+                </el-col>
+              </el-row>
             </template>
           </el-form>
 
@@ -207,6 +222,8 @@ const defaultForm = () => ({
     weight_mom_ratio_d1: 40,
     weight_mom_deviation: 30,
     weight_mom_volume: 30,
+    ma60_flat_lookback_days: 20,
+    ma60_flat_tol: 0.015,
   },
   exit: { trend_break_days: 3, overbought_ratio: 0.15 },
   ratio_indicators: { use_ratio_d: true, use_ratio_d_for_exit: false },

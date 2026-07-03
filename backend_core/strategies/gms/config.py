@@ -49,6 +49,8 @@ class GMSConfigManager:
             "scoring": {
                 "mechanism": "tiered_dual_max",
                 "penalty_rules": [],
+                "ma60_flat_lookback_days": 20,
+                "ma60_flat_tol": 0.015,
                 "accumulation_fz_min": 1.5,
                 "balance_ratio_max": 0.01,
                 "momentum_volume_ratio_min": 1.5,
@@ -275,6 +277,10 @@ class GMSConfigManager:
             params = self.get_default_config()
         scoring = dict(params.get("scoring") or {})
         scoring["mechanism"] = "tiered_dual_penalty"
+        scoring.setdefault("ma60_flat_tol", 0.015)
+        obs = int(params.get("observation_period") or 20)
+        if scoring.get("ma60_flat_lookback_days") is None:
+            scoring["ma60_flat_lookback_days"] = obs
         if not scoring.get("penalty_rules"):
             scoring["penalty_rules"] = [
                 {
@@ -282,6 +288,7 @@ class GMSConfigManager:
                     "enabled": True,
                     "points": 10,
                     "label": "收盘低于60日均线",
+                    "half_when_ma60_flat": True,
                 }
             ]
         params["scoring"] = scoring
@@ -608,6 +615,8 @@ class GMSConfigManager:
             "weight_mom_ratio_d1": scoring.get("weight_mom_ratio_d1"),
             "weight_mom_deviation": scoring.get("weight_mom_deviation"),
             "weight_mom_volume": scoring.get("weight_mom_volume"),
+            "ma60_flat_lookback_days": scoring.get("ma60_flat_lookback_days"),
+            "ma60_flat_tol": scoring.get("ma60_flat_tol"),
         }
 
     @staticmethod
@@ -648,6 +657,8 @@ class GMSConfigManager:
             ("weight_mom_ratio_d1", "weight_mom_ratio_d1"),
             ("weight_mom_deviation", "weight_mom_deviation"),
             ("weight_mom_volume", "weight_mom_volume"),
+            ("ma60_flat_lookback_days", "ma60_flat_lookback_days"),
+            ("ma60_flat_tol", "ma60_flat_tol"),
         ):
             if flat.get(fk) is not None:
                 scoring[sk] = flat[fk]

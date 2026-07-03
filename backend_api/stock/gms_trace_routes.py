@@ -659,7 +659,13 @@ def _compute_gms_trace_for_stock(
             progress_cb(i + 1, total_dates, f"正在计算 {target_date}（{i + 1}/{total_dates}）")
         try:
             # 加载当日指标（精确日期，不用 use_latest）
-            rows_data = loader.load_indicators(codes, target_date, market_type, use_latest_per_stock=False)
+            rows_data = loader.load_indicators(
+                codes,
+                target_date,
+                market_type,
+                use_latest_per_stock=False,
+                gms_config=config,
+            )
             if not rows_data:
                 continue
 

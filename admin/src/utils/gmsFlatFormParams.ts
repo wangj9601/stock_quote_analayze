@@ -26,5 +26,7 @@ export function configParamsToFlatForm(config: Record<string, unknown>): Record<
     weight_mom_ratio_d1: scoring.weight_mom_ratio_d1,
     weight_mom_deviation: scoring.weight_mom_deviation,
     weight_mom_volume: scoring.weight_mom_volume,
+    ma60_flat_lookback_days: scoring.ma60_flat_lookback_days,
+    ma60_flat_tol: scoring.ma60_flat_tol,
   }
 }

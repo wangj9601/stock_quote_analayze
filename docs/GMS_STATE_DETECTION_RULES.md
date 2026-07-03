@@ -479,9 +479,23 @@ def detect_sell(self, indicators):
 }
 ```
 
-**减分规则 `close_below_ma60`**：当 `d20 < ma60_d`（收盘价低于 60 日均线）时，从基础分扣除 `points` 分。等级判定仍按**减分前**基础分（首期约定）。
+**减分规则 `close_below_ma60`**：当 `d20 < ma60_d`（收盘价低于 60 日均线）时，从基础分扣除 `points` 分。若 MA60 处于**走平**状态，扣分取半（默认 `points × 0.5`）。等级判定仍按**减分前**基础分（首期约定）。
 
-**数据依赖**：GMS 使用的 MA60 以 **`ma_indicators.ma60`** 为唯一权威源（同 `code` + `date` + `market_type`）。指标写入时同步到 `mean_frequency_resonance_indicators.ma60_d`；读取时若 `ma60_d` 缺失，`data_loader` 会从 `ma_indicators` 补全。**不再**用行情表估算。若 MA 指标未生成则 `ma60_d` 为空，增强版 `close_below_ma60` 减分不生效。
+**MA60 走平判定**（默认，可在 `scoring` 中配置）：
+
+```
+ma60_flat = |ma60_d - ma60_d_lag| / ma60_d_lag < ma60_flat_tol
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ma60_flat_lookback_days` | 20（与 `observation_period` 一致） | 回看 N 个**交易日**的 MA60（`ma60_d_lag`）；未配置时自动取观察周期 |
+| `ma60_flat_tol` | 0.015 | 相对变化 &lt; 1.5% 视为走平 |
+| `half_when_ma60_flat` | true | 减分规则级开关，走平时扣分减半 |
+
+缺 lag 日 MA60 数据时视为**非走平**，扣满分。
+
+**数据依赖**：GMS 使用的 MA60 以 **`ma_indicators.ma60`** 为唯一权威源（同 `code` + `date` + `market_type`）。指标写入时同步到 `mean_frequency_resonance_indicators.ma60_d`；读取时若 `ma60_d` 缺失，`data_loader` 会从 `ma_indicators` 补全，并批量计算 `ma60_d_lag` / `ma60_flat`。**不再**用行情表估算。若 MA 指标未生成则 `ma60_d` 为空，增强版 `close_below_ma60` 减分不生效。
 
 **管理入口**：管理端「GMS策略版本」→「打分与参数」Tab；网站选股参数版本下拉展示 `scoring_mechanism_label`。
 
