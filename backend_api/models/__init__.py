@@ -51,6 +51,7 @@ try:
         UserUpdate = getattr(models_module, 'UserUpdate', None)
         MeanFrequencyResonanceIndicators = getattr(models_module, 'MeanFrequencyResonanceIndicators', None)
         GMSSignalTrace = getattr(models_module, 'GMSSignalTrace', None)
+        GmsTraceRecomputeTask = getattr(models_module, 'GmsTraceRecomputeTask', None)
         VolumeShrinkBreakoutSignal = getattr(models_module, 'VolumeShrinkBreakoutSignal', None)
         VsbObserveStock = getattr(models_module, 'VsbObserveStock', None)
         GmsTradeObserveStock = getattr(models_module, 'GmsTradeObserveStock', None)
@@ -153,6 +154,7 @@ except Exception as e:
     UserUpdate = None
     MeanFrequencyResonanceIndicators = None
     GMSSignalTrace = None
+    GmsTraceRecomputeTask = None
     VolumeShrinkBreakoutSignal = None
     VsbObserveStock = None
     GmsTradeObserveStock = None
@@ -257,6 +259,7 @@ __all__ = [
     'UserUpdate',
     'MeanFrequencyResonanceIndicators',
     'GMSSignalTrace',
+    'GmsTraceRecomputeTask',
     'VolumeShrinkBreakoutSignal',
     'VsbObserveStock',
     'GmsTradeObserveStock',

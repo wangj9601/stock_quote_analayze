@@ -796,6 +796,26 @@ class GMSSignalTrace(Base):
     score_detail = Column(JSON, nullable=True)
 
 
+class GmsTraceRecomputeTask(Base):
+    """GMS 信号追溯强制重算任务（多 worker 共享进度）"""
+    __tablename__ = "gms_trace_recompute_tasks"
+
+    task_id = Column(String(64), primary_key=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    message = Column(Text, nullable=True)
+    code = Column(String(20), nullable=False, index=True)
+    market_type = Column(String(10), nullable=False, default="CN")
+    config_id = Column(Integer, nullable=False, index=True)
+    config_name = Column(String(200), nullable=True)
+    current = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=False, default=0)
+    saved_count = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
 class GMSStrategyVersion(Base):
     """GMS 观察股分组表（非参数版本）；可选绑定 gms_strategy_configs。"""
     __tablename__ = "gms_strategy_versions"

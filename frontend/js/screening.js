@@ -423,18 +423,13 @@ const ScreeningPage = {
         const loadingEl = document.getElementById('gmsFormalTradeLoading');
         const tbody = document.getElementById('gmsFormalTradeTableBody');
         const countEl = document.getElementById('gmsFormalTradeCount');
-        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
-        if (!user || !user.id) {
-            if (errEl) {
-                errEl.style.display = '';
-                errEl.textContent = '请先登录后查看正式交易列表';
-            }
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="11" class="empty-state">请先登录</td></tr>';
-            }
-            if (countEl) countEl.textContent = '';
-            return;
-        }
+        const user = (window.CommonUtils && CommonUtils.auth)
+            ? await CommonUtils.auth.ensureLogin({
+                redirect: true,
+                message: '请先登录后查看正式交易列表',
+            })
+            : null;
+        if (!user) return;
         if (errEl) errEl.style.display = 'none';
         if (loadingEl) loadingEl.style.display = '';
         const statusFilter = document.getElementById('gmsFormalTradeStatusFilter');
@@ -824,18 +819,13 @@ const ScreeningPage = {
         const loadingEl = document.getElementById('gmsTradeObserveLoading');
         const tbody = document.getElementById('gmsTradeObserveTableBody');
         const countEl = document.getElementById('gmsTradeObserveCount');
-        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
-        if (!user || !user.id) {
-            if (errEl) {
-                errEl.style.display = '';
-                errEl.textContent = '请先登录后查看交易观察列表';
-            }
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">请先登录</td></tr>';
-            }
-            if (countEl) countEl.textContent = '';
-            return;
-        }
+        const user = (window.CommonUtils && CommonUtils.auth)
+            ? await CommonUtils.auth.ensureLogin({
+                redirect: true,
+                message: '请先登录后查看交易观察列表',
+            })
+            : null;
+        if (!user) return;
         if (errEl) errEl.style.display = 'none';
         if (loadingEl) loadingEl.style.display = '';
         const fetchFn = this.getAuthFetchFn();
@@ -1165,18 +1155,13 @@ const ScreeningPage = {
         const loadingEl = document.getElementById('tvoTradeObserveLoading');
         const tbody = document.getElementById('tvoTradeObserveTableBody');
         const countEl = document.getElementById('tvoTradeObserveCount');
-        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
-        if (!user || !user.id) {
-            if (errEl) {
-                errEl.textContent = '请先登录后查看交易观察列表';
-                errEl.style.display = 'block';
-            }
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">请先登录</td></tr>';
-            }
-            if (countEl) countEl.textContent = '';
-            return;
-        }
+        const user = (window.CommonUtils && CommonUtils.auth)
+            ? await CommonUtils.auth.ensureLogin({
+                redirect: true,
+                message: '请先登录后查看交易观察列表',
+            })
+            : null;
+        if (!user) return;
         if (errEl) {
             errEl.style.display = 'none';
             errEl.textContent = '';

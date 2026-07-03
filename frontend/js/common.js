@@ -24,11 +24,15 @@ async function authFetch(url, options = {}) {
         localStorage.removeItem('userInfo');
         localStorage.removeItem('token');
 
-        // 如果不在登录页面，跳转到登录页
+        // 如果不在登录页面，跳转到登录页（带回跳地址）
         if (!window.location.pathname.includes('login.html') &&
             !window.location.pathname.includes('test-login.html')) {
-            CommonUtils.showToast('登录已过期，请重新登录', 'error');
-            window.location.href = 'login.html';
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.auth && CommonUtils.auth.redirectToLogin) {
+                CommonUtils.auth.redirectToLogin('登录已过期，请重新登录');
+            } else {
+                const ret = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+                window.location.href = `login.html?redirect=${ret}`;
+            }
         }
     }
 
@@ -139,6 +143,63 @@ const CommonUtils = {
             return JSON.parse(localStorage.getItem('userInfo') || '{}');
         },
 
+        /** 保存用户信息到 localStorage（与登录页结构一致） */
+        saveUserInfo(user) {
+            if (!user || user.id == null) return;
+            localStorage.setItem('userInfo', JSON.stringify({
+                username: user.username,
+                id: user.id,
+                loginTime: new Date().toISOString(),
+                isLoggedIn: true,
+            }));
+        },
+
+        /** 跳转到登录页，可选带回跳地址 */
+        redirectToLogin(message, includeReturn = true) {
+            if (message) {
+                CommonUtils.showToast(message, message.includes('过期') ? 'error' : 'warning');
+            }
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('userInfo');
+            localStorage.removeItem('token');
+            if (window.location.pathname.includes('login.html')) return;
+            let url = 'login.html';
+            if (includeReturn) {
+                const ret = encodeURIComponent(
+                    window.location.pathname + window.location.search + window.location.hash
+                );
+                url += `?redirect=${ret}`;
+            }
+            window.location.href = url;
+        },
+
+        /**
+         * 确保已登录：优先读 localStorage，缺失时用 token 调 /api/auth/status 校验。
+         * @returns {object|null} 用户对象；redirect=true 且未登录时会跳转并返回 null
+         */
+        async ensureLogin(options = {}) {
+            const { redirect = true, message = '请先登录' } = options;
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                if (redirect) this.redirectToLogin(message);
+                return null;
+            }
+            let user = this.getUserInfo();
+            if (user && user.id != null) {
+                return user;
+            }
+            user = await this.checkLogin();
+            if (user && user.id != null) {
+                this.saveUserInfo(user);
+                this.updateUserDisplay(user);
+                return user;
+            }
+            if (redirect) {
+                this.redirectToLogin('登录已过期，请重新登录');
+            }
+            return null;
+        },
+
         // 登出
         async logout() {
             // 确认对话框
@@ -221,8 +282,9 @@ const CommonUtils = {
             // 检查登录状态
             const user = await this.checkLogin();
 
-            // 更新用户显示
+            // 更新用户显示并同步 localStorage
             if (user) {
+                this.saveUserInfo(user);
                 this.updateUserDisplay(user);
             }
 

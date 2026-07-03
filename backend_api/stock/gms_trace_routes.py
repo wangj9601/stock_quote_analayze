@@ -17,40 +17,129 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from backend_api.database import get_db
-from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators
+from backend_api.database import get_db, SessionLocal, engine
+from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators, GmsTraceRecomputeTask
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stock", tags=["GMS信号追溯"])
 
-# 强制重新计算：内存任务状态（单进程内有效）
-_trace_recompute_lock = threading.Lock()
-_trace_recompute_tasks: Dict[str, dict] = {}
+_trace_recompute_table_ready = False
+_trace_recompute_table_lock = threading.Lock()
+
+
+def _ensure_trace_recompute_task_table() -> None:
+    global _trace_recompute_table_ready
+    if _trace_recompute_table_ready:
+        return
+    with _trace_recompute_table_lock:
+        if _trace_recompute_table_ready:
+            return
+        try:
+            GmsTraceRecomputeTask.__table__.create(bind=engine, checkfirst=True)
+        except Exception as e:
+            logger.warning("创建 gms_trace_recompute_tasks 表失败: %s", e)
+            raise
+        _trace_recompute_table_ready = True
+
+
+def _task_row_to_dict(row: GmsTraceRecomputeTask) -> dict:
+    return {
+        "task_id": row.task_id,
+        "status": row.status,
+        "progress": row.progress,
+        "message": row.message,
+        "code": row.code,
+        "market_type": row.market_type,
+        "config_id": row.config_id,
+        "config_name": row.config_name,
+        "current": row.current,
+        "total": row.total,
+        "saved_count": row.saved_count,
+        "error": row.error,
+        "created_at": row.created_at.isoformat(timespec="seconds") if row.created_at else None,
+    }
 
 
 def _find_running_trace_recompute(code: str, config_id: int) -> Optional[str]:
-    with _trace_recompute_lock:
-        for tid, task in _trace_recompute_tasks.items():
-            if (
-                task.get("status") == "running"
-                and task.get("code") == code
-                and int(task.get("config_id") or 0) == int(config_id)
-            ):
-                return tid
-    return None
+    _ensure_trace_recompute_task_table()
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(GmsTraceRecomputeTask)
+            .filter(
+                GmsTraceRecomputeTask.code == code,
+                GmsTraceRecomputeTask.config_id == int(config_id),
+                GmsTraceRecomputeTask.status.in_(("pending", "running")),
+            )
+            .order_by(GmsTraceRecomputeTask.created_at.desc())
+            .first()
+        )
+        return row.task_id if row else None
+    finally:
+        db.close()
+
+
+def _create_trace_recompute_task(task_id: str, fields: dict) -> None:
+    _ensure_trace_recompute_task_table()
+    db = SessionLocal()
+    now = datetime.now()
+    try:
+        row = GmsTraceRecomputeTask(
+            task_id=task_id,
+            status=fields.get("status", "pending"),
+            progress=int(fields.get("progress") or 0),
+            message=fields.get("message"),
+            code=fields.get("code"),
+            market_type=fields.get("market_type") or "CN",
+            config_id=int(fields.get("config_id") or 0),
+            config_name=fields.get("config_name"),
+            current=int(fields.get("current") or 0),
+            total=int(fields.get("total") or 0),
+            saved_count=fields.get("saved_count"),
+            error=fields.get("error"),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("创建 GMS 追溯重算任务失败 task_id=%s: %s", task_id, e)
+        raise
+    finally:
+        db.close()
 
 
 def _update_trace_recompute_task(task_id: str, **fields) -> None:
-    with _trace_recompute_lock:
-        if task_id in _trace_recompute_tasks:
-            _trace_recompute_tasks[task_id].update(fields)
+    _ensure_trace_recompute_task_table()
+    db = SessionLocal()
+    try:
+        row = db.query(GmsTraceRecomputeTask).filter(GmsTraceRecomputeTask.task_id == task_id).first()
+        if not row:
+            return
+        for key, val in fields.items():
+            if hasattr(row, key):
+                setattr(row, key, val)
+        row.updated_at = datetime.now()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("更新 GMS 追溯重算任务失败 task_id=%s: %s", task_id, e)
+    finally:
+        db.close()
 
 
 def _get_trace_recompute_task(task_id: str) -> Optional[dict]:
-    with _trace_recompute_lock:
-        task = _trace_recompute_tasks.get(task_id)
-        return dict(task) if task else None
+    _ensure_trace_recompute_task_table()
+    db = SessionLocal()
+    try:
+        row = db.query(GmsTraceRecomputeTask).filter(GmsTraceRecomputeTask.task_id == task_id).first()
+        if not row:
+            return None
+        return _task_row_to_dict(row)
+    finally:
+        db.close()
 
 
 class GmsTraceRecomputeRequest(BaseModel):
@@ -66,8 +155,6 @@ def _run_trace_recompute_background(
     config: dict,
     config_display: str,
 ) -> None:
-    from backend_api.database import SessionLocal
-
     db = SessionLocal()
     try:
         _update_trace_recompute_task(task_id, status="running", message="正在清除旧记录…", progress=0)
@@ -684,22 +771,20 @@ async def start_gms_signal_trace_recompute(
         })
 
     task_id = f"gms_trace_recompute_{uuid.uuid4().hex[:12]}"
-    with _trace_recompute_lock:
-        _trace_recompute_tasks[task_id] = {
-            "task_id": task_id,
-            "status": "pending",
-            "progress": 0,
-            "message": "任务已创建，等待执行…",
-            "code": code_norm,
-            "market_type": market_type,
-            "config_id": resolved_config_id,
-            "config_name": config_display,
-            "current": 0,
-            "total": 0,
-            "saved_count": None,
-            "error": None,
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-        }
+    _create_trace_recompute_task(task_id, {
+        "task_id": task_id,
+        "status": "pending",
+        "progress": 0,
+        "message": "任务已创建，等待执行…",
+        "code": code_norm,
+        "market_type": market_type,
+        "config_id": resolved_config_id,
+        "config_name": config_display,
+        "current": 0,
+        "total": 0,
+        "saved_count": None,
+        "error": None,
+    })
 
     thread = threading.Thread(
         target=_run_trace_recompute_background,

@@ -4,6 +4,22 @@ const LoginPage = {
     getApiBaseUrl() {
         return Config ? Config.getApiBaseUrl() : '';
     },
+
+    getRedirectTarget() {
+        const params = new URLSearchParams(window.location.search);
+        const target = params.get('redirect');
+        if (target && !target.includes('login.html')) {
+            try {
+                const decoded = decodeURIComponent(target);
+                if (decoded.startsWith('/') || decoded.endsWith('.html')) {
+                    return decoded;
+                }
+            } catch (_) {
+                /* ignore */
+            }
+        }
+        return 'index.html';
+    },
     
     // 初始化
     init() {
@@ -24,8 +40,15 @@ const LoginPage = {
             const result = await response.json();
             
             if (result.success && result.logged_in) {
-                // 已登录，跳转到首页
-                window.location.href = 'index.html';
+                if (result.user) {
+                    localStorage.setItem('userInfo', JSON.stringify({
+                        username: result.user.username,
+                        id: result.user.id,
+                        loginTime: new Date().toISOString(),
+                        isLoggedIn: true,
+                    }));
+                }
+                window.location.href = this.getRedirectTarget();
             }
         } catch (error) {
             console.error('检查登录状态失败:', error);
@@ -199,9 +222,9 @@ const LoginPage = {
 
         this.showToast(`登录成功，欢迎回来！`, 'success');
 
-        // 延迟跳转到首页
+        // 延迟跳转到回跳页或首页
         setTimeout(() => {
-            window.location.href = 'index.html';
+            window.location.href = this.getRedirectTarget();
         }, 1500);
     },
 

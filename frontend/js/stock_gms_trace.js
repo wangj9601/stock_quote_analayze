@@ -310,7 +310,11 @@ class StockGMSTracePage {
             const resp = await fetch(url);
             const json = await resp.json().catch(() => ({}));
             if (!resp.ok || !json.success) {
-                throw new Error(json.detail || json.message || resp.statusText);
+                const detail = json.detail;
+                let errMsg = json.message || resp.statusText;
+                if (typeof detail === 'string') errMsg = detail;
+                else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+                throw new Error(errMsg || '查询进度失败');
             }
             const task = json.data;
             if (!task) return;
