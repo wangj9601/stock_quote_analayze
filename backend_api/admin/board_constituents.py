@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import threading
 from datetime import datetime
 from io import BytesIO, StringIO
 from typing import Any, Iterable, List, Literal, Optional
@@ -112,15 +113,58 @@ def _industry_board_list_src_sql(t: dict[str, str]) -> str:
         SELECT {cols}
         FROM {t['basic']}
         UNION ALL
-        SELECT DISTINCT board_code, NULL::varchar AS board_name, NULL::timestamp AS create_date,
-               FALSE AS trade_observe_flag,
-               TRUE AS frontend_visible_flag,
-               NULL::varchar AS board_code_source
-        FROM {t['constituents']}
-        WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-          AND board_code NOT IN (
-              SELECT board_code FROM {t['basic']} WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-          )
+        SELECT
+            orphan.board_code,
+            orphan.board_name,
+            orphan.create_date,
+            orphan.trade_observe_flag,
+            orphan.frontend_visible_flag,
+            orphan.board_code_source
+        FROM (
+            SELECT DISTINCT ON (c.board_code)
+                c.board_code,
+                NULL::varchar AS board_name,
+                NULL::timestamp AS create_date,
+                FALSE AS trade_observe_flag,
+                TRUE AS frontend_visible_flag,
+                NULL::varchar AS board_code_source
+            FROM {t['constituents']} c
+            WHERE c.board_code IS NOT NULL AND TRIM(c.board_code) <> ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM {t['basic']} b WHERE b.board_code = c.board_code
+              )
+            ORDER BY c.board_code
+        ) orphan
+    """
+
+
+def _board_list_src_sql(board_type: BoardType, t: dict[str, str]) -> str:
+    if board_type == "industry":
+        return _industry_board_list_src_sql(t)
+    return f"""
+        SELECT {_board_basic_select_cols().strip()}
+        FROM {t['basic']}
+    """
+
+
+def _board_list_filtered_cte(board_src_sql: str, kw_filter: str) -> str:
+    """板块列表公共 CTE：聚合后按关键字过滤。"""
+    return f"""
+        WITH src AS (
+            SELECT
+                board_code,
+                MAX(board_name) AS board_name,
+                MAX(create_date) AS create_date,
+                BOOL_OR(trade_observe_flag) AS trade_observe_flag,
+                BOOL_OR(frontend_visible_flag) AS frontend_visible_flag,
+                MAX(board_code_source) AS board_code_source
+            FROM ({board_src_sql}) u
+            WHERE board_code IS NOT NULL AND board_code <> ''
+            GROUP BY board_code
+        ),
+        filtered AS (
+            SELECT * FROM src WHERE 1=1 {kw_filter}
+        )
     """
 
 
@@ -230,8 +274,23 @@ def _tables(board_type: BoardType) -> dict[str, str]:
     }
 
 
+_board_schema_lock = threading.Lock()
+_board_schema_ensured = False
+
+
 def ensure_board_trade_observe_columns(db: Session) -> None:
     """确保行业/概念板块基础表存在 trade_observe / frontend_visible / board_code_source 列。"""
+    global _board_schema_ensured
+    if _board_schema_ensured:
+        return
+    with _board_schema_lock:
+        if _board_schema_ensured:
+            return
+        _ensure_board_trade_observe_columns_once(db)
+        _board_schema_ensured = True
+
+
+def _ensure_board_trade_observe_columns_once(db: Session) -> None:
     for table in ("industry_board_basic_info", "concept_board_basic_info"):
         db.execute(
             text(
@@ -1095,61 +1154,36 @@ async def list_boards_with_summary(
         kw_filter = "AND (src.board_code ILIKE :kw OR src.board_name ILIKE :kw)"
         params["kw"] = f"%{kw}%"
 
-    if board_type == "industry":
-        board_src_sql = _industry_board_list_src_sql(t)
-    else:
-        board_src_sql = f"""
-            SELECT {_board_basic_select_cols().strip()}
-            FROM {t['basic']}
-        """
+    board_src_sql = _board_list_src_sql(board_type, t)
+    filtered_cte = _board_list_filtered_cte(board_src_sql, kw_filter)
 
-    count_sql = text(
-        f"""
-        SELECT COUNT(*) FROM (
-            SELECT DISTINCT src.board_code
-            FROM (
-                SELECT board_code, MAX(board_name) AS board_name
-                FROM ({board_src_sql}) u
-                WHERE board_code IS NOT NULL AND board_code <> ''
-                GROUP BY board_code
-            ) src
-            WHERE 1=1 {kw_filter}
-        ) x
-        """
-    )
+    count_sql = text(f"{filtered_cte} SELECT COUNT(*) FROM filtered")
     total = db.execute(count_sql, params).scalar() or 0
 
+    # 仅对当前页板块做成分股统计，避免全表 GROUP BY industry_board_constituents
     list_sql = text(
         f"""
+        {filtered_cte}
         SELECT
-            src.board_code,
-            src.board_name,
+            page.board_code,
+            page.board_name,
             COALESCE(cnt.cnt, 0) AS constituent_count,
             cnt.last_updated,
-            src.create_date,
-            src.trade_observe_flag,
-            src.frontend_visible_flag,
-            src.board_code_source
+            page.create_date,
+            page.trade_observe_flag,
+            page.frontend_visible_flag,
+            page.board_code_source
         FROM (
-            SELECT
-                board_code,
-                MAX(board_name) AS board_name,
-                MAX(create_date) AS create_date,
-                BOOL_OR(trade_observe_flag) AS trade_observe_flag,
-                BOOL_OR(frontend_visible_flag) AS frontend_visible_flag,
-                MAX(board_code_source) AS board_code_source
-            FROM ({board_src_sql}) u
-            WHERE board_code IS NOT NULL AND board_code <> ''
-            GROUP BY board_code
-        ) src
-        LEFT JOIN (
-            SELECT board_code, COUNT(*) AS cnt, MAX(updated_at) AS last_updated
-            FROM {t['constituents']}
-            GROUP BY board_code
-        ) cnt ON cnt.board_code = src.board_code
-        WHERE 1=1 {kw_filter}
-        ORDER BY src.create_date DESC NULLS LAST, src.board_code
-        LIMIT :limit OFFSET :offset
+            SELECT * FROM filtered
+            ORDER BY create_date DESC NULLS LAST, board_code
+            LIMIT :limit OFFSET :offset
+        ) page
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*)::bigint AS cnt, MAX(updated_at) AS last_updated
+            FROM {t['constituents']} c
+            WHERE c.board_code = page.board_code
+        ) cnt ON TRUE
+        ORDER BY page.create_date DESC NULLS LAST, page.board_code
         """
     )
     rows = db.execute(list_sql, params).fetchall()

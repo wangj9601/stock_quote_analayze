@@ -18,6 +18,9 @@ from backend_api.admin.board_constituents import (
     _assert_concept_board_name_unique,
     _generate_next_concept_board_code,
     _industry_board_src_sql,
+    _industry_board_list_src_sql,
+    _board_list_filtered_cte,
+    _board_list_src_sql,
     _delete_industry_realtime_quotes,
     _resolve_delete_board_code,
     _normalize_board_code,
@@ -71,6 +74,23 @@ class TestBoardConstituentsHelpers:
         sql = _industry_board_src_sql(_tables("industry"))
         assert "industry_board_basic_info" in sql
         assert "industry_board_realtime_quotes" not in sql
+        assert "UNION" not in sql.upper()
+
+    def test_industry_board_list_src_sql_uses_not_exists(self):
+        sql = _industry_board_list_src_sql(_tables("industry"))
+        assert "NOT EXISTS" in sql
+        assert "NOT IN" not in sql.upper()
+
+    def test_board_list_filtered_cte_structure(self):
+        src = _board_list_src_sql("industry", _tables("industry"))
+        cte = _board_list_filtered_cte(src, "")
+        assert "WITH src AS" in cte
+        assert "filtered AS" in cte
+        assert "GROUP BY board_code" in cte
+
+    def test_board_list_src_sql_concept_basic_only(self):
+        sql = _board_list_src_sql("concept", _tables("concept"))
+        assert "concept_board_basic_info" in sql
         assert "UNION" not in sql.upper()
 
     def test_save_board_body_validation(self):
