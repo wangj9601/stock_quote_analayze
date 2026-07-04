@@ -83,17 +83,19 @@ class ConceptBoardBasicCollector:
                 session.execute(
                     text(
                         """
-                        INSERT INTO concept_board_basic_info (board_code, board_name, create_date)
-                        VALUES (:board_code, :board_name, :create_date)
+                        INSERT INTO concept_board_basic_info (board_code, board_name, create_date, board_code_source)
+                        VALUES (:board_code, :board_name, :create_date, :board_code_source)
                         ON CONFLICT (board_code) DO UPDATE SET
                             board_name = EXCLUDED.board_name,
-                            create_date = EXCLUDED.create_date
+                            create_date = EXCLUDED.create_date,
+                            board_code_source = EXCLUDED.board_code_source
                         """
                     ),
                     {
                         "board_code": str(bcode).strip(),
                         "board_name": None if pd.isna(row.get("board_name")) else str(row.get("board_name")).strip(),
                         "create_date": now,
+                        "board_code_source": "eastmoney",
                     },
                 )
                 count += 1

@@ -9,6 +9,13 @@ export interface BoardSummary {
   last_updated: string | null
   trade_observe_flag?: boolean
   frontend_visible_flag?: boolean
+  board_code_source?: string
+  board_code_source_label?: string
+}
+
+export interface BoardCodeSourceOption {
+  value: string
+  label: string
 }
 
 export interface BoardConstituentRow {
@@ -124,6 +131,13 @@ class BoardConstituentsService {
     })
   }
 
+  async getBoardCodeSources() {
+    return apiService.get<{
+      success: boolean
+      data: BoardCodeSourceOption[]
+    }>('/board-constituents/boards/code-sources')
+  }
+
   async saveBoard(body: {
     boardType: BoardType
     boardCode?: string
@@ -131,6 +145,7 @@ class BoardConstituentsService {
     originalBoardCode?: string
     tradeObserveFlag?: boolean
     frontendVisibleFlag?: boolean
+    boardCodeSource?: string
   }) {
     return apiService.post<{
       success: boolean
@@ -150,6 +165,7 @@ class BoardConstituentsService {
       original_board_code: body.originalBoardCode,
       trade_observe_flag: body.tradeObserveFlag,
       frontend_visible_flag: body.frontendVisibleFlag,
+      board_code_source: body.boardCodeSource,
     })
   }
 

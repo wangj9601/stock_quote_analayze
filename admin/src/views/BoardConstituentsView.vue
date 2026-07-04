@@ -110,6 +110,7 @@
             />
             <el-table-column prop="board_code" label="代码" min-width="100" show-overflow-tooltip />
             <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
+            <el-table-column prop="board_code_source_label" label="代码来源" width="88" show-overflow-tooltip />
             <el-table-column prop="constituent_count" label="成分数" width="72" align="right" />
             <el-table-column label="交易观察" width="88" align="center">
               <template #default="{ row }">
@@ -236,9 +237,9 @@
           <div class="flex gap-2 w-full">
             <el-input
               v-model="boardEditForm.board_code"
-              :placeholder="boardType === 'industry'
-                ? (isBoardCreateAutoCode ? '如 医疗服务、IT服务 或 BK0428' : '中文/英文/BK编码')
-                : (isBoardCreateAutoCode ? '保存时自动生成 BK 编码' : 'BK+数字，如 BK0428')"
+              :placeholder="isBoardCreateAutoCode
+                ? '保存时自动生成 BK 编码'
+                : (boardType === 'industry' ? '中文/英文/BK编码' : 'BK+数字，如 BK0428')"
               :readonly="isBoardCreateAutoCode"
               :clearable="!isBoardCreateAutoCode"
               class="flex-1"
@@ -253,12 +254,7 @@
             </el-button>
           </div>
           <p v-if="isBoardCreateAutoCode" class="text-xs text-gray-500 mt-1">
-            <template v-if="boardType === 'concept'">
-              概念板块使用 BK+数字 编码，且全局不可与行业板块重复；保存时自动生成，也可点「换一个」预览。
-            </template>
-            <template v-else>
-              请填写板块代码（中文/英文/BK 均可，1~20 位）；也可留空由名称推断或自动生成 BK 编码。
-            </template>
+            行业/概念板块新增时使用 BK+数字 编码，且全局不可重复；保存时自动生成，也可点「换一个」预览。
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
@@ -269,6 +265,17 @@
             clearable
             @keyup.enter="submitBoardEdit"
           />
+        </el-form-item>
+        <el-form-item label="代码来源">
+          <el-select v-model="boardEditForm.board_code_source" class="w-full" placeholder="选择板块代码来源">
+            <el-option
+              v-for="opt in boardCodeSourceOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <p class="text-xs text-gray-500 mt-1">标识板块代码取自哪家数据源；东财同步的板块一般为「东方财富」。</p>
         </el-form-item>
         <el-form-item label="交易观察">
           <el-switch
@@ -430,6 +437,7 @@ import {
   type BoardType,
   type BoardSummary,
   type BoardConstituentRow,
+  type BoardCodeSourceOption,
 } from '@/services/boardConstituents.service'
 
 function formatApiError(e: unknown, fallback: string): string {
@@ -502,19 +510,19 @@ const boardNameInputRef = ref<{ focus: () => void } | null>(null)
 const savingBoard = ref(false)
 const deletingBoard = ref(false)
 const loadingNextBoardCode = ref(false)
+const boardCodeSourceOptions = ref<BoardCodeSourceOption[]>([])
 const boardEditForm = reactive({
   board_code: '',
   board_name: '',
   trade_observe_flag: false,
   frontend_visible_flag: true,
+  board_code_source: 'manual',
   original_board_code: '' as string,
 })
 const togglingTradeObserve = ref<string | null>(null)
 const togglingFrontendVisible = ref<string | null>(null)
 
-const isBoardCreateAutoCode = computed(
-  () => boardType.value === 'concept' && !boardEditForm.original_board_code,
-)
+const isBoardCreateAutoCode = computed(() => !boardEditForm.original_board_code)
 
 function isValidBoardCode(type: BoardType, code: string): boolean {
   const c = code.trim()
@@ -645,16 +653,18 @@ function openBoardEditDialog(row?: BoardSummary) {
     boardEditForm.board_name = row.board_name || ''
     boardEditForm.trade_observe_flag = !!row.trade_observe_flag
     boardEditForm.frontend_visible_flag = row.frontend_visible_flag !== false
+    boardEditForm.board_code_source = row.board_code_source || 'manual'
     boardEditForm.original_board_code = row.board_code
   } else {
     boardEditForm.board_code = ''
     boardEditForm.board_name = ''
     boardEditForm.trade_observe_flag = false
     boardEditForm.frontend_visible_flag = true
+    boardEditForm.board_code_source = 'manual'
     boardEditForm.original_board_code = ''
   }
   boardEditVisible.value = true
-  if (!row && boardType.value === 'concept') {
+  if (!row) {
     void refreshBoardCode()
   }
 }
@@ -687,6 +697,7 @@ function resetBoardEditForm() {
   boardEditForm.board_name = ''
   boardEditForm.trade_observe_flag = false
   boardEditForm.frontend_visible_flag = true
+  boardEditForm.board_code_source = 'manual'
   boardEditForm.original_board_code = ''
 }
 
@@ -737,12 +748,9 @@ async function toggleBoardFrontendVisible(row: BoardSummary, val: boolean) {
 async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
-  const name = boardEditForm.board_name.trim()
   if (!isBoardCreateAutoCode && !code) {
-    if (!(boardType.value === 'industry' && !boardEditForm.original_board_code && name)) {
-      ElMessage.warning('请填写板块代码')
-      return
-    }
+    ElMessage.warning('请填写板块代码')
+    return
   }
   if (code && !isBoardCreateAutoCode && !isValidBoardCode(boardType.value, code)) {
     ElMessage.warning(
@@ -761,6 +769,7 @@ async function submitBoardEdit() {
       originalBoardCode: boardEditForm.original_board_code || undefined,
       tradeObserveFlag: boardEditForm.trade_observe_flag,
       frontendVisibleFlag: boardEditForm.frontend_visible_flag,
+      boardCodeSource: boardEditForm.board_code_source,
     })
     ElMessage.success(res.message || '已保存')
     boardEditVisible.value = false
@@ -1146,6 +1155,17 @@ async function syncAllBoards() {
 
 onMounted(() => {
   void loadBoards()
+  void boardConstituentsService.getBoardCodeSources().then((res) => {
+    boardCodeSourceOptions.value = res.data || []
+  }).catch(() => {
+    boardCodeSourceOptions.value = [
+      { value: 'eastmoney', label: '东方财富' },
+      { value: 'tonghuashun', label: '同花顺' },
+      { value: 'huatai', label: '华泰' },
+      { value: 'manual', label: '手动维护' },
+      { value: 'other', label: '其他' },
+    ]
+  })
 })
 </script>
 

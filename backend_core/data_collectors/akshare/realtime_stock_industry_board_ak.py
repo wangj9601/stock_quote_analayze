@@ -211,15 +211,17 @@ class RealtimeStockIndustryBoardCollector:
                         stored_code = allocate_bk_board_code(session, preferred=preferred)
                     em_to_stored[em_code] = stored_code
                     session.execute(text('''
-                        INSERT INTO industry_board_basic_info (board_code, board_name, create_date)
-                        VALUES (:board_code, :board_name, :create_date)
+                        INSERT INTO industry_board_basic_info (board_code, board_name, create_date, board_code_source)
+                        VALUES (:board_code, :board_name, :create_date, :board_code_source)
                         ON CONFLICT (board_code) DO UPDATE SET
                             board_name = EXCLUDED.board_name,
-                            create_date = EXCLUDED.create_date
+                            create_date = EXCLUDED.create_date,
+                            board_code_source = EXCLUDED.board_code_source
                     '''), {
                         'board_code': stored_code,
                         'board_name': board_name,
-                        'create_date': now
+                        'create_date': now,
+                        'board_code_source': 'eastmoney',
                     })
                     basic_info_count += 1
                 except Exception as e:

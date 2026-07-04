@@ -26,6 +26,14 @@ from backend_api.admin.board_constituents_import import (
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
 from backend_api.models import ConceptBoardConstituent, IndustryBoardConstituent
+from backend_api.utils.board_code_source import (
+    BOARD_CODE_SOURCE_OPTIONS,
+    DEFAULT_BOARD_CODE_SOURCE,
+    SYNC_BOARD_CODE_SOURCE,
+    board_code_source_label,
+    normalize_board_code_source,
+    resolve_board_code_source,
+)
 from backend_api.utils.bk_board_code import (
     assert_bk_available_for_board_type,
     generate_next_bk_board_code,
@@ -79,27 +87,35 @@ def _delete_industry_realtime_quotes(db: Session, board_codes: Iterable[str]) ->
     return deleted
 
 
+def _board_basic_select_cols() -> str:
+    return """
+        board_code, board_name, create_date,
+        COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
+        COALESCE(frontend_visible_flag, TRUE) AS frontend_visible_flag,
+        board_code_source
+    """
+
+
 def _industry_board_src_sql(t: dict[str, str]) -> str:
     """管理端行业板块列表：仅 industry_board_basic_info，不含实时行情表。"""
+    cols = _board_basic_select_cols()
     return f"""
-        SELECT board_code, board_name, create_date,
-               COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
-               COALESCE(frontend_visible_flag, TRUE) AS frontend_visible_flag
+        SELECT {cols}
         FROM {t['basic']}
     """
 
 
 def _industry_board_list_src_sql(t: dict[str, str]) -> str:
     """管理端行业板块列表：基础信息 + 仅存在于成分股表中的板块（导入后可见）。"""
+    cols = _board_basic_select_cols()
     return f"""
-        SELECT board_code, board_name, create_date,
-               COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
-               COALESCE(frontend_visible_flag, TRUE) AS frontend_visible_flag
+        SELECT {cols}
         FROM {t['basic']}
         UNION ALL
         SELECT DISTINCT board_code, NULL::varchar AS board_name, NULL::timestamp AS create_date,
                FALSE AS trade_observe_flag,
-               TRUE AS frontend_visible_flag
+               TRUE AS frontend_visible_flag,
+               NULL::varchar AS board_code_source
         FROM {t['constituents']}
         WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
           AND board_code NOT IN (
@@ -215,7 +231,7 @@ def _tables(board_type: BoardType) -> dict[str, str]:
 
 
 def ensure_board_trade_observe_columns(db: Session) -> None:
-    """确保行业/概念板块基础表存在 trade_observe_flag / frontend_visible_flag 列。"""
+    """确保行业/概念板块基础表存在 trade_observe / frontend_visible / board_code_source 列。"""
     for table in ("industry_board_basic_info", "concept_board_basic_info"):
         db.execute(
             text(
@@ -230,6 +246,14 @@ def ensure_board_trade_observe_columns(db: Session) -> None:
                 f"""
                 ALTER TABLE {table}
                 ADD COLUMN IF NOT EXISTS frontend_visible_flag BOOLEAN NOT NULL DEFAULT TRUE
+                """
+            )
+        )
+        db.execute(
+            text(
+                f"""
+                ALTER TABLE {table}
+                ADD COLUMN IF NOT EXISTS board_code_source VARCHAR(32)
                 """
             )
         )
@@ -354,6 +378,10 @@ class SaveBoardInfoBody(BaseModel):
         None,
         description="是否对网站前端显示；编辑保存时传入则更新",
     )
+    board_code_source: Optional[str] = Field(
+        None,
+        description="板块代码来源：eastmoney/tonghuashun/huatai/manual/other",
+    )
     original_board_code: Optional[str] = Field(
         None,
         description="编辑时原板块代码；改名时与 board_code 不同",
@@ -376,6 +404,11 @@ class SaveBoardInfoBody(BaseModel):
                     raise ValueError("行业板块代码须为 BK+数字、中文或英文字符")
                 raise ValueError("板块代码须为 BK+数字 格式")
             self.board_code = code
+        if self.board_code_source is not None and str(self.board_code_source).strip():
+            src = normalize_board_code_source(self.board_code_source)
+            if not src:
+                raise ValueError("板块代码来源无效")
+            self.board_code_source = src
         return self
 
 
@@ -459,6 +492,18 @@ def _read_board_flags(db: Session, board_type: BoardType, board_code: str) -> tu
     return trade_observe, frontend_visible
 
 
+def _read_board_code_source(db: Session, board_type: BoardType, board_code: str) -> str:
+    ensure_board_trade_observe_columns(db)
+    t = _tables(board_type)
+    row = db.execute(
+        text(f"SELECT board_code_source FROM {t['basic']} WHERE board_code = :code LIMIT 1"),
+        {"code": board_code},
+    ).fetchone()
+    if not row:
+        return SYNC_BOARD_CODE_SOURCE
+    return resolve_board_code_source(row[0])
+
+
 def _upsert_board_basic(
     db: Session,
     board_type: BoardType,
@@ -467,23 +512,33 @@ def _upsert_board_basic(
     now: datetime,
     trade_observe_flag: Optional[bool] = None,
     frontend_visible_flag: Optional[bool] = None,
+    board_code_source: Optional[str] = None,
 ) -> None:
     ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     cur_trade, cur_visible = _read_board_flags(db, board_type, board_code)
+    cur_source = _read_board_code_source(db, board_type, board_code)
     to_save_trade = cur_trade if trade_observe_flag is None else trade_observe_flag
     to_save_visible = cur_visible if frontend_visible_flag is None else frontend_visible_flag
+    to_save_source = cur_source if board_code_source is None else resolve_board_code_source(
+        board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+    )
     db.execute(
         text(
             f"""
             INSERT INTO {t['basic']} (
-                board_code, board_name, create_date, trade_observe_flag, frontend_visible_flag
+                board_code, board_name, create_date,
+                trade_observe_flag, frontend_visible_flag, board_code_source
             )
-            VALUES (:board_code, :board_name, :create_date, :trade_observe_flag, :frontend_visible_flag)
+            VALUES (
+                :board_code, :board_name, :create_date,
+                :trade_observe_flag, :frontend_visible_flag, :board_code_source
+            )
             ON CONFLICT (board_code) DO UPDATE SET
                 board_name = COALESCE(EXCLUDED.board_name, {t['basic']}.board_name),
                 trade_observe_flag = EXCLUDED.trade_observe_flag,
-                frontend_visible_flag = EXCLUDED.frontend_visible_flag
+                frontend_visible_flag = EXCLUDED.frontend_visible_flag,
+                board_code_source = EXCLUDED.board_code_source
             """
         ),
         {
@@ -492,6 +547,7 @@ def _upsert_board_basic(
             "create_date": now,
             "trade_observe_flag": to_save_trade,
             "frontend_visible_flag": to_save_visible,
+            "board_code_source": to_save_source,
         },
     )
 
@@ -643,6 +699,7 @@ def _rename_board_records(
     board_name: Optional[str],
     trade_observe_flag: Optional[bool] = None,
     frontend_visible_flag: Optional[bool] = None,
+    board_code_source: Optional[str] = None,
 ) -> None:
     t = _tables(board_type)
     exists = db.execute(
@@ -660,8 +717,14 @@ def _rename_board_records(
         raise HTTPException(status_code=400, detail=f"板块代码「{new_code}」在成分股表中已存在")
 
     preserved_trade, preserved_visible = _read_board_flags(db, board_type, old_code)
+    preserved_source = _read_board_code_source(db, board_type, old_code)
     flag_to_save_trade = trade_observe_flag if trade_observe_flag is not None else preserved_trade
     flag_to_save_visible = frontend_visible_flag if frontend_visible_flag is not None else preserved_visible
+    source_to_save = (
+        resolve_board_code_source(board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
+        if board_code_source is not None
+        else preserved_source
+    )
 
     if old_code != new_code:
         db.execute(
@@ -693,12 +756,22 @@ def _rename_board_records(
         now,
         trade_observe_flag=flag_to_save_trade,
         frontend_visible_flag=flag_to_save_visible,
+        board_code_source=source_to_save,
     )
     if board_type == "industry" and t.get("realtime") and board_name and old_code == new_code:
         db.execute(
             text(f"UPDATE {t['realtime']} SET board_name = :name WHERE board_code = :code"),
             {"name": board_name, "code": new_code},
         )
+
+
+@router.get("/boards/code-sources")
+async def list_board_code_sources(
+    current_user: Any = Depends(get_current_admin),
+):
+    """板块代码来源选项（管理端下拉）。"""
+    _ = current_user
+    return {"success": True, "data": BOARD_CODE_SOURCE_OPTIONS}
 
 
 @router.get("/boards/next-code")
@@ -740,8 +813,7 @@ async def save_board_info(
         new_code = _generate_next_concept_board_code(db)
         old_code = new_code
     elif body.board_type == "industry":
-        name_code = normalize_industry_board_code(board_name) if board_name else ""
-        new_code = name_code or _generate_next_industry_board_code(db)
+        new_code = _generate_next_industry_board_code(db)
         old_code = new_code
     else:
         raise HTTPException(status_code=400, detail="板块代码无效")
@@ -762,6 +834,16 @@ async def save_board_info(
             exclude_codes=[c for c in {new_code, old_code} if c],
         )
 
+    source_to_save = (
+        resolve_board_code_source(body.board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
+        if body.board_code_source is not None
+        else (
+            DEFAULT_BOARD_CODE_SOURCE
+            if not body.original_board_code
+            else _read_board_code_source(db, body.board_type, old_code)
+        )
+    )
+
     if old_code != new_code:
         _rename_board_records(
             db,
@@ -771,6 +853,7 @@ async def save_board_info(
             board_name,
             trade_observe_flag=body.trade_observe_flag,
             frontend_visible_flag=body.frontend_visible_flag,
+            board_code_source=source_to_save,
         )
         action = "rename"
     else:
@@ -789,6 +872,7 @@ async def save_board_info(
             now,
             trade_observe_flag=body.trade_observe_flag,
             frontend_visible_flag=body.frontend_visible_flag,
+            board_code_source=source_to_save,
         )
         if body.board_type == "industry" and t.get("realtime") and board_name:
             db.execute(
@@ -803,10 +887,13 @@ async def save_board_info(
     db.commit()
     uname = getattr(current_user, "username", None) or "admin"
     saved_trade, saved_visible = _read_board_flags(db, body.board_type, new_code)
+    saved_source = _read_board_code_source(db, body.board_type, new_code)
     if body.trade_observe_flag is not None:
         saved_trade = body.trade_observe_flag
     if body.frontend_visible_flag is not None:
         saved_visible = body.frontend_visible_flag
+    if body.board_code_source is not None:
+        saved_source = resolve_board_code_source(body.board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
     return {
         "success": True,
         "message": "板块信息已保存",
@@ -816,6 +903,8 @@ async def save_board_info(
             "board_name": board_name,
             "trade_observe_flag": saved_trade,
             "frontend_visible_flag": saved_visible,
+            "board_code_source": saved_source,
+            "board_code_source_label": board_code_source_label(saved_source),
             "original_board_code": old_code if old_code != new_code else None,
             "operator": uname,
         },
@@ -1010,9 +1099,7 @@ async def list_boards_with_summary(
         board_src_sql = _industry_board_list_src_sql(t)
     else:
         board_src_sql = f"""
-            SELECT board_code, board_name, create_date,
-                   COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
-                   COALESCE(frontend_visible_flag, TRUE) AS frontend_visible_flag
+            SELECT {_board_basic_select_cols().strip()}
             FROM {t['basic']}
         """
 
@@ -1041,14 +1128,16 @@ async def list_boards_with_summary(
             cnt.last_updated,
             src.create_date,
             src.trade_observe_flag,
-            src.frontend_visible_flag
+            src.frontend_visible_flag,
+            src.board_code_source
         FROM (
             SELECT
                 board_code,
                 MAX(board_name) AS board_name,
                 MAX(create_date) AS create_date,
                 BOOL_OR(trade_observe_flag) AS trade_observe_flag,
-                BOOL_OR(frontend_visible_flag) AS frontend_visible_flag
+                BOOL_OR(frontend_visible_flag) AS frontend_visible_flag,
+                MAX(board_code_source) AS board_code_source
             FROM ({board_src_sql}) u
             WHERE board_code IS NOT NULL AND board_code <> ''
             GROUP BY board_code
@@ -1073,6 +1162,8 @@ async def list_boards_with_summary(
             "create_date": r[4].isoformat() if r[4] else None,
             "trade_observe_flag": bool(r[5]),
             "frontend_visible_flag": bool(r[6]),
+            "board_code_source": resolve_board_code_source(r[7]),
+            "board_code_source_label": board_code_source_label(r[7]),
         }
         for r in rows
     ]

@@ -81,6 +81,22 @@ class TestBoardConstituentsHelpers:
             board_name="电力",
         )
         assert body.board_code is None
+        src_body = SaveBoardInfoBody(
+            board_type="industry",
+            board_code="BK0428",
+            board_name="电力",
+            board_code_source="tonghuashun",
+        )
+        assert src_body.board_code_source == "tonghuashun"
+        try:
+            SaveBoardInfoBody(
+                board_type="concept",
+                board_code="BK0428",
+                board_code_source="invalid_source",
+            )
+            assert False, "无效来源应失败"
+        except ValueError:
+            pass
 
     def test_set_board_trade_observe_body_validation(self):
         body = SetBoardTradeObserveBody(
@@ -109,7 +125,10 @@ class TestBoardConstituentsHelpers:
         class _DB:
             def execute(self, sql, params=None):
                 executed.append({"sql": str(sql), "params": params or {}})
-                if "SELECT trade_observe_flag" in str(sql):
+                sql_s = str(sql)
+                if "SELECT trade_observe_flag" in sql_s:
+                    return type("R", (), {"fetchone": lambda self: None})()
+                if "SELECT board_code_source" in sql_s:
                     return type("R", (), {"fetchone": lambda self: None})()
                 return type("R", (), {})()
 
@@ -117,12 +136,20 @@ class TestBoardConstituentsHelpers:
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now)
         assert "trade_observe_flag" in executed[-1]["sql"]
         assert "frontend_visible_flag" in executed[-1]["sql"]
+        assert "board_code_source" in executed[-1]["sql"]
         assert executed[-1]["params"]["board_code"] == "BK0428"
         assert executed[-1]["params"]["frontend_visible_flag"] is True
+        assert executed[-1]["params"]["board_code_source"] == "eastmoney"
 
         executed.clear()
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now, trade_observe_flag=True)
         assert executed[-1]["params"]["trade_observe_flag"] is True
+
+        executed.clear()
+        _upsert_board_basic(
+            _DB(), "concept", "BK0428", "电力", now, board_code_source="tonghuashun"
+        )
+        assert executed[-1]["params"]["board_code_source"] == "tonghuashun"
 
     def test_read_board_trade_observe_flag(self):
         class _DB:
