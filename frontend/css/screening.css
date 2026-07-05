@@ -1477,6 +1477,62 @@
     }
 }
 
+#resultsTable-gms-trade-observe .gms-col-code .gms-code-with-focus {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    max-width: 100%;
+}
+
+#resultsTable-gms-trade-observe .gms-key-focus-btn {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
+    vertical-align: middle;
+}
+
+#resultsTable-gms-trade-observe .gms-key-focus-icon {
+    display: inline-block;
+    font-size: 1rem;
+    line-height: 1;
+    transition: color 0.15s ease, filter 0.15s ease, opacity 0.15s ease, transform 0.12s ease;
+}
+
+#resultsTable-gms-trade-observe .gms-key-focus-btn.is-on .gms-key-focus-icon {
+    color: #f59e0b;
+    filter: none;
+    opacity: 1;
+    text-shadow: 0 0 6px rgba(245, 158, 11, 0.45);
+}
+
+#resultsTable-gms-trade-observe .gms-key-focus-btn:not(.is-on) .gms-key-focus-icon {
+    color: #94a3b8;
+    filter: grayscale(1);
+    opacity: 0.45;
+}
+
+#resultsTable-gms-trade-observe .gms-key-focus-btn:hover .gms-key-focus-icon {
+    opacity: 1;
+    transform: scale(1.08);
+}
+
+#resultsTable-gms-trade-observe .gms-key-focus-btn:not(.is-on):hover .gms-key-focus-icon {
+    color: #64748b;
+    filter: grayscale(0.6);
+}
+
+#resultsTable-gms-trade-observe tr.gms-trade-observe-row--focus {
+    background: rgba(245, 158, 11, 0.06);
+}
+
+#resultsTable-gms-trade-observe tr.gms-trade-observe-row--focus:hover {
+    background: rgba(245, 158, 11, 0.1);
+}
+
 #resultsTable-gms-trade-observe .gms-col-industry {
     max-width: 7rem;
     width: 7rem;

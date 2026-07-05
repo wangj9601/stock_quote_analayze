@@ -163,10 +163,18 @@ const ScreeningPage = {
                     return;
                 }
                 const rm = e.target.closest('.gms-trade-observe-remove');
-                if (!rm) return;
-                e.preventDefault();
-                const id = rm.getAttribute('data-id');
-                if (id) void this.removeGmsTradeObserve(parseInt(id, 10), rm);
+                if (rm) {
+                    e.preventDefault();
+                    const id = rm.getAttribute('data-id');
+                    if (id) void this.removeGmsTradeObserve(parseInt(id, 10), rm);
+                    return;
+                }
+                const focusBtn = e.target.closest('.gms-key-focus-btn');
+                if (focusBtn) {
+                    e.preventDefault();
+                    const id = focusBtn.getAttribute('data-id');
+                    if (id) void this.toggleGmsTradeObserveKeyFocus(parseInt(id, 10), focusBtn);
+                }
             });
         }
         const formalBody = document.getElementById('gmsFormalTradeTableBody');
@@ -732,6 +740,61 @@ const ScreeningPage = {
         return names.join(',');
     },
 
+    _gmsWatchThresholdFromForm() {
+        const el = document.getElementById('gms-watch_threshold');
+        if (!el || el.value === '') return 60;
+        const n = Number(el.value);
+        return Number.isFinite(n) ? n : 60;
+    },
+
+    _sortGmsTradeObserveItems(items) {
+        const list = Array.isArray(items) ? items.slice() : [];
+        list.sort((a, b) => {
+            const fa = a.key_focus_flag ? 1 : 0;
+            const fb = b.key_focus_flag ? 1 : 0;
+            if (fb !== fa) return fb - fa;
+            const ta = String(a.updated_at || a.created_at || '');
+            const tb = String(b.updated_at || b.created_at || '');
+            return tb.localeCompare(ta);
+        });
+        return list;
+    },
+
+    _gmsKeyFocusIconHtml(it, esc) {
+        const on = !!it.key_focus_flag;
+        const cls = on ? 'gms-key-focus-btn is-on' : 'gms-key-focus-btn';
+        const title = on ? '取消重点关注' : '标记为重点关注';
+        return `<button type="button" class="${cls}" data-id="${it.id}" title="${esc(title)}" aria-label="${esc(title)}"><span class="gms-key-focus-icon" aria-hidden="true">★</span></button>`;
+    },
+
+    async toggleGmsTradeObserveKeyFocus(itemId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        const row = (this.gmsTradeObserveItems || []).find((it) => it.id === itemId);
+        const nextFlag = row ? !row.key_focus_flag : true;
+        try {
+            if (btnEl) btnEl.disabled = true;
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-trade-observe/${itemId}/key-focus`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key_focus_flag: nextFlag }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `操作失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const idx = (this.gmsTradeObserveItems || []).findIndex((it) => it.id === itemId);
+            if (idx >= 0) {
+                this.gmsTradeObserveItems[idx] = data;
+            }
+            this.renderGmsTradeObserveTable(this.gmsTradeObserveItems);
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '更新重点关注失败', 'error');
+        } finally {
+            if (btnEl) btnEl.disabled = false;
+        }
+    },
+
     _buildGmsTradeObserveSnapshot(stock) {
         if (!stock || typeof stock !== 'object') return {};
         const sd = stock.score_detail || stock.indicators?.score_detail || {};
@@ -741,6 +804,7 @@ const ScreeningPage = {
             industry: this._gmsDisplayIndustry(stock.industry) === '--' ? null : this._gmsDisplayIndustry(stock.industry),
             signal_strength: stock.signal_strength,
             score_total: stock.score_total,
+            watch_threshold: this._gmsWatchThresholdFromForm(),
             buy_type: stock.buy_type,
             left_buy_signal: stock.left_buy_signal,
             right_buy_signal: stock.right_buy_signal,
@@ -836,19 +900,25 @@ const ScreeningPage = {
                 const msg = data.detail || data.message || `加载失败(${res.status})`;
                 throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
             }
-            const items = data.items || [];
+            const items = this._sortGmsTradeObserveItems(data.items || []);
             this.gmsTradeObserveCodeSet = new Set(
                 items.map((it) => this._gmsTradeObserveKey(it.market, it.code))
             );
             this.renderGmsTradeObserveTable(items);
-            if (countEl) countEl.textContent = `共 ${data.total != null ? data.total : items.length} 只观察股`;
+            const focusCount = items.filter((it) => it.key_focus_flag).length;
+            if (countEl) {
+                const total = data.total != null ? data.total : items.length;
+                countEl.textContent = focusCount > 0
+                    ? `共 ${total} 只观察股，重点关注 ${focusCount} 只`
+                    : `共 ${total} 只观察股`;
+            }
         } catch (e) {
             if (errEl) {
                 errEl.style.display = '';
                 errEl.textContent = e.message || '加载交易观察列表失败';
             }
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">加载失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="13" class="empty-state">加载失败</td></tr>';
             }
         } finally {
             if (loadingEl) loadingEl.style.display = 'none';
@@ -858,8 +928,9 @@ const ScreeningPage = {
     renderGmsTradeObserveTable(items) {
         const tbody = document.getElementById('gmsTradeObserveTableBody');
         if (!tbody) return;
-        this.gmsTradeObserveItems = Array.isArray(items) ? items : [];
-        if (!items || items.length === 0) {
+        const sorted = this._sortGmsTradeObserveItems(items);
+        this.gmsTradeObserveItems = sorted;
+        if (!sorted || sorted.length === 0) {
             tbody.innerHTML = '<tr><td colspan="13" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
             return;
         }
@@ -880,7 +951,7 @@ const ScreeningPage = {
             const s = String(iso);
             return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
         };
-        tbody.innerHTML = items.map((it) => {
+        tbody.innerHTML = sorted.map((it) => {
             const snap = it.snapshot || {};
             const plan = it.price_plan || snap.price_plan || {};
             const buyType = snap.buy_type || '—';
@@ -889,9 +960,15 @@ const ScreeningPage = {
             const buyTitle = buySrc ? `title="${esc(buySrc)}"` : '';
             const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             const traceHref = `stock_gms_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            const rowFocusCls = it.key_focus_flag ? ' gms-trade-observe-row--focus' : '';
             return `
-                <tr data-observe-id="${it.id}">
-                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                <tr class="gms-trade-observe-row${rowFocusCls}" data-observe-id="${it.id}">
+                    <td class="gms-col-code">
+                        <div class="gms-code-with-focus">
+                            ${this._gmsKeyFocusIconHtml(it, esc)}
+                            <a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a>
+                        </div>
+                    </td>
                     <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
                     <td class="gms-col-industry"><span class="stock-industry" title="${esc(this._gmsDisplayIndustry(it.industry || snap.industry))}">${esc(this._gmsDisplayIndustry(it.industry || snap.industry))}</span></td>
                     <td class="gms-col-narrow">${fmtStrength(snap)}</td>

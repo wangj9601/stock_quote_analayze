@@ -200,6 +200,51 @@ def test_add_requires_signal_date(client):
     assert r.status_code == 400
 
 
+def test_key_focus_toggle(client, memory_db, test_user):
+    memory_db.add(StockBasicInfo(code="600519", name="贵州茅台", industry="白酒"))
+    memory_db.commit()
+
+    r = client.post(
+        "/api/stock/gms-trade-observe/add",
+        json={
+            "code": "600519",
+            "market": "CN",
+            "name": "贵州茅台",
+            "signal_date": "2026-05-15",
+            "snapshot": {"score_total": 72, "watch_threshold": 60, "buy_type": "左侧"},
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["key_focus_flag"] is False
+
+    item_id = body["id"]
+    on = client.post(
+        f"/api/stock/gms-trade-observe/{item_id}/key-focus",
+        json={"key_focus_flag": True},
+    )
+    assert on.status_code == 200
+    assert on.json()["key_focus_flag"] is True
+
+    off = client.post(
+        f"/api/stock/gms-trade-observe/{item_id}/key-focus",
+        json={"key_focus_flag": False},
+    )
+    assert off.status_code == 200
+    off_body = off.json()
+    assert off_body["key_focus_flag"] is False
+    assert off_body["key_focus_display"] is True
+    assert off_body["key_focus_auto"] is True
+
+
+def test_snapshot_meets_watch_threshold_helper():
+    from backend_api.gms_trade_observe_routes import snapshot_meets_watch_threshold
+
+    assert snapshot_meets_watch_threshold({"score_total": 72, "watch_threshold": 60}) is True
+    assert snapshot_meets_watch_threshold({"score_total": 55, "watch_threshold": 60}) is False
+    assert snapshot_meets_watch_threshold({"signal_strength": 0.75, "watch_threshold": 60}) is True
+
+
 def test_list_signal_date_from_snapshot(memory_db, test_user):
     row = GmsTradeObserveStock(
         user_id=test_user.id,

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
@@ -35,6 +36,83 @@ from backend_api.utils.industry_board_query import (
 
 router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-observe"])
 
+_DEFAULT_WATCH_THRESHOLD = 60.0
+_key_focus_schema_lock = threading.Lock()
+_key_focus_schema_ensured = False
+
+
+def ensure_gms_trade_observe_key_focus_column(db: Session) -> None:
+    """确保 gms_trade_observe_stocks 存在 key_focus_flag 列（PostgreSQL 生产库）。"""
+    global _key_focus_schema_ensured
+    if _key_focus_schema_ensured:
+        return
+    with _key_focus_schema_lock:
+        if _key_focus_schema_ensured:
+            return
+        bind = db.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            db.execute(
+                text(
+                    """
+                    ALTER TABLE gms_trade_observe_stocks
+                    ADD COLUMN IF NOT EXISTS key_focus_flag BOOLEAN NOT NULL DEFAULT FALSE
+                    """
+                )
+            )
+        _key_focus_schema_ensured = True
+
+
+def _score_total_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not isinstance(snapshot, dict):
+        return None
+    if snapshot.get("score_total") is not None:
+        try:
+            return float(snapshot["score_total"])
+        except (TypeError, ValueError):
+            return None
+    if snapshot.get("signal_strength") is not None:
+        try:
+            return float(snapshot["signal_strength"]) * 100.0
+        except (TypeError, ValueError):
+            return None
+    sd = snapshot.get("score_detail")
+    if isinstance(sd, dict) and sd.get("score_total") is not None:
+        try:
+            return float(sd["score_total"])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _watch_threshold_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> float:
+    if isinstance(snapshot, dict) and snapshot.get("watch_threshold") is not None:
+        try:
+            return float(snapshot["watch_threshold"])
+        except (TypeError, ValueError):
+            pass
+    return _DEFAULT_WATCH_THRESHOLD
+
+
+def snapshot_meets_watch_threshold(snapshot: Optional[Dict[str, Any]]) -> bool:
+    """加入时总分是否达到策略「重点关注分数」阈值。"""
+    total = _score_total_from_snapshot(snapshot)
+    if total is None:
+        return False
+    return total >= _watch_threshold_from_snapshot(snapshot)
+
+
+def resolve_key_focus_display(
+    *,
+    key_focus_flag: bool,
+    snapshot: Optional[Dict[str, Any]],
+) -> tuple[bool, bool, Optional[float], float]:
+    """返回 (是否展示重点, 是否手动标记, 快照总分, 关注阈值)。"""
+    watch_th = _watch_threshold_from_snapshot(snapshot)
+    score_total = _score_total_from_snapshot(snapshot)
+    auto_hit = snapshot_meets_watch_threshold(snapshot)
+    show = bool(key_focus_flag) or auto_hit
+    return show, bool(key_focus_flag), score_total, watch_th
+
 
 def _normalize_market(market: Optional[str], code: str) -> str:
     m = (market or "").strip().upper()
@@ -61,6 +139,14 @@ class GmsTradeObserveAddRequest(BaseModel):
     name: Optional[str] = None
     signal_date: Optional[str] = Field(None, description="YYYY-MM-DD")
     snapshot: Optional[Dict[str, Any]] = None
+    key_focus_flag: Optional[bool] = Field(
+        None,
+        description="是否标记为重点关注；省略时按快照总分与 watch_threshold 自动判定",
+    )
+
+
+class GmsTradeObserveKeyFocusBody(BaseModel):
+    key_focus_flag: bool = Field(..., description="是否标记为重点关注")
 
 
 class GmsTradeObserveItem(BaseModel):
@@ -72,6 +158,11 @@ class GmsTradeObserveItem(BaseModel):
     signal_date: Optional[str]
     snapshot: Optional[Dict[str, Any]]
     price_plan: Optional[Dict[str, Any]] = None
+    key_focus_flag: bool = False
+    key_focus_display: bool = False
+    key_focus_auto: bool = False
+    score_total: Optional[float] = None
+    watch_threshold: Optional[float] = None
     created_at: str
     updated_at: str
 
@@ -304,6 +395,12 @@ def _row_to_item(
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
     resolved_industry = industry or _industry_from_snapshot(snap)
+    key_focus_flag = bool(getattr(r, "key_focus_flag", False))
+    show_focus, manual_focus, score_total, watch_th = resolve_key_focus_display(
+        key_focus_flag=key_focus_flag,
+        snapshot=snap,
+    )
+    auto_focus = show_focus and not manual_focus
     return GmsTradeObserveItem(
         id=r.id,
         market=r.market or "CN",
@@ -313,6 +410,11 @@ def _row_to_item(
         signal_date=sd,
         snapshot=snap,
         price_plan=_price_plan_for_row(db, r, snap),
+        key_focus_flag=key_focus_flag,
+        key_focus_display=show_focus,
+        key_focus_auto=auto_focus,
+        score_total=score_total,
+        watch_threshold=watch_th,
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
     )
@@ -368,11 +470,16 @@ def list_gms_trade_observe(
 ):
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
+    ensure_gms_trade_observe_key_focus_column(db)
     _purge_observe_rows_already_formal_traded(db, user.id)
     q = db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.user_id == user.id)
     total = q.count()
     rows = (
-        q.order_by(GmsTradeObserveStock.updated_at.desc(), GmsTradeObserveStock.code)
+        q.order_by(
+            GmsTradeObserveStock.key_focus_flag.desc(),
+            GmsTradeObserveStock.updated_at.desc(),
+            GmsTradeObserveStock.code,
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -452,11 +559,13 @@ def add_gms_trade_observe(
         code=code,
         signal_date=sig_date,
     )
+    focus_flag = False if body.key_focus_flag is None else bool(body.key_focus_flag)
 
     if existing:
         existing.name = body.name or existing.name
         existing.signal_snapshot_json = snapshot_with_plan
         existing.signal_date = sig_date
+        existing.key_focus_flag = focus_flag
         existing.updated_at = now
         db.commit()
         db.refresh(existing)
@@ -470,6 +579,7 @@ def add_gms_trade_observe(
         name=body.name,
         signal_snapshot_json=snapshot_with_plan,
         signal_date=sig_date,
+        key_focus_flag=focus_flag,
         created_at=now,
         updated_at=now,
     )
@@ -515,6 +625,30 @@ def get_gms_trade_observe_price_plan(
     row.updated_at = datetime.now()
     db.commit()
     return plan
+
+
+@router.post("/{item_id}/key-focus", response_model=GmsTradeObserveItem)
+def set_gms_trade_observe_key_focus(
+    item_id: int,
+    body: GmsTradeObserveKeyFocusBody,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """切换交易观察股「重点关注」标记。"""
+    ensure_gms_trade_observe_key_focus_column(db)
+    row = (
+        db.query(GmsTradeObserveStock)
+        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    row.key_focus_flag = bool(body.key_focus_flag)
+    row.updated_at = datetime.now()
+    db.commit()
+    db.refresh(row)
+    industries = _batch_resolve_industries(db, [row])
+    return _row_to_item(db, row, industry=industries.get(_observe_row_key(row)))
 
 
 @router.get("/history", response_model=GmsTradeObserveHistoryListResponse)
