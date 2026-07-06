@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import bindparam, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
@@ -23,6 +23,7 @@ from backend_api.models import (
     StockBasicInfoHK,
     User,
 )
+from backend_api.utils.latest_close_lookup import batch_lookup_latest_closes
 from backend_api.services.gms_audit_service import write_gms_audit
 from backend_core.strategies.gms.trade_price_plan import (
     attach_price_plan_to_snapshot,
@@ -39,6 +40,8 @@ router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-obser
 _DEFAULT_WATCH_THRESHOLD = 60.0
 _key_focus_schema_lock = threading.Lock()
 _key_focus_schema_ensured = False
+_latest_price_schema_lock = threading.Lock()
+_latest_price_schema_ensured = False
 
 
 def ensure_gms_trade_observe_key_focus_column(db: Session) -> None:
@@ -60,6 +63,35 @@ def ensure_gms_trade_observe_key_focus_column(db: Session) -> None:
                 )
             )
         _key_focus_schema_ensured = True
+
+
+def ensure_gms_trade_observe_latest_price_columns(db: Session) -> None:
+    """确保 gms_trade_observe_stocks 存在 latest_close_price / latest_close_date 列。"""
+    global _latest_price_schema_ensured
+    if _latest_price_schema_ensured:
+        return
+    with _latest_price_schema_lock:
+        if _latest_price_schema_ensured:
+            return
+        bind = db.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            db.execute(
+                text(
+                    """
+                    ALTER TABLE gms_trade_observe_stocks
+                    ADD COLUMN IF NOT EXISTS latest_close_price DOUBLE PRECISION
+                    """
+                )
+            )
+            db.execute(
+                text(
+                    """
+                    ALTER TABLE gms_trade_observe_stocks
+                    ADD COLUMN IF NOT EXISTS latest_close_date DATE
+                    """
+                )
+            )
+        _latest_price_schema_ensured = True
 
 
 def _score_total_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[float]:
@@ -163,8 +195,18 @@ class GmsTradeObserveItem(BaseModel):
     key_focus_auto: bool = False
     score_total: Optional[float] = None
     watch_threshold: Optional[float] = None
+    latest_close_price: Optional[float] = None
+    latest_close_date: Optional[str] = None
     created_at: str
     updated_at: str
+
+
+class GmsTradeObserveLatestPriceResponse(BaseModel):
+    id: int
+    market: str
+    code: str
+    latest_close_price: Optional[float] = None
+    latest_close_date: Optional[str] = None
 
 
 class GmsTradeObserveListResponse(BaseModel):
@@ -192,6 +234,34 @@ class GmsTradeObserveHistoryListResponse(BaseModel):
     page: int
     page_size: int
     items: List[GmsTradeObserveHistoryItem]
+
+
+def _parse_quote_date_optional(raw: Optional[str]) -> Optional[date]:
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(str(raw).strip()[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _format_stored_quote_date(raw: Any) -> Optional[str]:
+    if raw is None:
+        return None
+    if hasattr(raw, "strftime"):
+        return raw.strftime("%Y-%m-%d")
+    s = str(raw).strip()
+    return s[:10] if s else None
+
+
+def _apply_latest_close_to_row(
+    row: GmsTradeObserveStock,
+    *,
+    close_price: Optional[float],
+    close_date: Optional[str],
+) -> None:
+    row.latest_close_price = float(close_price) if close_price is not None else None
+    row.latest_close_date = _parse_quote_date_optional(close_date)
 
 
 def _resolve_signal_date_str(
@@ -364,9 +434,13 @@ def _price_plan_for_row(
     db: Session,
     r: GmsTradeObserveStock,
     snap: Optional[Dict[str, Any]],
+    *,
+    recompute: bool = True,
 ) -> Optional[Dict[str, Any]]:
     if isinstance(snap, dict) and isinstance(snap.get("price_plan"), dict):
         return snap["price_plan"]
+    if not recompute:
+        return None
     sig_date = r.signal_date
     if sig_date is None and isinstance(snap, dict):
         sd = _resolve_signal_date_str(None, snap)
@@ -391,6 +465,7 @@ def _row_to_item(
     r: GmsTradeObserveStock,
     *,
     industry: Optional[str] = None,
+    recompute_price_plan: bool = True,
 ) -> GmsTradeObserveItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
@@ -409,12 +484,14 @@ def _row_to_item(
         industry=resolved_industry,
         signal_date=sd,
         snapshot=snap,
-        price_plan=_price_plan_for_row(db, r, snap),
+        price_plan=_price_plan_for_row(db, r, snap, recompute=recompute_price_plan),
         key_focus_flag=key_focus_flag,
         key_focus_display=show_focus,
         key_focus_auto=auto_focus,
         score_total=score_total,
         watch_threshold=watch_th,
+        latest_close_price=getattr(r, "latest_close_price", None),
+        latest_close_date=_format_stored_quote_date(getattr(r, "latest_close_date", None)),
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
     )
@@ -471,6 +548,7 @@ def list_gms_trade_observe(
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
     ensure_gms_trade_observe_key_focus_column(db)
+    ensure_gms_trade_observe_latest_price_columns(db)
     _purge_observe_rows_already_formal_traded(db, user.id)
     q = db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.user_id == user.id)
     total = q.count()
@@ -490,7 +568,12 @@ def list_gms_trade_observe(
         page=page,
         page_size=page_size,
         items=[
-            _row_to_item(db, r, industry=industries.get(_observe_row_key(r)))
+            _row_to_item(
+                db,
+                r,
+                industry=industries.get(_observe_row_key(r)),
+                recompute_price_plan=False,
+            )
             for r in rows
         ],
     )
@@ -570,7 +653,11 @@ def add_gms_trade_observe(
         db.commit()
         db.refresh(existing)
         industries = _batch_resolve_industries(db, [existing])
-        return _row_to_item(db, existing, industry=industries.get(_observe_row_key(existing)))
+        return _row_to_item(
+            db,
+            existing,
+            industry=industries.get(_observe_row_key(existing)),
+        )
 
     row = GmsTradeObserveStock(
         user_id=user.id,
@@ -592,7 +679,41 @@ def add_gms_trade_observe(
         {"user_id": user.id, "code": code, "market": market},
     )
     industries = _batch_resolve_industries(db, [row])
-    return _row_to_item(db, row, industry=industries.get(_observe_row_key(row)))
+    return _row_to_item(
+        db,
+        row,
+        industry=industries.get(_observe_row_key(row)),
+    )
+
+
+@router.get("/{item_id}/latest-price", response_model=GmsTradeObserveLatestPriceResponse)
+def get_gms_trade_observe_latest_price(
+    item_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """按需查询单条观察股最新价格（实时行情优先，历史行情兜底），并写入观察记录。"""
+    ensure_gms_trade_observe_latest_price_columns(db)
+    row = (
+        db.query(GmsTradeObserveStock)
+        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    key = _observe_row_key(row)
+    latest = batch_lookup_latest_closes(db, [key]).get(key, (None, None))
+    close_price, close_date = latest
+    _apply_latest_close_to_row(row, close_price=close_price, close_date=close_date)
+    db.commit()
+    db.refresh(row)
+    return GmsTradeObserveLatestPriceResponse(
+        id=row.id,
+        market=row.market or "CN",
+        code=row.code,
+        latest_close_price=row.latest_close_price,
+        latest_close_date=_format_stored_quote_date(row.latest_close_date),
+    )
 
 
 @router.get("/{item_id}/price-plan")
@@ -648,7 +769,12 @@ def set_gms_trade_observe_key_focus(
     db.commit()
     db.refresh(row)
     industries = _batch_resolve_industries(db, [row])
-    return _row_to_item(db, row, industry=industries.get(_observe_row_key(row)))
+    return _row_to_item(
+        db,
+        row,
+        industry=industries.get(_observe_row_key(row)),
+        recompute_price_plan=False,
+    )
 
 
 @router.get("/history", response_model=GmsTradeObserveHistoryListResponse)

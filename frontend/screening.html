@@ -839,6 +839,16 @@
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="cn" style="margin-right: 5px;">仅A股</label>
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="hk" style="margin-right: 5px;">仅港股</label>
                 </div>
+                <div id="gmsWatchlistBoardWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">A股板块：</span>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="ALL" checked style="margin-right: 5px;">全部A股</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span style="color: #888; font-size: 12px;">在 GMS 观察股池内按代码段筛选</span>
+                </div>
                 <div style="padding: 10px 0 0 0;">
                     <label for="gmsExcludeSt" style="cursor: pointer; font-size: 13px; color: #666;">
                         <input type="checkbox" id="gmsExcludeSt" checked style="margin-right: 6px;">
@@ -1100,6 +1110,7 @@
                                     <th class="gms-col-narrow">信号强度</th>
                                     <th class="gms-col-narrow">买点类型</th>
                                     <th class="gms-col-price">加入时价格</th>
+                                    <th class="gms-col-price">最新价格</th>
                                     <th class="gms-col-price">建议买入</th>
                                     <th class="gms-col-price">止损价</th>
                                     <th class="gms-col-price">止盈价</th>
@@ -1111,7 +1122,7 @@
                             </thead>
                             <tbody id="gmsTradeObserveTableBody">
                                 <tr>
-                                    <td colspan="13" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                    <td colspan="14" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
                                 </tr>
                             </tbody>
                         </table>

@@ -1272,6 +1272,8 @@ class GmsTradeObserveStock(Base):
     signal_snapshot_json = Column(JSON, nullable=True)
     signal_date = Column(Date, nullable=True, index=True)
     key_focus_flag = Column(Boolean, nullable=False, default=False, index=True)
+    latest_close_price = Column(Float, nullable=True)
+    latest_close_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 

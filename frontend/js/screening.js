@@ -174,6 +174,13 @@ const ScreeningPage = {
                     e.preventDefault();
                     const id = focusBtn.getAttribute('data-id');
                     if (id) void this.toggleGmsTradeObserveKeyFocus(parseInt(id, 10), focusBtn);
+                    return;
+                }
+                const latestBtn = e.target.closest('.gms-latest-price-btn');
+                if (latestBtn) {
+                    e.preventDefault();
+                    const id = latestBtn.getAttribute('data-id');
+                    if (id) void this.fetchGmsTradeObserveLatestPrice(parseInt(id, 10), latestBtn);
                 }
             });
         }
@@ -767,6 +774,57 @@ const ScreeningPage = {
         return `<button type="button" class="${cls}" data-id="${it.id}" title="${esc(title)}" aria-label="${esc(title)}"><span class="gms-key-focus-icon" aria-hidden="true">★</span></button>`;
     },
 
+    _gmsLatestPriceCellHtml(it, esc, fmtPrice) {
+        const hasPrice = it.latest_close_price != null && !isNaN(it.latest_close_price);
+        if (hasPrice) {
+            const title = it.latest_close_date ? `title="行情日 ${esc(it.latest_close_date)}"` : '';
+            return `<td class="gms-col-price gms-latest-price-cell" ${title}>
+                <div class="gms-latest-price-value">${fmtPrice(it.latest_close_price)}</div>
+                <button type="button" class="gms-op-btn gms-latest-price-btn" data-id="${it.id}" title="重新查询最新价格">刷新</button>
+            </td>`;
+        }
+        return `<td class="gms-col-price gms-latest-price-cell">
+            <button type="button" class="gms-op-btn gms-latest-price-btn" data-id="${it.id}" title="查询最新价格">查看最新价格</button>
+        </td>`;
+    },
+
+    async fetchGmsTradeObserveLatestPrice(itemId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        const cell = btnEl ? btnEl.closest('.gms-latest-price-cell') : null;
+        try {
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.textContent = '查询中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/gms-trade-observe/${itemId}/latest-price`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `查询失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            if (data.latest_close_price == null || isNaN(data.latest_close_price)) {
+                throw new Error('暂无最新价格数据');
+            }
+            const idx = (this.gmsTradeObserveItems || []).findIndex((it) => it.id === itemId);
+            if (idx >= 0) {
+                this.gmsTradeObserveItems[idx] = {
+                    ...this.gmsTradeObserveItems[idx],
+                    latest_close_price: data.latest_close_price,
+                    latest_close_date: data.latest_close_date || null,
+                };
+            }
+            this.renderGmsTradeObserveTable(this.gmsTradeObserveItems);
+        } catch (e) {
+            if (cell && btnEl) {
+                btnEl.disabled = false;
+                const row = (this.gmsTradeObserveItems || []).find((it) => it.id === itemId);
+                const hasPrice = row && row.latest_close_price != null && !isNaN(row.latest_close_price);
+                btnEl.textContent = hasPrice ? '刷新' : '查看最新价格';
+            }
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '查询最新价格失败', 'error');
+        }
+    },
+
     async toggleGmsTradeObserveKeyFocus(itemId, btnEl) {
         const fetchFn = this.getAuthFetchFn();
         const row = (this.gmsTradeObserveItems || []).find((it) => it.id === itemId);
@@ -918,7 +976,7 @@ const ScreeningPage = {
                 errEl.textContent = e.message || '加载交易观察列表失败';
             }
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="13" class="empty-state">加载失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="14" class="empty-state">加载失败</td></tr>';
             }
         } finally {
             if (loadingEl) loadingEl.style.display = 'none';
@@ -931,7 +989,7 @@ const ScreeningPage = {
         const sorted = this._sortGmsTradeObserveItems(items);
         this.gmsTradeObserveItems = sorted;
         if (!sorted || sorted.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="13" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="14" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「交易观察」加入</td></tr>';
             return;
         }
         const esc = (s) => String(s ?? '')
@@ -961,6 +1019,7 @@ const ScreeningPage = {
             const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             const traceHref = `stock_gms_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             const rowFocusCls = it.key_focus_flag ? ' gms-trade-observe-row--focus' : '';
+            const latestPriceCell = this._gmsLatestPriceCellHtml(it, esc, fmtPrice);
             return `
                 <tr class="gms-trade-observe-row${rowFocusCls}" data-observe-id="${it.id}">
                     <td class="gms-col-code">
@@ -974,6 +1033,7 @@ const ScreeningPage = {
                     <td class="gms-col-narrow">${fmtStrength(snap)}</td>
                     <td class="gms-col-narrow"><span class="${buyClass}">${esc(buyType)}</span></td>
                     <td class="gms-col-price">${fmtPrice(snap.current_price)}</td>
+                    ${latestPriceCell}
                     <td class="gms-col-price" ${buyTitle}>${fmtPrice(plan.buy_price_suggested)}</td>
                     <td class="gms-col-price">${fmtPrice(plan.stop_loss_price)}</td>
                     <td class="gms-col-price">${fmtPrice(plan.take_profit_price)}</td>
@@ -1844,6 +1904,18 @@ const ScreeningPage = {
         const checked = document.querySelector('input[name="gmsScope"]:checked');
         const show = checked && checked.value === 'gms_watchlist';
         wrap.style.display = show ? 'flex' : 'none';
+        this.syncGmsWatchlistBoardWrap();
+    },
+
+    /** 显示/隐藏「GMS观察股」下的 A 股板块筛选（仅港股时隐藏） */
+    syncGmsWatchlistBoardWrap() {
+        const wrap = document.getElementById('gmsWatchlistBoardWrap');
+        if (!wrap) return;
+        const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+        const marketEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
+        const show = scopeEl && scopeEl.value === 'gms_watchlist'
+            && marketEl && marketEl.value !== 'hk';
+        wrap.style.display = show ? 'flex' : 'none';
     },
 
     /** 显示/隐藏「全部A股」下的板块筛选行 */
@@ -2340,6 +2412,9 @@ const ScreeningPage = {
                 }
             });
         });
+        document.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach((radio) => {
+            radio.addEventListener('change', () => this.syncGmsWatchlistBoardWrap());
+        });
         this.syncGmsWatchlistMarketWrap();
         this.syncGmsCnBoardWrap();
         this.syncGmsIndustryBoardWrap();
@@ -2517,6 +2592,11 @@ const ScreeningPage = {
         if (scope === 'gms_watchlist') {
             const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
+            const segEl = document.querySelector('input[name="gmsWatchlistBoardSegment"]:checked');
+            const seg = segEl ? segEl.value : 'ALL';
+            if (seg && seg !== 'ALL' && (!mEl || mEl.value !== 'hk')) {
+                q.set('cn_board_segment', seg);
+            }
         }
         if (scope === 'cn') {
             const segEl = document.querySelector('input[name="gmsCnBoardSegment"]:checked');

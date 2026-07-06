@@ -32,8 +32,17 @@ def build_scope_key(
     if scope == "concept_board" and concept_board_codes:
         codes = sorted({c.strip().upper() for c in concept_board_codes if c})
         return f"concept:{','.join(codes[:20])}"
-    if scope == "gms_watchlist" and gms_watchlist_market:
-        return f"gms_watchlist:{gms_watchlist_market.strip().lower()}"
+    if scope == "gms_watchlist":
+        parts = ["gms_watchlist"]
+        if gms_watchlist_market:
+            m = gms_watchlist_market.strip().lower()
+            if m and m != "all":
+                parts.append(m)
+        if cn_board_segment:
+            seg = (cn_board_segment or "").strip().upper()
+            if seg and seg != "ALL":
+                parts.append(seg)
+        return ":".join(parts)
     return scope
 
 

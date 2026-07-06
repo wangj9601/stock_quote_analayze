@@ -237,6 +237,80 @@ def test_key_focus_toggle(client, memory_db, test_user):
     assert off_body["key_focus_auto"] is True
 
 
+def test_latest_price_endpoint(client, memory_db, test_user):
+    from datetime import date
+
+    memory_db.add(
+        StockBasicInfo(
+            code="600519",
+            name="贵州茅台",
+            industry="白酒",
+        )
+    )
+    memory_db.add(
+        HistoricalQuotes(
+            code="600519",
+            date=date(2026, 6, 20),
+            close=1688.0,
+        )
+    )
+    memory_db.add(
+        HistoricalQuotes(
+            code="600519",
+            date=date(2026, 6, 24),
+            close=1720.5,
+        )
+    )
+    observe = GmsTradeObserveStock(
+        user_id=test_user.id,
+        market="CN",
+        code="600519",
+        name="贵州茅台",
+        signal_date=date(2026, 6, 24),
+        signal_snapshot_json={"signal_strength": 0.7},
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    memory_db.add(observe)
+    memory_db.commit()
+    memory_db.refresh(observe)
+
+    lst = client.get("/api/stock/gms-trade-observe/list")
+    assert lst.status_code == 200
+    item = lst.json()["items"][0]
+    assert item.get("latest_close_price") is None
+
+    res = client.get(f"/api/stock/gms-trade-observe/{observe.id}/latest-price")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["latest_close_price"] == 1720.5
+    assert body["latest_close_date"] == "2026-06-24"
+
+    memory_db.refresh(observe)
+    assert observe.latest_close_price == 1720.5
+    assert str(observe.latest_close_date) == "2026-06-24"
+
+    lst2 = client.get("/api/stock/gms-trade-observe/list")
+    assert lst2.status_code == 200
+    item2 = lst2.json()["items"][0]
+    assert item2["latest_close_price"] == 1720.5
+    assert item2["latest_close_date"] == "2026-06-24"
+
+    memory_db.add(
+        HistoricalQuotes(
+            code="600519",
+            date=date(2026, 6, 25),
+            close=1755.0,
+        )
+    )
+    memory_db.commit()
+    res2 = client.get(f"/api/stock/gms-trade-observe/{observe.id}/latest-price")
+    assert res2.status_code == 200
+    assert res2.json()["latest_close_price"] == 1755.0
+    memory_db.refresh(observe)
+    assert observe.latest_close_price == 1755.0
+
+
 def test_snapshot_meets_watch_threshold_helper():
     from backend_api.gms_trade_observe_routes import snapshot_meets_watch_threshold
 

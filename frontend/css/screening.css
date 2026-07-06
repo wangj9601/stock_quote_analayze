@@ -1525,6 +1525,22 @@
     filter: grayscale(0.6);
 }
 
+#resultsTable-gms-trade-observe .gms-latest-price-cell {
+    min-width: 6.5rem;
+}
+
+#resultsTable-gms-trade-observe .gms-latest-price-cell .gms-latest-price-value {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+}
+
+#resultsTable-gms-trade-observe .gms-latest-price-cell .gms-latest-price-btn {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.45rem;
+    white-space: nowrap;
+}
+
 #resultsTable-gms-trade-observe tr.gms-trade-observe-row--focus {
     background: rgba(245, 158, 11, 0.06);
 }

@@ -14,6 +14,8 @@ def test_build_scope_key_cn_segment():
     assert build_scope_key("cn", cn_board_segment="MAIN") == "cn:MAIN"
     assert build_scope_key("cn", cn_board_segment="ALL") == "cn"
     assert build_scope_key("industry_board", industry_board_codes=["BK0475", "BK0001"]) == "industry:BK0001,BK0475"
+    assert build_scope_key("gms_watchlist", gms_watchlist_market="cn", cn_board_segment="CYB") == "gms_watchlist:cn:CYB"
+    assert build_scope_key("gms_watchlist", gms_watchlist_market="all") == "gms_watchlist"
 
 
 def test_build_param_hash_stable():

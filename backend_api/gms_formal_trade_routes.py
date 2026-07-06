@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
@@ -26,6 +28,39 @@ TradeStatus = Literal["open", "closed"]
 
 # 与行情库「手」约定一致：A 股 / 港股默认 1 手 = 100 股
 _DEFAULT_LOT_SIZE = 100
+
+_pnl_schema_lock = threading.Lock()
+_pnl_schema_ensured = False
+
+
+def ensure_gms_formal_trade_pnl_columns(db: Session) -> None:
+    """确保 gms_formal_trades 存在 pnl_amount / pnl_percent 列（PostgreSQL 生产库）。"""
+    global _pnl_schema_ensured
+    if _pnl_schema_ensured:
+        return
+    with _pnl_schema_lock:
+        if _pnl_schema_ensured:
+            return
+        bind = db.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            db.execute(
+                text(
+                    """
+                    ALTER TABLE gms_formal_trades
+                    ADD COLUMN IF NOT EXISTS pnl_amount DOUBLE PRECISION
+                    """
+                )
+            )
+            db.execute(
+                text(
+                    """
+                    ALTER TABLE gms_formal_trades
+                    ADD COLUMN IF NOT EXISTS pnl_percent DOUBLE PRECISION
+                    """
+                )
+            )
+            db.commit()
+        _pnl_schema_ensured = True
 
 
 def _lot_size_for_market(market: Optional[str]) -> int:
@@ -163,6 +198,7 @@ def list_gms_formal_trades(
 ):
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
+    ensure_gms_formal_trade_pnl_columns(db)
     q = db.query(GmsFormalTrade).filter(GmsFormalTrade.user_id == user.id)
     st = (status or "").strip().lower()
     if st in ("open", "closed"):
@@ -213,6 +249,7 @@ def create_from_observe(
     db: Session = Depends(get_db),
 ):
     """从交易观察记录转入正式交易。"""
+    ensure_gms_formal_trade_pnl_columns(db)
     observe = (
         db.query(GmsTradeObserveStock)
         .filter(GmsTradeObserveStock.id == observe_id, GmsTradeObserveStock.user_id == user.id)
@@ -269,6 +306,7 @@ def update_gms_formal_trade(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    ensure_gms_formal_trade_pnl_columns(db)
     row = (
         db.query(GmsFormalTrade)
         .filter(GmsFormalTrade.id == trade_id, GmsFormalTrade.user_id == user.id)
