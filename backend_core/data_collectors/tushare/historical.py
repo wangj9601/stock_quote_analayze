@@ -1347,6 +1347,7 @@ class HistoricalQuoteCollector(TushareCollector):
             # 数据采集完成后，自动计算扩展涨跌幅与各类指标
             if success_count > 0:
                 self._run_indicators_for_date(session, date_str)
+                self._run_full_market_supplement_indicators(session, date_str)
             
             return True
         except Exception as e:
@@ -1513,29 +1514,7 @@ class HistoricalQuoteCollector(TushareCollector):
 
             if success_count > 0:
                 self._run_indicators_for_date(session, date_str)
-                # 显式触发 MA、MAVOL、PVFRS（GMS）全市场计算（不限于自选股）
-                target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-                try:
-                    self.logger.info("从实时表同步后：开始全市场 MA 指标计算...")
-                    ma_result = self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=None)
-                    self.logger.info("全市场 MA 指标计算完成: 成功 %s, 失败 %s", ma_result.get('success', 0), ma_result.get('failed', 0))
-                    session.commit()
-                except Exception as e:
-                    self.logger.error("从实时表同步后全市场 MA 计算失败: %s", e)
-                try:
-                    self.logger.info("从实时表同步后：开始全市场 MAVOL 指标计算...")
-                    mavol_result = self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=None)
-                    self.logger.info("全市场 MAVOL 指标计算完成: 成功 %s, 失败 %s", mavol_result.get('success', 0), mavol_result.get('failed', 0))
-                    session.commit()
-                except Exception as e:
-                    self.logger.error("从实时表同步后全市场 MAVOL 计算失败: %s", e)
-                try:
-                    self.logger.info("从实时表同步后：开始全市场 PVFRS（GMS）指标计算...")
-                    pvfrs_result = self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=None)
-                    self.logger.info("全市场 PVFRS（GMS）指标计算完成: 成功 %s, 失败 %s", pvfrs_result.get('success', 0), pvfrs_result.get('failed', 0))
-                    session.commit()
-                except Exception as e:
-                    self.logger.error("从实时表同步后全市场 PVFRS（GMS）计算失败: %s", e)
+                self._run_full_market_supplement_indicators(session, date_str)
             return True
         except Exception as e:
             self.logger.error("从实时表同步历史行情失败: %s", e, exc_info=True)
@@ -1559,6 +1538,37 @@ class HistoricalQuoteCollector(TushareCollector):
             return False
         finally:
             session.close()
+
+    def _run_full_market_supplement_indicators(self, session, date_str: str) -> None:
+        """日 K 入库后补充全市场 MA / MAVOL / PVFRS（GMS）指标（不限于自选股）。"""
+        target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+        for label, method in (
+            ("MA", lambda: self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=None)),
+            ("MAVOL", lambda: self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=None)),
+            (
+                "PVFRS（GMS）",
+                lambda: self._calculate_and_save_mean_frequency_for_date(
+                    session, target_date, watchlist_codes=None
+                ),
+            ),
+        ):
+            try:
+                self.logger.info("开始全市场 %s 指标计算...", label)
+                result = method()
+                if isinstance(result, dict):
+                    self.logger.info(
+                        "全市场 %s 指标计算完成: 成功 %s, 失败 %s",
+                        label,
+                        result.get("success", 0),
+                        result.get("failed", 0),
+                    )
+                session.commit()
+            except Exception as e:
+                self.logger.error("全市场 %s 指标计算失败: %s", label, e)
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
 
     def _run_indicators_for_date(self, session, date_str: str) -> None:
         """采集写入 historical_quotes 后，为指定日期运行扩展涨跌幅与各类指标。date_str 格式 YYYYMMDD。"""
