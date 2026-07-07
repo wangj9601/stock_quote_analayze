@@ -10,6 +10,7 @@ from sqlalchemy import text, desc
 from sqlalchemy.orm import Session
 from backend_api.database import get_db
 from backend_api.auth import get_current_admin
+from backend_api.services.operation_logs_schema import ensure_operation_logs_system_schema
 
 router = APIRouter(prefix="/api/admin/operation-logs", tags=["operation-logs"])
 
@@ -46,6 +47,7 @@ async def query_operation_logs(
     table_name = OPERATION_LOGS_CONFIG["table_name"]
     
     try:
+        ensure_operation_logs_system_schema(db)
         # 构建查询条件
         where_conditions = []
         params = {}
@@ -132,6 +134,7 @@ async def get_operation_logs_stats(
     table_name = OPERATION_LOGS_CONFIG["table_name"]
     
     try:
+        ensure_operation_logs_system_schema(db)
         # 构建WHERE条件
         where_clause = ""
         params = {}
@@ -215,6 +218,7 @@ async def get_recent_operation_logs(
     table_name = OPERATION_LOGS_CONFIG["table_name"]
     
     try:
+        ensure_operation_logs_system_schema(db)
         columns_str = ", ".join(OPERATION_LOGS_CONFIG["columns"])
         query_sql = f"""
             SELECT {columns_str}

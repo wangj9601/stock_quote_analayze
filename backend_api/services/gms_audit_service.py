@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend_api.services.operation_logs_schema import ensure_operation_logs_system_schema
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +26,7 @@ def write_gms_audit(
     if not log_type.startswith("gms_"):
         log_type = f"gms_{log_type}"
     try:
+        ensure_operation_logs_system_schema(db)
         db.execute(
             text(
                 """
