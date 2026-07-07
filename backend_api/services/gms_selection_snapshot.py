@@ -12,6 +12,39 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+# 与 gms_selection_snapshots.scope_key 列长度对齐（迁移可扩至 256）
+SCOPE_KEY_MAX_LEN = 120
+
+
+def _append_cn_segment(base: str, cn_board_segment: Optional[str]) -> str:
+    if not cn_board_segment:
+        return base
+    seg = (cn_board_segment or "").strip().upper()
+    if seg and seg != "ALL":
+        return f"{base}:{seg}"
+    return base
+
+
+def _board_codes_scope_part(
+    prefix: str,
+    codes: List[str],
+    *,
+    cn_board_segment: Optional[str] = None,
+    max_len: int = SCOPE_KEY_MAX_LEN,
+) -> str:
+    """行业/概念板块 scope 片段；板块过多时用哈希避免超出 VARCHAR 上限。"""
+    normalized = sorted({c.strip().upper() for c in codes if c and str(c).strip()})
+    if not normalized:
+        return _append_cn_segment(prefix, cn_board_segment)
+    if len(normalized) == 1:
+        return _append_cn_segment(f"{prefix}:{normalized[0]}", cn_board_segment)
+    joined = ",".join(normalized)
+    plain = _append_cn_segment(f"{prefix}:{joined}", cn_board_segment)
+    if len(plain) <= max_len:
+        return plain
+    digest = hashlib.md5(joined.encode("utf-8")).hexdigest()[:16]
+    return _append_cn_segment(f"{prefix}:h:{digest}", cn_board_segment)
+
 
 def build_scope_key(
     scope: str,
@@ -27,11 +60,17 @@ def build_scope_key(
         if seg and seg != "ALL":
             return f"cn:{seg}"
     if scope == "industry_board" and industry_board_codes:
-        codes = sorted({c.strip().upper() for c in industry_board_codes if c})
-        return f"industry:{','.join(codes[:20])}"
+        return _board_codes_scope_part(
+            "industry",
+            industry_board_codes,
+            cn_board_segment=cn_board_segment,
+        )
     if scope == "concept_board" and concept_board_codes:
-        codes = sorted({c.strip().upper() for c in concept_board_codes if c})
-        return f"concept:{','.join(codes[:20])}"
+        return _board_codes_scope_part(
+            "concept",
+            concept_board_codes,
+            cn_board_segment=cn_board_segment,
+        )
     if scope == "gms_watchlist":
         parts = ["gms_watchlist"]
         if gms_watchlist_market:

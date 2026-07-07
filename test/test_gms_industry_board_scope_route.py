@@ -197,3 +197,47 @@ def test_gms_strategy_scope_industry_board_accepts_multiple_codes(_mock_resolve)
     assert resp.status_code == 200
     data = resp.json()
     assert data["parameters"]["industry_board_codes"] == ["BK9001", "BK9002"]
+
+
+@patch(
+    "backend_api.utils.bk_board_code.resolve_industry_board_codes",
+    side_effect=_fake_resolve_industry_board_codes,
+)
+@patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
+@patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
+@patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
+@patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
+def test_gms_strategy_scope_industry_board_filters_by_cn_board_segment(_mock_resolve):
+    client = _make_client()
+    resp = client.get(
+        "/api/screening/gms-strategy"
+        "?scope=industry_board&industry_board_code=IT%E6%9C%8D%E5%8A%A1"
+        "&cn_board_segment=KCB&date=2026-04-23"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert _FakeGmsFrontendInterface.last_stock_pool == ["688158"]
+    assert data["parameters"]["cn_board_segment"] == "KCB"
+
+
+@patch(
+    "backend_api.utils.bk_board_code.resolve_industry_board_codes",
+    side_effect=_fake_resolve_industry_board_codes,
+)
+@patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
+@patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
+@patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
+@patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
+def test_gms_strategy_scope_industry_board_segment_empty_pool(_mock_resolve):
+    client = _make_client()
+    resp = client.get(
+        "/api/screening/gms-strategy"
+        "?scope=industry_board&industry_board_code=IT%E6%9C%8D%E5%8A%A1"
+        "&cn_board_segment=CYB&date=2026-04-23"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["data"] == []
+    assert "创业板" in data["message"]

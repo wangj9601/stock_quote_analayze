@@ -14,8 +14,26 @@ def test_build_scope_key_cn_segment():
     assert build_scope_key("cn", cn_board_segment="MAIN") == "cn:MAIN"
     assert build_scope_key("cn", cn_board_segment="ALL") == "cn"
     assert build_scope_key("industry_board", industry_board_codes=["BK0475", "BK0001"]) == "industry:BK0001,BK0475"
+    assert (
+        build_scope_key("industry_board", industry_board_codes=["BK0475"], cn_board_segment="CYB")
+        == "industry:BK0475:CYB"
+    )
+    assert (
+        build_scope_key("concept_board", concept_board_codes=["BK0428"], cn_board_segment="MAIN")
+        == "concept:BK0428:MAIN"
+    )
     assert build_scope_key("gms_watchlist", gms_watchlist_market="cn", cn_board_segment="CYB") == "gms_watchlist:cn:CYB"
     assert build_scope_key("gms_watchlist", gms_watchlist_market="all") == "gms_watchlist"
+
+
+def test_build_scope_key_many_concept_boards_uses_hash():
+    many = [f"BK{i:04d}" for i in range(18)]
+    key = build_scope_key("concept_board", concept_board_codes=many, cn_board_segment="MAIN")
+    assert len(key) <= 120
+    assert key.startswith("concept:h:")
+    assert key.endswith(":MAIN")
+    key2 = build_scope_key("concept_board", concept_board_codes=list(reversed(many)), cn_board_segment="MAIN")
+    assert key == key2
 
 
 def test_build_param_hash_stable():

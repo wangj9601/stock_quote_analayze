@@ -179,3 +179,21 @@ def test_gms_strategy_scope_concept_board_accepts_multiple_codes():
     assert resp.status_code == 200
     data = resp.json()
     assert data["parameters"]["concept_board_codes"] == ["BK0428", "BK0479"]
+
+
+@patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
+@patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
+@patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
+@patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
+def test_gms_strategy_scope_concept_board_filters_by_cn_board_segment():
+    client = _make_client()
+    resp = client.get(
+        "/api/screening/gms-strategy"
+        "?scope=concept_board&concept_board_code=BK0428"
+        "&cn_board_segment=CYB&date=2026-04-23"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert _FakeGmsFrontendInterface.last_stock_pool == ["300750"]
+    assert data["parameters"]["cn_board_segment"] == "CYB"

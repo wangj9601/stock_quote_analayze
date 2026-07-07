@@ -1918,12 +1918,12 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
-    /** 显示/隐藏「全部A股」下的板块筛选行 */
+    /** 显示/隐藏 A 股板块筛选行（全部A股 / 行业板块 / 概念板块） */
     syncGmsCnBoardWrap() {
         const wrap = document.getElementById('gmsCnBoardWrap');
         if (!wrap) return;
         const checked = document.querySelector('input[name="gmsScope"]:checked');
-        const show = checked && checked.value === 'cn';
+        const show = checked && ['cn', 'industry_board', 'concept_board'].includes(checked.value);
         wrap.style.display = show ? 'flex' : 'none';
     },
 
@@ -2598,7 +2598,7 @@ const ScreeningPage = {
                 q.set('cn_board_segment', seg);
             }
         }
-        if (scope === 'cn') {
+        if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
             const segEl = document.querySelector('input[name="gmsCnBoardSegment"]:checked');
             const seg = segEl ? segEl.value : 'ALL';
             if (seg && seg !== 'ALL') {
