@@ -29,7 +29,8 @@
         <el-descriptions-item label="创建时间" :span="2">{{ formatDateTimeBeijing(task.created_at) }}</el-descriptions-item>
         <template v-if="task.config">
           <el-descriptions-item label="任务类型">{{ backtestTypeLabel }}</el-descriptions-item>
-          <el-descriptions-item label="市场">{{ task.config.market }}</el-descriptions-item>
+          <el-descriptions-item label="市场">{{ marketLabel }}</el-descriptions-item>
+          <el-descriptions-item v-if="cnBoardSegmentLabel" label="A股板块">{{ cnBoardSegmentLabel }}</el-descriptions-item>
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
           <el-descriptions-item label="目标阈值">{{ (task.config.target_pct * 100) }}%</el-descriptions-item>
           <el-descriptions-item label="生效最低总分">{{ effectiveMinScore }}</el-descriptions-item>
@@ -156,6 +157,29 @@ const isTradeSimulation = computed(() => {
 const backtestTypeLabel = computed(() => {
   return isTradeSimulation.value ? '交易回测' : '策略信号命中率回测'
 })
+
+const marketLabel = computed(() => {
+  const m = String(task.value?.config?.market || '').toLowerCase()
+  if (m === 'cn') return 'A股'
+  if (m === 'hk') return '港股'
+  if (m === 'all') return 'A股+港股'
+  return task.value?.config?.market || '-'
+})
+
+const CN_BOARD_SEGMENT_LABELS: Record<string, string> = {
+  MAIN: '主板',
+  CYB: '创业板',
+  SZ_SME: '中小板',
+  KCB: '科创板',
+  BJ: '北证',
+}
+
+const cnBoardSegmentLabel = computed(() => {
+  const seg = String(task.value?.config?.cn_board_segment || '').trim().toUpperCase()
+  if (!seg || seg === 'ALL') return ''
+  return CN_BOARD_SEGMENT_LABELS[seg] || seg
+})
+
 const effectiveMinScore = computed(() => {
   const n = Number(task.value?.config?.min_score ?? 0)
   return Number.isNaN(n) ? 0 : n

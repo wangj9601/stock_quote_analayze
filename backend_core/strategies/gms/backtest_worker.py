@@ -113,6 +113,7 @@ def _run_task(task_id: str) -> None:
             cancel_check=cancel_check,
             strategy_config_id=strategy_config_id,
             config_params_snapshot=config_params_snapshot,
+            cn_board_segment=config.get("cn_board_segment"),
         )
         summary = result.get("summary") or {}
         details = result.get("details") or []

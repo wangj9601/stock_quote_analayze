@@ -928,6 +928,7 @@ def run_gms_backtest(
     cancel_check: Optional[Callable[[], bool]] = None,
     strategy_config_id: Optional[int] = None,
     config_params_snapshot: Optional[Dict[str, Any]] = None,
+    cn_board_segment: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     执行 GMS 回测（与管理端 create_backtest 任务一致）：
@@ -939,6 +940,9 @@ def run_gms_backtest(
     start_str = str(start_date).strip()[:10]
     end_str = str(end_date).strip()[:10]
     pos_f = _clamp_position_fraction(position_fraction)
+    seg_raw = (cn_board_segment or "").strip().upper() or None
+    if seg_raw == "ALL":
+        seg_raw = None
 
     bt = str(backtest_type or "signal_hit_rate").strip().lower()
     if bt not in ("signal_hit_rate", "trade_simulation"):
@@ -995,6 +999,13 @@ def run_gms_backtest(
         markets_to_run = [("etf", _get_trading_dates_cn(db, start_str, end_str))]
     else:
         markets_to_run = [("hk", _get_trading_dates_hk(db, start_str, end_str))]
+
+    if seg_raw and stock_pool:
+        from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+        stock_pool = filter_stock_codes_by_board_segment(stock_pool, seg_raw)
+        if not stock_pool:
+            stock_pool = None
 
     use_stock_first = stock_pool is not None and len(stock_pool) >= 2
     # 多股模式：仅统计「该市场池内确有代码」时的交易日数，与循环内 processed 次数一致；否则分母过小会导致进度超 100%
@@ -1060,7 +1071,10 @@ def run_gms_backtest(
                     break
                 try:
                     results = interface.get_selection_results(
-                        date=trade_date, stock_pool=codes_m, market=market_key
+                        date=trade_date,
+                        stock_pool=codes_m,
+                        market=market_key,
+                        cn_board_segment=seg_raw if market_key == "cn" else None,
                     )
                 except Exception as e:
                     logger.warning("GMS 选股失败 %s %s: %s", market_key, trade_date, e)
@@ -1118,7 +1132,10 @@ def run_gms_backtest(
                     break
                 try:
                     results = interface.get_selection_results(
-                        date=trade_date, stock_pool=stock_pool, market=market_key
+                        date=trade_date,
+                        stock_pool=stock_pool,
+                        market=market_key,
+                        cn_board_segment=seg_raw if market_key in ("cn", "all") else None,
                     )
                 except Exception as e:
                     logger.warning("GMS 选股失败 %s: %s", trade_date, e)

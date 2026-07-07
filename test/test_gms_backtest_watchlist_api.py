@@ -74,6 +74,54 @@ def test_create_backtest_watchlist_resolves_stock_pool(mock_create):
     assert cfg["stock_pool"] == ["000001", "600519"]
 
 
+@patch.object(gms_admin_routes.admin_interface, "create_backtest", return_value="task-id-cyb")
+def test_create_backtest_watchlist_filters_cn_board_segment(mock_create):
+    db = MagicMock()
+    db.query.return_value.distinct.return_value.all.return_value = [
+        ("600519",),
+        ("300001",),
+        ("00700",),
+    ]
+    client = _make_client(db)
+    body = {
+        "market": "all",
+        "cn_board_segment": "CYB",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+        "stock_pool_mode": "watchlist",
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 200
+    cfg = mock_create.call_args[0][0]
+    assert cfg["cn_board_segment"] == "CYB"
+    assert cfg["stock_pool"] == ["00700", "300001"]
+
+
+def test_create_backtest_cn_board_segment_invalid_returns_400():
+    client = _make_client(MagicMock())
+    body = {
+        "market": "cn",
+        "cn_board_segment": "INVALID",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 400
+
+
+def test_create_backtest_hk_rejects_cn_board_segment():
+    client = _make_client(MagicMock())
+    body = {
+        "market": "hk",
+        "cn_board_segment": "CYB",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 400
+    assert "港股" in (r.json().get("detail") or "")
+
+
 @patch.object(gms_admin_routes.admin_interface, "create_backtest", return_value="task-id-2")
 def test_create_backtest_watchlist_ignores_body_stock_pool(mock_create):
     """watchlist 模式下以库表为准，忽略请求中的 stock_code / stock_pool。"""

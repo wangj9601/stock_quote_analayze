@@ -69,6 +69,34 @@ def apply_cn_board_segment_filter(query: Query[_T], code_column: Column, board_s
     return query.filter(crit)
 
 
+def _is_cn_equity_code_for_segment(code: str) -> bool:
+    """是否应按 A 股代码段规则过滤的 6 位 A 股代码（不含 5 位港股）。"""
+    s = str(code or "").strip()
+    return len(s) == 6 and s.isdigit() and s[0] in "6039"
+
+
+def filter_stock_codes_by_board_segment(
+    codes: List[str],
+    board_segment: Optional[str],
+) -> List[str]:
+    """
+    在代码列表中按 A 股板块过滤；港股/ETF 等非 A 股代码原样保留。
+    board_segment 为空或 ALL 时不做过滤。
+    """
+    keys = normalize_list_board_segment(board_segment)
+    if not keys:
+        return list(codes)
+    out: List[str] = []
+    for raw in codes:
+        c = str(raw or "").strip()
+        if not c:
+            continue
+        if _is_cn_equity_code_for_segment(c) and not code_matches_vsb_boards(c, keys):
+            continue
+        out.append(raw)
+    return out
+
+
 # 3倍量每日爆量推送 Excel：按板块分 sheet（顺序与表头展示名）
 TVO_PUSH_EXCEL_BOARD_SHEETS: List[Tuple[str, str]] = [
     ("MAIN", "沪深主板"),

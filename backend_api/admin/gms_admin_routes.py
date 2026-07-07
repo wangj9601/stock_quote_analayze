@@ -167,6 +167,38 @@ def _distinct_gms_strategy_stock_codes(db: Session, market: Optional[str] = None
     return sorted(codes)
 
 
+def _normalize_backtest_cn_board_segment(raw: Optional[str]) -> Optional[str]:
+    """校验并规范化回测 A 股板块参数；无效返回 None 表示不筛选，ALL 亦返回 None。"""
+    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+
+    seg = (raw or "").strip().upper()
+    if not seg or seg == "ALL":
+        return None
+    if not normalize_list_board_segment(seg):
+        raise HTTPException(
+            status_code=400,
+            detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
+        )
+    return seg
+
+
+def _apply_backtest_cn_board_segment(
+    codes: List[str],
+    market: str,
+    board_segment: Optional[str],
+) -> List[str]:
+    """在回测股票池内按 A 股板块过滤；港股市场忽略。"""
+    m = (market or "all").strip().lower()
+    if m == "hk":
+        return codes
+    seg = _normalize_backtest_cn_board_segment(board_segment)
+    if not seg:
+        return codes
+    from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+    return filter_stock_codes_by_board_segment(codes, seg)
+
+
 def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
     """
     当股票池为单股、自定义或自选股时，生成包含股票名称和代码的任务名称。
@@ -238,6 +270,10 @@ def _attach_strategy_config_snapshot(config: dict, strategy_config_id: Optional[
 class BacktestCreateBody(BaseModel):
     task_name: Optional[str] = Field(None, description="任务名称")
     market: str = Field("all", description="市场: cn / hk / all")
+    cn_board_segment: Optional[str] = Field(
+        None,
+        description="A股板块: ALL/MAIN/CYB/SZ_SME/KCB/BJ；market=cn 或 all 时可选",
+    )
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
     target_pct: float = Field(0.05, description="目标涨幅，如 0.05 表示 5%")
@@ -431,6 +467,12 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
     """创建回测任务，返回 task_id。任务名称未填写时，单股/自定义/自选股股票池时自动包含股票名称和代码。"""
     try:
         mode = (body.stock_pool_mode or "all").strip()
+        mkt = (body.market or "all").strip().lower()
+        cn_seg = None
+        if body.cn_board_segment:
+            if mkt == "hk":
+                raise HTTPException(status_code=400, detail="港股市场回测不支持 A 股板块筛选")
+            cn_seg = _normalize_backtest_cn_board_segment(body.cn_board_segment)
         config = {
             "task_name": body.task_name,
             "market": body.market,
@@ -457,6 +499,8 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             "position_fraction": body.position_fraction,
             "stock_pool_mode": mode,
         }
+        if cn_seg:
+            config["cn_board_segment"] = cn_seg
         if mode == "watchlist":
             wl_uid = body.watchlist_user_id
             if wl_uid is not None:
@@ -466,18 +510,28 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
                 if wl_uid is None:
                     raise HTTPException(status_code=400, detail="当前无自选股，无法创建回测任务")
                 raise HTTPException(status_code=400, detail=f"用户ID={wl_uid}无自选股，无法创建回测任务")
+            codes = _apply_backtest_cn_board_segment(codes, mkt, cn_seg)
+            if not codes:
+                raise HTTPException(status_code=400, detail="自选股在选定 A 股板块下无匹配股票")
             config["stock_pool"] = codes
         elif mode == "gms_watchlist":
             codes = _distinct_gms_strategy_stock_codes(db, market=body.market)
             if not codes:
                 m_desc = "全部市场" if body.market == "all" else ("A股" if body.market == "cn" else "港股")
                 raise HTTPException(status_code=400, detail=f"GMS观察股({m_desc})中无有效状态数据，无法创建回测任务")
+            codes = _apply_backtest_cn_board_segment(codes, mkt, cn_seg)
+            if not codes:
+                raise HTTPException(status_code=400, detail="GMS观察股在选定 A 股板块下无匹配股票")
             config["stock_pool"] = codes
         else:
             if body.stock_code:
                 config["stock_code"] = body.stock_code.strip()
             if body.stock_pool:
-                config["stock_pool"] = [str(c).strip() for c in body.stock_pool if str(c).strip()]
+                pool = [str(c).strip() for c in body.stock_pool if str(c).strip()]
+                pool = _apply_backtest_cn_board_segment(pool, mkt, cn_seg)
+                if cn_seg and not pool:
+                    raise HTTPException(status_code=400, detail="自定义股票池在选定 A 股板块下无匹配股票")
+                config["stock_pool"] = pool
         # 任务名称：用户填写则用用户的；否则单股/自定义/自选股时生成含股票代码和名称的默认名
         task_name = (body.task_name or "").strip()
         if not task_name:

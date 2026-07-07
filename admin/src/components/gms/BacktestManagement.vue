@@ -18,6 +18,21 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row v-if="showCnBoardSegment" :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="A股板块">
+              <el-radio-group v-model="cnBoardSegment" class="flex flex-wrap gap-3">
+                <el-radio label="ALL">全部A股</el-radio>
+                <el-radio label="MAIN">主板</el-radio>
+                <el-radio label="CYB">创业板</el-radio>
+                <el-radio label="SZ_SME">中小板</el-radio>
+                <el-radio label="KCB">科创板</el-radio>
+                <el-radio label="BJ">北证</el-radio>
+              </el-radio-group>
+              <div class="text-gray-500 text-sm mt-1">在 A 股范围内按代码段筛选；A股+港股时仅过滤 A 股部分</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="策略参数版本">
@@ -630,6 +645,9 @@ const statusFilter = ref('')
 const watchlistScope = ref<'all' | 'user'>('all')
 const watchlistUserId = ref<number | undefined>(undefined)
 const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
+const cnBoardSegment = ref<'ALL' | 'MAIN' | 'CYB' | 'SZ_SME' | 'KCB' | 'BJ'>('ALL')
+
+const showCnBoardSegment = computed(() => form.market === 'cn' || form.market === 'all')
 
 const filteredTasks = computed(() => {
   if (!statusFilter.value) return tasks.value
@@ -710,6 +728,9 @@ async function createTask() {
       body.watchlist_user_id = watchlistUserId.value
     }
     if (strategyConfigId.value) body.strategy_config_id = strategyConfigId.value
+    if (showCnBoardSegment.value && cnBoardSegment.value && cnBoardSegment.value !== 'ALL') {
+      body.cn_board_segment = cnBoardSegment.value
+    }
     const taskId = await gmsApi.createBacktest(body)
     ElMessage.success('任务已创建: ' + taskId.slice(0, 8))
     resetForm()
@@ -740,6 +761,7 @@ function resetForm() {
   form.stock_list = ''
   watchlistScope.value = 'all'
   watchlistUserId.value = undefined
+  cnBoardSegment.value = 'ALL'
 }
 
 async function refresh() {

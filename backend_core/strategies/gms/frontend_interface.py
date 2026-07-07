@@ -307,6 +307,7 @@ class GMSFrontendInterface:
         trace_only: bool = False,
         return_meta: bool = False,
         exclude_st: bool = False,
+        cn_board_segment: Optional[str] = None,
     ) -> Union[List[dict], Tuple[List[dict], Dict[str, Any]]]:
         """
         获取选股结果。优先从 gms_signal_trace 表读取策略信号记录；
@@ -316,6 +317,7 @@ class GMSFrontendInterface:
             trace_only: 为 True 时只读库内 trace，不对缺失股票做实时计算（用于前端先快速展示缓存）。
             return_meta: 为 True 时返回 (列表, 统计字典)，便于接口返回 trace_complete 等字段。
             exclude_st: 为 True 时剔除 A 股 ST 类股票（名称含 ST）。
+            cn_board_segment: A 股板块 MAIN/CYB/SZ_SME/KCB/BJ；仅过滤 A 股代码，港股/ETF 保留。
         """
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
@@ -325,6 +327,11 @@ class GMSFrontendInterface:
             stock_pool = self._get_stock_pool(date, market)
         else:
             stock_pool = list(dict.fromkeys(stock_pool))
+
+        if cn_board_segment:
+            from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+            stock_pool = filter_stock_codes_by_board_segment(stock_pool, cn_board_segment)
 
         if exclude_st and stock_pool:
             from backend_api.utils.st_stock_filter import filter_codes_exclude_st

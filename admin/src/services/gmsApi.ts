@@ -166,6 +166,7 @@ class GMSApiService {
   async createBacktest(body: {
     task_name?: string
     market?: string
+    cn_board_segment?: string
     start_date: string
     end_date: string
     target_pct?: number
