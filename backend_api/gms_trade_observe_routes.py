@@ -62,6 +62,15 @@ def ensure_gms_trade_observe_key_focus_column(db: Session) -> None:
                     """
                 )
             )
+            db.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_gms_trade_observe_key_focus_flag
+                    ON gms_trade_observe_stocks (user_id, key_focus_flag)
+                    """
+                )
+            )
+            db.commit()
         _key_focus_schema_ensured = True
 
 
@@ -91,7 +100,14 @@ def ensure_gms_trade_observe_latest_price_columns(db: Session) -> None:
                     """
                 )
             )
+            db.commit()
         _latest_price_schema_ensured = True
+
+
+def ensure_gms_trade_observe_schema(db: Session) -> None:
+    """交易观察表 ORM 依赖列（key_focus、最新收盘价）一次性补齐。"""
+    ensure_gms_trade_observe_key_focus_column(db)
+    ensure_gms_trade_observe_latest_price_columns(db)
 
 
 def _score_total_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[float]:
@@ -322,6 +338,7 @@ def _formal_trade_keys_for_user(db: Session, user_id: int) -> set[tuple[str, str
 
 def _purge_observe_rows_already_formal_traded(db: Session, user_id: int) -> int:
     """已转入正式交易但观察记录仍残留时，归档并删除（兼容历史数据）。"""
+    ensure_gms_trade_observe_schema(db)
     formal_keys = _formal_trade_keys_for_user(db, user_id)
     if not formal_keys:
         return 0
@@ -547,8 +564,7 @@ def list_gms_trade_observe(
 ):
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
-    ensure_gms_trade_observe_key_focus_column(db)
-    ensure_gms_trade_observe_latest_price_columns(db)
+    ensure_gms_trade_observe_schema(db)
     _purge_observe_rows_already_formal_traded(db, user.id)
     q = db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.user_id == user.id)
     total = q.count()
@@ -609,6 +625,7 @@ def add_gms_trade_observe(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    ensure_gms_trade_observe_schema(db)
     code = _normalize_code(body.code)
     if not code:
         raise HTTPException(status_code=400, detail="股票代码无效")
@@ -693,7 +710,7 @@ def get_gms_trade_observe_latest_price(
     db: Session = Depends(get_db),
 ):
     """按需查询单条观察股最新价格（实时行情优先，历史行情兜底），并写入观察记录。"""
-    ensure_gms_trade_observe_latest_price_columns(db)
+    ensure_gms_trade_observe_schema(db)
     row = (
         db.query(GmsTradeObserveStock)
         .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
@@ -722,6 +739,7 @@ def get_gms_trade_observe_price_plan(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    ensure_gms_trade_observe_schema(db)
     """刷新单条观察股交易价格计划。"""
     row = (
         db.query(GmsTradeObserveStock)
@@ -756,7 +774,7 @@ def set_gms_trade_observe_key_focus(
     db: Session = Depends(get_db),
 ):
     """切换交易观察股「重点关注」标记。"""
-    ensure_gms_trade_observe_key_focus_column(db)
+    ensure_gms_trade_observe_schema(db)
     row = (
         db.query(GmsTradeObserveStock)
         .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
@@ -809,6 +827,7 @@ def remove_gms_trade_observe(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    ensure_gms_trade_observe_schema(db)
     row = (
         db.query(GmsTradeObserveStock)
         .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)

@@ -19,6 +19,7 @@ from backend_api.gms_trade_observe_routes import (
     _archive_trade_observe_row,
     _normalize_code,
     _resolve_signal_date_str,
+    ensure_gms_trade_observe_schema,
 )
 from backend_api.models import GmsFormalTrade, GmsTradeObserveStock, User
 
@@ -250,6 +251,7 @@ def create_from_observe(
 ):
     """从交易观察记录转入正式交易。"""
     ensure_gms_formal_trade_pnl_columns(db)
+    ensure_gms_trade_observe_schema(db)
     observe = (
         db.query(GmsTradeObserveStock)
         .filter(GmsTradeObserveStock.id == observe_id, GmsTradeObserveStock.user_id == user.id)
