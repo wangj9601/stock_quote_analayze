@@ -4,10 +4,14 @@ import logging
 from pathlib import Path
 from typing import Union
 
+# 必须在导入 backend_api / backend_core 之前加载 .env，否则数据库引擎会用旧环境变量初始化
+_project_root = Path(__file__).resolve().parent.parent.parent
 try:
     from dotenv import load_dotenv
+    load_dotenv(_project_root / ".env", override=True)
 except ImportError:
-    load_dotenv = None  # 生产环境可无 python-dotenv，依赖系统环境变量
+    pass
+
 from apscheduler.schedulers.blocking import BlockingScheduler
 from datetime import datetime, timedelta
 from backend_core.data_collectors.akshare.realtime import AkshareRealtimeQuoteCollector
@@ -43,11 +47,6 @@ import pandas as pd
 from backend_api.database import SessionLocal as ApiSessionLocal
 from backend_api.utils.trading_calendar_utils import is_market_session_closed
 from sqlalchemy import text
-
-# 加载项目根目录 .env（有 python-dotenv 时；生产环境无则使用系统环境变量）
-_project_root = Path(__file__).resolve().parent.parent.parent
-if load_dotenv is not None:
-    load_dotenv(_project_root / ".env")
 
 
 def _env(key: str, default: str = "") -> str:

@@ -762,6 +762,7 @@ class ETFCollector:
                     'efficiency': res['efficiency_m20_minus_m'],
                     'ma20': res['ma20_d'],
                     'ma60_d': lookup_ma60_d(self.session, etf_code, date_str, self.MARKET_TYPE),
+                    'mavol20': res.get('mavol20_m'),
                     'bias': res['bias'],
                     'd1': res.get('d1'), 'd1_date': res.get('d1_date'),
                     'd20': res.get('d20'), 'd20_date': res.get('d20_date'),

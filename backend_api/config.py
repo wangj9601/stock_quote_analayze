@@ -14,7 +14,7 @@ except ImportError:
 # 加载项目根目录 .env（有 python-dotenv 时）；生产环境无则使用系统环境变量
 _project_root = Path(__file__).resolve().parent.parent
 if load_dotenv is not None:
-    load_dotenv(_project_root / ".env")
+    load_dotenv(_project_root / ".env", override=True)
 
 
 def _env(key: str, default: str = "") -> str:

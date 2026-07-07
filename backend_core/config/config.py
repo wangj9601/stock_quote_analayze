@@ -11,7 +11,7 @@ except ImportError:
 # 项目根目录
 ROOT_DIR = Path(__file__).parent.parent.parent
 if load_dotenv is not None:
-    load_dotenv(ROOT_DIR / ".env")
+    load_dotenv(ROOT_DIR / ".env", override=True)
 
 def _env(key: str, default: str = "") -> str:
     return (os.getenv(key) or default).strip()
