@@ -173,3 +173,10 @@ def test_penalty_excessive_deviation():
     total, details = PenaltyEngine(config).apply(row)
     assert total == 12.0
     assert details[0]["id"] == "excessive_deviation"
+
+
+def test_penalty_rule_types_include_observation_range_amplitude():
+    from backend_core.strategies.gms.scoring.penalties import PENALTY_RULE_TYPES
+
+    assert "observation_range_amplitude" in PENALTY_RULE_TYPES
+    assert PENALTY_RULE_TYPES["observation_range_amplitude"]["default_points"] == 10

@@ -34,7 +34,8 @@ GMS（均值引力与动量突变策略）采用**双模块阶梯式评分**系�
 - **均值收敛态总分**：0-100分（时间耗散 + 引力粘合 + 成交量缩）
 - **动量溢出态总分**：0-100分（盈亏反转 + 推力支撑 +
   攻击强度，可含负分）
-- **综合总分**：取两模块较高者，用于排序
+- **综合总分**：取两模块较高者，用于排序（**标准版** `tiered_dual_max`）
+- **增强版综合总分**（`tiered_dual_penalty` / 配置名 `gms_penalty`）：`clamp(基础分 − 减分合计, 0, 100)`，其中基础分 = max(均值收敛态小计, 动量溢出态小计)；等级判定仍按**减分前**基础分
 
 ------------------------------------------------------------------------
 
@@ -457,14 +458,20 @@ def detect_sell(self, indicators):
 | `default` | `tiered_dual_max` | 标准版·双模块阶梯 |
 | `gms_penalty` | `tiered_dual_penalty` | 增强版·阶梯+减分 |
 
-管理端「打分与参数」与网站选股下拉均只展示以上两者；**修改扣分值等参数会原地更新对应 config，不会新建 `auto_gms_v*` 版本**。观察股策略版本（`gms_strategy_versions`）按所选机制绑定到上述共享 config。
-
+| mechanism | 名称 | 说明 |
 |-----------|------|------|
 | `tiered_dual_max` | 标准版·双模块阶梯 | 现网默认：均值收敛态与动量溢出态独立阶梯评分，综合分取两者较高者；**不允许**配置减分规则 |
 | `tiered_dual_penalty` | 增强版·阶梯+减分 | 在标准版基础分上按规则扣分，最终分限制在 0~100；**至少一条**启用的减分规则 |
 
+管理端「打分与参数」与网站选股下拉均只展示以上两者；**修改扣分值等参数会原地更新对应 config，不会新建 `auto_gms_v*` 版本**。观察股策略版本（`gms_strategy_versions`）按所选机制绑定到上述共享 config。
+
+**管理入口**：管理端「GMS策略版本」→「打分与参数」Tab，或「策略参数配置」页（`default` / `gms_penalty`）；网站选股参数版本下拉展示 `scoring_mechanism_label`。减分规则类型列表：`GET /api/admin/gms/penalty-rule-types`。
+
+#### 5.4.1 配置示例
+
 ``` json
 {
+  "observation_period": 20,
   "scoring": {
     "mechanism": "tiered_dual_penalty",
     "penalty_rules": [
@@ -472,14 +479,28 @@ def detect_sell(self, indicators):
         "id": "close_below_ma60",
         "enabled": true,
         "points": 10,
-        "label": "收盘低于 MA60"
+        "label": "收盘低于60日均线",
+        "half_when_ma60_flat": true
+      },
+      {
+        "id": "observation_range_amplitude",
+        "enabled": true,
+        "points": 10,
+        "label": "观察周期振幅过大",
+        "amplitude_threshold_pct": 0.30
       }
-    ]
+    ],
+    "ma60_flat_lookback_days": 20,
+    "ma60_flat_tol": 0.015
   }
 }
 ```
 
-**减分规则 `close_below_ma60`**：当 `d20 < ma60_d`（收盘价低于 60 日均线）时，从基础分扣除 `points` 分。若 MA60 处于**走平**状态，扣分取半（默认 `points × 0.5`）。等级判定仍按**减分前**基础分（首期约定）。
+新建 `gms_penalty` 共享配置时，系统默认启用上述两条减分规则；**已有库内配置不会自动追加**，需在管理端「添加规则」手动启用 `observation_range_amplitude`。
+
+#### 5.4.2 减分规则 `close_below_ma60`
+
+当 `d20 < ma60_d`（收盘价低于 60 日均线）时，从基础分扣除 `points` 分。若 MA60 处于**走平**状态，扣分取半（默认 `points × 0.5`）。
 
 **MA60 走平判定**（默认，可在 `scoring` 中配置）：
 
@@ -495,9 +516,78 @@ ma60_flat = |ma60_d - ma60_d_lag| / ma60_d_lag < ma60_flat_tol
 
 缺 lag 日 MA60 数据时视为**非走平**，扣满分。
 
-**数据依赖**：GMS 使用的 MA60 以 **`ma_indicators.ma60`** 为唯一权威源（同 `code` + `date` + `market_type`）。指标写入时同步到 `mean_frequency_resonance_indicators.ma60_d`；读取时若 `ma60_d` 缺失，`data_loader` 会从 `ma_indicators` 补全，并批量计算 `ma60_d_lag` / `ma60_flat`。**不再**用行情表估算。若 MA 指标未生成则 `ma60_d` 为空，增强版 `close_below_ma60` 减分不生效。
+**数据依赖**：GMS 使用的 MA60 以 **`ma_indicators.ma60`** 为唯一权威源（同 `code` + `date` + `market_type`）。指标写入时同步到 `mean_frequency_resonance_indicators.ma60_d`；读取时若 `ma60_d` 缺失，`data_loader` 会从 `ma_indicators` 补全，并批量计算 `ma60_d_lag` / `ma60_flat`。**不再**用行情表估算。若 MA 指标未生成则 `ma60_d` 为空，该规则减分不生效。
 
-**管理入口**：管理端「GMS策略版本」→「打分与参数」Tab；网站选股参数版本下拉展示 `scoring_mechanism_label`。
+#### 5.4.3 减分规则 `observation_range_amplitude`（观察周期振幅过大）
+
+当策略**观察周期内**（默认 `observation_period` = 20 个交易日，含信号日）最高价与最低价的区间振幅超过阈值时扣分，并自动生成风险提示标签（`penalty_observation_range_amplitude`）。
+
+**振幅计算公式**（与行情软件常见的「振幅」分母不同，以周期内最高价为分母）：
+
+```
+observation_range_amplitude_pct = (period_high − period_low) / period_high
+```
+
+其中：
+
+- `period_high`：观察周期内（信号日及向前 N−1 个交易日）行情 **high** 的最大值
+- `period_low`：同一窗口内行情 **low** 的最小值
+- N = `observation_period`（默认 20）
+
+**触发条件**：`observation_range_amplitude_pct > amplitude_threshold_pct`（严格大于；等于阈值不扣分）。
+
+| 参数 | 位置 | 默认值 | 说明 |
+|------|------|--------|------|
+| `points` | 规则级 | 10 | 命中后扣分 |
+| `amplitude_threshold_pct` | 规则级 | 0.30 | 振幅阈值（0.30 = 30%） |
+| `observation_range_amplitude_threshold` | `scoring` 全局（可选） | — | 未在规则上配置阈值时的兜底 |
+| `observation_period` | 根配置 | 20 | 观察窗口交易日数 |
+
+**注意**：`mean_frequency_resonance_indicators.amplitude` 字段表示的是 `|Δ|`（宏观位移绝对值），**不是**本规则的区间振幅；本规则在运行时从行情表实时计算，不依赖该字段。
+
+**数据依赖与 enrich 链路**：
+
+| 市场 | 行情表 |
+|------|--------|
+| A 股 `CN` | `historical_quotes` |
+| 港股 `HK` | `historical_quotes_hk` |
+| ETF / 基金 `ETF` | `fund_historical_quotes` |
+
+实现模块：`backend_core/strategies/gms/observation_range.py`。在 `GMSDataLoader.load_indicators` 及选股单股兜底路径中，于 MA60 enrich 之后调用 `enrich_rows_observation_range`，向计算行写入：
+
+- `observation_period_high` / `observation_period_low`
+- `observation_range_amplitude_pct`
+- `observation_range_period_days`
+
+窗口内有效 K 线不足 N 根时，振幅为空，规则**不触发**（不扣分）。
+
+**得分明细展示**（前端 `gms_score_detail.js`）：减分项表格条件列显示「观察周期振幅 X% &gt; 阈值 Y%」；指标细项区展示周期高低点与振幅。
+
+#### 5.4.4 其他已注册减分规则（可选启用）
+
+| 规则 ID | 说明 | 默认扣分 |
+|---------|------|----------|
+| `volume_shrink_after_breakout` | 突破后缩量回落 | 8 |
+| `momentum_fade` | 动量衰减 | 6 |
+| `excessive_deviation` | 乖离过大（Δ/d₂₀ 超 `overbought_ratio`） | 12 |
+
+规则注册表：`backend_core/strategies/gms/scoring/penalties.py` → `PENALTY_RULE_TYPES`；校验：`validate_scoring_config`（`registry.py`）。
+
+#### 5.4.5 增强版计算流程（概要）
+
+```
+TieredDualMaxScorer → 基础分 base_total
+        ↓
+enrich（ma60_d / ma60_flat / observation_range）
+        ↓
+PenaltyEngine.apply(row) → 减分合计 + penalty_details
+        ↓
+score_total = clamp(base_total − 减分合计, 0, 100)
+        ↓
+build_risk_tags → 每条命中的减分规则生成 penalty_* 风险提示
+```
+
+相关代码：`scoring/tiered_dual_penalty.py`、`scoring/penalties.py`、`risk_tags.py`、`strategy_engine.py`（`score_detail.penalties`）。
 
 ------------------------------------------------------------------------
 
@@ -671,6 +761,7 @@ GMS策略的状态判定系统通过**双模块阶梯式评分**实现了对股�
 2.  **等级优先机制**：S/A级和全速切入/分批买入等级可跳过前置条件
 3.  **阶梯式评分**：每个维度采用多级阈值，评分更精细
 4.  **灵活配置**：所有阈值和权重均可配置
+5.  **增强减分版**（`gms_penalty`）：在基础分上按规则扣分（如低于 MA60、观察周期振幅过大），并输出风险提示标签
 
 ### 判定逻辑
 

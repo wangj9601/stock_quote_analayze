@@ -289,7 +289,14 @@ class GMSConfigManager:
                     "points": 10,
                     "label": "收盘低于60日均线",
                     "half_when_ma60_flat": True,
-                }
+                },
+                {
+                    "id": "observation_range_amplitude",
+                    "enabled": True,
+                    "points": 10,
+                    "label": "观察周期振幅过大",
+                    "amplitude_threshold_pct": 0.30,
+                },
             ]
         params["scoring"] = scoring
         penalty_id = self.create_config(

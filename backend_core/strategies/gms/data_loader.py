@@ -119,6 +119,7 @@ class GMSDataLoader:
 
             self._enrich_ma60_missing(result, market_type)
             self._enrich_ma60_flat(result, scoring_config, gms_config)
+            self._enrich_observation_range(result, gms_config)
 
             logger.info(
                 f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}"
@@ -281,3 +282,14 @@ class GMSDataLoader:
         enrich_rows_ma60_flat(self.db, rows, lookback_days=lookback, tol=tol)
         for r in rows:
             r["ma60_flat_lookback_days"] = lookback
+
+    def _enrich_observation_range(
+        self,
+        rows: List[Dict[str, Any]],
+        gms_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """补全观察周期内最高/最低及区间振幅。"""
+        from .observation_range import enrich_rows_observation_range, resolve_observation_period_days
+
+        period = resolve_observation_period_days(gms_config or {})
+        enrich_rows_observation_range(self.db, rows, period_days=period)

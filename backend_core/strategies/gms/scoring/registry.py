@@ -93,6 +93,17 @@ def validate_scoring_config(scoring: Dict[str, Any]) -> List[str]:
                         errors.append(f"减分规则 {rid} 的 points 须在 (0, 100]")
                 except (TypeError, ValueError):
                     errors.append(f"减分规则 {rid} 的 points 无效")
+                if rid == "observation_range_amplitude":
+                    th = r.get("amplitude_threshold_pct")
+                    if th is not None:
+                        try:
+                            t = float(th)
+                            if t <= 0 or t > 2.0:
+                                errors.append(
+                                    f"减分规则 {rid} 的 amplitude_threshold_pct 须在 (0, 2.0] 范围内"
+                                )
+                        except (TypeError, ValueError):
+                            errors.append(f"减分规则 {rid} 的 amplitude_threshold_pct 无效")
         lookback = scoring.get("ma60_flat_lookback_days")
         if lookback is not None:
             try:

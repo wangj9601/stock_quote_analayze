@@ -207,6 +207,14 @@ class GMSStrategyEngine:
                     "ma60_flat": (ind.raw_row.get("ma60_flat") if ind.raw_row else None),
                     "ma60_flat_change_pct": (ind.raw_row.get("ma60_flat_change_pct") if ind.raw_row else None),
                     "ma60_flat_lookback_days": (ind.raw_row.get("ma60_flat_lookback_days") if ind.raw_row else None),
+                    "observation_period_high": (ind.raw_row.get("observation_period_high") if ind.raw_row else None),
+                    "observation_period_low": (ind.raw_row.get("observation_period_low") if ind.raw_row else None),
+                    "observation_range_amplitude_pct": (
+                        ind.raw_row.get("observation_range_amplitude_pct") if ind.raw_row else None
+                    ),
+                    "observation_range_period_days": (
+                        ind.raw_row.get("observation_range_period_days") if ind.raw_row else None
+                    ),
                     "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(self.config),
                     "score_base_total": getattr(ind, "score_base_total", ind.score_total),
                     "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),

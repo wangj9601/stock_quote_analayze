@@ -34,6 +34,7 @@ export interface GMSPenaltyRuleType {
   label: string
   description?: string
   default_points?: number
+  default_amplitude_threshold_pct?: number
 }
 
 export interface GMSPenaltyRule {
@@ -41,6 +42,8 @@ export interface GMSPenaltyRule {
   enabled: boolean
   points: number
   label?: string
+  amplitude_threshold_pct?: number
+  half_when_ma60_flat?: boolean
 }
 
 export interface GMSStrategyVersion {

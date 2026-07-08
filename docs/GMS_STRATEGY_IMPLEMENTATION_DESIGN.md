@@ -5,6 +5,8 @@
 - [2. 核心架构](#2-核心架构)
 - [3. 数据模型](#3-数据模型)
 - [4. 模块设计](#4-模块设计)
+  - [4.6 打分机制与减分引擎](#46-打分机制与减分引擎)
+  - [4.7 观察周期振幅 enrich](#47-观察周期振幅-enrich)
 - [5. 算法实现](#5-算法实现)
 - [6. 配置管理](#6-配置管理)
 - [7. API接口](#7-api接口)
@@ -59,11 +61,15 @@ GMS策略基于"均值引力"和"动量突变"两个核心概念：
 │   (GMSSignalDetector) │ Calculator      │
 │                       │(GMSIndicators)  │
 ├─────────────────────────────────────────┤
+│  Scoring (tiered_dual_max / penalty)    │
+│  PenaltyEngine │ observation_range      │
+├─────────────────────────────────────────┤
 │              Data Loader                │
 │           (GMSDataLoader)               │
 ├─────────────────────────────────────────┤
 │         Database Layer                  │
 │  mean_frequency_resonance_indicators    │
+│  ma_indicators │ historical_quotes*      │
 └─────────────────────────────────────────┘
 ```
 
@@ -172,11 +178,28 @@ GMSException                    # 基础异常
     "volume_ratio_min": 1.5          // m₂₀ > 1.5m
   },
   "scoring": {                       // 评分参数
-    "accumulation_fz_min": 1.5,      // F/Z > 1.5 → 蓄势30分
-    "balance_ratio_max": 0.01,       // |Δ/d₂₀| < 1% → 平衡40分
-    "momentum_volume_ratio_min": 1.5,// Δ>0且量比>1.5 → 动量30分
-    "watch_threshold": 60,           // 观察阈值
-    "alert_threshold": 90            // 警示阈值
+    "mechanism": "tiered_dual_max",  // 或 tiered_dual_penalty（增强减分版）
+    "accumulation_fz_min": 1.5,
+    "balance_ratio_max": 0.01,
+    "momentum_volume_ratio_min": 1.5,
+    "watch_threshold": 60,
+    "alert_threshold": 90,
+    "ma60_flat_lookback_days": 20,   // MA60 走平回看（增强版 close_below_ma60）
+    "ma60_flat_tol": 0.015,
+    "penalty_rules": [               // 仅 mechanism=tiered_dual_penalty 时启用
+      {
+        "id": "close_below_ma60",
+        "enabled": true,
+        "points": 10,
+        "half_when_ma60_flat": true
+      },
+      {
+        "id": "observation_range_amplitude",
+        "enabled": true,
+        "points": 10,
+        "amplitude_threshold_pct": 0.30
+      }
+    ]
   },
   "exit": {                          // 退出参数
     "trend_break_days": 3,           // 趋势破坏天数
@@ -190,8 +213,19 @@ GMSException                    # 基础异常
 #### 功能职责
 - 从`mean_frequency_resonance_indicators`表加载基础数据
 - 计算衍生指标 (ratio_d, volume_ratio)
+- 补全 MA60（`ma_indicators.ma60`）及 MA60 走平字段
+- 补全观察周期高低点与区间振幅（行情表）
 - 支持批量加载
 - 数据清洗和验证
+
+#### enrich 顺序（选股 / 回测加载后）
+
+```
+load_indicators
+  → _enrich_ma60_missing      # ma60_d 从 ma_indicators 补全
+  → _enrich_ma60_flat         # ma60_d_lag / ma60_flat
+  → _enrich_observation_range # period_high/low、observation_range_amplitude_pct
+```
 
 #### 核心算法
 ```python
@@ -340,7 +374,46 @@ def screen(self, codes, date, market, min_score=0, max_results=None):
     return results
 ```
 
-### 4.6 前端接口 (GMSFrontendInterface)
+### 4.6 打分机制与减分引擎
+
+#### 机制注册（`scoring/registry.py`）
+
+| ID | 类 | 综合分 |
+|----|-----|--------|
+| `tiered_dual_max` | `TieredDualMaxScorer` | max(均值收敛态, 动量溢出态) |
+| `tiered_dual_penalty` | `TieredDualPenaltyScorer` | clamp(基础分 − Σ减分, 0, 100) |
+
+共享配置名：`default`（标准版）、`gms_penalty`（减分版）。业务规则与参数说明见 [GMS_STATE_DETECTION_RULES.md §5.4](./GMS_STATE_DETECTION_RULES.md#54-打分机制与减分规则多版本)。
+
+#### PenaltyEngine（`scoring/penalties.py`）
+
+按 `scoring.penalty_rules` 中启用的规则对单行指标依次判定；命中则累加扣分并写入 `penalty_details`。规则类型见 `PENALTY_RULE_TYPES`，管理端通过 `GET /api/admin/gms/penalty-rule-types` 拉取元数据。
+
+| 规则 ID | 判定概要 |
+|---------|----------|
+| `close_below_ma60` | d₂₀ &lt; ma60_d；MA60 走平时扣分减半 |
+| `observation_range_amplitude` | 观察周期内 (高−低)/高 &gt; 阈值（默认 30%，扣 10 分） |
+
+等级（S/A/全速/分批）仍按**减分前**基础分判定。`risk_tags.py` 对每条命中的减分规则生成 `penalty_{id}` 风险提示。
+
+### 4.7 观察周期振幅 enrich
+
+模块：`observation_range.py`（由 `GMSDataLoader._enrich_observation_range` 调用）。
+
+```python
+# 观察窗口 = observation_period 个交易日（含信号日）
+period_high = max(high)   # 窗口内
+period_low  = min(low)
+observation_range_amplitude_pct = (period_high - period_low) / period_high
+
+# 触发：observation_range_amplitude_pct > amplitude_threshold_pct（默认 0.30）
+```
+
+行情来源：A 股 `historical_quotes`、港股 `historical_quotes_hk`、ETF `fund_historical_quotes`。与指标表 `amplitude`（\|Δ\|）无关。
+
+单测：`test/test_gms_observation_range.py`；减分集成：`test/test_gms_scoring_mechanism.py`。
+
+### 4.8 前端接口 (GMSFrontendInterface)
 
 #### 功能职责
 - 提供API调用入口

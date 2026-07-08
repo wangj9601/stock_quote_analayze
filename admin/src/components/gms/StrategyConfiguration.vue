@@ -158,6 +158,22 @@
                     <el-input-number v-model="row.points" :min="0" :max="50" size="small" />
                   </template>
                 </el-table-column>
+                <el-table-column label="参数" min-width="160">
+                  <template #default="{ row }">
+                    <div v-if="row.id === 'observation_range_amplitude'" class="flex items-center gap-1">
+                      <span class="text-xs text-gray-500 whitespace-nowrap">振幅阈值</span>
+                      <el-input-number
+                        v-model="row.amplitude_threshold_pct"
+                        :min="0.01"
+                        :max="2"
+                        :step="0.01"
+                        :precision="2"
+                        size="small"
+                      />
+                    </div>
+                    <span v-else class="text-xs text-gray-400">—</span>
+                  </template>
+                </el-table-column>
               </el-table>
               <el-divider content-position="left">MA60 走平判定（低于 MA60 减分减半）</el-divider>
               <el-row :gutter="12">
@@ -258,13 +274,20 @@ function syncPenaltyRulesFromForm(params: Record<string, any>) {
   const byId = Object.fromEntries(existing.map((r) => [r.id, r]))
   penaltyRules.value = penaltyRuleTypes.value.map((meta) => {
     const cur = byId[meta.id] || {}
-    return {
+    const row: Record<string, unknown> = {
       id: meta.id,
       label: meta.label,
       description: meta.description,
       enabled: cur.enabled !== false,
       points: cur.points != null ? cur.points : meta.default_points ?? 10,
     }
+    if (meta.id === 'observation_range_amplitude') {
+      row.amplitude_threshold_pct =
+        cur.amplitude_threshold_pct != null
+          ? cur.amplitude_threshold_pct
+          : meta.default_amplitude_threshold_pct ?? 0.3
+    }
+    return row
   })
 }
 
@@ -272,12 +295,18 @@ function mergePenaltyRulesIntoForm(partial: Record<string, unknown>) {
   if (!showPenaltyEditor.value || !penaltyRules.value.length) return partial
   const scoring = { ...((partial.scoring as Record<string, unknown>) || {}) }
   scoring.mechanism = 'tiered_dual_penalty'
-  scoring.penalty_rules = penaltyRules.value.map((r) => ({
-    id: r.id,
-    enabled: r.enabled,
-    points: r.points,
-    label: r.label,
-  }))
+  scoring.penalty_rules = penaltyRules.value.map((r) => {
+    const item: Record<string, unknown> = {
+      id: r.id,
+      enabled: r.enabled,
+      points: r.points,
+      label: r.label,
+    }
+    if (r.id === 'observation_range_amplitude' && r.amplitude_threshold_pct != null) {
+      item.amplitude_threshold_pct = r.amplitude_threshold_pct
+    }
+    return item
+  })
   return { ...partial, scoring }
 }
 

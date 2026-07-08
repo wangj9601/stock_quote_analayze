@@ -306,6 +306,17 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
         )
         calc_row["ma60_flat_lookback_days"] = lookback
 
+        from backend_core.strategies.gms.observation_range import (
+            enrich_rows_observation_range,
+            resolve_observation_period_days,
+        )
+
+        enrich_rows_observation_range(
+            db,
+            [calc_row],
+            period_days=resolve_observation_period_days(config),
+        )
+
         # 站稳 N 日：取最近 N 日的 instant_deviation 序列（最后一项为当日）
         stable_days = int((config.get("scoring") or {}).get("instant_deviation_stable_days", 3) or 3)
         series_rows = (
@@ -390,6 +401,10 @@ def _fill_gms_score_fallback(db: Session, code: str, target_date: str, market_ty
             "ma60_flat": calc_row.get("ma60_flat"),
             "ma60_flat_change_pct": calc_row.get("ma60_flat_change_pct"),
             "ma60_flat_lookback_days": calc_row.get("ma60_flat_lookback_days"),
+            "observation_period_high": calc_row.get("observation_period_high"),
+            "observation_period_low": calc_row.get("observation_period_low"),
+            "observation_range_amplitude_pct": calc_row.get("observation_range_amplitude_pct"),
+            "observation_range_period_days": calc_row.get("observation_range_period_days"),
             "scoring_mechanism": getattr(ind, "scoring_mechanism", "") or resolve_mechanism_id(config),
             "score_base_total": getattr(ind, "score_base_total", ind.score_total),
             "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),

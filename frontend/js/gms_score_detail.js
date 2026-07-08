@@ -72,13 +72,24 @@ const GmsScoreDetail = {
             ma60Hint += `；MA60 非走平（${ma60FlatLookback}日变化 ${chg}）`;
         }
         const formatPenaltyCondition = (p) => {
-            if (p.id !== 'close_below_ma60') return '—';
-            let cond = 'd₂₀ &lt; ma60_d';
-            if (p.ma60_flat) cond += '；MA60 走平，扣分减半';
-            if (p.base_points != null && p.points != null && Number(p.points) !== Number(p.base_points)) {
-                cond += `（${p.base_points}→${p.points}）`;
+            if (p.id === 'close_below_ma60') {
+                let cond = 'd₂₀ &lt; ma60_d';
+                if (p.ma60_flat) cond += '；MA60 走平，扣分减半';
+                if (p.base_points != null && p.points != null && Number(p.points) !== Number(p.base_points)) {
+                    cond += `（${p.base_points}→${p.points}）`;
+                }
+                return cond;
             }
-            return cond;
+            if (p.id === 'observation_range_amplitude') {
+                const th = p.amplitude_threshold_pct != null ? (Number(p.amplitude_threshold_pct) * 100).toFixed(1) + '%' : '30%';
+                const amp = p.observation_range_amplitude_pct != null
+                    ? (Number(p.observation_range_amplitude_pct) * 100).toFixed(2) + '%'
+                    : (sd.observation_range_amplitude_pct != null
+                        ? (Number(sd.observation_range_amplitude_pct) * 100).toFixed(2) + '%'
+                        : '--');
+                return `观察周期振幅 ${amp} &gt; ${th}`;
+            }
+            return '—';
         };
         const versionMetaHtml = `
             <div class="gms-score-detail-section gms-score-detail-meta">
@@ -167,6 +178,8 @@ const GmsScoreDetail = {
                             <tr><td>量比 (m₂₀/m)</td><td>${gmsFmt(sd.volume_ratio, 'ratio')}</td><td>放量/地量判断</td></tr>
                             <tr><td>F/Z (数方比)</td><td>${gmsFmt(sd.fz_ratio, 'ratio')}</td><td>蓄势判断</td></tr>
                             <tr><td>d₂₀ - d (价格vs均线)</td><td>${gmsFmt(sd.instant_deviation, 'num')}</td><td>价格相对均线偏离</td></tr>
+                            <tr><td>观察周期最高/最低</td><td>${gmsFmt(sd.observation_period_high, 'price')} / ${gmsFmt(sd.observation_period_low, 'price')}</td><td>${sd.observation_range_period_days != null ? sd.observation_range_period_days + ' 个交易日' : '观察周期内极值'}</td></tr>
+                            <tr><td>观察周期振幅 (高−低)/高</td><td>${gmsFmt(sd.observation_range_amplitude_pct, 'pct')}</td><td>减分规则「观察周期振幅过大」判定依据</td></tr>
                         </tbody>
                     </table>
                 </div>

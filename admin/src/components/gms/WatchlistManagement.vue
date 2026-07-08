@@ -136,6 +136,17 @@
                   <span class="text-sm text-gray-600">扣分</span>
                   <el-input-number v-model="rule.points" :min="1" :max="100" :step="1" />
                   <span class="text-sm text-gray-500">分</span>
+                  <template v-if="rule.id === 'observation_range_amplitude'">
+                    <span class="text-sm text-gray-600">振幅阈值</span>
+                    <el-input-number
+                      v-model="rule.amplitude_threshold_pct"
+                      :min="0.01"
+                      :max="2"
+                      :step="0.01"
+                      :precision="2"
+                    />
+                    <span class="text-xs text-gray-400">（0.30 = 30%）</span>
+                  </template>
                   <span v-if="penaltyRuleHint(rule.id)" class="text-xs text-gray-400">{{ penaltyRuleHint(rule.id) }}</span>
                 </div>
                 <el-button size="small" @click="addPenaltyRule">添加规则</el-button>
@@ -371,6 +382,9 @@ function defaultPenaltyRules(enabledOnly = false): GMSPenaltyRule[] {
     label: t.label,
     enabled: enabledOnly,
     points: t.default_points ?? 10,
+    ...(t.id === 'observation_range_amplitude'
+      ? { amplitude_threshold_pct: t.default_amplitude_threshold_pct ?? 0.3 }
+      : {}),
   }))
 }
 
@@ -409,6 +423,9 @@ function addPenaltyRule() {
     label: next.label,
     enabled: true,
     points: next.default_points ?? 10,
+    ...(next.id === 'observation_range_amplitude'
+      ? { amplitude_threshold_pct: next.default_amplitude_threshold_pct ?? 0.3 }
+      : {}),
   })
 }
 

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ._helpers import safe_float
 
@@ -33,6 +33,13 @@ PENALTY_RULE_TYPES = {
         "description": "Δ/d₂₀ 超过配置的 overbought_ratio 阈值时扣分。",
         "default_points": 12,
     },
+    "observation_range_amplitude": {
+        "id": "observation_range_amplitude",
+        "label": "观察周期振幅过大",
+        "description": "策略观察周期内（默认 20 个交易日）最高价与最低价区间振幅 (高−低)/高 超过阈值时扣分；默认阈值 30%，扣 10 分。",
+        "default_points": 10,
+        "default_amplitude_threshold_pct": 0.30,
+    },
 }
 
 
@@ -51,7 +58,12 @@ def _close_price(row: Dict[str, Any]) -> float:
     return 0.0
 
 
-def _eval_rule(rule_id: str, row: Dict[str, Any], config: Dict[str, Any]) -> bool:
+def _eval_rule(
+    rule_id: str,
+    row: Dict[str, Any],
+    config: Dict[str, Any],
+    rule: Optional[Dict[str, Any]] = None,
+) -> bool:
     if rule_id == "close_below_ma60":
         close = _close_price(row)
         ma60 = row.get("ma60_d")
@@ -83,6 +95,15 @@ def _eval_rule(rule_id: str, row: Dict[str, Any], config: Dict[str, Any]) -> boo
         ratio_d20 = safe_float(row.get("ratio_d20"), 0.0)
         return ratio_d20 > th
 
+    if rule_id == "observation_range_amplitude":
+        amp = row.get("observation_range_amplitude_pct")
+        if amp is None:
+            return False
+        from ..observation_range import resolve_amplitude_threshold_pct
+
+        threshold = resolve_amplitude_threshold_pct(rule=rule or {}, config=config)
+        return safe_float(amp, -1.0) > threshold
+
     return False
 
 
@@ -104,6 +125,16 @@ def _effective_penalty_points(
     base_points: float,
 ) -> Tuple[float, Dict[str, Any]]:
     extra: Dict[str, Any] = {"base_points": base_points}
+    if rule_id == "observation_range_amplitude":
+        from ..observation_range import resolve_amplitude_threshold_pct
+
+        extra["observation_range_amplitude_pct"] = row.get("observation_range_amplitude_pct")
+        extra["amplitude_threshold_pct"] = resolve_amplitude_threshold_pct(rule=rule, config=config)
+        extra["observation_period_high"] = row.get("observation_period_high")
+        extra["observation_period_low"] = row.get("observation_period_low")
+        if row.get("observation_range_period_days") is not None:
+            extra["observation_range_period_days"] = row.get("observation_range_period_days")
+        return base_points, extra
     if rule_id != "close_below_ma60":
         return base_points, extra
     half_when_flat = rule.get("half_when_ma60_flat", True)
@@ -143,7 +174,7 @@ class PenaltyEngine:
             points = safe_float(rule.get("points"), 0.0)
             if points <= 0:
                 continue
-            if not _eval_rule(rid, row, self.config):
+            if not _eval_rule(rid, row, self.config, rule=rule):
                 continue
             meta = PENALTY_RULE_TYPES.get(rid, {})
             label = rule.get("label") or meta.get("label") or rid

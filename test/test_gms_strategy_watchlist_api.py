@@ -213,6 +213,7 @@ def test_gms_scoring_mechanisms_and_penalty_types():
     assert penalty_resp.status_code == 200
     penalty_ids = {p["id"] for p in penalty_resp.json()["data"]}
     assert "close_below_ma60" in penalty_ids
+    assert "observation_range_amplitude" in penalty_ids
 
 
 def test_gms_strategy_version_scoring_create_and_update():
