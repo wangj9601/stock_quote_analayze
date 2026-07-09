@@ -866,11 +866,24 @@
                         <option value="">加载中…</option>
                     </select>
                     <span class="param-rule">与回测管理中心「策略配置」同源；切换版本会从服务端同步下方参数</span>
-                    <label style="display:block;margin-top:8px;font-size:13px;cursor:pointer;">
-                        <input type="checkbox" id="gms-param-override" style="margin-right:6px;">
-                        临时用下方表单覆盖服务端参数（高级）
-                    </label>
+                    <div class="gms-param-override-bar">
+                        <label class="gms-param-override-check" for="gms-param-override">
+                            <input type="checkbox" id="gms-param-override">
+                            临时用下方表单覆盖服务端参数（高级）
+                        </label>
+                        <button
+                            type="button"
+                            id="gms-param-override-toggle"
+                            class="gms-param-collapse-toggle"
+                            aria-expanded="false"
+                            aria-controls="gms-param-override-panel"
+                        >
+                            <span class="gms-param-collapse-label">展开参数表单</span>
+                            <span class="gms-param-collapse-icon" aria-hidden="true">▼</span>
+                        </button>
+                    </div>
                 </div>
+                <div id="gms-param-override-panel" class="gms-param-override-panel is-collapsed" aria-hidden="true">
                 <div class="params-grid gms-params-grid">
                     <div class="parameter-group">
                         <label for="gms-start_date">策略起始交易日期</label>
@@ -1005,6 +1018,7 @@
                     <button type="button" id="gmsParamsSyncBtn" class="gms-btn-outline" type="button">从服务端同步</button>
                     <button type="button" id="gmsParamsSaveBtn" class="refresh-btn">保存到本地</button>
                     <span id="gmsParamsSaveStatus" class="search-date" style="margin-left: 8px;"></span>
+                </div>
                 </div>
             </div>
 

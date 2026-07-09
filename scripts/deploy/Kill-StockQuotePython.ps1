@@ -218,6 +218,11 @@ if ($skippedNonRoot -gt 0) {
 $taskkillExe = [System.IO.Path]::Combine($env:SystemRoot, 'System32', 'taskkill.exe')
 $killed = 0
 
+$killHelpers = Join-Path $PSScriptRoot 'ProcessKillHelpers.ps1'
+if (Test-Path -LiteralPath $killHelpers) {
+    . $killHelpers
+}
+
 foreach ($r in $rootRows) {
     $procIdKill = $r.ProcessId
     $reason = $r.Reason
@@ -238,7 +243,14 @@ foreach ($r in $rootRows) {
         continue
     }
 
-    # taskkill 会向 stderr 写中文提示；脚本顶部为 Stop 时会变成终止错误，故临时忽略
+    if (Get-Command Invoke-StopProcessTreeIfAlive -ErrorAction SilentlyContinue) {
+        if (Invoke-StopProcessTreeIfAlive -ProcessId $procIdKill -Reason $reason -ExecutablePath $exePathKill -TaskkillExe $taskkillExe) {
+            $killed++
+        }
+        continue
+    }
+
+    # fallback（缺少 ProcessKillHelpers.ps1 时）
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'SilentlyContinue'
     try {
@@ -247,29 +259,6 @@ foreach ($r in $rootRows) {
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "KILL: taskkill /F /T PID=$procIdKill reason=$reason" -ForegroundColor DarkYellow
                 $killed++
-            }
-            else {
-                Write-Host "WARN: taskkill /F /T exit=$LASTEXITCODE PID=$procIdKill reason=$reason — trying Stop-Process" -ForegroundColor Yellow
-                try {
-                    $ErrorActionPreference = 'Stop'
-                    Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-                    Write-Host "KILL: Stop-Process PID=$procIdKill reason=$reason" -ForegroundColor DarkYellow
-                    $killed++
-                }
-                catch {
-                    Write-Host "WARN: Stop-Process PID=$procIdKill msg=$($_.Exception.Message)" -ForegroundColor Yellow
-                }
-            }
-        }
-        else {
-            $ErrorActionPreference = 'Stop'
-            try {
-                Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-                Write-Host "KILL: Stop-Process PID=$procIdKill reason=$reason (no System32\taskkill.exe)" -ForegroundColor DarkYellow
-                $killed++
-            }
-            catch {
-                Write-Host "WARN: Stop-Process PID=$procIdKill msg=$($_.Exception.Message)" -ForegroundColor Yellow
             }
         }
     }

@@ -2450,6 +2450,7 @@ const ScreeningPage = {
                 void this.syncGmsParamsFromServer(this.gmsConfigId);
             });
         }
+        this.initGmsParamOverrideCollapse();
 
         // GMS 得分明细：点击「得分明细」展开/收起（事件委托）
         const gmsContainer = document.getElementById('resultsContainer-gms');
@@ -3312,6 +3313,42 @@ const ScreeningPage = {
         set('gms-weight_mom_ratio_d1', data.weight_mom_ratio_d1);
         set('gms-weight_mom_deviation', data.weight_mom_deviation);
         set('gms-weight_mom_volume', data.weight_mom_volume);
+    },
+
+    setGmsParamOverridePanelExpanded(expanded) {
+        const panel = document.getElementById('gms-param-override-panel');
+        const toggle = document.getElementById('gms-param-override-toggle');
+        if (!panel) return;
+        panel.classList.toggle('is-collapsed', !expanded);
+        panel.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            const label = toggle.querySelector('.gms-param-collapse-label');
+            const icon = toggle.querySelector('.gms-param-collapse-icon');
+            if (label) label.textContent = expanded ? '收起参数表单' : '展开参数表单';
+            if (icon) icon.textContent = expanded ? '▲' : '▼';
+        }
+    },
+
+    initGmsParamOverrideCollapse() {
+        const panel = document.getElementById('gms-param-override-panel');
+        const toggle = document.getElementById('gms-param-override-toggle');
+        const overrideEl = document.getElementById('gms-param-override');
+        if (!panel) return;
+        this.setGmsParamOverridePanelExpanded(false);
+        if (toggle) {
+            toggle.addEventListener('click', () => {
+                const willExpand = panel.classList.contains('is-collapsed');
+                this.setGmsParamOverridePanelExpanded(willExpand);
+            });
+        }
+        if (overrideEl) {
+            overrideEl.addEventListener('change', () => {
+                if (overrideEl.checked) {
+                    this.setGmsParamOverridePanelExpanded(true);
+                }
+            });
+        }
     },
 
     async syncGmsParamsFromServer(configId, showToast = true) {

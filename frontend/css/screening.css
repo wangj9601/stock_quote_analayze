@@ -726,6 +726,58 @@
     font-weight: 600;
 }
 
+.gms-param-override-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin-top: 10px;
+}
+
+.gms-param-override-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    margin: 0;
+}
+
+.gms-param-collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    color: #1976d2;
+    background: #f5f9ff;
+    border: 1px solid #cfe3fc;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.gms-param-collapse-toggle:hover {
+    background: #e8f2fd;
+    border-color: #90caf9;
+}
+
+.gms-param-collapse-icon {
+    font-size: 11px;
+    line-height: 1;
+}
+
+.gms-param-override-panel.is-collapsed {
+    display: none;
+}
+
+.gms-param-override-panel:not(.is-collapsed) {
+    margin-top: 12px;
+    padding-top: 4px;
+    border-top: 1px dashed #e0e0e0;
+}
+
 .params-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

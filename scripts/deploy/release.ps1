@@ -779,44 +779,33 @@ function Invoke-KillPythonSameInterpreter {
             Write-Host ('[INFO] Kill python: {0} matched child(ren) under same tree — taskkill /T on {1} root(s) only.' -f $skippedNonRoot, $rootRows.Count) -ForegroundColor DarkGray
         }
 
-        $prevEap = $ErrorActionPreference
+        $killHelpers = Join-Path $PSScriptRoot 'ProcessKillHelpers.ps1'
+        if (Test-Path -LiteralPath $killHelpers) {
+            . $killHelpers
+        }
+
         foreach ($r in $rootRows) {
             $procIdKill = [int]$r.ProcessId
             $reason = [string]$r.Reason
             $exePathKill = [string]$r.ExecutablePath
-            $exeDispKill = if ([string]::IsNullOrWhiteSpace($exePathKill)) { 'NO_EXE_PATH' } else { $exePathKill }
-            $ErrorActionPreference = 'SilentlyContinue'
-            try {
-                if (Test-Path -LiteralPath $taskkillExe) {
-                    $null = & $taskkillExe /F /T /PID $procIdKill 2>&1
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host ('KILL: taskkill /F /T PID={0} reason={1} exe={2}' -f $procIdKill, $reason, $exeDispKill) -ForegroundColor DarkYellow
-                    }
-                    else {
-                        Write-Host ("[WARN] taskkill /F /T exit={0} PID={1} — trying Stop-Process" -f $LASTEXITCODE, $procIdKill) -ForegroundColor Yellow
-                        $ErrorActionPreference = 'Stop'
-                        try {
-                            Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-                            Write-Host ('KILL: Stop-Process PID={0} reason={1}' -f $procIdKill, $reason) -ForegroundColor DarkYellow
-                        }
-                        catch {
-                            Write-Host ("[WARN] Stop-Process PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow
-                        }
-                    }
-                }
-                else {
-                    $ErrorActionPreference = 'Stop'
-                    try {
-                        Stop-Process -Id $procIdKill -Force -ErrorAction Stop
-                        Write-Host ('KILL: Stop-Process PID={0} reason={1} (no taskkill.exe)' -f $procIdKill, $reason) -ForegroundColor DarkYellow
-                    }
-                    catch {
-                        Write-Host ("[WARN] Stop-Process PID {0}: {1}" -f $procIdKill, $_.Exception.Message) -ForegroundColor Yellow
-                    }
-                }
+            if (Get-Command Invoke-StopProcessTreeIfAlive -ErrorAction SilentlyContinue) {
+                $null = Invoke-StopProcessTreeIfAlive -ProcessId $procIdKill -Reason $reason -ExecutablePath $exePathKill -TaskkillExe $taskkillExe
             }
-            finally {
-                $ErrorActionPreference = $prevEap
+            else {
+                $exeDispKill = if ([string]::IsNullOrWhiteSpace($exePathKill)) { 'NO_EXE_PATH' } else { $exePathKill }
+                $prevEap = $ErrorActionPreference
+                $ErrorActionPreference = 'SilentlyContinue'
+                try {
+                    if (Test-Path -LiteralPath $taskkillExe) {
+                        $null = & $taskkillExe /F /T /PID $procIdKill 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host ('KILL: taskkill /F /T PID={0} reason={1} exe={2}' -f $procIdKill, $reason, $exeDispKill) -ForegroundColor DarkYellow
+                        }
+                    }
+                }
+                finally {
+                    $ErrorActionPreference = $prevEap
+                }
             }
         }
 
