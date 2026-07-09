@@ -1,0 +1,65 @@
+{
+  "description": "GMS 交易回测 P0 三组对比任务（基于 2026-05~06 科创板观察股池回测复盘）",
+  "base": {
+    "market": "cn",
+    "cn_board_segment": "KCB",
+    "start_date": "2026-05-01",
+    "end_date": "2026-06-30",
+    "target_pct": 0.1,
+    "horizon_days": 20,
+    "min_score": 70,
+    "backtest_type": "trade_simulation",
+    "commission_bps": 3,
+    "slippage_bps": 5,
+    "atr_period": 14,
+    "init_stop_atr_k": 2.6,
+    "trail_stop_mode": "percent",
+    "trail_atr_k": 3.4,
+    "profit_lock_trigger_r": 2.0,
+    "profit_lock_r": 0.4,
+    "time_stop_bars": 20,
+    "position_fraction": 0.5,
+    "stock_pool_mode": "gms_watchlist"
+  },
+  "variants": [
+    {
+      "key": "baseline",
+      "task_name": "P0对比-基线(止损10跟踪10保本1R)",
+      "stop_loss_pct": 0.1,
+      "trail_pct": 0.1,
+      "breakeven_trigger_r": 1.0,
+      "partial_take_profit_r": 20.0,
+      "partial_take_ratio": 0.0
+    },
+    {
+      "key": "trend_hold",
+      "task_name": "P0对比-持趋势(止损8跟踪14保本1.5R分批35%)",
+      "stop_loss_pct": 0.08,
+      "trail_pct": 0.14,
+      "breakeven_trigger_r": 1.5,
+      "partial_take_profit_r": 1.5,
+      "partial_take_ratio": 0.35
+    },
+    {
+      "key": "conservative",
+      "task_name": "P0对比-稳健预设(止损5跟踪8时间10)",
+      "stop_loss_pct": 0.05,
+      "trail_pct": 0.08,
+      "breakeven_trigger_r": 1.1,
+      "profit_lock_trigger_r": 2.2,
+      "profit_lock_r": 0.6,
+      "partial_take_profit_r": 999,
+      "partial_take_ratio": 0.0,
+      "time_stop_bars": 10
+    }
+  ],
+  "compare_metrics": [
+    "胜率",
+    "平均单笔收益率",
+    "平均R倍数",
+    "出场原因分布",
+    "命中目标但仍亏损比例",
+    "平均持有K线数",
+    "最大回撤"
+  ]
+}
