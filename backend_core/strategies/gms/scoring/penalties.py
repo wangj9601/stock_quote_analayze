@@ -12,7 +12,7 @@ PENALTY_RULE_TYPES = {
     "close_below_ma60": {
         "id": "close_below_ma60",
         "label": "收盘低于60日均线",
-        "description": "当日收盘价 d₂₀ 低于 60 日均线 ma60_d 时扣分；若 MA60 走平（默认回看 observation_period 个交易日，变化率 < 1.5%）则扣分减半。",
+        "description": "当日收盘价 d₂₀ 低于 60 日均线 ma60_d 时扣分；若 MA60 走平（默认回看「观察周期」内的交易日数，通常 20 天，与下方 MA60 走平判定中的回看周期一致；变化率 < 1.5%）则扣分减半。",
         "default_points": 10,
     },
     "volume_shrink_after_breakout": {
@@ -30,13 +30,13 @@ PENALTY_RULE_TYPES = {
     "excessive_deviation": {
         "id": "excessive_deviation",
         "label": "乖离过大",
-        "description": "Δ/d₂₀ 超过配置的 overbought_ratio 阈值时扣分。",
+        "description": "Δ/d₂₀ 超过「乖离过大阈值」时扣分（默认 15%，对应配置项 overbought_ratio / 退出·乖离过大阈值）。",
         "default_points": 12,
     },
     "observation_range_amplitude": {
         "id": "observation_range_amplitude",
         "label": "观察周期振幅过大",
-        "description": "策略观察周期内（默认 20 个交易日）最高价与最低价区间振幅 (高−低)/高 超过阈值时扣分；默认阈值 30%，扣 10 分。",
+        "description": "策略观察周期（observation_period，默认 20 个交易日）内，最高价与最低价区间振幅 (高−低)/高 超过阈值时扣分；默认阈值 30%，扣 10 分。",
         "default_points": 10,
         "default_amplitude_threshold_pct": 0.30,
     },

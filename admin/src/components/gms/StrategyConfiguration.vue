@@ -158,9 +158,9 @@
                     <el-input-number v-model="row.points" :min="0" :max="50" size="small" />
                   </template>
                 </el-table-column>
-                <el-table-column label="参数" min-width="160">
+                <el-table-column label="参数" min-width="200">
                   <template #default="{ row }">
-                    <div v-if="row.id === 'observation_range_amplitude'" class="flex items-center gap-1">
+                    <div v-if="row.id === 'observation_range_amplitude'" class="flex items-center gap-2 flex-wrap">
                       <span class="text-xs text-gray-500 whitespace-nowrap">振幅阈值</span>
                       <el-input-number
                         v-model="row.amplitude_threshold_pct"
@@ -169,7 +169,10 @@
                         :step="0.01"
                         :precision="2"
                         size="small"
+                        controls-position="right"
+                        style="width: 132px"
                       />
+                      <span class="text-xs text-gray-400">（0.30=30%）</span>
                     </div>
                     <span v-else class="text-xs text-gray-400">—</span>
                   </template>
@@ -283,9 +286,9 @@ function syncPenaltyRulesFromForm(params: Record<string, any>) {
     }
     if (meta.id === 'observation_range_amplitude') {
       row.amplitude_threshold_pct =
-        cur.amplitude_threshold_pct != null
-          ? cur.amplitude_threshold_pct
-          : meta.default_amplitude_threshold_pct ?? 0.3
+        cur.amplitude_threshold_pct != null && !Number.isNaN(Number(cur.amplitude_threshold_pct))
+          ? Number(cur.amplitude_threshold_pct)
+          : Number(meta.default_amplitude_threshold_pct ?? 0.3)
     }
     return row
   })

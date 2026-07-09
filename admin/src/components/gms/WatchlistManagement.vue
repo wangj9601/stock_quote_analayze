@@ -128,31 +128,59 @@
 
               <template v-if="scoringForm.scoring_mechanism === 'tiered_dual_penalty'">
                 <el-divider content-position="left">减分规则</el-divider>
-                <p class="text-xs text-gray-500 mb-2">
+                <p class="text-xs text-gray-500 mb-3">
                   增强版在基础分上按规则扣分；勾选启用并设置每条规则的扣分分值（1～100），保存后选股明细即时生效。
                 </p>
-                <div v-for="(rule, idx) in scoringForm.penalty_rules" :key="idx" class="penalty-row">
-                  <el-checkbox v-model="rule.enabled">{{ rule.label || rule.id }}</el-checkbox>
-                  <span class="text-sm text-gray-600">扣分</span>
-                  <el-input-number v-model="rule.points" :min="1" :max="100" :step="1" />
-                  <span class="text-sm text-gray-500">分</span>
-                  <template v-if="rule.id === 'observation_range_amplitude'">
-                    <span class="text-sm text-gray-600">振幅阈值</span>
-                    <el-input-number
-                      v-model="rule.amplitude_threshold_pct"
-                      :min="0.01"
-                      :max="2"
-                      :step="0.01"
-                      :precision="2"
-                    />
-                    <span class="text-xs text-gray-400">（0.30 = 30%）</span>
-                  </template>
-                  <span v-if="penaltyRuleHint(rule.id)" class="text-xs text-gray-400">{{ penaltyRuleHint(rule.id) }}</span>
+                <div class="penalty-rules-list">
+                  <div
+                    v-for="rule in scoringForm.penalty_rules"
+                    :key="rule.id"
+                    class="penalty-rule-item"
+                  >
+                    <div class="penalty-rule-head">
+                      <el-checkbox v-model="rule.enabled" class="penalty-rule-check">
+                        {{ rule.label || rule.id }}
+                      </el-checkbox>
+                      <div class="penalty-rule-controls">
+                        <div class="penalty-field">
+                          <span class="penalty-field-label">扣分</span>
+                          <el-input-number
+                            v-model="rule.points"
+                            :min="1"
+                            :max="100"
+                            :step="1"
+                            controls-position="right"
+                            class="penalty-input-num"
+                          />
+                          <span class="penalty-field-suffix">分</span>
+                        </div>
+                        <div
+                          v-if="rule.id === 'observation_range_amplitude'"
+                          class="penalty-field penalty-field-threshold"
+                        >
+                          <span class="penalty-field-label">振幅阈值</span>
+                          <el-input-number
+                            v-model="rule.amplitude_threshold_pct"
+                            :min="0.01"
+                            :max="2"
+                            :step="0.01"
+                            :precision="2"
+                            controls-position="right"
+                            class="penalty-input-num penalty-input-threshold"
+                          />
+                          <span class="penalty-field-suffix">（0.30 = 30%）</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p v-if="penaltyRuleHint(rule.id)" class="penalty-rule-desc">
+                      {{ penaltyRuleHint(rule.id) }}
+                    </p>
+                  </div>
                 </div>
-                <el-button size="small" @click="addPenaltyRule">添加规则</el-button>
+                <el-button size="small" class="mt-2" @click="addPenaltyRule">添加规则</el-button>
                 <el-divider content-position="left">MA60 走平判定</el-divider>
                 <p class="text-xs text-gray-500 mb-2">
-                  收盘低于 MA60 时，若 MA60 在回看周期内变化率低于阈值，减分取半。回看周期默认与 GMS 观察周期（20 天）一致。
+                  收盘低于 MA60 时，若 MA60 在回看周期内变化率低于阈值，减分取半。回看周期默认与策略<strong>观察周期</strong>（observation_period，默认 20 个交易日）一致，可在下方单独修改。
                 </p>
                 <el-row :gutter="16">
                   <el-col :span="12">
@@ -373,25 +401,116 @@ function versionOptionLabel(v: GMSStrategyVersion) {
   return `${v.strategy_code}-V${v.version_no} ${v.version_name}${tag}`
 }
 
+function penaltyRuleMetaList(): GMSPenaltyRuleType[] {
+  const fallback: GMSPenaltyRuleType[] = [
+    { id: 'close_below_ma60', label: '收盘低于 MA60', default_points: 10 },
+    {
+      id: 'observation_range_amplitude',
+      label: '观察周期振幅过大',
+      default_points: 10,
+      default_amplitude_threshold_pct: 0.3,
+    },
+  ]
+  const base = penaltyRuleTypes.value.length ? [...penaltyRuleTypes.value] : fallback
+  if (!base.some((t) => t.id === 'observation_range_amplitude')) {
+    base.push(fallback[1])
+  }
+  return base
+}
+
+function normalizePenaltyRuleFields(rule: GMSPenaltyRule, meta?: GMSPenaltyRuleType): GMSPenaltyRule {
+  const m = meta || penaltyRuleMetaList().find((t) => t.id === rule.id)
+  const out: GMSPenaltyRule = {
+    id: rule.id,
+    label: rule.label || m?.label || rule.id,
+    enabled: rule.enabled !== false,
+    points: toPenaltyPoints(rule.points ?? m?.default_points),
+  }
+  if (rule.id === 'observation_range_amplitude') {
+    out.amplitude_threshold_pct = toAmplitudeThreshold(
+      rule.amplitude_threshold_pct ?? m?.default_amplitude_threshold_pct
+    )
+  }
+  if (rule.id === 'close_below_ma60') {
+    out.half_when_ma60_flat = rule.half_when_ma60_flat !== false
+  }
+  return out
+}
+
+function toPenaltyPoints(value: unknown, fallback = 10): number {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+function toAmplitudeThreshold(value: unknown, fallback = 0.3): number {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+/** 与 StrategyConfiguration 一致：按规则类型补全 points / amplitude_threshold_pct，避免 el-input-number 绑定 undefined */
+function syncPenaltyRulesFromConfig(existing: GMSPenaltyRule[] = []): GMSPenaltyRule[] {
+  const byId = Object.fromEntries(existing.map((r) => [r.id, r]))
+  const synced = penaltyRuleMetaList().map((meta) => {
+    const cur = byId[meta.id]
+    return normalizePenaltyRuleFields(
+      {
+        id: meta.id,
+        label: meta.label,
+        enabled: cur != null ? cur.enabled !== false : false,
+        points: cur?.points,
+        amplitude_threshold_pct: cur?.amplitude_threshold_pct,
+        half_when_ma60_flat: cur?.half_when_ma60_flat,
+      },
+      meta
+    )
+  })
+  for (const r of existing) {
+    if (!synced.some((s) => s.id === r.id)) {
+      synced.push(normalizePenaltyRuleFields(r))
+    }
+  }
+  return synced
+}
+
+function serializePenaltyRulesForSave(rules: GMSPenaltyRule[]): GMSPenaltyRule[] {
+  return syncPenaltyRulesFromConfig(rules).map((r) => {
+    const item: GMSPenaltyRule = {
+      id: r.id,
+      enabled: r.enabled,
+      points: r.points,
+      label: r.label,
+    }
+    if (r.id === 'observation_range_amplitude') {
+      item.amplitude_threshold_pct = r.amplitude_threshold_pct
+    }
+    if (r.id === 'close_below_ma60') {
+      item.half_when_ma60_flat = r.half_when_ma60_flat
+    }
+    return item
+  })
+}
+
 function defaultPenaltyRules(enabledOnly = false): GMSPenaltyRule[] {
-  const types = penaltyRuleTypes.value.length
-    ? penaltyRuleTypes.value
-    : [{ id: 'close_below_ma60', label: '收盘低于 MA60', default_points: 10 }]
-  return types.map((t) => ({
-    id: t.id,
-    label: t.label,
-    enabled: enabledOnly,
-    points: t.default_points ?? 10,
-    ...(t.id === 'observation_range_amplitude'
-      ? { amplitude_threshold_pct: t.default_amplitude_threshold_pct ?? 0.3 }
-      : {}),
-  }))
+  const rules = syncPenaltyRulesFromConfig([])
+  if (enabledOnly) {
+    return rules.map((r) => ({ ...r, enabled: true }))
+  }
+  return rules
 }
 
 function penaltyRuleHint(ruleId?: string): string {
   if (!ruleId) return ''
   const meta = penaltyRuleTypes.value.find((t) => t.id === ruleId)
-  return meta?.description || (ruleId === 'close_below_ma60' ? '条件：收盘价 d₂₀ < MA60' : '')
+  if (meta?.description) return meta.description
+  const fallbacks: Record<string, string> = {
+    close_below_ma60:
+      '条件：收盘价 d₂₀ < MA60；MA60 走平时扣分减半（回看周期默认与观察周期相同，通常 20 个交易日）。',
+    excessive_deviation:
+      'Δ/d₂₀ 超过乖离过大阈值时扣分（默认 15%，可在策略参数「退出·乖离过大阈值」overbought_ratio 中配置）。',
+    observation_range_amplitude:
+      '观察周期内 (高−低)/高 超过振幅阈值时扣分；观察周期（observation_period）默认 20 个交易日。',
+  }
+  return fallbacks[ruleId] || ''
 }
 
 function onMechanismChange(mid: string) {
@@ -418,15 +537,18 @@ function addPenaltyRule() {
     ElMessage.info('已添加全部可用减分规则')
     return
   }
-  scoringForm.value.penalty_rules.push({
-    id: next.id,
-    label: next.label,
-    enabled: true,
-    points: next.default_points ?? 10,
-    ...(next.id === 'observation_range_amplitude'
-      ? { amplitude_threshold_pct: next.default_amplitude_threshold_pct ?? 0.3 }
-      : {}),
-  })
+  scoringForm.value.penalty_rules = syncPenaltyRulesFromConfig([
+    ...scoringForm.value.penalty_rules,
+    {
+      id: next.id,
+      label: next.label,
+      enabled: true,
+      points: toPenaltyPoints(next.default_points),
+      ...(next.id === 'observation_range_amplitude'
+        ? { amplitude_threshold_pct: toAmplitudeThreshold(next.default_amplitude_threshold_pct) }
+        : {}),
+    },
+  ])
 }
 
 const loadVersions = async () => {
@@ -442,13 +564,22 @@ const loadScoringPanel = async () => {
   if (!selectedVersionId.value) return
   scoringLoading.value = true
   try {
+    if (!penaltyRuleTypes.value.length) {
+      try {
+        penaltyRuleTypes.value = await gmsApiService.getPenaltyRuleTypes()
+      } catch {
+        /* 使用 penaltyRuleMetaList 内置 fallback */
+      }
+    }
     const full = await gmsApiService.getStrategyVersionFull(selectedVersionId.value)
     const v = full.version
     const params = full.config?.config_params || {}
     const scoring = (params.scoring || {}) as Record<string, any>
+    const rawRules = ((v.penalty_rules?.length ? v.penalty_rules : scoring.penalty_rules) || []) as GMSPenaltyRule[]
+    const mergedRules = syncPenaltyRulesFromConfig(rawRules)
     scoringForm.value = {
       scoring_mechanism: v.scoring_mechanism || scoring.mechanism || 'tiered_dual_max',
-      penalty_rules: (v.penalty_rules?.length ? v.penalty_rules : scoring.penalty_rules) || [],
+      penalty_rules: mergedRules.map((r) => ({ ...r })),
       config: {
         scoring: {
           watch_threshold: scoring.watch_threshold ?? 60,
@@ -463,7 +594,7 @@ const loadScoringPanel = async () => {
     }
     if (
       scoringForm.value.scoring_mechanism === 'tiered_dual_penalty' &&
-      !scoringForm.value.penalty_rules.length
+      !rawRules.length
     ) {
       scoringForm.value.penalty_rules = defaultPenaltyRules(true)
     }
@@ -489,7 +620,7 @@ const saveScoring = async () => {
       scoring_mechanism: scoringForm.value.scoring_mechanism,
       penalty_rules:
         scoringForm.value.scoring_mechanism === 'tiered_dual_penalty'
-          ? scoringForm.value.penalty_rules
+          ? serializePenaltyRulesForSave(scoringForm.value.penalty_rules)
           : [],
       config: scoringForm.value.config,
     })
@@ -804,5 +935,65 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   margin-bottom: 8px;
+}
+.penalty-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.penalty-rule-item {
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.penalty-rule-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 20px;
+}
+.penalty-rule-check {
+  min-width: 168px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+.penalty-rule-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  flex: 1;
+  min-width: 280px;
+}
+.penalty-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.penalty-field-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  white-space: nowrap;
+}
+.penalty-field-suffix {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+.penalty-input-num {
+  width: 120px;
+}
+.penalty-input-threshold {
+  width: 132px;
+}
+.penalty-rule-desc {
+  margin: 10px 0 0 0;
+  padding-left: 24px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--el-text-color-secondary);
+  word-break: break-word;
 }
 </style>
