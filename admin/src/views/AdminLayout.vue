@@ -88,7 +88,7 @@ const menuItems = [
   { path: '/gms-watchlist', name: 'GMS策略版本', icon: Star },
   { path: '/triple-volume-observe', name: '3倍量观察股', icon: Notebook },
   { path: '/indicators', name: '指标管理', icon: Histogram },
-  { path: '/gms-management', name: 'GMS回测管理', icon: TrendCharts },
+  { path: '/gms-management', name: 'GMS策略回测管理', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },

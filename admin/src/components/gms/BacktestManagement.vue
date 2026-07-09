@@ -471,7 +471,132 @@ function getDefaultBacktestDateRange(): { start_date: string; end_date: string }
 
 const defaultBacktestDates = getDefaultBacktestDateRange()
 
+const BACKTEST_FORM_STORAGE_KEY = 'gms_admin_backtest_create_form_v1'
+
 const strategyConfigs = ref<any[]>([])
+function snapshotFormPreferences() {
+  return {
+    task_name: form.task_name,
+    market: form.market,
+    start_date: form.start_date,
+    end_date: form.end_date,
+    target_pct: form.target_pct,
+    horizon_days: form.horizon_days,
+    min_score: form.min_score,
+    backtest_type: form.backtest_type,
+    stop_loss_pct: form.stop_loss_pct,
+    commission_bps: form.commission_bps,
+    slippage_bps: form.slippage_bps,
+    atr_period: form.atr_period,
+    init_stop_atr_k: form.init_stop_atr_k,
+    trail_stop_mode: form.trail_stop_mode,
+    trail_atr_k: form.trail_atr_k,
+    trail_pct: form.trail_pct,
+    breakeven_trigger_r: form.breakeven_trigger_r,
+    profit_lock_trigger_r: form.profit_lock_trigger_r,
+    profit_lock_r: form.profit_lock_r,
+    partial_take_profit_r: form.partial_take_profit_r,
+    partial_take_ratio: form.partial_take_ratio,
+    time_stop_bars: form.time_stop_bars,
+    position_fraction: form.position_fraction,
+    stock_pool_mode: form.stock_pool_mode,
+    stock_code: form.stock_code,
+    stock_list: form.stock_list,
+    strategyConfigId: strategyConfigId.value,
+    cnBoardSegment: cnBoardSegment.value,
+    watchlistScope: watchlistScope.value,
+    watchlistUserId: watchlistUserId.value,
+    tradePreset: tradePreset.value
+  }
+}
+
+function saveFormPreferences() {
+  try {
+    localStorage.setItem(BACKTEST_FORM_STORAGE_KEY, JSON.stringify(snapshotFormPreferences()))
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function applyFormPreferences(raw: Record<string, unknown>) {
+  if (!raw || typeof raw !== 'object') return
+  const assignNum = (key: keyof typeof form, v: unknown) => {
+    if (v === undefined || v === null) return
+    const n = Number(v)
+    if (!Number.isNaN(n)) (form as any)[key] = n
+  }
+  const assignStr = (key: keyof typeof form, v: unknown) => {
+    if (v === undefined || v === null) return
+    ;(form as any)[key] = String(v)
+  }
+  assignStr('task_name', raw.task_name)
+  assignStr('market', raw.market)
+  assignStr('start_date', raw.start_date)
+  assignStr('end_date', raw.end_date)
+  assignNum('target_pct', raw.target_pct)
+  assignNum('horizon_days', raw.horizon_days)
+  assignNum('min_score', raw.min_score)
+  assignStr('backtest_type', raw.backtest_type)
+  assignNum('stop_loss_pct', raw.stop_loss_pct)
+  assignNum('commission_bps', raw.commission_bps)
+  assignNum('slippage_bps', raw.slippage_bps)
+  assignNum('atr_period', raw.atr_period)
+  assignNum('init_stop_atr_k', raw.init_stop_atr_k)
+  assignStr('trail_stop_mode', raw.trail_stop_mode)
+  assignNum('trail_atr_k', raw.trail_atr_k)
+  assignNum('trail_pct', raw.trail_pct)
+  assignNum('breakeven_trigger_r', raw.breakeven_trigger_r)
+  assignNum('profit_lock_trigger_r', raw.profit_lock_trigger_r)
+  assignNum('profit_lock_r', raw.profit_lock_r)
+  assignNum('partial_take_profit_r', raw.partial_take_profit_r)
+  assignNum('partial_take_ratio', raw.partial_take_ratio)
+  assignNum('time_stop_bars', raw.time_stop_bars)
+  assignNum('position_fraction', raw.position_fraction)
+  assignStr('stock_pool_mode', raw.stock_pool_mode)
+  assignStr('stock_code', raw.stock_code)
+  assignStr('stock_list', raw.stock_list)
+  if (raw.strategyConfigId != null) {
+    const sid = Number(raw.strategyConfigId)
+    if (!Number.isNaN(sid) && strategyConfigs.value.some((c: any) => c.id === sid)) {
+      strategyConfigId.value = sid
+    }
+  }
+  const seg = raw.cnBoardSegment
+  if (seg === 'ALL' || seg === 'MAIN' || seg === 'CYB' || seg === 'SZ_SME' || seg === 'KCB' || seg === 'BJ') {
+    cnBoardSegment.value = seg
+  }
+  if (raw.watchlistScope === 'all' || raw.watchlistScope === 'user') {
+    watchlistScope.value = raw.watchlistScope
+  }
+  if (raw.watchlistUserId != null) {
+    const uid = Number(raw.watchlistUserId)
+    if (!Number.isNaN(uid)) watchlistUserId.value = uid
+  }
+  const preset = raw.tradePreset
+  if (preset === 'conservative' || preset === 'balanced' || preset === 'aggressive') {
+    tradePreset.value = preset
+  }
+}
+
+function loadFormPreferences(): boolean {
+  try {
+    const raw = localStorage.getItem(BACKTEST_FORM_STORAGE_KEY)
+    if (!raw) return false
+    applyFormPreferences(JSON.parse(raw) as Record<string, unknown>)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clearFormPreferences() {
+  try {
+    localStorage.removeItem(BACKTEST_FORM_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
 const strategyConfigId = ref<number | undefined>(undefined)
 
 const formRef = ref()
@@ -733,7 +858,8 @@ async function createTask() {
     }
     const taskId = await gmsApi.createBacktest(body)
     ElMessage.success('任务已创建: ' + taskId.slice(0, 8))
-    resetForm()
+    saveFormPreferences()
+    form.task_name = ''
     await refresh()
     emit('task-created', { id: taskId })
   } catch (e: any) {
@@ -762,6 +888,7 @@ function resetForm() {
   watchlistScope.value = 'all'
   watchlistUserId.value = undefined
   cnBoardSegment.value = 'ALL'
+  clearFormPreferences()
 }
 
 async function refresh() {
@@ -868,15 +995,18 @@ defineExpose({ refresh })
 onMounted(async () => {
   try {
     strategyConfigs.value = await gmsApi.listStrategyConfigs(true)
-    const def = strategyConfigs.value.find((c: any) => c.is_default)
-    if (def) strategyConfigId.value = def.id
   } catch {
     /* ignore */
   }
+  const restored = loadFormPreferences()
+  if (!restored) {
+    const def = strategyConfigs.value.find((c: any) => c.is_default)
+    if (def) strategyConfigId.value = def.id
+    const d = getDefaultBacktestDateRange()
+    form.start_date = d.start_date
+    form.end_date = d.end_date
+  }
   await Promise.all([refresh(), loadWatchlistUsers()])
-  const d = getDefaultBacktestDateRange()
-  form.start_date = d.start_date
-  form.end_date = d.end_date
 })
 </script>
 
