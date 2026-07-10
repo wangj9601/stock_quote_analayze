@@ -10,11 +10,12 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="市场" prop="market">
-              <el-select v-model="form.market" placeholder="选择市场" class="w-full">
+              <el-select v-model="form.market" placeholder="选择市场" class="w-full" @change="onMarketChange">
                 <el-option label="A股" value="cn" />
-                <el-option label="港股" value="hk" />
-                <el-option label="A股+港股" value="all" />
+                <el-option label="港股" value="hk" :disabled="isBoardStockPoolMode" />
+                <el-option label="A股+港股" value="all" :disabled="isBoardStockPoolMode" />
               </el-select>
+              <div v-if="isBoardStockPoolMode" class="text-gray-500 text-sm mt-1">行业/概念板块仅适用于 A 股，港股暂无该划分。</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -125,10 +126,12 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="股票池">
-              <el-select v-model="form.stock_pool_mode" class="w-full" placeholder="选择股票池范围">
+              <el-select v-model="form.stock_pool_mode" class="w-full" placeholder="选择股票池范围" @change="onStockPoolModeChange">
                 <el-option label="全市场" value="all" />
                 <el-option label="GMS观察股" value="gms_watchlist" />
                 <el-option label="自选股" value="watchlist" />
+                <el-option v-if="form.market !== 'hk'" label="行业板块" value="industry_board" />
+                <el-option v-if="form.market !== 'hk'" label="概念板块" value="concept_board" />
                 <el-option label="单股回测" value="single" />
                 <el-option label="自定义列表" value="custom" />
               </el-select>
@@ -330,6 +333,56 @@
         <el-form-item v-if="form.stock_pool_mode === 'custom'" label="股票列表" prop="stock_list">
           <el-input v-model="form.stock_list" type="textarea" :rows="4" placeholder="每行一个代码，如 000001&#10;600519&#10;00700" />
         </el-form-item>
+        <el-form-item v-if="form.stock_pool_mode === 'industry_board'" label="行业板块" required>
+          <el-select
+            v-model="selectedIndustryBoardCodes"
+            multiple
+            filterable
+            remote
+            reserve-keyword
+            collapse-tags
+            collapse-tags-tooltip
+            :max-collapse-tags="3"
+            class="w-full"
+            placeholder="搜索并选择行业板块（可多选）"
+            :remote-method="searchIndustryBoards"
+            :loading="industryBoardLoading"
+            @visible-change="onIndustryBoardDropdownVisible"
+          >
+            <el-option
+              v-for="b in industryBoardOptions"
+              :key="b.board_code"
+              :label="`${b.board_name || b.board_code} (${b.board_code})`"
+              :value="b.board_code"
+            />
+          </el-select>
+          <div class="text-gray-500 text-sm mt-1">成分股取所选行业板块的并集；仅 A 股。</div>
+        </el-form-item>
+        <el-form-item v-if="form.stock_pool_mode === 'concept_board'" label="概念板块" required>
+          <el-select
+            v-model="selectedConceptBoardCodes"
+            multiple
+            filterable
+            remote
+            reserve-keyword
+            collapse-tags
+            collapse-tags-tooltip
+            :max-collapse-tags="3"
+            class="w-full"
+            placeholder="搜索并选择概念板块（可多选）"
+            :remote-method="searchConceptBoards"
+            :loading="conceptBoardLoading"
+            @visible-change="onConceptBoardDropdownVisible"
+          >
+            <el-option
+              v-for="b in conceptBoardOptions"
+              :key="b.board_code"
+              :label="`${b.board_name || b.board_code} (${b.board_code})`"
+              :value="b.board_code"
+            />
+          </el-select>
+          <div class="text-gray-500 text-sm mt-1">成分股取所选概念板块的并集；仅 A 股。</div>
+        </el-form-item>
         <el-row v-if="form.stock_pool_mode === 'watchlist'" :gutter="20">
           <el-col :span="12">
             <el-form-item label="自选股范围">
@@ -447,11 +500,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, inject, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, inject, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
 import TaskDetail from './TaskDetail.vue'
 import { formatDateTimeBeijing } from '@/utils/formatBeijingTime'
+import { boardConstituentsService, type BoardSummary } from '@/services/boardConstituents.service'
 
 const gmsApi = inject<any>('gmsApi')
 
@@ -506,7 +560,9 @@ function snapshotFormPreferences() {
     cnBoardSegment: cnBoardSegment.value,
     watchlistScope: watchlistScope.value,
     watchlistUserId: watchlistUserId.value,
-    tradePreset: tradePreset.value
+    tradePreset: tradePreset.value,
+    industryBoardCodes: selectedIndustryBoardCodes.value,
+    conceptBoardCodes: selectedConceptBoardCodes.value
   }
 }
 
@@ -575,6 +631,18 @@ function applyFormPreferences(raw: Record<string, unknown>) {
   const preset = raw.tradePreset
   if (preset === 'conservative' || preset === 'balanced' || preset === 'aggressive') {
     tradePreset.value = preset
+  }
+  if (Array.isArray(raw.industryBoardCodes)) {
+    selectedIndustryBoardCodes.value = raw.industryBoardCodes.map((c) => String(c)).filter(Boolean)
+  }
+  if (Array.isArray(raw.conceptBoardCodes)) {
+    selectedConceptBoardCodes.value = raw.conceptBoardCodes.map((c) => String(c)).filter(Boolean)
+  }
+  if (
+    form.stock_pool_mode === 'industry_board' ||
+    form.stock_pool_mode === 'concept_board'
+  ) {
+    form.market = 'cn'
   }
 }
 
@@ -771,8 +839,108 @@ const watchlistScope = ref<'all' | 'user'>('all')
 const watchlistUserId = ref<number | undefined>(undefined)
 const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
 const cnBoardSegment = ref<'ALL' | 'MAIN' | 'CYB' | 'SZ_SME' | 'KCB' | 'BJ'>('ALL')
+const selectedIndustryBoardCodes = ref<string[]>([])
+const selectedConceptBoardCodes = ref<string[]>([])
+const industryBoardOptions = ref<BoardSummary[]>([])
+const conceptBoardOptions = ref<BoardSummary[]>([])
+const industryBoardLoading = ref(false)
+const conceptBoardLoading = ref(false)
 
-const showCnBoardSegment = computed(() => form.market === 'cn' || form.market === 'all')
+function mergeBoardOptions(target: BoardSummary[], selectedCodes: string[]) {
+  const map = new Map<string, BoardSummary>()
+  for (const item of target) {
+    map.set(item.board_code, item)
+  }
+  for (const code of selectedCodes) {
+    if (!map.has(code)) {
+      map.set(code, { board_code: code, board_name: code, constituent_count: 0, last_updated: null })
+    }
+  }
+  return Array.from(map.values())
+}
+
+async function searchIndustryBoards(keyword = '') {
+  industryBoardLoading.value = true
+  try {
+    const res = await boardConstituentsService.listBoards({
+      boardType: 'industry',
+      keyword: keyword.trim() || undefined,
+      page: 1,
+      pageSize: 80
+    })
+    industryBoardOptions.value = mergeBoardOptions(res.data || [], selectedIndustryBoardCodes.value)
+  } catch {
+    industryBoardOptions.value = mergeBoardOptions([], selectedIndustryBoardCodes.value)
+  } finally {
+    industryBoardLoading.value = false
+  }
+}
+
+async function searchConceptBoards(keyword = '') {
+  conceptBoardLoading.value = true
+  try {
+    const res = await boardConstituentsService.listBoards({
+      boardType: 'concept',
+      keyword: keyword.trim() || undefined,
+      page: 1,
+      pageSize: 80
+    })
+    conceptBoardOptions.value = mergeBoardOptions(res.data || [], selectedConceptBoardCodes.value)
+  } catch {
+    conceptBoardOptions.value = mergeBoardOptions([], selectedConceptBoardCodes.value)
+  } finally {
+    conceptBoardLoading.value = false
+  }
+}
+
+function onIndustryBoardDropdownVisible(visible: boolean) {
+  if (visible && !industryBoardOptions.value.length) {
+    void searchIndustryBoards('')
+  }
+}
+
+function onConceptBoardDropdownVisible(visible: boolean) {
+  if (visible && !conceptBoardOptions.value.length) {
+    void searchConceptBoards('')
+  }
+}
+
+function onStockPoolModeChange(mode: string) {
+  if (mode === 'industry_board') {
+    void searchIndustryBoards('')
+    ensureBoardStockPoolMarketCn('行业板块')
+  } else if (mode === 'concept_board') {
+    void searchConceptBoards('')
+    ensureBoardStockPoolMarketCn('概念板块')
+  }
+}
+
+function ensureBoardStockPoolMarketCn(label: string) {
+  if (form.market !== 'cn') {
+    form.market = 'cn'
+    ElMessage.info(`${label}仅适用于 A 股，已自动将市场设为 A股`)
+  }
+}
+
+function onMarketChange(market: string) {
+  if (
+    market === 'hk' &&
+    (form.stock_pool_mode === 'industry_board' || form.stock_pool_mode === 'concept_board')
+  ) {
+    form.stock_pool_mode = 'all'
+    selectedIndustryBoardCodes.value = []
+    selectedConceptBoardCodes.value = []
+    ElMessage.info('港股暂无行业/概念板块，已切换股票池为全市场')
+  }
+}
+
+const isBoardStockPoolMode = computed(
+  () => form.stock_pool_mode === 'industry_board' || form.stock_pool_mode === 'concept_board'
+)
+
+const showCnBoardSegment = computed(
+  () => form.market === 'cn' || form.market === 'all' || isBoardStockPoolMode.value
+)
 
 const filteredTasks = computed(() => {
   if (!statusFilter.value) return tasks.value
@@ -811,6 +979,18 @@ async function createTask() {
     ElMessage.warning('请选择一个自选股用户')
     return
   }
+  if (form.stock_pool_mode === 'industry_board' && !selectedIndustryBoardCodes.value.length) {
+    ElMessage.warning('请至少选择一个行业板块')
+    return
+  }
+  if (form.stock_pool_mode === 'concept_board' && !selectedConceptBoardCodes.value.length) {
+    ElMessage.warning('请至少选择一个概念板块')
+    return
+  }
+  if (isBoardStockPoolMode.value && form.market !== 'cn') {
+    ElMessage.warning('行业/概念板块回测仅支持 A 股市场')
+    return
+  }
   if (form.target_pct < 0.001 || form.target_pct > 1) {
     ElMessage.warning('目标阈值请在 0.1%～100% 之间（即 0.001～1）')
     return
@@ -819,7 +999,7 @@ async function createTask() {
   try {
     const body: any = {
       task_name: form.task_name || undefined,
-      market: form.market,
+      market: isBoardStockPoolMode.value ? 'cn' : form.market,
       start_date: form.start_date,
       end_date: form.end_date,
       target_pct: form.target_pct,
@@ -851,6 +1031,12 @@ async function createTask() {
     }
     if (form.stock_pool_mode === 'watchlist' && watchlistScope.value === 'user' && watchlistUserId.value) {
       body.watchlist_user_id = watchlistUserId.value
+    }
+    if (form.stock_pool_mode === 'industry_board') {
+      body.industry_board_codes = [...selectedIndustryBoardCodes.value]
+    }
+    if (form.stock_pool_mode === 'concept_board') {
+      body.concept_board_codes = [...selectedConceptBoardCodes.value]
     }
     if (strategyConfigId.value) body.strategy_config_id = strategyConfigId.value
     if (showCnBoardSegment.value && cnBoardSegment.value && cnBoardSegment.value !== 'ALL') {
@@ -888,6 +1074,10 @@ function resetForm() {
   watchlistScope.value = 'all'
   watchlistUserId.value = undefined
   cnBoardSegment.value = 'ALL'
+  selectedIndustryBoardCodes.value = []
+  selectedConceptBoardCodes.value = []
+  industryBoardOptions.value = []
+  conceptBoardOptions.value = []
   clearFormPreferences()
 }
 
@@ -1006,7 +1196,21 @@ onMounted(async () => {
     form.start_date = d.start_date
     form.end_date = d.end_date
   }
+  if (selectedIndustryBoardCodes.value.length) {
+    await searchIndustryBoards('')
+  }
+  if (selectedConceptBoardCodes.value.length) {
+    await searchConceptBoards('')
+  }
   await Promise.all([refresh(), loadWatchlistUsers()])
+})
+
+watch(selectedIndustryBoardCodes, () => {
+  industryBoardOptions.value = mergeBoardOptions(industryBoardOptions.value, selectedIndustryBoardCodes.value)
+})
+
+watch(selectedConceptBoardCodes, () => {
+  conceptBoardOptions.value = mergeBoardOptions(conceptBoardOptions.value, selectedConceptBoardCodes.value)
 })
 </script>
 

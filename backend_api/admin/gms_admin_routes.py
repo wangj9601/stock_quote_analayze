@@ -199,6 +199,106 @@ def _apply_backtest_cn_board_segment(
     return filter_stock_codes_by_board_segment(codes, seg)
 
 
+def _normalize_backtest_board_codes(
+    raw: Optional[List[str]],
+    *,
+    upper: bool = False,
+) -> List[str]:
+    """解析行业/概念板块代码列表（支持逗号分隔）。"""
+    if not raw:
+        return []
+    out: List[str] = []
+    for item in raw:
+        for part in str(item or "").split(","):
+            code = part.strip()
+            if not code:
+                continue
+            if upper:
+                code = code.upper()
+            if code not in out:
+                out.append(code)
+    return out
+
+
+def _normalize_backtest_stock_code(code: str) -> str:
+    """与 GMS 选股池一致：归一化 A 股/港股代码。"""
+    s = str(code).strip()
+    if not s:
+        return s
+    if s.isdigit():
+        if len(s) == 6 and s[0] in "603":
+            return s.zfill(6)
+        if len(s) <= 5:
+            return s.zfill(5)
+        return s.zfill(6)
+    return s
+
+
+def _resolve_industry_board_backtest_codes(
+    db: Session,
+    raw_board_codes: List[str],
+) -> Tuple[List[str], List[str]]:
+    """按行业板块代码解析成分股，返回 (板块代码, 股票代码)。"""
+    from backend_api.models import IndustryBoardConstituent
+    from backend_api.utils.bk_board_code import resolve_industry_board_codes
+
+    bcodes = resolve_industry_board_codes(db, raw_board_codes)
+    if not bcodes:
+        return [], []
+    rows = (
+        db.query(IndustryBoardConstituent.stock_code)
+        .filter(IndustryBoardConstituent.board_code.in_(bcodes))
+        .distinct()
+        .all()
+    )
+    pool = list(
+        dict.fromkeys(
+            _normalize_backtest_stock_code(str(r[0]))
+            for r in rows
+            if r[0] is not None and str(r[0]).strip()
+        )
+    )
+    pool = [c for c in pool if c]
+    return bcodes, sorted(pool)
+
+
+def _resolve_concept_board_backtest_codes(
+    db: Session,
+    raw_board_codes: List[str],
+) -> Tuple[List[str], List[str]]:
+    """按概念板块代码解析成分股，返回 (板块代码, 股票代码)。"""
+    from backend_api.models import ConceptBoardConstituent
+
+    bcodes = _normalize_backtest_board_codes(raw_board_codes, upper=True)
+    if not bcodes:
+        return [], []
+    rows = (
+        db.query(ConceptBoardConstituent.stock_code)
+        .filter(ConceptBoardConstituent.board_code.in_(bcodes))
+        .distinct()
+        .all()
+    )
+    pool = list(
+        dict.fromkeys(
+            _normalize_backtest_stock_code(str(r[0]))
+            for r in rows
+            if r[0] is not None and str(r[0]).strip()
+        )
+    )
+    pool = [c for c in pool if c]
+    return bcodes, sorted(pool)
+
+
+def _assert_board_stock_pool_market_cn(market: str, pool_label: str) -> None:
+    """行业/概念板块仅 A 股；港股暂无该划分。"""
+    mkt = (market or "all").strip().lower()
+    if mkt != "cn":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{pool_label}回测仅支持 A 股市场（港股暂无行业/概念板块划分）",
+        )
+
+
 def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
     """
     当股票池为单股、自定义或自选股时，生成包含股票名称和代码的任务名称。
@@ -221,6 +321,22 @@ def _build_task_name_with_stocks(db: Session, config: dict) -> Optional[str]:
             n = _get_stock_name(db, code)
             parts.append(f"{code}{n}" if n else code)
         return "GMS回测_" + "_".join(parts)
+    if mode == "industry_board":
+        bcodes = config.get("industry_board_codes") or []
+        if not bcodes:
+            return None
+        label = "、".join(str(c) for c in bcodes[:3])
+        if len(bcodes) > 3:
+            label += "等"
+        return f"GMS回测_行业板块_{label}"
+    if mode == "concept_board":
+        bcodes = config.get("concept_board_codes") or []
+        if not bcodes:
+            return None
+        label = "、".join(str(c) for c in bcodes[:3])
+        if len(bcodes) > 3:
+            label += "等"
+        return f"GMS回测_概念板块_{label}"
     return None
 
 
@@ -321,9 +437,20 @@ class BacktestCreateBody(BaseModel):
         le=1,
         description="单笔仓位：每笔投入占组合权益的比例(0~1]，仅 trade_simulation；1 为全仓",
     )
-    stock_pool_mode: Optional[str] = Field("all", description="股票池: all / single / custom / watchlist")
+    stock_pool_mode: Optional[str] = Field(
+        "all",
+        description="股票池: all / single / custom / watchlist / gms_watchlist / industry_board / concept_board",
+    )
     stock_code: Optional[str] = Field(None, description="单股回测时的股票代码，如 000001、00700")
     stock_pool: Optional[List[str]] = Field(None, description="自定义股票池代码列表")
+    industry_board_codes: Optional[List[str]] = Field(
+        None,
+        description="stock_pool_mode=industry_board 时必填：行业板块代码，可多选",
+    )
+    concept_board_codes: Optional[List[str]] = Field(
+        None,
+        description="stock_pool_mode=concept_board 时必填：概念板块代码，可多选",
+    )
     watchlist_user_id: Optional[int] = Field(None, description="stock_pool_mode=watchlist 时可选：指定用户ID")
     strategy_config_id: Optional[int] = Field(None, ge=1, description="GMS 策略参数版本 ID，不传则用默认版本")
 
@@ -522,6 +649,39 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
             codes = _apply_backtest_cn_board_segment(codes, mkt, cn_seg)
             if not codes:
                 raise HTTPException(status_code=400, detail="GMS观察股在选定 A 股板块下无匹配股票")
+            config["stock_pool"] = codes
+        elif mode == "industry_board":
+            _assert_board_stock_pool_market_cn(mkt, "行业板块")
+            raw_bcodes = _normalize_backtest_board_codes(body.industry_board_codes)
+            if not raw_bcodes:
+                raise HTTPException(status_code=400, detail="请选择至少一个行业板块")
+            bcodes, codes = _resolve_industry_board_backtest_codes(db, raw_bcodes)
+            if not bcodes:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"未找到行业板块：{'、'.join(raw_bcodes)}",
+                )
+            if not codes:
+                raise HTTPException(status_code=400, detail="所选行业板块成分股为空，请在管理端维护板块成分股")
+            codes = _apply_backtest_cn_board_segment(codes, "cn", cn_seg)
+            if not codes:
+                raise HTTPException(status_code=400, detail="行业板块在选定 A 股板块下无匹配成分股")
+            config["market"] = "cn"
+            config["industry_board_codes"] = bcodes
+            config["stock_pool"] = codes
+        elif mode == "concept_board":
+            _assert_board_stock_pool_market_cn(mkt, "概念板块")
+            raw_bcodes = _normalize_backtest_board_codes(body.concept_board_codes, upper=True)
+            if not raw_bcodes:
+                raise HTTPException(status_code=400, detail="请选择至少一个概念板块")
+            bcodes, codes = _resolve_concept_board_backtest_codes(db, raw_bcodes)
+            if not codes:
+                raise HTTPException(status_code=400, detail="所选概念板块成分股为空，请在管理端维护板块成分股")
+            codes = _apply_backtest_cn_board_segment(codes, "cn", cn_seg)
+            if not codes:
+                raise HTTPException(status_code=400, detail="概念板块在选定 A 股板块下无匹配成分股")
+            config["market"] = "cn"
+            config["concept_board_codes"] = bcodes
             config["stock_pool"] = codes
         else:
             if body.stock_code:

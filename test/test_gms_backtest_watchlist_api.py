@@ -143,6 +143,94 @@ def test_create_backtest_watchlist_ignores_body_stock_pool(mock_create):
     assert "stock_code" not in cfg
 
 
+@patch.object(gms_admin_routes.admin_interface, "create_backtest", return_value="task-id-industry")
+@patch.object(
+    gms_admin_routes,
+    "_resolve_industry_board_backtest_codes",
+    return_value=(["BK0479"], ["000001", "600519"]),
+)
+def test_create_backtest_industry_board_resolves_stock_pool(mock_resolve, mock_create):
+    client = _make_client(MagicMock())
+    body = {
+        "market": "cn",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+        "stock_pool_mode": "industry_board",
+        "industry_board_codes": ["BK0479"],
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 200
+    mock_resolve.assert_called_once()
+    cfg = mock_create.call_args[0][0]
+    assert cfg["stock_pool_mode"] == "industry_board"
+    assert cfg["industry_board_codes"] == ["BK0479"]
+    assert cfg["stock_pool"] == ["000001", "600519"]
+
+
+def test_create_backtest_industry_board_requires_codes():
+    client = _make_client(MagicMock())
+    body = {
+        "market": "cn",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+        "stock_pool_mode": "industry_board",
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 400
+    assert "行业板块" in (r.json().get("detail") or "")
+
+
+def test_create_backtest_industry_board_rejects_hk_market():
+    client = _make_client(MagicMock())
+    body = {
+        "market": "hk",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+        "stock_pool_mode": "industry_board",
+        "industry_board_codes": ["BK0479"],
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 400
+    assert "A 股" in (r.json().get("detail") or "")
+
+
+def test_create_backtest_industry_board_rejects_all_market():
+    client = _make_client(MagicMock())
+    body = {
+        "market": "all",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+        "stock_pool_mode": "industry_board",
+        "industry_board_codes": ["BK0479"],
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 400
+    assert "港股暂无" in (r.json().get("detail") or "")
+
+
+@patch.object(gms_admin_routes.admin_interface, "create_backtest", return_value="task-id-concept")
+@patch.object(
+    gms_admin_routes,
+    "_resolve_concept_board_backtest_codes",
+    return_value=(["BK0428", "BK0479"], ["000001", "300001"]),
+)
+def test_create_backtest_concept_board_accepts_multiple_codes(mock_resolve, mock_create):
+    client = _make_client(MagicMock())
+    body = {
+        "market": "cn",
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-01",
+        "stock_pool_mode": "concept_board",
+        "concept_board_codes": ["BK0428", "BK0479"],
+    }
+    r = client.post("/api/admin/gms/backtests", json=body)
+    assert r.status_code == 200
+    cfg = mock_create.call_args[0][0]
+    assert cfg["market"] == "cn"
+    assert cfg["concept_board_codes"] == ["BK0428", "BK0479"]
+    assert cfg["stock_pool"] == ["000001", "300001"]
+
+
 @patch.object(gms_admin_routes.admin_interface, "delete_tasks_batch", return_value={"deleted": 2, "failed": [], "failed_count": 0})
 def test_batch_delete_backtests(mock_batch):
     client = _make_client(MagicMock())

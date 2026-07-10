@@ -195,6 +195,8 @@ class GMSApiService {
     stock_pool_mode?: string
     stock_code?: string
     stock_pool?: string[]
+    industry_board_codes?: string[]
+    concept_board_codes?: string[]
     watchlist_user_id?: number
     strategy_config_id?: number
   }) {

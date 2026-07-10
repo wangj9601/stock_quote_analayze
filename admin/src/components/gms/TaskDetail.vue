@@ -31,6 +31,9 @@
           <el-descriptions-item label="任务类型">{{ backtestTypeLabel }}</el-descriptions-item>
           <el-descriptions-item label="市场">{{ marketLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="cnBoardSegmentLabel" label="A股板块">{{ cnBoardSegmentLabel }}</el-descriptions-item>
+          <el-descriptions-item v-if="stockPoolLabel" label="股票池">{{ stockPoolLabel }}</el-descriptions-item>
+          <el-descriptions-item v-if="industryBoardCodesLabel" label="行业板块" :span="2">{{ industryBoardCodesLabel }}</el-descriptions-item>
+          <el-descriptions-item v-if="conceptBoardCodesLabel" label="概念板块" :span="2">{{ conceptBoardCodesLabel }}</el-descriptions-item>
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
           <el-descriptions-item label="目标阈值">{{ (task.config.target_pct * 100) }}%</el-descriptions-item>
           <el-descriptions-item label="生效最低总分">{{ effectiveMinScore }}</el-descriptions-item>
@@ -178,6 +181,41 @@ const cnBoardSegmentLabel = computed(() => {
   const seg = String(task.value?.config?.cn_board_segment || '').trim().toUpperCase()
   if (!seg || seg === 'ALL') return ''
   return CN_BOARD_SEGMENT_LABELS[seg] || seg
+})
+
+const STOCK_POOL_MODE_LABELS: Record<string, string> = {
+  all: '全市场',
+  gms_watchlist: 'GMS观察股',
+  watchlist: '自选股',
+  industry_board: '行业板块',
+  concept_board: '概念板块',
+  single: '单股回测',
+  custom: '自定义列表',
+}
+
+const stockPoolLabel = computed(() => {
+  const mode = String(task.value?.config?.stock_pool_mode || 'all')
+  const base = STOCK_POOL_MODE_LABELS[mode] || mode
+  const pool = task.value?.config?.stock_pool
+  if (Array.isArray(pool) && pool.length) {
+    return `${base}（${pool.length} 只）`
+  }
+  if (task.value?.config?.stock_code) {
+    return `${base}（${task.value.config.stock_code}）`
+  }
+  return base
+})
+
+const industryBoardCodesLabel = computed(() => {
+  const codes = task.value?.config?.industry_board_codes
+  if (!Array.isArray(codes) || !codes.length) return ''
+  return codes.join('、')
+})
+
+const conceptBoardCodesLabel = computed(() => {
+  const codes = task.value?.config?.concept_board_codes
+  if (!Array.isArray(codes) || !codes.length) return ''
+  return codes.join('、')
 })
 
 const effectiveMinScore = computed(() => {
