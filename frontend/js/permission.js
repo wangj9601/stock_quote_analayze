@@ -91,7 +91,13 @@ const PermissionEngine = {
       if (!visible.length) continue;
       const active = tabs.find(t => t.classList.contains('active'));
       if (active && this.has(active.getAttribute('data-perm'))) continue;
-      visible[0].click();
+      const first = visible[0];
+      const strategy = first.getAttribute('data-strategy');
+      if (strategy && window.ScreeningPage && typeof ScreeningPage.switchStrategy === 'function') {
+        ScreeningPage.switchStrategy(strategy);
+      } else {
+        first.click();
+      }
       break;
     }
   },

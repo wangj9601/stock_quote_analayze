@@ -58,7 +58,34 @@ const ScreeningPage = {
         this.initStrategyTabs();
         this.initVsbIntegratedTabs();
         this.initGmsIntegratedTabs();
+        // 权限引擎需在 Tab 事件绑定后再应用，以便正确切换到首个有权限的策略
+        if (typeof loadPermissionEngine === 'function') {
+            await loadPermissionEngine();
+        }
+        this.ensureActiveStrategyVisible();
         this.applyVsbHashOnLoad();
+    },
+
+    /** 默认策略 Tab 被权限隐藏时，切换到第一个可见且有权限的策略 */
+    ensureActiveStrategyVisible() {
+        const activeContent = document.querySelector('.strategy-content.active');
+        const contentHidden = !activeContent
+            || activeContent.getAttribute('aria-hidden') === 'true'
+            || getComputedStyle(activeContent).display === 'none';
+        if (!contentHidden) return;
+
+        const legacyHidden = new Set(['parking-apron', 'backtrace-ma250', 'high-tight-flag']);
+        const tabs = Array.from(document.querySelectorAll('.strategy-tab[data-strategy]'));
+        const pick = tabs.find((t) => {
+            if (legacyHidden.has(t.dataset.strategy)) return false;
+            if (getComputedStyle(t).display === 'none') return false;
+            const perm = t.getAttribute('data-perm');
+            if (perm && window.PermissionEngine && !PermissionEngine.has(perm)) return false;
+            return true;
+        });
+        if (pick) {
+            this.switchStrategy(pick.dataset.strategy);
+        }
     },
 
     // 初始化策略标签页
@@ -2267,13 +2294,6 @@ const ScreeningPage = {
                 if (response.ok) {
                     const headerHtml = await response.text();
                     headerContainer.innerHTML = headerHtml;
-
-                    // 加载权限引擎并应用到选股策略 Tab / 内容区
-                    if (typeof loadPermissionEngine === 'function') {
-                        await loadPermissionEngine();
-                    } else {
-                        console.warn('loadPermissionEngine 未找到，策略 Tab 权限控制可能未生效');
-                    }
 
                     // 等待DOM更新后初始化头部功能
                     setTimeout(() => {
