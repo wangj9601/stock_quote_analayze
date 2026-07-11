@@ -2268,6 +2268,13 @@ const ScreeningPage = {
                     const headerHtml = await response.text();
                     headerContainer.innerHTML = headerHtml;
 
+                    // 加载权限引擎并应用到选股策略 Tab / 内容区
+                    if (typeof loadPermissionEngine === 'function') {
+                        await loadPermissionEngine();
+                    } else {
+                        console.warn('loadPermissionEngine 未找到，策略 Tab 权限控制可能未生效');
+                    }
+
                     // 等待DOM更新后初始化头部功能
                     setTimeout(() => {
                         // 高亮当前频道

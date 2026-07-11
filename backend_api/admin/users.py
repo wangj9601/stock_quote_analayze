@@ -8,11 +8,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_
 from pydantic import BaseModel
 
-from backend_api.models import UserCreate, UserUpdate, UserInDB
+from backend_api.models import UserCreate, UserUpdate, UserInDB, FrontendRole, User
 from backend_api.database import get_db
-from backend_api.auth import get_password_hash
-from backend_api.auth import get_current_admin
-from backend_api.models import User
+from backend_api.auth import get_password_hash, get_current_admin
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin"])
 
@@ -93,11 +91,21 @@ async def create_user(
             )
         
         # 创建新用户
+        role_id = user.role_id
+        if role_id is None and user.role:
+            role_obj = db.query(FrontendRole).filter(FrontendRole.code == user.role).first()
+            if role_obj:
+                role_id = role_obj.id
+            else:
+                standard = db.query(FrontendRole).filter(FrontendRole.code == "standard").first()
+                role_id = standard.id if standard else None
+
         db_user = User(
             username=user.username,
             email=user.email,
             password_hash=get_password_hash(user.password),
-            role=user.role,
+            role=user.role or "user",
+            role_id=role_id,
             status="active"
         )
         db.add(db_user)
@@ -126,8 +134,64 @@ def _update_user_impl(user_id: int, user_update: UserUpdate, db: Session) -> Use
             detail="用户不存在"
         )
     update_data = user_update.dict(exclude_unset=True)
+    if "role_id" in update_data and update_data["role_id"] is not None:
+        role_obj = db.query(FrontendRole).filter(FrontendRole.id == update_data["role_id"]).first()
+        if role_obj:
+            update_data["role"] = role_obj.code
     for field, value in update_data.items():
         setattr(db_user, field, value)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@router.get("/stats")
+async def get_user_stats(
+    current_user = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """获取用户统计信息"""
+    total = db.query(User).count()
+    active = db.query(User).filter(User.status == "active").count()
+    disabled = db.query(User).filter(User.status == "disabled").count()
+    suspended = db.query(User).filter(User.status == "suspended").count()
+    
+    return {
+        "total": total,
+        "active": active,
+        "disabled": disabled,
+        "suspended": suspended
+    }
+
+
+@router.get("/test")
+async def test_users_api():
+    """测试用户API是否正常工作"""
+    return {
+        "message": "Users API is working",
+        "timestamp": "2024-01-01T00:00:00"
+    }
+
+
+class UserRoleUpdate(BaseModel):
+    role_id: int
+
+
+@router.put("/{user_id}/role", response_model=UserInDB)
+async def update_user_role(
+    user_id: int,
+    payload: UserRoleUpdate,
+    current_user=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    role_obj = db.query(FrontendRole).filter(FrontendRole.id == payload.role_id).first()
+    if not role_obj:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    db_user.role_id = role_obj.id
+    db_user.role = role_obj.code
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -137,8 +201,8 @@ def _update_user_impl(user_id: int, user_update: UserUpdate, db: Session) -> Use
 async def update_user_put(
     user_id: int,
     user_update: UserUpdate,
-    current_user = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    current_user=Depends(get_current_admin),
+    db: Session = Depends(get_db),
 ):
     """更新用户信息（PUT）。"""
     return _update_user_impl(user_id, user_update, db)
@@ -148,10 +212,10 @@ async def update_user_put(
 async def update_user_post(
     user_id: int,
     user_update: UserUpdate,
-    current_user = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    current_user=Depends(get_current_admin),
+    db: Session = Depends(get_db),
 ):
-    """更新用户信息（POST）；与 PUT 行为一致，用于生产环境对 PUT 有限制时。"""
+    """更新用户信息（POST）；与 PUT 行为一致。"""
     return _update_user_impl(user_id, user_update, db)
 
 
@@ -262,43 +326,3 @@ async def reset_user_password(
     db.commit()
 
     return {"message": "密码已重置为默认值", "default": DEFAULT_PASSWORD}
-
-@router.get("/stats")
-async def get_user_stats(
-    current_user = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    """获取用户统计信息"""
-    total = db.query(User).count()
-    active = db.query(User).filter(User.status == "active").count()
-    disabled = db.query(User).filter(User.status == "disabled").count()
-    suspended = db.query(User).filter(User.status == "suspended").count()
-    
-    return {
-        "total": total,
-        "active": active,
-        "disabled": disabled,
-        "suspended": suspended
-    }
-
-@router.get("/test")
-async def test_users_api():
-    """测试用户API是否正常工作"""
-    return {
-        "message": "用户管理API正常工作",
-        "timestamp": "2024-01-01T00:00:00Z",
-        "data": [
-            {
-                "id": 1,
-                "username": "test_user",
-                "email": "test@example.com",
-                "role": "user",
-                "status": "active",
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z"
-            }
-        ],
-        "total": 1,
-        "page": 1,
-        "pageSize": 20
-    } 

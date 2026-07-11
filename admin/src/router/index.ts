@@ -33,6 +33,26 @@ const routes = [
         component: () => import('@/views/UsersView.vue')
       },
       {
+        path: 'roles',
+        name: 'Roles',
+        component: () => import('@/views/RolesView.vue')
+      },
+      {
+        path: 'roles/:id/permissions',
+        name: 'RolePermissions',
+        component: () => import('@/views/RolePermissionsView.vue')
+      },
+      {
+        path: 'users/:id/permissions',
+        name: 'UserPermissions',
+        component: () => import('@/views/UserPermissionsView.vue')
+      },
+      {
+        path: 'permissions',
+        name: 'Permissions',
+        component: () => import('@/views/PermissionsView.vue')
+      },
+      {
         path: 'quotes',
         name: 'Quotes',
         component: () => import('@/views/QuotesView.vue')

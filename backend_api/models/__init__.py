@@ -49,6 +49,20 @@ try:
         UserInDB = getattr(models_module, 'UserInDB', None)
         UserCreate = getattr(models_module, 'UserCreate', None)
         UserUpdate = getattr(models_module, 'UserUpdate', None)
+        FrontendRole = getattr(models_module, 'FrontendRole', None)
+        FrontendPermission = getattr(models_module, 'FrontendPermission', None)
+        RolePermission = getattr(models_module, 'RolePermission', None)
+        FrontendRoleCreate = getattr(models_module, 'FrontendRoleCreate', None)
+        FrontendRoleUpdate = getattr(models_module, 'FrontendRoleUpdate', None)
+        FrontendRoleInDB = getattr(models_module, 'FrontendRoleInDB', None)
+        FrontendPermissionInDB = getattr(models_module, 'FrontendPermissionInDB', None)
+        PermissionTreeNode = getattr(models_module, 'PermissionTreeNode', None)
+        RolePermissionsUpdate = getattr(models_module, 'RolePermissionsUpdate', None)
+        UserPermissionsUpdate = getattr(models_module, 'UserPermissionsUpdate', None)
+        UserPermissionsDetail = getattr(models_module, 'UserPermissionsDetail', None)
+        UserPermission = getattr(models_module, 'UserPermission', None)
+        UserRoleInfo = getattr(models_module, 'UserRoleInfo', None)
+        PermissionsResponse = getattr(models_module, 'PermissionsResponse', None)
         MeanFrequencyResonanceIndicators = getattr(models_module, 'MeanFrequencyResonanceIndicators', None)
         GMSSignalTrace = getattr(models_module, 'GMSSignalTrace', None)
         GmsTraceRecomputeTask = getattr(models_module, 'GmsTraceRecomputeTask', None)
@@ -152,6 +166,20 @@ except Exception as e:
     UserInDB = None
     UserCreate = None
     UserUpdate = None
+    FrontendRole = None
+    FrontendPermission = None
+    RolePermission = None
+    FrontendRoleCreate = None
+    FrontendRoleUpdate = None
+    FrontendRoleInDB = None
+    FrontendPermissionInDB = None
+    PermissionTreeNode = None
+    RolePermissionsUpdate = None
+    UserPermissionsUpdate = None
+    UserPermissionsDetail = None
+    UserPermission = None
+    UserRoleInfo = None
+    PermissionsResponse = None
     MeanFrequencyResonanceIndicators = None
     GMSSignalTrace = None
     GmsTraceRecomputeTask = None
@@ -257,6 +285,20 @@ __all__ = [
     'UserInDB',
     'UserCreate',
     'UserUpdate',
+    'FrontendRole',
+    'FrontendPermission',
+    'RolePermission',
+    'FrontendRoleCreate',
+    'FrontendRoleUpdate',
+    'FrontendRoleInDB',
+    'FrontendPermissionInDB',
+    'PermissionTreeNode',
+    'RolePermissionsUpdate',
+    'UserPermissionsUpdate',
+    'UserPermissionsDetail',
+    'UserPermission',
+    'UserRoleInfo',
+    'PermissionsResponse',
     'MeanFrequencyResonanceIndicators',
     'GMSSignalTrace',
     'GmsTraceRecomputeTask',

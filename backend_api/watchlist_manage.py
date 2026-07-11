@@ -18,6 +18,7 @@ from .models import (
 )
 from .database import get_db
 from .auth import get_current_user
+from .permissions import require_permission
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
@@ -198,7 +199,8 @@ async def get_watchlist_groups(
 async def add_to_watchlist(
     watchlist: WatchlistCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.watchlist.tab.default.btn.add")),
 ):
     """添加股票到自选股"""
     try:
@@ -374,7 +376,8 @@ async def update_watchlist_group(
 async def remove_from_watchlist(
     watchlist_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.watchlist.tab.default.btn.delete")),
 ):
     """从自选股中删除股票"""
     # 检查自选股是否存在
@@ -532,7 +535,8 @@ async def import_watchlist(
     file: UploadFile = File(...),
     group_name: str = "default",
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.watchlist.tab.default.btn.import")),
 ):
     """导入自选股列表"""
     try:

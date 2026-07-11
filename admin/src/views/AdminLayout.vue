@@ -70,7 +70,8 @@ import {
   Tickets,
   Select,
   Star,
-  Notebook
+  Notebook,
+  Lock
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -81,6 +82,8 @@ const authStore = useAuthStore()
 const menuItems = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
   { path: '/users', name: '用户管理', icon: User },
+  { path: '/roles', name: '角色管理', icon: Lock },
+  { path: '/permissions', name: '权限资源', icon: Lock },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
   { path: '/stock-basic', name: '股票基本信息管理', icon: Tickets },
   { path: '/board-constituents', name: '板块成分股维护', icon: Histogram },

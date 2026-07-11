@@ -628,9 +628,38 @@ except ImportError as e:
 try:
     from .admin.users import router as admin_users_router
     print("admin_users_router 导入成功")
-except ImportError as e:
+except Exception as e:
+    import traceback
     print(f"admin_users_router 导入失败: {e}")
+    traceback.print_exc()
     admin_users_router = None
+
+try:
+    from .admin.roles import router as admin_roles_router
+    print("admin_roles_router 导入成功")
+except Exception as e:
+    import traceback
+    print(f"admin_roles_router 导入失败: {e}")
+    traceback.print_exc()
+    admin_roles_router = None
+
+try:
+    from .admin.permissions import router as admin_permissions_router
+    print("admin_permissions_router 导入成功")
+except Exception as e:
+    import traceback
+    print(f"admin_permissions_router 导入失败: {e}")
+    traceback.print_exc()
+    admin_permissions_router = None
+
+try:
+    from .admin.user_permissions import router as admin_user_permissions_router
+    print("admin_user_permissions_router 导入成功")
+except Exception as e:
+    import traceback
+    print(f"admin_user_permissions_router 导入失败: {e}")
+    traceback.print_exc()
+    admin_user_permissions_router = None
 
 # 尝试导入日志查询路由
 try:
@@ -707,6 +736,24 @@ if admin_users_router is not None:
     print("admin users路由注册成功")
 else:
     print("admin users路由未注册")
+
+if admin_user_permissions_router is not None:
+    app.include_router(admin_user_permissions_router)
+    print("admin user permissions路由注册成功")
+else:
+    print("admin user permissions路由未注册")
+
+if admin_roles_router is not None:
+    app.include_router(admin_roles_router)
+    print("admin roles路由注册成功")
+else:
+    print("admin roles路由未注册")
+
+if admin_permissions_router is not None:
+    app.include_router(admin_permissions_router)
+    print("admin permissions路由注册成功")
+else:
+    print("admin permissions路由未注册")
 
 # 注册日志查询路由
 if admin_logs_router is not None:

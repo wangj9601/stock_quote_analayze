@@ -59,6 +59,25 @@ export class UsersService {
   }> {
     return apiService.get('/users/stats')
   }
+
+  async getUserPermissions(userId: number): Promise<UserPermissionsDetail> {
+    return apiService.get<UserPermissionsDetail>(`/users/${userId}/permissions`)
+  }
+
+  async setUserPermissions(userId: number, permissionCodes: string[]): Promise<{ success: boolean; override_count: number }> {
+    return apiService.post(`/users/${userId}/permissions`, { permission_codes: permissionCodes })
+  }
+
+  async resetUserPermissions(userId: number): Promise<{ success: boolean; message: string }> {
+    return apiService.delete(`/users/${userId}/permissions`)
+  }
+}
+
+export interface UserPermissionsDetail {
+  role: { code: string; name: string }
+  role_permission_codes: string[]
+  effective_permission_codes: string[]
+  override_count: number
 }
 
 export const usersService = new UsersService()

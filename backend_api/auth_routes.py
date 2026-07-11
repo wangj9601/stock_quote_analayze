@@ -21,8 +21,10 @@ from .auth import (
     authenticate_user,
     create_access_token,
     get_current_user,
+    get_current_user_optional,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from .permissions import build_permissions_response
 
 # 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
 from backend_core.logging_utils import should_log_to_file
@@ -95,29 +97,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
-
 class LoginRequest(BaseModel):
     """登录请求数据模型"""
     username: str
     password: str
-
-async def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> Optional[User]:
-    """获取当前用户（可选）"""
-    if not token:
-        logger.debug("未提供认证令牌")
-        return None
-    try:
-        user = await get_current_user(token, db)
-        logger.debug(f"成功获取当前用户: {user.username} (ID: {user.id})")
-        return user
-    except Exception as e:
-        logger.warning(f"获取当前用户失败: {str(e)}")
-        return None
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -209,6 +192,9 @@ async def login(
                 "token_type": "bearer",
                 "user": UserInDB.from_orm(user)
             }
+            perm_resp = build_permissions_response(db, user)
+            response["permissions"] = perm_resp.permissions
+            response["role"] = perm_resp.role
             
             # 计算总处理时间
             process_time = time.time() - start_time
@@ -249,7 +235,8 @@ async def login(
 @router.get("/status")
 async def get_auth_status(
     request: Request,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
 ):
     """获取认证状态"""
     start_time = time.time()
@@ -259,6 +246,7 @@ async def get_auth_status(
     try:
         if current_user:
             process_time = time.time() - start_time
+            perm_resp = build_permissions_response(db, current_user)
             logger.info(
                 f"获取认证状态: 用户已登录 - "
                 f"用户: {current_user.username}, "
@@ -270,10 +258,13 @@ async def get_auth_status(
             return {
                 "success": True,
                 "logged_in": True,
-                "user": UserInDB.from_orm(current_user)
+                "user": UserInDB.from_orm(current_user),
+                "permissions": perm_resp.permissions,
+                "role": perm_resp.role,
             }
         else:
             process_time = time.time() - start_time
+            perm_resp = build_permissions_response(db, None)
             logger.info(
                 f"获取认证状态: 用户未登录 - "
                 f"IP: {client_host}, "
@@ -283,7 +274,9 @@ async def get_auth_status(
             return {
                 "success": True,
                 "logged_in": False,
-                "user": None
+                "user": None,
+                "permissions": perm_resp.permissions,
+                "role": perm_resp.role,
             }
     except Exception as e:
         error_detail = f"获取认证状态时发生错误: {str(e)}\n{traceback.format_exc()}"
@@ -298,6 +291,14 @@ async def get_auth_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=error_detail
         )
+
+@router.get("/permissions")
+async def get_permissions(
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """获取当前用户权限码列表；未登录返回 standard 角色权限"""
+    return build_permissions_response(db, current_user)
 
 @router.post("/logout")
 async def logout(request: Request):
