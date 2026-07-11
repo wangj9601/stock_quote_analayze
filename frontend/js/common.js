@@ -126,6 +126,9 @@ const CommonUtils = {
                 const result = await response.json();
 
                 if (result.success && result.logged_in) {
+                    if (window.PermissionEngine && result.permissions) {
+                        PermissionEngine.setPermissions(result.permissions, result.role || null);
+                    }
                     return result.user;
                 } else {
                     // 不再强制跳转，只返回 null 表示未登录
@@ -162,6 +165,11 @@ const CommonUtils = {
             localStorage.removeItem('access_token');
             localStorage.removeItem('userInfo');
             localStorage.removeItem('token');
+            localStorage.removeItem('userPermissions');
+            localStorage.removeItem('userRole');
+            if (window.PermissionEngine) {
+                PermissionEngine.setPermissions([], null);
+            }
             if (window.location.pathname.includes('login.html')) return;
             let url = 'login.html';
             if (includeReturn) {
@@ -220,7 +228,9 @@ const CommonUtils = {
                     'token',
                     'rememberedUsername',
                     'adminLoggedIn',
-                    'adminData'
+                    'adminData',
+                    'userPermissions',
+                    'userRole'
                 ].forEach(function (k) {
                     try { localStorage.removeItem(k); } catch (e) {}
                 });

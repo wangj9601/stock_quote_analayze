@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/watchlist.css">
 </head>
 
-<body>
+<body data-channel="watchlist">
     <script src="components/header.js"></script>
     <script>loadHeader('watchlist');</script>
     <!-- 主要内容 -->
@@ -23,8 +23,8 @@
                     <span class="stock-count">共 <span id="stockCount">6</span> 只股票</span>
                 </div>
                 <div class="toolbar-right">
-                    <button class="btn btn-primary add-stock-btn">+ 添加</button>
-                    <button class="btn btn-secondary import-btn">导入</button>
+                    <button class="btn btn-primary add-stock-btn" data-perm="channel.watchlist.tab.default.btn.add">+ 添加</button>
+                    <button class="btn btn-secondary import-btn" data-perm="channel.watchlist.tab.default.btn.import">导入</button>
                     <div class="export-dropdown">
                         <button class="btn btn-secondary export-dropdown-btn">导出</button>
                         <div class="export-menu">

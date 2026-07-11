@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
+from backend_api.permissions import require_permission
 from backend_api.models import (
     GmsFormalTrade,
     GmsTradeObserveHistory,
@@ -624,6 +625,7 @@ def add_gms_trade_observe(
     body: GmsTradeObserveAddRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.screening.tab.gms.btn.refresh")),
 ):
     ensure_gms_trade_observe_schema(db)
     code = _normalize_code(body.code)
@@ -826,6 +828,7 @@ def remove_gms_trade_observe(
     item_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.screening.tab.gms.btn.refresh")),
 ):
     ensure_gms_trade_observe_schema(db)
     row = (

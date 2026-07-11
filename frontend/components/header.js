@@ -1,4 +1,33 @@
 // 动态加载header.html并处理登录状态
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+            resolve();
+            return;
+        }
+        const el = document.createElement('script');
+        el.src = src;
+        el.onload = resolve;
+        el.onerror = reject;
+        document.head.appendChild(el);
+    });
+}
+
+async function loadPermissionEngine() {
+    try {
+        await loadScript('js/permission-registry.js');
+        await loadScript('js/permission.js');
+        if (window.PermissionEngine) {
+            await PermissionEngine.init();
+            if (typeof PermissionEngine.decorateStrategyTabs === 'function') {
+                PermissionEngine.decorateStrategyTabs();
+            }
+        }
+    } catch (err) {
+        console.warn('权限引擎加载失败', err);
+    }
+}
+
 async function loadHeader(activePage) {
     console.log('开始加载header，当前页面:', activePage);
     
@@ -23,6 +52,8 @@ async function loadHeader(activePage) {
         console.log('开始初始化用户菜单...');
         initUserMenu();
     }, 100);
+
+    await loadPermissionEngine();
     
     // 延迟初始化股票搜索功能
     setTimeout(() => {

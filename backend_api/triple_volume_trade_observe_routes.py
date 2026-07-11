@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
+from backend_api.permissions import require_permission
 from backend_api.models import TripleVolumeTradeObserveStock, User
 
 router = APIRouter(
@@ -155,6 +156,7 @@ def add_tvo_trade_observe(
     body: TvoTradeObserveAddRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.screening.tab.vsb.btn.add_observe")),
 ):
     code = _normalize_code(body.code)
     if not code:

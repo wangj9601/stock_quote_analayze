@@ -85,6 +85,64 @@ class StockCodeTextPK(TypeDecorator):
         return str(value).strip()
 
 # SQLAlchemy 模型
+class FrontendRole(Base):
+    __tablename__ = "frontend_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    is_system = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    permissions = relationship(
+        "FrontendPermission",
+        secondary="role_permissions",
+        back_populates="roles",
+    )
+    users = relationship("User", back_populates="frontend_role")
+
+
+class FrontendPermission(Base):
+    __tablename__ = "frontend_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(200), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    level = Column(Integer, nullable=False)
+    parent_code = Column(String(200), nullable=True)
+    channel_code = Column(String(50), nullable=True)
+    sort_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    roles = relationship(
+        "FrontendRole",
+        secondary="role_permissions",
+        back_populates="permissions",
+    )
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    role_id = Column(Integer, ForeignKey("frontend_roles.id", ondelete="CASCADE"), primary_key=True)
+    permission_id = Column(Integer, ForeignKey("frontend_permissions.id", ondelete="CASCADE"), primary_key=True)
+
+
+class UserPermission(Base):
+    """用户级权限覆盖：granted=True 额外授予，granted=False 相对角色撤销"""
+    __tablename__ = "user_permissions"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    permission_id = Column(Integer, ForeignKey("frontend_permissions.id", ondelete="CASCADE"), primary_key=True)
+    granted = Column(Boolean, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", back_populates="permission_overrides")
+    permission = relationship("FrontendPermission")
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -93,6 +151,7 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="user")
+    role_id = Column(Integer, ForeignKey("frontend_roles.id"), nullable=True, index=True)
     status = Column(String, default="active")
     created_at = Column(DateTime, default=datetime.now)
     last_login = Column(DateTime, nullable=True)
@@ -102,6 +161,8 @@ class User(Base):
     wechat_userid = Column(String(100), nullable=True, index=True)  # 企业微信成员UserID，通知发送时优先使用
     wechat_type = Column(String(20), nullable=True)  # 'personal' 或 'enterprise'
     
+    frontend_role = relationship("FrontendRole", back_populates="users")
+    permission_overrides = relationship("UserPermission", back_populates="user", cascade="all, delete-orphan")
     watchlists = relationship("Watchlist", back_populates="user")
     watchlist_groups = relationship("WatchlistGroup", back_populates="user")
     push_configs = relationship("UserPushConfig", back_populates="user", uselist=True)
@@ -178,17 +239,20 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
     role: Optional[str] = "user"
+    role_id: Optional[int] = None
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     role: Optional[str] = None
+    role_id: Optional[int] = None
     status: Optional[str] = None
     wechat_userid: Optional[str] = None  # 企业微信成员UserID，用于微信通知
 
 class UserInDB(UserBase):
     id: int
     role: str
+    role_id: Optional[int] = None
     status: str
     created_at: datetime
     last_login: Optional[datetime] = None
@@ -196,6 +260,81 @@ class UserInDB(UserBase):
 
     class Config:
         from_attributes = True
+
+
+class FrontendRoleBase(BaseModel):
+    code: str
+    name: str
+    description: Optional[str] = None
+
+
+class FrontendRoleCreate(FrontendRoleBase):
+    pass
+
+
+class FrontendRoleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class FrontendRoleInDB(FrontendRoleBase):
+    id: int
+    is_system: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class FrontendPermissionInDB(BaseModel):
+    id: int
+    code: str
+    name: str
+    level: int
+    parent_code: Optional[str] = None
+    channel_code: Optional[str] = None
+    sort_order: int
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PermissionTreeNode(BaseModel):
+    id: int
+    code: str
+    name: str
+    level: int
+    parent_code: Optional[str] = None
+    channel_code: Optional[str] = None
+    sort_order: int
+    children: List["PermissionTreeNode"] = []
+
+
+class RolePermissionsUpdate(BaseModel):
+    permission_codes: List[str]
+
+
+class UserRoleInfo(BaseModel):
+    code: str
+    name: str
+
+
+class PermissionsResponse(BaseModel):
+    permissions: List[str]
+    role: UserRoleInfo
+    has_custom_permissions: bool = False
+
+
+class UserPermissionsUpdate(BaseModel):
+    permission_codes: List[str]
+
+
+class UserPermissionsDetail(BaseModel):
+    role: UserRoleInfo
+    role_permission_codes: List[str]
+    effective_permission_codes: List[str]
+    override_count: int
 
 class AdminBase(BaseModel):
     username: str
@@ -260,6 +399,8 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: Optional[UserInDB] = None
+    permissions: Optional[List[str]] = None
+    role: Optional[UserRoleInfo] = None
 
     class Config:
         from_attributes = True

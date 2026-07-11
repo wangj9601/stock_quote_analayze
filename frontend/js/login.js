@@ -167,7 +167,7 @@ const LoginPage = {
             
             if (response.ok && result.access_token && result.user) {
                 // 登录成功，保存token
-                this.handleLoginSuccess(result.user, rememberMe, result.access_token);
+                this.handleLoginSuccess(result.user, rememberMe, result.access_token, result.permissions, result.role);
             } else {
                 // 登录失败
                 this.showToast(result.message || '登录失败', 'error');
@@ -194,7 +194,7 @@ const LoginPage = {
     },
 
     // 登录成功处理
-    handleLoginSuccess(user, rememberMe, accessToken) {
+    handleLoginSuccess(user, rememberMe, accessToken, permissions, role) {
         // 添加登录成功动画效果
         this.playSuccessAnimation();
         
@@ -209,6 +209,12 @@ const LoginPage = {
         // 保存 access_token
         if (accessToken) {
             localStorage.setItem('access_token', accessToken);
+        }
+        if (window.PermissionEngine && permissions) {
+            PermissionEngine.setPermissions(permissions, role || null);
+        } else if (permissions) {
+            localStorage.setItem('userPermissions', JSON.stringify(permissions));
+            if (role) localStorage.setItem('userRole', JSON.stringify(role));
         }
         // 如果记住我，保存用户名
         if (rememberMe) {

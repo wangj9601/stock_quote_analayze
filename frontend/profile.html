@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/profile.css">
 </head>
 
-<body>
+<body data-channel="profile">
     <script src="components/header.js"></script>
     <script>loadHeader('profile');</script>
     <!-- 主要内容 -->
@@ -53,12 +53,12 @@
             <!-- 内容标签 -->
             <section class="profile-tabs">
                 <div class="tab-nav">
-                    <button class="profile-tab active" data-tab="overview">投资概况</button>
-                    <button class="profile-tab" data-tab="portfolio">投资组合</button>
-                    <button class="profile-tab" data-tab="transactions">交易记录</button>
-                    <button class="profile-tab" data-tab="trading-logs">交易日志</button>
-                    <button class="profile-tab" data-tab="analysis">投资分析</button>
-                    <button class="profile-tab" data-tab="settings">账户设置</button>
+                    <button class="profile-tab active" data-tab="overview" data-perm="channel.profile.tab.overview">投资概况</button>
+                    <button class="profile-tab" data-tab="portfolio" data-perm="channel.profile.tab.portfolio">投资组合</button>
+                    <button class="profile-tab" data-tab="transactions" data-perm="channel.profile.tab.transactions">交易记录</button>
+                    <button class="profile-tab" data-tab="trading-logs" data-perm="channel.profile.tab.trading_logs">交易日志</button>
+                    <button class="profile-tab" data-tab="analysis" data-perm="channel.profile.tab.analysis">投资分析</button>
+                    <button class="profile-tab" data-tab="settings" data-perm="channel.profile.tab.settings">账户设置</button>
                 </div>
 
                 <!-- 投资概况 -->

@@ -95,9 +95,7 @@
             style="width: 100%"
           >
             <el-option label="全部" value="" />
-            <el-option label="管理员" value="admin" />
-            <el-option label="用户" value="user" />
-            <el-option label="访客" value="guest" />
+            <el-option v-for="r in frontendRoles" :key="r.id" :label="r.name" :value="r.code" />
           </el-select>
         </el-col>
         <el-col :xs="24" :sm="24" :md="8" :lg="8" :xl="8">
@@ -134,7 +132,7 @@
               :type="getRoleTagType(row.role)"
               size="small"
             >
-              {{ getRoleText(row.role) }}
+              {{ getRoleText(row.role, row.role_id) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -177,6 +175,7 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="permissions">配置权限</el-dropdown-item>
                   <el-dropdown-item command="change_password">修改密码</el-dropdown-item>
                   <el-dropdown-item command="reset_password">初始化密码</el-dropdown-item>
                   <el-dropdown-item
@@ -248,11 +247,9 @@
             show-password
           />
         </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="createForm.role" placeholder="选择用户角色">
-            <el-option label="用户" value="user" />
-            <el-option label="管理员" value="admin" />
-            <el-option label="访客" value="guest" />
+        <el-form-item label="角色" prop="role_id">
+          <el-select v-model="createForm.role_id" placeholder="选择用户角色">
+            <el-option v-for="r in frontendRoles" :key="r.id" :label="r.name" :value="r.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -283,11 +280,9 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="editForm.email" placeholder="请输入邮箱地址" />
         </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="editForm.role" placeholder="选择用户角色">
-            <el-option label="用户" value="user" />
-            <el-option label="管理员" value="admin" />
-            <el-option label="访客" value="guest" />
+        <el-form-item label="角色" prop="role_id">
+          <el-select v-model="editForm.role_id" placeholder="选择用户角色">
+            <el-option v-for="r in frontendRoles" :key="r.id" :label="r.name" :value="r.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="status">
@@ -332,7 +327,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
   Plus,
@@ -345,10 +341,12 @@ import {
   ArrowDown
 } from '@element-plus/icons-vue'
 import { useUsersStore } from '@/stores/users'
+import { rolesService, type FrontendRole } from '@/services/roles.service'
 import type { User as UserType, CreateUserRequest, UpdateUserRequest } from '@/types/users.types'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const usersStore = useUsersStore()
+const router = useRouter()
 
 // Refs
 const createFormRef = ref<FormInstance>()
@@ -362,6 +360,7 @@ const changePasswordForm = ref<{ userId: number | null; password: string }>({ us
 const searchKeyword = ref('')
 const statusFilter = ref('')
 const roleFilter = ref('')
+const frontendRoles = ref<FrontendRole[]>([])
 const currentEditUser = ref<UserType | null>(null)
 const tableHeight = ref(720) // 表格默认高度（约 15 行），实际由 updateTableHeight 按窗口与最小高度取大
 
@@ -370,13 +369,13 @@ const createForm = ref<CreateUserRequest>({
   username: '',
   email: '',
   password: '',
-  role: 'user'
+  role_id: undefined
 })
 
 const editForm = ref<UpdateUserRequest & { username: string }>({
   username: '',
   email: '',
-  role: 'user',
+  role_id: undefined,
   status: 'active',
   wechat_userid: ''
 })
@@ -395,7 +394,7 @@ const createRules: FormRules = {
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
   ],
-  role: [
+  role_id: [
     { required: true, message: '请选择用户角色', trigger: 'change' }
   ]
 }
@@ -405,7 +404,7 @@ const editRules: FormRules = {
     { required: true, message: '请输入邮箱地址', trigger: 'blur' },
     { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
   ],
-  role: [
+  role_id: [
     { required: true, message: '请选择用户角色', trigger: 'change' }
   ],
   status: [
@@ -455,13 +454,18 @@ const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleString()
 }
 
-const getRoleText = (role: string) => {
-  const roleMap = {
-    admin: '管理员',
-    user: '用户',
+const getRoleText = (role: string, roleId?: number | null) => {
+  if (roleId != null) {
+    const found = frontendRoles.value.find(r => r.id === roleId)
+    if (found) return found.name
+  }
+  const roleMap: Record<string, string> = {
+    admin: '前台管理员',
+    standard: '标准用户',
+    user: '标准用户',
     guest: '访客'
   }
-  return roleMap[role as keyof typeof roleMap] || role
+  return roleMap[role] || role
 }
 
 const getRoleTagType = (role: string): 'success' | 'primary' | 'warning' | 'info' | 'danger' => {
@@ -519,11 +523,12 @@ const handleCurrentChange = (page: number) => {
 }
 
 const resetCreateForm = () => {
+  const defaultRole = frontendRoles.value.find(r => r.code === 'standard')
   createForm.value = {
     username: '',
     email: '',
     password: '',
-    role: 'user'
+    role_id: defaultRole?.id
   }
   createFormRef.value?.resetFields()
 }
@@ -532,7 +537,7 @@ const resetEditForm = () => {
   editForm.value = {
     username: '',
     email: '',
-    role: 'user',
+    role_id: undefined,
     status: 'active',
     wechat_userid: ''
   }
@@ -558,7 +563,7 @@ const editUser = (user: UserType) => {
   editForm.value = {
     username: user.username,
     email: user.email,
-    role: user.role,
+    role_id: user.role_id ?? frontendRoles.value.find(r => r.code === user.role)?.id,
     status: user.status,
     wechat_userid: user.wechat_userid ?? ''
   }
@@ -582,6 +587,9 @@ const handleUpdateUser = async () => {
 const handleUserAction = async (action: string, user: UserType) => {
   try {
     switch (action) {
+      case 'permissions':
+        router.push({ path: `/users/${user.id}/permissions`, query: { username: user.username } })
+        break
       case 'change_password':
         changePasswordForm.value = { userId: user.id, password: '' }
         showChangePasswordDialog.value = true
@@ -631,31 +639,30 @@ const submitChangePassword = async () => {
   changePasswordForm.value = { userId: null, password: '' }
 }
 
-// Lifecycle
-onMounted(async () => {
-  console.log('🚀 用户管理页面已挂载，开始加载数据...')
-  
-  // 设置响应式表格高度：保证至少可显示约 15 条记录（约 600px），再按窗口剩余空间放大
+const updateTableHeight = () => {
   const ROW_HEIGHT_ESTIMATE = 48
   const MIN_VISIBLE_ROWS = 15
   const MIN_TABLE_HEIGHT = Math.max(400, ROW_HEIGHT_ESTIMATE * MIN_VISIBLE_ROWS)
+  const windowHeight = window.innerHeight
+  const headerHeight = 64
+  const statsHeight = 120
+  const searchHeight = 100
+  const paginationHeight = 72
+  const padding = 48
+  const calculated = windowHeight - headerHeight - statsHeight - searchHeight - paginationHeight - padding
+  tableHeight.value = Math.max(MIN_TABLE_HEIGHT, calculated)
+}
 
-  const updateTableHeight = () => {
-    const windowHeight = window.innerHeight
-    const headerHeight = 64
-    const statsHeight = 120
-    const searchHeight = 100
-    const paginationHeight = 72
-    const padding = 48
-
-    const calculated = windowHeight - headerHeight - statsHeight - searchHeight - paginationHeight - padding
-    tableHeight.value = Math.max(MIN_TABLE_HEIGHT, calculated)
+// Lifecycle
+onMounted(async () => {
+  console.log('🚀 用户管理页面已挂载，开始加载数据...')
+  try {
+    frontendRoles.value = await rolesService.listRoles()
+  } catch (e) {
+    console.error('加载角色列表失败', e)
   }
-  
-  // 初始设置
+
   updateTableHeight()
-  
-  // 监听窗口大小变化
   window.addEventListener('resize', updateTableHeight)
   
   try {
@@ -668,11 +675,10 @@ onMounted(async () => {
   } catch (error) {
     console.error('❌ 用户数据加载失败:', error)
   }
-  
-  // 清理事件监听器
-  onUnmounted(() => {
-    window.removeEventListener('resize', updateTableHeight)
-  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateTableHeight)
 })
 </script> 
 

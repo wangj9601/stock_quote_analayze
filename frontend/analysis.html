@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/analysis.css">
 </head>
 
-<body>
+<body data-channel="analyze">
     <script src="components/header.js"></script>
     <script>loadHeader('analyze');</script>
 
@@ -25,7 +25,7 @@
                     <h2>🔍 快速分析</h2>
                     <div class="stock-selector">
                         <input type="text" placeholder="输入股票代码或名称" class="stock-input">
-                        <button class="analyze-btn">开始分析</button>
+                        <button class="analyze-btn" data-perm="channel.analyze.tab.technical.btn.analyze">开始分析</button>
                     </div>
                 </div>
 
@@ -40,10 +40,10 @@
             <!-- 功能标签 -->
             <section class="analysis-tabs">
                 <div class="tab-nav">
-                    <button class="analysis-tab active" data-tab="market-analysis">市场分析</button>
-                    <button class="analysis-tab" data-tab="technical-tools">技术工具</button>
-                    <button class="analysis-tab" data-tab="strategy">投资策略</button>
-                    <button class="analysis-tab" data-tab="reports">分析报告</button>
+                    <button class="analysis-tab active" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
+                    <button class="analysis-tab" data-tab="technical-tools" data-perm="channel.analyze.tab.technical">技术工具</button>
+                    <button class="analysis-tab" data-tab="strategy" data-perm="channel.analyze.tab.strategy">投资策略</button>
+                    <button class="analysis-tab" data-tab="reports" data-perm="channel.analyze.tab.report">分析报告</button>
                 </div>
 
                 <!-- 市场分析 -->
