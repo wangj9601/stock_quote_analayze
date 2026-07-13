@@ -132,6 +132,19 @@ const PermissionEngine = {
       const suffix = tabPerm.replace('channel.screening.tab.', '');
       btn.setAttribute('data-perm', 'channel.screening.tab.' + suffix + '.btn.refresh');
     });
+    // 导出按钮：exportBtn-<strategy> → ...btn.export
+    document.querySelectorAll('[id^="exportBtn-"]').forEach(btn => {
+      const strategy = btn.id.replace(/^exportBtn-/, '');
+      const tabPerm = window.PERMISSION_TAB_MAP[strategy];
+      if (!tabPerm) return;
+      const suffix = tabPerm.replace('channel.screening.tab.', '');
+      const exportPerm = 'channel.screening.tab.' + suffix + '.btn.export';
+      // 仅当注册表存在该导出权限码时才挂载（部分策略未定义 export）
+      const registry = window.PERMISSION_REGISTRY || [];
+      if (registry.some(p => p.code === exportPerm)) {
+        btn.setAttribute('data-perm', exportPerm);
+      }
+    });
     this.applyToPage();
   }
 };

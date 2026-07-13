@@ -114,6 +114,15 @@ const ScreeningPage = {
             return;
         }
 
+        // 权限校验：无对应 Tab 权限则不允许切换
+        const tabPerm = (window.PERMISSION_TAB_MAP && window.PERMISSION_TAB_MAP[strategy]) || null;
+        if (tabPerm && window.PermissionEngine && !PermissionEngine.has(tabPerm)) {
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+                CommonUtils.showToast('您没有该选股策略的访问权限', 'warning');
+            }
+            return;
+        }
+
         this.currentStrategy = strategy;
 
         // 更新标签页状态
@@ -2908,6 +2917,8 @@ const ScreeningPage = {
             suffix = 'gms';
         } else if (strategy === 'volume-shrink-breakout') {
             suffix = 'volume-shrink-breakout';
+        } else if (strategy === 'urt') {
+            suffix = 'urt';
         } else {
             suffix = 'cyb';
         }
@@ -3032,6 +3043,28 @@ const ScreeningPage = {
                     if (v) params.append('boards', v);
                 });
                 url = `${apiBaseUrl}/api/screening/volume-shrink-breakout-strategy?${params.toString()}`;
+            } else if (strategy === 'urt') {
+                const params = new URLSearchParams();
+                params.set('scope', 'all');
+                const urtDateEl = document.getElementById('urtScreeningDate');
+                if (urtDateEl && urtDateEl.value) {
+                    params.set('date', urtDateEl.value);
+                }
+                const limEl = document.getElementById('urtLimit');
+                const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
+                if (limRaw !== '') {
+                    const lim = parseInt(limRaw, 10);
+                    if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
+                }
+                const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
+                if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
+                const ms = parseFloat(document.getElementById('urtMinScore')?.value);
+                if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
+                document.querySelectorAll('input[name="urtBoard"]:checked').forEach((cb) => {
+                    const v = cb && cb.value ? String(cb.value).trim() : '';
+                    if (v) params.append('boards', v);
+                });
+                url = `${apiBaseUrl}/api/screening/urt-strategy?${params.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -3084,9 +3117,19 @@ const ScreeningPage = {
                     if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;
                     searchDate.textContent = dateText;
                 }
-                // 显示导出按钮
+                // 显示导出按钮（尊重 data-perm 权限）
                 if (exportBtn && result.data.length > 0) {
-                    exportBtn.style.display = 'inline-block';
+                    const exportPerm = exportBtn.getAttribute('data-perm');
+                    const allowed = !exportPerm
+                        || !window.PermissionEngine
+                        || PermissionEngine.has(exportPerm);
+                    if (allowed) {
+                        exportBtn.style.display = 'inline-block';
+                        exportBtn.removeAttribute('aria-hidden');
+                    } else {
+                        exportBtn.style.display = 'none';
+                        exportBtn.setAttribute('aria-hidden', 'true');
+                    }
                 }
                 if (strategy === 'gms' && result.data.length > 0) {
                     const excelBtn = document.getElementById('exportExcelBtn-gms');
@@ -3147,6 +3190,8 @@ const ScreeningPage = {
                 colSpan = 11;
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
+            } else if (strategy === 'urt') {
+                colSpan = 12;
             } else {
                 colSpan = 12;
             }
@@ -3541,6 +3586,8 @@ const ScreeningPage = {
             suffix = 'gms';
         } else if (strategy === 'volume-shrink-breakout') {
             suffix = 'volume-shrink-breakout';
+        } else if (strategy === 'urt') {
+            suffix = 'urt';
         } else {
             suffix = 'cyb';
         }
@@ -3575,6 +3622,8 @@ const ScreeningPage = {
                 colSpan = 17;
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
+            } else if (strategy === 'urt') {
+                colSpan = 12;
             } else {
                 colSpan = 12;
             }
@@ -3787,6 +3836,28 @@ const ScreeningPage = {
                                 <a href="stock_vsb_trace.html?code=${stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">信号历史</a>
                                 <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
                                 <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else if (strategy === 'urt') {
+                html += `
+                    <tr>
+                        <td><span class="stock-code">${stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name}</span></td>
+                        <td>${stock.signal_date || '--'}</td>
+                        <td>${stock.close != null ? Number(stock.close).toFixed(2) : '--'}</td>
+                        <td>${stock.ma20 != null ? Number(stock.ma20).toFixed(2) : '--'}</td>
+                        <td>${stock.yang_count_4 != null ? stock.yang_count_4 : '--'}</td>
+                        <td>${stock.yang_count_5 != null ? stock.yang_count_5 : '--'}</td>
+                        <td>${stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '--'}</td>
+                        <td>${stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '--'}</td>
+                        <td>${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
+                        <td>${stock.score != null ? Number(stock.score).toFixed(1) : '--'}</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
                             </div>
                         </td>
                     </tr>
@@ -4374,6 +4445,25 @@ const ScreeningPage = {
                 ];
             });
             filename = `3倍量缩量突破筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
+        } else if (strategy === 'urt') {
+            headers = [
+                '股票代码', '股票名称', '信号日', '收盘', 'MA20', '4日阳', '5日阳',
+                '量能倍数', '量比', '换手%', '得分',
+            ];
+            rows = data.map((stock) => [
+                `\u2060${stock.code}`,
+                stock.name,
+                stock.signal_date || '',
+                stock.close != null ? Number(stock.close).toFixed(2) : '',
+                stock.ma20 != null ? Number(stock.ma20).toFixed(2) : '',
+                stock.yang_count_4 != null ? stock.yang_count_4 : '',
+                stock.yang_count_5 != null ? stock.yang_count_5 : '',
+                stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '',
+                stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '',
+                stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '',
+                stock.score != null ? Number(stock.score).toFixed(1) : '',
+            ]);
+            filename = `上升趋势策略筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else {
             // 通用导出（如果需要支持其他策略）
             if (data.length > 0) {

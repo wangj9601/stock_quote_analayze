@@ -75,6 +75,7 @@ try:
         GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
         GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
         GMSStrategyConfig = getattr(models_module, 'GMSStrategyConfig', None)
+        URTStrategyConfig = getattr(models_module, 'URTStrategyConfig', None)
         GMSRuntimeConfig = getattr(models_module, 'GMSRuntimeConfig', None)
         GMSBacktestTask = getattr(models_module, 'GMSBacktestTask', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
@@ -191,6 +192,8 @@ except Exception as e:
     TripleVolumeTradeObserveStock = None
     GMSStrategyVersion = None
     GMSStrategyVersionStock = None
+    GMSStrategyConfig = None
+    URTStrategyConfig = None
     GMSRuntimeConfig = None
     GMSBacktestTask = None
     StockBasicInfo = None
@@ -310,6 +313,8 @@ __all__ = [
     'TripleVolumeTradeObserveStock',
     'GMSStrategyVersion',
     'GMSStrategyVersionStock',
+    'GMSStrategyConfig',
+    'URTStrategyConfig',
     'GMSRuntimeConfig',
     'GMSBacktestTask',
     'StockBasicInfo',

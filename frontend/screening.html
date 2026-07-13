@@ -31,6 +31,7 @@
             <button class="strategy-tab" data-strategy="pvfrs" id="pvfrsTab" style="display:none;">PVFARS量价频幅度共振</button>
             <button class="strategy-tab" data-strategy="gms" id="gmsTab">GMS均值引力动量</button>
             <button class="strategy-tab" data-strategy="volume-shrink-breakout" id="volumeShrinkBreakoutTab">3倍量缩量突破</button>
+            <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -1426,6 +1427,89 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 上升趋势策略 URT -->
+        <div id="urt-content" class="strategy-content" data-perm="channel.screening.tab.urt">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>趋势确认：</strong>收盘价站上 20 日均线</li>
+                    <li><strong>动能连阳：</strong>4 日内 ≥3 根阳线，或 5 日内 ≥4 根阳线</li>
+                    <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（默认 2.5）</li>
+                    <li><strong>得分过滤：</strong>默认最低 70 分；可选手动启用换手率/量比硬筛</li>
+                    <li class="condition-item">全市场扫描较慢，联调请先设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
+                </ul>
+            </div>
+            <div class="parameters-card">
+                <h3>可选参数</h3>
+                <div class="parameters-grid">
+                    <div class="parameter-group">
+                        <label for="urtScreeningDate">筛选基准日</label>
+                        <input type="date" id="urtScreeningDate" class="param-input">
+                        <label for="urtLimit">limit（空=全市场）</label>
+                        <input type="number" id="urtLimit" class="param-input" min="1" max="10000" step="1" placeholder="如 200" value="200">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="urtVolumeMultiple">量能倍数</label>
+                        <input type="number" id="urtVolumeMultiple" class="param-input" min="1" max="30" step="0.1" value="2.5">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="urtMinScore">最低得分</label>
+                        <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" value="70">
+                    </div>
+                    <div class="parameter-group" style="grid-column: 1 / -1;">
+                        <label>代码段过滤（多选；不选表示全市场）</label>
+                        <div class="ma-periods-checkboxes" id="urtBoardCheckboxes">
+                            <label><input type="checkbox" name="urtBoard" value="CYB"> 创业板 (300)</label>
+                            <label><input type="checkbox" name="urtBoard" value="KCB"> 科创板 (688)</label>
+                            <label><input type="checkbox" name="urtBoard" value="SH_MAIN"> 沪市主板</label>
+                            <label><input type="checkbox" name="urtBoard" value="SZ_MAIN"> 深市主板</label>
+                            <label><input type="checkbox" name="urtBoard" value="SZ_SME"> 中小板 (002)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="screening-actions">
+                <button id="refreshBtn-urt" class="refresh-btn" data-strategy="urt" data-perm="channel.screening.tab.urt.btn.refresh">刷新筛选</button>
+                <button id="exportBtn-urt" class="export-btn" style="display:none;" data-perm="channel.screening.tab.urt.btn.export">导出CSV</button>
+                <span id="searchDate-urt" class="search-date"></span>
+            </div>
+            <div id="loadingIndicator-urt" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+            <div id="errorMessage-urt" class="error-message" style="display:none;"></div>
+            <div id="resultsContainer-urt" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-urt" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-urt" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>信号日</th>
+                                <th>收盘</th>
+                                <th>MA20</th>
+                                <th>4日阳</th>
+                                <th>5日阳</th>
+                                <th>量能倍数</th>
+                                <th>量比</th>
+                                <th>换手%</th>
+                                <th>得分</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-urt">
+                            <tr>
+                                <td colspan="12" class="empty-state">点击「刷新筛选」开始</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
