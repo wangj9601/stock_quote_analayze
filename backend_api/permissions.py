@@ -214,3 +214,50 @@ def sync_permissions_from_registry(db: Session) -> dict:
         role.permissions = all_perms
     db.commit()
     return {"created": created, "updated": updated, "total": len(PERMISSION_REGISTRY)}
+
+
+def ensure_permissions_from_registry(db: Session) -> dict:
+    """
+    增量同步注册表权限：写入/更新注册表项；把 admin/standard 缺少的注册表权限补上。
+    不覆盖自定义角色已有授权（与全量 sync 不同）。
+    """
+    from backend_api.permission_registry_data import PERMISSION_REGISTRY
+
+    created_codes: List[str] = []
+    updated = 0
+    for item in PERMISSION_REGISTRY:
+        existing = db.query(FrontendPermission).filter(FrontendPermission.code == item["code"]).first()
+        if existing:
+            for key, value in item.items():
+                setattr(existing, key, value)
+            existing.is_active = True
+            updated += 1
+        else:
+            db.add(FrontendPermission(**item))
+            created_codes.append(item["code"])
+    db.commit()
+
+    registry_codes = {item["code"] for item in PERMISSION_REGISTRY}
+    registry_perms = (
+        db.query(FrontendPermission)
+        .filter(FrontendPermission.code.in_(registry_codes), FrontendPermission.is_active.is_(True))
+        .all()
+    )
+    standard = get_standard_role(db)
+    admin_role = db.query(FrontendRole).filter(FrontendRole.code == "admin").first()
+    granted = 0
+    for role in filter(None, [standard, admin_role]):
+        existing_ids = {p.id for p in (role.permissions or [])}
+        for perm in registry_perms:
+            if perm.id not in existing_ids:
+                role.permissions.append(perm)
+                granted += 1
+    db.commit()
+
+    return {
+        "created": len(created_codes),
+        "updated": updated,
+        "granted_to_builtin_roles": granted,
+        "created_codes": created_codes,
+        "total": len(PERMISSION_REGISTRY),
+    }

@@ -828,6 +828,20 @@ if gms_admin_router is not None:
 else:
     print("GMS admin 路由未注册")
 
+# 尝试导入 URT admin 路由
+try:
+    from backend_api.admin.urt_admin_routes import router as urt_admin_router
+    print("urt_admin_router 导入成功")
+except Exception as e:
+    print(f"urt_admin_router 导入失败: {e}")
+    urt_admin_router = None
+
+if urt_admin_router is not None:
+    app.include_router(urt_admin_router)
+    print("URT admin 路由注册成功 (/api/admin/urt)")
+else:
+    print("URT admin 路由未注册")
+
 # 尝试导入 ETF admin 路由
 try:
     from backend_api.admin.etf_admin_routes import router as etf_admin_router
@@ -929,6 +943,26 @@ async def startup_event():
         except Exception as e:
             logger.warning("StockBasicInfo.code 列类型探测失败: %s", e)
         
+        try:
+            from backend_api.database import SessionLocal
+            from backend_api.permissions import ensure_permissions_from_registry
+
+            db = SessionLocal()
+            try:
+                result = ensure_permissions_from_registry(db)
+                if result.get("created"):
+                    logger.info(
+                        "权限注册表增量同步：新建 %s 项 %s",
+                        result["created"],
+                        result.get("created_codes"),
+                    )
+                else:
+                    logger.info("权限注册表增量同步完成（无新建项）")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("权限注册表增量同步失败: %s", e)
+
         # 启动 PVFRS 监控后台线程
         try:
             from backend_core.strategies.pvfrs.monitor_service import monitor_service

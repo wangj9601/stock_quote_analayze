@@ -1,0 +1,21 @@
+{
+  "ma_period": 20,
+  "yang_rule_a": {"window": 4, "min_up_days": 3},
+  "yang_rule_b": {"window": 5, "min_up_days": 4},
+  "volume_lookback": 20,
+  "volume_multiple": 2.5,
+  "min_score": 70,
+  "use_turnover": false,
+  "use_volume_ratio": false,
+  "min_turnover": 0,
+  "min_volume_ratio": 0,
+  "history_calendar_days": 120,
+  "risk": {
+    "stop_loss_pct_min": 5,
+    "stop_loss_pct_max": 10,
+    "time_stop_down_days": 3,
+    "take_profit_alert_pct_min": 25,
+    "take_profit_alert_pct_max": 30,
+    "trailing_drawdown_pct": 5
+  }
+}

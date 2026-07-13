@@ -27,6 +27,7 @@ def _int_env(name: str, default: int) -> int:
 
 GMS_SCREENING_TIMEOUT = max(60, _int_env("GMS_SCREENING_TIMEOUT", 600))
 VSB_SCREENING_TIMEOUT = max(60, _int_env("VSB_SCREENING_TIMEOUT", 600))
+URT_SCREENING_TIMEOUT = max(60, _int_env("URT_SCREENING_TIMEOUT", 600))
 
 from backend_api.services.gms_selection_snapshot import (
     build_param_hash,
@@ -473,6 +474,15 @@ except Exception as e:
     VolumeShrinkBreakoutFrontendInterface = None  # type: ignore
     VSB_AVAILABLE = False
     logger.warning("VSB 策略模块导入失败: %s", e)
+
+try:
+    from backend_core.strategies.urt import URTFrontendInterface
+
+    URT_AVAILABLE = True
+except Exception as e:
+    URTFrontendInterface = None  # type: ignore
+    URT_AVAILABLE = False
+    logger.warning("URT 策略模块导入失败: %s", e)
 
 # PVFRS 策略参数（供选股界面显示与编辑）
 PVFRS_PARAM_KEYS = [
@@ -2733,6 +2743,109 @@ async def get_volume_shrink_breakout_strategy(
             content={
                 "success": False,
                 "message": f"选股计算超时（超过{VSB_SCREENING_TIMEOUT}秒），请缩小范围或使用 limit",
+                "data": [],
+            },
+        )
+
+    return JSONResponse(payload)
+
+
+@router.get("/urt-strategy")
+async def get_urt_strategy(
+    scope: str = Query("all", description="股票范围: all | watchlist"),
+    limit: Optional[int] = Query(None, ge=1, description="限制扫描数量（全市场建议先设 limit）"),
+    date: Optional[str] = Query(None, description="筛选基准日 YYYY-MM-DD"),
+    config_id: Optional[int] = Query(None, ge=1, description="URT 参数版本 ID"),
+    volume_multiple: Optional[float] = Query(None, ge=1.0, le=30.0, description="量能相对近20日均量倍数"),
+    min_score: Optional[float] = Query(None, ge=0, le=100, description="最低得分"),
+    use_turnover: Optional[bool] = Query(None, description="是否启用换手率硬筛"),
+    use_volume_ratio: Optional[bool] = Query(None, description="是否启用量比硬筛"),
+    min_turnover: Optional[float] = Query(None, ge=0, description="最低换手率%"),
+    min_volume_ratio: Optional[float] = Query(None, ge=0, description="最低量比"),
+    boards: Optional[List[str]] = Query(
+        None,
+        description="板块过滤：CYB/KCB/SH_MAIN/SZ_MAIN/SZ_SME/BJ",
+    ),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """
+    上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
+    """
+    if not URT_AVAILABLE or URTFrontendInterface is None:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "上升趋势策略模块不可用", "data": []},
+        )
+
+    stock_codes: Optional[List[str]] = None
+    if scope == "watchlist":
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="查看自选股需要登录",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username: str = payload.get("sub")
+            if username is None:
+                raise HTTPException(status_code=401, detail="无效的认证凭据")
+            from backend_api.models import User
+
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="用户不存在")
+            watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+            if not watchlist_items:
+                from backend_core.strategies.urt.data_loader import URTDataLoader
+
+                eff = URTDataLoader.resolve_effective_history_end_date(db, date)
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "search_date": eff,
+                        "strategy_name": "上升趋势策略",
+                        "scope": "watchlist",
+                        "message": "您的自选股列表为空",
+                    }
+                )
+            stock_codes = [str(item.stock_code).strip() for item in watchlist_items]
+        except JWTError:
+            raise HTTPException(status_code=401, detail="无效的认证凭据")
+    elif scope != "all":
+        raise HTTPException(status_code=400, detail="scope 仅支持 all 或 watchlist")
+
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        return URTFrontendInterface.screen(
+            db,
+            scope=scope,
+            limit=limit,
+            stock_codes=stock_codes,
+            boards=boards,
+            screening_date=date,
+            config_id=config_id,
+            volume_multiple=volume_multiple,
+            min_score=min_score,
+            use_turnover=use_turnover,
+            use_volume_ratio=use_volume_ratio,
+            min_turnover=min_turnover,
+            min_volume_ratio=min_volume_ratio,
+        )
+
+    try:
+        payload = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=URT_SCREENING_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.warning("URT 选股超时(%ss) scope=%s", URT_SCREENING_TIMEOUT, scope)
+        return JSONResponse(
+            status_code=504,
+            content={
+                "success": False,
+                "message": f"选股计算超时（超过{URT_SCREENING_TIMEOUT}秒），请缩小范围或使用 limit",
                 "data": [],
             },
         )

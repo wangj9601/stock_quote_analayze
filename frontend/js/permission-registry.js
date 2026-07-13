@@ -18,12 +18,15 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.gms', name: 'GMS均值引力动量', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 60 },
   { code: 'channel.screening.tab.pvfrs', name: 'PVFRS量价频幅度共振', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 70 },
   { code: 'channel.screening.tab.vsb', name: '3倍量缩量突破', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 80 },
+  { code: 'channel.screening.tab.urt', name: '上升趋势', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 90 },
 
   { code: 'channel.screening.tab.cyb_midline.btn.refresh', name: '刷新筛选', level: 3, parent_code: 'channel.screening.tab.cyb_midline', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.gms.btn.refresh', name: 'GMS刷新', level: 3, parent_code: 'channel.screening.tab.gms', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.gms.btn.export', name: 'GMS导出', level: 3, parent_code: 'channel.screening.tab.gms', channel_code: 'screening', sort_order: 20 },
   { code: 'channel.screening.tab.pvfrs.btn.refresh', name: 'PVFRS刷新', level: 3, parent_code: 'channel.screening.tab.pvfrs', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.vsb.btn.refresh', name: 'VSB刷新', level: 3, parent_code: 'channel.screening.tab.vsb', channel_code: 'screening', sort_order: 10 },
+  { code: 'channel.screening.tab.urt.btn.refresh', name: 'URT刷新', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 10 },
+  { code: 'channel.screening.tab.urt.btn.export', name: 'URT导出', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 20 },
   { code: 'channel.screening.tab.vsb.btn.add_observe', name: '加入观察', level: 3, parent_code: 'channel.screening.tab.vsb', channel_code: 'screening', sort_order: 20 },
 
   { code: 'channel.analyze.tab.market', name: '市场分析', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 10 },
@@ -56,5 +59,6 @@ window.PERMISSION_TAB_MAP = {
   'one-yang-three-lines': 'channel.screening.tab.one_yang_three_lines',
   gms: 'channel.screening.tab.gms',
   pvfrs: 'channel.screening.tab.pvfrs',
-  'volume-shrink-breakout': 'channel.screening.tab.vsb'
+  'volume-shrink-breakout': 'channel.screening.tab.vsb',
+  urt: 'channel.screening.tab.urt'
 };

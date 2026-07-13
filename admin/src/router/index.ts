@@ -88,6 +88,11 @@ const routes = [
         component: () => import('@/views/GMSManagementView.vue')
       },
       {
+        path: 'urt-management',
+        name: 'URTManagement',
+        component: () => import('@/views/UrtManagementView.vue')
+      },
+      {
         path: 'triple-volume-observe',
         name: 'TripleVolumeObserve',
         component: () => import('@/views/TripleVolumeObserveView.vue')

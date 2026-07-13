@@ -868,6 +868,23 @@ class MeanFrequencyResonanceIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class URTStrategyConfig(Base):
+    """URT 上升趋势策略参数版本表：多版本 JSON 快照。"""
+
+    __tablename__ = "urt_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    version_label = Column(String(32), nullable=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    created_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
 class GMSStrategyConfig(Base):
     """GMS 策略参数版本表：多版本 JSON 快照，支持默认版本与预计算标记。"""
 
