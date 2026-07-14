@@ -47,9 +47,14 @@ const ScreeningPage = {
     /** 已选板块代码 */
     gmsSelectedIndustryBoardCodes: [],
     gmsSelectedConceptBoardCodes: [],
+    /** URT 已选行业/概念板块 */
+    urtSelectedIndustryBoardCodes: [],
+    urtSelectedConceptBoardCodes: [],
     /** 板块选择弹窗：industry | concept */
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
+    /** 板块选择弹窗归属：gms | urt */
+    _gmsBoardPickerOwner: 'gms',
 
     // 初始化
     async init() {
@@ -260,11 +265,19 @@ const ScreeningPage = {
 
         const industryBtn = document.getElementById('gmsIndustryBoardPickBtn');
         if (industryBtn) {
-            industryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry'));
+            industryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'gms'));
         }
         const conceptBtn = document.getElementById('gmsConceptBoardPickBtn');
         if (conceptBtn) {
-            conceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept'));
+            conceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'gms'));
+        }
+        const urtIndustryBtn = document.getElementById('urtIndustryBoardPickBtn');
+        if (urtIndustryBtn) {
+            urtIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'urt'));
+        }
+        const urtConceptBtn = document.getElementById('urtConceptBoardPickBtn');
+        if (urtConceptBtn) {
+            urtConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'urt'));
         }
 
         const confirmBtn = document.getElementById('gmsBoardPickerConfirm');
@@ -2087,15 +2100,18 @@ const ScreeningPage = {
             : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
     },
 
-    async openGmsBoardPickerModal(kind) {
+    async openGmsBoardPickerModal(kind, owner = 'gms') {
         if (kind === 'industry') await this.loadGmsIndustryBoardOptions();
         else await this.loadGmsConceptBoardOptions();
 
         this._gmsBoardPickerKind = kind;
-        const selected = kind === 'industry'
-            ? this.getGmsSelectedIndustryBoardCodes()
-            : this.getGmsSelectedConceptBoardCodes();
-        this._gmsBoardPickerDraft = this._mergeGmsTradeObserveBoardSelection(kind, selected);
+        this._gmsBoardPickerOwner = owner === 'urt' ? 'urt' : 'gms';
+        const selected = this._gmsBoardPickerOwner === 'urt'
+            ? (kind === 'industry' ? this.getUrtSelectedIndustryBoardCodes() : this.getUrtSelectedConceptBoardCodes())
+            : (kind === 'industry' ? this.getGmsSelectedIndustryBoardCodes() : this.getGmsSelectedConceptBoardCodes());
+        this._gmsBoardPickerDraft = this._gmsBoardPickerOwner === 'urt'
+            ? new Set(selected)
+            : this._mergeGmsTradeObserveBoardSelection(kind, selected);
 
         const titleEl = document.getElementById('gmsBoardPickerTitle');
         if (titleEl) {
@@ -2162,7 +2178,16 @@ const ScreeningPage = {
     confirmGmsBoardPicker() {
         const kind = this._gmsBoardPickerKind;
         const codes = Array.from(this._gmsBoardPickerDraft);
-        if (kind === 'industry') {
+        const owner = this._gmsBoardPickerOwner || 'gms';
+        if (owner === 'urt') {
+            if (kind === 'industry') {
+                this.urtSelectedIndustryBoardCodes = codes;
+                this.updateUrtIndustryBoardSummary();
+            } else if (kind === 'concept') {
+                this.urtSelectedConceptBoardCodes = codes;
+                this.updateUrtConceptBoardSummary();
+            }
+        } else if (kind === 'industry') {
             this.gmsSelectedIndustryBoardCodes = codes;
             this.updateGmsIndustryBoardSummary();
         } else if (kind === 'concept') {
@@ -2170,6 +2195,84 @@ const ScreeningPage = {
             this.updateGmsConceptBoardSummary();
         }
         this._hideGmsModal(document.getElementById('gmsBoardPickerModal'));
+    },
+
+    getUrtSelectedIndustryBoardCodes() {
+        return Array.isArray(this.urtSelectedIndustryBoardCodes)
+            ? this.urtSelectedIndustryBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    getUrtSelectedConceptBoardCodes() {
+        return Array.isArray(this.urtSelectedConceptBoardCodes)
+            ? this.urtSelectedConceptBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    updateUrtIndustryBoardSummary() {
+        const el = document.getElementById('urtIndustryBoardSummary');
+        if (!el) return;
+        const codes = this.getUrtSelectedIndustryBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
+            return b?.board_name || code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    updateUrtConceptBoardSummary() {
+        const el = document.getElementById('urtConceptBoardSummary');
+        if (!el) return;
+        const codes = this.getUrtSelectedConceptBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
+            return b?.board_name || code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    syncUrtCnBoardWrap() {
+        const wrap = document.getElementById('urtCnBoardWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="urtScope"]:checked');
+        const show = checked && ['cn', 'industry_board', 'concept_board'].includes(checked.value);
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
+    syncUrtIndustryBoardWrap() {
+        const wrap = document.getElementById('urtIndustryBoardWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="urtScope"]:checked');
+        const show = checked && checked.value === 'industry_board';
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
+    syncUrtConceptBoardWrap() {
+        const wrap = document.getElementById('urtConceptBoardWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="urtScope"]:checked');
+        const show = checked && checked.value === 'concept_board';
+        wrap.style.display = show ? 'flex' : 'none';
+    },
+
+    syncUrtSingleStockWrap() {
+        const wrap = document.getElementById('urtSingleStockWrap');
+        if (!wrap) return;
+        const checked = document.querySelector('input[name="urtScope"]:checked');
+        const show = checked && checked.value === 'single';
+        wrap.style.display = show ? 'flex' : 'none';
     },
 
     /** 显示/隐藏「行业板块」选择行 */
@@ -2348,10 +2451,11 @@ const ScreeningPage = {
 
     // 绑定事件
     bindEvents() {
-        // 绑定所有刷新按钮
+        // 绑定所有刷新按钮（仅带 data-strategy 的真正「刷新筛选」）
         document.querySelectorAll('.refresh-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const strategy = btn.dataset.strategy;
+                if (!strategy) return;
                 this.loadScreeningResults(strategy);
             });
         });
@@ -2469,6 +2573,39 @@ const ScreeningPage = {
             });
         }
 
+        // URT 数据来源切换（仅更新 UI，不自动触发选股）
+        document.querySelectorAll('input[name="urtScope"]').forEach((radio) => {
+            radio.addEventListener('change', () => {
+                this.syncUrtCnBoardWrap();
+                this.syncUrtIndustryBoardWrap();
+                this.syncUrtConceptBoardWrap();
+                this.syncUrtSingleStockWrap();
+                const scopeEl = document.querySelector('input[name="urtScope"]:checked');
+                if (scopeEl && scopeEl.value === 'industry_board') {
+                    void this.loadGmsIndustryBoardOptions();
+                }
+                if (scopeEl && scopeEl.value === 'concept_board') {
+                    void this.loadGmsConceptBoardOptions();
+                }
+            });
+        });
+        this.syncUrtCnBoardWrap();
+        this.syncUrtIndustryBoardWrap();
+        this.syncUrtConceptBoardWrap();
+        this.syncUrtSingleStockWrap();
+        const urtSingleInput = document.getElementById('urtSingleStockInput');
+        if (urtSingleInput) {
+            urtSingleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const scopeEl = document.querySelector('input[name="urtScope"]:checked');
+                    if (scopeEl && scopeEl.value === 'single') {
+                        e.preventDefault();
+                        void this.loadScreeningResults('urt');
+                    }
+                }
+            });
+        }
+
         // GMS 策略参数：保存 / 同步
         const gmsParamsSaveBtn = document.getElementById('gmsParamsSaveBtn');
         if (gmsParamsSaveBtn) {
@@ -2516,6 +2653,23 @@ const ScreeningPage = {
                 const tbody = document.getElementById('resultsTableBody-gms');
                 if (!tbody) return;
                 const detailRow = tbody.querySelector(`tr.gms-score-detail-row[data-detail-for="${rowIndex}"]`);
+                if (detailRow) {
+                    detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+                }
+            });
+        }
+
+        // URT 得分明细：展开/收起（风格对齐 GMS）
+        const urtContainer = document.getElementById('resultsContainer-urt');
+        if (urtContainer) {
+            urtContainer.addEventListener('click', (e) => {
+                const btn = e.target.closest('.urt-score-detail-toggle');
+                if (!btn) return;
+                e.preventDefault();
+                const rowIndex = btn.getAttribute('data-row');
+                const tbody = document.getElementById('resultsTableBody-urt');
+                if (!tbody) return;
+                const detailRow = tbody.querySelector(`tr.urt-score-detail-row[data-detail-for="${rowIndex}"]`);
                 if (detailRow) {
                     detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
                 }
@@ -2727,6 +2881,71 @@ const ScreeningPage = {
             });
         }
         return this.getGmsQuerySearchParams(options);
+    },
+
+    /** 构建 URT 选股查询参数（数据来源对齐 GMS） */
+    async buildUrtQuerySearchParams() {
+        const scopeElement = document.querySelector('input[name="urtScope"]:checked');
+        const scope = scopeElement ? scopeElement.value : 'cn';
+        if (scope === 'industry_board') {
+            if (this.getUrtSelectedIndustryBoardCodes().length === 0) {
+                throw new Error('请选择至少一个行业板块');
+            }
+        }
+        if (scope === 'concept_board') {
+            if (this.getUrtSelectedConceptBoardCodes().length === 0) {
+                throw new Error('请选择至少一个概念板块');
+            }
+        }
+        if (scope === 'single') {
+            const inputEl = document.getElementById('urtSingleStockInput');
+            const raw = inputEl ? String(inputEl.value || '').trim() : '';
+            if (!raw) {
+                throw new Error('请输入股票代码或名称');
+            }
+        }
+
+        const params = new URLSearchParams();
+        params.set('scope', scope);
+
+        if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
+            document.querySelectorAll('input[name="urtCnBoardSegment"]:checked').forEach((cb) => {
+                const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
+                if (v && v !== 'ALL') params.append('cn_board_segment', v);
+            });
+        }
+        if (scope === 'industry_board') {
+            this.getUrtSelectedIndustryBoardCodes().forEach((code) => {
+                params.append('industry_board_code', code);
+            });
+        }
+        if (scope === 'concept_board') {
+            this.getUrtSelectedConceptBoardCodes().forEach((code) => {
+                params.append('concept_board_code', code);
+            });
+        }
+        if (scope === 'single') {
+            const inputEl = document.getElementById('urtSingleStockInput');
+            params.set('stock_code', String(inputEl?.value || '').trim());
+        }
+
+        const urtDateEl = document.getElementById('urtScreeningDate');
+        if (urtDateEl && urtDateEl.value) {
+            params.set('date', urtDateEl.value);
+        }
+        if (scope === 'cn') {
+            const limEl = document.getElementById('urtLimit');
+            const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
+            if (limRaw !== '') {
+                const lim = parseInt(limRaw, 10);
+                if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
+            }
+        }
+        const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
+        if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
+        const ms = parseFloat(document.getElementById('urtMinScore')?.value);
+        if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
+        return params;
     },
 
     /** GMS：按代码/名称精准定位（全量拉取后匹配） */
@@ -3044,26 +3263,7 @@ const ScreeningPage = {
                 });
                 url = `${apiBaseUrl}/api/screening/volume-shrink-breakout-strategy?${params.toString()}`;
             } else if (strategy === 'urt') {
-                const params = new URLSearchParams();
-                params.set('scope', 'all');
-                const urtDateEl = document.getElementById('urtScreeningDate');
-                if (urtDateEl && urtDateEl.value) {
-                    params.set('date', urtDateEl.value);
-                }
-                const limEl = document.getElementById('urtLimit');
-                const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
-                if (limRaw !== '') {
-                    const lim = parseInt(limRaw, 10);
-                    if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
-                }
-                const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
-                if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
-                const ms = parseFloat(document.getElementById('urtMinScore')?.value);
-                if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
-                document.querySelectorAll('input[name="urtBoard"]:checked').forEach((cb) => {
-                    const v = cb && cb.value ? String(cb.value).trim() : '';
-                    if (v) params.append('boards', v);
-                });
+                const params = await this.buildUrtQuerySearchParams();
                 url = `${apiBaseUrl}/api/screening/urt-strategy?${params.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
@@ -3841,25 +4041,48 @@ const ScreeningPage = {
                     </tr>
                 `;
             } else if (strategy === 'urt') {
+                const urtName = stock.name || '--';
+                const urtTitleAttr = String(urtName)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/</g, '&lt;');
+                const urtCode = String(stock.code || '');
+                const urtDetailHref = `stock.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
+                const urtTraceHref = `stock_urt_trace.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
+                let urtScoreDetailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
+                if (window.UrtScoreDetail && typeof window.UrtScoreDetail.buildHtml === 'function') {
+                    urtScoreDetailHtml = window.UrtScoreDetail.buildHtml(stock);
+                }
+                const scoreVal = stock.score != null ? Number(stock.score) : null;
+                let scoreClass = '';
+                if (scoreVal != null) {
+                    if (scoreVal >= 85) scoreClass = 'strength-high';
+                    else if (scoreVal >= 70) scoreClass = 'strength-mid';
+                    else scoreClass = 'strength-low';
+                }
                 html += `
-                    <tr>
-                        <td><span class="stock-code">${stock.code}</span></td>
-                        <td><span class="stock-name">${stock.name}</span></td>
-                        <td>${stock.signal_date || '--'}</td>
-                        <td>${stock.close != null ? Number(stock.close).toFixed(2) : '--'}</td>
-                        <td>${stock.ma20 != null ? Number(stock.ma20).toFixed(2) : '--'}</td>
-                        <td>${stock.yang_count_4 != null ? stock.yang_count_4 : '--'}</td>
-                        <td>${stock.yang_count_5 != null ? stock.yang_count_5 : '--'}</td>
-                        <td>${stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '--'}</td>
-                        <td>${stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '--'}</td>
-                        <td>${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
-                        <td>${stock.score != null ? Number(stock.score).toFixed(1) : '--'}</td>
-                        <td>
+                    <tr data-urt-row="${index}">
+                        <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${urtCode}</a></td>
+                        <td class="gms-col-name"><span class="stock-name" title="${urtTitleAttr}">${urtName}</span></td>
+                        <td class="gms-col-narrow">${stock.signal_date || '--'}</td>
+                        <td class="gms-col-price">${stock.close != null ? Number(stock.close).toFixed(2) : '--'}</td>
+                        <td class="gms-col-price">${stock.ma20 != null ? Number(stock.ma20).toFixed(2) : '--'}</td>
+                        <td class="gms-col-narrow">${stock.yang_count_4 != null ? stock.yang_count_4 : '--'}</td>
+                        <td class="gms-col-narrow">${stock.yang_count_5 != null ? stock.yang_count_5 : '--'}</td>
+                        <td class="gms-col-narrow">${stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '--'}</td>
+                        <td class="gms-col-narrow">${stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '--'}</td>
+                        <td class="gms-col-narrow">${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
+                        <td class="gms-col-narrow"><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
+                        <td class="gms-col-actions">
                             <div class="action-links">
-                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
-                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
+                                <a href="${urtTraceHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
+                                <button type="button" class="gms-op-btn urt-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">明细</button>
                             </div>
                         </td>
+                    </tr>
+                    <tr class="gms-score-detail-row urt-score-detail-row" data-detail-for="${index}" style="display:none;">
+                        <td colspan="12" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
                     </tr>
                 `;
             } else if (strategy === 'one-yang-three-lines') {

@@ -1440,15 +1440,76 @@
                     <li><strong>动能连阳：</strong>4 日内 ≥3 根阳线，或 5 日内 ≥4 根阳线</li>
                     <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（默认 2.5）</li>
                     <li><strong>得分过滤：</strong>默认最低 70 分；可选手动启用换手率/量比硬筛</li>
+                    <li><strong>数据来源：</strong>全部 A 股 / 我的自选 / 行业板块 / 概念板块 / 单只股票（暂仅 A 股）；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
                     <li class="condition-item">全市场扫描较慢，联调请先设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
                 </ul>
             </div>
+
+            <div class="strategy-params-card" id="urtDataSourceCard">
+                <h3>🔍 数据来源</h3>
+                <p class="gms-params-refresh-hint">修改数据来源或板块后，须点击「刷新筛选」才会重新计算。</p>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 10px 0;">
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeCN" name="urtScope" value="cn" checked style="margin-right: 5px;">
+                        <label for="urtScopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeWatchlist" name="urtScope" value="watchlist" style="margin-right: 5px;">
+                        <label for="urtScopeWatchlist" style="cursor: pointer;">我的自选</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeIndustryBoard" name="urtScope" value="industry_board" style="margin-right: 5px;">
+                        <label for="urtScopeIndustryBoard" style="cursor: pointer;">行业板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeConceptBoard" name="urtScope" value="concept_board" style="margin-right: 5px;">
+                        <label for="urtScopeConceptBoard" style="cursor: pointer;">概念板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeSingle" name="urtScope" value="single" style="margin-right: 5px;">
+                        <label for="urtScopeSingle" style="cursor: pointer;">单只股票</label>
+                    </div>
+                </div>
+                <div id="urtCnBoardWrap" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;"
+                    title="可多选；不勾选表示不限 A 股板块（等同全部 A 股）。">
+                    <span style="color: #666; font-size: 13px;">A股板块（可多选）：</span>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span style="color: #888; font-size: 12px;">不选=不限板块</span>
+                </div>
+                <div id="urtIndustryBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">行业板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="urtIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="urtIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="urtConceptBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">概念板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="urtConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="urtConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="urtSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <label for="urtSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
+                    <input type="text" id="urtSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
+                        style="min-width: 220px; max-width: 320px;">
+                    <span style="color: #888; font-size: 12px;">输入后按 Enter 或点击「刷新筛选」</span>
+                </div>
+            </div>
+
             <div class="parameters-card">
                 <h3>可选参数</h3>
                 <div class="parameters-grid">
                     <div class="parameter-group">
                         <label for="urtScreeningDate">筛选基准日</label>
                         <input type="date" id="urtScreeningDate" class="param-input">
+                    </div>
+                    <div class="parameter-group">
                         <label for="urtLimit">limit（空=全市场）</label>
                         <input type="number" id="urtLimit" class="param-input" min="1" max="10000" step="1" placeholder="如 200" value="200">
                     </div>
@@ -1460,48 +1521,38 @@
                         <label for="urtMinScore">最低得分</label>
                         <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" value="70">
                     </div>
-                    <div class="parameter-group" style="grid-column: 1 / -1;">
-                        <label>代码段过滤（多选；不选表示全市场）</label>
-                        <div class="ma-periods-checkboxes" id="urtBoardCheckboxes">
-                            <label><input type="checkbox" name="urtBoard" value="CYB"> 创业板 (300)</label>
-                            <label><input type="checkbox" name="urtBoard" value="KCB"> 科创板 (688)</label>
-                            <label><input type="checkbox" name="urtBoard" value="SH_MAIN"> 沪市主板</label>
-                            <label><input type="checkbox" name="urtBoard" value="SZ_MAIN"> 深市主板</label>
-                            <label><input type="checkbox" name="urtBoard" value="SZ_SME"> 中小板 (002)</label>
-                        </div>
-                    </div>
                 </div>
             </div>
             <div class="screening-actions">
                 <button id="refreshBtn-urt" class="refresh-btn" data-strategy="urt" data-perm="channel.screening.tab.urt.btn.refresh">刷新筛选</button>
-                <button id="exportBtn-urt" class="export-btn" style="display:none;" data-perm="channel.screening.tab.urt.btn.export">导出CSV</button>
-                <span id="searchDate-urt" class="search-date"></span>
+                <button id="exportBtn-urt" class="export-btn gms-btn-outline" style="display:none;" data-perm="channel.screening.tab.urt.btn.export">导出CSV</button>
+                <span id="searchDate-urt" class="search-date gms-meta-text"></span>
             </div>
             <div id="loadingIndicator-urt" class="loading-indicator" style="display:none;">
                 <div class="spinner"></div>
                 <span>正在筛选股票，请稍候...</span>
             </div>
             <div id="errorMessage-urt" class="error-message" style="display:none;"></div>
-            <div id="resultsContainer-urt" class="results-container">
-                <div class="results-header">
-                    <span id="resultsCount-urt" class="results-count">共找到 0 只符合条件的股票</span>
+            <div id="resultsContainer-urt" class="results-container gms-results-card">
+                <div class="gms-table-meta-bar">
+                    <span id="resultsCount-urt" class="gms-table-meta-summary results-count">共找到 0 只符合条件的股票</span>
                 </div>
                 <div id="resultsTable-urt" class="results-table-wrapper">
                     <table class="results-table">
                         <thead>
                             <tr>
-                                <th>股票代码</th>
-                                <th>股票名称</th>
-                                <th>信号日</th>
-                                <th>收盘</th>
-                                <th>MA20</th>
-                                <th>4日阳</th>
-                                <th>5日阳</th>
-                                <th>量能倍数</th>
-                                <th>量比</th>
-                                <th>换手%</th>
-                                <th>得分</th>
-                                <th>操作</th>
+                                <th class="gms-col-code">股票代码</th>
+                                <th class="gms-col-name">股票名称</th>
+                                <th class="gms-col-narrow">信号日</th>
+                                <th class="gms-col-price">收盘</th>
+                                <th class="gms-col-price">MA20</th>
+                                <th class="gms-col-narrow">4日阳</th>
+                                <th class="gms-col-narrow">5日阳</th>
+                                <th class="gms-col-narrow">量能倍数</th>
+                                <th class="gms-col-narrow">量比</th>
+                                <th class="gms-col-narrow">换手%</th>
+                                <th class="gms-col-narrow">得分</th>
+                                <th class="gms-col-actions">操作</th>
                             </tr>
                         </thead>
                         <tbody id="resultsTableBody-urt">
@@ -1651,6 +1702,7 @@
     </div>
 
     <script src="js/gms_score_detail.js"></script>
+    <script src="js/urt_score_detail.js"></script>
     <script src="js/screening.js"></script>
 </body>
 

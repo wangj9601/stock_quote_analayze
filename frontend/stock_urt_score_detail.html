@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URT 信号计算明细</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+    <div class="container">
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">URT 上升趋势 — 信号计算明细</div>
+            <div class="toolbar">
+                <div class="toolbar-row">
+                    <label>股票: <span id="stockDisplay">--</span></label>
+                    <span id="metaLine" class="gms-meta-text"></span>
+                    <a id="traceLink" class="gms-op-btn" href="#">返回信号历史</a>
+                </div>
+            </div>
+            <div id="content" class="gms-score-detail-cell" style="border-left: 3px solid #2e7d32; margin-top: 8px;"></div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/urt_score_detail.js"></script>
+    <script src="js/stock_urt_score_detail.js"></script>
+</body>
+</html>

@@ -112,6 +112,13 @@ except ImportError as e:
     print(f"gms_frontend_router 导入失败: {e}")
     gms_frontend_router = None
 
+try:
+    from .stock.urt_frontend_routes import router as urt_frontend_router
+    print("urt_frontend_router 导入成功")
+except ImportError as e:
+    print(f"urt_frontend_router 导入失败: {e}")
+    urt_frontend_router = None
+
 # 尝试导入认证路由
 try:
     from .auth_routes import router as auth_router
@@ -859,6 +866,10 @@ else:
 # 前端公开接口：路径与 PVFRS 完全分离（/api/frontend/gms vs /api/frontend/pvfrs）
 if gms_frontend_router is not None:
     app.include_router(gms_frontend_router)
+
+if urt_frontend_router is not None:
+    app.include_router(urt_frontend_router)
+    print("URT frontend 路由注册成功 (/api/stock/urt-*)")
     print("GMS 前端路由注册成功 (/api/frontend/gms)")
 else:
     print("GMS 前端路由未注册")

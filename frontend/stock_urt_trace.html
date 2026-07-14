@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URT 策略信号历史</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+    <div class="container">
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">URT 上升趋势 — 策略信号历史</div>
+            <div class="toolbar">
+                <div class="toolbar-row">
+                    <label>股票: <span id="stockDisplay">--</span></label>
+                    <label>参数版本:
+                        <select id="configSelect"></select>
+                    </label>
+                    <button id="searchBtn">查询</button>
+                    <a id="detailLink" class="gms-op-btn" href="#" target="_blank" rel="noopener">打开明细页</a>
+                </div>
+            </div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 URT 预计算信号（需先完成日终预计算）</div>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>日期</th>
+                            <th>买点</th>
+                            <th>得分</th>
+                            <th>收盘</th>
+                            <th>MA20</th>
+                            <th>4日阳</th>
+                            <th>5日阳</th>
+                            <th>量能倍数</th>
+                            <th>量比</th>
+                            <th>换手%</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/urt_score_detail.js"></script>
+    <script src="js/stock_urt_trace.js"></script>
+</body>
+</html>

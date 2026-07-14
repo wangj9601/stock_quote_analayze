@@ -2752,7 +2752,10 @@ async def get_volume_shrink_breakout_strategy(
 
 @router.get("/urt-strategy")
 async def get_urt_strategy(
-    scope: str = Query("all", description="股票范围: all | watchlist"),
+    scope: str = Query(
+        "cn",
+        description="股票范围: cn|all|watchlist|industry_board|concept_board|single",
+    ),
     limit: Optional[int] = Query(None, ge=1, description="限制扫描数量（全市场建议先设 limit）"),
     date: Optional[str] = Query(None, description="筛选基准日 YYYY-MM-DD"),
     config_id: Optional[int] = Query(None, ge=1, description="URT 参数版本 ID"),
@@ -2764,13 +2767,27 @@ async def get_urt_strategy(
     min_volume_ratio: Optional[float] = Query(None, ge=0, description="最低量比"),
     boards: Optional[List[str]] = Query(
         None,
-        description="板块过滤：CYB/KCB/SH_MAIN/SZ_MAIN/SZ_SME/BJ",
+        description="板块过滤：CYB/KCB/SH_MAIN/SZ_MAIN/SZ_SME/BJ（兼容旧参数）",
     ),
+    cn_board_segment: Optional[List[str]] = Query(
+        None,
+        description="A 股板块可多选: MAIN/CYB/SZ_SME/KCB/BJ（与 GMS 标签一致；优先于 boards；不传或 ALL 表示不限）",
+    ),
+    industry_board_code: Optional[List[str]] = Query(
+        None,
+        description="scope=industry_board 时：行业板块 BK 编码，可多选",
+    ),
+    concept_board_code: Optional[List[str]] = Query(
+        None,
+        description="scope=concept_board 时：概念板块代码，可多选",
+    ),
+    stock_code: Optional[str] = Query(None, description="scope=single 时：股票代码或名称"),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
     """
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
+    暂仅 A 股。数据来源对齐 GMS：全部A股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
     """
     if not URT_AVAILABLE or URTFrontendInterface is None:
         return JSONResponse(
@@ -2778,8 +2795,51 @@ async def get_urt_strategy(
             content={"success": False, "message": "上升趋势策略模块不可用", "data": []},
         )
 
+    scope_raw = (scope or "cn").strip().lower()
+    if scope_raw == "all":
+        scope_raw = "cn"
+    allowed = {"cn", "watchlist", "industry_board", "concept_board", "single"}
+    if scope_raw not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="scope 仅支持 cn/all/watchlist/industry_board/concept_board/single",
+        )
+
+    from backend_core.strategies.urt.data_loader import URTDataLoader, normalize_urt_board_keys
+
     stock_codes: Optional[List[str]] = None
-    if scope == "watchlist":
+    boards_out: Optional[List[str]] = boards
+    empty_msg: Optional[str] = None
+    extra_meta: Dict[str, Any] = {}
+
+    seg_list_raw = [
+        str(s).strip().upper()
+        for s in (cn_board_segment or [])
+        if s is not None and str(s).strip()
+    ]
+    seg_list = [s for s in seg_list_raw if s != "ALL"]
+    seg = ",".join(seg_list) if seg_list else ""
+    if seg_list:
+        from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+
+        mapped: List[str] = []
+        for one in seg_list:
+            keys = normalize_list_board_segment(one)
+            if not keys:
+                raise HTTPException(
+                    status_code=400,
+                    detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ（可多选）",
+                )
+            for k in keys:
+                ku = str(k).upper()
+                if ku in ("SH_MAIN", "SZ_MAIN", "MAIN", "主板"):
+                    mapped.extend(["SH_MAIN", "SZ_MAIN"])
+                else:
+                    mapped.append(ku)
+        boards_out = normalize_urt_board_keys(mapped) or mapped
+        extra_meta["cn_board_segments"] = seg_list
+
+    if scope_raw == "watchlist":
         if not token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -2798,35 +2858,123 @@ async def get_urt_strategy(
                 raise HTTPException(status_code=401, detail="用户不存在")
             watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
             if not watchlist_items:
-                from backend_core.strategies.urt.data_loader import URTDataLoader
-
-                eff = URTDataLoader.resolve_effective_history_end_date(db, date)
-                return JSONResponse(
-                    {
-                        "success": True,
-                        "data": [],
-                        "total": 0,
-                        "search_date": eff,
-                        "strategy_name": "上升趋势策略",
-                        "scope": "watchlist",
-                        "message": "您的自选股列表为空",
-                    }
-                )
-            stock_codes = [str(item.stock_code).strip() for item in watchlist_items]
+                empty_msg = "您的自选股列表为空"
+                stock_codes = []
+            else:
+                stock_codes = [str(item.stock_code).strip() for item in watchlist_items]
         except JWTError:
             raise HTTPException(status_code=401, detail="无效的认证凭据")
-    elif scope != "all":
-        raise HTTPException(status_code=400, detail="scope 仅支持 all 或 watchlist")
+
+    elif scope_raw == "industry_board":
+        from backend_api.models import IndustryBoardConstituent
+        from backend_api.utils.bk_board_code import resolve_industry_board_codes
+
+        bcodes = resolve_industry_board_codes(
+            db, _normalize_gms_board_codes(industry_board_code)
+        )
+        if not bcodes:
+            raw = _normalize_gms_board_codes(industry_board_code)
+            raise HTTPException(
+                status_code=400,
+                detail=f"未找到行业板块：{('、'.join(raw) if raw else '请传 industry_board_code')}",
+            )
+        rows_ib = (
+            db.query(IndustryBoardConstituent)
+            .filter(IndustryBoardConstituent.board_code.in_(bcodes))
+            .all()
+        )
+        stock_codes = list(
+            dict.fromkeys(
+                _normalize_stock_code_for_gms_pool(str(getattr(r, "stock_code", "") or "").strip())
+                for r in rows_ib
+                if getattr(r, "stock_code", None) is not None
+            )
+        )
+        stock_codes = [c for c in stock_codes if c]
+        extra_meta["industry_board_codes"] = bcodes
+        if not stock_codes:
+            empty_msg = f"行业板块「{'、'.join(bcodes)}」成分股为空"
+
+    elif scope_raw == "concept_board":
+        from backend_api.models import ConceptBoardConstituent
+
+        bcodes = _normalize_gms_board_codes(concept_board_code, upper=True)
+        if not bcodes:
+            raise HTTPException(status_code=400, detail="scope=concept_board 时需传 concept_board_code")
+        rows_cb = (
+            db.query(ConceptBoardConstituent)
+            .filter(ConceptBoardConstituent.board_code.in_(bcodes))
+            .all()
+        )
+        stock_codes = list(
+            dict.fromkeys(
+                _normalize_stock_code_for_gms_pool(str(getattr(r, "stock_code", "") or "").strip())
+                for r in rows_cb
+                if getattr(r, "stock_code", None) is not None
+            )
+        )
+        stock_codes = [c for c in stock_codes if c]
+        extra_meta["concept_board_codes"] = bcodes
+        if not stock_codes:
+            empty_msg = f"概念板块「{'、'.join(bcodes)}」成分股为空"
+
+    elif scope_raw == "single":
+        code = _resolve_gms_stock_code_from_input(db, stock_code or "")
+        if not code:
+            raise HTTPException(status_code=400, detail="未找到匹配的股票，请检查代码或名称")
+        if not (str(code).isdigit() and len(str(code)) == 6):
+            raise HTTPException(status_code=400, detail="上升趋势策略暂仅支持 A 股个股")
+        stock_codes = [str(code).zfill(6)]
+        extra_meta["stock_code"] = stock_codes[0]
+
+    if empty_msg is not None and stock_codes is not None and len(stock_codes) == 0:
+        eff = URTDataLoader.resolve_effective_history_end_date(db, date)
+        return JSONResponse(
+            {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "search_date": eff,
+                "strategy_name": "上升趋势策略",
+                "scope": scope_raw,
+                "message": empty_msg,
+                **extra_meta,
+            }
+        )
+
+    if stock_codes and boards_out:
+        from backend_core.strategies.volume_shrink_breakout.data_loader import code_matches_vsb_boards
+
+        keys = normalize_urt_board_keys(boards_out) or boards_out
+        stock_codes = [c for c in stock_codes if code_matches_vsb_boards(c, keys)]
+        if not stock_codes:
+            eff = URTDataLoader.resolve_effective_history_end_date(db, date)
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "search_date": eff,
+                    "strategy_name": "上升趋势策略",
+                    "scope": scope_raw,
+                    "message": "当前 A 股板块过滤下无匹配股票",
+                    "cn_board_segment": seg or None,
+                    **extra_meta,
+                }
+            )
+
+    screen_scope = "watchlist" if stock_codes is not None else "all"
+    screen_boards = None if stock_codes is not None else boards_out
 
     loop = asyncio.get_event_loop()
 
     def _run():
         return URTFrontendInterface.screen(
             db,
-            scope=scope,
-            limit=limit,
+            scope=screen_scope,
+            limit=limit if stock_codes is None else None,
             stock_codes=stock_codes,
-            boards=boards,
+            boards=screen_boards,
             screening_date=date,
             config_id=config_id,
             volume_multiple=volume_multiple,
@@ -2840,7 +2988,7 @@ async def get_urt_strategy(
     try:
         payload = await asyncio.wait_for(loop.run_in_executor(None, _run), timeout=URT_SCREENING_TIMEOUT)
     except asyncio.TimeoutError:
-        logger.warning("URT 选股超时(%ss) scope=%s", URT_SCREENING_TIMEOUT, scope)
+        logger.warning("URT 选股超时(%ss) scope=%s", URT_SCREENING_TIMEOUT, scope_raw)
         return JSONResponse(
             status_code=504,
             content={
@@ -2850,6 +2998,17 @@ async def get_urt_strategy(
             },
         )
 
+    if isinstance(payload, dict):
+        payload["scope"] = scope_raw
+        if seg:
+            payload["cn_board_segment"] = seg
+        for k, v in extra_meta.items():
+            payload[k] = v
+        if limit and isinstance(payload.get("data"), list) and stock_codes is not None:
+            data = payload["data"]
+            if len(data) > int(limit):
+                payload["data"] = data[: int(limit)]
+                payload["total"] = len(payload["data"])
     return JSONResponse(payload)
 
 

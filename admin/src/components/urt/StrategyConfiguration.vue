@@ -33,6 +33,7 @@
               <div class="flex gap-2">
                 <el-switch v-model="editMeta.is_default" active-text="默认" />
                 <el-switch v-model="editMeta.is_active" active-text="启用" />
+                <el-switch v-model="editMeta.precompute_enabled" active-text="预计算" />
                 <el-button type="primary" :loading="saving" @click="saveVersion">保存</el-button>
                 <el-button @click="showJson = !showJson">{{ showJson ? '表单' : 'JSON' }}</el-button>
                 <el-button :loading="previewing" @click="runPreview">试跑选股</el-button>
@@ -170,6 +171,7 @@ const editMeta = reactive({
   description: '',
   is_default: false,
   is_active: true,
+  precompute_enabled: false,
 })
 
 const form = reactive<any>({
@@ -243,6 +245,7 @@ async function onSelectVersion(row: URTStrategyConfig | null) {
     editMeta.description = data.description || ''
     editMeta.is_default = !!data.is_default
     editMeta.is_active = data.is_active !== false
+    editMeta.precompute_enabled = !!data.precompute_enabled
     applyParams(data.config_params || {})
   } catch (e: any) {
     ElMessage.error(e.message || '加载版本失败')
@@ -262,6 +265,7 @@ async function saveVersion() {
       description: editMeta.description,
       is_default: editMeta.is_default,
       is_active: editMeta.is_active,
+      precompute_enabled: editMeta.precompute_enabled,
       config_params: params,
     })
     ElMessage.success('已保存')

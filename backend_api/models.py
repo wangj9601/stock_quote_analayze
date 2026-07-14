@@ -880,9 +880,68 @@ class URTStrategyConfig(Base):
     config_params = Column(JSON, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     is_default = Column(Boolean, nullable=False, default=False, index=True)
+    precompute_enabled = Column(Boolean, nullable=False, default=False, index=True)
     created_by = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class URTSignalTrace(Base):
+    """URT 信号预计算表：按 code + date + config_id 隔离。"""
+
+    __tablename__ = "urt_signal_trace"
+
+    code = Column(StockCodeTextPK(), primary_key=True)
+    date = Column(String(20), primary_key=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("urt_strategy_configs.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    name = Column(String(100), nullable=True)
+    buy_signal = Column(Boolean, nullable=True, index=True)
+    score = Column(Float, nullable=True, index=True)
+    signal_strength = Column(Float, nullable=True)
+    close = Column(Float, nullable=True)
+    open = Column(Float, nullable=True)
+    ma20 = Column(Float, nullable=True)
+    above_ma20 = Column(Boolean, nullable=True)
+    yang_count_4 = Column(Integer, nullable=True)
+    yang_count_5 = Column(Integer, nullable=True)
+    yang_rule = Column(String(32), nullable=True)
+    volume = Column(Float, nullable=True)
+    avg_volume_20 = Column(Float, nullable=True)
+    volume_multiple = Column(Float, nullable=True)
+    volume_ratio = Column(Float, nullable=True)
+    turnover_rate = Column(Float, nullable=True)
+    score_detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (Index("idx_urt_trace_date_score", "date", "score"),)
+
+
+class URTBacktestTask(Base):
+    """URT 回测任务与报告摘要。"""
+
+    __tablename__ = "urt_backtest_tasks"
+
+    task_id = Column(String(64), primary_key=True)
+    name = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, index=True)
+    progress = Column(Integer, default=0, nullable=False)
+    message = Column(Text, nullable=True)
+    config = Column(JSON, nullable=False)
+    logs = Column(JSON, nullable=True)
+    summary = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    details_path = Column(String(512), nullable=True)
+    details_csv_bytes = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("idx_urt_bt_status_created", "status", "created_at"),)
 
 
 class GMSStrategyConfig(Base):

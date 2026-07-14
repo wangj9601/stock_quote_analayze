@@ -805,6 +805,33 @@ def _register_gms_signal_precompute_jobs():
 
 _register_gms_signal_precompute_jobs()
 
+
+def _register_urt_signal_precompute_jobs():
+    """定时将 URT 信号写入 urt_signal_trace（全 A 股），供选股页优先读库。"""
+    if not _env_bool("ENABLE_URT_PRECOMPUTE", True):
+        logging.info("URT 信号预计算已禁用（ENABLE_URT_PRECOMPUTE=false）")
+        return
+    try:
+        from backend_core.strategies.urt.scheduled_precompute import scheduled_urt_signals_cn
+    except Exception as e:
+        logging.error("导入 URT 预计算任务失败，跳过注册: %s", e)
+        return
+
+    scheduler.add_job(
+        scheduled_urt_signals_cn,
+        "cron",
+        day_of_week=_cron("SCHED_URT_SIGNALS_CN_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_URT_SIGNALS_CN_HOUR", 18),
+        minute=_cron_int("SCHED_URT_SIGNALS_CN_MINUTE", 35),
+        id="urt_signals_cn",
+    )
+    logging.info(
+        "已注册 URT 信号预计算任务（ENABLE_URT_PRECOMPUTE=true）：A股全量，默认 18:35"
+    )
+
+
+_register_urt_signal_precompute_jobs()
+
 scheduler.add_job(collect_akshare_realtime, 'cron',
     day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),
     hour=_cron('SCHED_AKSHARE_REALTIME_HOUR', '15'),

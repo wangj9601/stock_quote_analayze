@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-"""URT 上升趋势策略 — 管理端 API（参数版本 CRUD）。"""
+"""URT 上升趋势策略 — 管理端 API（参数版本 + 预计算 + 回测）。"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+import threading
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -25,6 +27,7 @@ class StrategyConfigCreateBody(BaseModel):
     description: Optional[str] = None
     is_active: bool = True
     is_default: bool = False
+    precompute_enabled: bool = False
     created_by: Optional[str] = None
 
 
@@ -35,6 +38,20 @@ class StrategyConfigUpdateBody(BaseModel):
     description: Optional[str] = None
     is_active: Optional[bool] = None
     is_default: Optional[bool] = None
+    precompute_enabled: Optional[bool] = None
+
+
+class BacktestCreateBody(BaseModel):
+    start_date: str
+    end_date: str
+    task_name: Optional[str] = None
+    strategy_config_id: Optional[int] = None
+    target_pct: float = 0.10
+    horizon_days: int = 20
+    min_score: Optional[float] = None
+    use_trace: bool = True
+    stock_code: Optional[str] = None
+    stock_pool: Optional[List[str]] = None
 
 
 @router.get("/strategy-configs")
@@ -81,6 +98,7 @@ async def create_strategy_config(body: StrategyConfigCreateBody, db: Session = D
             description=body.description,
             is_active=body.is_active,
             is_default=body.is_default,
+            precompute_enabled=body.precompute_enabled,
             created_by=body.created_by,
         )
         row = mgr.get_config_row(db, new_id)
@@ -112,6 +130,7 @@ async def update_strategy_config(
             config_params=body.config_params,
             is_active=body.is_active,
             is_default=body.is_default,
+            precompute_enabled=body.precompute_enabled,
         )
         if not ok:
             raise HTTPException(status_code=400, detail="更新失败")
@@ -128,7 +147,6 @@ async def update_strategy_config(
 
 @router.get("/default-params")
 async def get_default_params():
-    """返回内置默认参数（不含 DB）。"""
     mgr = URTConfigManager()
     return {"success": True, "data": mgr.load_file_config()}
 
@@ -140,18 +158,103 @@ async def screen_preview(
     config_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """管理端试跑选股摘要。"""
     try:
         from backend_core.strategies.urt import URTFrontendInterface
 
-        payload = URTFrontendInterface.screen(
+        return URTFrontendInterface.screen(
             db,
             scope="all",
             limit=limit,
             screening_date=date,
             config_id=config_id,
         )
-        return payload
     except Exception as e:
         logger.exception("URT screen-preview 失败")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/precompute/run")
+async def run_precompute(
+    date: Optional[str] = Query(None),
+    config_id: Optional[int] = Query(None),
+    limit: Optional[int] = Query(None, ge=1),
+):
+    """手动触发 A 股预计算（后台线程）。"""
+
+    def _job():
+        from backend_core.strategies.urt.scheduled_precompute import (
+            run_urt_precompute_ashare,
+            run_urt_precompute_for_config,
+        )
+
+        if config_id is not None:
+            run_urt_precompute_for_config(int(config_id), trade_date=date, limit=limit)
+        else:
+            run_urt_precompute_ashare(trade_date=date, limit=limit)
+
+    threading.Thread(target=_job, daemon=True, name="urt-precompute-manual").start()
+    return {"success": True, "message": "预计算任务已启动"}
+
+
+@router.post("/backtests")
+async def create_backtest(body: BacktestCreateBody):
+    try:
+        from backend_core.strategies.urt import backtest_storage, backtest_worker
+
+        config = body.model_dump()
+        task_id = backtest_storage.create_task(config, name=body.task_name)
+        backtest_worker.start_backtest_task(task_id)
+        return {"success": True, "task_id": task_id, "data": backtest_storage.get_task(task_id)}
+    except Exception as e:
+        logger.exception("创建 URT 回测失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/backtests")
+async def list_backtests(
+    limit: int = Query(50, ge=1, le=200),
+    status: Optional[str] = Query(None),
+):
+    from backend_core.strategies.urt import backtest_storage
+
+    return {"success": True, "data": backtest_storage.list_tasks(limit=limit, status=status)}
+
+
+@router.get("/backtests/{task_id}")
+async def get_backtest(task_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    row = backtest_storage.get_task(task_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"success": True, "data": row}
+
+
+@router.post("/backtests/{task_id}/cancel")
+async def cancel_backtest(task_id: str):
+    from backend_core.strategies.urt import backtest_storage, backtest_worker
+
+    backtest_worker.request_cancel(task_id)
+    ok = backtest_storage.cancel_task(task_id)
+    return {"success": ok}
+
+
+@router.post("/backtests/{task_id}/delete")
+async def delete_backtest(task_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    return {"success": backtest_storage.delete_task(task_id)}
+
+
+@router.get("/backtests/{task_id}/export")
+async def export_backtest(task_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    raw = backtest_storage.get_details_csv(task_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail="无明细可导出")
+    return Response(
+        content=raw,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="urt_backtest_{task_id[:8]}.csv"'},
+    )
