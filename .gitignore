@@ -35,6 +35,7 @@ env/
 .DS_Store
 
 # 日志文件
+logs/
 *.log
 auth.log
 sync.log

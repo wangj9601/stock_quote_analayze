@@ -16,12 +16,19 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
+# 确保可导入 backend_core（在项目根执行）
+_project_root = Path(__file__).parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from backend_core.logging_utils import resolve_log_file
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('deploy.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('deploy.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )

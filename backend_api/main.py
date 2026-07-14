@@ -80,6 +80,7 @@ import asyncio
 import re
 import uvicorn
 import logging
+from backend_core.logging_utils import resolve_log_file
 import os
 import sys
 from sqlalchemy.orm import Session
@@ -91,7 +92,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
     handlers=[
-        logging.FileHandler('app.log', encoding='utf-8', mode='a'),
+        logging.FileHandler(resolve_log_file('app.log'), encoding='utf-8', mode='a'),
         logging.StreamHandler()
     ]
 )

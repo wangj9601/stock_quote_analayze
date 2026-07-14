@@ -7,6 +7,7 @@
 
 import argparse
 import logging
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -23,7 +24,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('five_day_change_calculation.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('five_day_change_calculation.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )

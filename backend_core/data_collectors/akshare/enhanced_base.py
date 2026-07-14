@@ -20,6 +20,7 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
 from backend_core.config.config import DATA_COLLECTORS
+from backend_core.logging_utils import get_logs_dir
 
 T = TypeVar('T')
 
@@ -40,8 +41,8 @@ class EnhancedAKShareCollector:
         self._setup_user_agents()
         
     def _setup_logging(self):
-        """设置日志"""
-        log_dir = Path(self.config.get('log_dir', 'logs'))
+        """设置日志（统一写入项目根 logs/）"""
+        log_dir = Path(self.config.get('log_dir') or get_logs_dir())
         log_dir.mkdir(parents=True, exist_ok=True)
         
         log_file = log_dir / f'enhanced_akshare_{self.__class__.__name__.lower()}.log'

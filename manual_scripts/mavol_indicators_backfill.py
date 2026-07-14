@@ -24,11 +24,11 @@ import pandas as pd
 
 from backend_api.database import SessionLocal
 from backend_core.utils.mavol_calculator import MAVOLCalculator
-from backend_core.logging_utils import should_log_to_file
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 
 _handlers = [logging.StreamHandler()]
-if should_log_to_file() and (project_root / "logs").exists():
-    _handlers.append(logging.FileHandler(project_root / "logs" / "mavol_backfill.log", encoding="utf-8"))
+if should_log_to_file():
+    _handlers.append(logging.FileHandler(resolve_log_file("mavol_backfill.log"), encoding="utf-8"))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", handlers=_handlers)
 logger = logging.getLogger(__name__)
 

@@ -67,7 +67,7 @@ def test_logging():
         logger.info(f"📈 成交量检测结果: 放量={is_volume_increase}, 倍数={volume_ratio}, 换手率={turnover_rate:.2f}%")
         
         print("\n✅ 日志功能测试完成!")
-        print("📁 请检查 backend_api/logs/ 目录下的日志文件")
+            print("📁 请检查项目根目录 logs/ 下的日志文件")
         print("=" * 60)
         
         return True

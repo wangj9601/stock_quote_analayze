@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
 import logging
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 import argparse
 
 # 添加项目根目录到Python路径
@@ -26,7 +27,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('boll_backfill.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('boll_backfill.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )

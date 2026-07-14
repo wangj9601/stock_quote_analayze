@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 import time
 import random
 
@@ -39,7 +40,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('akshare_historical_collect.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('akshare_historical_collect.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )

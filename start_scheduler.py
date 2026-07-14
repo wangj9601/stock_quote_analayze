@@ -26,6 +26,8 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+from backend_core.logging_utils import resolve_log_file
+
 
 def _reconfigure_stdio_utf8() -> None:
     if sys.platform != "win32":
@@ -119,7 +121,7 @@ def setup_logging(log_level: str):
         level=numeric_level,
         format='%(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('scheduler.log'),
+            logging.FileHandler(resolve_log_file('scheduler.log')),
             logging.StreamHandler(sys.stdout)
         ]
     )

@@ -4,6 +4,7 @@
 import akshare as ak
 import pandas as pd
 import logging
+from backend_core.logging_utils import resolve_log_file
 import sys
 import os
 from datetime import datetime
@@ -13,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('test_stock_research_report.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('test_stock_research_report.log'), encoding='utf-8'),
         logging.StreamHandler(sys.stdout)
     ]
 )

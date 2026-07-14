@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -19,7 +20,7 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
-                   handlers=[logging.FileHandler('semiannual_generation.log', encoding='utf-8'), logging.StreamHandler()])
+                   handlers=[logging.FileHandler(resolve_log_file('semiannual_generation.log'), encoding='utf-8'), logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
 class SemiAnnualDataGenerator:

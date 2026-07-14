@@ -70,7 +70,7 @@ def main():
         import backend_core
         backend_core.start_collector_process()
         print("[OK] backend_core 已启动，定时采集进程已在后台运行")
-        print("如需查看日志，请查看 backend_core/logs/ 目录")
+        print("如需查看日志，请查看项目根目录 logs/ 文件夹")
         print("按 Ctrl+C 停止服务")
         print("=" * 50)
         # 阻塞主线程，保持进程存活

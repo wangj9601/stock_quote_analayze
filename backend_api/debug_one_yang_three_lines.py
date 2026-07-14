@@ -21,13 +21,10 @@ from stock.one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 
 # 配置日志
 def setup_debug_logger():
-    """配置调试日志（.env 中 LOG_TO_FILE=true 时才写文件）"""
-    from backend_core.logging_utils import should_log_to_file
-    log_dir = os.path.join(os.path.dirname(__file__), 'logs')
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    """配置调试日志到项目根 logs/（.env 中 LOG_TO_FILE=true 时才写文件）"""
+    from backend_core.logging_utils import should_log_to_file, resolve_log_file
     log_filename = f"debug_one_yang_three_lines_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    log_filepath = os.path.join(log_dir, log_filename)
+    log_filepath = resolve_log_file(log_filename)
 
     logger = logging.getLogger('debug_one_yang_three_lines')
     logger.setLevel(logging.DEBUG)
@@ -271,8 +268,9 @@ def debug_strategy(db: Session, limit: int = 100):
             for detail in stats['volume_details'][:10]:
                 logger.info(f"  {detail['code']} {detail['name']}: 成交量{detail['volume_ratio']:.2f}倍, 换手率{detail['turnover_rate']:.2f}%")
         
-        # 7. 保存详细统计到文件
-        stats_file = os.path.join(log_dir, f"debug_stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+        # 7. 保存详细统计到项目根 logs/
+        from backend_core.logging_utils import resolve_log_file
+        stats_file = str(resolve_log_file(f"debug_stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"))
         with open(stats_file, 'w', encoding='utf-8') as f:
             json.dump(stats, f, ensure_ascii=False, indent=2)
         

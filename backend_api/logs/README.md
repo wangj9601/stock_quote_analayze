@@ -6,12 +6,15 @@
 
 ## 日志文件位置
 
-日志文件保存在 `backend_api/logs/` 目录下，文件名格式为：
+日志文件统一保存在项目根目录 `logs/` 下，文件名格式为：
 ```
 one_yang_three_lines_YYYYMMDD_HHMMSS.log
 ```
 
-例如：`one_yang_three_lines_20250130_143000.log`
+例如：`logs/one_yang_three_lines_20250130_143000.log`
+
+> 需 `.env` 中设置 `LOG_TO_FILE=true` 才会写入文件。
+
 
 ## 日志级别
 

@@ -23,10 +23,10 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
 # 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
-from backend_core.logging_utils import should_log_to_file
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 _handlers = [logging.StreamHandler()]
 if should_log_to_file():
-    _handlers.append(logging.FileHandler('weekly_generation.log', encoding='utf-8'))
+    _handlers.append(logging.FileHandler(resolve_log_file('weekly_generation.log'), encoding='utf-8'))
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=_handlers)
 logger = logging.getLogger(__name__)
 
