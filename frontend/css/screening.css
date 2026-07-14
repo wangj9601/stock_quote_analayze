@@ -1065,7 +1065,8 @@
     flex-wrap: wrap;
     gap: 16px 24px;
 }
-#resultsContainer-gms .gms-score-detail-toggle {
+#resultsContainer-gms .gms-score-detail-toggle,
+#resultsContainer-urt .urt-score-detail-toggle {
     font-family: inherit;
 }
 .gms-score-detail-section {
@@ -1313,7 +1314,9 @@
 
 /* 操作列：固定右侧，横向滚动时始终可见 */
 #resultsContainer-gms .results-table th.gms-col-actions,
-#resultsContainer-gms .results-table td.gms-col-actions {
+#resultsContainer-gms .results-table td.gms-col-actions,
+#resultsContainer-urt .results-table th.gms-col-actions,
+#resultsContainer-urt .results-table td.gms-col-actions {
     position: sticky;
     right: 0;
     z-index: 2;
@@ -1327,16 +1330,19 @@
     border-left: 1px solid #e2e8f0;
 }
 
-#resultsContainer-gms .results-table thead th.gms-col-actions {
+#resultsContainer-gms .results-table thead th.gms-col-actions,
+#resultsContainer-urt .results-table thead th.gms-col-actions {
     z-index: 4;
     background: #f8f9fa;
 }
 
-#resultsContainer-gms .results-table tbody tr:hover td.gms-col-actions {
+#resultsContainer-gms .results-table tbody tr:hover td.gms-col-actions,
+#resultsContainer-urt .results-table tbody tr:hover td.gms-col-actions {
     background: #f8f9fa;
 }
 
 #resultsContainer-gms .action-links,
+#resultsContainer-urt .action-links,
 #resultsTable-gms-trade-observe .action-links,
 #resultsTable-tvo-trade-observe .action-links {
     display: flex;

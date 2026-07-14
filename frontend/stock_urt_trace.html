@@ -7,30 +7,23 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/screening.css">
-    <style>
-        .urt-trace-card { background: #fff; padding: 20px; border-radius: 8px; margin-top: 16px; }
-        .urt-trace-title { font-size: 20px; font-weight: 600; margin-bottom: 12px; }
-        .toolbar { margin-bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-        .trace-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .trace-table th, .trace-table td { border: 1px solid #e5e7eb; padding: 8px; text-align: center; }
-        .trace-table th { background: #f9fafb; }
-        .buy-yes { color: #dc2626; font-weight: 600; }
-        .empty-msg, .loading-msg { padding: 24px; color: #6b7280; }
-    </style>
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
 </head>
 <body>
     <script src="components/header.js"></script>
     <script>loadHeader('quotes');</script>
     <div class="container">
-        <div class="urt-trace-card">
-            <div class="urt-trace-title">URT 上升趋势 — 策略信号历史</div>
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">URT 上升趋势 — 策略信号历史</div>
             <div class="toolbar">
-                <label>股票: <span id="stockDisplay">--</span></label>
-                <label>参数版本:
-                    <select id="configSelect"></select>
-                </label>
-                <button id="searchBtn">查询</button>
-                <a id="detailLink" class="action-link" href="#" target="_blank">查看最新明细</a>
+                <div class="toolbar-row">
+                    <label>股票: <span id="stockDisplay">--</span></label>
+                    <label>参数版本:
+                        <select id="configSelect"></select>
+                    </label>
+                    <button id="searchBtn">查询</button>
+                    <a id="detailLink" class="gms-op-btn" href="#" target="_blank" rel="noopener">打开明细页</a>
+                </div>
             </div>
             <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
             <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 URT 预计算信号（需先完成日终预计算）</div>
@@ -38,6 +31,7 @@
                 <table class="trace-table" id="traceTable">
                     <thead>
                         <tr>
+                            <th></th>
                             <th>日期</th>
                             <th>买点</th>
                             <th>得分</th>
@@ -57,6 +51,7 @@
         </div>
     </div>
     <script src="js/config.js"></script>
+    <script src="js/urt_score_detail.js"></script>
     <script src="js/stock_urt_trace.js"></script>
 </body>
 </html>

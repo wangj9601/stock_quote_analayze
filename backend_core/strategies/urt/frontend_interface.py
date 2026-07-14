@@ -101,44 +101,48 @@ class URTFrontendInterface:
 
         data: List[Dict[str, Any]] = []
         data_source = "realtime"
-        # 无 Query 覆盖、无板块/自选缩池时优先读全量预计算结果
-        if (
-            prefer_cache
-            and not force_realtime
-            and not overrides_active
-            and not board_keys
-            and resolved_id is not None
-            and (scope != "watchlist" or not stock_codes)
-        ):
+        # 无 Query 覆盖时优先读预计算；限定股票池时再按代码过滤
+        if prefer_cache and not force_realtime and not overrides_active and not board_keys and resolved_id is not None:
             try:
                 cached = query_buy_signals_for_date(
                     db,
                     trade_date=effective,
                     config_id=resolved_id,
                     min_score=float(cfg.get("min_score") or 70),
-                    limit=limit,
+                    limit=None if stock_codes else limit,
                 )
                 if cached:
-                    data = cached
-                    data_source = "urt_signal_trace"
+                    if stock_codes:
+                        allow = {
+                            str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip()
+                            for c in stock_codes
+                        }
+                        cached = [
+                            r
+                            for r in cached
+                            if str(r.get("code") or "").zfill(6) in allow or str(r.get("code")) in allow
+                        ]
+                    if cached:
+                        if limit and len(cached) > int(limit):
+                            cached = cached[: int(limit)]
+                        data = cached
+                        data_source = "urt_signal_trace"
             except Exception as e:
                 logger.debug("URT cache read failed: %s", e)
 
         if not data:
-            pool_codes = stock_codes if scope == "watchlist" else None
+            pool_codes = stock_codes if stock_codes is not None else None
             stocks = loader.list_a_share_candidates(
-                limit=limit,
+                limit=limit if pool_codes is None else None,
                 stock_codes=pool_codes,
                 boards=board_keys or None,
             )
+            if limit and pool_codes is not None and len(stocks) > int(limit):
+                # 缩池很大时仍可用 limit 限制扫描量
+                stocks = stocks[: int(limit)]
             engine = URTStrategyEngine(loader, cfg)
             data = engine.screen_universe(stocks, as_of_end_date=effective)
             data_source = "realtime"
-
-        # watchlist / boards：若刚才走了 cache 全集则再过滤
-        if data_source == "urt_signal_trace" and stock_codes and scope == "watchlist":
-            allow = {str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip() for c in stock_codes}
-            data = [r for r in data if str(r.get("code") or "").zfill(6) in allow or str(r.get("code")) in allow]
 
         parameters_out = {
             "ma_period": cfg.get("ma_period"),

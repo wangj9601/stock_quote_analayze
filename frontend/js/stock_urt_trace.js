@@ -1,5 +1,5 @@
 /**
- * URT 策略信号历史页
+ * URT 策略信号历史页（展示风格对齐 GMS 追溯页）
  */
 (function () {
     const apiBase = (typeof Config !== 'undefined' && Config.getApiBaseUrl)
@@ -19,6 +19,19 @@
                 this.configId = Number(document.getElementById('configSelect').value) || null;
                 this.fetchData();
             });
+            const tbody = document.querySelector('#traceTable tbody');
+            if (tbody) {
+                tbody.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.urt-score-detail-toggle');
+                    if (!btn) return;
+                    e.preventDefault();
+                    const idx = btn.getAttribute('data-row');
+                    const detailRow = tbody.querySelector(`tr.gms-score-detail-row[data-detail-for="${idx}"]`);
+                    if (detailRow) {
+                        detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+                    }
+                });
+            }
             if (this.code) this.fetchData();
         }
 
@@ -47,9 +60,19 @@
                     empty.style.display = '';
                     return;
                 }
-                tbody.innerHTML = rows.map((r) => {
-                    const detailHref = `stock_urt_score_detail.html?code=${encodeURIComponent(this.code)}&name=${encodeURIComponent(this.name)}&date=${encodeURIComponent(r.date || '')}&config_id=${r.config_id || this.configId || ''}`;
+                tbody.innerHTML = rows.map((r, index) => {
+                    const pageHref = `stock_urt_score_detail.html?code=${encodeURIComponent(this.code)}&name=${encodeURIComponent(this.name)}&date=${encodeURIComponent(r.date || '')}&config_id=${r.config_id || this.configId || ''}`;
+                    let detailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
+                    if (window.UrtScoreDetail) {
+                        detailHtml = window.UrtScoreDetail.buildHtml({
+                            ...r,
+                            score: r.score,
+                            score_detail: r.score_detail,
+                            buy_signal: r.buy_signal,
+                        });
+                    }
                     return `<tr>
+                        <td><button type="button" class="gms-op-btn urt-score-detail-toggle" data-row="${index}">明细</button></td>
                         <td>${r.date || '--'}</td>
                         <td class="${r.buy_signal ? 'buy-yes' : ''}">${r.buy_signal ? '是' : '否'}</td>
                         <td>${r.score != null ? Number(r.score).toFixed(1) : '--'}</td>
@@ -60,7 +83,10 @@
                         <td>${r.volume_multiple != null ? Number(r.volume_multiple).toFixed(2) : '--'}</td>
                         <td>${r.volume_ratio != null ? Number(r.volume_ratio).toFixed(2) : '--'}</td>
                         <td>${r.turnover_rate != null ? Number(r.turnover_rate).toFixed(2) : '--'}</td>
-                        <td><a href="${detailHref}" target="_blank" rel="noopener">明细</a></td>
+                        <td><a class="gms-op-btn" href="${pageHref}" target="_blank" rel="noopener">明细页</a></td>
+                    </tr>
+                    <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
+                        <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
                     </tr>`;
                 }).join('');
             } catch (e) {
