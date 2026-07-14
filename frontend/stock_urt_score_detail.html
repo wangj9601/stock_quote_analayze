@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URT 信号计算明细</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <style>
+        .urt-detail-card { background: #fff; padding: 20px; border-radius: 8px; margin-top: 16px; max-width: 960px; }
+        .urt-detail-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+        .meta { color: #6b7280; margin-bottom: 16px; font-size: 13px; }
+        .parts-table, .fields-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
+        .parts-table th, .parts-table td, .fields-table th, .fields-table td {
+            border: 1px solid #e5e7eb; padding: 8px; text-align: left;
+        }
+        .parts-table th, .fields-table th { background: #f9fafb; width: 28%; }
+        .score-total { font-size: 22px; font-weight: 700; color: #dc2626; }
+        .ok { color: #16a34a; }
+        .bad { color: #dc2626; }
+    </style>
+</head>
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+    <div class="container">
+        <div class="urt-detail-card">
+            <div class="urt-detail-title">URT 上升趋势 — 信号计算明细</div>
+            <div class="meta" id="metaLine">加载中...</div>
+            <div id="content"></div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/stock_urt_score_detail.js"></script>
+</body>
+</html>

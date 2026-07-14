@@ -3856,8 +3856,8 @@ const ScreeningPage = {
                         <td>${stock.score != null ? Number(stock.score).toFixed(1) : '--'}</td>
                         <td>
                             <div class="action-links">
-                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
-                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
+                                <a href="stock_urt_trace.html?code=${encodeURIComponent(stock.code)}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank" rel="noopener noreferrer">历史</a>
+                                <a href="stock_urt_score_detail.html?code=${encodeURIComponent(stock.code)}&name=${encodeURIComponent(stock.name || '')}&date=${encodeURIComponent(stock.signal_date || '')}" class="action-link" target="_blank" rel="noopener noreferrer">明细</a>
                             </div>
                         </td>
                     </tr>

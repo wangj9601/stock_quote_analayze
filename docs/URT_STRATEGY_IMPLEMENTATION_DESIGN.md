@@ -173,7 +173,36 @@ admin/  # /urt-management 参数配置页
 | 参数多版本 | 有 | 有（`urt_strategy_configs`） |
 | 前台 Tab | 有 | 有 |
 | Admin 配置 | 有 | 有（精简） |
-| 信号 trace / 观察股 / 回测中心 | 有 | 预留（纪律函数已在 `signal_detector.evaluate_exit_rules`） |
+| 信号 trace / 观察股 / 回测中心 | 有 | 二期：`urt_signal_trace` + Admin 回测；观察股后续 |
+
+## 5.1 二期：预计算 / 回测 / 历史·明细
+
+### 预计算（暂仅 A 股）
+
+| 项 | 说明 |
+|----|------|
+| 表 | `urt_signal_trace`（PK: `code`+`date`+`config_id`），含得分、硬筛字段、`score_detail` JSON |
+| 配置 | `urt_strategy_configs.precompute_enabled`；默认版本或开关开启才算 |
+| 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 18:35，`ENABLE_URT_PRECOMPUTE` |
+| 选股 | `URTFrontendInterface.screen` 无 Query 覆盖时优先读 `urt_signal_trace` |
+| 手动 | `POST /api/admin/urt/precompute/run` |
+
+### 回测管理
+
+| 项 | 说明 |
+|----|------|
+| 表 | `urt_backtest_tasks` |
+| Core | `backtest_runner` / `backtest_storage` / `backtest_worker` |
+| 入场 | 信号次日开盘；观察期内触达 `target_pct` 或 `evaluate_exit_rules` 离场 |
+| API | `/api/admin/urt/backtests*`（创建/列表/取消/删除/导出 CSV） |
+| Admin | `/urt-management` →「回测管理」Tab |
+
+### 前台页面与选股按钮
+
+| 入口 | 页面 |
+|------|------|
+| 选股结果「历史」 | `frontend/stock_urt_trace.html` → `GET /api/stock/urt-signal-trace` |
+| 选股结果「明细」（原「详情」） | `frontend/stock_urt_score_detail.html` → `GET /api/stock/urt-score-detail` |
 
 ## 6. 参数说明与值域
 
@@ -255,4 +284,4 @@ admin/  # /urt-management 参数配置页
 
 ## 7. 测试
 
-`test/test_urt_strategy.py`：连阳计数、量能、硬筛、得分、止损/止盈路径。
+`test/test_urt_strategy.py`：连阳计数、量能、硬筛、得分/分项明细、`require_pass=False` 明细、止损/止盈路径、回测 storage 工具函数。

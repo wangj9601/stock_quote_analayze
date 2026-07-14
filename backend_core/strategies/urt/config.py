@@ -157,46 +157,28 @@ class URTConfigManager:
             "config_params": row.config_params,
             "is_active": bool(row.is_active),
             "is_default": bool(row.is_default),
+            "precompute_enabled": bool(getattr(row, "precompute_enabled", False)),
             "created_by": row.created_by,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
-    def create_config(
-        self,
-        db,
-        *,
-        name: str,
-        config_params: Optional[Dict[str, Any]] = None,
-        version_label: Optional[str] = None,
-        description: Optional[str] = None,
-        is_active: bool = True,
-        is_default: bool = False,
-        created_by: Optional[str] = None,
-    ) -> int:
+    def list_precompute_config_ids(self, db) -> List[int]:
         from backend_api.models import URTStrategyConfig
 
-        params = _deep_merge(self.get_default_config(), config_params or {})
-        if is_default:
-            db.query(URTStrategyConfig).filter(URTStrategyConfig.is_default.is_(True)).update(
-                {"is_default": False}
+        rows = (
+            db.query(URTStrategyConfig.id)
+            .filter(
+                URTStrategyConfig.is_active.is_(True),
+                (
+                    (URTStrategyConfig.is_default.is_(True))
+                    | (URTStrategyConfig.precompute_enabled.is_(True))
+                ),
             )
-        row = URTStrategyConfig(
-            name=name,
-            version_label=version_label,
-            description=description,
-            config_params=params,
-            is_active=is_active,
-            is_default=is_default,
-            created_by=created_by,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            .order_by(URTStrategyConfig.id.asc())
+            .all()
         )
-        db.add(row)
-        db.commit()
-        db.refresh(row)
-        self.invalidate_cache()
-        return int(row.id)
+        return [int(r[0]) for r in rows]
 
     def update_config(
         self,
@@ -209,6 +191,7 @@ class URTConfigManager:
         config_params: Optional[Dict[str, Any]] = None,
         is_active: Optional[bool] = None,
         is_default: Optional[bool] = None,
+        precompute_enabled: Optional[bool] = None,
     ) -> bool:
         from backend_api.models import URTStrategyConfig
 
@@ -232,17 +215,73 @@ class URTConfigManager:
             row.is_default = True
         elif is_default is False:
             row.is_default = False
+        if precompute_enabled is not None:
+            row.precompute_enabled = bool(precompute_enabled)
         row.updated_at = datetime.now()
         db.commit()
         self.invalidate_cache(config_id)
         return True
 
+    def create_config(
+        self,
+        db,
+        *,
+        name: str,
+        config_params: Optional[Dict[str, Any]] = None,
+        version_label: Optional[str] = None,
+        description: Optional[str] = None,
+        is_active: bool = True,
+        is_default: bool = False,
+        precompute_enabled: bool = False,
+        created_by: Optional[str] = None,
+    ) -> int:
+        from backend_api.models import URTStrategyConfig
+
+        params = _deep_merge(self.get_default_config(), config_params or {})
+        if is_default:
+            db.query(URTStrategyConfig).filter(URTStrategyConfig.is_default.is_(True)).update(
+                {"is_default": False}
+            )
+        row = URTStrategyConfig(
+            name=name,
+            version_label=version_label,
+            description=description,
+            config_params=params,
+            is_active=is_active,
+            is_default=is_default,
+            precompute_enabled=bool(precompute_enabled),
+            created_by=created_by,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        self.invalidate_cache()
+        return int(row.id)
+
     def ensure_default_row(self, db) -> Optional[int]:
-        """若表为空则写入 default 版本。"""
+        """若表为空则写入 default 版本；并尽量补齐预计算相关表/字段。"""
         try:
-            from backend_api.models import URTStrategyConfig
+            from sqlalchemy import text
+            from backend_api.models import URTStrategyConfig, URTSignalTrace, URTBacktestTask
 
             URTStrategyConfig.__table__.create(bind=db.get_bind(), checkfirst=True)
+            URTSignalTrace.__table__.create(bind=db.get_bind(), checkfirst=True)
+            URTBacktestTask.__table__.create(bind=db.get_bind(), checkfirst=True)
+            try:
+                db.execute(
+                    text(
+                        "ALTER TABLE urt_strategy_configs "
+                        "ADD COLUMN IF NOT EXISTS precompute_enabled BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                )
+                db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
             existing = db.query(URTStrategyConfig).first()
             if existing:
                 return int(existing.id)
@@ -254,6 +293,7 @@ class URTConfigManager:
                 config_params=self.load_file_config(),
                 is_active=True,
                 is_default=True,
+                precompute_enabled=True,
                 created_by="system",
             )
         except Exception as e:

@@ -144,3 +144,38 @@ def test_exit_trailing_take_profit():
     r = evaluate_exit_rules(entry_price=10.0, closes=closes, peak_price=13.0, cfg=cfg)
     assert r is not None
     assert r["exit_reason"] == "trailing_take_profit"
+
+
+def test_score_breakdown_and_detail_payload():
+    from backend_core.strategies.urt.scoring import compute_score_breakdown
+
+    cfg = URTConfigManager().get_default_config()
+    yang = [True, True, True, False, True]
+    bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
+    ind = build_indicators(bars, cfg)
+    assert ind is not None
+    total, detail = compute_score_breakdown(ind, cfg)
+    assert total == compute_score(ind, cfg)
+    assert "parts" in detail and "above_ma20" in detail["parts"]
+    assert detail["total"] == total
+
+
+def test_evaluate_buy_signal_require_pass_false_returns_detail():
+    cfg = URTConfigManager().get_default_config()
+    # 量能不足：仍返回明细
+    yang = [True, True, True, False, True]
+    bars = _bars(40, yang_pattern=yang, vol_spike=False, above_ma=True)
+    for b in bars:
+        b["volume"] = 1000.0
+    detail = evaluate_buy_signal(bars, cfg, require_pass=False)
+    assert detail is not None
+    assert detail["buy_signal"] is False
+    assert detail.get("score_detail")
+
+
+def test_backtest_progress_helpers_import():
+    from backend_core.strategies.urt.backtest_storage import clamp_progress, normalize_task_id
+
+    assert clamp_progress(150) == 100
+    assert clamp_progress(-1) == 0
+    assert normalize_task_id("  abc  ") == "abc"

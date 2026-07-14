@@ -6,31 +6,43 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .indicators import build_indicators, hard_filter_pass
-from .scoring import compute_score
+from .scoring import compute_score_breakdown
 
 
-def evaluate_buy_signal(bars_desc: list, cfg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """对截至最新日的 DESC K 线判定是否触发 URT 买点。"""
+def evaluate_buy_signal(
+    bars_desc: list,
+    cfg: Dict[str, Any],
+    *,
+    require_pass: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """
+    对截至最新日的 DESC K 线判定 URT 买点。
+    require_pass=True：仅硬筛+得分通过才返回；False：始终返回指标与得分明细（供明细页）。
+    """
     ind = build_indicators(bars_desc, cfg)
     if not ind:
         return None
     ok, reason = hard_filter_pass(ind, cfg)
-    if not ok:
-        return None
-    score = compute_score(ind, cfg)
+    score, score_detail = compute_score_breakdown(ind, cfg)
     min_score = float(cfg.get("min_score") or 70)
-    if score < min_score:
+    score_ok = score >= min_score
+    buy = bool(ok and score_ok)
+
+    if require_pass and not buy:
         return None
 
     yang_rule = "4d3" if ind.get("rule_a_ok") else "5d4"
     if ind.get("rule_a_ok") and ind.get("rule_b_ok"):
         yang_rule = "4d3+5d4"
+    elif not ind.get("rule_a_ok") and not ind.get("rule_b_ok"):
+        yang_rule = "none"
 
     return {
         "signal_date": ind.get("date"),
         "close": ind.get("close"),
         "open": ind.get("open"),
         "ma20": ind.get("ma20"),
+        "above_ma20": ind.get("above_ma20"),
         "yang_count_4": ind.get("yang_count_4"),
         "yang_count_5": ind.get("yang_count_5"),
         "yang_rule": yang_rule,
@@ -41,8 +53,11 @@ def evaluate_buy_signal(bars_desc: list, cfg: Dict[str, Any]) -> Optional[Dict[s
         "turnover_rate": ind.get("turnover_rate"),
         "score": score,
         "signal_strength": score,
-        "buy_signal": True,
+        "score_detail": score_detail,
+        "buy_signal": buy,
+        "filter_ok": ok,
         "filter_reason": reason,
+        "score_ok": score_ok,
     }
 
 
@@ -55,7 +70,7 @@ def evaluate_exit_rules(
 ) -> Optional[Dict[str, Any]]:
     """
     卖出纪律（供回测）：
-    - 价格止损：亏损达 stop_loss_pct（默认取区间中值偏保守用 max）
+    - 价格止损：亏损达 stop_loss_pct
     - 时间止损：连续下跌 N 日
     - 回撤止盈：涨幅达警惕区后，自高点回撤 trailing_drawdown_pct
     closes: 持仓以来收盘价序列（时间正序，含最新）。

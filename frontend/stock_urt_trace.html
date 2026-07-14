@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URT 策略信号历史</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <style>
+        .urt-trace-card { background: #fff; padding: 20px; border-radius: 8px; margin-top: 16px; }
+        .urt-trace-title { font-size: 20px; font-weight: 600; margin-bottom: 12px; }
+        .toolbar { margin-bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .trace-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .trace-table th, .trace-table td { border: 1px solid #e5e7eb; padding: 8px; text-align: center; }
+        .trace-table th { background: #f9fafb; }
+        .buy-yes { color: #dc2626; font-weight: 600; }
+        .empty-msg, .loading-msg { padding: 24px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+    <div class="container">
+        <div class="urt-trace-card">
+            <div class="urt-trace-title">URT 上升趋势 — 策略信号历史</div>
+            <div class="toolbar">
+                <label>股票: <span id="stockDisplay">--</span></label>
+                <label>参数版本:
+                    <select id="configSelect"></select>
+                </label>
+                <button id="searchBtn">查询</button>
+                <a id="detailLink" class="action-link" href="#" target="_blank">查看最新明细</a>
+            </div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 URT 预计算信号（需先完成日终预计算）</div>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>买点</th>
+                            <th>得分</th>
+                            <th>收盘</th>
+                            <th>MA20</th>
+                            <th>4日阳</th>
+                            <th>5日阳</th>
+                            <th>量能倍数</th>
+                            <th>量比</th>
+                            <th>换手%</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/stock_urt_trace.js"></script>
+</body>
+</html>
