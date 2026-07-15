@@ -1,0 +1,23 @@
+[Unit]
+Description=Stock Quote Frontend HTTP (port 8000)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stockquote
+Group=stockquote
+WorkingDirectory=/opt/stock_quote/current
+EnvironmentFile=-/opt/stock_quote/shared/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONNOUSERSITE=1
+Environment=FRONTEND_PORT=8000
+ExecStart=/opt/stock_quote/.venv/bin/python /opt/stock_quote/current/start_frontend.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stock-quote-frontend
+
+[Install]
+WantedBy=multi-user.target
