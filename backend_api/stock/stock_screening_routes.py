@@ -3316,3 +3316,121 @@ async def get_one_yang_three_lines_strategy(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"一阳穿三线选股策略执行失败: {str(e)}"
         )
+
+
+@router.get("/sbbr-strategy")
+async def get_sbbr_strategy(
+    scope: str = Query("market", description="market|watchlist|reserve"),
+    date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    config_id: Optional[int] = Query(None),
+    entry_only: bool = Query(False, description="仅返回入场信号"),
+    require_bottom: bool = Query(True),
+    require_size: bool = Query(True),
+    trace_only: bool = Query(False, description="仅读 sbbr_signal_trace"),
+    max_results: Optional[int] = Query(200, ge=1, le=2000),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """做小做底（SBBR）全市场/自选/储备箱选股。"""
+    try:
+        from backend_core.strategies.sbbr.config import SBBRConfigManager
+        from backend_core.strategies.sbbr.signal_storage import load_traces
+        from backend_core.strategies.sbbr.strategy_engine import SBBRStrategyEngine
+        from backend_api.models import SBBRReserveBox, User, Watchlist
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": f"SBBR 模块不可用: {e}", "data": []},
+        )
+
+    cm = SBBRConfigManager()
+    cid = int(config_id) if config_id is not None else cm.get_default_config_id()
+    cfg = cm.get_config(cid)
+    engine = SBBRStrategyEngine(db_session=db, config=cfg)
+    trade_date = date or engine.loader.resolve_trade_date()
+
+    stock_codes = None
+    user = None
+    if scope in ("watchlist", "reserve"):
+        if not token:
+            raise HTTPException(status_code=401, detail="该 scope 需要登录")
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username = payload.get("sub")
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="用户不存在")
+        except JWTError:
+            raise HTTPException(status_code=401, detail="无效的认证凭据")
+        if scope == "watchlist":
+            stock_codes = [str(i.stock_code).strip() for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()]
+        else:
+            stock_codes = [
+                str(i.stock_code).strip()
+                for i in db.query(SBBRReserveBox).filter(SBBRReserveBox.user_id == user.id).all()
+            ]
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "search_date": trade_date,
+                    "strategy_name": "做小做底",
+                    "scope": scope,
+                    "config_id": cid,
+                    "message": "列表为空",
+                }
+            )
+
+    if trace_only and scope == "market":
+        rows = load_traces(
+            db,
+            trade_date=trade_date,
+            config_id=cid,
+            entry_only=entry_only,
+            limit=max_results or 200,
+        )
+        if require_bottom:
+            rows = [r for r in rows if r.get("bottom_matched")]
+        if require_size:
+            rows = [r for r in rows if r.get("size_ok")]
+        return JSONResponse(
+            {
+                "success": True,
+                "data": rows,
+                "total": len(rows),
+                "search_date": trade_date,
+                "strategy_name": "做小做底",
+                "scope": scope,
+                "config_id": cid,
+                "source": "trace",
+            }
+        )
+
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        return engine.screen(
+            codes=stock_codes,
+            date=trade_date,
+            config=cfg,
+            require_entry=entry_only,
+            require_size=require_size,
+            require_bottom=require_bottom,
+            max_results=max_results,
+        )
+
+    rows = await loop.run_in_executor(None, _run)
+    return JSONResponse(
+        {
+            "success": True,
+            "data": rows,
+            "total": len(rows),
+            "search_date": trade_date,
+            "strategy_name": "做小做底",
+            "scope": scope,
+            "config_id": cid,
+            "source": "live",
+        }
+    )

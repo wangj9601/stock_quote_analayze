@@ -182,6 +182,13 @@ except ImportError as e:
     gms_formal_trade_router = None
 
 try:
+    from .sbbr_routes import router as sbbr_router
+    print("sbbr_router 导入成功")
+except ImportError as e:
+    print(f"sbbr_router 导入失败: {e}")
+    sbbr_router = None
+
+try:
     from .gms_user_preferences_routes import router as gms_user_preferences_router
     print("gms_user_preferences_router 导入成功")
 except ImportError as e:
@@ -562,6 +569,7 @@ _include_router(app, triple_volume_observe_admin_router, "triple_volume_observe_
 _include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")
 _include_router(app, gms_trade_observe_router, "gms_trade_observe")
 _include_router(app, gms_formal_trade_router, "gms_formal_trade")
+_include_router(app, sbbr_router, "sbbr")
 _include_router(app, gms_user_preferences_router, "gms_user_preferences")
 _include_router(app, triple_volume_trade_observe_router, "triple_volume_trade_observe")
 _include_router(app, screening_router, "screening")
@@ -835,6 +843,19 @@ if gms_admin_router is not None:
     print("GMS admin 路由注册成功 (/api/admin/gms)")
 else:
     print("GMS admin 路由未注册")
+
+try:
+    from backend_api.admin.sbbr_admin_routes import router as sbbr_admin_router
+    print("sbbr_admin_router 导入成功")
+except Exception as e:
+    print(f"sbbr_admin_router 导入失败: {e}")
+    sbbr_admin_router = None
+
+if sbbr_admin_router is not None:
+    app.include_router(sbbr_admin_router)
+    print("SBBR admin 路由注册成功 (/api/admin/sbbr)")
+else:
+    print("SBBR admin 路由未注册")
 
 # 尝试导入 URT admin 路由
 try:

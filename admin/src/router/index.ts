@@ -88,6 +88,11 @@ const routes = [
         component: () => import('@/views/GMSManagementView.vue')
       },
       {
+        path: 'sbbr-management',
+        name: 'SBBRManagement',
+        component: () => import('@/views/SBBRManagementView.vue')
+      },
+      {
         path: 'urt-management',
         name: 'URTManagement',
         component: () => import('@/views/UrtManagementView.vue')
