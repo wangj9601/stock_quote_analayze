@@ -1,0 +1,22 @@
+[Unit]
+Description=Stock Quote Push Scheduler
+After=network.target postgresql.service postgresql-14.service postgresql-15.service postgresql-16.service stock-quote-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stockquote
+Group=stockquote
+WorkingDirectory=/opt/stock_quote/current
+EnvironmentFile=-/opt/stock_quote/shared/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONNOUSERSITE=1
+ExecStart=/opt/stock_quote/.venv/bin/python /opt/stock_quote/current/start_scheduler.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stock-quote-notify
+
+[Install]
+WantedBy=multi-user.target

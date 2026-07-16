@@ -1,0 +1,25 @@
+[Unit]
+Description=Stock Quote Admin static HTTP (port 8001)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stockquote
+Group=stockquote
+WorkingDirectory=/opt/stock_quote/current/admin/dist
+EnvironmentFile=-/opt/stock_quote/shared/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONNOUSERSITE=1
+ExecStart=/opt/stock_quote/.venv/bin/python -m http.server 8001 --bind 127.0.0.1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stock-quote-admin
+
+# admin/dist 必须存在；发布包需包含 npm run build 产物
+ConditionPathExists=/opt/stock_quote/current/admin/dist
+
+[Install]
+WantedBy=multi-user.target

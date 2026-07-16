@@ -9,11 +9,13 @@ import shutil
 from datetime import datetime, timedelta
 import argparse
 
+from backend_core.logging_utils import get_logs_dir
+
 class LogManager:
-    """日志管理器"""
+    """日志管理器（默认扫描项目根 logs/）"""
     
-    def __init__(self, log_dir="logs"):
-        self.log_dir = log_dir
+    def __init__(self, log_dir=None):
+        self.log_dir = str(log_dir or get_logs_dir())
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
     

@@ -29,14 +29,10 @@ from sqlalchemy.exc import IntegrityError
 
 # 配置日志输出到文件
 def setup_strategy_logger():
-    """配置策略日志输出到文件"""
-    # 创建日志目录（.env 中 LOG_TO_FILE=true 时才写文件）
-    from backend_core.logging_utils import should_log_to_file
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    """配置策略日志输出到项目根 logs/（.env 中 LOG_TO_FILE=true 时才写文件）"""
+    from backend_core.logging_utils import should_log_to_file, resolve_log_file
     log_filename = f"one_yang_three_lines_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    log_filepath = os.path.join(log_dir, log_filename)
+    log_filepath = resolve_log_file(log_filename)
 
     logger = logging.getLogger('one_yang_three_lines_strategy')
     logger.setLevel(logging.INFO)

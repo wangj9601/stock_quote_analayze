@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 import logging
+from backend_core.logging_utils import resolve_log_file
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent
@@ -23,7 +24,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('manual_hk_collection.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('manual_hk_collection.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )

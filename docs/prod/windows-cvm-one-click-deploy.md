@@ -1,5 +1,9 @@
 # 腾讯云 Windows CVM 一键部署（多服务）
 
+> **说明（2026-07）**：新生产目标机已定为 **CentOS**，请优先使用  
+> [centos-migration-runbook.md](centos-migration-runbook.md) 与 `scripts/deploy/linux/`。  
+> 本文档仅适用于 **仍在 Windows CVM / NSSM 上运行的旧生产** 与开发机构建包参考。
+
 本文档对应以下服务拓扑：
 
 - `https://www.icemaplecity.com/` -> `frontend`

@@ -17,10 +17,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend_core.data_collectors.news_collector import NewsCollector
 
 # 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
-from backend_core.logging_utils import should_log_to_file
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 _handlers = [logging.StreamHandler()]
 if should_log_to_file():
-    _handlers.append(logging.FileHandler('news_collector.log', encoding='utf-8'))
+    _handlers.append(logging.FileHandler(resolve_log_file('news_collector.log'), encoding='utf-8'))
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', handlers=_handlers)
 logger = logging.getLogger(__name__)
 

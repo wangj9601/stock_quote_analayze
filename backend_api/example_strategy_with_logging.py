@@ -62,7 +62,7 @@ def run_strategy_with_logging():
                         print(f"   风险提示: {', '.join(stock['risk_warnings'])}")
                     print()
             
-            print("📁 详细日志请查看 backend_api/logs/ 目录")
+            print("📁 详细日志请查看项目根目录 logs/")
             
         finally:
             db.close()
@@ -125,7 +125,7 @@ def run_production_strategy():
                 
                 print(f"📄 结果已保存到: {output_path}")
             
-            print("📁 详细日志请查看 backend_api/logs/ 目录")
+            print("📁 详细日志请查看项目根目录 logs/")
             
         finally:
             db.close()

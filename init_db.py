@@ -26,6 +26,7 @@ from datetime import datetime
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+from backend_core.logging_utils import resolve_log_file
 from backend_core.database.db import get_db_session, engine
 from backend_api.models import Base, User, UserPushConfig, PushRecord
 from sqlalchemy import inspect, text
@@ -37,7 +38,7 @@ def setup_logging():
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('init_db.log'),
+            logging.FileHandler(resolve_log_file('init_db.log')),
             logging.StreamHandler(sys.stdout)
         ]
     )

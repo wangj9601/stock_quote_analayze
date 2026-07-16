@@ -11,6 +11,7 @@ from sqlalchemy import desc, text, func, cast, String
 from sqlalchemy import Date as SA_Date
 from datetime import datetime, timedelta, date as date_type
 import logging
+from backend_core.logging_utils import resolve_log_file
 import csv
 import json
 import os
@@ -54,7 +55,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('quotes.log'),
+        logging.FileHandler(resolve_log_file('quotes.log')),
         logging.StreamHandler()
     ]
 )

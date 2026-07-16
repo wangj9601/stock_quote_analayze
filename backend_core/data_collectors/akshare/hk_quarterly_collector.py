@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+from backend_core.logging_utils import should_log_to_file, resolve_log_file
 
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,7 +24,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('hk_quarterly_generation.log', encoding='utf-8'),
+        logging.FileHandler(resolve_log_file('hk_quarterly_generation.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )

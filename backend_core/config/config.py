@@ -39,7 +39,7 @@ DATA_COLLECTORS = {
         'max_retries': _env_int('TUSHARE_MAX_RETRIES', 3),
         'retry_delay': _env_int('TUSHARE_RETRY_DELAY', 5),
         'timeout': _env_int('TUSHARE_TIMEOUT', 30),
-        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),
+        'log_dir': str(ROOT_DIR / 'logs'),
         'db_file': str(DB_DIR / 'stock_analysis.db'),
         'max_connection_errors': _env_int('TUSHARE_MAX_CONNECTION_ERRORS', 10),
         'token': TUSHARE_CONFIG['token'],
@@ -48,7 +48,7 @@ DATA_COLLECTORS = {
         'max_retries': _env_int('AKSHARE_MAX_RETRIES', 3),
         'retry_delay': _env_int('AKSHARE_RETRY_DELAY', 5),
         'timeout': _env_int('AKSHARE_TIMEOUT', 30),
-        'log_dir': str(ROOT_DIR / 'backend_core' / 'logs'),
+        'log_dir': str(ROOT_DIR / 'logs'),
         'db_file': str(DB_DIR / 'stock_analysis.db'),
         'max_connection_errors': _env_int('AKSHARE_MAX_CONNECTION_ERRORS', 10),
         'proxy_pool': [],
@@ -59,9 +59,9 @@ DATA_COLLECTORS = {
     }
 }
 
-# 创建必要的目录
+# 创建必要的目录（日志统一到项目根 logs/）
 for dir_path in [
-    ROOT_DIR / 'backend_core' / 'logs',
+    ROOT_DIR / 'logs',
     ROOT_DIR / 'backend_core' / 'data',
     ROOT_DIR / 'backend_core' / 'models'
 ]:

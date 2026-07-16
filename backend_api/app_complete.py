@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime
 import logging
+from backend_core.logging_utils import resolve_log_file
 import akshare as ak
 import pandas as pd
 
@@ -25,7 +26,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('sync.log'),
+        logging.FileHandler(resolve_log_file('sync.log')),
         logging.StreamHandler()
     ]
 )
