@@ -29,7 +29,11 @@ class SBBRDataLoader:
 
         return SessionLocal()
 
-    def load_share_map(self, codes: Optional[List[str]] = None) -> Dict[str, Dict[str, Any]]:
+    def load_share_map(
+        self,
+        codes: Optional[List[str]] = None,
+        as_of_date: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
         db = self._session()
         own = self._db is None
         try:
@@ -53,8 +57,86 @@ class SBBRDataLoader:
                     "total_shares": r.total_shares,
                     "free_float_shares": r.free_float_shares,
                     "industry": r.industry,
+                    "shares_source": "basic_info",
+                }
+
+            # stock_basic_info.free_float_shares 多为 IPO 初始流通盘，随解禁会失真；
+            # 优先用行情表权威市值反推股本（总市值/现价、流通市值/现价）。
+            rt = self.load_shares_from_realtime(
+                list(out.keys()) or (codes or None), as_of_date=as_of_date
+            )
+            for code_n, rec in rt.items():
+                info = out.setdefault(
+                    code_n,
+                    {
+                        "code": code_n,
+                        "name": None,
+                        "total_shares": None,
+                        "free_float_shares": None,
+                        "industry": None,
+                        "shares_source": "basic_info",
+                    },
+                )
+                if rec.get("total_shares"):
+                    info["total_shares"] = rec["total_shares"]
+                if rec.get("free_float_shares"):
+                    info["free_float_shares"] = rec["free_float_shares"]
+                info["shares_source"] = "realtime_mv"
+            return out
+        finally:
+            if own:
+                db.close()
+
+    def load_shares_from_realtime(
+        self,
+        codes: Optional[List[str]] = None,
+        as_of_date: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """从 stock_realtime_quote 用权威市值反推股本（股）。
+
+        total_shares = 总市值 / 现价；free_float_shares = 流通市值 / 现价。
+        取每只 <= as_of_date 且市值/现价有效的最新一行。
+        """
+        db = self._session()
+        own = self._db is None
+        try:
+            params: Dict[str, Any] = {}
+            filters = [
+                "current_price IS NOT NULL",
+                "current_price > 0",
+                "(total_market_value IS NOT NULL OR circulating_market_value IS NOT NULL)",
+            ]
+            if codes:
+                params["codes"] = [_norm_code(c) for c in codes]
+                filters.append("code = ANY(:codes)")
+            if as_of_date:
+                params["d"] = as_of_date
+                filters.append("trade_date <= :d")
+            where = " AND ".join(filters)
+            sql = text(
+                f"""
+                SELECT DISTINCT ON (code)
+                    code, current_price, total_market_value, circulating_market_value
+                FROM stock_realtime_quote
+                WHERE {where}
+                ORDER BY code, trade_date DESC
+                """
+            )
+            out: Dict[str, Dict[str, Any]] = {}
+            for r in db.execute(sql, params).fetchall():
+                price = float(r[1]) if r[1] is not None else None
+                if not price or price <= 0:
+                    continue
+                tmv = float(r[2]) if r[2] is not None else None
+                cmv = float(r[3]) if r[3] is not None else None
+                out[_norm_code(r[0])] = {
+                    "total_shares": (tmv / price) if tmv and tmv > 0 else None,
+                    "free_float_shares": (cmv / price) if cmv and cmv > 0 else None,
                 }
             return out
+        except Exception as e:
+            logger.warning("load_shares_from_realtime failed: %s", e)
+            return {}
         finally:
             if own:
                 db.close()
@@ -102,7 +184,7 @@ class SBBRDataLoader:
         """全市场做小粗筛：有股本的股票按最新收盘估算市值。"""
         from .size_filter import evaluate_size
 
-        shares = self.load_share_map()
+        shares = self.load_share_map(as_of_date=trade_date)
         codes = list(shares.keys())
         closes = self.load_latest_closes(codes, trade_date=trade_date)
         out: List[Dict[str, Any]] = []

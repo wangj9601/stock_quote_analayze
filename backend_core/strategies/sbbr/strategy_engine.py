@@ -39,7 +39,7 @@ class SBBRStrategyEngine:
             return None
 
         close = bars[-1]["close"]
-        info = share_info or self.loader.load_share_map([code_n]).get(code_n) or {}
+        info = share_info or self.loader.load_share_map([code_n], as_of_date=date).get(code_n) or {}
         size = evaluate_size(
             total_shares=info.get("total_shares"),
             free_float_shares=info.get("free_float_shares"),
@@ -179,7 +179,7 @@ class SBBRStrategyEngine:
         market_returns = self.loader.load_market_returns(end_date=trade_date)
 
         if codes:
-            universe_infos = self.loader.load_share_map(codes)
+            universe_infos = self.loader.load_share_map(codes, as_of_date=trade_date)
             code_list = [_norm_code(c) for c in codes]
         else:
             universe = self.loader.build_size_universe(cfg, trade_date=trade_date)
