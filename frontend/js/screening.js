@@ -4059,7 +4059,6 @@ const ScreeningPage = {
                 if (scoreVal != null) {
                     if (scoreVal >= 85) scoreClass = 'strength-high';
                     else if (scoreVal >= 70) scoreClass = 'strength-mid';
-                    else scoreClass = 'strength-low';
                 }
                 html += `
                     <tr data-urt-row="${index}">

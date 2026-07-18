@@ -3,10 +3,95 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import logging
+import os
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_a_share_code(code: str) -> str:
+    s = str(code or "").strip()
+    if s.isdigit() and len(s) <= 6:
+        return s.zfill(6)
+    return s
+
+
+def delete_trace_for_code_config(db: Session, *, code: str, config_id: int) -> int:
+    """删除某股某参数版本的全部 URT 信号历史。"""
+    from backend_api.models import URTSignalTrace
+
+    code_n = _normalize_a_share_code(code)
+    n = (
+        db.query(URTSignalTrace)
+        .filter(
+            URTSignalTrace.code == code_n,
+            URTSignalTrace.config_id == int(config_id),
+        )
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n or 0)
+
+
+def recompute_trace_for_stock(
+    db: Session,
+    *,
+    code: str,
+    config_id: int,
+    config: Dict[str, Any],
+    lookback_calendar_days: Optional[int] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
+) -> int:
+    """
+    对单股按交易日滚动重算 URT 信号并写入 urt_signal_trace（require_pass=False，写入可评日）。
+    返回写入条数。
+    """
+    from backend_core.strategies.urt.data_loader import URTDataLoader
+    from backend_core.strategies.urt.signal_detector import evaluate_buy_signal
+
+    code_n = _normalize_a_share_code(code)
+    if lookback_calendar_days is None:
+        env_raw = (os.getenv("URT_TRACE_RECOMPUTE_LOOKBACK_DAYS") or "").strip()
+        if env_raw.isdigit():
+            lookback_calendar_days = int(env_raw)
+        else:
+            lookback_calendar_days = max(400, int(config.get("history_calendar_days") or 120) + 280)
+
+    delete_trace_for_code_config(db, code=code_n, config_id=config_id)
+
+    loader = URTDataLoader(db)
+    end_s = URTDataLoader.resolve_effective_history_end_date(db, None)
+    try:
+        end_d = datetime.strptime(end_s, "%Y-%m-%d").date()
+    except ValueError:
+        end_d = datetime.now().date()
+        end_s = end_d.strftime("%Y-%m-%d")
+    start_s = (end_d - timedelta(days=int(lookback_calendar_days))).strftime("%Y-%m-%d")
+    hist = loader.fetch_historical_desc(code_n, start_date=start_s, end_date=end_s)
+    if not hist:
+        return 0
+
+    name = str(hist[0].get("name") or "")
+    total = len(hist)
+    rows: List[Dict[str, Any]] = []
+    for i in range(total):
+        if progress_cb:
+            date_i = str(hist[i].get("date") or "")[:10]
+            progress_cb(i + 1, total, f"正在计算 {date_i}（{i + 1}/{total}）")
+        try:
+            detail = evaluate_buy_signal(hist[i:], config, require_pass=False)
+            if not detail:
+                continue
+            rows.append({"code": code_n, "name": name, **detail})
+        except Exception as e:
+            logger.debug("URT 单股重算跳过 %s day=%s: %s", code_n, hist[i].get("date"), e)
+            continue
+
+    return upsert_trace_rows(db, config_id=config_id, rows=rows)
 
 
 def upsert_trace_rows(

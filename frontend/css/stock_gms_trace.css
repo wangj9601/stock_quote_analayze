@@ -130,6 +130,40 @@
 .trace-table .strength-mid { color: #f57c00; }
 .trace-table .strength-low { color: #666; }
 
+/* URT 信号历史：得分颜色与选股-上升趋势列表一致 */
+.trace-table.urt-trace-table .strength-high {
+    color: #4caf50;
+    font-weight: 600;
+    background: #e8f5e9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+.trace-table.urt-trace-table .strength-mid {
+    color: #ff9800;
+    font-weight: 600;
+    background: #fff3e0;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* URT：得分≥70 整行着色（≥85 绿底，70–84 橙底） */
+.trace-table.urt-trace-table tr.urt-row-score-high {
+    background-color: #e8f5e9;
+}
+.trace-table.urt-trace-table tr.urt-row-score-high td {
+    color: #2e7d32;
+}
+.trace-table.urt-trace-table tr.urt-row-score-mid {
+    background-color: #fff3e0;
+}
+.trace-table.urt-trace-table tr.urt-row-score-mid td {
+    color: #ef6c00;
+}
+.trace-table.urt-trace-table tr.urt-row-score-high .gms-op-btn,
+.trace-table.urt-trace-table tr.urt-row-score-mid .gms-op-btn {
+    color: #1565c0;
+}
+
 /* 信号强度≥60% 时整行与信号强度列同色 */
 .trace-table tr.row-strength-high { background-color: #e8f5e9; color: #2e7d32; }
 .trace-table tr.row-strength-high td { color: #2e7d32; }

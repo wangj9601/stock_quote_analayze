@@ -1,10 +1,19 @@
 /**
- * URT 策略信号历史页（展示风格对齐 GMS 追溯页）
+ * URT 策略信号历史页（展示风格对齐 GMS 追溯页，含个股强制重算与分页）
  */
 (function () {
     const apiBase = (typeof Config !== 'undefined' && Config.getApiBaseUrl)
         ? (Config.getApiBaseUrl() || '')
         : '';
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
 
     class StockUrtTracePage {
         constructor() {
@@ -12,13 +21,37 @@
             this.code = (params.get('code') || '').trim();
             this.name = decodeURIComponent(params.get('name') || '');
             this.configId = params.get('config_id') ? Number(params.get('config_id')) : null;
+            this.configOptions = [];
+            this.allData = [];
+            this.currentPage = 1;
+            this.pageSize = 30;
+            this.totalPages = 0;
+            this.forceComputeRunning = false;
+            this.forceComputePollTimer = null;
+            this.forceComputeTaskId = '';
+            this.forceComputePollCount = 0;
+            this.maxForceComputePolls = 3600;
+
             document.getElementById('stockDisplay').textContent =
                 this.code ? `${this.code} ${this.name}` : '--';
-            document.getElementById('searchBtn').addEventListener('click', () => this.fetchData());
+            document.getElementById('searchBtn').addEventListener('click', () => {
+                if (this.forceComputeRunning) return;
+                this.fetchData();
+            });
+            const forceBtn = document.getElementById('forceComputeBtn');
+            if (forceBtn) {
+                forceBtn.addEventListener('click', () => this.forceCompute());
+            }
             document.getElementById('configSelect').addEventListener('change', () => {
+                if (this.forceComputeRunning) return;
                 this.configId = Number(document.getElementById('configSelect').value) || null;
                 this.fetchData();
             });
+            document.getElementById('firstPage').addEventListener('click', () => this.goToPage(1));
+            document.getElementById('prevPage').addEventListener('click', () => this.goToPage(this.currentPage - 1));
+            document.getElementById('nextPage').addEventListener('click', () => this.goToPage(this.currentPage + 1));
+            document.getElementById('lastPage').addEventListener('click', () => this.goToPage(this.totalPages));
+
             const tbody = document.querySelector('#traceTable tbody');
             if (tbody) {
                 tbody.addEventListener('click', (e) => {
@@ -32,7 +65,259 @@
                     }
                 });
             }
+            this.updatePagination();
             if (this.code) this.fetchData();
+        }
+
+        getActiveConfigLabel() {
+            const opt = (this.configOptions || []).find((o) => String(o.id) === String(this.configId));
+            if (!opt) return '当前策略版本';
+            const name = opt.name || `配置${opt.id}`;
+            return opt.is_default ? `${name} (默认)` : name;
+        }
+
+        setForceComputeRunning(running) {
+            this.forceComputeRunning = !!running;
+            const btn = document.getElementById('forceComputeBtn');
+            const searchBtn = document.getElementById('searchBtn');
+            const sel = document.getElementById('configSelect');
+            if (btn) {
+                btn.disabled = this.forceComputeRunning;
+                btn.textContent = this.forceComputeRunning ? '正在重新计算…' : '强制重新计算';
+            }
+            if (searchBtn) searchBtn.disabled = this.forceComputeRunning;
+            if (sel) sel.disabled = this.forceComputeRunning;
+            ['firstPage', 'prevPage', 'nextPage', 'lastPage'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el && this.forceComputeRunning) el.disabled = true;
+            });
+            if (!this.forceComputeRunning) this.updatePagination();
+        }
+
+        clearForceComputePoll() {
+            if (this.forceComputePollTimer) {
+                clearInterval(this.forceComputePollTimer);
+                this.forceComputePollTimer = null;
+            }
+            this.forceComputePollCount = 0;
+        }
+
+        renderForceComputeProgress(task) {
+            const area = document.getElementById('forceComputeProgress');
+            if (!area) return;
+            area.style.display = 'block';
+            const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
+            const msg = task.message || '';
+            const total = task.total != null && task.total > 0
+                ? ` · ${task.current || 0}/${task.total}`
+                : '';
+            const statusLabel = task.status === 'completed' ? '已完成'
+                : (task.status === 'failed' ? '失败' : '计算中');
+            area.innerHTML = `
+                <div>URT 信号重算: <strong>${escapeHtml(statusLabel)}</strong>${msg ? ` · ${escapeHtml(String(msg))}${total}` : ''}</div>
+                <div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>
+            `;
+        }
+
+        forceCompute() {
+            if (this.forceComputeRunning) return;
+            if (!this.code) {
+                alert('请先选择股票');
+                return;
+            }
+            const label = this.getActiveConfigLabel();
+            if (!confirm(`将按「${label}」重新计算该股近期交易日的 URT 信号（仅影响该策略版本），是否继续？`)) {
+                return;
+            }
+            void this.startForceComputeTask();
+        }
+
+        async startForceComputeTask() {
+            this.clearForceComputePoll();
+            this.setForceComputeRunning(true);
+            const area = document.getElementById('forceComputeProgress');
+            if (area) {
+                area.style.display = 'block';
+                area.innerHTML = '<div>正在提交重算任务…</div><div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:5%"></div></div>';
+            }
+            const loading = document.getElementById('loadingMsg');
+            if (loading) loading.style.display = 'none';
+
+            try {
+                const resp = await fetch(`${apiBase}/api/stock/urt-signal-trace/recompute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        code: this.code,
+                        config_id: this.configId,
+                    }),
+                });
+                const json = await resp.json().catch(() => ({}));
+                if (!resp.ok || !json.success) {
+                    const detail = json.detail;
+                    let errMsg = json.message || resp.statusText;
+                    if (typeof detail === 'string') errMsg = detail;
+                    else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+                    throw new Error(errMsg || '提交失败');
+                }
+                this.forceComputeTaskId = json.data?.task_id || '';
+                if (!this.forceComputeTaskId) {
+                    throw new Error('未返回任务 ID');
+                }
+                if (json.data?.config_id != null) {
+                    this.configId = json.data.config_id;
+                }
+                if (json.data?.already_running) {
+                    this.renderForceComputeProgress({
+                        status: 'running',
+                        progress: 0,
+                        message: json.message || '任务进行中',
+                    });
+                }
+                await this.pollForceComputeOnce();
+                this.forceComputePollTimer = setInterval(() => this.pollForceComputeOnce(), 1000);
+            } catch (e) {
+                this.clearForceComputePoll();
+                this.setForceComputeRunning(false);
+                if (area) {
+                    area.style.display = 'block';
+                    area.innerHTML = `<span class="gms-recompute-error">提交失败: ${escapeHtml(e.message || String(e))}</span>`;
+                }
+            }
+        }
+
+        async pollForceComputeOnce() {
+            if (!this.forceComputeTaskId) return;
+            this.forceComputePollCount += 1;
+            if (this.forceComputePollCount > this.maxForceComputePolls) {
+                this.clearForceComputePoll();
+                this.setForceComputeRunning(false);
+                const area = document.getElementById('forceComputeProgress');
+                if (area) {
+                    area.innerHTML = '<span class="gms-recompute-error">等待超时，请刷新页面后重试</span>';
+                }
+                return;
+            }
+            const url = `${apiBase}/api/stock/urt-signal-trace/recompute/${encodeURIComponent(this.forceComputeTaskId)}`;
+            try {
+                const resp = await fetch(url);
+                const json = await resp.json().catch(() => ({}));
+                if (!resp.ok || !json.success) {
+                    const detail = json.detail;
+                    let errMsg = json.message || resp.statusText;
+                    if (typeof detail === 'string') errMsg = detail;
+                    else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+                    throw new Error(errMsg || '查询进度失败');
+                }
+                const task = json.data;
+                if (!task) return;
+                this.renderForceComputeProgress(task);
+                const st = task.status;
+                if (st === 'completed' || st === 'failed') {
+                    this.clearForceComputePoll();
+                    this.setForceComputeRunning(false);
+                    if (st === 'completed') {
+                        if (window.CommonUtils && task.message) {
+                            CommonUtils.showToast(task.message, 'success');
+                        }
+                        await this.fetchData();
+                        if (task.message) {
+                            this.renderForceComputeProgress({ ...task, progress: 100 });
+                        }
+                    } else {
+                        const area = document.getElementById('forceComputeProgress');
+                        if (area) {
+                            area.innerHTML = `<span class="gms-recompute-error">${escapeHtml(task.error || task.message || '计算失败')}</span>`;
+                        }
+                    }
+                }
+            } catch (e) {
+                this.clearForceComputePoll();
+                this.setForceComputeRunning(false);
+                const area = document.getElementById('forceComputeProgress');
+                if (area) {
+                    area.innerHTML = `<span class="gms-recompute-error">查询进度失败: ${escapeHtml(e.message || String(e))}</span>`;
+                }
+            }
+        }
+
+        renderTable() {
+            const tbody = document.querySelector('#traceTable tbody');
+            if (!tbody) return;
+            const start = (this.currentPage - 1) * this.pageSize;
+            const pageData = this.allData.slice(start, start + this.pageSize);
+            if (!pageData.length) {
+                tbody.innerHTML = '';
+                return;
+            }
+            tbody.innerHTML = pageData.map((r, index) => {
+                let detailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
+                if (window.UrtScoreDetail) {
+                    detailHtml = window.UrtScoreDetail.buildHtml({
+                        ...r,
+                        score: r.score,
+                        score_detail: r.score_detail,
+                        buy_signal: r.buy_signal,
+                    });
+                }
+                const scoreVal = r.score != null ? Number(r.score) : null;
+                let scoreClass = '';
+                let rowClass = '';
+                if (scoreVal != null) {
+                    if (scoreVal >= 85) {
+                        scoreClass = 'strength-high';
+                        rowClass = 'urt-row-score-high';
+                    } else if (scoreVal >= 70) {
+                        scoreClass = 'strength-mid';
+                        rowClass = 'urt-row-score-mid';
+                    }
+                }
+                return `<tr class="${rowClass}">
+                    <td>${r.date || '--'}</td>
+                    <td class="${r.buy_signal ? 'buy-yes' : ''}">${r.buy_signal ? '是' : '否'}</td>
+                    <td><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
+                    <td>${r.close != null ? Number(r.close).toFixed(2) : '--'}</td>
+                    <td>${r.ma20 != null ? Number(r.ma20).toFixed(2) : '--'}</td>
+                    <td>${r.yang_count_4 ?? '--'}</td>
+                    <td>${r.yang_count_5 ?? '--'}</td>
+                    <td>${r.volume_multiple != null ? Number(r.volume_multiple).toFixed(2) : '--'}</td>
+                    <td>${r.volume_ratio != null ? Number(r.volume_ratio).toFixed(2) : '--'}</td>
+                    <td>${r.turnover_rate != null ? Number(r.turnover_rate).toFixed(2) : '--'}</td>
+                    <td><button type="button" class="gms-op-btn urt-score-detail-toggle" data-row="${index}">明细</button></td>
+                </tr>
+                <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
+                    <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        updatePagination() {
+            const total = this.allData.length;
+            this.totalPages = total > 0 ? Math.max(1, Math.ceil(total / this.pageSize)) : 0;
+            const pageInfo = document.getElementById('pageInfo');
+            if (pageInfo) {
+                pageInfo.textContent = total > 0
+                    ? `第 ${this.currentPage} / ${this.totalPages} 页，共 ${total} 条`
+                    : '共 0 条';
+            }
+            const atStart = this.currentPage <= 1 || total === 0;
+            const atEnd = this.currentPage >= this.totalPages || total === 0;
+            const first = document.getElementById('firstPage');
+            const prev = document.getElementById('prevPage');
+            const next = document.getElementById('nextPage');
+            const last = document.getElementById('lastPage');
+            if (first) first.disabled = atStart || this.forceComputeRunning;
+            if (prev) prev.disabled = atStart || this.forceComputeRunning;
+            if (next) next.disabled = atEnd || this.forceComputeRunning;
+            if (last) last.disabled = atEnd || this.forceComputeRunning;
+        }
+
+        goToPage(p) {
+            if (this.forceComputeRunning) return;
+            if (!this.totalPages || p < 1 || p > this.totalPages) return;
+            this.currentPage = p;
+            this.renderTable();
+            this.updatePagination();
         }
 
         async fetchData() {
@@ -41,62 +326,48 @@
             const tbody = document.querySelector('#traceTable tbody');
             loading.style.display = '';
             empty.style.display = 'none';
+            empty.textContent = '暂无 URT 预计算信号（可点击「强制重新计算」对该股即时计算）';
             tbody.innerHTML = '';
+            this.allData = [];
+            this.currentPage = 1;
+            this.totalPages = 0;
+            this.updatePagination();
             try {
-                const q = new URLSearchParams({ code: this.code, limit: '300' });
+                const q = new URLSearchParams({ code: this.code, limit: '2000' });
                 if (this.configId) q.set('config_id', String(this.configId));
                 const res = await fetch(`${apiBase}/api/stock/urt-signal-trace?${q}`);
                 const json = await res.json();
                 const configs = json.configs || [];
+                this.configOptions = configs;
                 const sel = document.getElementById('configSelect');
                 sel.innerHTML = configs.map((c) =>
-                    `<option value="${c.id}" ${c.id === json.config_id ? 'selected' : ''}>${c.name}${c.is_default ? ' (默认)' : ''}</option>`
+                    `<option value="${c.id}" ${c.id === json.config_id ? 'selected' : ''}>${escapeHtml(c.name)}${c.is_default ? ' (默认)' : ''}</option>`
                 ).join('');
                 this.configId = json.config_id;
                 const detail = document.getElementById('detailLink');
                 detail.href = `stock_urt_score_detail.html?code=${encodeURIComponent(this.code)}&name=${encodeURIComponent(this.name)}&config_id=${this.configId || ''}`;
-                const rows = json.data || [];
-                if (!rows.length) {
+                this.allData = json.data || [];
+                if (!this.allData.length) {
                     empty.style.display = '';
+                    this.updatePagination();
                     return;
                 }
-                tbody.innerHTML = rows.map((r, index) => {
-                    const pageHref = `stock_urt_score_detail.html?code=${encodeURIComponent(this.code)}&name=${encodeURIComponent(this.name)}&date=${encodeURIComponent(r.date || '')}&config_id=${r.config_id || this.configId || ''}`;
-                    let detailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
-                    if (window.UrtScoreDetail) {
-                        detailHtml = window.UrtScoreDetail.buildHtml({
-                            ...r,
-                            score: r.score,
-                            score_detail: r.score_detail,
-                            buy_signal: r.buy_signal,
-                        });
-                    }
-                    return `<tr>
-                        <td><button type="button" class="gms-op-btn urt-score-detail-toggle" data-row="${index}">明细</button></td>
-                        <td>${r.date || '--'}</td>
-                        <td class="${r.buy_signal ? 'buy-yes' : ''}">${r.buy_signal ? '是' : '否'}</td>
-                        <td>${r.score != null ? Number(r.score).toFixed(1) : '--'}</td>
-                        <td>${r.close != null ? Number(r.close).toFixed(2) : '--'}</td>
-                        <td>${r.ma20 != null ? Number(r.ma20).toFixed(2) : '--'}</td>
-                        <td>${r.yang_count_4 ?? '--'}</td>
-                        <td>${r.yang_count_5 ?? '--'}</td>
-                        <td>${r.volume_multiple != null ? Number(r.volume_multiple).toFixed(2) : '--'}</td>
-                        <td>${r.volume_ratio != null ? Number(r.volume_ratio).toFixed(2) : '--'}</td>
-                        <td>${r.turnover_rate != null ? Number(r.turnover_rate).toFixed(2) : '--'}</td>
-                        <td><a class="gms-op-btn" href="${pageHref}" target="_blank" rel="noopener">明细页</a></td>
-                    </tr>
-                    <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
-                    </tr>`;
-                }).join('');
+                this.totalPages = Math.max(1, Math.ceil(this.allData.length / this.pageSize));
+                this.currentPage = 1;
+                this.renderTable();
+                this.updatePagination();
             } catch (e) {
                 empty.textContent = '加载失败: ' + (e.message || e);
                 empty.style.display = '';
+                this.allData = [];
+                this.updatePagination();
             } finally {
                 loading.style.display = 'none';
             }
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => new StockUrtTracePage());
+    document.addEventListener('DOMContentLoaded', () => {
+        window.urtTracePage = new StockUrtTracePage();
+    });
 })();

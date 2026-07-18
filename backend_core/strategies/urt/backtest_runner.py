@@ -223,6 +223,13 @@ def run_urt_backtest(
                     exit_date = future[-1]["date"]
 
             pnl_pct = (exit_price - entry_price) / entry_price * 100.0
+            bars_held = 0
+            for bar in future:
+                bars_held += 1
+                if bar.get("date") == exit_date:
+                    break
+            if bars_held <= 0:
+                bars_held = 1
             cooldown[code] = exit_date
             details.append(
                 {
@@ -238,6 +245,7 @@ def run_urt_backtest(
                     "hit_target": hit,
                     "hit_date": hit_date,
                     "pnl_pct": round(pnl_pct, 2),
+                    "bars_held": bars_held,
                 }
             )
 
@@ -245,9 +253,68 @@ def run_urt_backtest(
     hits = sum(1 for r in details if r.get("hit_target"))
     wins = sum(1 for r in details if float(r.get("pnl_pct") or 0) > 0)
     avg_pnl = sum(float(r.get("pnl_pct") or 0) for r in details) / total if total else 0.0
+
+    by_score_bucket: Dict[str, Dict[str, Any]] = {}
+    for r in details:
+        s = r.get("score")
+        try:
+            sv = float(s) if s is not None else None
+        except (TypeError, ValueError):
+            sv = None
+        if sv is None:
+            bucket = "未知"
+        elif sv < 60:
+            bucket = "[0,60)"
+        elif sv < 70:
+            bucket = "[60,70)"
+        elif sv < 80:
+            bucket = "[70,80)"
+        elif sv < 90:
+            bucket = "[80,90)"
+        else:
+            bucket = "[90,100]"
+        if bucket not in by_score_bucket:
+            by_score_bucket[bucket] = {"total": 0, "hit": 0}
+        by_score_bucket[bucket]["total"] += 1
+        if r.get("hit_target"):
+            by_score_bucket[bucket]["hit"] += 1
+    for v in by_score_bucket.values():
+        v["hit_rate"] = round(v["hit"] / v["total"], 4) if v["total"] else 0.0
+
+    holding_hist = {"1-3": 0, "4-10": 0, "11-20": 0, "21+": 0}
+    for r in details:
+        bars = int(r.get("bars_held") or 0)
+        if bars <= 3:
+            holding_hist["1-3"] += 1
+        elif bars <= 10:
+            holding_hist["4-10"] += 1
+        elif bars <= 20:
+            holding_hist["11-20"] += 1
+        else:
+            holding_hist["21+"] += 1
+
+    exit_reason_dist: Dict[str, int] = {}
+    for r in details:
+        reason = str(r.get("exit_reason") or "unknown")
+        exit_reason_dist[reason] = exit_reason_dist.get(reason, 0) + 1
+
+    # 分月收益：按出场月汇总 pnl_pct 均值（简化）
+    monthly_map: Dict[str, List[float]] = {}
+    for r in details:
+        ed = str(r.get("exit_date") or "")[:7]
+        if not ed:
+            continue
+        monthly_map.setdefault(ed, []).append(float(r.get("pnl_pct") or 0))
+    monthly_returns = [
+        {"month": m, "return_pct": round(sum(vs) / len(vs), 2), "count": len(vs)}
+        for m, vs in sorted(monthly_map.items())
+    ]
+
     summary = {
         "total_signals": total,
+        "total_samples": total,
         "target_hits": hits,
+        "hit_count": hits,
         "hit_rate": round(hits / total, 4) if total else 0.0,
         "win_count": wins,
         "win_rate": round(wins / total, 4) if total else 0.0,
@@ -258,6 +325,11 @@ def run_urt_backtest(
         "end_date": end_date,
         "strategy_config_id": resolved_id,
         "min_score": cfg.get("min_score"),
+        "by_score_bucket": by_score_bucket,
+        "holding_days_histogram": holding_hist,
+        "exit_reason_dist": exit_reason_dist,
+        "monthly_returns": monthly_returns,
+        "stock_pool_size": len(pool) if pool else None,
     }
     if progress_cb:
         progress_cb(100, "回测完成")

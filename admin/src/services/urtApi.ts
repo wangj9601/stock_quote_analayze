@@ -33,7 +33,13 @@ class URTApiService {
     })
     if (!response.ok) {
       const err = await response.json().catch(() => ({ detail: 'Request failed' }))
-      throw new Error(err.detail || err.message || 'Request failed')
+      const detail = err.detail
+      const msg = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: any) => d.msg || d).join('; ')
+          : (err.message || 'Request failed')
+      throw new Error(msg)
     }
     return response.json()
   }
@@ -76,6 +82,11 @@ class URTApiService {
     return res.data || {}
   }
 
+  async getWatchlistUsers(): Promise<Array<{ user_id: number; username: string; watchlist_count: number }>> {
+    const res = await this.request<{ success: boolean; data: any[] }>(`${PREFIX}/watchlist-users`)
+    return res.data || []
+  }
+
   async screenPreview(params?: { limit?: number; date?: string; config_id?: number }) {
     const q = new URLSearchParams()
     if (params?.limit) q.set('limit', String(params.limit))
@@ -93,16 +104,17 @@ class URTApiService {
   }
 
   async createBacktest(body: Record<string, any>) {
-    const res = await this.request<{ success: boolean; task_id: string; data: any }>(
+    return this.request<{ success: boolean; task_id: string; data: any }>(
       `${PREFIX}/backtests`,
       { method: 'POST', body: JSON.stringify(body) }
     )
-    return res
   }
 
-  async listBacktests(limit = 50) {
+  async listBacktests(limit = 50, status?: string) {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (status) q.set('status', status)
     const res = await this.request<{ success: boolean; data: any[] }>(
-      `${PREFIX}/backtests?limit=${limit}`
+      `${PREFIX}/backtests?${q.toString()}`
     )
     return res.data || []
   }
@@ -112,16 +124,57 @@ class URTApiService {
     return res.data
   }
 
+  async getBacktestLogs(taskId: string) {
+    const res = await this.request<{ success: boolean; data: { logs: any[] } }>(
+      `${PREFIX}/backtests/${taskId}/logs`
+    )
+    return res.data?.logs || []
+  }
+
   async cancelBacktest(taskId: string) {
     return this.request(`${PREFIX}/backtests/${taskId}/cancel`, { method: 'POST' })
+  }
+
+  async rerunBacktest(taskId: string) {
+    return this.request(`${PREFIX}/backtests/${taskId}/rerun`, { method: 'POST' })
   }
 
   async deleteBacktest(taskId: string) {
     return this.request(`${PREFIX}/backtests/${taskId}/delete`, { method: 'POST' })
   }
 
+  async batchDeleteBacktests(taskIds: string[]) {
+    return this.request(`${PREFIX}/backtests/batch-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ task_ids: taskIds }),
+    })
+  }
+
   backtestExportUrl(taskId: string) {
     return `${API_BASE}${PREFIX}/backtests/${taskId}/export`
+  }
+
+  async getReports(params?: { limit?: number; offset?: number }) {
+    const q = new URLSearchParams()
+    if (params?.limit) q.set('limit', String(params.limit))
+    if (params?.offset) q.set('offset', String(params.offset))
+    const res = await this.request<{ success: boolean; data: { reports: any[] } }>(
+      `${PREFIX}/reports?${q.toString()}`
+    )
+    return res.data?.reports || []
+  }
+
+  async getReport(reportId: string) {
+    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/reports/${reportId}`)
+    return res.data
+  }
+
+  async deleteReport(reportId: string) {
+    return this.request(`${PREFIX}/reports/${reportId}/delete`, { method: 'POST' })
+  }
+
+  reportDownloadUrl(reportId: string) {
+    return `${API_BASE}${PREFIX}/reports/${reportId}/download`
   }
 }
 
