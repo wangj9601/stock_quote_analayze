@@ -80,6 +80,12 @@ try:
         URTBacktestTask = getattr(models_module, 'URTBacktestTask', None)
         GMSRuntimeConfig = getattr(models_module, 'GMSRuntimeConfig', None)
         GMSBacktestTask = getattr(models_module, 'GMSBacktestTask', None)
+        SBBRStrategyConfig = getattr(models_module, 'SBBRStrategyConfig', None)
+        SBBRSignalTrace = getattr(models_module, 'SBBRSignalTrace', None)
+        SBBRReserveBox = getattr(models_module, 'SBBRReserveBox', None)
+        SBBRTradeObserveStock = getattr(models_module, 'SBBRTradeObserveStock', None)
+        SBBRFormalTrade = getattr(models_module, 'SBBRFormalTrade', None)
+        SBBRBacktestTask = getattr(models_module, 'SBBRBacktestTask', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
         StockPriceData = getattr(models_module, 'StockPriceData', None)
@@ -200,6 +206,12 @@ except Exception as e:
     URTBacktestTask = None
     GMSRuntimeConfig = None
     GMSBacktestTask = None
+    SBBRStrategyConfig = None
+    SBBRSignalTrace = None
+    SBBRReserveBox = None
+    SBBRTradeObserveStock = None
+    SBBRFormalTrade = None
+    SBBRBacktestTask = None
     StockBasicInfo = None
     StockBasicInfoHK = None
     StockPriceData = None
@@ -323,6 +335,12 @@ __all__ = [
     'URTBacktestTask',
     'GMSRuntimeConfig',
     'GMSBacktestTask',
+    'SBBRStrategyConfig',
+    'SBBRSignalTrace',
+    'SBBRReserveBox',
+    'SBBRTradeObserveStock',
+    'SBBRFormalTrade',
+    'SBBRBacktestTask',
     'StockBasicInfo',
     'StockBasicInfoHK',
     'StockPriceData',

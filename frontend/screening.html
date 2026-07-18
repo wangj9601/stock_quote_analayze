@@ -32,6 +32,7 @@
             <button class="strategy-tab" data-strategy="gms" id="gmsTab">GMS均值引力动量</button>
             <button class="strategy-tab" data-strategy="volume-shrink-breakout" id="volumeShrinkBreakoutTab">3倍量缩量突破</button>
             <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
+            <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab">做小做底</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -1564,6 +1565,101 @@
                 </div>
             </div>
         </div>
+
+        <div id="sbbr-content" class="strategy-content">
+            <div class="gms-integrated-head">
+                <div class="gms-sub-tabs">
+                    <button type="button" class="gms-sub-tab active" data-sbbr-sub="signals">策略选股</button>
+                    <button type="button" class="gms-sub-tab" data-sbbr-sub="observe">交易观察</button>
+                    <button type="button" class="gms-sub-tab" data-sbbr-sub="formal">正式交易</button>
+                    <button type="button" class="gms-sub-tab" data-sbbr-sub="reserve">储备箱</button>
+                </div>
+                <p class="gms-integrated-hint">做小做底：全市场市值过滤 → 筑底识别 → 共振弱转强入场；可加入观察并转正式交易（五·三·二分仓）。</p>
+            </div>
+
+            <div id="sbbr-sub-signals" class="sbbr-sub-panel" style="display:block;">
+                <div class="params-section">
+                    <div class="param-group">
+                        <label>范围</label>
+                        <select id="sbbrScope" class="param-input">
+                            <option value="market">全市场（做小宇宙）</option>
+                            <option value="watchlist">自选股</option>
+                            <option value="reserve">储备箱</option>
+                        </select>
+                    </div>
+                    <div class="param-group">
+                        <label>基准日</label>
+                        <input type="date" id="sbbrDate" class="param-input">
+                    </div>
+                    <div class="param-group">
+                        <label><input type="checkbox" id="sbbrEntryOnly"> 仅入场信号</label>
+                    </div>
+                    <div class="param-group">
+                        <label><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
+                    </div>
+                    <button type="button" id="sbbrRefreshBtn" class="refresh-btn">刷新筛选</button>
+                    <span id="sbbrSearchMeta" class="gms-meta-text"></span>
+                </div>
+                <div id="sbbrLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
+                <div id="sbbrError" class="error-message" style="display:none;"></div>
+                <div class="results-container">
+                    <div class="results-header"><span id="sbbrResultsCount">共 0 只</span></div>
+                    <div class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>代码</th><th>名称</th><th>总市值(亿)</th><th>流通(亿)</th>
+                                    <th>筑底模式</th><th>入场</th><th>收盘</th><th>防守下沿</th><th>量比</th><th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sbbrResultsBody">
+                                <tr><td colspan="10" class="empty-state">点击「刷新筛选」开始</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="sbbr-sub-observe" class="sbbr-sub-panel" style="display:none;">
+                <button type="button" id="sbbrObserveRefreshBtn" class="refresh-btn">刷新观察列表</button>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead><tr><th>代码</th><th>名称</th><th>信号日</th><th>操作</th></tr></thead>
+                        <tbody id="sbbrObserveBody"><tr><td colspan="4" class="empty-state">暂无</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="sbbr-sub-formal" class="sbbr-sub-panel" style="display:none;">
+                <button type="button" id="sbbrFormalRefreshBtn" class="refresh-btn">刷新正式交易</button>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th><th>名称</th><th>状态</th><th>阶段</th><th>入场价</th>
+                                <th>仓位%</th><th>防守锚</th><th>最新评估</th><th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sbbrFormalBody"><tr><td colspan="9" class="empty-state">暂无</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="sbbr-sub-reserve" class="sbbr-sub-panel" style="display:none;">
+                <div class="params-section">
+                    <input type="text" id="sbbrReserveCode" class="param-input" placeholder="股票代码">
+                    <input type="text" id="sbbrReserveName" class="param-input" placeholder="名称(可选)">
+                    <button type="button" id="sbbrReserveAddBtn" class="refresh-btn">加入储备箱</button>
+                    <button type="button" id="sbbrReserveRefreshBtn" class="gms-btn-outline">刷新</button>
+                </div>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead><tr><th>代码</th><th>名称</th><th>状态</th><th>操作</th></tr></thead>
+                        <tbody id="sbbrReserveBody"><tr><td colspan="4" class="empty-state">暂无</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script src="js/config.js"></script>
@@ -1704,6 +1800,7 @@
     <script src="js/gms_score_detail.js"></script>
     <script src="js/urt_score_detail.js"></script>
     <script src="js/screening.js"></script>
+    <script src="js/sbbr_screening.js"></script>
 </body>
 
 </html>

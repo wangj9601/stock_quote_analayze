@@ -1,0 +1,131 @@
+"""SBBR 信号落库。"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+def upsert_signal_traces(
+    db,
+    rows: List[Dict[str, Any]],
+    *,
+    config_id: int,
+    trade_date: str,
+) -> int:
+    from backend_api.models import SBBRSignalTrace
+
+    n = 0
+    for r in rows:
+        code = str(r.get("code") or r.get("symbol") or "").strip()
+        if not code:
+            continue
+        date_s = str(r.get("date") or trade_date)[:10]
+        try:
+            d = datetime.strptime(date_s, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+
+        existing = (
+            db.query(SBBRSignalTrace)
+            .filter(
+                SBBRSignalTrace.code == code,
+                SBBRSignalTrace.trade_date == d,
+                SBBRSignalTrace.config_id == int(config_id),
+            )
+            .first()
+        )
+        payload = dict(
+            name=r.get("name"),
+            market_type=r.get("market_type") or "CN",
+            total_mv=r.get("total_mv"),
+            circ_mv=r.get("circ_mv"),
+            size_ok=r.get("size_ok"),
+            bottom_mode=r.get("bottom_mode"),
+            bottom_matched=bool(r.get("bottom_matched")),
+            entry_signal=bool(r.get("entry_signal")),
+            entry_low=r.get("entry_low"),
+            defense_low=r.get("defense_low"),
+            defense_high=r.get("defense_high"),
+            defense_buffer_pct=r.get("defense_buffer_pct"),
+            close_price=r.get("close"),
+            ma20=r.get("ma20"),
+            volume_ratio=r.get("volume_ratio"),
+            exit_flags=r.get("exit_flags") or {},
+            position_advice=r.get("position_advice") or {},
+            detail=r.get("detail") or {},
+            updated_at=datetime.now(),
+        )
+        if existing:
+            for k, v in payload.items():
+                setattr(existing, k, v)
+        else:
+            db.add(
+                SBBRSignalTrace(
+                    code=code,
+                    trade_date=d,
+                    config_id=int(config_id),
+                    created_at=datetime.now(),
+                    **payload,
+                )
+            )
+        n += 1
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.exception("SBBR upsert_signal_traces failed: %s", e)
+        raise
+    return n
+
+
+def load_traces(
+    db,
+    *,
+    trade_date: str,
+    config_id: int,
+    entry_only: bool = False,
+    limit: int = 500,
+) -> List[Dict[str, Any]]:
+    from backend_api.models import SBBRSignalTrace
+
+    d = datetime.strptime(trade_date[:10], "%Y-%m-%d").date()
+    q = db.query(SBBRSignalTrace).filter(
+        SBBRSignalTrace.trade_date == d,
+        SBBRSignalTrace.config_id == int(config_id),
+    )
+    if entry_only:
+        q = q.filter(SBBRSignalTrace.entry_signal.is_(True))
+    rows = q.order_by(SBBRSignalTrace.entry_signal.desc(), SBBRSignalTrace.code.asc()).limit(limit).all()
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "code": r.code,
+                "symbol": r.code,
+                "name": r.name,
+                "date": r.trade_date.isoformat() if r.trade_date else trade_date,
+                "market_type": r.market_type,
+                "total_mv": r.total_mv,
+                "circ_mv": r.circ_mv,
+                "size_ok": r.size_ok,
+                "bottom_mode": r.bottom_mode,
+                "bottom_matched": r.bottom_matched,
+                "entry_signal": r.entry_signal,
+                "entry_low": r.entry_low,
+                "defense_low": r.defense_low,
+                "defense_high": r.defense_high,
+                "defense_buffer_pct": r.defense_buffer_pct,
+                "close": r.close_price,
+                "ma20": r.ma20,
+                "volume_ratio": r.volume_ratio,
+                "exit_flags": r.exit_flags or {},
+                "position_advice": r.position_advice or {},
+                "detail": r.detail or {},
+                "config_id": r.config_id,
+            }
+        )
+    return out

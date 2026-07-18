@@ -1921,3 +1921,145 @@ class FundHistoricalQuotes(Base):
     turnover_rate = Column(Float)          # 换手率
     collected_source = Column(String)
     collected_date = Column(DateTime, default=datetime.now)
+
+# ========== SBBR 做小做底策略 ==========
+
+class SBBRStrategyConfig(Base):
+    """SBBR 策略参数版本。"""
+    __tablename__ = "sbbr_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class SBBRSignalTrace(Base):
+    """SBBR 日终信号追溯。"""
+    __tablename__ = "sbbr_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    config_id = Column(Integer, ForeignKey("sbbr_strategy_configs.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    market_type = Column(String(10), nullable=False, default="CN")
+    total_mv = Column(Float, nullable=True)
+    circ_mv = Column(Float, nullable=True)
+    size_ok = Column(Boolean, nullable=True)
+    bottom_mode = Column(String(40), nullable=True)
+    bottom_matched = Column(Boolean, nullable=True)
+    entry_signal = Column(Boolean, nullable=True)
+    entry_low = Column(Float, nullable=True)
+    defense_low = Column(Float, nullable=True)
+    defense_high = Column(Float, nullable=True)
+    defense_buffer_pct = Column(Float, nullable=True)
+    close_price = Column(Float, nullable=True)
+    ma20 = Column(Float, nullable=True)
+    volume_ratio = Column(Float, nullable=True)
+    exit_flags = Column(JSON, nullable=True)
+    position_advice = Column(JSON, nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", "trade_date", "config_id", name="uq_sbbr_signal_trace_code_date_cfg"),
+    )
+
+
+class SBBRReserveBox(Base):
+    """SBBR 人工储备箱。"""
+    __tablename__ = "sbbr_reserve_box"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    stock_code = Column(String(20), nullable=False, index=True)
+    stock_name = Column(String(200), nullable=True)
+    industry_note = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="watching")
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="sbbr_reserve_box")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "stock_code", name="uq_sbbr_reserve_user_code"),
+    )
+
+
+class SBBRTradeObserveStock(Base):
+    """SBBR 交易观察。"""
+    __tablename__ = "sbbr_trade_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="sbbr_trade_observe_stocks")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "market", "code", name="uq_sbbr_trade_observe_user_market_code"),
+    )
+
+
+class SBBRFormalTrade(Base):
+    """SBBR 正式交易（含五·三·二分仓）。"""
+    __tablename__ = "sbbr_formal_trades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source_observe_id = Column(Integer, nullable=True, index=True)
+    entry_price = Column(Float, nullable=False)
+    exit_price = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="open", index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    notes = Column(Text, nullable=True)
+    stage = Column(String(20), nullable=False, default="probe")
+    budget_total = Column(Float, nullable=True)
+    allocated_pct = Column(Float, nullable=False, default=50.0)
+    defense_anchor_low = Column(Float, nullable=True)
+    defense_buffer_pct = Column(Float, nullable=True)
+    exit_reason = Column(String(100), nullable=True)
+    last_eval_json = Column(JSON, nullable=True)
+    pnl_amount = Column(Float, nullable=True)
+    pnl_percent = Column(Float, nullable=True)
+    entry_at = Column(DateTime, default=datetime.now, nullable=False)
+    exit_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="sbbr_formal_trades")
+
+
+class SBBRBacktestTask(Base):
+    """SBBR 回测任务。"""
+    __tablename__ = "sbbr_backtest_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    config = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    message = Column(Text, nullable=True)
+    summary = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
