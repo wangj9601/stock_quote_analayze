@@ -91,23 +91,26 @@ class URTDataLoader:
         self,
         code: str,
         *,
-        start_date: str,
-        end_date: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        rows = self.db.execute(
-            text(
-                """
-                SELECT code, name, date, open, close, high, low,
-                       change_percent, volume, amount, turnover_rate
-                FROM historical_quotes
-                WHERE code = :code
-                  AND date >= :start_date
-                  AND date <= :end_date
-                ORDER BY date DESC
-                """
-            ),
-            {"code": str(code), "start_date": start_date, "end_date": end_date},
-        ).fetchall()
+        """拉取日 K（日期 DESC）。start/end 均可选；强制重算时可省略以取该股全部历史。"""
+        clauses = ["code = :code"]
+        params: Dict[str, Any] = {"code": str(code)}
+        if start_date:
+            clauses.append("date >= :start_date")
+            params["start_date"] = str(start_date)[:10]
+        if end_date:
+            clauses.append("date <= :end_date")
+            params["end_date"] = str(end_date)[:10]
+        sql = f"""
+            SELECT code, name, date, open, close, high, low,
+                   change_percent, volume, amount, turnover_rate
+            FROM historical_quotes
+            WHERE {' AND '.join(clauses)}
+            ORDER BY date DESC
+        """
+        rows = self.db.execute(text(sql), params).fetchall()
         out: List[Dict[str, Any]] = []
         for row in rows:
             date_val = row[2]

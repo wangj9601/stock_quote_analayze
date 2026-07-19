@@ -18,6 +18,52 @@ from backend_api.models import URTBacktestTask
 
 logger = logging.getLogger(__name__)
 
+# 明细导出列顺序与中文表头（打开 CSV/Excel 时显示）
+_URT_DETAIL_FIELDS: List[str] = [
+    "code",
+    "name",
+    "signal_date",
+    "score",
+    "entry_date",
+    "entry_price",
+    "max_high",
+    "max_gain_pct",
+    "hit_target",
+    "hit_date",
+    "exit_date",
+    "exit_price",
+    "exit_reason",
+    "pnl_pct",
+    "bars_held",
+]
+
+_URT_DETAIL_HEADER_ZH: Dict[str, str] = {
+    "code": "股票代码",
+    "name": "股票名称",
+    "signal_date": "信号日期",
+    "score": "得分",
+    "entry_date": "入场日期",
+    "entry_price": "入场价",
+    "max_high": "观察期最高价",
+    "max_gain_pct": "观察期最大涨幅(%)",
+    "hit_target": "是否命中目标",
+    "hit_date": "命中日期",
+    "exit_date": "出场日期",
+    "exit_price": "出场价(期末收盘)",
+    "exit_reason": "出场原因",
+    "pnl_pct": "期末盈亏比例(%)",
+    "bars_held": "持有天数",
+}
+
+_URT_EXIT_REASON_ZH: Dict[str, str] = {
+    "target_hit": "触及目标",
+    "horizon_end": "到期平仓",
+    "rule_exit": "规则离场",
+    "stop_loss": "止损",
+    "time_stop": "时间止损",
+    "trailing_drawdown": "回撤止盈",
+}
+
 
 def _session() -> Session:
     return SessionLocal()
@@ -148,6 +194,52 @@ def update_task_progress(task_id: str, progress: int, message: str = "", log_lin
         db.close()
 
 
+def _urt_detail_field_order(rows: List[Dict[str, Any]]) -> List[str]:
+    """稳定列顺序：优先预定义字段，其余追加在后。"""
+    seen = set()
+    ordered: List[str] = []
+    for k in _URT_DETAIL_FIELDS:
+        ordered.append(k)
+        seen.add(k)
+    if rows:
+        for k in rows[0].keys():
+            if k not in seen:
+                ordered.append(k)
+                seen.add(k)
+    return ordered
+
+
+def _format_urt_detail_cell(key: str, value: Any) -> Any:
+    if key == "hit_target":
+        if value is True or value == 1 or str(value).lower() in ("true", "1", "yes"):
+            return "是"
+        if value is False or value == 0 or str(value).lower() in ("false", "0", "no"):
+            return "否"
+        return value
+    if key == "exit_reason":
+        s = str(value or "").strip()
+        return _URT_EXIT_REASON_ZH.get(s, s or "")
+    if key == "code" and value is not None:
+        # 避免 Excel 把代码当数字丢掉前导零
+        return str(value)
+    return value
+
+
+def _build_urt_details_csv_bytes(details_rows: List[Dict[str, Any]]) -> bytes:
+    fields = _urt_detail_field_order(details_rows)
+    headers_zh = [_URT_DETAIL_HEADER_ZH.get(k, k) for k in fields]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=headers_zh, extrasaction="ignore", quoting=csv.QUOTE_MINIMAL)
+    w.writeheader()
+    for r in details_rows:
+        row_zh = {
+            _URT_DETAIL_HEADER_ZH.get(k, k): _format_urt_detail_cell(k, r.get(k))
+            for k in fields
+        }
+        w.writerow(row_zh)
+    return buf.getvalue().encode("utf-8-sig")
+
+
 def complete_task(
     task_id: str,
     summary: Dict[str, Any],
@@ -166,13 +258,7 @@ def complete_task(
         row.completed_at = datetime.utcnow()
         row.error = None
         if details_rows:
-            buf = io.StringIO()
-            fields = list(details_rows[0].keys())
-            w = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
-            w.writeheader()
-            for r in details_rows:
-                w.writerow(r)
-            row.details_csv_bytes = buf.getvalue().encode("utf-8-sig")
+            row.details_csv_bytes = _build_urt_details_csv_bytes(details_rows)
         db.commit()
     except Exception:
         db.rollback()

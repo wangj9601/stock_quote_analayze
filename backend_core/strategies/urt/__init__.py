@@ -4,7 +4,7 @@
 from .config import URTConfigManager
 from .data_loader import URTDataLoader
 from .frontend_interface import URTFrontendInterface
-from .signal_detector import evaluate_buy_signal, evaluate_exit_rules
+from .signal_detector import build_buy_logic, evaluate_buy_signal, evaluate_exit_rules
 from .strategy_engine import URTStrategyEngine
 from . import backtest_storage
 from . import backtest_worker
@@ -14,6 +14,7 @@ __all__ = [
     "URTDataLoader",
     "URTFrontendInterface",
     "URTStrategyEngine",
+    "build_buy_logic",
     "evaluate_buy_signal",
     "evaluate_exit_rules",
     "backtest_storage",

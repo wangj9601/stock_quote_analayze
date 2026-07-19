@@ -173,6 +173,36 @@ def test_evaluate_buy_signal_require_pass_false_returns_detail():
     assert detail.get("score_detail")
 
 
+def test_min_bars_needed_matches_build_indicators():
+    from backend_core.strategies.urt.indicators import min_bars_needed
+
+    cfg = URTConfigManager().get_default_config()
+    assert min_bars_needed(cfg) == max(20, 20 + 1, 4, 5) == 21
+
+
+def test_screen_universe_require_pass_false_keeps_failed_signal():
+    """单股模式：不按筛选过滤，未过硬筛也返回信号明细。"""
+    from backend_core.strategies.urt.strategy_engine import URTStrategyEngine
+
+    cfg = URTConfigManager().get_default_config()
+    yang = [True, True, True, False, True]
+    bars = _bars(40, yang_pattern=yang, vol_spike=False, above_ma=True)
+    for b in bars:
+        b["volume"] = 1000.0
+
+    class _Loader:
+        def fetch_historical_desc(self, code, start_date=None, end_date=None):
+            return bars
+
+    engine = URTStrategyEngine(_Loader(), cfg)
+    passed = engine.screen_universe([("000001", "测试")], require_pass=True)
+    assert passed == []
+    kept = engine.screen_universe([("000001", "测试")], require_pass=False)
+    assert len(kept) == 1
+    assert kept[0]["buy_signal"] is False
+    assert kept[0]["code"] == "000001"
+
+
 def test_backtest_progress_helpers_import():
     from backend_core.strategies.urt.backtest_storage import clamp_progress, normalize_task_id
 

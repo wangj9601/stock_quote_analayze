@@ -18,7 +18,7 @@ from backend_api.database import SessionLocal, engine, get_db
 from backend_api.models import UrtTraceRecomputeTask
 from backend_core.strategies.urt.config import URTConfigManager
 from backend_core.strategies.urt.data_loader import URTDataLoader
-from backend_core.strategies.urt.signal_detector import evaluate_buy_signal
+from backend_core.strategies.urt.signal_detector import build_buy_logic, evaluate_buy_signal
 from backend_core.strategies.urt.trace_store import (
     query_trace_by_code,
     recompute_trace_for_stock,
@@ -211,6 +211,8 @@ def _run_trace_recompute_background(
             status="completed",
             progress=100,
             saved_count=count,
+            current=count,
+            total=count,
             message=f"已按「{config_display}」重新计算，写入 {count} 条",
         )
         logger.info("URT 追溯异步重算完成: %s config_id=%s, 写入 %s 条", code, config_id, count)
@@ -230,6 +232,8 @@ def _run_trace_recompute_background(
 async def get_urt_signal_trace(
     code: str = Query(..., description="股票代码"),
     config_id: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     limit: int = Query(200, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
@@ -246,15 +250,37 @@ async def get_urt_signal_trace(
             if resolved is None and configs:
                 resolved = configs[0]["id"]
         code_n = _normalize_code(code)
-        rows = query_trace_by_code(db, code=code_n, config_id=resolved, limit=limit)
+        start_s = str(start_date).strip()[:10] if start_date else None
+        end_s = str(end_date).strip()[:10] if end_date else None
+        if start_s and end_s and start_s > end_s:
+            raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+        rows = query_trace_by_code(
+            db,
+            code=code_n,
+            config_id=resolved,
+            start_date=start_s or None,
+            end_date=end_s or None,
+            limit=limit,
+        )
+        cfg = cm.get_config(resolved, db=db)
+        for row in rows:
+            bl = build_buy_logic(row, cfg)
+            row["buy_logic"] = bl
+            row["filter_ok"] = bl.get("filter_ok")
+            row["score_ok"] = bl.get("score_ok")
+            row["filter_reason"] = bl.get("filter_reason") or None
         return {
             "success": True,
             "code": code_n,
             "config_id": resolved,
             "configs": configs,
+            "start_date": start_s,
+            "end_date": end_s,
             "data": rows,
             "total": len(rows),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("urt-signal-trace 失败")
         raise HTTPException(status_code=500, detail=str(e))
@@ -374,6 +400,29 @@ async def get_urt_score_detail(
                     .first()
                 )
                 if cached and cached.score_detail:
+                    fields = {
+                        "close": cached.close,
+                        "open": cached.open,
+                        "ma20": cached.ma20,
+                        "yang_count_4": cached.yang_count_4,
+                        "yang_count_5": cached.yang_count_5,
+                        "volume_multiple": cached.volume_multiple,
+                        "volume_ratio": cached.volume_ratio,
+                        "turnover_rate": cached.turnover_rate,
+                        "filter_reason": None,
+                    }
+                    buy_logic = build_buy_logic(
+                        {
+                            **fields,
+                            "score": cached.score,
+                            "buy_signal": cached.buy_signal,
+                            "score_detail": cached.score_detail,
+                        },
+                        cfg,
+                    )
+                    fields["filter_ok"] = buy_logic.get("filter_ok")
+                    fields["score_ok"] = buy_logic.get("score_ok")
+                    fields["filter_reason"] = buy_logic.get("filter_reason") or None
                     return {
                         "success": True,
                         "source": "urt_signal_trace",
@@ -384,17 +433,11 @@ async def get_urt_score_detail(
                         "buy_signal": cached.buy_signal,
                         "score": cached.score,
                         "score_detail": cached.score_detail,
-                        "fields": {
-                            "close": cached.close,
-                            "open": cached.open,
-                            "ma20": cached.ma20,
-                            "yang_count_4": cached.yang_count_4,
-                            "yang_count_5": cached.yang_count_5,
-                            "volume_multiple": cached.volume_multiple,
-                            "volume_ratio": cached.volume_ratio,
-                            "turnover_rate": cached.turnover_rate,
-                            "filter_reason": None,
-                        },
+                        "buy_logic": buy_logic,
+                        "filter_ok": buy_logic.get("filter_ok"),
+                        "score_ok": buy_logic.get("score_ok"),
+                        "filter_reason": buy_logic.get("filter_reason") or None,
+                        "fields": fields,
                     }
 
         loader = URTDataLoader(db)
@@ -417,12 +460,19 @@ async def get_urt_score_detail(
             "buy_signal": detail.get("buy_signal"),
             "score": detail.get("score"),
             "score_detail": detail.get("score_detail"),
+            "buy_logic": detail.get("buy_logic"),
+            "filter_ok": detail.get("filter_ok"),
+            "score_ok": detail.get("score_ok"),
+            "filter_reason": detail.get("filter_reason"),
             "fields": {
                 "close": detail.get("close"),
                 "open": detail.get("open"),
                 "ma20": detail.get("ma20"),
+                "above_ma20": detail.get("above_ma20"),
                 "yang_count_4": detail.get("yang_count_4"),
                 "yang_count_5": detail.get("yang_count_5"),
+                "rule_a_ok": detail.get("rule_a_ok"),
+                "rule_b_ok": detail.get("rule_b_ok"),
                 "volume_multiple": detail.get("volume_multiple"),
                 "volume_ratio": detail.get("volume_ratio"),
                 "turnover_rate": detail.get("turnover_rate"),

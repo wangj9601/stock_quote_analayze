@@ -34,6 +34,12 @@
 
             document.getElementById('stockDisplay').textContent =
                 this.code ? `${this.code} ${this.name}` : '--';
+            // 与 GMS 一致：默认最近约三个月（90 天）；URL 可覆盖
+            this.setDefaultDates();
+            const startEl = document.getElementById('startDate');
+            const endEl = document.getElementById('endDate');
+            if (startEl && params.get('start_date')) startEl.value = params.get('start_date');
+            if (endEl && params.get('end_date')) endEl.value = params.get('end_date');
             document.getElementById('searchBtn').addEventListener('click', () => {
                 if (this.forceComputeRunning) return;
                 this.fetchData();
@@ -69,6 +75,19 @@
             if (this.code) this.fetchData();
         }
 
+        setDefaultDates() {
+            const today = new Date();
+            const threeMonthsAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+            const startEl = document.getElementById('startDate');
+            const endEl = document.getElementById('endDate');
+            if (startEl) startEl.value = this.formatDate(threeMonthsAgo);
+            if (endEl) endEl.value = this.formatDate(today);
+        }
+
+        formatDate(d) {
+            return d.toISOString().slice(0, 10);
+        }
+
         getActiveConfigLabel() {
             const opt = (this.configOptions || []).find((o) => String(o.id) === String(this.configId));
             if (!opt) return '当前策略版本';
@@ -87,6 +106,10 @@
             }
             if (searchBtn) searchBtn.disabled = this.forceComputeRunning;
             if (sel) sel.disabled = this.forceComputeRunning;
+            ['startDate', 'endDate'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = this.forceComputeRunning;
+            });
             ['firstPage', 'prevPage', 'nextPage', 'lastPage'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el && this.forceComputeRunning) el.disabled = true;
@@ -108,9 +131,15 @@
             area.style.display = 'block';
             const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
             const msg = task.message || '';
-            const total = task.total != null && task.total > 0
-                ? ` · ${task.current || 0}/${task.total}`
-                : '';
+            // 完成后优先用实际写入条数，保证展示与落库一致
+            const saved = task.saved_count != null ? Number(task.saved_count) : null;
+            const cur = (task.status === 'completed' && saved != null && !Number.isNaN(saved))
+                ? saved
+                : (task.current || 0);
+            const tot = (task.status === 'completed' && saved != null && !Number.isNaN(saved))
+                ? saved
+                : task.total;
+            const total = tot != null && tot > 0 ? ` · ${cur}/${tot}` : '';
             const statusLabel = task.status === 'completed' ? '已完成'
                 : (task.status === 'failed' ? '失败' : '计算中');
             area.innerHTML = `
@@ -126,7 +155,7 @@
                 return;
             }
             const label = this.getActiveConfigLabel();
-            if (!confirm(`将按「${label}」重新计算该股近期交易日的 URT 信号（仅影响该策略版本），是否继续？`)) {
+            if (!confirm(`将按「${label}」重新计算该股全部历史行情的 URT 信号（仅影响该策略版本，耗时可能较长），是否继续？`)) {
                 return;
             }
             void this.startForceComputeTask();
@@ -258,6 +287,24 @@
                         score: r.score,
                         score_detail: r.score_detail,
                         buy_signal: r.buy_signal,
+                        buy_logic: r.buy_logic,
+                        filter_ok: r.filter_ok,
+                        score_ok: r.score_ok,
+                        filter_reason: r.filter_reason,
+                        fields: {
+                            close: r.close,
+                            open: r.open,
+                            ma20: r.ma20,
+                            above_ma20: r.above_ma20,
+                            yang_count_4: r.yang_count_4,
+                            yang_count_5: r.yang_count_5,
+                            volume_multiple: r.volume_multiple,
+                            volume_ratio: r.volume_ratio,
+                            turnover_rate: r.turnover_rate,
+                            filter_ok: r.filter_ok,
+                            score_ok: r.score_ok,
+                            filter_reason: r.filter_reason,
+                        },
                     });
                 }
                 const scoreVal = r.score != null ? Number(r.score) : null;
@@ -333,10 +380,26 @@
             this.totalPages = 0;
             this.updatePagination();
             try {
+                const startDate = (document.getElementById('startDate')?.value || '').trim();
+                const endDate = (document.getElementById('endDate')?.value || '').trim();
+                if (startDate && endDate && startDate > endDate) {
+                    empty.textContent = '开始日期不能晚于结束日期';
+                    empty.style.display = '';
+                    return;
+                }
                 const q = new URLSearchParams({ code: this.code, limit: '2000' });
                 if (this.configId) q.set('config_id', String(this.configId));
+                if (startDate) q.set('start_date', startDate);
+                if (endDate) q.set('end_date', endDate);
                 const res = await fetch(`${apiBase}/api/stock/urt-signal-trace?${q}`);
                 const json = await res.json();
+                if (!res.ok || json.success === false) {
+                    const detail = json.detail;
+                    let errMsg = json.message || res.statusText || '加载失败';
+                    if (typeof detail === 'string') errMsg = detail;
+                    else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+                    throw new Error(errMsg);
+                }
                 const configs = json.configs || [];
                 this.configOptions = configs;
                 const sel = document.getElementById('configSelect');
@@ -348,6 +411,9 @@
                 detail.href = `stock_urt_score_detail.html?code=${encodeURIComponent(this.code)}&name=${encodeURIComponent(this.name)}&config_id=${this.configId || ''}`;
                 this.allData = json.data || [];
                 if (!this.allData.length) {
+                    empty.textContent = (startDate || endDate)
+                        ? '所选日期范围内暂无 URT 信号记录'
+                        : '暂无 URT 预计算信号（可点击「强制重新计算」对该股即时计算）';
                     empty.style.display = '';
                     this.updatePagination();
                     return;

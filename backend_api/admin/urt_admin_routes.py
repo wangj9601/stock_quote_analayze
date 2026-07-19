@@ -155,6 +155,30 @@ def _resolve_concept_codes(db: Session, raw: List[str]) -> tuple:
     return bcodes, pool
 
 
+def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any]:
+    """将交易逻辑说明与风控参数快照写入任务 config，供详情页展示。"""
+    from backend_core.strategies.urt.backtest_runner import build_urt_trade_meta
+
+    mgr = URTConfigManager()
+    mgr.ensure_default_row(db)
+    sid = config.get("strategy_config_id")
+    strategy_cfg = mgr.get_config(int(sid) if sid is not None else None, db=db)
+    min_score = config.get("min_score")
+    if min_score is None:
+        min_score = strategy_cfg.get("min_score")
+    meta = build_urt_trade_meta(
+        target_pct=float(config.get("target_pct", 0.10)),
+        horizon_days=int(config.get("horizon_days", 20)),
+        min_score=min_score,
+        use_trace=bool(config.get("use_trace", True)),
+        risk=strategy_cfg.get("risk") if isinstance(strategy_cfg.get("risk"), dict) else {},
+    )
+    config["risk_params"] = meta["risk_params"]
+    config["trade_logic"] = meta["trade_logic"]
+    config["strategy_risk"] = meta["risk_params"]
+    return config
+
+
 def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, Any]:
     mode = (body.stock_pool_mode or "all").strip() or "all"
     cn_seg = _normalize_cn_board_segment(body.cn_board_segment)
@@ -190,9 +214,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
             if not codes:
                 raise HTTPException(status_code=400, detail="所选 A 股板块下无股票")
             config["stock_pool"] = codes
-        return config
-
-    if mode == "single":
+    elif mode == "single":
         code = _normalize_a_code(body.stock_code or "")
         if not code:
             raise HTTPException(status_code=400, detail="单股回测请填写股票代码")
@@ -201,9 +223,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
             raise HTTPException(status_code=400, detail="股票代码不在所选 A 股板块内")
         config["stock_code"] = code
         config["stock_pool"] = codes
-        return config
-
-    if mode == "custom":
+    elif mode == "custom":
         raw = body.stock_pool or []
         codes = [_normalize_a_code(c) for c in raw if str(c).strip()]
         codes = list(dict.fromkeys(codes))
@@ -211,9 +231,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         if not codes:
             raise HTTPException(status_code=400, detail="自定义股票列表为空")
         config["stock_pool"] = codes
-        return config
-
-    if mode == "watchlist":
+    elif mode == "watchlist":
         uid = body.watchlist_user_id
         if uid is not None:
             config["watchlist_user_id"] = int(uid)
@@ -222,9 +240,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         if not codes:
             raise HTTPException(status_code=400, detail="自选股列表为空")
         config["stock_pool"] = codes
-        return config
-
-    if mode == "industry_board":
+    elif mode == "industry_board":
         raw = _normalize_board_codes(body.industry_board_codes)
         if not raw:
             raise HTTPException(status_code=400, detail="请选择行业板块")
@@ -234,9 +250,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
             raise HTTPException(status_code=400, detail="行业板块下无成分股")
         config["industry_board_codes"] = bcodes
         config["stock_pool"] = codes
-        return config
-
-    if mode == "concept_board":
+    elif mode == "concept_board":
         raw = _normalize_board_codes(body.concept_board_codes, upper=True)
         if not raw:
             raise HTTPException(status_code=400, detail="请选择概念板块")
@@ -246,9 +260,10 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
             raise HTTPException(status_code=400, detail="概念板块下无成分股")
         config["concept_board_codes"] = bcodes
         config["stock_pool"] = codes
-        return config
+    else:
+        raise HTTPException(status_code=400, detail=f"不支持的股票池模式: {mode}")
 
-    raise HTTPException(status_code=400, detail=f"不支持的股票池模式: {mode}")
+    return _attach_urt_trade_meta(db, config)
 
 
 @router.get("/strategy-configs")
@@ -449,12 +464,31 @@ async def list_backtests(
 
 
 @router.get("/backtests/{task_id}")
-async def get_backtest(task_id: str):
+async def get_backtest(task_id: str, db: Session = Depends(get_db)):
     from backend_core.strategies.urt import backtest_storage
 
     row = backtest_storage.get_task(task_id)
     if not row:
         raise HTTPException(status_code=404, detail="任务不存在")
+    # 旧任务可能无交易逻辑/风控快照，按当前策略参数补齐供详情展示
+    cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    if not cfg.get("trade_logic") or not cfg.get("risk_params"):
+        try:
+            patched = _attach_urt_trade_meta(db, dict(cfg))
+            cfg = {**cfg, "trade_logic": patched.get("trade_logic"), "risk_params": patched.get("risk_params")}
+            row = {**row, "config": cfg}
+        except Exception:
+            logger.exception("URT 回测详情补齐交易逻辑失败 task=%s", task_id)
+    if summary and (not summary.get("trade_logic") or not summary.get("risk_params")):
+        row = {
+            **row,
+            "summary": {
+                **summary,
+                "trade_logic": summary.get("trade_logic") or cfg.get("trade_logic"),
+                "risk_params": summary.get("risk_params") or cfg.get("risk_params"),
+            },
+        }
     return {"success": True, "data": row}
 
 

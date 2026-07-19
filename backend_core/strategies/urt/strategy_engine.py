@@ -22,7 +22,12 @@ class URTStrategyEngine:
         stock_rows: List[Tuple[str, str]],
         *,
         as_of_end_date: Optional[str] = None,
+        require_pass: bool = True,
     ) -> List[Dict[str, Any]]:
+        """
+        require_pass=True：仅返回硬筛+得分通过的买点（全市场/板块选股）。
+        require_pass=False：始终返回可计算的信号明细（单股查询，不按筛选条件过滤）。
+        """
         cal_days = int(self.config.get("history_calendar_days") or 120)
         start_s, end_s = URTDataLoader.default_date_window(cal_days, as_of_end_date)
         results: List[Dict[str, Any]] = []
@@ -35,7 +40,7 @@ class URTStrategyEngine:
                 if as_of_end_date:
                     anchor = str(as_of_end_date)[:10]
                     hist = [b for b in hist if str(b.get("date") or "")[:10] <= anchor]
-                detail = evaluate_buy_signal(hist, self.config)
+                detail = evaluate_buy_signal(hist, self.config, require_pass=require_pass)
                 if not detail:
                     continue
                 results.append({"code": code, "name": name, **detail})

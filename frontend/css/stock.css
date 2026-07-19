@@ -1393,6 +1393,30 @@ mark {
     color: #374151;
 }
 
+.urt-buy-logic-formula {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
+    color: #1f2937;
+}
+
+.urt-buy-logic-detail {
+    margin: 0 0 10px;
+    font-size: 0.85rem;
+    color: #64748b;
+    line-height: 1.45;
+}
+
+.urt-buy-logic-sub {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.urt-buy-logic-conclusion {
+    margin: 10px 0 0;
+    font-size: 0.9rem;
+}
+
 .gms-weight-table {
     width: 100%;
     border-collapse: collapse;
