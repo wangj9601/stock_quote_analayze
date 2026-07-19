@@ -18,6 +18,52 @@ from backend_api.models import URTBacktestTask
 
 logger = logging.getLogger(__name__)
 
+# 明细导出列顺序与中文表头（打开 CSV/Excel 时显示）
+_URT_DETAIL_FIELDS: List[str] = [
+    "code",
+    "name",
+    "signal_date",
+    "score",
+    "entry_date",
+    "entry_price",
+    "max_high",
+    "max_gain_pct",
+    "hit_target",
+    "hit_date",
+    "exit_date",
+    "exit_price",
+    "exit_reason",
+    "pnl_pct",
+    "bars_held",
+]
+
+_URT_DETAIL_HEADER_ZH: Dict[str, str] = {
+    "code": "股票代码",
+    "name": "股票名称",
+    "signal_date": "信号日期",
+    "score": "得分",
+    "entry_date": "入场日期",
+    "entry_price": "入场价",
+    "max_high": "观察期最高价",
+    "max_gain_pct": "观察期最大涨幅(%)",
+    "hit_target": "是否命中目标",
+    "hit_date": "命中日期",
+    "exit_date": "出场日期",
+    "exit_price": "出场价(期末收盘)",
+    "exit_reason": "出场原因",
+    "pnl_pct": "期末盈亏比例(%)",
+    "bars_held": "持有天数",
+}
+
+_URT_EXIT_REASON_ZH: Dict[str, str] = {
+    "target_hit": "触及目标",
+    "horizon_end": "到期平仓",
+    "rule_exit": "规则离场",
+    "stop_loss": "止损",
+    "time_stop": "时间止损",
+    "trailing_drawdown": "回撤止盈",
+}
+
 
 def _session() -> Session:
     return SessionLocal()
@@ -148,6 +194,52 @@ def update_task_progress(task_id: str, progress: int, message: str = "", log_lin
         db.close()
 
 
+def _urt_detail_field_order(rows: List[Dict[str, Any]]) -> List[str]:
+    """稳定列顺序：优先预定义字段，其余追加在后。"""
+    seen = set()
+    ordered: List[str] = []
+    for k in _URT_DETAIL_FIELDS:
+        ordered.append(k)
+        seen.add(k)
+    if rows:
+        for k in rows[0].keys():
+            if k not in seen:
+                ordered.append(k)
+                seen.add(k)
+    return ordered
+
+
+def _format_urt_detail_cell(key: str, value: Any) -> Any:
+    if key == "hit_target":
+        if value is True or value == 1 or str(value).lower() in ("true", "1", "yes"):
+            return "是"
+        if value is False or value == 0 or str(value).lower() in ("false", "0", "no"):
+            return "否"
+        return value
+    if key == "exit_reason":
+        s = str(value or "").strip()
+        return _URT_EXIT_REASON_ZH.get(s, s or "")
+    if key == "code" and value is not None:
+        # 避免 Excel 把代码当数字丢掉前导零
+        return str(value)
+    return value
+
+
+def _build_urt_details_csv_bytes(details_rows: List[Dict[str, Any]]) -> bytes:
+    fields = _urt_detail_field_order(details_rows)
+    headers_zh = [_URT_DETAIL_HEADER_ZH.get(k, k) for k in fields]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=headers_zh, extrasaction="ignore", quoting=csv.QUOTE_MINIMAL)
+    w.writeheader()
+    for r in details_rows:
+        row_zh = {
+            _URT_DETAIL_HEADER_ZH.get(k, k): _format_urt_detail_cell(k, r.get(k))
+            for k in fields
+        }
+        w.writerow(row_zh)
+    return buf.getvalue().encode("utf-8-sig")
+
+
 def complete_task(
     task_id: str,
     summary: Dict[str, Any],
@@ -166,13 +258,7 @@ def complete_task(
         row.completed_at = datetime.utcnow()
         row.error = None
         if details_rows:
-            buf = io.StringIO()
-            fields = list(details_rows[0].keys())
-            w = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
-            w.writeheader()
-            for r in details_rows:
-                w.writerow(r)
-            row.details_csv_bytes = buf.getvalue().encode("utf-8-sig")
+            row.details_csv_bytes = _build_urt_details_csv_bytes(details_rows)
         db.commit()
     except Exception:
         db.rollback()
@@ -244,3 +330,102 @@ def get_details_csv(task_id: str) -> Optional[bytes]:
         return bytes(row.details_csv_bytes) if row and row.details_csv_bytes else None
     finally:
         db.close()
+
+
+def list_reports(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    """已完成任务投影为报告列表。"""
+    db = _session()
+    try:
+        rows = (
+            db.query(URTBacktestTask)
+            .filter(URTBacktestTask.status == "completed")
+            .order_by(desc(URTBacktestTask.completed_at), desc(URTBacktestTask.created_at))
+            .offset(int(offset))
+            .limit(int(limit))
+            .all()
+        )
+        out = []
+        for r in rows:
+            d = _row_to_dict(r)
+            out.append(
+                {
+                    "report_id": d["task_id"],
+                    "task_id": d["task_id"],
+                    "name": d["name"],
+                    "created_at": d.get("completed_at") or d.get("created_at"),
+                    "summary": d.get("summary"),
+                    "details_path": d.get("details_path"),
+                    "has_details_csv": d.get("has_details_csv"),
+                    "config": d.get("config"),
+                }
+            )
+        return out
+    finally:
+        db.close()
+
+
+def get_report(report_id: str) -> Optional[Dict[str, Any]]:
+    row = get_task(report_id)
+    if not row or row.get("status") != "completed":
+        return None
+    return {
+        "report_id": row["task_id"],
+        "task_id": row["task_id"],
+        "name": row["name"],
+        "created_at": row.get("completed_at") or row.get("created_at"),
+        "summary": row.get("summary"),
+        "details_path": row.get("details_path"),
+        "has_details_csv": row.get("has_details_csv"),
+        "config": row.get("config"),
+    }
+
+
+def get_task_logs(task_id: str) -> List[Dict[str, Any]]:
+    row = get_task(task_id)
+    if not row:
+        return []
+    logs = row.get("logs") or []
+    # 统一为 {text, ts} 便于前端
+    out = []
+    for item in logs:
+        if isinstance(item, dict):
+            text = item.get("message") or item.get("text") or str(item)
+            out.append({"text": text, "ts": item.get("ts")})
+        else:
+            out.append({"text": str(item)})
+    return out
+
+
+def reset_task_for_rerun(task_id: str) -> bool:
+    tid = normalize_task_id(task_id)
+    db = _session()
+    try:
+        row = db.query(URTBacktestTask).filter(URTBacktestTask.task_id == tid).first()
+        if not row:
+            return False
+        row.status = "pending"
+        row.progress = 0
+        row.message = "重新排队"
+        row.error = None
+        row.summary = None
+        row.details_csv_bytes = None
+        row.started_at = None
+        row.completed_at = None
+        logs = list(row.logs or [])
+        logs.append({"ts": datetime.utcnow().isoformat() + "Z", "message": "任务重新执行"})
+        row.logs = logs[-200:]
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def batch_delete_tasks(task_ids: List[str]) -> int:
+    n = 0
+    for tid in task_ids or []:
+        if delete_task(tid):
+            n += 1
+    return n

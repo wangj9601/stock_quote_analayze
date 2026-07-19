@@ -77,6 +77,7 @@ try:
         GMSStrategyConfig = getattr(models_module, 'GMSStrategyConfig', None)
         URTStrategyConfig = getattr(models_module, 'URTStrategyConfig', None)
         URTSignalTrace = getattr(models_module, 'URTSignalTrace', None)
+        UrtTraceRecomputeTask = getattr(models_module, 'UrtTraceRecomputeTask', None)
         URTBacktestTask = getattr(models_module, 'URTBacktestTask', None)
         GMSRuntimeConfig = getattr(models_module, 'GMSRuntimeConfig', None)
         GMSBacktestTask = getattr(models_module, 'GMSBacktestTask', None)
@@ -203,6 +204,7 @@ except Exception as e:
     GMSStrategyConfig = None
     URTStrategyConfig = None
     URTSignalTrace = None
+    UrtTraceRecomputeTask = None
     URTBacktestTask = None
     GMSRuntimeConfig = None
     GMSBacktestTask = None
@@ -332,6 +334,7 @@ __all__ = [
     'GMSStrategyConfig',
     'URTStrategyConfig',
     'URTSignalTrace',
+    'UrtTraceRecomputeTask',
     'URTBacktestTask',
     'GMSRuntimeConfig',
     'GMSBacktestTask',

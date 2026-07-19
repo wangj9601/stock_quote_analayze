@@ -2788,6 +2788,7 @@ async def get_urt_strategy(
     """
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
     暂仅 A 股。数据来源对齐 GMS：全部A股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
+    scope=single 时跳过硬筛与最低得分过滤，直接计算该股策略信号明细（含未通过买点）。
     """
     if not URT_AVAILABLE or URTFrontendInterface is None:
         return JSONResponse(
@@ -2965,6 +2966,8 @@ async def get_urt_strategy(
 
     screen_scope = "watchlist" if stock_codes is not None else "all"
     screen_boards = None if stock_codes is not None else boards_out
+    # 单只股票：不按量能/得分等筛选条件过滤，直接计算策略信号明细
+    skip_filters = scope_raw == "single"
 
     loop = asyncio.get_event_loop()
 
@@ -2977,12 +2980,13 @@ async def get_urt_strategy(
             boards=screen_boards,
             screening_date=date,
             config_id=config_id,
-            volume_multiple=volume_multiple,
-            min_score=min_score,
-            use_turnover=use_turnover,
-            use_volume_ratio=use_volume_ratio,
-            min_turnover=min_turnover,
-            min_volume_ratio=min_volume_ratio,
+            volume_multiple=None if skip_filters else volume_multiple,
+            min_score=None if skip_filters else min_score,
+            use_turnover=None if skip_filters else use_turnover,
+            use_volume_ratio=None if skip_filters else use_volume_ratio,
+            min_turnover=None if skip_filters else min_turnover,
+            min_volume_ratio=None if skip_filters else min_volume_ratio,
+            skip_screening_filters=skip_filters,
         )
 
     try:

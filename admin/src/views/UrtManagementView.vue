@@ -2,7 +2,7 @@
   <div class="urt-management">
     <div class="page-header">
       <h2>URT 上升趋势策略</h2>
-      <p class="subtitle">参数配置、信号预计算与回测管理</p>
+      <p class="subtitle">参数配置、多数据源回测、任务详情与统计分析报告</p>
     </div>
     <el-tabs v-model="activeTab">
       <el-tab-pane label="策略参数" name="config">
@@ -11,16 +11,28 @@
       <el-tab-pane label="回测管理" name="backtest">
         <UrtBacktestManagement />
       </el-tab-pane>
+      <el-tab-pane label="报告与分析" name="reports">
+        <UrtReportAnalysis ref="reportRef" />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { provide, ref, watch } from 'vue'
+import { urtApiService } from '@/services/urtApi'
 import UrtStrategyConfiguration from '@/components/urt/StrategyConfiguration.vue'
 import UrtBacktestManagement from '@/components/urt/BacktestManagement.vue'
+import UrtReportAnalysis from '@/components/urt/ReportAnalysis.vue'
 
-const activeTab = ref('config')
+provide('urtApi', urtApiService)
+
+const activeTab = ref('backtest')
+const reportRef = ref<{ refresh?: () => void } | null>(null)
+
+watch(activeTab, (tab) => {
+  if (tab === 'reports') reportRef.value?.refresh?.()
+})
 </script>
 
 <style scoped>

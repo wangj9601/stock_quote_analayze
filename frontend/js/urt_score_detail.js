@@ -11,6 +11,12 @@ const UrtScoreDetail = {
         return n.toFixed(digits != null ? digits : 2);
     },
 
+    _passLabel(ok) {
+        if (ok === true) return '<span class="strength-high">通过</span>';
+        if (ok === false) return '<span class="strength-low">未通过</span>';
+        return '--';
+    },
+
     /**
      * @param {object} stockOrDetail 行数据或 API 返回
      * @returns {string} HTML
@@ -21,13 +27,22 @@ const UrtScoreDetail = {
         const parts = sd.parts && typeof sd.parts === 'object' ? sd.parts : {};
         const inputs = sd.inputs && typeof sd.inputs === 'object' ? sd.inputs : {};
         const fields = src.fields && typeof src.fields === 'object' ? src.fields : {};
+        const buyLogic = src.buy_logic && typeof src.buy_logic === 'object' ? src.buy_logic : null;
 
         const total = src.score != null ? src.score : sd.total;
-        const minScore = sd.min_score != null ? sd.min_score : 70;
-        const buy = src.buy_signal;
-        const filterOk = fields.filter_ok != null ? fields.filter_ok : src.filter_ok;
-        const filterReason = fields.filter_reason != null ? fields.filter_reason : src.filter_reason;
-        const scoreOk = fields.score_ok != null ? fields.score_ok : src.score_ok;
+        const minScore = (buyLogic && buyLogic.min_score != null)
+            ? buyLogic.min_score
+            : (sd.min_score != null ? sd.min_score : 70);
+        const buy = buyLogic && buyLogic.buy_signal != null ? buyLogic.buy_signal : src.buy_signal;
+        const filterOk = buyLogic && buyLogic.filter_ok != null
+            ? buyLogic.filter_ok
+            : (fields.filter_ok != null ? fields.filter_ok : src.filter_ok);
+        const filterReason = buyLogic && buyLogic.filter_reason
+            ? buyLogic.filter_reason
+            : (fields.filter_reason != null ? fields.filter_reason : src.filter_reason);
+        const scoreOk = buyLogic && buyLogic.score_ok != null
+            ? buyLogic.score_ok
+            : (fields.score_ok != null ? fields.score_ok : src.score_ok);
 
         const close = fields.close != null ? fields.close : (src.close != null ? src.close : inputs.close);
         const open = fields.open != null ? fields.open : (src.open != null ? src.open : inputs.open);
@@ -52,9 +67,48 @@ const UrtScoreDetail = {
         html += `<div class="gms-version-meta-line"><span class="gms-version-name">上升趋势策略（URT）</span>`;
         html += `<span>总分 <strong>${this._fmt(total, 1)}</strong> / 阈值 ${this._fmt(minScore, 0)}</span>`;
         html += `<span>买点 <span class="${buyClass}">${buyLabel}</span></span>`;
-        if (filterOk != null) html += `<span>硬筛 ${filterOk ? '通过' : '未通过'}${filterReason ? `（${filterReason}）` : ''}</span>`;
+        if (filterOk != null) {
+            const reasonText = filterReason && filterReason !== 'ok' ? `（${filterReason}）` : '';
+            html += `<span>硬筛 ${filterOk ? '通过' : '未通过'}${reasonText}</span>`;
+        }
         if (scoreOk != null) html += `<span>得分达标 ${scoreOk ? '是' : '否'}</span>`;
         html += '</div></div>';
+
+        // 【买点判断逻辑】
+        html += '<div class="gms-score-detail-section"><strong>【买点判断逻辑】</strong>';
+        if (buyLogic) {
+            html += `<p class="urt-buy-logic-formula">${buyLogic.formula || '买点 = 硬筛全部通过 AND 得分≥最低得分'}</p>`;
+            if (buyLogic.formula_detail) {
+                html += `<p class="urt-buy-logic-detail">${buyLogic.formula_detail}</p>`;
+            }
+            const steps = Array.isArray(buyLogic.steps) ? buyLogic.steps : [];
+            if (steps.length) {
+                html += '<table class="gms-weight-table"><thead><tr><th>条件</th><th>规则</th><th>实际值</th><th>结果</th></tr></thead><tbody>';
+                steps.forEach((s) => {
+                    let extra = '';
+                    if (s.detail && typeof s.detail === 'object') {
+                        const bits = [];
+                        if (s.detail.rule_a) bits.push(s.detail.rule_a);
+                        if (s.detail.rule_b) bits.push(s.detail.rule_b);
+                        if (bits.length) extra = `<div class="urt-buy-logic-sub">${bits.join('；')}</div>`;
+                    }
+                    if (s.note) extra += `<div class="urt-buy-logic-sub">${s.note}</div>`;
+                    html += `<tr><td>${s.name || '--'}</td><td>${s.rule || '--'}${extra}</td>`;
+                    html += `<td>${s.actual != null ? s.actual : '--'}</td><td>${this._passLabel(s.pass)}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            const conclClass = buy === true ? 'strength-high' : (buy === false ? 'strength-low' : '');
+            html += `<p class="urt-buy-logic-conclusion">结论：硬筛 ${filterOk ? '通过' : '未通过'}，得分达标 ${scoreOk ? '是' : '否'} → 买点 <span class="${conclClass}">${buyLabel}</span></p>`;
+        } else {
+            html += '<p class="urt-buy-logic-formula">买点 = 硬筛全部通过 AND 得分≥最低得分</p>';
+            html += '<p class="urt-buy-logic-detail">硬筛含：站上MA20、连阳（4日≥3阳或5日≥4阳）、放量倍数；可选换手/量比。通过后再要求得分达标。</p>';
+            if (filterOk != null || scoreOk != null || buy != null) {
+                const conclClass = buy === true ? 'strength-high' : (buy === false ? 'strength-low' : '');
+                html += `<p class="urt-buy-logic-conclusion">结论：硬筛 ${filterOk == null ? '--' : (filterOk ? '通过' : '未通过')}，得分达标 ${scoreOk == null ? '--' : (scoreOk ? '是' : '否')} → 买点 <span class="${conclClass}">${buyLabel}</span></p>`;
+            }
+        }
+        html += '</div>';
 
         html += '<div class="gms-score-detail-section"><strong>【分项得分】</strong>';
         html += '<table class="gms-weight-table"><thead><tr><th>分项</th><th>得分</th><th>满分</th><th>说明</th></tr></thead><tbody>';

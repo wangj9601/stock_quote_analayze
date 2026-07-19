@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
@@ -50,8 +51,219 @@ class BacktestCreateBody(BaseModel):
     horizon_days: int = 20
     min_score: Optional[float] = None
     use_trace: bool = True
+    stock_pool_mode: Optional[str] = Field(
+        "all",
+        description="股票池: all / single / custom / watchlist / industry_board / concept_board",
+    )
     stock_code: Optional[str] = None
     stock_pool: Optional[List[str]] = None
+    watchlist_user_id: Optional[int] = None
+    industry_board_codes: Optional[List[str]] = None
+    concept_board_codes: Optional[List[str]] = None
+    cn_board_segment: Optional[str] = Field(
+        None, description="A股板块: ALL/MAIN/CYB/SZ_SME/KCB/BJ"
+    )
+
+
+class BatchDeleteBody(BaseModel):
+    task_ids: List[str] = Field(default_factory=list)
+
+
+def _normalize_a_code(code: str) -> str:
+    s = str(code or "").strip()
+    if s.isdigit() and len(s) <= 6:
+        return s.zfill(6)
+    return s
+
+
+def _normalize_board_codes(raw: Optional[List[str]], *, upper: bool = False) -> List[str]:
+    if not raw:
+        return []
+    out: List[str] = []
+    for item in raw:
+        for part in str(item or "").split(","):
+            code = part.strip()
+            if not code:
+                continue
+            if upper:
+                code = code.upper()
+            if code not in out:
+                out.append(code)
+    return out
+
+
+def _normalize_cn_board_segment(raw: Optional[str]) -> Optional[str]:
+    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+
+    seg = (raw or "").strip().upper()
+    if not seg or seg == "ALL":
+        return None
+    if not normalize_list_board_segment(seg):
+        raise HTTPException(status_code=400, detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ")
+    return seg
+
+
+def _apply_cn_board_segment(codes: List[str], board_segment: Optional[str]) -> List[str]:
+    seg = _normalize_cn_board_segment(board_segment)
+    if not seg:
+        return codes
+    from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+    return filter_stock_codes_by_board_segment(codes, seg)
+
+
+def _distinct_watchlist_codes(db: Session, user_id: Optional[int] = None) -> List[str]:
+    from backend_api.models import Watchlist
+
+    q = db.query(Watchlist.stock_code)
+    if user_id is not None:
+        q = q.filter(Watchlist.user_id == int(user_id))
+    rows = q.distinct().all()
+    return sorted({_normalize_a_code(str(r[0])) for r in rows if r[0] and str(r[0]).strip()})
+
+
+def _resolve_industry_codes(db: Session, raw: List[str]) -> tuple:
+    from backend_api.models import IndustryBoardConstituent
+    from backend_api.utils.bk_board_code import resolve_industry_board_codes
+
+    bcodes = resolve_industry_board_codes(db, raw)
+    if not bcodes:
+        return [], []
+    rows = (
+        db.query(IndustryBoardConstituent.stock_code)
+        .filter(IndustryBoardConstituent.board_code.in_(bcodes))
+        .distinct()
+        .all()
+    )
+    pool = sorted({_normalize_a_code(str(r[0])) for r in rows if r[0] and str(r[0]).strip()})
+    return bcodes, pool
+
+
+def _resolve_concept_codes(db: Session, raw: List[str]) -> tuple:
+    from backend_api.models import ConceptBoardConstituent
+
+    bcodes = _normalize_board_codes(raw, upper=True)
+    if not bcodes:
+        return [], []
+    rows = (
+        db.query(ConceptBoardConstituent.stock_code)
+        .filter(ConceptBoardConstituent.board_code.in_(bcodes))
+        .distinct()
+        .all()
+    )
+    pool = sorted({_normalize_a_code(str(r[0])) for r in rows if r[0] and str(r[0]).strip()})
+    return bcodes, pool
+
+
+def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any]:
+    """将交易逻辑说明与风控参数快照写入任务 config，供详情页展示。"""
+    from backend_core.strategies.urt.backtest_runner import build_urt_trade_meta
+
+    mgr = URTConfigManager()
+    mgr.ensure_default_row(db)
+    sid = config.get("strategy_config_id")
+    strategy_cfg = mgr.get_config(int(sid) if sid is not None else None, db=db)
+    min_score = config.get("min_score")
+    if min_score is None:
+        min_score = strategy_cfg.get("min_score")
+    meta = build_urt_trade_meta(
+        target_pct=float(config.get("target_pct", 0.10)),
+        horizon_days=int(config.get("horizon_days", 20)),
+        min_score=min_score,
+        use_trace=bool(config.get("use_trace", True)),
+        risk=strategy_cfg.get("risk") if isinstance(strategy_cfg.get("risk"), dict) else {},
+    )
+    config["risk_params"] = meta["risk_params"]
+    config["trade_logic"] = meta["trade_logic"]
+    config["strategy_risk"] = meta["risk_params"]
+    return config
+
+
+def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, Any]:
+    mode = (body.stock_pool_mode or "all").strip() or "all"
+    cn_seg = _normalize_cn_board_segment(body.cn_board_segment)
+    config: Dict[str, Any] = {
+        "start_date": body.start_date,
+        "end_date": body.end_date,
+        "task_name": body.task_name,
+        "strategy_config_id": body.strategy_config_id,
+        "target_pct": body.target_pct,
+        "horizon_days": body.horizon_days,
+        "min_score": body.min_score,
+        "use_trace": body.use_trace,
+        "stock_pool_mode": mode,
+        "market": "cn",
+    }
+    if cn_seg:
+        config["cn_board_segment"] = cn_seg
+
+    if mode == "all":
+        # 全市场：若指定板块，则先取全市场候选再过滤不现实；板块过滤在无 pool 时由 runner 全扫
+        # 有 cn_board_segment 时展开为代码池（从 stock_basic_info）
+        if cn_seg:
+            from backend_api.models import StockBasicInfo
+            from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+            rows = (
+                db.query(StockBasicInfo.code)
+                .filter(func.length(StockBasicInfo.code) == 6)
+                .all()
+            )
+            codes = [_normalize_a_code(str(r[0])) for r in rows if r[0]]
+            codes = filter_stock_codes_by_board_segment(codes, cn_seg)
+            if not codes:
+                raise HTTPException(status_code=400, detail="所选 A 股板块下无股票")
+            config["stock_pool"] = codes
+    elif mode == "single":
+        code = _normalize_a_code(body.stock_code or "")
+        if not code:
+            raise HTTPException(status_code=400, detail="单股回测请填写股票代码")
+        codes = _apply_cn_board_segment([code], body.cn_board_segment)
+        if not codes:
+            raise HTTPException(status_code=400, detail="股票代码不在所选 A 股板块内")
+        config["stock_code"] = code
+        config["stock_pool"] = codes
+    elif mode == "custom":
+        raw = body.stock_pool or []
+        codes = [_normalize_a_code(c) for c in raw if str(c).strip()]
+        codes = list(dict.fromkeys(codes))
+        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        if not codes:
+            raise HTTPException(status_code=400, detail="自定义股票列表为空")
+        config["stock_pool"] = codes
+    elif mode == "watchlist":
+        uid = body.watchlist_user_id
+        if uid is not None:
+            config["watchlist_user_id"] = int(uid)
+        codes = _distinct_watchlist_codes(db, user_id=uid)
+        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        if not codes:
+            raise HTTPException(status_code=400, detail="自选股列表为空")
+        config["stock_pool"] = codes
+    elif mode == "industry_board":
+        raw = _normalize_board_codes(body.industry_board_codes)
+        if not raw:
+            raise HTTPException(status_code=400, detail="请选择行业板块")
+        bcodes, codes = _resolve_industry_codes(db, raw)
+        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        if not codes:
+            raise HTTPException(status_code=400, detail="行业板块下无成分股")
+        config["industry_board_codes"] = bcodes
+        config["stock_pool"] = codes
+    elif mode == "concept_board":
+        raw = _normalize_board_codes(body.concept_board_codes, upper=True)
+        if not raw:
+            raise HTTPException(status_code=400, detail="请选择概念板块")
+        bcodes, codes = _resolve_concept_codes(db, raw)
+        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        if not codes:
+            raise HTTPException(status_code=400, detail="概念板块下无成分股")
+        config["concept_board_codes"] = bcodes
+        config["stock_pool"] = codes
+    else:
+        raise HTTPException(status_code=400, detail=f"不支持的股票池模式: {mode}")
+
+    return _attach_urt_trade_meta(db, config)
 
 
 @router.get("/strategy-configs")
@@ -151,6 +363,37 @@ async def get_default_params():
     return {"success": True, "data": mgr.load_file_config()}
 
 
+@router.get("/watchlist-users")
+async def list_watchlist_users(db: Session = Depends(get_db)):
+    from backend_api.models import User, Watchlist
+
+    try:
+        rows = (
+            db.query(
+                User.id.label("user_id"),
+                User.username.label("username"),
+                func.count(Watchlist.id).label("watchlist_count"),
+            )
+            .join(Watchlist, Watchlist.user_id == User.id)
+            .group_by(User.id, User.username)
+            .having(func.count(Watchlist.id) > 0)
+            .order_by(func.count(Watchlist.id).desc())
+            .all()
+        )
+        data = [
+            {
+                "user_id": int(r.user_id),
+                "username": r.username,
+                "watchlist_count": int(r.watchlist_count or 0),
+            }
+            for r in rows
+        ]
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.exception("URT watchlist-users 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/screen-preview")
 async def screen_preview(
     limit: int = Query(50, ge=1, le=500),
@@ -179,8 +422,6 @@ async def run_precompute(
     config_id: Optional[int] = Query(None),
     limit: Optional[int] = Query(None, ge=1),
 ):
-    """手动触发 A 股预计算（后台线程）。"""
-
     def _job():
         from backend_core.strategies.urt.scheduled_precompute import (
             run_urt_precompute_ashare,
@@ -197,14 +438,16 @@ async def run_precompute(
 
 
 @router.post("/backtests")
-async def create_backtest(body: BacktestCreateBody):
+async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db)):
     try:
         from backend_core.strategies.urt import backtest_storage, backtest_worker
 
-        config = body.model_dump()
+        config = _build_backtest_config(db, body)
         task_id = backtest_storage.create_task(config, name=body.task_name)
         backtest_worker.start_backtest_task(task_id)
         return {"success": True, "task_id": task_id, "data": backtest_storage.get_task(task_id)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("创建 URT 回测失败")
         raise HTTPException(status_code=500, detail=str(e))
@@ -221,13 +464,41 @@ async def list_backtests(
 
 
 @router.get("/backtests/{task_id}")
-async def get_backtest(task_id: str):
+async def get_backtest(task_id: str, db: Session = Depends(get_db)):
     from backend_core.strategies.urt import backtest_storage
 
     row = backtest_storage.get_task(task_id)
     if not row:
         raise HTTPException(status_code=404, detail="任务不存在")
+    # 旧任务可能无交易逻辑/风控快照，按当前策略参数补齐供详情展示
+    cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    if not cfg.get("trade_logic") or not cfg.get("risk_params"):
+        try:
+            patched = _attach_urt_trade_meta(db, dict(cfg))
+            cfg = {**cfg, "trade_logic": patched.get("trade_logic"), "risk_params": patched.get("risk_params")}
+            row = {**row, "config": cfg}
+        except Exception:
+            logger.exception("URT 回测详情补齐交易逻辑失败 task=%s", task_id)
+    if summary and (not summary.get("trade_logic") or not summary.get("risk_params")):
+        row = {
+            **row,
+            "summary": {
+                **summary,
+                "trade_logic": summary.get("trade_logic") or cfg.get("trade_logic"),
+                "risk_params": summary.get("risk_params") or cfg.get("risk_params"),
+            },
+        }
     return {"success": True, "data": row}
+
+
+@router.get("/backtests/{task_id}/logs")
+async def get_backtest_logs(task_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    if not backtest_storage.get_task(task_id):
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"success": True, "data": {"logs": backtest_storage.get_task_logs(task_id)}}
 
 
 @router.post("/backtests/{task_id}/cancel")
@@ -239,11 +510,34 @@ async def cancel_backtest(task_id: str):
     return {"success": ok}
 
 
+@router.post("/backtests/{task_id}/rerun")
+async def rerun_backtest(task_id: str):
+    from backend_core.strategies.urt import backtest_storage, backtest_worker
+
+    row = backtest_storage.get_task(task_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if row.get("status") in ("pending", "running"):
+        raise HTTPException(status_code=400, detail="任务仍在运行中")
+    if not backtest_storage.reset_task_for_rerun(task_id):
+        raise HTTPException(status_code=400, detail="无法重新执行")
+    backtest_worker.start_backtest_task(task_id)
+    return {"success": True, "data": backtest_storage.get_task(task_id)}
+
+
 @router.post("/backtests/{task_id}/delete")
 async def delete_backtest(task_id: str):
     from backend_core.strategies.urt import backtest_storage
 
     return {"success": backtest_storage.delete_task(task_id)}
+
+
+@router.post("/backtests/batch-delete")
+async def batch_delete_backtests(body: BatchDeleteBody):
+    from backend_core.strategies.urt import backtest_storage
+
+    n = backtest_storage.batch_delete_tasks(body.task_ids or [])
+    return {"success": True, "deleted": n}
 
 
 @router.get("/backtests/{task_id}/export")
@@ -257,4 +551,45 @@ async def export_backtest(task_id: str):
         content=raw,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="urt_backtest_{task_id[:8]}.csv"'},
+    )
+
+
+@router.get("/reports")
+async def list_reports(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    from backend_core.strategies.urt import backtest_storage
+
+    return {"success": True, "data": {"reports": backtest_storage.list_reports(limit=limit, offset=offset)}}
+
+
+@router.get("/reports/{report_id}")
+async def get_report(report_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    row = backtest_storage.get_report(report_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    return {"success": True, "data": row}
+
+
+@router.post("/reports/{report_id}/delete")
+async def delete_report(report_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    return {"success": backtest_storage.delete_task(report_id)}
+
+
+@router.get("/reports/{report_id}/download")
+async def download_report(report_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    raw = backtest_storage.get_details_csv(report_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail="无明细可下载")
+    return Response(
+        content=raw,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="urt_report_{report_id[:8]}.csv"'},
     )

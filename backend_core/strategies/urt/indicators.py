@@ -41,6 +41,20 @@ def volume_ratio_vs_prev(volumes: List[float]) -> Optional[float]:
     return float(volumes[0]) / prev
 
 
+def min_bars_needed(cfg: Dict[str, Any]) -> int:
+    """计算 URT 指标所需最少 K 线根数（含当日）。"""
+    ma_period = int(cfg.get("ma_period") or 20)
+    vol_lb = int(cfg.get("volume_lookback") or 20)
+    rule_a = cfg.get("yang_rule_a") or {"window": 4, "min_up_days": 3}
+    rule_b = cfg.get("yang_rule_b") or {"window": 5, "min_up_days": 4}
+    return max(
+        ma_period,
+        vol_lb + 1,
+        int(rule_a.get("window", 4)),
+        int(rule_b.get("window", 5)),
+    )
+
+
 def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     bars_desc: 日期 DESC，index0=基准日。
@@ -50,7 +64,7 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
     vol_lb = int(cfg.get("volume_lookback") or 20)
     rule_a = cfg.get("yang_rule_a") or {"window": 4, "min_up_days": 3}
     rule_b = cfg.get("yang_rule_b") or {"window": 5, "min_up_days": 4}
-    need = max(ma_period, vol_lb + 1, int(rule_a.get("window", 4)), int(rule_b.get("window", 5)))
+    need = min_bars_needed(cfg)
     if len(bars_desc) < need:
         return None
 

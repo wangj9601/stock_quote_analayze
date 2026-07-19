@@ -2273,6 +2273,21 @@ const ScreeningPage = {
         const checked = document.querySelector('input[name="urtScope"]:checked');
         const show = checked && checked.value === 'single';
         wrap.style.display = show ? 'flex' : 'none';
+        this.syncUrtFilterParamsForScope();
+    },
+
+    /** 单只股票：禁用量能/最低得分等筛选控件（后端亦不应用筛选） */
+    syncUrtFilterParamsForScope() {
+        const checked = document.querySelector('input[name="urtScope"]:checked');
+        const isSingle = checked && checked.value === 'single';
+        ['urtVolumeMultiple', 'urtMinScore'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = !!isSingle;
+            el.title = isSingle ? '单只股票模式不应用筛选条件，仅直接计算策略信号' : '';
+        });
+        const hint = document.getElementById('urtSingleSkipFilterHint');
+        if (hint) hint.style.display = isSingle ? 'block' : 'none';
     },
 
     /** 显示/隐藏「行业板块」选择行 */
@@ -2580,6 +2595,7 @@ const ScreeningPage = {
                 this.syncUrtIndustryBoardWrap();
                 this.syncUrtConceptBoardWrap();
                 this.syncUrtSingleStockWrap();
+                this.syncUrtFilterParamsForScope();
                 const scopeEl = document.querySelector('input[name="urtScope"]:checked');
                 if (scopeEl && scopeEl.value === 'industry_board') {
                     void this.loadGmsIndustryBoardOptions();
@@ -2593,6 +2609,7 @@ const ScreeningPage = {
         this.syncUrtIndustryBoardWrap();
         this.syncUrtConceptBoardWrap();
         this.syncUrtSingleStockWrap();
+        this.syncUrtFilterParamsForScope();
         const urtSingleInput = document.getElementById('urtSingleStockInput');
         if (urtSingleInput) {
             urtSingleInput.addEventListener('keydown', (e) => {
@@ -2941,10 +2958,13 @@ const ScreeningPage = {
                 if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
             }
         }
-        const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
-        if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
-        const ms = parseFloat(document.getElementById('urtMinScore')?.value);
-        if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
+        // 单只股票：不传筛选参数，后端跳过硬筛/最低得分，直接计算信号
+        if (scope !== 'single') {
+            const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
+            if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
+            const ms = parseFloat(document.getElementById('urtMinScore')?.value);
+            if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
+        }
         return params;
     },
 
@@ -4059,7 +4079,6 @@ const ScreeningPage = {
                 if (scoreVal != null) {
                     if (scoreVal >= 85) scoreClass = 'strength-high';
                     else if (scoreVal >= 70) scoreClass = 'strength-mid';
-                    else scoreClass = 'strength-low';
                 }
                 html += `
                     <tr data-urt-row="${index}">

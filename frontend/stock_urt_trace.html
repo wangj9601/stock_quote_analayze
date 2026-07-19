@@ -18,20 +18,23 @@
             <div class="toolbar">
                 <div class="toolbar-row">
                     <label>股票: <span id="stockDisplay">--</span></label>
+                    <label>开始日期: <input type="date" id="startDate"></label>
+                    <label>结束日期: <input type="date" id="endDate"></label>
                     <label>参数版本:
                         <select id="configSelect"></select>
                     </label>
                     <button id="searchBtn">查询</button>
+                    <button id="forceComputeBtn" class="btn-secondary" type="button">强制重新计算</button>
                     <a id="detailLink" class="gms-op-btn" href="#" target="_blank" rel="noopener">打开明细页</a>
                 </div>
             </div>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
             <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
-            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 URT 预计算信号（需先完成日终预计算）</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 URT 预计算信号（可点击「强制重新计算」对该股即时计算）</div>
             <div class="table-wrapper">
-                <table class="trace-table" id="traceTable">
+                <table class="trace-table urt-trace-table" id="traceTable">
                     <thead>
                         <tr>
-                            <th></th>
                             <th>日期</th>
                             <th>买点</th>
                             <th>得分</th>
@@ -47,6 +50,13 @@
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+            <div class="pagination">
+                <button type="button" id="firstPage">第一页</button>
+                <button type="button" id="prevPage">上一页</button>
+                <span id="pageInfo"></span>
+                <button type="button" id="nextPage">下一页</button>
+                <button type="button" id="lastPage">最后一页</button>
             </div>
         </div>
     </div>

@@ -53,12 +53,28 @@ class URTFrontendInterface:
         min_volume_ratio: Optional[float] = None,
         prefer_cache: bool = True,
         force_realtime: bool = False,
+        skip_screening_filters: bool = False,
     ) -> Dict[str, Any]:
+        """
+        skip_screening_filters=True（单只股票）：不按硬筛/最低得分过滤结果，
+        实时计算信号明细（含未通过买点），便于查看个股当日策略状态。
+        """
         cm = URTConfigManager()
         try:
             cm.ensure_default_row(db)
         except Exception:
             pass
+
+        # 单股：忽略选股筛选 Query 覆盖，仅用策略版本默认参数计算信号
+        if skip_screening_filters:
+            volume_multiple = None
+            min_score = None
+            use_turnover = None
+            use_volume_ratio = None
+            min_turnover = None
+            min_volume_ratio = None
+            force_realtime = True
+            prefer_cache = False
 
         resolved_id = URTFrontendInterface._resolve_config_id(db, config_id, cm)
         base = cm.get_config(resolved_id, db=db)
@@ -85,6 +101,9 @@ class URTFrontendInterface:
                 )
             else:
                 hint = f"当前自然日 {today_s} 无行情数据，已改用表内最新交易日 {effective}。"
+        if skip_screening_filters:
+            single_hint = "单只股票模式：已跳过选股筛选条件，直接计算策略信号。"
+            hint = f"{hint} {single_hint}" if hint else single_hint
 
         board_keys = normalize_urt_board_keys(boards)
         overrides_active = any(
@@ -101,8 +120,17 @@ class URTFrontendInterface:
 
         data: List[Dict[str, Any]] = []
         data_source = "realtime"
+        require_pass = not skip_screening_filters
         # 无 Query 覆盖时优先读预计算；限定股票池时再按代码过滤
-        if prefer_cache and not force_realtime and not overrides_active and not board_keys and resolved_id is not None:
+        # 单股跳过筛选时不走「仅买点」缓存，避免未过筛股票查不到
+        if (
+            prefer_cache
+            and not force_realtime
+            and not overrides_active
+            and not board_keys
+            and resolved_id is not None
+            and require_pass
+        ):
             try:
                 cached = query_buy_signals_for_date(
                     db,
@@ -125,6 +153,12 @@ class URTFrontendInterface:
                     if cached:
                         if limit and len(cached) > int(limit):
                             cached = cached[: int(limit)]
+                        from backend_core.strategies.urt.signal_detector import build_buy_logic
+
+                        for row in cached:
+                            row["buy_logic"] = build_buy_logic(row, cfg)
+                            row["filter_ok"] = row["buy_logic"].get("filter_ok")
+                            row["score_ok"] = row["buy_logic"].get("score_ok")
                         data = cached
                         data_source = "urt_signal_trace"
             except Exception as e:
@@ -141,7 +175,11 @@ class URTFrontendInterface:
                 # 缩池很大时仍可用 limit 限制扫描量
                 stocks = stocks[: int(limit)]
             engine = URTStrategyEngine(loader, cfg)
-            data = engine.screen_universe(stocks, as_of_end_date=effective)
+            data = engine.screen_universe(
+                stocks,
+                as_of_end_date=effective,
+                require_pass=require_pass,
+            )
             data_source = "realtime"
 
         parameters_out = {
@@ -161,6 +199,7 @@ class URTFrontendInterface:
             "screening_date_requested": req_norm,
             "screening_date_effective": effective,
             "data_source": data_source,
+            "skip_screening_filters": bool(skip_screening_filters),
         }
         out: Dict[str, Any] = {
             "success": True,
@@ -171,6 +210,7 @@ class URTFrontendInterface:
             "parameters": parameters_out,
             "search_date": effective,
             "data_source": data_source,
+            "skip_screening_filters": bool(skip_screening_filters),
         }
         if hint:
             out["message"] = hint

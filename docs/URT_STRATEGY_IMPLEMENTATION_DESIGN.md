@@ -16,7 +16,7 @@
 
 **出信号流程**：先过硬筛（MA20 + 连阳 + 量能，以及若启用的换手/量比阈值）→ 再计算得分 → `score < min_score` 仍过滤。
 
-交易纪律（写入配置，供回测扩展）：价格止损 5%–10%、连跌 3 日离场、涨 25%–30% 后高点回撤 5% 止盈。
+交易纪律（写入配置，选股不强制；**回测持仓阶段生效**）：价格止损 5%–10%、连跌 3 日离场、涨 25%–30% 后高点回撤 5% 止盈。完整买卖与观察期规则见：[URT策略交易回测说明.md](./URT策略交易回测说明.md)。
 
 与 GMS 差异：不做左侧吸附；数据源为 `historical_quotes`（现算 MA），不依赖 `mean_frequency_resonance_indicators`。
 
@@ -189,13 +189,21 @@ admin/  # /urt-management 参数配置页
 
 ### 回测管理
 
+详细买卖规则、观察期、风控与汇总字段见专文：[URT策略交易回测说明.md](./URT策略交易回测说明.md)。
+
 | 项 | 说明 |
 |----|------|
 | 表 | `urt_backtest_tasks` |
 | Core | `backtest_runner` / `backtest_storage` / `backtest_worker` |
-| 入场 | 信号次日开盘；观察期内触达 `target_pct` 或 `evaluate_exit_rules` 离场 |
-| API | `/api/admin/urt/backtests*`（创建/列表/取消/删除/导出 CSV） |
-| Admin | `/urt-management` →「回测管理」Tab |
+| 市场 | 暂仅 A 股 |
+| 信号 | 优先 `urt_signal_trace`；区间内缺失日先按时间范围全市场/股票池补算一次再回测；`use_trace=false` 则逐日实时（含全市场） |
+| 入场 | 信号次日开盘价；同标的上一笔出场日前不重复开仓 |
+| 观察期 | `horizon_days`，**默认 20 个交易日** |
+| 出场 | 对齐 GMS 命中率：观察期内最高价判定目标（默认 10%）；**不止损**；持有满观察期以收盘作参考出场 |
+| 元数据 | 任务 `config`/`summary` 含 `trade_logic`、`risk_params`；详情页展示 |
+| 导出 | UTF-8-BOM CSV，中文列名（Excel 可开） |
+| API | `/api/admin/urt/backtests*`（创建/列表/详情/取消/重跑/删除/导出） |
+| Admin | `/urt-management` →「回测管理」Tab；详情见 `TaskDetail.vue` |
 
 ### 前台页面与选股按钮
 
@@ -241,9 +249,10 @@ admin/  # /urt-management 参数配置页
 
 最少 K 线根数约：`max(ma_period, volume_lookback+1, yang_rule_a.window, yang_rule_b.window)`。
 
-### 6.4 交易纪律 `risk`（回测扩展，本期选股不强制）
+### 6.4 交易纪律 `risk`（回测扩展，选股不强制）
 
-实现：`signal_detector.evaluate_exit_rules`。管理端表单暴露部分字段；其余可在 JSON 中改。
+实现：`signal_detector.evaluate_exit_rules`。管理端表单暴露部分字段；其余可在 JSON 中改。  
+回测入场/观察期/出场优先级与任务参数见：[URT策略交易回测说明.md](./URT策略交易回测说明.md) §3–§4。
 
 | 参数 | 含义 | 默认 | 界面/建议值域 | 说明 |
 |------|------|------|---------------|------|
@@ -254,21 +263,32 @@ admin/  # /urt-management 参数配置页
 | `risk.take_profit_alert_pct_max` | 止盈警惕涨幅上限（%） | 30 | JSON | 与会议纪律区间对应；现实现以 `alert_min` 起步 |
 | `risk.trailing_drawdown_pct` | 高点回撤止盈（%） | 5 | 管理端 **1～20** | 达警惕涨幅后，自峰值回撤 ≥ 该值 → `trailing_take_profit` |
 
+回测任务级参数（不写入 `risk`，写在任务 `config`）：
+
+| 参数 | 含义 | 默认 |
+|------|------|------|
+| `target_pct` | 目标涨幅（小数） | 0.10 |
+| `horizon_days` | 观察期交易日数 | **20** |
+| `use_trace` | 是否优先读 `urt_signal_trace` | true |
+
 ### 6.5 选股 API 运行时参数（Query，不写配置表）
 
 `GET /api/screening/urt-strategy`：
 
 | Query | 含义 | 校验/枚举 | 备注 |
 |-------|------|-----------|------|
-| `scope` | 股票范围 | `all` \| `watchlist` | 自选需登录，代码来自 `watchlist` |
+| `scope` | 股票范围 | `cn`/`all` \| `watchlist` \| `industry_board` \| `concept_board` \| `single` | 自选需登录；**`single` 见下方说明** |
+| `stock_code` | 个股代码/名称 | 文本 | 仅 `scope=single` |
 | `limit` | 扫描股票数上限 | ≥1（可选） | 先截断候选池再算信号；全市场建议带 limit |
 | `date` | 筛选基准日 | `YYYY-MM-DD` | 无数据时回退表内最新交易日 |
 | `config_id` | 参数版本 ID | ≥1 | 不传则用默认版本 / JSON |
-| `volume_multiple` | 临时覆盖量能阈值 | **1.0～30.0** | 覆盖配置中同名项 |
-| `min_score` | 临时覆盖最低分 | **0～100** | 同上 |
+| `volume_multiple` | 临时覆盖量能阈值 | **1.0～30.0** | 覆盖配置中同名项；**单股模式忽略** |
+| `min_score` | 临时覆盖最低分 | **0～100** | 同上；**单股模式忽略** |
 | `use_turnover` / `use_volume_ratio` | 临时开关 | bool | 同上 |
 | `min_turnover` / `min_volume_ratio` | 临时阈值 | ≥0 | 同上 |
 | `boards` | 板块过滤（可多选） | `CYB` / `KCB` / `SH_MAIN` / `SZ_MAIN` / `SZ_SME` / `BJ` | 按代码前缀过滤 `stock_basic_info`；不传=不限板块 |
+
+**`scope=single`（单只股票）**：不应用硬筛与最低得分过滤，实时计算并返回该股策略信号明细（含 `buy_signal=false`）；前端禁用量能/最低得分控件。实现：`URTFrontendInterface.screen(skip_screening_filters=True)` → `evaluate_buy_signal(..., require_pass=False)`。
 
 板块前缀（`URT_BOARD_PREFIX_GROUPS`）：创业板 `300*`、科创 `688*`、沪主板 `600/601/602/603/605*`、深主板 `000/001*`、中小 `002*`、北证 `43/83/87/88/92*`。
 
