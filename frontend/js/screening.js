@@ -50,10 +50,13 @@ const ScreeningPage = {
     /** URT 已选行业/概念板块 */
     urtSelectedIndustryBoardCodes: [],
     urtSelectedConceptBoardCodes: [],
+    /** RPE 已选行业/概念板块 */
+    rpeSelectedIndustryBoardCodes: [],
+    rpeSelectedConceptBoardCodes: [],
     /** 板块选择弹窗：industry | concept */
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
-    /** 板块选择弹窗归属：gms | urt */
+    /** 板块选择弹窗归属：gms | urt | rpe */
     _gmsBoardPickerOwner: 'gms',
 
     // 初始化
@@ -278,6 +281,14 @@ const ScreeningPage = {
         const urtConceptBtn = document.getElementById('urtConceptBoardPickBtn');
         if (urtConceptBtn) {
             urtConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'urt'));
+        }
+        const rpeIndustryBtn = document.getElementById('rpeIndustryBoardPickBtn');
+        if (rpeIndustryBtn) {
+            rpeIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'rpe'));
+        }
+        const rpeConceptBtn = document.getElementById('rpeConceptBoardPickBtn');
+        if (rpeConceptBtn) {
+            rpeConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'rpe'));
         }
 
         const confirmBtn = document.getElementById('gmsBoardPickerConfirm');
@@ -2105,13 +2116,27 @@ const ScreeningPage = {
         else await this.loadGmsConceptBoardOptions();
 
         this._gmsBoardPickerKind = kind;
-        this._gmsBoardPickerOwner = owner === 'urt' ? 'urt' : 'gms';
-        const selected = this._gmsBoardPickerOwner === 'urt'
-            ? (kind === 'industry' ? this.getUrtSelectedIndustryBoardCodes() : this.getUrtSelectedConceptBoardCodes())
-            : (kind === 'industry' ? this.getGmsSelectedIndustryBoardCodes() : this.getGmsSelectedConceptBoardCodes());
-        this._gmsBoardPickerDraft = this._gmsBoardPickerOwner === 'urt'
-            ? new Set(selected)
-            : this._mergeGmsTradeObserveBoardSelection(kind, selected);
+        if (owner === 'urt') this._gmsBoardPickerOwner = 'urt';
+        else if (owner === 'rpe') this._gmsBoardPickerOwner = 'rpe';
+        else this._gmsBoardPickerOwner = 'gms';
+
+        let selected;
+        if (this._gmsBoardPickerOwner === 'urt') {
+            selected = kind === 'industry'
+                ? this.getUrtSelectedIndustryBoardCodes()
+                : this.getUrtSelectedConceptBoardCodes();
+            this._gmsBoardPickerDraft = new Set(selected);
+        } else if (this._gmsBoardPickerOwner === 'rpe') {
+            selected = kind === 'industry'
+                ? this.getRpeSelectedIndustryBoardCodes()
+                : this.getRpeSelectedConceptBoardCodes();
+            this._gmsBoardPickerDraft = new Set(selected);
+        } else {
+            selected = kind === 'industry'
+                ? this.getGmsSelectedIndustryBoardCodes()
+                : this.getGmsSelectedConceptBoardCodes();
+            this._gmsBoardPickerDraft = this._mergeGmsTradeObserveBoardSelection(kind, selected);
+        }
 
         const titleEl = document.getElementById('gmsBoardPickerTitle');
         if (titleEl) {
@@ -2187,6 +2212,14 @@ const ScreeningPage = {
                 this.urtSelectedConceptBoardCodes = codes;
                 this.updateUrtConceptBoardSummary();
             }
+        } else if (owner === 'rpe') {
+            if (kind === 'industry') {
+                this.rpeSelectedIndustryBoardCodes = codes;
+                this.updateRpeIndustryBoardSummary();
+            } else if (kind === 'concept') {
+                this.rpeSelectedConceptBoardCodes = codes;
+                this.updateRpeConceptBoardSummary();
+            }
         } else if (kind === 'industry') {
             this.gmsSelectedIndustryBoardCodes = codes;
             this.updateGmsIndustryBoardSummary();
@@ -2195,6 +2228,52 @@ const ScreeningPage = {
             this.updateGmsConceptBoardSummary();
         }
         this._hideGmsModal(document.getElementById('gmsBoardPickerModal'));
+    },
+
+    getRpeSelectedIndustryBoardCodes() {
+        return Array.isArray(this.rpeSelectedIndustryBoardCodes)
+            ? this.rpeSelectedIndustryBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    getRpeSelectedConceptBoardCodes() {
+        return Array.isArray(this.rpeSelectedConceptBoardCodes)
+            ? this.rpeSelectedConceptBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    updateRpeIndustryBoardSummary() {
+        const el = document.getElementById('rpeIndustryBoardSummary');
+        if (!el) return;
+        const codes = this.getRpeSelectedIndustryBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardLabel(b) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    updateRpeConceptBoardSummary() {
+        const el = document.getElementById('rpeConceptBoardSummary');
+        if (!el) return;
+        const codes = this.getRpeSelectedConceptBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardLabel(b) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
     },
 
     getUrtSelectedIndustryBoardCodes() {

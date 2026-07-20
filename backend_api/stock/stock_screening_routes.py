@@ -3442,12 +3442,18 @@ async def get_sbbr_strategy(
 
 @router.get("/rpe-strategy")
 async def get_rpe_strategy(
-    scope: str = Query("cn", description="cn|watchlist|industry_board|single"),
+    scope: str = Query("cn", description="cn|watchlist|industry_board|concept_board|single"),
     date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     config_id: Optional[int] = Query(None),
     entry_only: bool = Query(False),
     signal_type: Optional[str] = Query(None, description="catch_up|lead"),
-    board_code: Optional[str] = Query(None),
+    board_code: Optional[str] = Query(None, description="兼容单板块代码"),
+    industry_board_code: Optional[List[str]] = Query(
+        None, description="scope=industry_board 时：行业板块代码，可多选"
+    ),
+    concept_board_code: Optional[List[str]] = Query(
+        None, description="scope=concept_board 时：概念板块代码，可多选"
+    ),
     stock_code: Optional[str] = Query(None),
     trace_only: bool = Query(False),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
@@ -3465,6 +3471,8 @@ async def get_rpe_strategy(
         )
 
     codes = None
+    board_codes = None
+    board_kind = "industry"
     if scope in ("watchlist", "single"):
         if scope == "single":
             if not stock_code:
@@ -3494,10 +3502,32 @@ async def get_rpe_strategy(
                     }
                 )
     elif scope == "industry_board":
-        if not board_code:
-            raise HTTPException(status_code=400, detail="industry_board 需要 board_code")
+        board_kind = "industry"
+        board_codes = _normalize_gms_board_codes(industry_board_code) or (
+            [board_code] if board_code else []
+        )
+        if not board_codes:
+            raise HTTPException(status_code=400, detail="industry_board 需要选择行业板块")
+        try:
+            from backend_api.utils.bk_board_code import resolve_industry_board_codes
+
+            board_codes = resolve_industry_board_codes(db, board_codes)
+        except Exception:
+            pass
+        if not board_codes:
+            raise HTTPException(status_code=400, detail="未找到有效的行业板块代码")
+    elif scope == "concept_board":
+        board_kind = "concept"
+        board_codes = _normalize_gms_board_codes(concept_board_code, upper=True) or (
+            [board_code] if board_code else []
+        )
+        if not board_codes:
+            raise HTTPException(status_code=400, detail="concept_board 需要选择概念板块")
     elif scope != "cn":
-        raise HTTPException(status_code=400, detail="scope 仅支持 cn|watchlist|industry_board|single")
+        raise HTTPException(
+            status_code=400,
+            detail="scope 仅支持 cn|watchlist|industry_board|concept_board|single",
+        )
 
     loop = asyncio.get_event_loop()
 
@@ -3507,10 +3537,11 @@ async def get_rpe_strategy(
             config_id=config_id,
             scope=scope if scope == "cn" else "cn",
             codes=codes,
-            board_code=board_code,
+            board_codes=board_codes,
+            board_kind=board_kind,
             entry_only=entry_only,
             signal_type=signal_type,
-            trace_only=trace_only and scope == "cn" and not board_code and not codes,
+            trace_only=trace_only and scope == "cn" and not board_codes and not codes,
             max_results=max_results or 200,
             db=db,
         )
@@ -3526,5 +3557,7 @@ async def get_rpe_strategy(
             "scope": scope,
             "config_id": result.get("config_id"),
             "source": result.get("source"),
+            "board_kind": board_kind if scope in ("industry_board", "concept_board") else None,
+            "board_codes": board_codes,
         }
     )

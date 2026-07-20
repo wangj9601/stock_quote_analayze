@@ -69,14 +69,48 @@ class RPEDataLoader:
             if own:
                 db.close()
 
-    def load_board_members(self, board_code: str) -> List[Dict[str, str]]:
+    def list_concept_boards(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
         db = self._session()
         own = self._db is None
         try:
             sql = text(
                 """
+                SELECT board_code, board_name
+                FROM concept_board_basic_info
+                WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                ORDER BY board_code
+                """
+            )
+            rows = db.execute(sql).fetchall()
+            out = [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
+            if limit:
+                out = out[: int(limit)]
+            return out
+        except Exception as e:
+            logger.warning("list_concept_boards failed: %s", e)
+            return []
+        finally:
+            if own:
+                db.close()
+
+    def list_boards(self, board_kind: str = "industry", limit: Optional[int] = None) -> List[Dict[str, str]]:
+        if board_kind == "concept":
+            return self.list_concept_boards(limit=limit)
+        return self.list_industry_boards(limit=limit)
+
+    def load_board_members(self, board_code: str, board_kind: str = "industry") -> List[Dict[str, str]]:
+        db = self._session()
+        own = self._db is None
+        table = (
+            "concept_board_constituents"
+            if board_kind == "concept"
+            else "industry_board_constituents"
+        )
+        try:
+            sql = text(
+                f"""
                 SELECT stock_code, stock_name
-                FROM industry_board_constituents
+                FROM {table}
                 WHERE board_code = :bc
                 """
             )
@@ -87,26 +121,35 @@ class RPEDataLoader:
                 if r[0]
             ]
         except Exception as e:
-            logger.warning("load_board_members %s failed: %s", board_code, e)
+            logger.warning("load_board_members %s (%s) failed: %s", board_code, board_kind, e)
             return []
         finally:
             if own:
                 db.close()
 
-    def find_boards_for_code(self, code: str) -> List[Dict[str, str]]:
+    def find_boards_for_code(self, code: str, board_kind: str = "industry") -> List[Dict[str, str]]:
         db = self._session()
         own = self._db is None
         try:
             code_n = _norm_code(code)
-            sql = text(
-                """
-                SELECT c.board_code, COALESCE(b.board_name, c.board_code)
-                FROM industry_board_constituents c
-                LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
-                WHERE c.stock_code = :code OR c.stock_code = :code2
-                """
-            )
-            # try both padded and raw
+            if board_kind == "concept":
+                sql = text(
+                    """
+                    SELECT c.board_code, COALESCE(b.board_name, c.board_code)
+                    FROM concept_board_constituents c
+                    LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
+                    WHERE c.stock_code = :code OR c.stock_code = :code2
+                    """
+                )
+            else:
+                sql = text(
+                    """
+                    SELECT c.board_code, COALESCE(b.board_name, c.board_code)
+                    FROM industry_board_constituents c
+                    LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+                    WHERE c.stock_code = :code OR c.stock_code = :code2
+                    """
+                )
             rows = db.execute(sql, {"code": code_n, "code2": code}).fetchall()
             return [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
         except Exception as e:

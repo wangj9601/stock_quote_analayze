@@ -90,6 +90,65 @@ class RPEStrategyEngine:
             nearest_support=near.get("nearest_support"),
             nearest_resistance=near.get("nearest_resistance"),
         )
+        z_lead = float(cfg.get("z_lead", 2.0))
+        z_catch = float(cfg.get("z_catch_up", -1.5))
+        min_rr = float(cfg.get("min_rr_to_resistance", 1.5))
+        enable_veto = bool(cfg.get("enable_trend_veto", True))
+        enable_lead_trade = bool(cfg.get("enable_lead_trade", False))
+        z_val = zinfo.get("z_score")
+        catch_hit = z_val is not None and float(z_val) <= z_catch
+        lead_hit = z_val is not None and float(z_val) >= z_lead
+        veto = bool(sig.get("trend_veto"))
+        struct_ok = bool(struct.get("structure_valid"))
+        liq_ok = bool(liq.get("liquidity_ok"))
+        judgment_steps = [
+            {
+                "name": "补涨 Z 阈值",
+                "rule": f"Z ≤ {z_catch}",
+                "actual": z_val,
+                "pass": catch_hit,
+            },
+            {
+                "name": "领涨 Z 阈值",
+                "rule": f"Z ≥ {z_lead}",
+                "actual": z_val,
+                "pass": lead_hit,
+            },
+            {
+                "name": "板块趋势否决",
+                "rule": "斜率≥0（enable_trend_veto 时）" if enable_veto else "已关闭",
+                "actual": slope,
+                "pass": (not veto) if enable_veto else True,
+            },
+            {
+                "name": "结构过滤",
+                "rule": f"站上支撑且盈亏比≥{min_rr}",
+                "actual": struct.get("rr"),
+                "pass": struct_ok,
+                "note": struct.get("reason"),
+            },
+            {
+                "name": "流动性",
+                "rule": (
+                    f"近{liq_cfg.get('lookback_days', 20)}日均额≥"
+                    f"{liq_cfg.get('min_avg_amount', 5_000_000)}且换手≥"
+                    f"{liq_cfg.get('min_avg_turnover_rate', 0.5)}%"
+                ),
+                "actual": liq.get("avg_amount"),
+                "pass": liq_ok,
+                "note": liq.get("reason"),
+            },
+            {
+                "name": "入场信号",
+                "rule": (
+                    "catch_up：未否决+结构+流动性；"
+                    f"lead：enable_lead_trade={enable_lead_trade} 时同理"
+                ),
+                "actual": sig.get("signal_type"),
+                "pass": bool(sig.get("entry_signal")),
+                "note": sig.get("reason"),
+            },
+        ]
         return {
             "code": code_n,
             "symbol": code_n,
@@ -120,6 +179,24 @@ class RPEStrategyEngine:
                 "kde_reason": kde.get("reason"),
                 "bw": kde.get("bw"),
                 "i_t": zinfo.get("i_t"),
+                "z_window": int(cfg.get("z_window", 40)),
+                "thresholds": {
+                    "z_lead": z_lead,
+                    "z_catch_up": z_catch,
+                    "min_rr_to_resistance": min_rr,
+                    "enable_trend_veto": enable_veto,
+                    "enable_lead_trade": enable_lead_trade,
+                    "kde_base_factor": float(cfg.get("kde_base_factor", 1.0)),
+                    "sector_slope_window": int(cfg.get("sector_slope_window", 60)),
+                },
+                "judgment": {
+                    "formula": "入场 = (catch_up 或 允许交易的 lead) AND 未趋势否决 AND 结构有效 AND 流动性通过",
+                    "formula_detail": (
+                        "补涨主路径：Z≤z_catch_up；领涨默认仅观察；"
+                        "离场仅认收盘跌破结构支撑，不用固定百分比止损。"
+                    ),
+                    "steps": judgment_steps,
+                },
             },
         }
 
@@ -152,11 +229,12 @@ class RPEStrategyEngine:
         date: Optional[str] = None,
         config: Optional[Dict] = None,
         entry_only: bool = False,
+        board_kind: str = "industry",
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         lookback = int(cfg.get("lookback_days", 250))
         min_members = int((cfg.get("scan") or {}).get("min_sector_members", 5))
-        members = self.loader.load_board_members(board_code)
+        members = self.loader.load_board_members(board_code, board_kind=board_kind)
         if len(members) < min_members:
             return []
         codes = [m["code"] for m in members]
@@ -207,15 +285,17 @@ class RPEStrategyEngine:
         entry_only: bool = False,
         signal_type: Optional[str] = None,
         max_results: Optional[int] = None,
+        board_kind: str = "industry",
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         scan = cfg.get("scan") or {}
         max_n = max_results if max_results is not None else int(scan.get("max_results", 200))
         trade_date = date or self.loader.resolve_trade_date()
+        kind = "concept" if board_kind == "concept" else "industry"
 
         boards: List[Dict[str, str]]
         if board_codes:
-            all_boards = {b["board_code"]: b for b in self.loader.list_industry_boards()}
+            all_boards = {b["board_code"]: b for b in self.loader.list_boards(kind)}
             boards = []
             for bc in board_codes:
                 b = all_boards.get(bc) or {"board_code": bc, "board_name": bc}
@@ -224,11 +304,11 @@ class RPEStrategyEngine:
             # 自选/单股：收集涉及板块
             seen = {}
             for c in codes:
-                for b in self.loader.find_boards_for_code(c):
+                for b in self.loader.find_boards_for_code(c, board_kind=kind):
                     seen[b["board_code"]] = b
             boards = list(seen.values())
         else:
-            boards = self.loader.list_industry_boards(limit=scan.get("max_boards"))
+            boards = self.loader.list_boards(kind, limit=scan.get("max_boards"))
 
         code_filter = {_norm_code(c) for c in codes} if codes else None
         results: List[Dict[str, Any]] = []
@@ -239,6 +319,7 @@ class RPEStrategyEngine:
                 date=trade_date,
                 config=cfg,
                 entry_only=False,
+                board_kind=kind,
             )
             for r in rows:
                 if code_filter is not None and r["code"] not in code_filter:

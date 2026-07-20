@@ -1584,7 +1584,7 @@
             <div id="sbbr-sub-signals" class="sbbr-sub-panel" style="display:block;">
                 <div class="params-section">
                     <div class="param-group">
-                        <label>范围</label>
+                        <label for="sbbrScope">范围</label>
                         <select id="sbbrScope" class="param-input">
                             <option value="market">全市场（做小宇宙）</option>
                             <option value="watchlist">自选股</option>
@@ -1592,16 +1592,18 @@
                         </select>
                     </div>
                     <div class="param-group">
-                        <label>基准日</label>
+                        <label for="sbbrDate">基准日</label>
                         <input type="date" id="sbbrDate" class="param-input">
                     </div>
-                    <div class="param-group">
+                    <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrEntryOnly"> 仅入场信号</label>
                     </div>
-                    <div class="param-group">
+                    <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
                     </div>
-                    <button type="button" id="sbbrRefreshBtn" class="refresh-btn">刷新筛选</button>
+                    <div class="param-actions">
+                        <button type="button" id="sbbrRefreshBtn" class="refresh-btn">刷新筛选</button>
+                    </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                 </div>
                 <div id="sbbrLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
@@ -1678,43 +1680,56 @@
             <div id="rpe-sub-signals" class="rpe-sub-panel" style="display:block;">
                 <div class="params-section">
                     <div class="param-group">
-                        <label>范围</label>
+                        <label for="rpeScope">范围</label>
                         <select id="rpeScope" class="param-input">
                             <option value="cn">全市场（读预计算）</option>
                             <option value="watchlist">自选股</option>
                             <option value="industry_board">行业板块</option>
+                            <option value="concept_board">概念板块</option>
                             <option value="single">单股</option>
                         </select>
                     </div>
                     <div class="param-group">
-                        <label>基准日</label>
+                        <label for="rpeDate">基准日</label>
                         <input type="date" id="rpeDate" class="param-input">
                     </div>
                     <div class="param-group">
-                        <label>信号类型</label>
+                        <label for="rpeSignalType">信号类型</label>
                         <select id="rpeSignalType" class="param-input">
                             <option value="">全部</option>
                             <option value="catch_up">补涨 catch_up</option>
                             <option value="lead">领涨 lead</option>
                         </select>
                     </div>
-                    <div class="param-group">
-                        <label>板块代码</label>
-                        <input type="text" id="rpeBoardCode" class="param-input" placeholder="industry_board 时必填">
-                    </div>
-                    <div class="param-group">
-                        <label>股票代码</label>
+                    <div class="param-group" id="rpeStockCodeGroup" style="display:none;">
+                        <label for="rpeStockCode">股票代码</label>
                         <input type="text" id="rpeStockCode" class="param-input" placeholder="single 时必填">
                     </div>
-                    <div class="param-group">
+                    <div class="param-group param-group-check">
                         <label><input type="checkbox" id="rpeEntryOnly"> 仅入场信号</label>
                     </div>
-                    <div class="param-group">
+                    <div class="param-group param-group-check">
                         <label><input type="checkbox" id="rpeTraceOnly" checked> 优先读预计算</label>
                     </div>
-                    <button type="button" id="rpeRefreshBtn" class="refresh-btn">刷新筛选</button>
-                    <a class="gms-btn-outline" href="stock_rpe_trace.html" target="_blank" rel="noopener">信号追溯</a>
+                    <div class="param-actions">
+                        <button type="button" id="rpeRefreshBtn" class="refresh-btn">刷新筛选</button>
+                        <a class="gms-btn-outline" href="stock_rpe_trace.html" target="_blank" rel="noopener">信号追溯</a>
+                    </div>
                     <span id="rpeSearchMeta" class="gms-meta-text"></span>
+                </div>
+                <div id="rpeIndustryBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">行业板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="rpeIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="rpeIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="rpeConceptBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">概念板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="rpeConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="rpeConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
                 </div>
                 <div id="rpeLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
                 <div id="rpeError" class="error-message" style="display:none;"></div>
@@ -1902,6 +1917,7 @@
 
     <script src="js/gms_score_detail.js"></script>
     <script src="js/urt_score_detail.js"></script>
+    <script src="js/rpe_score_detail.js"></script>
     <script src="js/screening.js"></script>
     <script src="js/sbbr_screening.js"></script>
     <script src="js/rpe_screening.js"></script>

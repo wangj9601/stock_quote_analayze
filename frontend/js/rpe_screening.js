@@ -68,6 +68,42 @@
     return '-';
   }
 
+  function getScreeningApp() {
+    if (typeof ScreeningPage !== 'undefined') return ScreeningPage;
+    if (typeof window !== 'undefined') return window.ScreeningPage || null;
+    return null;
+  }
+
+  function syncScopeUI() {
+    const scope = document.getElementById('rpeScope')?.value || 'cn';
+    const indWrap = document.getElementById('rpeIndustryBoardWrap');
+    const conWrap = document.getElementById('rpeConceptBoardWrap');
+    const stockGroup = document.getElementById('rpeStockCodeGroup');
+    if (indWrap) indWrap.style.display = scope === 'industry_board' ? 'flex' : 'none';
+    if (conWrap) conWrap.style.display = scope === 'concept_board' ? 'flex' : 'none';
+    if (stockGroup) stockGroup.style.display = scope === 'single' ? 'flex' : 'none';
+  }
+
+  function selectedIndustryCodes() {
+    const app = getScreeningApp();
+    if (app && typeof app.getRpeSelectedIndustryBoardCodes === 'function') {
+      return app.getRpeSelectedIndustryBoardCodes();
+    }
+    return Array.isArray(app?.rpeSelectedIndustryBoardCodes)
+      ? app.rpeSelectedIndustryBoardCodes.filter(Boolean)
+      : [];
+  }
+
+  function selectedConceptCodes() {
+    const app = getScreeningApp();
+    if (app && typeof app.getRpeSelectedConceptBoardCodes === 'function') {
+      return app.getRpeSelectedConceptBoardCodes();
+    }
+    return Array.isArray(app?.rpeSelectedConceptBoardCodes)
+      ? app.rpeSelectedConceptBoardCodes.filter(Boolean)
+      : [];
+  }
+
   async function refreshSignals() {
     const loading = document.getElementById('rpeLoading');
     const body = document.getElementById('rpeResultsBody');
@@ -79,11 +115,15 @@
       const entryOnly = document.getElementById('rpeEntryOnly').checked;
       const traceOnly = document.getElementById('rpeTraceOnly').checked;
       const signalType = document.getElementById('rpeSignalType').value || '';
-      const boardCode = (document.getElementById('rpeBoardCode').value || '').trim();
       const stockCode = (document.getElementById('rpeStockCode').value || '').trim();
+      const industryCodes = selectedIndustryCodes();
+      const conceptCodes = selectedConceptCodes();
 
-      if (scope === 'industry_board' && !boardCode) {
-        throw new Error('行业板块范围需要填写板块代码');
+      if (scope === 'industry_board' && !industryCodes.length) {
+        throw new Error('请先选择行业板块（与 GMS 相同的选择面板）');
+      }
+      if (scope === 'concept_board' && !conceptCodes.length) {
+        throw new Error('请先选择概念板块（与 GMS 相同的选择面板）');
       }
       if (scope === 'single' && !stockCode) {
         throw new Error('单股范围需要填写股票代码');
@@ -96,9 +136,10 @@
       });
       if (date) q.set('date', date);
       if (signalType) q.set('signal_type', signalType);
-      if (boardCode) q.set('board_code', boardCode);
       if (stockCode) q.set('stock_code', stockCode);
       if (traceOnly && scope === 'cn') q.set('trace_only', 'true');
+      industryCodes.forEach((code) => q.append('industry_board_code', code));
+      conceptCodes.forEach((code) => q.append('concept_board_code', code));
 
       let data = await api(`/api/screening/rpe-strategy?${q}`);
       if (traceOnly && scope === 'cn' && (!data.data || !data.data.length)) {
@@ -114,9 +155,13 @@
         return;
       }
       body.innerHTML = rows
-        .map((r) => {
+        .map((r, index) => {
           const snap = encodeURIComponent(JSON.stringify(r));
-          return `<tr>
+          let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
+          if (window.RpeScoreDetail && typeof window.RpeScoreDetail.buildHtml === 'function') {
+            detailHtml = window.RpeScoreDetail.buildHtml(r);
+          }
+          return `<tr data-rpe-row="${index}">
             <td>${r.code || ''}</td>
             <td>${r.name || ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
@@ -128,10 +173,16 @@
             <td>${yn(r.structure_valid)}</td>
             <td>${yn(r.liquidity_ok)}</td>
             <td>
-              <button type="button" class="gms-btn-outline rpe-add-observe"
-                data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>
-              <a class="gms-btn-outline" href="stock_rpe_trace.html?code=${encodeURIComponent(r.code || '')}" target="_blank" rel="noopener">追溯</a>
+              <div class="action-links">
+                <button type="button" class="gms-op-btn rpe-score-detail-toggle" data-row="${index}" title="展开/收起策略明细">明细</button>
+                <button type="button" class="gms-op-btn rpe-add-observe"
+                  data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>
+                <a class="gms-op-btn" href="stock_rpe_trace.html?code=${encodeURIComponent(r.code || '')}" target="_blank" rel="noopener">追溯</a>
+              </div>
             </td>
+          </tr>
+          <tr class="gms-score-detail-row rpe-score-detail-row" data-detail-for="${index}" style="display:none;">
+            <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
         })
         .join('');
@@ -208,6 +259,9 @@
     const root = document.getElementById('rpe-content');
     if (!root) return;
 
+    syncScopeUI();
+    document.getElementById('rpeScope')?.addEventListener('change', () => syncScopeUI());
+
     root.querySelectorAll('[data-rpe-sub]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sub = btn.getAttribute('data-rpe-sub');
@@ -222,6 +276,18 @@
     document.getElementById('rpeFormalRefreshBtn')?.addEventListener('click', () => refreshFormal());
 
     document.getElementById('rpeResultsBody')?.addEventListener('click', async (e) => {
+      const detailBtn = e.target.closest('.rpe-score-detail-toggle');
+      if (detailBtn) {
+        const rowIndex = detailBtn.getAttribute('data-row');
+        const tbody = document.getElementById('rpeResultsBody');
+        const detailRow = tbody?.querySelector(`tr.rpe-score-detail-row[data-detail-for="${rowIndex}"]`);
+        if (detailRow) {
+          const show = detailRow.style.display === 'none' || !detailRow.style.display;
+          detailRow.style.display = show ? 'table-row' : 'none';
+          detailBtn.classList.toggle('active', show);
+        }
+        return;
+      }
       const obs = e.target.closest('.rpe-add-observe');
       if (!obs) return;
       let snap = null;
