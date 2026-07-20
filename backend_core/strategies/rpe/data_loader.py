@@ -164,32 +164,36 @@ class RPEDataLoader:
         code: str,
         *,
         end_date: Optional[str] = None,
-        limit: int = 250,
+        limit: Optional[int] = 250,
     ) -> List[Dict[str, Any]]:
         db = self._session()
         own = self._db is None
         try:
             code_n = _norm_code(code)
-            params: Dict[str, Any] = {"code": code_n, "lim": int(limit)}
+            params: Dict[str, Any] = {"code": code_n}
+            lim_sql = ""
+            if limit is not None and int(limit) > 0:
+                params["lim"] = int(limit)
+                lim_sql = " LIMIT :lim"
             if end_date:
+                params["d"] = end_date
                 sql = text(
-                    """
+                    f"""
                     SELECT date, open, high, low, close, volume, amount, turnover_rate
                     FROM historical_quotes
                     WHERE code = :code AND date <= :d
                     ORDER BY date DESC
-                    LIMIT :lim
+                    {lim_sql}
                     """
                 )
-                params["d"] = end_date
             else:
                 sql = text(
-                    """
+                    f"""
                     SELECT date, open, high, low, close, volume, amount, turnover_rate
                     FROM historical_quotes
                     WHERE code = :code
                     ORDER BY date DESC
-                    LIMIT :lim
+                    {lim_sql}
                     """
                 )
             rows = db.execute(sql, params).fetchall()
@@ -222,9 +226,9 @@ class RPEDataLoader:
         member_codes: List[str],
         *,
         end_date: Optional[str] = None,
-        lookback: int = 250,
+        lookback: Optional[int] = 250,
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """批量加载成分股 bars（逐只，简单实现；后续可优化 SQL）。"""
+        """批量加载成分股 bars（逐只；lookback=None 表示拉全历史）。"""
         out: Dict[str, List[Dict[str, Any]]] = {}
         for code in member_codes:
             bars = self.load_bars(code, end_date=end_date, limit=lookback)

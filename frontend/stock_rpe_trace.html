@@ -25,11 +25,13 @@
                     <label>config_id: <input type="number" id="configIdInput" placeholder="默认" style="width:80px;"></label>
                     <label>条数: <input type="number" id="limitInput" value="120" min="10" max="500" style="width:70px;"></label>
                     <button id="searchBtn">查询</button>
+                    <button id="forceComputeBtn" class="btn-secondary" type="button">强制重新计算</button>
                     <a href="screening.html#rpe" class="btn-secondary">返回选股</a>
                 </div>
             </div>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
             <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
-            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 RPE 追溯数据（需日终预计算或现场选股回写）</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 RPE 追溯数据（可点击「强制重新计算」对该股全量历史重算）</div>
             <div class="table-wrapper">
                 <table class="trace-table" id="traceTable">
                     <thead>
@@ -55,6 +57,12 @@
     <script src="js/common.js"></script>
     <script>
     (function () {
+      let forceComputeRunning = false;
+      let forceComputeTaskId = '';
+      let forceComputePollTimer = null;
+      let forceComputePollCount = 0;
+      const maxForceComputePolls = 7200; // 最长约 2 小时（1s 一次）
+
       function apiBase() {
         if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
           return window.API_BASE_URL.replace(/\/+$/, '');
@@ -70,11 +78,44 @@
         if (token) h.Authorization = `Bearer ${token}`;
         return h;
       }
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
       function fmt(v, n) {
         if (v == null || v === '') return '-';
         const x = Number(v);
         return Number.isFinite(x) ? x.toFixed(n == null ? 2 : n) : String(v);
       }
+      function clearForceComputePoll() {
+        if (forceComputePollTimer) {
+          clearInterval(forceComputePollTimer);
+          forceComputePollTimer = null;
+        }
+        forceComputePollCount = 0;
+      }
+      function setForceComputeRunning(running) {
+        forceComputeRunning = !!running;
+        const btn = document.getElementById('forceComputeBtn');
+        if (btn) btn.disabled = forceComputeRunning;
+      }
+      function renderForceComputeProgress(task) {
+        const area = document.getElementById('forceComputeProgress');
+        if (!area || !task) return;
+        area.style.display = 'block';
+        const pct = Math.max(0, Math.min(100, Number(task.progress) || 0));
+        const msg = escapeHtml(task.message || task.status || '');
+        area.innerHTML =
+          `<div>${msg}</div>` +
+          `<div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>` +
+          (task.current != null && task.total
+            ? `<div style="font-size:12px;color:#666;margin-top:4px;">${task.current}/${task.total}</div>`
+            : '');
+      }
+
       async function load() {
         const code = (document.getElementById('codeInput').value || '').trim();
         const body = document.getElementById('traceBody');
@@ -85,6 +126,7 @@
           return;
         }
         empty.style.display = 'none';
+        empty.textContent = '暂无 RPE 追溯数据（可点击「强制重新计算」对该股全量历史重算）';
         loading.style.display = 'block';
         body.innerHTML = '';
         try {
@@ -119,7 +161,131 @@
           loading.style.display = 'none';
         }
       }
+
+      async function startForceComputeTask() {
+        const code = (document.getElementById('codeInput').value || '').trim();
+        if (!code) {
+          alert('请先输入股票代码');
+          return;
+        }
+        const cidRaw = document.getElementById('configIdInput').value;
+        const label = cidRaw ? `config_id=${cidRaw}` : '默认配置';
+        if (!confirm(`将按「${label}」对该股全量历史行情重新计算 RPE 信号（耗时可能较长），是否继续？`)) {
+          return;
+        }
+
+        clearForceComputePoll();
+        setForceComputeRunning(true);
+        const area = document.getElementById('forceComputeProgress');
+        if (area) {
+          area.style.display = 'block';
+          area.innerHTML = '<div>正在提交重算任务…</div><div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:5%"></div></div>';
+        }
+        const loading = document.getElementById('loadingMsg');
+        if (loading) loading.style.display = 'none';
+
+        try {
+          const payload = { code };
+          if (cidRaw) payload.config_id = Number(cidRaw);
+          const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
+          const resp = await fetchFn(`${apiBase()}/api/stock/rpe-signal-trace/recompute`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
+          });
+          const json = await resp.json().catch(() => ({}));
+          if (!resp.ok || !json.success) {
+            const detail = json.detail;
+            let errMsg = json.message || resp.statusText;
+            if (typeof detail === 'string') errMsg = detail;
+            else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+            throw new Error(errMsg || '提交失败');
+          }
+          forceComputeTaskId = json.data?.task_id || '';
+          if (!forceComputeTaskId) throw new Error('未返回任务 ID');
+          if (json.data?.config_id != null) {
+            document.getElementById('configIdInput').value = json.data.config_id;
+          }
+          if (json.data?.already_running) {
+            renderForceComputeProgress({
+              status: 'running',
+              progress: 0,
+              message: json.message || '任务进行中',
+            });
+          }
+          await pollForceComputeOnce();
+          forceComputePollTimer = setInterval(() => pollForceComputeOnce(), 1000);
+        } catch (e) {
+          clearForceComputePoll();
+          setForceComputeRunning(false);
+          if (area) {
+            area.style.display = 'block';
+            area.innerHTML = `<span class="gms-recompute-error">提交失败: ${escapeHtml(e.message || String(e))}</span>`;
+          }
+        }
+      }
+
+      async function pollForceComputeOnce() {
+        if (!forceComputeTaskId) return;
+        forceComputePollCount += 1;
+        if (forceComputePollCount > maxForceComputePolls) {
+          clearForceComputePoll();
+          setForceComputeRunning(false);
+          const area = document.getElementById('forceComputeProgress');
+          if (area) {
+            area.innerHTML = '<span class="gms-recompute-error">等待超时，请刷新页面后重试</span>';
+          }
+          return;
+        }
+        const url = `${apiBase()}/api/stock/rpe-signal-trace/recompute/${encodeURIComponent(forceComputeTaskId)}`;
+        try {
+          const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
+          const resp = await fetchFn(url, { headers: authHeaders() });
+          const json = await resp.json().catch(() => ({}));
+          if (!resp.ok || !json.success) {
+            const detail = json.detail;
+            let errMsg = json.message || resp.statusText;
+            if (typeof detail === 'string') errMsg = detail;
+            else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+            throw new Error(errMsg || '查询进度失败');
+          }
+          const task = json.data;
+          if (!task) return;
+          renderForceComputeProgress(task);
+          const st = task.status;
+          if (st === 'completed' || st === 'failed') {
+            clearForceComputePoll();
+            setForceComputeRunning(false);
+            if (st === 'completed') {
+              if (window.CommonUtils && task.message) {
+                CommonUtils.showToast(task.message, 'success');
+              }
+              await load();
+              if (task.message) {
+                renderForceComputeProgress({ ...task, progress: 100 });
+              }
+            } else {
+              const area = document.getElementById('forceComputeProgress');
+              if (area) {
+                area.innerHTML = `<span class="gms-recompute-error">${escapeHtml(task.error || task.message || '计算失败')}</span>`;
+              }
+            }
+          }
+        } catch (e) {
+          clearForceComputePoll();
+          setForceComputeRunning(false);
+          const area = document.getElementById('forceComputeProgress');
+          if (area) {
+            area.innerHTML = `<span class="gms-recompute-error">查询进度失败: ${escapeHtml(e.message || String(e))}</span>`;
+          }
+        }
+      }
+
       document.getElementById('searchBtn').addEventListener('click', load);
+      document.getElementById('forceComputeBtn').addEventListener('click', () => {
+        if (forceComputeRunning) return;
+        void startForceComputeTask();
+      });
       const params = new URLSearchParams(location.search);
       const code = params.get('code');
       if (code) {

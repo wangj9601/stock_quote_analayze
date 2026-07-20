@@ -94,6 +94,7 @@ try:
         RPEFormalTrade = getattr(models_module, 'RPEFormalTrade', None)
         RPEBacktestTask = getattr(models_module, 'RPEBacktestTask', None)
         RPEPrecomputeRun = getattr(models_module, 'RPEPrecomputeRun', None)
+        RPETraceRecomputeTask = getattr(models_module, 'RPETraceRecomputeTask', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
         StockPriceData = getattr(models_module, 'StockPriceData', None)
@@ -228,6 +229,7 @@ except Exception as e:
     RPEFormalTrade = None
     RPEBacktestTask = None
     RPEPrecomputeRun = None
+    RPETraceRecomputeTask = None
     StockBasicInfo = None
     StockBasicInfoHK = None
     StockPriceData = None
@@ -365,6 +367,7 @@ __all__ = [
     'RPEFormalTrade',
     'RPEBacktestTask',
     'RPEPrecomputeRun',
+    'RPETraceRecomputeTask',
     'StockBasicInfo',
     'StockBasicInfoHK',
     'StockPriceData',

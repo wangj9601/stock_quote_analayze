@@ -4,9 +4,28 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def delete_traces_for_code_config(db, *, code: str, config_id: int, market_type: str = "CN") -> int:
+    from backend_api.models import RPESignalTrace
+
+    code_n = str(code or "").strip()
+    if code_n.isdigit() and len(code_n) <= 6:
+        code_n = code_n.zfill(6)
+    n = (
+        db.query(RPESignalTrace)
+        .filter(
+            RPESignalTrace.code == code_n,
+            RPESignalTrace.config_id == int(config_id),
+            RPESignalTrace.market_type == (market_type or "CN"),
+        )
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n or 0)
 
 
 def upsert_signal_traces(
@@ -138,3 +157,165 @@ def load_traces(
             }
         )
     return out
+
+
+def _panel_as_of(
+    panel: Dict[str, List[Dict[str, Any]]], trade_date: str
+) -> Dict[str, List[Dict[str, Any]]]:
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for code, bars in panel.items():
+        sliced = [b for b in bars if b.get("date") and b["date"] <= trade_date]
+        if sliced:
+            out[code] = sliced
+    return out
+
+
+def recompute_trace_for_stock(
+    db,
+    *,
+    code: str,
+    config_id: int,
+    config: Optional[Dict[str, Any]] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
+) -> int:
+    """
+    对单股按所属板块全量历史日滚动重算 RPE 信号，写入 rpe_signal_trace。
+
+    - 先删除该 code + config_id 旧记录
+    - 优先行业板块，无则概念板块；同日多板块取 |Z| 最大
+    - 每个可评交易日写入一行（含无入场信号日，便于追溯页查看 Z 序列）
+    返回写入条数。
+    """
+    from .config import RPEConfigManager
+    from .data_loader import RPEDataLoader, _norm_code
+    from .sector_benchmark import compute_vwap_benchmark, sector_slope
+    from .strategy_engine import RPEStrategyEngine
+
+    code_n = _norm_code(code)
+    cfg = config or RPEConfigManager().get_config(config_id)
+    z_window = int(cfg.get("z_window", 40))
+    slope_window = int(cfg.get("sector_slope_window", 60))
+    min_members = int((cfg.get("scan") or {}).get("min_sector_members", 5))
+    min_need = z_window + 5
+
+    delete_traces_for_code_config(db, code=code_n, config_id=int(config_id))
+
+    loader = RPEDataLoader(db)
+    engine = RPEStrategyEngine(db_session=db, config=cfg)
+
+    kind = "industry"
+    boards = loader.find_boards_for_code(code_n, board_kind="industry")
+    if not boards:
+        boards = loader.find_boards_for_code(code_n, board_kind="concept")
+        kind = "concept"
+    if not boards:
+        logger.info("RPE 单股重算 %s 无所属板块，跳过", code_n)
+        return 0
+
+    target_bars = loader.load_bars(code_n, limit=None)
+    if len(target_bars) < min_need:
+        logger.info("RPE 单股重算 %s 历史不足 bars=%s need=%s", code_n, len(target_bars), min_need)
+        return 0
+
+    dates = [b["date"] for b in target_bars]
+    eval_dates = dates[min_need - 1 :]
+    if not eval_dates:
+        return 0
+
+    board_ctx: List[Dict[str, Any]] = []
+    for b in boards:
+        members = loader.load_board_members(b["board_code"], board_kind=kind)
+        if len(members) < min_members:
+            continue
+        codes = [m["code"] for m in members]
+        name_map = {m["code"]: m.get("name") for m in members}
+        if code_n not in {_norm_code(c) for c in codes}:
+            codes.append(code_n)
+        panel = loader.load_sector_panel(codes, lookback=None)
+        if code_n not in panel or len(panel) < min_members:
+            continue
+        board_ctx.append(
+            {
+                "board_code": b["board_code"],
+                "board_name": b.get("board_name") or b["board_code"],
+                "name_map": name_map,
+                "panel": panel,
+            }
+        )
+
+    if not board_ctx:
+        logger.info("RPE 单股重算 %s 板块成分不足，跳过", code_n)
+        return 0
+
+    logger.info(
+        "RPE 单股全历史重算 %s config_id=%s boards=%s evaluable=%s",
+        code_n,
+        config_id,
+        len(board_ctx),
+        len(eval_dates),
+    )
+
+    rows: List[Dict[str, Any]] = []
+    total = len(eval_dates)
+    batch_size = 80
+
+    for idx, trade_date in enumerate(eval_dates):
+        if progress_cb:
+            progress_cb(idx + 1, total, f"正在计算 {trade_date}（{idx + 1}/{total}）")
+        best: Optional[Dict[str, Any]] = None
+        for ctx in board_ctx:
+            try:
+                panel_d = _panel_as_of(ctx["panel"], trade_date)
+                if code_n not in panel_d or len(panel_d[code_n]) < min_need:
+                    continue
+                if len(panel_d) < min_members:
+                    continue
+                date_members = loader.build_date_members(panel_d)
+                benchmark = compute_vwap_benchmark(date_members)
+                if len(benchmark) < min_need:
+                    continue
+                slope = sector_slope(benchmark, slope_window)
+                row = engine.evaluate_in_sector(
+                    code_n,
+                    sector_id=ctx["board_code"],
+                    sector_name=ctx["board_name"],
+                    panel=panel_d,
+                    benchmark=benchmark,
+                    slope=slope,
+                    trade_date=trade_date,
+                    config=cfg,
+                    name=ctx["name_map"].get(code_n),
+                )
+                if not row:
+                    continue
+                if best is None or abs(row.get("z_score") or 0) > abs(best.get("z_score") or 0):
+                    best = row
+            except Exception as e:
+                logger.debug(
+                    "RPE recompute skip %s board=%s day=%s: %s",
+                    code_n,
+                    ctx.get("board_code"),
+                    trade_date,
+                    e,
+                )
+        if best:
+            rows.append(best)
+
+        if len(rows) >= batch_size:
+            upsert_signal_traces(db, rows, config_id=int(config_id), trade_date=trade_date)
+            rows = []
+
+    if rows:
+        upsert_signal_traces(db, rows, config_id=int(config_id), trade_date=eval_dates[-1])
+
+    from backend_api.models import RPESignalTrace
+
+    written = (
+        db.query(RPESignalTrace)
+        .filter(RPESignalTrace.code == code_n, RPESignalTrace.config_id == int(config_id))
+        .count()
+    )
+    if progress_cb:
+        progress_cb(written, written, f"写入完成（{written}/{written}）")
+    logger.info("RPE 单股重算完成 %s written=%s", code_n, written)
+    return int(written)
