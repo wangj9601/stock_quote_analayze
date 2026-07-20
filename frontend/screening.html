@@ -33,6 +33,7 @@
             <button class="strategy-tab" data-strategy="volume-shrink-breakout" id="volumeShrinkBreakoutTab">3倍量缩量突破</button>
             <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
             <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab">做小做底</button>
+            <button class="strategy-tab" data-strategy="rpe" id="rpeTab">比价效应</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -1583,7 +1584,7 @@
             <div id="sbbr-sub-signals" class="sbbr-sub-panel" style="display:block;">
                 <div class="params-section">
                     <div class="param-group">
-                        <label>范围</label>
+                        <label for="sbbrScope">范围</label>
                         <select id="sbbrScope" class="param-input">
                             <option value="market">全市场（做小宇宙）</option>
                             <option value="watchlist">自选股</option>
@@ -1591,16 +1592,18 @@
                         </select>
                     </div>
                     <div class="param-group">
-                        <label>基准日</label>
+                        <label for="sbbrDate">基准日</label>
                         <input type="date" id="sbbrDate" class="param-input">
                     </div>
-                    <div class="param-group">
+                    <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrEntryOnly"> 仅入场信号</label>
                     </div>
-                    <div class="param-group">
+                    <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
                     </div>
-                    <button type="button" id="sbbrRefreshBtn" class="refresh-btn">刷新筛选</button>
+                    <div class="param-actions">
+                        <button type="button" id="sbbrRefreshBtn" class="refresh-btn">刷新筛选</button>
+                    </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                 </div>
                 <div id="sbbrLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
@@ -1659,6 +1662,118 @@
                     <table class="results-table">
                         <thead><tr><th>代码</th><th>名称</th><th>状态</th><th>操作</th></tr></thead>
                         <tbody id="sbbrReserveBody"><tr><td colspan="4" class="empty-state">暂无</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="rpe-content" class="strategy-content">
+            <div class="gms-integrated-head">
+                <div class="gms-sub-tabs">
+                    <button type="button" class="gms-sub-tab active" data-rpe-sub="signals">策略选股</button>
+                    <button type="button" class="gms-sub-tab" data-rpe-sub="observe">交易观察</button>
+                    <button type="button" class="gms-sub-tab" data-rpe-sub="formal">正式交易</button>
+                </div>
+                <p class="gms-integrated-hint">比价效应：板块量权基准 → 滚动 Z-Score → KDE 支撑/阻力过滤；主抓补涨（catch_up），离场仅看结构破位。</p>
+            </div>
+
+            <div id="rpe-sub-signals" class="rpe-sub-panel" style="display:block;">
+                <div class="params-section">
+                    <div class="param-group">
+                        <label for="rpeScope">范围</label>
+                        <select id="rpeScope" class="param-input">
+                            <option value="cn">全市场（读预计算）</option>
+                            <option value="watchlist">自选股</option>
+                            <option value="industry_board">行业板块</option>
+                            <option value="concept_board">概念板块</option>
+                            <option value="single">单股</option>
+                        </select>
+                    </div>
+                    <div class="param-group">
+                        <label for="rpeDate">基准日</label>
+                        <input type="date" id="rpeDate" class="param-input">
+                    </div>
+                    <div class="param-group">
+                        <label for="rpeSignalType">信号类型</label>
+                        <select id="rpeSignalType" class="param-input">
+                            <option value="">全部</option>
+                            <option value="catch_up">补涨 catch_up</option>
+                            <option value="lead">领涨 lead</option>
+                        </select>
+                    </div>
+                    <div class="param-group" id="rpeStockCodeGroup" style="display:none;">
+                        <label for="rpeStockCode">股票代码</label>
+                        <input type="text" id="rpeStockCode" class="param-input" placeholder="single 时必填">
+                    </div>
+                    <div class="param-group param-group-check">
+                        <label><input type="checkbox" id="rpeEntryOnly"> 仅入场信号</label>
+                    </div>
+                    <div class="param-group param-group-check">
+                        <label><input type="checkbox" id="rpeTraceOnly" checked> 优先读预计算</label>
+                    </div>
+                    <div class="param-actions">
+                        <button type="button" id="rpeRefreshBtn" class="refresh-btn">刷新筛选</button>
+                        <a class="gms-btn-outline" href="stock_rpe_trace.html" target="_blank" rel="noopener">信号追溯</a>
+                    </div>
+                    <span id="rpeSearchMeta" class="gms-meta-text"></span>
+                </div>
+                <div id="rpeIndustryBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">行业板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="rpeIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="rpeIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="rpeConceptBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">概念板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="rpeConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="rpeConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="rpeLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
+                <div id="rpeError" class="error-message" style="display:none;"></div>
+                <div class="results-container">
+                    <div class="results-header"><span id="rpeResultsCount">共 0 只</span></div>
+                    <div class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>代码</th><th>名称</th><th>板块</th><th>Z</th><th>信号</th>
+                                    <th>入场</th><th>支撑</th><th>阻力</th><th>结构</th><th>流动性</th><th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rpeResultsBody">
+                                <tr><td colspan="11" class="empty-state">点击「刷新筛选」开始</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="rpe-sub-observe" class="rpe-sub-panel" style="display:none;">
+                <button type="button" id="rpeObserveRefreshBtn" class="refresh-btn">刷新观察列表</button>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr><th>代码</th><th>名称</th><th>信号日</th><th>现价仍在支撑上</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="rpeObserveBody"><tr><td colspan="5" class="empty-state">暂无</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="rpe-sub-formal" class="rpe-sub-panel" style="display:none;">
+                <button type="button" id="rpeFormalRefreshBtn" class="refresh-btn">刷新正式交易</button>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th><th>名称</th><th>状态</th><th>入场价</th>
+                                <th>结构支撑</th><th>结构阻力</th><th>离场原因</th><th>最新评估</th><th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rpeFormalBody"><tr><td colspan="9" class="empty-state">暂无</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -1802,8 +1917,10 @@
 
     <script src="js/gms_score_detail.js"></script>
     <script src="js/urt_score_detail.js"></script>
+    <script src="js/rpe_score_detail.js"></script>
     <script src="js/screening.js"></script>
     <script src="js/sbbr_screening.js"></script>
+    <script src="js/rpe_screening.js"></script>
 </body>
 
 </html>

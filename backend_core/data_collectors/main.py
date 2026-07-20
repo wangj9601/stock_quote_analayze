@@ -857,6 +857,31 @@ def _register_sbbr_signal_precompute_jobs():
 
 _register_sbbr_signal_precompute_jobs()
 
+
+def _register_rpe_signal_precompute_jobs():
+    """定时将 RPE（比价效应）信号写入 rpe_signal_trace。"""
+    if not _env_bool("ENABLE_RPE_PRECOMPUTE", True):
+        logging.info("RPE 信号预计算已禁用（ENABLE_RPE_PRECOMPUTE=false）")
+        return
+    try:
+        from backend_core.strategies.rpe.scheduled_precompute import scheduled_rpe_signals_cn
+    except Exception as e:
+        logging.error("导入 RPE 预计算任务失败，跳过注册: %s", e)
+        return
+
+    scheduler.add_job(
+        scheduled_rpe_signals_cn,
+        "cron",
+        day_of_week=_cron("SCHED_RPE_SIGNALS_CN_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_RPE_SIGNALS_CN_HOUR", 19),
+        minute=_cron_int("SCHED_RPE_SIGNALS_CN_MINUTE", 40),
+        id="rpe_signals_cn",
+    )
+    logging.info("已注册 RPE 信号预计算任务（ENABLE_RPE_PRECOMPUTE=true）19:40")
+
+
+_register_rpe_signal_precompute_jobs()
+
 scheduler.add_job(collect_akshare_realtime, 'cron',
     day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),
     hour=_cron('SCHED_AKSHARE_REALTIME_HOUR', '15'),

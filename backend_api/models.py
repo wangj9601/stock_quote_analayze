@@ -2083,3 +2083,175 @@ class SBBRBacktestTask(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+# ========== RPE 比价效应策略 ==========
+
+class RPEStrategyConfig(Base):
+    """RPE 策略参数版本。"""
+    __tablename__ = "rpe_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    precompute_enabled = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class RPESignalTrace(Base):
+    """RPE 日终信号追溯。"""
+    __tablename__ = "rpe_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    market_type = Column(String(10), nullable=False, default="CN")
+    config_id = Column(Integer, ForeignKey("rpe_strategy_configs.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    sector_id = Column(String(40), nullable=True, index=True)
+    sector_name = Column(String(100), nullable=True)
+    z_score = Column(Float, nullable=True)
+    ratio = Column(Float, nullable=True)
+    signal_type = Column(String(20), nullable=True, index=True)
+    entry_signal = Column(Boolean, nullable=True)
+    watch_only = Column(Boolean, nullable=True)
+    trend_veto = Column(Boolean, nullable=True)
+    sector_slope = Column(Float, nullable=True)
+    support_levels = Column(JSON, nullable=True)
+    resistance_levels = Column(JSON, nullable=True)
+    nearest_support = Column(Float, nullable=True)
+    nearest_resistance = Column(Float, nullable=True)
+    structure_valid = Column(Boolean, nullable=True)
+    liquidity_ok = Column(Boolean, nullable=True)
+    close_price = Column(Float, nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", "trade_date", "market_type", "config_id", name="uq_rpe_signal_trace_code_date_mkt_cfg"),
+    )
+
+
+class RPETradeObserveStock(Base):
+    """RPE 交易观察。"""
+    __tablename__ = "rpe_trade_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="rpe_trade_observe_stocks")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "market", "code", name="uq_rpe_trade_observe_user_market_code"),
+    )
+
+
+class RPETradeObserveHistory(Base):
+    """RPE 交易观察移除归档。"""
+    __tablename__ = "rpe_trade_observe_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN")
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    signal_date = Column(Date, nullable=True)
+    source_observe_id = Column(Integer, nullable=True)
+    removed_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User", backref="rpe_trade_observe_history")
+
+
+class RPEFormalTrade(Base):
+    """RPE 正式交易（结构破位离场）。"""
+    __tablename__ = "rpe_formal_trades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source_observe_id = Column(Integer, nullable=True, index=True)
+    entry_price = Column(Float, nullable=False)
+    exit_price = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="open", index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    notes = Column(Text, nullable=True)
+    structure_support = Column(Float, nullable=True)
+    structure_resistance = Column(Float, nullable=True)
+    exit_reason = Column(String(100), nullable=True)
+    last_eval_json = Column(JSON, nullable=True)
+    pnl_amount = Column(Float, nullable=True)
+    pnl_percent = Column(Float, nullable=True)
+    entry_at = Column(DateTime, default=datetime.now, nullable=False)
+    exit_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="rpe_formal_trades")
+
+
+class RPEBacktestTask(Base):
+    """RPE 回测任务。"""
+    __tablename__ = "rpe_backtest_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    config = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    message = Column(Text, nullable=True)
+    summary = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class RPEPrecomputeRun(Base):
+    """RPE 预计算运行记录。"""
+    __tablename__ = "rpe_precompute_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    config_id = Column(Integer, nullable=False, index=True)
+    trade_date = Column(Date, nullable=True, index=True)
+    market = Column(String(10), nullable=False, default="CN")
+    status = Column(String(20), nullable=False, default="completed")
+    stock_count = Column(Integer, nullable=True)
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
+class RPETraceRecomputeTask(Base):
+    """RPE 信号追溯强制重算任务（多 worker 共享进度）。"""
+
+    __tablename__ = "rpe_trace_recompute_tasks"
+
+    task_id = Column(String(64), primary_key=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    message = Column(Text, nullable=True)
+    code = Column(String(20), nullable=False, index=True)
+    config_id = Column(Integer, nullable=False, index=True)
+    config_name = Column(String(200), nullable=True)
+    current = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=False, default=0)
+    saved_count = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)

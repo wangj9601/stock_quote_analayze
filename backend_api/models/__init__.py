@@ -87,6 +87,14 @@ try:
         SBBRTradeObserveStock = getattr(models_module, 'SBBRTradeObserveStock', None)
         SBBRFormalTrade = getattr(models_module, 'SBBRFormalTrade', None)
         SBBRBacktestTask = getattr(models_module, 'SBBRBacktestTask', None)
+        RPEStrategyConfig = getattr(models_module, 'RPEStrategyConfig', None)
+        RPESignalTrace = getattr(models_module, 'RPESignalTrace', None)
+        RPETradeObserveStock = getattr(models_module, 'RPETradeObserveStock', None)
+        RPETradeObserveHistory = getattr(models_module, 'RPETradeObserveHistory', None)
+        RPEFormalTrade = getattr(models_module, 'RPEFormalTrade', None)
+        RPEBacktestTask = getattr(models_module, 'RPEBacktestTask', None)
+        RPEPrecomputeRun = getattr(models_module, 'RPEPrecomputeRun', None)
+        RPETraceRecomputeTask = getattr(models_module, 'RPETraceRecomputeTask', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
         StockPriceData = getattr(models_module, 'StockPriceData', None)
@@ -214,6 +222,14 @@ except Exception as e:
     SBBRTradeObserveStock = None
     SBBRFormalTrade = None
     SBBRBacktestTask = None
+    RPEStrategyConfig = None
+    RPESignalTrace = None
+    RPETradeObserveStock = None
+    RPETradeObserveHistory = None
+    RPEFormalTrade = None
+    RPEBacktestTask = None
+    RPEPrecomputeRun = None
+    RPETraceRecomputeTask = None
     StockBasicInfo = None
     StockBasicInfoHK = None
     StockPriceData = None
@@ -344,6 +360,14 @@ __all__ = [
     'SBBRTradeObserveStock',
     'SBBRFormalTrade',
     'SBBRBacktestTask',
+    'RPEStrategyConfig',
+    'RPESignalTrace',
+    'RPETradeObserveStock',
+    'RPETradeObserveHistory',
+    'RPEFormalTrade',
+    'RPEBacktestTask',
+    'RPEPrecomputeRun',
+    'RPETraceRecomputeTask',
     'StockBasicInfo',
     'StockBasicInfoHK',
     'StockPriceData',

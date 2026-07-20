@@ -48,20 +48,137 @@
 
 /* GMS 整合区：分段标签 + 工具栏 + 表格元信息 */
 .gms-integrated-head {
-    margin: 0 0 16px 0;
+    margin: 0 0 20px 0;
 }
 .gms-integrated-hint {
-    margin: 10px 0 0 0;
+    margin: 12px 0 0 0;
     font-size: 13px;
     color: #64748b;
-    line-height: 1.5;
+    line-height: 1.55;
 }
+.gms-sub-tabs,
 .gms-segmented-tabs {
     display: inline-flex;
-    padding: 3px;
+    padding: 4px;
     background: #eef2f6;
     border-radius: 8px;
-    gap: 2px;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+/* SBBR / RPE 等策略：筛选参数条（避免默认块级纵向挤在一起） */
+.params-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px 20px;
+    margin: 18px 0 22px;
+    padding: 16px 18px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.params-section .param-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 148px;
+}
+.params-section .param-group > label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #475569;
+    line-height: 1.3;
+}
+.params-section .param-group-check {
+    min-width: auto;
+    flex-direction: row;
+    align-items: center;
+    align-self: flex-end;
+    min-height: 38px;
+    padding-bottom: 2px;
+}
+.params-section .param-group-check > label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-weight: 400;
+    color: #334155;
+}
+.params-section .param-group-check input[type="checkbox"] {
+    margin: 0;
+    width: 15px;
+    height: 15px;
+}
+.params-section .param-input,
+.params-section select.param-input {
+    min-width: 168px;
+    height: 38px;
+    box-sizing: border-box;
+}
+.params-section .param-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    align-self: flex-end;
+}
+.params-section .param-actions .refresh-btn,
+.params-section .param-actions .gms-btn-outline {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+.params-section .gms-meta-text {
+    flex: 1 1 100%;
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#rpe-content .rpe-sub-panel,
+#sbbr-content .sbbr-sub-panel {
+    margin-top: 4px;
+}
+#rpe-content .results-container,
+#sbbr-content .results-container {
+    margin-top: 8px;
+}
+#rpe-sub-observe,
+#rpe-sub-formal,
+#sbbr-sub-observe,
+#sbbr-sub-formal,
+#sbbr-sub-reserve {
+    padding-top: 8px;
+}
+#rpe-sub-observe > .refresh-btn,
+#rpe-sub-formal > .refresh-btn,
+#sbbr-sub-observe > .refresh-btn,
+#sbbr-sub-formal > .refresh-btn {
+    margin-bottom: 14px;
+}
+.rpe-board-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.rpe-board-wrap-label {
+    color: #666;
+    font-size: 13px;
+    white-space: nowrap;
 }
 .gms-sub-tab {
     border: none;
@@ -1364,7 +1481,8 @@
 #resultsContainer-gms .action-links,
 #resultsContainer-urt .action-links,
 #resultsTable-gms-trade-observe .action-links,
-#resultsTable-tvo-trade-observe .action-links {
+#resultsTable-tvo-trade-observe .action-links,
+#rpeResultsBody .action-links {
     display: flex;
     justify-content: center;
     align-items: center;
