@@ -189,6 +189,15 @@ except ImportError as e:
     sbbr_router = None
 
 try:
+    from .rpe_routes import stock_router as rpe_stock_router
+    from .rpe_routes import frontend_router as rpe_frontend_router
+    print("rpe_routers 导入成功")
+except ImportError as e:
+    print(f"rpe_routers 导入失败: {e}")
+    rpe_stock_router = None
+    rpe_frontend_router = None
+
+try:
     from .gms_user_preferences_routes import router as gms_user_preferences_router
     print("gms_user_preferences_router 导入成功")
 except ImportError as e:
@@ -570,6 +579,8 @@ _include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")
 _include_router(app, gms_trade_observe_router, "gms_trade_observe")
 _include_router(app, gms_formal_trade_router, "gms_formal_trade")
 _include_router(app, sbbr_router, "sbbr")
+_include_router(app, rpe_stock_router, "rpe_stock")
+_include_router(app, rpe_frontend_router, "rpe_frontend")
 _include_router(app, gms_user_preferences_router, "gms_user_preferences")
 _include_router(app, triple_volume_trade_observe_router, "triple_volume_trade_observe")
 _include_router(app, screening_router, "screening")
@@ -856,6 +867,19 @@ if sbbr_admin_router is not None:
     print("SBBR admin 路由注册成功 (/api/admin/sbbr)")
 else:
     print("SBBR admin 路由未注册")
+
+try:
+    from backend_api.admin.rpe_admin_routes import router as rpe_admin_router
+    print("rpe_admin_router 导入成功")
+except Exception as e:
+    print(f"rpe_admin_router 导入失败: {e}")
+    rpe_admin_router = None
+
+if rpe_admin_router is not None:
+    app.include_router(rpe_admin_router)
+    print("RPE admin 路由注册成功 (/api/admin/rpe)")
+else:
+    print("RPE admin 路由未注册")
 
 # 尝试导入 URT admin 路由
 try:

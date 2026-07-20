@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPE 比价效应信号追溯</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+
+    <div class="container">
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">RPE 比价效应 · 信号追溯</div>
+            <div class="toolbar">
+                <div class="toolbar-row">
+                    <label>股票代码: <input type="text" id="codeInput" placeholder="如 000001" style="width:100px;"></label>
+                    <label>config_id: <input type="number" id="configIdInput" placeholder="默认" style="width:80px;"></label>
+                    <label>条数: <input type="number" id="limitInput" value="120" min="10" max="500" style="width:70px;"></label>
+                    <button id="searchBtn">查询</button>
+                    <a href="screening.html#rpe" class="btn-secondary">返回选股</a>
+                </div>
+            </div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 RPE 追溯数据（需日终预计算或现场选股回写）</div>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>收盘</th>
+                            <th>Z-Score</th>
+                            <th>信号类型</th>
+                            <th>入场</th>
+                            <th>板块</th>
+                            <th>最近支撑</th>
+                            <th>最近阻力</th>
+                            <th>结构有效</th>
+                        </tr>
+                    </thead>
+                    <tbody id="traceBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+    (function () {
+      function apiBase() {
+        if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
+          return window.API_BASE_URL.replace(/\/+$/, '');
+        }
+        if (typeof Config !== 'undefined' && Config && typeof Config.getApiBaseUrl === 'function') {
+          return String(Config.getApiBaseUrl() || '').replace(/\/+$/, '');
+        }
+        return '';
+      }
+      function authHeaders() {
+        const token = localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+        const h = { 'Content-Type': 'application/json' };
+        if (token) h.Authorization = `Bearer ${token}`;
+        return h;
+      }
+      function fmt(v, n) {
+        if (v == null || v === '') return '-';
+        const x = Number(v);
+        return Number.isFinite(x) ? x.toFixed(n == null ? 2 : n) : String(v);
+      }
+      async function load() {
+        const code = (document.getElementById('codeInput').value || '').trim();
+        const body = document.getElementById('traceBody');
+        const empty = document.getElementById('emptyMsg');
+        const loading = document.getElementById('loadingMsg');
+        if (!code) {
+          alert('请输入股票代码');
+          return;
+        }
+        empty.style.display = 'none';
+        loading.style.display = 'block';
+        body.innerHTML = '';
+        try {
+          const q = new URLSearchParams({ code, limit: document.getElementById('limitInput').value || '120' });
+          const cid = document.getElementById('configIdInput').value;
+          if (cid) q.set('config_id', cid);
+          const url = `${apiBase()}/api/stock/rpe-signal-trace?${q}`;
+          const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
+          const res = await fetchFn(url, { headers: authHeaders() });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || data.message || res.statusText);
+          const rows = data.items || [];
+          if (!rows.length) {
+            empty.style.display = 'block';
+            return;
+          }
+          body.innerHTML = rows.map((r) => `<tr>
+            <td>${r.date || '-'}</td>
+            <td>${fmt(r.close)}</td>
+            <td>${fmt(r.z_score, 3)}</td>
+            <td>${r.signal_type || '-'}</td>
+            <td>${r.entry_signal ? '是' : '否'}</td>
+            <td>${r.sector_name || r.sector_id || '-'}</td>
+            <td>${fmt(r.nearest_support)}</td>
+            <td>${fmt(r.nearest_resistance)}</td>
+            <td>${r.structure_valid ? '是' : '否'}</td>
+          </tr>`).join('');
+        } catch (e) {
+          empty.style.display = 'block';
+          empty.textContent = e.message || String(e);
+        } finally {
+          loading.style.display = 'none';
+        }
+      }
+      document.getElementById('searchBtn').addEventListener('click', load);
+      const params = new URLSearchParams(location.search);
+      const code = params.get('code');
+      if (code) {
+        document.getElementById('codeInput').value = code;
+        load();
+      }
+    })();
+    </script>
+
+    <footer class="icp-footer">
+        <div class="icp-container">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">京ICP备18061239号-1</a>
+        </div>
+    </footer>
+</body>
+
+</html>

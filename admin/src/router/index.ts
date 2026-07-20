@@ -93,6 +93,11 @@ const routes = [
         component: () => import('@/views/SBBRManagementView.vue')
       },
       {
+        path: 'rpe-management',
+        name: 'RPEManagement',
+        component: () => import('@/views/RPEManagementView.vue')
+      },
+      {
         path: 'urt-management',
         name: 'URTManagement',
         component: () => import('@/views/UrtManagementView.vue')

@@ -1,0 +1,302 @@
+/**
+ * 比价效应（RPE）选股页：选股 / 交易观察 / 正式交易
+ */
+(function () {
+  function apiBase() {
+    if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
+      return window.API_BASE_URL.replace(/\/+$/, '');
+    }
+    if (typeof Config !== 'undefined' && Config && typeof Config.getApiBaseUrl === 'function') {
+      return String(Config.getApiBaseUrl() || '').replace(/\/+$/, '');
+    }
+    return '';
+  }
+
+  function apiUrl(path) {
+    const p = path.startsWith('/') ? path : `/${path}`;
+    return `${apiBase()}${p}`;
+  }
+
+  function authHeaders() {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+    const h = { 'Content-Type': 'application/json' };
+    if (token) h.Authorization = `Bearer ${token}`;
+    return h;
+  }
+
+  async function api(url, options) {
+    const full = url.startsWith('http') ? url : apiUrl(url);
+    const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
+    const res = await fetchFn(full, {
+      ...options,
+      headers: { ...authHeaders(), ...(options && options.headers) },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.detail || data.message || res.statusText;
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+    return data;
+  }
+
+  function showErr(msg) {
+    const el = document.getElementById('rpeError');
+    if (!el) return;
+    el.style.display = msg ? 'block' : 'none';
+    el.textContent = msg || '';
+  }
+
+  function switchSub(name) {
+    document.querySelectorAll('#rpe-content [data-rpe-sub]').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-rpe-sub') === name);
+    });
+    ['signals', 'observe', 'formal'].forEach((k) => {
+      const panel = document.getElementById(`rpe-sub-${k}`);
+      if (panel) panel.style.display = k === name ? 'block' : 'none';
+    });
+  }
+
+  function fmt(v, n) {
+    if (v == null || v === '') return '-';
+    const x = Number(v);
+    return Number.isFinite(x) ? x.toFixed(n == null ? 2 : n) : String(v);
+  }
+
+  function yn(v) {
+    if (v === true) return '是';
+    if (v === false) return '否';
+    return '-';
+  }
+
+  async function refreshSignals() {
+    const loading = document.getElementById('rpeLoading');
+    const body = document.getElementById('rpeResultsBody');
+    showErr('');
+    if (loading) loading.style.display = 'flex';
+    try {
+      const scope = document.getElementById('rpeScope').value || 'cn';
+      const date = document.getElementById('rpeDate').value || '';
+      const entryOnly = document.getElementById('rpeEntryOnly').checked;
+      const traceOnly = document.getElementById('rpeTraceOnly').checked;
+      const signalType = document.getElementById('rpeSignalType').value || '';
+      const boardCode = (document.getElementById('rpeBoardCode').value || '').trim();
+      const stockCode = (document.getElementById('rpeStockCode').value || '').trim();
+
+      if (scope === 'industry_board' && !boardCode) {
+        throw new Error('行业板块范围需要填写板块代码');
+      }
+      if (scope === 'single' && !stockCode) {
+        throw new Error('单股范围需要填写股票代码');
+      }
+
+      const q = new URLSearchParams({
+        scope,
+        entry_only: String(entryOnly),
+        max_results: '200',
+      });
+      if (date) q.set('date', date);
+      if (signalType) q.set('signal_type', signalType);
+      if (boardCode) q.set('board_code', boardCode);
+      if (stockCode) q.set('stock_code', stockCode);
+      if (traceOnly && scope === 'cn') q.set('trace_only', 'true');
+
+      let data = await api(`/api/screening/rpe-strategy?${q}`);
+      if (traceOnly && scope === 'cn' && (!data.data || !data.data.length)) {
+        q.delete('trace_only');
+        data = await api(`/api/screening/rpe-strategy?${q}`);
+      }
+      const rows = data.data || [];
+      document.getElementById('rpeResultsCount').textContent = `共 ${rows.length} 只`;
+      document.getElementById('rpeSearchMeta').textContent =
+        `日期 ${data.search_date || '-'} · 来源 ${data.source || 'live'} · config ${data.config_id || ''}`;
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="11" class="empty-state">无符合条件的结果</td></tr>';
+        return;
+      }
+      body.innerHTML = rows
+        .map((r) => {
+          const snap = encodeURIComponent(JSON.stringify(r));
+          return `<tr>
+            <td>${r.code || ''}</td>
+            <td>${r.name || ''}</td>
+            <td>${r.sector_name || r.sector_id || '-'}</td>
+            <td>${fmt(r.z_score, 2)}</td>
+            <td>${r.signal_type || '-'}</td>
+            <td>${yn(r.entry_signal)}</td>
+            <td>${fmt(r.nearest_support)}</td>
+            <td>${fmt(r.nearest_resistance)}</td>
+            <td>${yn(r.structure_valid)}</td>
+            <td>${yn(r.liquidity_ok)}</td>
+            <td>
+              <button type="button" class="gms-btn-outline rpe-add-observe"
+                data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>
+              <a class="gms-btn-outline" href="stock_rpe_trace.html?code=${encodeURIComponent(r.code || '')}" target="_blank" rel="noopener">追溯</a>
+            </td>
+          </tr>`;
+        })
+        .join('');
+    } catch (e) {
+      showErr(e.message || String(e));
+      body.innerHTML = '<tr><td colspan="11" class="empty-state">加载失败</td></tr>';
+    } finally {
+      if (loading) loading.style.display = 'none';
+    }
+  }
+
+  async function refreshObserve() {
+    const body = document.getElementById('rpeObserveBody');
+    try {
+      const data = await api('/api/stock/rpe-trade-observe/list');
+      const rows = data.items || [];
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="5" class="empty-state">暂无观察股</td></tr>';
+        return;
+      }
+      body.innerHTML = rows
+        .map(
+          (r) => `<tr>
+          <td>${r.code}</td><td>${r.name || ''}</td><td>${r.signal_date || '-'}</td>
+          <td>${yn(r.above_support)}</td>
+          <td>
+            <button type="button" class="refresh-btn rpe-to-formal" data-id="${r.id}">转正式</button>
+            <button type="button" class="gms-btn-outline rpe-del-observe" data-id="${r.id}">移除</button>
+          </td>
+        </tr>`
+        )
+        .join('');
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-state">${e.message}</td></tr>`;
+    }
+  }
+
+  async function refreshFormal() {
+    const body = document.getElementById('rpeFormalBody');
+    try {
+      const data = await api('/api/stock/rpe-formal-trade/list');
+      const rows = data.items || [];
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="9" class="empty-state">暂无正式交易</td></tr>';
+        return;
+      }
+      body.innerHTML = rows
+        .map((r) => {
+          const live = r.live_eval || {};
+          const breached = live.structure_break || live.breached ? '结构破位' : '';
+          const evalTxt = breached || (live.note || r.last_eval && JSON.stringify(r.last_eval)) || '-';
+          return `<tr>
+            <td>${r.code}</td><td>${r.name || ''}</td><td>${r.status}</td>
+            <td>${fmt(r.entry_price)}</td>
+            <td>${fmt(r.structure_support)}</td><td>${fmt(r.structure_resistance)}</td>
+            <td>${r.exit_reason || '-'}</td><td>${evalTxt}</td>
+            <td>
+              ${
+                r.status === 'open'
+                  ? `<button type="button" class="gms-btn-outline rpe-close-trade" data-id="${r.id}">结构破位平仓</button>`
+                  : ''
+              }
+              <button type="button" class="gms-btn-outline rpe-del-formal" data-id="${r.id}">删除</button>
+            </td>
+          </tr>`;
+        })
+        .join('');
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="9" class="empty-state">${e.message}</td></tr>`;
+    }
+  }
+
+  function bind() {
+    const root = document.getElementById('rpe-content');
+    if (!root) return;
+
+    root.querySelectorAll('[data-rpe-sub]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sub = btn.getAttribute('data-rpe-sub');
+        switchSub(sub);
+        if (sub === 'observe') refreshObserve();
+        if (sub === 'formal') refreshFormal();
+      });
+    });
+
+    document.getElementById('rpeRefreshBtn')?.addEventListener('click', () => refreshSignals());
+    document.getElementById('rpeObserveRefreshBtn')?.addEventListener('click', () => refreshObserve());
+    document.getElementById('rpeFormalRefreshBtn')?.addEventListener('click', () => refreshFormal());
+
+    document.getElementById('rpeResultsBody')?.addEventListener('click', async (e) => {
+      const obs = e.target.closest('.rpe-add-observe');
+      if (!obs) return;
+      let snap = null;
+      try {
+        snap = JSON.parse(decodeURIComponent(obs.getAttribute('data-snap') || '%7B%7D'));
+      } catch (_) {}
+      try {
+        await api('/api/stock/rpe-trade-observe/add', {
+          method: 'POST',
+          body: JSON.stringify({
+            code: obs.getAttribute('data-code'),
+            name: obs.getAttribute('data-name'),
+            signal_date: obs.getAttribute('data-date'),
+            signal_snapshot: snap,
+          }),
+        });
+        alert('已加入交易观察');
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    document.getElementById('rpeObserveBody')?.addEventListener('click', async (e) => {
+      const toFormal = e.target.closest('.rpe-to-formal');
+      if (toFormal) {
+        const price = window.prompt('请输入入场价格');
+        if (!price) return;
+        try {
+          await api(`/api/stock/rpe-formal-trade/from-observe/${toFormal.getAttribute('data-id')}`, {
+            method: 'POST',
+            body: JSON.stringify({ entry_price: Number(price) }),
+          });
+          alert('已转入正式交易（离场仅认结构破位）');
+          switchSub('formal');
+          refreshFormal();
+        } catch (err) {
+          alert(err.message);
+        }
+        return;
+      }
+      const del = e.target.closest('.rpe-del-observe');
+      if (del) {
+        await api(`/api/stock/rpe-trade-observe/${del.getAttribute('data-id')}`, { method: 'DELETE' });
+        refreshObserve();
+      }
+    });
+
+    document.getElementById('rpeFormalBody')?.addEventListener('click', async (e) => {
+      const closeBtn = e.target.closest('.rpe-close-trade');
+      if (closeBtn) {
+        const px = window.prompt('平仓价格（exit_reason=structure_break）');
+        if (!px) return;
+        await api(`/api/stock/rpe-formal-trade/${closeBtn.getAttribute('data-id')}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'closed',
+            exit_price: Number(px),
+            exit_reason: 'structure_break',
+          }),
+        });
+        refreshFormal();
+        return;
+      }
+      const del = e.target.closest('.rpe-del-formal');
+      if (del) {
+        if (!window.confirm('确定删除？')) return;
+        await api(`/api/stock/rpe-formal-trade/${del.getAttribute('data-id')}`, { method: 'DELETE' });
+        refreshFormal();
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
+})();

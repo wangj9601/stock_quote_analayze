@@ -3438,3 +3438,93 @@ async def get_sbbr_strategy(
             "source": "live",
         }
     )
+
+
+@router.get("/rpe-strategy")
+async def get_rpe_strategy(
+    scope: str = Query("cn", description="cn|watchlist|industry_board|single"),
+    date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    config_id: Optional[int] = Query(None),
+    entry_only: bool = Query(False),
+    signal_type: Optional[str] = Query(None, description="catch_up|lead"),
+    board_code: Optional[str] = Query(None),
+    stock_code: Optional[str] = Query(None),
+    trace_only: bool = Query(False),
+    max_results: Optional[int] = Query(200, ge=1, le=2000),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """比价效应（RPE）选股。"""
+    try:
+        from backend_core.strategies.rpe.frontend_interface import RPEFrontendInterface
+        from backend_api.models import User, Watchlist
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": f"RPE 模块不可用: {e}", "data": []},
+        )
+
+    codes = None
+    if scope in ("watchlist", "single"):
+        if scope == "single":
+            if not stock_code:
+                raise HTTPException(status_code=400, detail="single scope 需要 stock_code")
+            codes = [stock_code]
+        else:
+            if not token:
+                raise HTTPException(status_code=401, detail="watchlist 需要登录")
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                username = payload.get("sub")
+                user = db.query(User).filter(User.username == username).first()
+                if not user:
+                    raise HTTPException(status_code=401, detail="用户不存在")
+            except JWTError:
+                raise HTTPException(status_code=401, detail="无效的认证凭据")
+            codes = [str(i.stock_code).strip() for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()]
+            if not codes:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": [],
+                        "total": 0,
+                        "strategy_name": "比价效应",
+                        "scope": scope,
+                        "message": "自选股为空",
+                    }
+                )
+    elif scope == "industry_board":
+        if not board_code:
+            raise HTTPException(status_code=400, detail="industry_board 需要 board_code")
+    elif scope != "cn":
+        raise HTTPException(status_code=400, detail="scope 仅支持 cn|watchlist|industry_board|single")
+
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        return RPEFrontendInterface.get_selection_results(
+            date=date,
+            config_id=config_id,
+            scope=scope if scope == "cn" else "cn",
+            codes=codes,
+            board_code=board_code,
+            entry_only=entry_only,
+            signal_type=signal_type,
+            trace_only=trace_only and scope == "cn" and not board_code and not codes,
+            max_results=max_results or 200,
+            db=db,
+        )
+
+    result = await loop.run_in_executor(None, _run)
+    return JSONResponse(
+        {
+            "success": True,
+            "data": result.get("data") or [],
+            "total": result.get("total") or 0,
+            "search_date": result.get("search_date"),
+            "strategy_name": "比价效应",
+            "scope": scope,
+            "config_id": result.get("config_id"),
+            "source": result.get("source"),
+        }
+    )
