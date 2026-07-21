@@ -10,12 +10,16 @@
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| `TRIPLE_VOLUME_OBSERVE_ENABLED` | 是否执行扫描/复核任务内逻辑（采集进程内） | `false` |
+| `TRIPLE_VOLUME_OBSERVE_ENABLED` | **总开关**：为 `false` 时不注册采集进程内扫描/复核 cron，且 PushScheduler 跳过 `triple_volume_observe_*` 微信/邮件推送 | `false` |
 | `TRIPLE_VOLUME_MARKETS` | 逗号分隔，`CN` / `HK` | `CN` |
 | `TRIPLE_VOLUME_BOARDS` | 逗号分隔板块键，空=不限（仍排除 ST）；键与 VSB 一致如 `CYB`、`SZ_MAIN` 等 | 空 |
 | `TRIPLE_VOLUME_RATIO` | 爆量倍数阈值 | `3` |
 
+> **当前默认已关闭**：无需改库。若需恢复，将 `TRIPLE_VOLUME_OBSERVE_ENABLED=true` 写入 `.env` 并重启 `backend_core`（定时任务）与推送调度进程。
+
 ## 采集调度（APScheduler，`backend_core/data_collectors/main.py`）
+
+仅当 `TRIPLE_VOLUME_OBSERVE_ENABLED=true` 时注册下列任务：
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
