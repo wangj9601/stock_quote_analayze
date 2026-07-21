@@ -32,8 +32,8 @@
             <button class="strategy-tab" data-strategy="gms" id="gmsTab">GMS均值引力动量</button>
             <button class="strategy-tab" data-strategy="volume-shrink-breakout" id="volumeShrinkBreakoutTab">3倍量缩量突破</button>
             <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
-            <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab">做小做底</button>
-            <button class="strategy-tab" data-strategy="rpe" id="rpeTab">比价效应</button>
+            <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab" data-perm="channel.screening.tab.sbbr">做小做底</button>
+            <button class="strategy-tab" data-strategy="rpe" id="rpeTab" data-perm="channel.screening.tab.rpe">比价效应</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -1570,7 +1570,7 @@
             </div>
         </div>
 
-        <div id="sbbr-content" class="strategy-content">
+        <div id="sbbr-content" class="strategy-content" data-perm="channel.screening.tab.sbbr">
             <div class="gms-integrated-head">
                 <div class="gms-sub-tabs">
                     <button type="button" class="gms-sub-tab active" data-sbbr-sub="signals">策略选股</button>
@@ -1602,7 +1602,7 @@
                         <label><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
                     </div>
                     <div class="param-actions">
-                        <button type="button" id="sbbrRefreshBtn" class="refresh-btn">刷新筛选</button>
+                        <button type="button" id="sbbrRefreshBtn" class="refresh-btn" data-strategy="sbbr" data-perm="channel.screening.tab.sbbr.btn.refresh">刷新筛选</button>
                     </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                 </div>
@@ -1667,7 +1667,7 @@
             </div>
         </div>
 
-        <div id="rpe-content" class="strategy-content">
+        <div id="rpe-content" class="strategy-content" data-perm="channel.screening.tab.rpe">
             <div class="gms-integrated-head">
                 <div class="gms-sub-tabs">
                     <button type="button" class="gms-sub-tab active" data-rpe-sub="signals">策略选股</button>
@@ -1718,7 +1718,7 @@
                         <label><input type="checkbox" id="rpeTraceOnly" checked> 优先读预计算</label>
                     </div>
                     <div class="param-actions">
-                        <button type="button" id="rpeRefreshBtn" class="refresh-btn">刷新筛选</button>
+                        <button type="button" id="rpeRefreshBtn" class="refresh-btn" data-strategy="rpe" data-perm="channel.screening.tab.rpe.btn.refresh">刷新筛选</button>
                         <a class="gms-btn-outline" href="stock_rpe_trace.html" target="_blank" rel="noopener">信号追溯</a>
                     </div>
                     <span id="rpeSearchMeta" class="gms-meta-text"></span>

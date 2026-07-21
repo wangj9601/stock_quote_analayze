@@ -25,6 +25,8 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.screening.tab.pvfrs", "name": "PVFRS量价频幅度共振", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 70},
     {"code": "channel.screening.tab.vsb", "name": "3倍量缩量突破", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 80},
     {"code": "channel.screening.tab.urt", "name": "上升趋势", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 90},
+    {"code": "channel.screening.tab.sbbr", "name": "做小做底", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 100},
+    {"code": "channel.screening.tab.rpe", "name": "比价效应", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 110},
 
     # ── 三级：选股按钮 ──
     {"code": "channel.screening.tab.cyb_midline.btn.refresh", "name": "刷新筛选", "level": 3, "parent_code": "channel.screening.tab.cyb_midline", "channel_code": "screening", "sort_order": 10},
@@ -35,6 +37,8 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.screening.tab.vsb.btn.add_observe", "name": "加入观察", "level": 3, "parent_code": "channel.screening.tab.vsb", "channel_code": "screening", "sort_order": 20},
     {"code": "channel.screening.tab.urt.btn.refresh", "name": "URT刷新", "level": 3, "parent_code": "channel.screening.tab.urt", "channel_code": "screening", "sort_order": 10},
     {"code": "channel.screening.tab.urt.btn.export", "name": "URT导出", "level": 3, "parent_code": "channel.screening.tab.urt", "channel_code": "screening", "sort_order": 20},
+    {"code": "channel.screening.tab.sbbr.btn.refresh", "name": "SBBR刷新", "level": 3, "parent_code": "channel.screening.tab.sbbr", "channel_code": "screening", "sort_order": 10},
+    {"code": "channel.screening.tab.rpe.btn.refresh", "name": "RPE刷新", "level": 3, "parent_code": "channel.screening.tab.rpe", "channel_code": "screening", "sort_order": 10},
 
     # ── 二级：分析标签页 ──
     {"code": "channel.analyze.tab.market", "name": "市场分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 10},
