@@ -230,6 +230,8 @@ class RPEStrategyEngine:
         config: Optional[Dict] = None,
         entry_only: bool = False,
         board_kind: str = "industry",
+        include_no_signal: bool = False,
+        codes_filter: Optional[set] = None,
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         lookback = int(cfg.get("lookback_days", 250))
@@ -239,6 +241,13 @@ class RPEStrategyEngine:
             return []
         codes = [m["code"] for m in members]
         name_map = {m["code"]: m.get("name") for m in members}
+        # 单股/自选目标股若不在成分列表（编码差异等），仍并入面板以便评估
+        if codes_filter:
+            for c in codes_filter:
+                cn = _norm_code(c)
+                if cn and cn not in name_map:
+                    codes.append(cn)
+                    name_map[cn] = None
         panel = self.loader.load_sector_panel(codes, end_date=date, lookback=lookback)
         if len(panel) < min_members:
             return []
@@ -249,8 +258,21 @@ class RPEStrategyEngine:
         slope = sector_slope(benchmark, int(cfg.get("sector_slope_window", 60)))
         trade_date = date or (benchmark[-1]["date"] if benchmark else self.loader.resolve_trade_date())
 
+        # 全成分建基准；仅对目标代码评估（单股/自选过滤时）
+        eval_codes = list(panel.keys())
+        if codes_filter is not None:
+            filt = {_norm_code(c) for c in codes_filter}
+            eval_codes = [c for c in eval_codes if c in filt]
+            # 目标股有日线但未进 panel 键名时再补一次
+            for c in filt:
+                if c not in panel:
+                    bars = self.loader.load_bars(c, end_date=date, limit=lookback)
+                    if bars:
+                        panel[c] = bars
+                        eval_codes.append(c)
+
         results = []
-        for code in panel.keys():
+        for code in eval_codes:
             try:
                 row = self.evaluate_in_sector(
                     code,
@@ -267,13 +289,50 @@ class RPEStrategyEngine:
                     continue
                 if entry_only and not row.get("entry_signal"):
                     continue
-                # 至少有信号类型或观察价值
-                if not row.get("signal_type") and not row.get("entry_signal"):
+                # 选股默认只要有信号类型；单股明细可返回区间内（in_band）结果
+                if (
+                    not include_no_signal
+                    and not row.get("signal_type")
+                    and not row.get("entry_signal")
+                ):
                     continue
                 results.append(row)
             except Exception as e:
                 logger.debug("RPE evaluate %s in %s failed: %s", code, board_code, e)
         return results
+
+    def _resolve_boards_for_codes(
+        self,
+        codes: List[str],
+        board_kind: str,
+    ) -> List[Dict[str, str]]:
+        """
+        为代码列表解析所属板块。
+        优先使用指定 kind（默认行业）；若某股无行业归属则回退概念板块。
+        返回项含 board_code / board_name / board_kind。
+        """
+        kind = "concept" if board_kind == "concept" else "industry"
+        jobs: List[Dict[str, str]] = []
+        seen = set()
+        for c in codes:
+            found = self.loader.find_boards_for_code(c, board_kind=kind)
+            use_kind = kind
+            if not found and kind == "industry":
+                found = self.loader.find_boards_for_code(c, board_kind="concept")
+                use_kind = "concept"
+            for b in found:
+                key = (str(b["board_code"]), use_kind)
+                if key in seen:
+                    continue
+                seen.add(key)
+                jobs.append(
+                    {
+                        "board_code": str(b["board_code"]),
+                        "board_name": str(b.get("board_name") or b["board_code"]),
+                        "board_kind": use_kind,
+                    }
+                )
+        return jobs
 
     def screen(
         self,
@@ -286,40 +345,52 @@ class RPEStrategyEngine:
         signal_type: Optional[str] = None,
         max_results: Optional[int] = None,
         board_kind: str = "industry",
+        include_no_signal: bool = False,
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         scan = cfg.get("scan") or {}
         max_n = max_results if max_results is not None else int(scan.get("max_results", 200))
         trade_date = date or self.loader.resolve_trade_date()
         kind = "concept" if board_kind == "concept" else "industry"
+        code_filter = {_norm_code(c) for c in codes} if codes else None
 
-        boards: List[Dict[str, str]]
+        board_jobs: List[Dict[str, str]]
         if board_codes:
             all_boards = {b["board_code"]: b for b in self.loader.list_boards(kind)}
-            boards = []
+            board_jobs = []
             for bc in board_codes:
                 b = all_boards.get(bc) or {"board_code": bc, "board_name": bc}
-                boards.append(b)
+                board_jobs.append(
+                    {
+                        "board_code": b["board_code"],
+                        "board_name": b.get("board_name") or b["board_code"],
+                        "board_kind": kind,
+                    }
+                )
         elif codes:
-            # 自选/单股：收集涉及板块
-            seen = {}
-            for c in codes:
-                for b in self.loader.find_boards_for_code(c, board_kind=kind):
-                    seen[b["board_code"]] = b
-            boards = list(seen.values())
+            # 自选/单股：按个股归属板块建簇（行业优先，无则概念）
+            board_jobs = self._resolve_boards_for_codes(list(codes), kind)
         else:
-            boards = self.loader.list_boards(kind, limit=scan.get("max_boards"))
+            board_jobs = [
+                {
+                    "board_code": b["board_code"],
+                    "board_name": b.get("board_name") or b["board_code"],
+                    "board_kind": kind,
+                }
+                for b in self.loader.list_boards(kind, limit=scan.get("max_boards"))
+            ]
 
-        code_filter = {_norm_code(c) for c in codes} if codes else None
         results: List[Dict[str, Any]] = []
-        for b in boards:
+        for b in board_jobs:
             rows = self.screen_board(
                 b["board_code"],
                 b.get("board_name") or b["board_code"],
                 date=trade_date,
                 config=cfg,
                 entry_only=False,
-                board_kind=kind,
+                board_kind=b.get("board_kind") or kind,
+                include_no_signal=include_no_signal,
+                codes_filter=code_filter,
             )
             for r in rows:
                 if code_filter is not None and r["code"] not in code_filter:

@@ -3454,13 +3454,20 @@ async def get_rpe_strategy(
     concept_board_code: Optional[List[str]] = Query(
         None, description="scope=concept_board 时：概念板块代码，可多选"
     ),
-    stock_code: Optional[str] = Query(None),
+    stock_code: Optional[str] = Query(
+        None, description="scope=single 时：股票代码或名称（如 000001 / 平安银行）"
+    ),
     trace_only: bool = Query(False),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
-    """比价效应（RPE）选股。"""
+    """
+    比价效应（RPE）选股。
+    scope=single：按个股所属行业（无则概念）板块建簇，计算相对基准的 Z-Score/KDE/信号；
+    跳过「仅有信号才返回」过滤，始终返回该股策略明细（含区间内 in_band）。
+    scope=watchlist：按自选股代码列表解析所属板块后计算信号。
+    """
     try:
         from backend_core.strategies.rpe.frontend_interface import RPEFrontendInterface
         from backend_api.models import User, Watchlist
@@ -3470,14 +3477,29 @@ async def get_rpe_strategy(
             content={"success": False, "message": f"RPE 模块不可用: {e}", "data": []},
         )
 
+    scope_raw = (scope or "cn").strip().lower()
+    if scope_raw == "all":
+        scope_raw = "cn"
+
     codes = None
     board_codes = None
     board_kind = "industry"
-    if scope in ("watchlist", "single"):
-        if scope == "single":
-            if not stock_code:
-                raise HTTPException(status_code=400, detail="single scope 需要 stock_code")
-            codes = [stock_code]
+    extra_meta: Dict[str, Any] = {}
+    include_no_signal = False
+
+    if scope_raw in ("watchlist", "single"):
+        if scope_raw == "single":
+            if not stock_code or not str(stock_code).strip():
+                raise HTTPException(status_code=400, detail="单股范围需要填写股票代码或名称")
+            resolved = _resolve_gms_stock_code_from_input(db, stock_code)
+            if not resolved:
+                raise HTTPException(status_code=400, detail="未找到匹配的股票，请检查代码或名称")
+            if not (str(resolved).isdigit() and len(str(resolved)) == 6):
+                raise HTTPException(status_code=400, detail="比价效应策略暂仅支持 A 股个股")
+            codes = [str(resolved).zfill(6)]
+            extra_meta["stock_code"] = codes[0]
+            # 单股：展示完整策略明细（含未触发买点）
+            include_no_signal = True
         else:
             if not token:
                 raise HTTPException(status_code=401, detail="watchlist 需要登录")
@@ -3489,7 +3511,16 @@ async def get_rpe_strategy(
                     raise HTTPException(status_code=401, detail="用户不存在")
             except JWTError:
                 raise HTTPException(status_code=401, detail="无效的认证凭据")
-            codes = [str(i.stock_code).strip() for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()]
+            raw_codes = [
+                str(i.stock_code).strip()
+                for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+            ]
+            codes = []
+            for c in raw_codes:
+                n = _normalize_stock_code_for_gms_pool(c)
+                if n and n.isdigit() and len(n) == 6:
+                    codes.append(n)
+            codes = list(dict.fromkeys(codes))
             if not codes:
                 return JSONResponse(
                     {
@@ -3497,11 +3528,11 @@ async def get_rpe_strategy(
                         "data": [],
                         "total": 0,
                         "strategy_name": "比价效应",
-                        "scope": scope,
-                        "message": "自选股为空",
+                        "scope": scope_raw,
+                        "message": "自选股为空或无有效 A 股代码",
                     }
                 )
-    elif scope == "industry_board":
+    elif scope_raw == "industry_board":
         board_kind = "industry"
         board_codes = _normalize_gms_board_codes(industry_board_code) or (
             [board_code] if board_code else []
@@ -3516,18 +3547,21 @@ async def get_rpe_strategy(
             pass
         if not board_codes:
             raise HTTPException(status_code=400, detail="未找到有效的行业板块代码")
-    elif scope == "concept_board":
+    elif scope_raw == "concept_board":
         board_kind = "concept"
         board_codes = _normalize_gms_board_codes(concept_board_code, upper=True) or (
             [board_code] if board_code else []
         )
         if not board_codes:
             raise HTTPException(status_code=400, detail="concept_board 需要选择概念板块")
-    elif scope != "cn":
+    elif scope_raw != "cn":
         raise HTTPException(
             status_code=400,
             detail="scope 仅支持 cn|watchlist|industry_board|concept_board|single",
         )
+
+    # 单股明细时不强制 entry_only（与 URT 对齐：直接看策略信号）
+    effective_entry_only = False if scope_raw == "single" else entry_only
 
     loop = asyncio.get_event_loop()
 
@@ -3535,14 +3569,15 @@ async def get_rpe_strategy(
         return RPEFrontendInterface.get_selection_results(
             date=date,
             config_id=config_id,
-            scope=scope if scope == "cn" else "cn",
+            scope=scope_raw if scope_raw == "cn" else "cn",
             codes=codes,
             board_codes=board_codes,
             board_kind=board_kind,
-            entry_only=entry_only,
-            signal_type=signal_type,
-            trace_only=trace_only and scope == "cn" and not board_codes and not codes,
+            entry_only=effective_entry_only,
+            signal_type=None if scope_raw == "single" else signal_type,
+            trace_only=trace_only and scope_raw == "cn" and not board_codes and not codes,
             max_results=max_results or 200,
+            include_no_signal=include_no_signal,
             db=db,
         )
 
@@ -3554,10 +3589,12 @@ async def get_rpe_strategy(
             "total": result.get("total") or 0,
             "search_date": result.get("search_date"),
             "strategy_name": "比价效应",
-            "scope": scope,
+            "scope": scope_raw,
             "config_id": result.get("config_id"),
             "source": result.get("source"),
-            "board_kind": board_kind if scope in ("industry_board", "concept_board") else None,
+            "message": result.get("message"),
+            "board_kind": board_kind if scope_raw in ("industry_board", "concept_board") else None,
             "board_codes": board_codes,
+            **extra_meta,
         }
     )

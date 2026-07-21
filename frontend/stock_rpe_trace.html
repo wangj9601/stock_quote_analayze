@@ -24,9 +24,9 @@
                     <label>股票代码: <input type="text" id="codeInput" placeholder="如 000001" style="width:100px;"></label>
                     <label>config_id: <input type="number" id="configIdInput" placeholder="默认" style="width:80px;"></label>
                     <label>条数: <input type="number" id="limitInput" value="120" min="10" max="500" style="width:70px;"></label>
-                    <button id="searchBtn">查询</button>
+                    <button id="searchBtn" type="button">查询</button>
                     <button id="forceComputeBtn" class="btn-secondary" type="button">强制重新计算</button>
-                    <a href="screening.html#rpe" class="btn-secondary">返回选股</a>
+                    <a href="screening.html#rpe" class="btn-secondary" id="backToScreeningBtn">返回选股</a>
                 </div>
             </div>
             <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>

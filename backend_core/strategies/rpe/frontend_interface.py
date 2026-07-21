@@ -23,6 +23,7 @@ class RPEFrontendInterface:
         signal_type: Optional[str] = None,
         trace_only: bool = False,
         max_results: int = 200,
+        include_no_signal: bool = False,
         db=None,
     ) -> Dict[str, Any]:
         from backend_api.database import SessionLocal
@@ -64,6 +65,21 @@ class RPEFrontendInterface:
                     "total": len(rows),
                 }
 
+            # 单股/自选：预先检查是否有板块归属，便于返回可读提示
+            message = None
+            if codes and not resolved_boards:
+                board_jobs = engine._resolve_boards_for_codes(list(codes), kind)
+                if not board_jobs:
+                    message = "未找到所选股票的行业/概念板块归属，无法计算比价效应"
+                    return {
+                        "data": [],
+                        "search_date": trade_date,
+                        "config_id": cid,
+                        "source": "live",
+                        "total": 0,
+                        "message": message,
+                    }
+
             rows = engine.screen(
                 date=trade_date,
                 config=cfg,
@@ -73,6 +89,7 @@ class RPEFrontendInterface:
                 signal_type=signal_type,
                 max_results=max_results,
                 board_kind=kind,
+                include_no_signal=include_no_signal,
             )
 
             try:
@@ -80,13 +97,18 @@ class RPEFrontendInterface:
             except Exception as e:
                 logger.warning("RPE save traces skipped: %s", e)
 
-            return {
+            out: Dict[str, Any] = {
                 "data": rows,
                 "search_date": trade_date,
                 "config_id": cid,
                 "source": "live",
                 "total": len(rows),
             }
+            if not rows and codes and include_no_signal:
+                out["message"] = (
+                    "已定位板块但未能计算出有效 Z-Score（可能日线不足或成分股过少）"
+                )
+            return out
         finally:
             if own:
                 session.close()
