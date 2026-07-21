@@ -37,3 +37,14 @@ def load_scan_env() -> TripleVolumeScanEnvConfig:
         board_keys=board_keys,
         volume_ratio=ratio,
     )
+
+
+def is_triple_volume_observe_enabled() -> bool:
+    """是否启用 3倍量观察股定时任务 / 对应微信推送。"""
+    return load_scan_env().enabled
+
+
+# 定时推送与微信通知使用的 report_type（关闭时 PushService 直接跳过）
+TRIPLE_VOLUME_PUSH_REPORT_TYPES = frozenset(
+    ("triple_volume_observe_scan", "triple_volume_observe_eval")
+)

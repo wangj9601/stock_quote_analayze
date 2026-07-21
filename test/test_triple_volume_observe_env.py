@@ -2,7 +2,11 @@
 
 import pytest
 
-from backend_core.strategies.triple_volume_observe.env_config import load_scan_env
+from backend_core.strategies.triple_volume_observe.env_config import (
+    TRIPLE_VOLUME_PUSH_REPORT_TYPES,
+    is_triple_volume_observe_enabled,
+    load_scan_env,
+)
 
 
 def test_load_scan_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -15,6 +19,7 @@ def test_load_scan_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.markets == ["CN"]
     assert cfg.board_keys == []
     assert cfg.volume_ratio == 3.0
+    assert is_triple_volume_observe_enabled() is False
 
 
 def test_load_scan_env_enabled_and_boards(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,3 +32,9 @@ def test_load_scan_env_enabled_and_boards(monkeypatch: pytest.MonkeyPatch) -> No
     assert cfg.markets == ["CN", "HK"]
     assert cfg.board_keys == ["CYB", "SZ_MAIN"]
     assert cfg.volume_ratio == 2.5
+    assert is_triple_volume_observe_enabled() is True
+
+
+def test_push_report_types_constant() -> None:
+    assert "triple_volume_observe_scan" in TRIPLE_VOLUME_PUSH_REPORT_TYPES
+    assert "triple_volume_observe_eval" in TRIPLE_VOLUME_PUSH_REPORT_TYPES

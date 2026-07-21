@@ -161,6 +161,27 @@ class PushService:
             tasks_to_push = []
             skipped_count = 0
             for config, user in tasks:
+                # 3倍量观察股：关闭时跳过扫描/复核微信与邮件推送
+                if config.report_type in (
+                    "triple_volume_observe_scan",
+                    "triple_volume_observe_eval",
+                ):
+                    try:
+                        from backend_core.strategies.triple_volume_observe.env_config import (
+                            is_triple_volume_observe_enabled,
+                        )
+
+                        tvo_on = is_triple_volume_observe_enabled()
+                    except Exception:
+                        tvo_on = False
+                    if not tvo_on:
+                        logger.info(
+                            "用户 %s 任务 %s 跳过（TRIPLE_VOLUME_OBSERVE_ENABLED=false）",
+                            user.id,
+                            config.report_type,
+                        )
+                        skipped_count += 1
+                        continue
                 # GMS：按用户自选股涉及的 CN/HK 分别对照 trading_calendar，仅当持仓侧均为休市日才跳过
                 if config.report_type == "gms_daily":
                     skip_gms, gms_skip_reason = False, ""
@@ -374,6 +395,32 @@ class PushService:
                     record_id=None,
                     error_message=error_msg
                 )
+
+            if config.report_type in (
+                "triple_volume_observe_scan",
+                "triple_volume_observe_eval",
+            ):
+                try:
+                    from backend_core.strategies.triple_volume_observe.env_config import (
+                        is_triple_volume_observe_enabled,
+                    )
+
+                    tvo_on = is_triple_volume_observe_enabled()
+                except Exception:
+                    tvo_on = False
+                if not tvo_on:
+                    error_msg = (
+                        f"用户 {user_id} 任务 {config.report_type} 已停用"
+                        "（TRIPLE_VOLUME_OBSERVE_ENABLED=false）"
+                    )
+                    logger.info(error_msg)
+                    return PushResult(
+                        user_id=user_id,
+                        success=False,
+                        channel_results=[],
+                        record_id=None,
+                        error_message=error_msg,
+                    )
             
             # 2. 验证用户是否绑定了推送渠道
             # 获取用户信息

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 logger = logging.getLogger(__name__)
 
@@ -132,25 +132,28 @@ class RPEDataLoader:
         own = self._db is None
         try:
             code_n = _norm_code(code)
+            raw = str(code or "").strip()
+            stripped = code_n.lstrip("0") or code_n
+            variants = list(dict.fromkeys([v for v in (code_n, raw, stripped) if v]))
             if board_kind == "concept":
                 sql = text(
                     """
                     SELECT c.board_code, COALESCE(b.board_name, c.board_code)
                     FROM concept_board_constituents c
                     LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
-                    WHERE c.stock_code = :code OR c.stock_code = :code2
+                    WHERE c.stock_code IN :codes
                     """
-                )
+                ).bindparams(bindparam("codes", expanding=True))
             else:
                 sql = text(
                     """
                     SELECT c.board_code, COALESCE(b.board_name, c.board_code)
                     FROM industry_board_constituents c
                     LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
-                    WHERE c.stock_code = :code OR c.stock_code = :code2
+                    WHERE c.stock_code IN :codes
                     """
-                )
-            rows = db.execute(sql, {"code": code_n, "code2": code}).fetchall()
+                ).bindparams(bindparam("codes", expanding=True))
+            rows = db.execute(sql, {"codes": variants}).fetchall()
             return [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
         except Exception as e:
             logger.warning("find_boards_for_code failed: %s", e)

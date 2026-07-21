@@ -1701,10 +1701,16 @@
                             <option value="lead">领涨 lead</option>
                         </select>
                     </div>
-                    <div class="param-group" id="rpeStockCodeGroup" style="display:none;">
-                        <label for="rpeStockCode">股票代码</label>
-                        <input type="text" id="rpeStockCode" class="param-input" placeholder="single 时必填">
+                    <div class="param-group" id="rpeStockCodeGroup" style="display:none; flex-wrap: wrap; align-items: center; gap: 8px;">
+                        <label for="rpeStockCode">股票代码或名称</label>
+                        <input type="text" id="rpeStockCode" class="param-input" placeholder="如 000001 或 平安银行"
+                            style="min-width: 220px; max-width: 320px;"
+                            title="按该股所属行业（无则概念）板块计算相对基准的 Z/KDE/信号">
+                        <span style="color: #888; font-size: 12px;">输入后按 Enter 或点「刷新筛选」；相对所属板块基准计算信号</span>
                     </div>
+                    <p id="rpeSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">
+                        单股模式：按该股所属行业/概念板块建簇，直接计算并展示策略明细（含未触发买点的 in_band）。
+                    </p>
                     <div class="param-group param-group-check">
                         <label><input type="checkbox" id="rpeEntryOnly"> 仅入场信号</label>
                     </div>

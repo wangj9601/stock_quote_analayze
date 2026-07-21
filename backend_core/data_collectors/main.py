@@ -891,16 +891,41 @@ scheduler.add_job(collect_tushare_historical, 'cron',
     hour=_cron('SCHED_TUSHARE_HISTORICAL_HOUR', '16'),
     minute=_cron_int('SCHED_TUSHARE_HISTORICAL_MINUTE', 2),
     id='tushare_historical')
-scheduler.add_job(run_job_triple_volume_scan, 'cron',
-    day_of_week=_cron('SCHED_TRIPLE_VOLUME_SCAN_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_TRIPLE_VOLUME_SCAN_HOUR', 16),
-    minute=_cron_int('SCHED_TRIPLE_VOLUME_SCAN_MINUTE', 25),
-    id='triple_volume_observe_scan')
-scheduler.add_job(run_job_triple_volume_eval, 'cron',
-    day_of_week=_cron('SCHED_TRIPLE_VOLUME_EVAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_TRIPLE_VOLUME_EVAL_HOUR', 16),
-    minute=_cron_int('SCHED_TRIPLE_VOLUME_EVAL_MINUTE', 40),
-    id='triple_volume_observe_eval')
+
+
+def _register_triple_volume_observe_jobs():
+    """3倍量观察股扫描/复核：默认不注册；仅当 TRIPLE_VOLUME_OBSERVE_ENABLED=true 时启用。"""
+    if not _env_bool("TRIPLE_VOLUME_OBSERVE_ENABLED", False):
+        logging.info(
+            "3倍量观察股定时任务未注册（TRIPLE_VOLUME_OBSERVE_ENABLED=false，含扫描/复核及对应推送数据源）"
+        )
+        return
+    scheduler.add_job(
+        run_job_triple_volume_scan,
+        "cron",
+        day_of_week=_cron("SCHED_TRIPLE_VOLUME_SCAN_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_TRIPLE_VOLUME_SCAN_HOUR", 16),
+        minute=_cron_int("SCHED_TRIPLE_VOLUME_SCAN_MINUTE", 25),
+        id="triple_volume_observe_scan",
+    )
+    scheduler.add_job(
+        run_job_triple_volume_eval,
+        "cron",
+        day_of_week=_cron("SCHED_TRIPLE_VOLUME_EVAL_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_TRIPLE_VOLUME_EVAL_HOUR", 16),
+        minute=_cron_int("SCHED_TRIPLE_VOLUME_EVAL_MINUTE", 40),
+        id="triple_volume_observe_eval",
+    )
+    logging.info(
+        "已注册 3倍量观察股定时任务（TRIPLE_VOLUME_OBSERVE_ENABLED=true）：scan=%s:%s eval=%s:%s",
+        _cron_int("SCHED_TRIPLE_VOLUME_SCAN_HOUR", 16),
+        _cron_int("SCHED_TRIPLE_VOLUME_SCAN_MINUTE", 25),
+        _cron_int("SCHED_TRIPLE_VOLUME_EVAL_HOUR", 16),
+        _cron_int("SCHED_TRIPLE_VOLUME_EVAL_MINUTE", 40),
+    )
+
+
+_register_triple_volume_observe_jobs()
 scheduler.add_job(collect_akshare_index_realtime, 'cron',
     day_of_week=_cron('SCHED_AKSHARE_INDEX_REALTIME_DOW', 'mon-fri'),
     hour=_cron('SCHED_AKSHARE_INDEX_REALTIME_HOUR', '11,15'),

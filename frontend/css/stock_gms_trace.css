@@ -37,17 +37,32 @@
     border-radius: 4px;
 }
 
-.gms-trace-card .toolbar-row button {
+.gms-trace-card .toolbar-row button,
+.gms-trace-card .toolbar-row a.btn-secondary {
     padding: 6px 14px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     background: #2e7d32;
     color: #fff;
+    font-size: 14px;
+    line-height: 1.4;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    text-decoration: none;
 }
 
-.gms-trace-card .toolbar-row button.btn-secondary {
+.gms-trace-card .toolbar-row button.btn-secondary,
+.gms-trace-card .toolbar-row a.btn-secondary {
     background: #666;
+}
+
+.gms-trace-card .toolbar-row a.btn-secondary:hover {
+    background: #555;
+    color: #fff;
+    text-decoration: none;
 }
 
 .gms-trace-card .toolbar-row button:disabled {
