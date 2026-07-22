@@ -30,3 +30,9 @@ def test_recompute_helpers_importable():
 
     assert callable(delete_traces_for_code_config)
     assert callable(recompute_trace_for_stock)
+
+
+def test_recompute_doc_mentions_primary_board():
+    from backend_core.strategies.rpe import signal_storage as ss
+
+    assert "主板块" in (ss.recompute_trace_for_stock.__doc__ or "")

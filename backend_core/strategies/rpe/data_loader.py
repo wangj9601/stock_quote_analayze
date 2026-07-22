@@ -127,14 +127,17 @@ class RPEDataLoader:
             if own:
                 db.close()
 
+    def _code_variants(self, code: str) -> List[str]:
+        code_n = _norm_code(code)
+        raw = str(code or "").strip()
+        stripped = code_n.lstrip("0") or code_n
+        return list(dict.fromkeys([v for v in (code_n, raw, stripped) if v]))
+
     def find_boards_for_code(self, code: str, board_kind: str = "industry") -> List[Dict[str, str]]:
         db = self._session()
         own = self._db is None
         try:
-            code_n = _norm_code(code)
-            raw = str(code or "").strip()
-            stripped = code_n.lstrip("0") or code_n
-            variants = list(dict.fromkeys([v for v in (code_n, raw, stripped) if v]))
+            variants = self._code_variants(code)
             if board_kind == "concept":
                 sql = text(
                     """
@@ -142,6 +145,7 @@ class RPEDataLoader:
                     FROM concept_board_constituents c
                     LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
                     WHERE c.stock_code IN :codes
+                    ORDER BY c.board_code
                     """
                 ).bindparams(bindparam("codes", expanding=True))
             else:
@@ -151,6 +155,7 @@ class RPEDataLoader:
                     FROM industry_board_constituents c
                     LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
                     WHERE c.stock_code IN :codes
+                    ORDER BY c.board_code
                     """
                 ).bindparams(bindparam("codes", expanding=True))
             rows = db.execute(sql, {"codes": variants}).fetchall()
@@ -158,6 +163,84 @@ class RPEDataLoader:
         except Exception as e:
             logger.warning("find_boards_for_code failed: %s", e)
             return []
+        finally:
+            if own:
+                db.close()
+
+    def resolve_primary_board(
+        self,
+        code: str,
+        board_kind: str = "industry",
+        *,
+        allow_fallback: bool = True,
+    ) -> Optional[Dict[str, str]]:
+        """
+        固定个股主板块（用于选股/追溯，避免同股多板块按日跳变）。
+
+        规则：
+        1. 优先指定 kind（默认 industry）；无归属且 allow_fallback 时回退 concept
+        2. 同 kind 多板块时取成分股数量最多者
+        3. 成分数并列时按 board_code 升序，保证稳定可复现
+        """
+        kind = "concept" if board_kind == "concept" else "industry"
+        picked = self._pick_primary_board_among(code, kind)
+        if picked is None and allow_fallback and kind == "industry":
+            picked = self._pick_primary_board_among(code, "concept")
+        return picked
+
+    def _pick_primary_board_among(self, code: str, board_kind: str) -> Optional[Dict[str, str]]:
+        db = self._session()
+        own = self._db is None
+        try:
+            variants = self._code_variants(code)
+            if board_kind == "concept":
+                sql = text(
+                    """
+                    SELECT c.board_code,
+                           COALESCE(b.board_name, c.board_code) AS board_name,
+                           cnt.n AS member_count
+                    FROM concept_board_constituents c
+                    JOIN (
+                        SELECT board_code, COUNT(*) AS n
+                        FROM concept_board_constituents
+                        GROUP BY board_code
+                    ) cnt ON cnt.board_code = c.board_code
+                    LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
+                    WHERE c.stock_code IN :codes
+                    ORDER BY cnt.n DESC, c.board_code ASC
+                    LIMIT 1
+                    """
+                ).bindparams(bindparam("codes", expanding=True))
+            else:
+                sql = text(
+                    """
+                    SELECT c.board_code,
+                           COALESCE(b.board_name, c.board_code) AS board_name,
+                           cnt.n AS member_count
+                    FROM industry_board_constituents c
+                    JOIN (
+                        SELECT board_code, COUNT(*) AS n
+                        FROM industry_board_constituents
+                        GROUP BY board_code
+                    ) cnt ON cnt.board_code = c.board_code
+                    LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+                    WHERE c.stock_code IN :codes
+                    ORDER BY cnt.n DESC, c.board_code ASC
+                    LIMIT 1
+                    """
+                ).bindparams(bindparam("codes", expanding=True))
+            row = db.execute(sql, {"codes": variants}).fetchone()
+            if not row:
+                return None
+            return {
+                "board_code": str(row[0]),
+                "board_name": str(row[1] or row[0]),
+                "board_kind": "concept" if board_kind == "concept" else "industry",
+                "member_count": int(row[2] or 0),
+            }
+        except Exception as e:
+            logger.warning("resolve_primary_board failed: %s", e)
+            return None
         finally:
             if own:
                 db.close()

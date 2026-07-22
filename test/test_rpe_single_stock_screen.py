@@ -31,7 +31,10 @@ def _make_bars(n: int = 80, base: float = 10.0, vol: float = 1000.0) -> List[Dic
 class _FakeLoader:
     def __init__(self):
         self._industry = {
-            "000001": [{"board_code": "BK0001", "board_name": "银行"}],
+            "000001": [
+                {"board_code": "BK0002", "board_name": "小银行"},
+                {"board_code": "BK0001", "board_name": "银行"},
+            ],
         }
         self._concept = {
             "000002": [{"board_code": "BK9001", "board_name": "深圳本地"}],
@@ -39,6 +42,10 @@ class _FakeLoader:
         self._members = {
             ("BK0001", "industry"): [
                 {"code": f"{i:06d}", "name": f"M{i}"} for i in range(1, 8)
+            ],
+            ("BK0002", "industry"): [
+                {"code": "000001", "name": "平安银行"},
+                {"code": "000008", "name": "M8"},
             ],
             ("BK9001", "concept"): [
                 {"code": "000002", "name": "万科A"},
@@ -58,6 +65,28 @@ class _FakeLoader:
         if board_kind == "concept":
             return list(self._concept.get(c) or [])
         return list(self._industry.get(c) or [])
+
+    def resolve_primary_board(self, code: str, board_kind: str = "industry", *, allow_fallback: bool = True):
+        """与生产规则一致：优先行业；多板块取成分最多，并列取 board_code 升序。"""
+        kind = "concept" if board_kind == "concept" else "industry"
+        found = self.find_boards_for_code(code, board_kind=kind)
+        if not found and allow_fallback and kind == "industry":
+            found = self.find_boards_for_code(code, board_kind="concept")
+            kind = "concept"
+        if not found:
+            return None
+        ranked = []
+        for b in found:
+            members = self.load_board_members(b["board_code"], board_kind=kind)
+            ranked.append((len(members), str(b["board_code"]), b, kind))
+        ranked.sort(key=lambda x: (-x[0], x[1]))
+        _, _, b, use_kind = ranked[0]
+        return {
+            "board_code": b["board_code"],
+            "board_name": b.get("board_name") or b["board_code"],
+            "board_kind": use_kind,
+            "member_count": ranked[0][0],
+        }
 
     def load_board_members(self, board_code: str, board_kind: str = "industry"):
         return list(self._members.get((board_code, board_kind)) or [])
@@ -80,6 +109,16 @@ class _FakeLoader:
         return date_map
 
 
+def test_resolve_boards_uses_primary_board_only():
+    eng = RPEStrategyEngine(db_session=MagicMock())
+    eng.loader = _FakeLoader()
+    # 000001 同时属 BK0001(7成分) 与 BK0002(2成分)，应固定 BK0001
+    jobs = eng._resolve_boards_for_codes(["000001"], "industry")
+    assert len(jobs) == 1
+    assert jobs[0]["board_code"] == "BK0001"
+    assert jobs[0]["board_kind"] == "industry"
+
+
 def test_resolve_boards_industry_first_then_concept_fallback():
     eng = RPEStrategyEngine(db_session=MagicMock())
     eng.loader = _FakeLoader()
@@ -87,6 +126,8 @@ def test_resolve_boards_industry_first_then_concept_fallback():
     kinds = {(j["board_code"], j["board_kind"]) for j in jobs}
     assert ("BK0001", "industry") in kinds
     assert ("BK9001", "concept") in kinds
+    # 每只股票只贡献一个主板块
+    assert len(jobs) == 2
 
 
 def test_screen_single_returns_in_band_with_include_no_signal():
