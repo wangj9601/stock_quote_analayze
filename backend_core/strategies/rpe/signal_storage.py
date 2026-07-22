@@ -179,10 +179,10 @@ def recompute_trace_for_stock(
     progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> int:
     """
-    对单股按所属板块全量历史日滚动重算 RPE 信号，写入 rpe_signal_trace。
+    对单股按**固定主板块**全量历史日滚动重算 RPE 信号，写入 rpe_signal_trace。
 
     - 先删除该 code + config_id 旧记录
-    - 优先行业板块，无则概念板块；同日多板块取 |Z| 最大
+    - 主板块：行业优先（成分最多）；无行业则概念；全程只用这一板块，避免追溯页按日跳变
     - 每个可评交易日写入一行（含无入场信号日，便于追溯页查看 Z 序列）
     返回写入条数。
     """
@@ -203,14 +203,18 @@ def recompute_trace_for_stock(
     loader = RPEDataLoader(db)
     engine = RPEStrategyEngine(db_session=db, config=cfg)
 
-    kind = "industry"
-    boards = loader.find_boards_for_code(code_n, board_kind="industry")
-    if not boards:
-        boards = loader.find_boards_for_code(code_n, board_kind="concept")
-        kind = "concept"
-    if not boards:
+    primary = loader.resolve_primary_board(code_n, board_kind="industry", allow_fallback=True)
+    if not primary:
         logger.info("RPE 单股重算 %s 无所属板块，跳过", code_n)
         return 0
+
+    kind = str(primary.get("board_kind") or "industry")
+    boards = [
+        {
+            "board_code": primary["board_code"],
+            "board_name": primary.get("board_name") or primary["board_code"],
+        }
+    ]
 
     target_bars = loader.load_bars(code_n, limit=None)
     if len(target_bars) < min_need:
@@ -244,62 +248,58 @@ def recompute_trace_for_stock(
         )
 
     if not board_ctx:
-        logger.info("RPE 单股重算 %s 板块成分不足，跳过", code_n)
+        logger.info("RPE 单股重算 %s 主板块成分不足，跳过 primary=%s", code_n, primary.get("board_code"))
         return 0
 
     logger.info(
-        "RPE 单股全历史重算 %s config_id=%s boards=%s evaluable=%s",
+        "RPE 单股全历史重算 %s config_id=%s primary_board=%s(%s) evaluable=%s",
         code_n,
         config_id,
-        len(board_ctx),
+        board_ctx[0]["board_code"],
+        kind,
         len(eval_dates),
     )
 
     rows: List[Dict[str, Any]] = []
     total = len(eval_dates)
     batch_size = 80
+    ctx = board_ctx[0]
 
     for idx, trade_date in enumerate(eval_dates):
         if progress_cb:
             progress_cb(idx + 1, total, f"正在计算 {trade_date}（{idx + 1}/{total}）")
-        best: Optional[Dict[str, Any]] = None
-        for ctx in board_ctx:
-            try:
-                panel_d = _panel_as_of(ctx["panel"], trade_date)
-                if code_n not in panel_d or len(panel_d[code_n]) < min_need:
-                    continue
-                if len(panel_d) < min_members:
-                    continue
-                date_members = loader.build_date_members(panel_d)
-                benchmark = compute_vwap_benchmark(date_members)
-                if len(benchmark) < min_need:
-                    continue
-                slope = sector_slope(benchmark, slope_window)
-                row = engine.evaluate_in_sector(
-                    code_n,
-                    sector_id=ctx["board_code"],
-                    sector_name=ctx["board_name"],
-                    panel=panel_d,
-                    benchmark=benchmark,
-                    slope=slope,
-                    trade_date=trade_date,
-                    config=cfg,
-                    name=ctx["name_map"].get(code_n),
-                )
-                if not row:
-                    continue
-                if best is None or abs(row.get("z_score") or 0) > abs(best.get("z_score") or 0):
-                    best = row
-            except Exception as e:
-                logger.debug(
-                    "RPE recompute skip %s board=%s day=%s: %s",
-                    code_n,
-                    ctx.get("board_code"),
-                    trade_date,
-                    e,
-                )
-        if best:
-            rows.append(best)
+        try:
+            panel_d = _panel_as_of(ctx["panel"], trade_date)
+            if code_n not in panel_d or len(panel_d[code_n]) < min_need:
+                continue
+            if len(panel_d) < min_members:
+                continue
+            date_members = loader.build_date_members(panel_d)
+            benchmark = compute_vwap_benchmark(date_members)
+            if len(benchmark) < min_need:
+                continue
+            slope = sector_slope(benchmark, slope_window)
+            row = engine.evaluate_in_sector(
+                code_n,
+                sector_id=ctx["board_code"],
+                sector_name=ctx["board_name"],
+                panel=panel_d,
+                benchmark=benchmark,
+                slope=slope,
+                trade_date=trade_date,
+                config=cfg,
+                name=ctx["name_map"].get(code_n),
+            )
+            if row:
+                rows.append(row)
+        except Exception as e:
+            logger.debug(
+                "RPE recompute skip %s board=%s day=%s: %s",
+                code_n,
+                ctx.get("board_code"),
+                trade_date,
+                e,
+            )
 
         if len(rows) >= batch_size:
             upsert_signal_traces(db, rows, config_id=int(config_id), trade_date=trade_date)

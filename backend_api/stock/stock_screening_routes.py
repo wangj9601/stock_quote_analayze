@@ -3466,6 +3466,8 @@ async def get_rpe_strategy(
     比价效应（RPE）选股。
     scope=single：按个股所属行业（无则概念）板块建簇，计算相对基准的 Z-Score/KDE/信号；
     跳过「仅有信号才返回」过滤，始终返回该股策略明细（含区间内 in_band）。
+    scope=industry_board|concept_board：返回所选板块成分股策略结果，默认包含未出现信号的股票；
+    勾选「仅入场信号」或指定 signal_type 时仍按条件过滤。
     scope=watchlist：按自选股代码列表解析所属板块后计算信号。
     """
     try:
@@ -3547,6 +3549,8 @@ async def get_rpe_strategy(
             pass
         if not board_codes:
             raise HTTPException(status_code=400, detail="未找到有效的行业板块代码")
+        # 板块扫描：同时返回未触发 catch_up/lead 的成分股
+        include_no_signal = True
     elif scope_raw == "concept_board":
         board_kind = "concept"
         board_codes = _normalize_gms_board_codes(concept_board_code, upper=True) or (
@@ -3554,6 +3558,7 @@ async def get_rpe_strategy(
         )
         if not board_codes:
             raise HTTPException(status_code=400, detail="concept_board 需要选择概念板块")
+        include_no_signal = True
     elif scope_raw != "cn":
         raise HTTPException(
             status_code=400,
@@ -3561,7 +3566,16 @@ async def get_rpe_strategy(
         )
 
     # 单股明细时不强制 entry_only（与 URT 对齐：直接看策略信号）
+    # 行业/概念板块：保留用户勾选的「仅入场」；未勾选时 include_no_signal 返回无信号成分股
     effective_entry_only = False if scope_raw == "single" else entry_only
+    # 勾选「仅入场」时无需强制 include_no_signal（引擎会按 entry_signal 过滤）
+    if effective_entry_only:
+        include_no_signal = False
+
+    # 板块全成分展示：放宽上限，避免无信号股被截断
+    effective_max = max_results or 200
+    if scope_raw in ("industry_board", "concept_board") and effective_max < 2000:
+        effective_max = 2000
 
     loop = asyncio.get_event_loop()
 
@@ -3576,7 +3590,7 @@ async def get_rpe_strategy(
             entry_only=effective_entry_only,
             signal_type=None if scope_raw == "single" else signal_type,
             trace_only=trace_only and scope_raw == "cn" and not board_codes and not codes,
-            max_results=max_results or 200,
+            max_results=effective_max,
             include_no_signal=include_no_signal,
             db=db,
         )

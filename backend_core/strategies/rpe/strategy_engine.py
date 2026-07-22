@@ -307,31 +307,29 @@ class RPEStrategyEngine:
         board_kind: str,
     ) -> List[Dict[str, str]]:
         """
-        为代码列表解析所属板块。
-        优先使用指定 kind（默认行业）；若某股无行业归属则回退概念板块。
-        返回项含 board_code / board_name / board_kind。
+        为代码列表解析**固定主板块**（每只股票只对应一个板块）。
+        优先指定 kind（默认行业）；无归属则回退概念；同 kind 多板块取成分最多者。
+        返回项含 board_code / board_name / board_kind（按板块去重）。
         """
         kind = "concept" if board_kind == "concept" else "industry"
         jobs: List[Dict[str, str]] = []
         seen = set()
         for c in codes:
-            found = self.loader.find_boards_for_code(c, board_kind=kind)
-            use_kind = kind
-            if not found and kind == "industry":
-                found = self.loader.find_boards_for_code(c, board_kind="concept")
-                use_kind = "concept"
-            for b in found:
-                key = (str(b["board_code"]), use_kind)
-                if key in seen:
-                    continue
-                seen.add(key)
-                jobs.append(
-                    {
-                        "board_code": str(b["board_code"]),
-                        "board_name": str(b.get("board_name") or b["board_code"]),
-                        "board_kind": use_kind,
-                    }
-                )
+            picked = self.loader.resolve_primary_board(c, board_kind=kind, allow_fallback=True)
+            if not picked:
+                continue
+            use_kind = str(picked.get("board_kind") or kind)
+            key = (str(picked["board_code"]), use_kind)
+            if key in seen:
+                continue
+            seen.add(key)
+            jobs.append(
+                {
+                    "board_code": str(picked["board_code"]),
+                    "board_name": str(picked.get("board_name") or picked["board_code"]),
+                    "board_kind": use_kind,
+                }
+            )
         return jobs
 
     def screen(
@@ -409,7 +407,8 @@ class RPEStrategyEngine:
             ),
             reverse=True,
         )
-        # 同股多板块去重：保留 |z| 最大
+        # 同股多板块去重（显式多选板块时仍可能撞车）：保留 |z| 最大
+        # 单股/自选路径已固定主板块，通常不会产生同股多行
         dedup: Dict[str, Dict] = {}
         for r in results:
             prev = dedup.get(r["code"])

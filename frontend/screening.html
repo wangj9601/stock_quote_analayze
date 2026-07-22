@@ -34,6 +34,7 @@
             <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
             <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab" data-perm="channel.screening.tab.sbbr">做小做底</button>
             <button class="strategy-tab" data-strategy="rpe" id="rpeTab" data-perm="channel.screening.tab.rpe">比价效应</button>
+            <button class="strategy-tab" data-strategy="rpe" id="rpeTab">比价效应</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -1759,12 +1760,18 @@
 
             <div id="rpe-sub-observe" class="rpe-sub-panel" style="display:none;">
                 <button type="button" id="rpeObserveRefreshBtn" class="refresh-btn">刷新观察列表</button>
+                <p class="gms-integrated-hint">展示加入观察时的最初信号快照（Z、支撑/阻力、结构等），并二次确认现价是否仍在支撑之上。</p>
                 <div class="results-table-wrapper">
                     <table class="results-table">
                         <thead>
-                            <tr><th>代码</th><th>名称</th><th>信号日</th><th>现价仍在支撑上</th><th>操作</th></tr>
+                            <tr>
+                                <th>代码</th><th>名称</th><th>信号日</th><th>板块</th>
+                                <th>Z</th><th>信号</th><th>入场</th><th>收盘</th>
+                                <th>支撑</th><th>阻力</th><th>结构</th><th>流动性</th>
+                                <th>现价仍在支撑上</th><th>操作</th>
+                            </tr>
                         </thead>
-                        <tbody id="rpeObserveBody"><tr><td colspan="5" class="empty-state">暂无</td></tr></tbody>
+                        <tbody id="rpeObserveBody"><tr><td colspan="14" class="empty-state">暂无</td></tr></tbody>
                     </table>
                 </div>
             </div>
