@@ -62,6 +62,10 @@
     return Number.isFinite(x) ? x.toFixed(n == null ? 2 : n) : String(v);
   }
 
+  function canPerm(code) {
+    return !(window.Permission && typeof window.Permission.has === 'function') || window.Permission.has(code);
+  }
+
   async function refreshSignals() {
     const loading = document.getElementById('sbbrLoading');
     const body = document.getElementById('sbbrResultsBody');
@@ -98,6 +102,17 @@
       body.innerHTML = rows
         .map((r) => {
           const snap = encodeURIComponent(JSON.stringify(r));
+          const ops = [];
+          if (canPerm('channel.screening.tab.sbbr.btn.add_observe')) {
+            ops.push(
+              `<button type="button" class="gms-btn-outline sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>`
+            );
+          }
+          if (canPerm('channel.screening.tab.sbbr.btn.add_reserve')) {
+            ops.push(
+              `<button type="button" class="gms-btn-outline sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}">储备</button>`
+            );
+          }
           return `<tr>
             <td>${r.code || ''}</td>
             <td>${r.name || ''}</td>
@@ -108,12 +123,7 @@
             <td>${fmt(r.close)}</td>
             <td>${fmt(r.defense_low)}</td>
             <td>${fmt(r.volume_ratio)}</td>
-            <td>
-              <button type="button" class="gms-btn-outline sbbr-add-observe"
-                data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>
-              <button type="button" class="gms-btn-outline sbbr-add-reserve"
-                data-code="${r.code}" data-name="${r.name || ''}">储备</button>
-            </td>
+            <td>${ops.join(' ') || '-'}</td>
           </tr>`;
         })
         .join('');

@@ -68,6 +68,19 @@
     return '-';
   }
 
+  function signalLabel(r) {
+    if (!r) return '-';
+    if (r.signal_type) return r.signal_type;
+    const reason = (r.detail && r.detail.signal_reason) || r.signal_reason;
+    if (reason === 'in_band' || reason === 'no_z') return '无信号';
+    return '无信号';
+  }
+
+  function snapField(snap, key, fallback) {
+    if (snap && snap[key] != null && snap[key] !== '') return snap[key];
+    return fallback;
+  }
+
   /** code -> observe id */
   const observeIdByCode = new Map();
 
@@ -191,7 +204,7 @@
       const q = new URLSearchParams({
         scope,
         entry_only: String(entryOnly),
-        max_results: '200',
+        max_results: scope === 'industry_board' || scope === 'concept_board' ? '2000' : '200',
       });
       if (date) q.set('date', date);
       if (signalType) q.set('signal_type', signalType);
@@ -233,7 +246,7 @@
             <td>${r.name || ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
             <td>${fmt(r.z_score, 2)}</td>
-            <td>${r.signal_type || '-'}</td>
+            <td>${signalLabel(r)}</td>
             <td>${yn(r.entry_signal)}</td>
             <td>${fmt(r.nearest_support)}</td>
             <td>${fmt(r.nearest_resistance)}</td>
@@ -271,23 +284,40 @@
         if (c && it.id != null) observeIdByCode.set(c, it.id);
       });
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="5" class="empty-state">暂无观察股</td></tr>';
+        body.innerHTML = '<tr><td colspan="14" class="empty-state">暂无观察股</td></tr>';
         return;
       }
       body.innerHTML = rows
-        .map(
-          (r) => `<tr>
-          <td>${r.code}</td><td>${r.name || ''}</td><td>${r.signal_date || '-'}</td>
+        .map((r) => {
+          const snap = r.signal_snapshot || {};
+          const view = {
+            signal_type: snapField(snap, 'signal_type', r.signal_type),
+            detail: snap.detail || r.detail,
+            signal_reason: snapField(snap, 'signal_reason', null),
+          };
+          return `<tr>
+          <td>${r.code || ''}</td>
+          <td>${r.name || snap.name || ''}</td>
+          <td>${r.signal_date || snap.date || '-'}</td>
+          <td>${snapField(snap, 'sector_name', snap.sector_id) || '-'}</td>
+          <td>${fmt(snapField(snap, 'z_score', null), 2)}</td>
+          <td>${signalLabel(view)}</td>
+          <td>${yn(snapField(snap, 'entry_signal', null))}</td>
+          <td>${fmt(snapField(snap, 'close', null))}</td>
+          <td>${fmt(snapField(snap, 'nearest_support', null))}</td>
+          <td>${fmt(snapField(snap, 'nearest_resistance', null))}</td>
+          <td>${yn(snapField(snap, 'structure_valid', null))}</td>
+          <td>${yn(snapField(snap, 'liquidity_ok', null))}</td>
           <td>${yn(r.above_support)}</td>
           <td>
             <button type="button" class="refresh-btn rpe-to-formal" data-id="${r.id}">转正式</button>
             <button type="button" class="gms-btn-outline rpe-del-observe" data-id="${r.id}">移除</button>
           </td>
-        </tr>`
-        )
+        </tr>`;
+        })
         .join('');
     } catch (e) {
-      body.innerHTML = `<tr><td colspan="5" class="empty-state">${e.message}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="14" class="empty-state">${e.message}</td></tr>`;
     }
   }
 
