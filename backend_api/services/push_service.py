@@ -223,6 +223,42 @@ class PushService:
                         )
                         skipped_count += 1
                         continue
+                # URT：仅 A 股策略，A 股休市日跳过
+                if config.report_type == "urt_daily":
+                    skip_urt = False
+                    urt_skip_reason = ""
+                    try:
+                        from backend_api.utils.trading_calendar_utils import (
+                            is_market_session_closed,
+                        )
+
+                        if is_market_session_closed(
+                            self.config_service.db, "CN", push_date
+                        ):
+                            skip_urt = True
+                            urt_skip_reason = "A股休市日"
+                    except Exception as e:
+                        logger.warning(
+                            "URT 休市日判定异常 user=%s: %s", user.id, e
+                        )
+                    if skip_urt:
+                        logger.info(
+                            "用户 %s 任务 urt_daily 跳过（%s）",
+                            user.id,
+                            urt_skip_reason,
+                        )
+                        log_push_event(
+                            event_type=PushEventType.GMS_NON_TRADING_SKIPPED,
+                            user_id=user.id,
+                            push_time=push_time,
+                            details={
+                                "push_date": str(push_date),
+                                "report_type": "urt_daily",
+                                "reason": urt_skip_reason,
+                            },
+                        )
+                        skipped_count += 1
+                        continue
                 is_duplicate = self.record_repository.check_duplicate_push(
                     user_id=user.id,
                     push_date=push_date,
@@ -824,6 +860,8 @@ class PushService:
         subject = (
             f"自选股GSM策略指标信号列表 - {report_info.report_date}"
             if report_info.report_type == "gms_daily"
+            else f"自选股上升趋势策略信号列表 - {report_info.report_date}"
+            if report_info.report_type == "urt_daily"
             else f"成交量异动榜 - {report_info.report_date}"
             if report_info.report_type == "volume_aberration"
             else f"3倍量观察股·爆量侦测 - {report_info.report_date}"
@@ -921,6 +959,8 @@ class PushService:
         """
         if report_info.report_type == "gms_daily":
             report_type_name = "自选股GSM策略指标信号列表"
+        elif report_info.report_type == "urt_daily":
+            report_type_name = "自选股上升趋势策略信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
         elif report_info.report_type == "triple_volume_observe_scan":
@@ -963,6 +1003,8 @@ class PushService:
         """
         if report_info.report_type == "gms_daily":
             report_type_name = "自选股GSM策略指标信号列表"
+        elif report_info.report_type == "urt_daily":
+            report_type_name = "自选股上升趋势策略信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
         elif report_info.report_type == "triple_volume_observe_scan":

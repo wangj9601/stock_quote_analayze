@@ -39,9 +39,26 @@ def normalize_urt_board_keys(boards: Optional[List[str]]) -> List[str]:
     return out
 
 
+def normalize_hk_code(code: str) -> Optional[str]:
+    s = str(code or "").strip()
+    if not s:
+        return None
+    if s.isdigit() and len(s) <= 5:
+        return s.zfill(5)
+    return s
+
+
+def is_hk_stock_code(code: str) -> bool:
+    s = str(code or "").strip()
+    if not s.isdigit():
+        return False
+    return len(s) == 5 or (len(s) < 6 and len(s) > 0)
+
+
 class URTDataLoader:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, *, market: str = "CN"):
         self.db = db
+        self.market = str(market or "CN").strip().upper()
 
     def list_a_share_candidates(
         self,
@@ -87,14 +104,49 @@ class URTDataLoader:
             out = out[: int(limit)]
         return out
 
+    def list_hk_share_candidates(
+        self,
+        *,
+        limit: Optional[int] = None,
+        stock_codes: Optional[List[str]] = None,
+    ) -> List[Tuple[str, str]]:
+        """从 stock_basic_info_hk 取港股候选（排除 ST，尊重 collect_enabled）。"""
+        from backend_api.models import StockBasicInfoHK
+
+        qry = (
+            self.db.query(StockBasicInfoHK.code, StockBasicInfoHK.name)
+            .filter(not_(StockBasicInfoHK.name.like("%ST%")))
+            .filter(
+                or_(
+                    StockBasicInfoHK.collect_enabled.is_(True),
+                    StockBasicInfoHK.collect_enabled.is_(None),
+                )
+            )
+            .order_by(StockBasicInfoHK.code)
+        )
+        if stock_codes:
+            cleaned = [normalize_hk_code(c) for c in stock_codes]
+            cleaned = [c for c in cleaned if c]
+            if not cleaned:
+                return []
+            qry = qry.filter(StockBasicInfoHK.code.in_(cleaned))
+        rows = qry.all()
+        out = [(str(r[0]), str(r[1] or "")) for r in rows]
+        if limit is not None and limit > 0:
+            out = out[: int(limit)]
+        return out
+
     def fetch_historical_desc(
         self,
         code: str,
         *,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        market: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """拉取日 K（日期 DESC）。start/end 均可选；强制重算时可省略以取该股全部历史。"""
+        mkt = str(market or self.market or "CN").strip().upper()
+        table = "historical_quotes_hk" if mkt == "HK" else "historical_quotes"
         clauses = ["code = :code"]
         params: Dict[str, Any] = {"code": str(code)}
         if start_date:
@@ -106,7 +158,7 @@ class URTDataLoader:
         sql = f"""
             SELECT code, name, date, open, close, high, low,
                    change_percent, volume, amount, turnover_rate
-            FROM historical_quotes
+            FROM {table}
             WHERE {' AND '.join(clauses)}
             ORDER BY date DESC
         """
@@ -136,8 +188,21 @@ class URTDataLoader:
         return out
 
     @staticmethod
-    def resolve_effective_history_end_date(db: Session, requested: Optional[str]) -> str:
-        from backend_api.models import HistoricalQuotes
+    def resolve_effective_history_end_date(
+        db: Session,
+        requested: Optional[str],
+        *,
+        market: str = "CN",
+    ) -> str:
+        mkt = str(market or "CN").strip().upper()
+        if mkt == "HK":
+            from backend_api.models import HistoricalQuotesHK
+
+            quote_model = HistoricalQuotesHK
+        else:
+            from backend_api.models import HistoricalQuotes
+
+            quote_model = HistoricalQuotes
 
         today = datetime.now().date()
         today_s = today.strftime("%Y-%m-%d")
@@ -153,7 +218,7 @@ class URTDataLoader:
                 target = today
                 target_s = today_s
 
-        row_max = db.query(func.max(HistoricalQuotes.date)).scalar()
+        row_max = db.query(func.max(quote_model.date)).scalar()
         if row_max is None:
             return target_s
         if hasattr(row_max, "strftime"):
@@ -170,8 +235,8 @@ class URTDataLoader:
             return max_s
 
         exists = (
-            db.query(HistoricalQuotes.code)
-            .filter(HistoricalQuotes.date == target_s)
+            db.query(quote_model.code)
+            .filter(quote_model.date == target_s)
             .limit(1)
             .first()
         )

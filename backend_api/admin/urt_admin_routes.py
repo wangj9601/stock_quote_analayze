@@ -10,10 +10,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
+from backend_api.services.urt_audit_service import write_urt_audit
 from backend_core.strategies.urt.config import URTConfigManager
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,10 @@ class BacktestCreateBody(BaseModel):
     horizon_days: int = 20
     min_score: Optional[float] = None
     use_trace: bool = True
+    exit_mode: str = Field(
+        "hit_rate",
+        description="出场模式: hit_rate=命中率(不止损) | risk_exit=纪律出场(止损/连跌/回撤)",
+    )
     stock_pool_mode: Optional[str] = Field(
         "all",
         description="股票池: all / single / custom / watchlist / industry_board / concept_board",
@@ -172,6 +177,7 @@ def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
         min_score=min_score,
         use_trace=bool(config.get("use_trace", True)),
         risk=strategy_cfg.get("risk") if isinstance(strategy_cfg.get("risk"), dict) else {},
+        exit_mode=str(config.get("exit_mode") or "hit_rate"),
     )
     config["risk_params"] = meta["risk_params"]
     config["trade_logic"] = meta["trade_logic"]
@@ -191,6 +197,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         "horizon_days": body.horizon_days,
         "min_score": body.min_score,
         "use_trace": body.use_trace,
+        "exit_mode": (body.exit_mode or "hit_rate").strip().lower() or "hit_rate",
         "stock_pool_mode": mode,
         "market": "cn",
     }
@@ -266,6 +273,75 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
     return _attach_urt_trade_meta(db, config)
 
 
+@router.get("/system/status")
+async def get_system_status(db: Session = Depends(get_db)):
+    """系统状态：运行中回测数、pending、failed、报告数。"""
+    try:
+        from backend_core.strategies.urt import backtest_storage
+
+        running = backtest_storage.count_running_tasks()
+        total_reports = backtest_storage.count_completed_reports()
+        tasks = backtest_storage.list_tasks(limit=200)
+        pending = sum(
+            1 for t in tasks if str(t.get("status") or "").lower() in ("pending", "queued")
+        )
+        failed = sum(1 for t in tasks if str(t.get("status") or "").lower() == "failed")
+        health = "ok"
+        if failed > 3:
+            health = "degraded"
+        return {
+            "success": True,
+            "data": {
+                "runningBacktests": running,
+                "totalReports": total_reports,
+                "pendingBacktests": pending,
+                "failedBacktests": failed,
+                "systemHealth": health,
+            },
+        }
+    except Exception as e:
+        logger.exception("URT system/status 失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/audit-logs")
+async def list_urt_audit_logs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    log_type: Optional[str] = Query(None, description="如 urt_config_update"),
+    db: Session = Depends(get_db),
+):
+    """URT 操作审计（operation_logs 中 log_type 以 urt_ 开头）。"""
+    try:
+        where = "WHERE log_type LIKE 'urt_%'"
+        params: Dict[str, Any] = {"lim": limit, "off": offset}
+        if log_type:
+            where += " AND log_type = :lt"
+            params["lt"] = log_type if log_type.startswith("urt_") else f"urt_{log_type}"
+        rows = db.execute(
+            text(
+                f"""
+                SELECT id, log_type, log_message, affected_count, log_status, error_info, log_time
+                FROM operation_logs
+                {where}
+                ORDER BY log_time DESC
+                LIMIT :lim OFFSET :off
+                """
+            ),
+            params,
+        ).mappings().all()
+        items = []
+        for r in rows:
+            d = dict(r)
+            if d.get("log_time") and hasattr(d["log_time"], "isoformat"):
+                d["log_time"] = d["log_time"].isoformat()
+            items.append(d)
+        return {"success": True, "data": {"items": items, "limit": limit, "offset": offset}}
+    except Exception as e:
+        logger.exception("URT audit-logs 查询失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/strategy-configs")
 async def list_strategy_configs(
     active_only: bool = Query(False),
@@ -316,6 +392,11 @@ async def create_strategy_config(body: StrategyConfigCreateBody, db: Session = D
         row = mgr.get_config_row(db, new_id)
         data = mgr._serialize_row(row)
         data["config_params"] = mgr.get_config(new_id, db=db)
+        write_urt_audit(
+            db,
+            "urt_config_create",
+            {"config_id": new_id, "name": body.name, "action": "create"},
+        )
         return {"success": True, "data": data}
     except Exception as e:
         logger.exception("URT strategy-config create 失败")
@@ -349,6 +430,11 @@ async def update_strategy_config(
         row = mgr.get_config_row(db, config_id)
         data = mgr._serialize_row(row)
         data["config_params"] = mgr.get_config(config_id, db=db)
+        write_urt_audit(
+            db,
+            "urt_config_update",
+            {"config_id": config_id, "name": data.get("name"), "action": "update"},
+        )
         return {"success": True, "data": data}
     except HTTPException:
         raise
@@ -445,6 +531,18 @@ async def create_backtest(body: BacktestCreateBody, db: Session = Depends(get_db
         config = _build_backtest_config(db, body)
         task_id = backtest_storage.create_task(config, name=body.task_name)
         backtest_worker.start_backtest_task(task_id)
+        write_urt_audit(
+            db,
+            "urt_backtest_create",
+            {
+                "task_id": task_id,
+                "task_name": body.task_name,
+                "stock_pool_mode": body.stock_pool_mode or "all",
+                "stock_code": body.stock_code,
+                "start_date": body.start_date,
+                "end_date": body.end_date,
+            },
+        )
         return {"success": True, "task_id": task_id, "data": backtest_storage.get_task(task_id)}
     except HTTPException:
         raise
@@ -554,6 +652,20 @@ async def export_backtest(task_id: str):
     )
 
 
+@router.get("/backtests/{task_id}/export-xlsx")
+async def export_backtest_xlsx(task_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    raw = backtest_storage.get_details_xlsx(task_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail="无明细可导出")
+    return Response(
+        content=raw,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="urt_backtest_{task_id[:8]}.xlsx"'},
+    )
+
+
 @router.get("/reports")
 async def list_reports(
     limit: int = Query(50, ge=1, le=200),
@@ -592,4 +704,18 @@ async def download_report(report_id: str):
         content=raw,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="urt_report_{report_id[:8]}.csv"'},
+    )
+
+
+@router.get("/reports/{report_id}/download-xlsx")
+async def download_report_xlsx(report_id: str):
+    from backend_core.strategies.urt import backtest_storage
+
+    raw = backtest_storage.get_details_xlsx(report_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail="无明细可下载")
+    return Response(
+        content=raw,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="urt_report_{report_id[:8]}.xlsx"'},
     )

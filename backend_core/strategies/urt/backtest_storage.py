@@ -332,6 +332,71 @@ def get_details_csv(task_id: str) -> Optional[bytes]:
         db.close()
 
 
+def _csv_bytes_to_xlsx(raw: bytes) -> bytes:
+    """将已存 CSV 明细转为 xlsx（保留中文表头）。"""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+    from openpyxl.utils import get_column_letter
+
+    text = raw.decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        return b""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "URT回测明细"
+    headers = rows[0]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    code_col = None
+    for i, h in enumerate(headers, start=1):
+        if h == "股票代码":
+            code_col = i
+            break
+    for row in rows[1:]:
+        ws.append(row)
+    if code_col and ws.max_row >= 2:
+        for r in range(2, ws.max_row + 1):
+            ws.cell(row=r, column=code_col).number_format = "@"
+    for col_idx in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def get_details_xlsx(task_id: str) -> Optional[bytes]:
+    raw = get_details_csv(task_id)
+    if not raw:
+        return None
+    return _csv_bytes_to_xlsx(raw)
+
+
+def count_completed_reports() -> int:
+    db = _session()
+    try:
+        return db.query(URTBacktestTask).filter(URTBacktestTask.status == "completed").count()
+    finally:
+        db.close()
+
+
+def count_running_tasks() -> int:
+    db = _session()
+    try:
+        return (
+            db.query(URTBacktestTask)
+            .filter(URTBacktestTask.status.in_(("pending", "running")))
+            .count()
+        )
+    finally:
+        db.close()
+
+
 def list_reports(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     """已完成任务投影为报告列表。"""
     db = _session()

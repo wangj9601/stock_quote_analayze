@@ -320,6 +320,8 @@ class ReportService:
                 return self._generate_detailed_report(user_id, watchlist)
             elif report_type == 'gms_daily':
                 return self._generate_gms_report_for_user(user_id)
+            elif report_type == 'urt_daily':
+                return self._generate_urt_report_for_user(user_id)
             else:
                 return ReportResult(
                     success=False,
@@ -1112,6 +1114,174 @@ class ReportService:
             error_message=None,
         )
 
+    def _generate_urt_report_for_user(self, user_id: int) -> ReportResult:
+        """
+        生成该用户自选股范围内的 URT 上升趋势策略买点报告（仅 A 股）。
+        """
+        watchlist = self.get_user_watchlist(user_id)
+        if not watchlist:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=datetime.now().strftime("%Y-%m-%d"),
+                    report_type="urt_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="用户没有自选股",
+            )
+
+        def _norm_cn_code(raw: str) -> str:
+            s = str(raw or "").strip()
+            if not s:
+                return s
+            return s.zfill(6) if s.isdigit() else s
+
+        stock_pool: List[str] = []
+        code_to_name: Dict[str, str] = {}
+        for item in watchlist:
+            market = (item.get("market") or "").strip().upper()
+            raw_code = str(item.get("stock_code") or "").strip()
+            if market != "CN" and not (raw_code.isdigit() and len(raw_code) <= 6):
+                continue
+            code = _norm_cn_code(raw_code)
+            if not code or not code.isdigit() or len(code) != 6:
+                continue
+            stock_pool.append(code)
+            code_to_name[code] = item.get("stock_name") or ""
+
+        if not stock_pool:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=datetime.now().strftime("%Y-%m-%d"),
+                    report_type="urt_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="自选股中无 A 股标的",
+            )
+
+        try:
+            from backend_core.strategies.urt import URTFrontendInterface
+
+            payload = URTFrontendInterface.screen(
+                self.db,
+                scope="watchlist",
+                stock_codes=stock_pool,
+                prefer_cache=True,
+            )
+        except Exception as e:
+            logger.exception("URT 自选股选股失败: %s", e)
+            return ReportResult(
+                success=False,
+                file_path=None,
+                report_info=None,
+                error_message=str(e),
+            )
+
+        results = payload.get("data") or [] if isinstance(payload, dict) else []
+        report_date = (
+            str(payload.get("search_date") or "")[:10]
+            if isinstance(payload, dict) and payload.get("search_date")
+            else datetime.now().strftime("%Y-%m-%d")
+        )
+
+        if not results:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=report_date,
+                    report_type="urt_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="当日自选股范围内无 URT 买点",
+            )
+
+        rows: List[Dict[str, Any]] = []
+        for r in results:
+            code = str(r.get("code") or "").strip()
+            if code.isdigit():
+                code = code.zfill(6)
+            name = (r.get("name") or "").strip() or code_to_name.get(code, "")
+            signal_date = r.get("signal_date") or report_date
+            score = r.get("score")
+            close = r.get("close")
+            ma20 = r.get("ma20")
+            vol_mult = r.get("volume_multiple")
+            buy_signal = r.get("buy_signal")
+
+            rows.append({
+                "代码": "\u2060" + str(code),
+                "名称": name,
+                "信号日": str(signal_date)[:10] if signal_date else "",
+                "得分": round(float(score), 2) if score is not None else "",
+                "收盘": round(float(close), 2) if close is not None else "",
+                "MA20": round(float(ma20), 4) if ma20 is not None else "",
+                "量能倍数": round(float(vol_mult), 4) if vol_mult is not None else "",
+                "buy_signal": bool(buy_signal) if buy_signal is not None else True,
+            })
+
+        filename = f"urt_{user_id}_{report_date.replace('-', '')}.xlsx"
+        filepath = os.path.join(self.report_dir, filename)
+        df = pd.DataFrame(rows)
+        if "代码" in df.columns:
+            df["代码"] = df["代码"].astype(str)
+        df.to_excel(filepath, index=False, sheet_name="URT策略信号列表")
+        try:
+            from openpyxl import load_workbook
+            from openpyxl.utils import get_column_letter
+
+            wb = load_workbook(filepath)
+            ws = wb["URT策略信号列表"] if "URT策略信号列表" in wb.sheetnames else wb[wb.sheetnames[0]]
+            title_to_col = {}
+            for cell in ws[1]:
+                if cell.value is not None:
+                    title_to_col[str(cell.value).strip()] = cell.column
+            desired = {
+                "代码": 12,
+                "名称": 18,
+                "信号日": 13,
+                "得分": 10,
+                "收盘": 12,
+                "MA20": 12,
+                "量能倍数": 12,
+                "buy_signal": 12,
+            }
+            for title, width in desired.items():
+                col_idx = title_to_col.get(title)
+                if col_idx:
+                    ws.column_dimensions[get_column_letter(col_idx)].width = width
+            wb.save(filepath)
+        except Exception as e:
+            logger.warning("URT 报告 Excel 列宽样式应用失败: %s", e)
+
+        file_size = os.path.getsize(filepath)
+        logger.info("生成 URT 自选股报告成功: %s, 买点数: %s", filepath, len(rows))
+        return ReportResult(
+            success=True,
+            file_path=filepath,
+            report_info=ReportInfo(
+                stock_count=len(rows),
+                report_date=report_date,
+                report_type="urt_daily",
+                file_size=file_size,
+                has_data=True,
+                missing_data_stocks=[],
+            ),
+            error_message=None,
+        )
+
     def get_report_info(self, report_path: str) -> Optional[ReportInfo]:
         """
         获取报告信息
@@ -1136,6 +1306,8 @@ class ReportService:
                 report_type = 'volume_aberration'
             elif 'gms_' in filename:
                 report_type = 'gms_daily'
+            elif 'urt_' in filename:
+                report_type = 'urt_daily'
             elif 'summary' in filename:
                 report_type = 'summary'
             else:
@@ -1167,6 +1339,15 @@ class ReportService:
                     # GMS 推送报告默认写入该 sheet；兼容历史/异常文件时回退到首个 sheet
                     try:
                         df = pd.read_excel(report_path, sheet_name='GMS策略信号列表')
+                    except Exception:
+                        xls = pd.ExcelFile(report_path)
+                        first_sheet = xls.sheet_names[0] if xls.sheet_names else 0
+                        df = pd.read_excel(report_path, sheet_name=first_sheet)
+                    stock_count = len(df)
+                    has_data = stock_count > 0
+                elif report_type == 'urt_daily':
+                    try:
+                        df = pd.read_excel(report_path, sheet_name='URT策略信号列表')
                     except Exception:
                         xls = pd.ExcelFile(report_path)
                         first_sheet = xls.sheet_names[0] if xls.sheet_names else 0

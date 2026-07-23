@@ -94,9 +94,11 @@
           <el-descriptions-item label="均最大涨幅">{{ task.summary.avg_max_gain_pct ?? '-' }}%</el-descriptions-item>
           <el-descriptions-item label="目标涨幅">{{ ((task.summary.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
           <el-descriptions-item label="回测模式">
-            {{ task.summary.backtest_mode === 'signal_hit_rate' || task.summary.apply_stop_loss === false
-              ? '命中率(不止损)'
-              : (task.summary.backtest_mode || '命中率(不止损)') }}
+            {{
+              (task.summary.exit_mode === 'risk_exit' || task.summary.backtest_mode === 'risk_exit' || task.summary.apply_stop_loss === true)
+                ? '纪律出场(止损/连跌/回撤)'
+                : '命中率(不止损)'
+            }}
           </el-descriptions-item>
         </el-descriptions>
 
