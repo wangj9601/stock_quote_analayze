@@ -120,6 +120,13 @@ except ImportError as e:
     print(f"urt_frontend_router 导入失败: {e}")
     urt_frontend_router = None
 
+try:
+    from .stock.urt_public_frontend_routes import router as urt_public_frontend_router
+    print("urt_public_frontend_router 导入成功")
+except ImportError as e:
+    print(f"urt_public_frontend_router 导入失败: {e}")
+    urt_public_frontend_router = None
+
 # 尝试导入认证路由
 try:
     from .auth_routes import router as auth_router
@@ -180,6 +187,20 @@ try:
 except ImportError as e:
     print(f"gms_formal_trade_router 导入失败: {e}")
     gms_formal_trade_router = None
+
+try:
+    from .stock.urt_trade_observe_routes import router as urt_trade_observe_router
+    print("urt_trade_observe_router 导入成功")
+except ImportError as e:
+    print(f"urt_trade_observe_router 导入失败: {e}")
+    urt_trade_observe_router = None
+
+try:
+    from .stock.urt_formal_trade_routes import router as urt_formal_trade_router
+    print("urt_formal_trade_router 导入成功")
+except ImportError as e:
+    print(f"urt_formal_trade_router 导入失败: {e}")
+    urt_formal_trade_router = None
 
 try:
     from .sbbr_routes import router as sbbr_router
@@ -578,6 +599,8 @@ _include_router(app, triple_volume_observe_admin_router, "triple_volume_observe_
 _include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")
 _include_router(app, gms_trade_observe_router, "gms_trade_observe")
 _include_router(app, gms_formal_trade_router, "gms_formal_trade")
+_include_router(app, urt_trade_observe_router, "urt_trade_observe")
+_include_router(app, urt_formal_trade_router, "urt_formal_trade")
 _include_router(app, sbbr_router, "sbbr")
 _include_router(app, rpe_stock_router, "rpe_stock")
 _include_router(app, rpe_frontend_router, "rpe_frontend")
@@ -915,6 +938,9 @@ if gms_frontend_router is not None:
 
 if urt_frontend_router is not None:
     app.include_router(urt_frontend_router)
+
+if urt_public_frontend_router is not None:
+    app.include_router(urt_public_frontend_router)
     print("URT frontend 路由注册成功 (/api/stock/urt-*)")
     print("GMS 前端路由注册成功 (/api/frontend/gms)")
 else:

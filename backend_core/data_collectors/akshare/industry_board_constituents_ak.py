@@ -87,10 +87,7 @@ class IndustryBoardConstituentsCollector:
     def save_board_constituents(
         self, session, board_code: str, constituents: List[Tuple[str, str]], now: datetime
     ) -> int:
-        session.execute(
-            text("DELETE FROM industry_board_constituents WHERE board_code = :board_code"),
-            {"board_code": board_code},
-        )
+        # 仅 UPSERT：不删除库中已有成分股，避免同步失败或接口缺漏时误删存量数据
         inserted = 0
         for stock_code, stock_name in constituents:
             session.execute(

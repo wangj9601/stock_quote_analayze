@@ -1282,6 +1282,9 @@ const StockPage = {
             // 加载GMS指标
             this.loadGmsData();
 
+            // 加载 URT 指标（失败则隐藏卡片）
+            this.loadUrtData();
+
             // 隐藏加载状态
             this.hideAnalysisLoading();
 
@@ -1661,6 +1664,76 @@ const StockPage = {
     },
 
     // 更新关键价位（KDE；各侧最多 2 档；近端填「1」，有第二档才显示「2」）
+    // 加载 URT 指标（失败则隐藏卡片）
+    async loadUrtData() {
+        const card = document.getElementById('urtCard');
+        const container = document.getElementById('urtDataContainer');
+        if (!card || !container || !this.stockCode) return;
+        try {
+            const response = await authFetch(
+                `${API_BASE_URL}/api/stock/urt-score-detail?code=${encodeURIComponent(this.stockCode)}`
+            );
+            if (!response.ok) {
+                card.style.display = 'none';
+                return;
+            }
+            const result = await response.json();
+            if (!result.success) {
+                card.style.display = 'none';
+                return;
+            }
+            card.style.display = '';
+            this.updateUrtCard(result);
+        } catch (e) {
+            console.warn('[URT] 加载失败，隐藏卡片:', e);
+            card.style.display = 'none';
+        }
+    },
+
+    updateUrtCard(data) {
+        const container = document.getElementById('urtDataContainer');
+        if (!container) return;
+        const score = data.score != null ? Number(data.score).toFixed(1) : '--';
+        const buySignal = data.buy_signal === true;
+        const signalText = buySignal ? '买点' : '无买点';
+        const signalClass = buySignal ? 'positive' : 'neutral';
+        const fields = data.fields || {};
+        const fmt = (v, d = 2) => (v != null && v !== '' ? Number(v).toFixed(d) : '--');
+        const traceUrl = `stock_urt_trace.html?code=${encodeURIComponent(this.stockCode)}&name=${encodeURIComponent(this.stockName || '')}`;
+        const detailUrl = `stock_urt_score_detail.html?code=${encodeURIComponent(this.stockCode)}&name=${encodeURIComponent(this.stockName || '')}`;
+        container.innerHTML = `
+            <div class="gms-overview">
+                <div class="gms-score-box ${buySignal ? 'high' : 'medium'}">
+                    <div class="gms-score-value">${score}</div>
+                    <div class="gms-score-label">URT得分</div>
+                </div>
+                <div class="gms-main-info">
+                    <div class="gms-info-row">
+                        <span>买点信号：</span>
+                        <span class="${signalClass}">${signalText}</span>
+                    </div>
+                    <div class="gms-info-row">
+                        <span>信号日期：</span>
+                        <span>${data.date || '--'}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="gms-details-grid">
+                <div class="gms-detail-item"><span>收盘</span><strong>${fmt(fields.close)}</strong></div>
+                <div class="gms-detail-item"><span>MA20</span><strong>${fmt(fields.ma20)}</strong></div>
+                <div class="gms-detail-item"><span>4日阳</span><strong>${fields.yang_count_4 != null ? fields.yang_count_4 : '--'}</strong></div>
+                <div class="gms-detail-item"><span>5日阳</span><strong>${fields.yang_count_5 != null ? fields.yang_count_5 : '--'}</strong></div>
+                <div class="gms-detail-item"><span>量能倍数</span><strong>${fmt(fields.volume_multiple)}</strong></div>
+                <div class="gms-detail-item"><span>量比</span><strong>${fmt(fields.volume_ratio)}</strong></div>
+            </div>
+            <div class="gms-details-toggle-container" style="margin-top:8px;">
+                <a href="${traceUrl}" target="_blank" rel="noopener" class="gms-op-btn">信号历史</a>
+                <a href="${detailUrl}" target="_blank" rel="noopener" class="gms-op-btn" style="margin-left:8px;">计算明细</a>
+            </div>
+        `;
+    },
+
+    // 更新关键价位
     updateKeyLevels(levels) {
         console.log('[关键价位] 更新数据:', levels);
 

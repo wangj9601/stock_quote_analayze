@@ -120,8 +120,10 @@ const PermissionEngine = {
   decorateStrategyTabs() {
     if (!window.PERMISSION_TAB_MAP) return;
     Object.entries(window.PERMISSION_TAB_MAP).forEach(([strategy, perm]) => {
-      const tab = document.querySelector(`.strategy-tab[data-strategy="${strategy}"]`);
-      if (tab) tab.setAttribute('data-perm', perm);
+      // 同 strategy 可能有多个 Tab（历史重复节点），全部挂权限
+      document.querySelectorAll(`.strategy-tab[data-strategy="${strategy}"]`).forEach((tab) => {
+        tab.setAttribute('data-perm', perm);
+      });
       const content = document.getElementById(`${strategy}-content`);
       if (content) content.setAttribute('data-perm', perm);
     });

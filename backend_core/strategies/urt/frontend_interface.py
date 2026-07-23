@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from .config import URTConfigManager
-from .data_loader import URTDataLoader, normalize_urt_board_keys
+from .data_loader import URTDataLoader, is_hk_stock_code, normalize_urt_board_keys
 from .strategy_engine import URTStrategyEngine
 from .trace_store import query_buy_signals_for_date
 
@@ -54,6 +54,7 @@ class URTFrontendInterface:
         prefer_cache: bool = True,
         force_realtime: bool = False,
         skip_screening_filters: bool = False,
+        market: str = "CN",
     ) -> Dict[str, Any]:
         """
         skip_screening_filters=True（单只股票）：不按硬筛/最低得分过滤结果，
@@ -88,8 +89,9 @@ class URTFrontendInterface:
             min_volume_ratio=min_volume_ratio,
         )
 
-        loader = URTDataLoader(db)
-        effective = URTDataLoader.resolve_effective_history_end_date(db, screening_date)
+        mkt = str(market or "CN").strip().upper()
+        loader = URTDataLoader(db, market=mkt)
+        effective = URTDataLoader.resolve_effective_history_end_date(db, screening_date, market=mkt)
         today_s = datetime.now().strftime("%Y-%m-%d")
         req_norm = (screening_date or "").strip()[:10] or None
         hint: Optional[str] = None
@@ -141,14 +143,34 @@ class URTFrontendInterface:
                 )
                 if cached:
                     if stock_codes:
-                        allow = {
-                            str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip()
-                            for c in stock_codes
-                        }
+                        if mkt == "HK":
+                            allow = {
+                                str(c).strip().zfill(5) if str(c).strip().isdigit() else str(c).strip()
+                                for c in stock_codes
+                            }
+                            cached = [
+                                r
+                                for r in cached
+                                if str(r.get("code") or "").strip() in allow
+                                or str(r.get("code") or "").strip().zfill(5) in allow
+                            ]
+                        else:
+                            allow = {
+                                str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip()
+                                for c in stock_codes
+                            }
+                            cached = [
+                                r
+                                for r in cached
+                                if str(r.get("code") or "").zfill(6) in allow or str(r.get("code")) in allow
+                            ]
+                    elif mkt == "HK":
+                        cached = [r for r in cached if is_hk_stock_code(str(r.get("code") or ""))]
+                    else:
                         cached = [
                             r
                             for r in cached
-                            if str(r.get("code") or "").zfill(6) in allow or str(r.get("code")) in allow
+                            if not is_hk_stock_code(str(r.get("code") or ""))
                         ]
                     if cached:
                         if limit and len(cached) > int(limit):
@@ -166,11 +188,17 @@ class URTFrontendInterface:
 
         if not data:
             pool_codes = stock_codes if stock_codes is not None else None
-            stocks = loader.list_a_share_candidates(
-                limit=limit if pool_codes is None else None,
-                stock_codes=pool_codes,
-                boards=board_keys or None,
-            )
+            if mkt == "HK":
+                stocks = loader.list_hk_share_candidates(
+                    limit=limit if pool_codes is None else None,
+                    stock_codes=pool_codes,
+                )
+            else:
+                stocks = loader.list_a_share_candidates(
+                    limit=limit if pool_codes is None else None,
+                    stock_codes=pool_codes,
+                    boards=board_keys or None,
+                )
             if limit and pool_codes is not None and len(stocks) > int(limit):
                 # 缩池很大时仍可用 limit 限制扫描量
                 stocks = stocks[: int(limit)]
@@ -196,6 +224,7 @@ class URTFrontendInterface:
             "limit": limit,
             "boards": board_keys,
             "config_id": resolved_id,
+            "market": mkt,
             "screening_date_requested": req_norm,
             "screening_date_effective": effective,
             "data_source": data_source,

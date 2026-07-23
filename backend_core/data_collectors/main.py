@@ -812,7 +812,10 @@ def _register_urt_signal_precompute_jobs():
         logging.info("URT 信号预计算已禁用（ENABLE_URT_PRECOMPUTE=false）")
         return
     try:
-        from backend_core.strategies.urt.scheduled_precompute import scheduled_urt_signals_cn
+        from backend_core.strategies.urt.scheduled_precompute import (
+            scheduled_urt_signals_cn,
+            scheduled_urt_signals_hk,
+        )
     except Exception as e:
         logging.error("导入 URT 预计算任务失败，跳过注册: %s", e)
         return
@@ -825,8 +828,16 @@ def _register_urt_signal_precompute_jobs():
         minute=_cron_int("SCHED_URT_SIGNALS_CN_MINUTE", 35),
         id="urt_signals_cn",
     )
+    scheduler.add_job(
+        scheduled_urt_signals_hk,
+        "cron",
+        day_of_week=_cron("SCHED_URT_SIGNALS_HK_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_URT_SIGNALS_HK_HOUR", 19),
+        minute=_cron_int("SCHED_URT_SIGNALS_HK_MINUTE", 5),
+        id="urt_signals_hk",
+    )
     logging.info(
-        "已注册 URT 信号预计算任务（ENABLE_URT_PRECOMPUTE=true）：A股全量，默认 18:35"
+        "已注册 URT 信号预计算任务（ENABLE_URT_PRECOMPUTE=true）：A股 18:35，港股 19:05"
     )
 
 

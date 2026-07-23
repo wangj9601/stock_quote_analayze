@@ -19,21 +19,38 @@ from .pvfrs_enhanced import (
 # 导入原有模型以保持兼容性
 # 注意：模型定义在 backend_api/models.py 文件中
 # 由于存在 models 目录和 models.py 文件，需要使用特殊方式导入
-try:
-    import sys
+_models_py_module = None
+
+def _load_models_py_module(force_reload: bool = False):
+    """加载 backend_api/models.py（与包名冲突，需 importlib）。"""
+    global _models_py_module
     import os
     import importlib.util
-    
-    # 获取 backend_api 目录路径
+    import sys
+
+    if _models_py_module is not None and not force_reload:
+        return _models_py_module
+
     backend_api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     models_py_path = os.path.join(backend_api_dir, 'models.py')
-    
-    # 使用 importlib 直接加载 models.py 文件
-    if os.path.exists(models_py_path):
-        spec = importlib.util.spec_from_file_location("backend_api_models", models_py_path)
-        models_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(models_module)
-        
+    if not os.path.exists(models_py_path):
+        raise ImportError(f"找不到 models.py 文件: {models_py_path}")
+
+    module_name = "backend_api_models"
+    if force_reload and module_name in sys.modules:
+        del sys.modules[module_name]
+
+    spec = importlib.util.spec_from_file_location(module_name, models_py_path)
+    models_module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = models_module
+    spec.loader.exec_module(models_module)
+    _models_py_module = models_module
+    return models_module
+
+
+try:
+    models_module = _load_models_py_module()
+    if models_module is not None:
         # 导入所有需要的模型
         User = getattr(models_module, 'User', None)
         Admin = getattr(models_module, 'Admin', None)
@@ -71,6 +88,9 @@ try:
         GmsTradeObserveStock = getattr(models_module, 'GmsTradeObserveStock', None)
         GmsTradeObserveHistory = getattr(models_module, 'GmsTradeObserveHistory', None)
         GmsFormalTrade = getattr(models_module, 'GmsFormalTrade', None)
+        UrtTradeObserveStock = getattr(models_module, 'UrtTradeObserveStock', None)
+        UrtTradeObserveHistory = getattr(models_module, 'UrtTradeObserveHistory', None)
+        UrtFormalTrade = getattr(models_module, 'UrtFormalTrade', None)
         TripleVolumeTradeObserveStock = getattr(models_module, 'TripleVolumeTradeObserveStock', None)
         GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
         GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
@@ -162,9 +182,8 @@ try:
         TradingCalendar = getattr(models_module, 'TradingCalendar', None)
         TradingCalendarCreate = getattr(models_module, 'TradingCalendarCreate', None)
         TradingCalendarInDB = getattr(models_module, 'TradingCalendarInDB', None)
-    else:
-        raise ImportError(f"找不到 models.py 文件: {models_py_path}")
-    
+        StockCodeTextPK = getattr(models_module, 'StockCodeTextPK', None)
+
 except Exception as e:
     # 如果导入失败，创建占位符
     import traceback
@@ -206,6 +225,9 @@ except Exception as e:
     GmsTradeObserveStock = None
     GmsTradeObserveHistory = None
     GmsFormalTrade = None
+    UrtTradeObserveStock = None
+    UrtTradeObserveHistory = None
+    UrtFormalTrade = None
     TripleVolumeTradeObserveStock = None
     GMSStrategyVersion = None
     GMSStrategyVersionStock = None
@@ -230,6 +252,7 @@ except Exception as e:
     RPEBacktestTask = None
     RPEPrecomputeRun = None
     RPETraceRecomputeTask = None
+    StockCodeTextPK = None
     StockBasicInfo = None
     StockBasicInfoHK = None
     StockPriceData = None
@@ -344,6 +367,9 @@ __all__ = [
     'GmsTradeObserveStock',
     'GmsTradeObserveHistory',
     'GmsFormalTrade',
+    'UrtTradeObserveStock',
+    'UrtTradeObserveHistory',
+    'UrtFormalTrade',
     'TripleVolumeTradeObserveStock',
     'GMSStrategyVersion',
     'GMSStrategyVersionStock',
@@ -429,3 +455,18 @@ __all__ = [
     'TradingCalendarInDB',
     'StockCodeTextPK',
 ]
+
+
+def __getattr__(name: str):
+    """热重载/切分支后包缓存过期时，按需从 models.py 补齐缺失符号。"""
+    if name.startswith('_'):
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    try:
+        mod = _load_models_py_module(force_reload=True)
+        val = getattr(mod, name, None)
+    except Exception as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+    if val is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    globals()[name] = val
+    return val

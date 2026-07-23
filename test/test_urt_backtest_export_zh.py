@@ -38,3 +38,16 @@ def test_urt_details_csv_chinese_headers():
     assert "是" in body
     assert "触及目标" in body
     assert "000676" in body
+
+
+def test_urt_details_xlsx_from_csv():
+    from backend_core.strategies.urt.backtest_storage import (
+        _build_urt_details_csv_bytes,
+        _csv_bytes_to_xlsx,
+    )
+
+    rows = [{"code": "000676", "name": "智度股份", "signal_date": "2026-07-17", "score": 86.0, "hit_target": True}]
+    raw = _build_urt_details_csv_bytes(rows)
+    xlsx = _csv_bytes_to_xlsx(raw)
+    assert xlsx[:2] == b"PK"
+    assert len(xlsx) > 100

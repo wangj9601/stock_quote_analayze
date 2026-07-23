@@ -132,6 +132,7 @@ def build_urt_trade_meta(
     min_score: Optional[float] = None,
     use_trace: bool = True,
     risk: Optional[Dict[str, Any]] = None,
+    exit_mode: str = "hit_rate",
 ) -> Dict[str, Any]:
     """回测详情用：交易逻辑说明 + 风控参数快照。"""
     risk = dict(risk or {})
@@ -144,6 +145,9 @@ def build_urt_trade_meta(
     ms = float(min_score) if min_score is not None else 70.0
     tp = float(target_pct) * 100.0
     hz = int(horizon_days)
+    mode = (exit_mode or "hit_rate").strip().lower()
+    if mode not in ("hit_rate", "risk_exit"):
+        mode = "hit_rate"
 
     risk_params = {
         "stop_loss_pct_min": stop_min,
@@ -152,47 +156,87 @@ def build_urt_trade_meta(
         "take_profit_alert_pct_min": alert_min,
         "take_profit_alert_pct_max": alert_max,
         "trailing_drawdown_pct": trail,
+        "exit_mode": mode,
     }
 
-    trade_logic = {
-        "summary": (
-            f"URT 交易回测（对齐 GMS 命中率）：信号次日开盘入场；观察期 {hz} 个交易日；"
-            f"以观察期内最高价判定是否达到目标涨幅 {tp:.1f}%；不止损；最低得分 {ms:.0f}。"
-        ),
-        "rules": [
-            (
-                "信号筛选：硬筛（站上均线、连阳规则 A/B、放量倍数等）通过，"
-                f"且得分 ≥ {ms:.0f}；"
-                + ("优先读取 urt_signal_trace 预计算买点。" if use_trace else "实时引擎扫描买点。")
+    if mode == "risk_exit":
+        trade_logic = {
+            "summary": (
+                f"URT 交易回测（纪律出场 risk_exit）：信号次日开盘入场；最长观察期 {hz} 个交易日；"
+                f"持仓期按止损/连跌/回撤止盈离场；同时统计观察期内是否触及目标涨幅 {tp:.1f}%；最低得分 {ms:.0f}。"
             ),
-            "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
-            f"观察期：自入场日起共 {hz} 根交易日 K 线（默认 20，与 GMS horizon_days 一致）。",
-            (
-                f"目标命中（不止损）：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是；"
-                "同时记录观察期最高价与最大涨幅；不因浮亏/连跌/回撤提前离场。"
+            "rules": [
+                (
+                    "信号筛选：硬筛通过，"
+                    f"且得分 ≥ {ms:.0f}；"
+                    + ("优先读取 urt_signal_trace 预计算买点。" if use_trace else "实时引擎扫描买点。")
+                ),
+                "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
+                f"最长持有：自入场日起至多 {hz} 根交易日 K 线。",
+                (
+                    f"纪律出场：浮亏达 {stop_max:.0f}%→price_stop；连跌 {time_stop_days} 日→time_stop；"
+                    f"涨幅达警惕区 {alert_min:.0f}%–{alert_max:.0f}% 后自高点回撤 {trail:.0f}%→trailing_take_profit。"
+                ),
+                f"目标统计：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是（不必然立即平仓）。",
+                f"到期平仓：未触发纪律则满 {hz} 日以收盘价出场（horizon_end）。",
+                "同标的去重：上一笔出场日之前不再接受新信号开仓。",
+            ],
+            "exit_priority": [
+                {"code": "price_stop", "label": "价格止损", "desc": f"浮亏 ≤ -{stop_max:.0f}%"},
+                {"code": "time_stop", "label": "连跌离场", "desc": f"连续收跌 ≥ {time_stop_days} 日"},
+                {
+                    "code": "trailing_take_profit",
+                    "label": "回撤止盈",
+                    "desc": f"达警惕涨幅后自峰值回撤 ≥ {trail:.0f}%",
+                },
+                {
+                    "code": "horizon_end",
+                    "label": "到期平仓",
+                    "desc": f"满 {hz} 个交易日以收盘价出场",
+                },
+            ],
+        }
+    else:
+        trade_logic = {
+            "summary": (
+                f"URT 交易回测（对齐 GMS 命中率）：信号次日开盘入场；观察期 {hz} 个交易日；"
+                f"以观察期内最高价判定是否达到目标涨幅 {tp:.1f}%；不止损；最低得分 {ms:.0f}。"
             ),
-            f"到期平仓：持有满观察期，以最后一根 K 线收盘价作为参考出场价（horizon_end）。",
-            "同标的去重：上一笔观察期结束日之前不再接受新信号开仓。",
-            "参考盈亏 pnl_pct：按观察期末收盘价相对入场价计算；另输出 max_gain_pct（观察期最高价涨幅）。",
-            (
-                "说明：策略配置中的风控参数（止损/连跌/回撤）仅作文档参考，"
-                f"本回测模式不启用（止损区间约 {stop_min:.0f}%–{stop_max:.0f}%，"
-                f"连跌 {time_stop_days} 日、回撤止盈警惕 {alert_min:.0f}%–{alert_max:.0f}% / {trail:.0f}%）。"
-            ),
-        ],
-        "exit_priority": [
-            {
-                "code": "target_hit",
-                "label": "触及目标（统计）",
-                "desc": f"观察期内最高价触及 +{tp:.1f}%（不止损、不提前平仓）",
-            },
-            {
-                "code": "horizon_end",
-                "label": "到期平仓",
-                "desc": f"满 {hz} 个交易日以收盘价记作出场参考",
-            },
-        ],
-    }
+            "rules": [
+                (
+                    "信号筛选：硬筛（站上均线、连阳规则 A/B、放量倍数等）通过，"
+                    f"且得分 ≥ {ms:.0f}；"
+                    + ("优先读取 urt_signal_trace 预计算买点。" if use_trace else "实时引擎扫描买点。")
+                ),
+                "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
+                f"观察期：自入场日起共 {hz} 根交易日 K 线（默认 20，与 GMS horizon_days 一致）。",
+                (
+                    f"目标命中（不止损）：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是；"
+                    "同时记录观察期最高价与最大涨幅；不因浮亏/连跌/回撤提前离场。"
+                ),
+                f"到期平仓：持有满观察期，以最后一根 K 线收盘价作为参考出场价（horizon_end）。",
+                "同标的去重：上一笔观察期结束日之前不再接受新信号开仓。",
+                "参考盈亏 pnl_pct：按观察期末收盘价相对入场价计算；另输出 max_gain_pct（观察期最高价涨幅）。",
+                (
+                    "说明：策略配置中的风控参数（止损/连跌/回撤）在 hit_rate 模式下仅作文档参考，"
+                    f"本模式不启用（止损区间约 {stop_min:.0f}%–{stop_max:.0f}%，"
+                    f"连跌 {time_stop_days} 日、回撤止盈警惕 {alert_min:.0f}%–{alert_max:.0f}% / {trail:.0f}%）。"
+                    "启用纪律出场请设 exit_mode=risk_exit。"
+                ),
+            ],
+            "exit_priority": [
+                {
+                    "code": "target_hit",
+                    "label": "触及目标（统计）",
+                    "desc": f"观察期内最高价触及 +{tp:.1f}%（不止损、不提前平仓）",
+                },
+                {
+                    "code": "horizon_end",
+                    "label": "到期平仓",
+                    "desc": f"满 {hz} 个交易日以收盘价记作出场参考",
+                },
+            ],
+        }
     return {"risk_params": risk_params, "trade_logic": trade_logic}
 
 
@@ -275,9 +319,16 @@ def run_urt_backtest(
     min_score: Optional[float] = None,
     use_trace: bool = True,
     stock_pool: Optional[List[str]] = None,
+    exit_mode: str = "hit_rate",
     progress_cb: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
+    from .signal_detector import evaluate_exit_rules
+
+    mode = (exit_mode or "hit_rate").strip().lower()
+    if mode not in ("hit_rate", "risk_exit"):
+        mode = "hit_rate"
+
     cm = URTConfigManager()
     cm.ensure_default_row(db)
     cfg = cm.get_config(strategy_config_id, db=db)
@@ -426,14 +477,47 @@ def run_urt_backtest(
                     hit_date = bar.get("date")
 
             max_gain = (max_high / entry_price - 1.0) if entry_price else 0.0
-            # 不止损：持有满观察期，参考出场=末日收盘
-            last = future[-1]
-            exit_date = last.get("date") or entry_date
-            exit_close = last.get("close")
-            exit_price = float(exit_close) if exit_close is not None else entry_price
-            exit_reason = "horizon_end"
+            if mode == "risk_exit":
+                closes: List[float] = []
+                peak = entry_price
+                exit_date = future[-1].get("date") or entry_date
+                exit_price = float(future[-1].get("close") or entry_price)
+                exit_reason = "horizon_end"
+                bars_held = len(future)
+                for bi, bar in enumerate(future):
+                    cl = bar.get("close")
+                    if cl is None:
+                        cl = bar.get("open") if bar.get("open") is not None else entry_price
+                    cl_f = float(cl)
+                    closes.append(cl_f)
+                    hi = bar.get("high")
+                    if hi is None:
+                        hi = cl_f
+                    peak = max(peak, float(hi), cl_f)
+                    # 入场日当日仅建仓，从第二根 K 起检查纪律（仍统计 hit）
+                    if bi == 0:
+                        continue
+                    hit_exit = evaluate_exit_rules(
+                        entry_price=entry_price,
+                        closes=closes,
+                        peak_price=peak,
+                        cfg=cfg,
+                    )
+                    if hit_exit:
+                        exit_date = bar.get("date") or exit_date
+                        exit_price = cl_f
+                        exit_reason = str(hit_exit.get("exit_reason") or "risk_exit")
+                        bars_held = bi + 1
+                        break
+            else:
+                # 不止损：持有满观察期，参考出场=末日收盘
+                last = future[-1]
+                exit_date = last.get("date") or entry_date
+                exit_close = last.get("close")
+                exit_price = float(exit_close) if exit_close is not None else entry_price
+                exit_reason = "horizon_end"
+                bars_held = len(future)
             pnl_pct = (exit_price - entry_price) / entry_price * 100.0
-            bars_held = len(future)
             # 去重窗口=完整观察期结束日（对齐 GMS block_until_obs_end）
             cooldown[code] = exit_date
             details.append(
@@ -526,6 +610,7 @@ def run_urt_backtest(
         min_score=cfg.get("min_score"),
         use_trace=bool(use_trace),
         risk=cfg.get("risk") if isinstance(cfg.get("risk"), dict) else {},
+        exit_mode=mode,
     )
     summary = {
         "total_signals": total,
@@ -539,8 +624,9 @@ def run_urt_backtest(
         "avg_max_gain_pct": round(avg_max_gain, 2),
         "target_pct": target_pct,
         "horizon_days": horizon_days,
-        "backtest_mode": "signal_hit_rate",
-        "apply_stop_loss": False,
+        "backtest_mode": "risk_exit" if mode == "risk_exit" else "signal_hit_rate",
+        "exit_mode": mode,
+        "apply_stop_loss": mode == "risk_exit",
         "start_date": start_date,
         "end_date": end_date,
         "strategy_config_id": resolved_id,

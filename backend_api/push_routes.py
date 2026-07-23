@@ -28,6 +28,7 @@ VALID_PUSH_REPORT_TYPES = (
     "summary",
     "detailed",
     "gms_daily",
+    "urt_daily",
     "volume_aberration",
     "triple_volume_observe_scan",
     "triple_volume_observe_eval",

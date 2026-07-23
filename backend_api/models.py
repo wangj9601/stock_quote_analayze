@@ -1569,6 +1569,78 @@ class GmsFormalTrade(Base):
     user = relationship("User", backref="gms_formal_trades")
 
 
+class UrtTradeObserveStock(Base):
+    """用户 URT 交易观察股：网站选股页从 URT 信号列表点击「观察」加入。"""
+
+    __tablename__ = "urt_trade_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    config_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="urt_trade_observe_stocks")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "market", "code", name="uq_urt_trade_observe_user_market_code"),
+    )
+
+
+class UrtTradeObserveHistory(Base):
+    """用户 URT 交易观察股移除归档。"""
+
+    __tablename__ = "urt_trade_observe_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    config_id = Column(Integer, nullable=True, index=True)
+    observe_created_at = Column(DateTime, nullable=True)
+    observe_updated_at = Column(DateTime, nullable=True)
+    source_observe_id = Column(Integer, nullable=True)
+    removed_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User", backref="urt_trade_observe_history")
+
+
+class UrtFormalTrade(Base):
+    """用户 URT 正式交易记录：从交易观察转入。"""
+
+    __tablename__ = "urt_formal_trades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source_observe_id = Column(Integer, nullable=True, index=True)
+    entry_price = Column(Float, nullable=False)
+    position_lots = Column(Integer, nullable=False, default=0)
+    exit_price = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="open", index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    notes = Column(Text, nullable=True)
+    entry_at = Column(DateTime, default=datetime.now, nullable=False)
+    exit_at = Column(DateTime, nullable=True)
+    pnl_amount = Column(Float, nullable=True)
+    pnl_percent = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="urt_formal_trades")
+
+
 class TripleVolumeTradeObserveStock(Base):
     """用户 3倍量策略交易观察股：日终爆量列表点击「交易观察」加入。"""
 

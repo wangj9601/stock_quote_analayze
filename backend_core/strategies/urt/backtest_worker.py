@@ -61,6 +61,7 @@ def _run_task(task_id: str) -> None:
             min_score=cfg.get("min_score"),
             use_trace=bool(cfg.get("use_trace", True)),
             stock_pool=stock_pool if isinstance(stock_pool, list) else None,
+            exit_mode=str(cfg.get("exit_mode") or "hit_rate"),
             progress_cb=progress_cb,
             cancel_check=cancel_check,
         )
