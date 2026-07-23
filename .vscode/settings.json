@@ -8,5 +8,9 @@
         "postcss",
         "scss",
         "vue"
+    ],
+    "python.defaultInterpreterPath": "C:\\Users\\T480S\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
     ]
 }

@@ -13,6 +13,15 @@ const ScreeningPage = {
     vsbObserveSource: 'vsb',
     /** GMS 子页：signals=策略信号；trade-observe=交易观察；formal-trade=正式交易 */
     gmsSubPanel: 'signals',
+    /** URT 子页：signals / trade-observe / formal-trade */
+    urtSubPanel: 'signals',
+    /** 已加入 URT 交易观察的 CN:code */
+    urtTradeObserveCodeSet: new Set(),
+    /** 已在 URT 正式交易中的 CN:code */
+    urtFormalTradeCodeSet: new Set(),
+    urtTradeObserveItems: [],
+    _urtFormalTransferObserveId: null,
+    lastUrtSearchDate: null,
     /** 已加入交易观察的 CN:code / HK:code */
     gmsTradeObserveCodeSet: new Set(),
     /** 已在正式交易中的 CN:code / HK:code（策略信号页也显示「已观察」） */
@@ -66,12 +75,14 @@ const ScreeningPage = {
         this.initStrategyTabs();
         this.initVsbIntegratedTabs();
         this.initGmsIntegratedTabs();
+        this.initUrtIntegratedTabs();
         // 权限引擎需在 Tab 事件绑定后再应用，以便正确切换到首个有权限的策略
         if (typeof loadPermissionEngine === 'function') {
             await loadPermissionEngine();
         }
         this.ensureActiveStrategyVisible();
         this.applyVsbHashOnLoad();
+        void this.initUrtStrategyConfig();
     },
 
     /** 默认策略 Tab 被权限隐藏时，切换到第一个可见且有权限的策略 */
@@ -165,6 +176,10 @@ const ScreeningPage = {
             void this.loadGmsIndustryBoardOptions();
             void this.loadGmsObservedCodeSets();
         }
+        if (strategy === 'urt') {
+            void this.initUrtStrategyConfig();
+            void this.loadUrtObservedCodeSets();
+        }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');
         }
@@ -249,7 +264,541 @@ const ScreeningPage = {
             });
         }
         this._bindGmsFormalModalEvents();
+        this._bindUrtFormalModalEvents();
         this._bindGmsBoardPickerEvents();
+    },
+
+    initUrtIntegratedTabs() {
+        document.querySelectorAll('#urt-content .gms-integrated-head .gms-sub-tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const sub = btn.getAttribute('data-urt-sub');
+                if (sub === 'signals' || sub === 'trade-observe' || sub === 'formal-trade') {
+                    this.switchUrtSubPanel(sub);
+                }
+            });
+        });
+        const refreshBtn = document.getElementById('urtTradeObserveRefreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.refreshUrtTradeObserveList());
+        }
+        const formalRefreshBtn = document.getElementById('urtFormalTradeRefreshBtn');
+        if (formalRefreshBtn) {
+            formalRefreshBtn.addEventListener('click', () => this.refreshUrtFormalTradeList());
+        }
+        const formalStatusFilter = document.getElementById('urtFormalTradeStatusFilter');
+        if (formalStatusFilter) {
+            formalStatusFilter.addEventListener('change', () => this.refreshUrtFormalTradeList());
+        }
+        const observeBody = document.getElementById('urtTradeObserveTableBody');
+        if (observeBody) {
+            observeBody.addEventListener('click', (e) => {
+                const transfer = e.target.closest('.urt-trade-observe-transfer');
+                if (transfer) {
+                    e.preventDefault();
+                    const id = transfer.getAttribute('data-id');
+                    const code = transfer.getAttribute('data-code') || '';
+                    const name = transfer.getAttribute('data-name') || '';
+                    if (id) this.openUrtFormalTransferModal(parseInt(id, 10), code, name);
+                    return;
+                }
+                const rm = e.target.closest('.urt-trade-observe-remove');
+                if (rm) {
+                    e.preventDefault();
+                    const id = rm.getAttribute('data-id');
+                    if (id) void this.removeUrtTradeObserve(parseInt(id, 10), rm);
+                }
+            });
+        }
+        const formalBody = document.getElementById('urtFormalTradeTableBody');
+        if (formalBody) {
+            formalBody.addEventListener('click', (e) => {
+                const delBtn = e.target.closest('.urt-formal-trade-delete');
+                if (delBtn) {
+                    e.preventDefault();
+                    const id = delBtn.getAttribute('data-id');
+                    if (id && window.confirm('确定删除该正式交易记录？')) {
+                        void this.deleteUrtFormalTrade(parseInt(id, 10), delBtn);
+                    }
+                }
+            });
+        }
+    },
+
+    _bindUrtFormalModalEvents() {
+        const overlay = document.getElementById('urtFormalTransferModal');
+        if (!overlay) return;
+        ['urtFormalTransferClose', 'urtFormalTransferCancel'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', () => this._hideGmsModal(overlay));
+        });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._hideGmsModal(overlay);
+        });
+        const card = overlay.querySelector('.gms-modal-card');
+        if (card) card.addEventListener('click', (e) => e.stopPropagation());
+        const confirmBtn = document.getElementById('urtFormalTransferConfirm');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => void this.submitUrtFormalTransfer());
+        }
+    },
+
+    switchUrtSubPanel(sub) {
+        this.urtSubPanel = sub;
+        document.querySelectorAll('#urt-content .gms-integrated-head .gms-sub-tab').forEach((t) => {
+            t.classList.toggle('active', t.getAttribute('data-urt-sub') === sub);
+        });
+        document.querySelectorAll('#urt-content .gms-sub-panel').forEach((p) => {
+            const show =
+                (sub === 'signals' && p.id === 'urt-sub-signals-wrap') ||
+                (sub === 'trade-observe' && p.id === 'urt-sub-trade-observe-wrap') ||
+                (sub === 'formal-trade' && p.id === 'urt-sub-formal-trade-wrap');
+            p.classList.toggle('active', show);
+        });
+        if (sub === 'trade-observe') {
+            void this.refreshUrtTradeObserveList();
+        } else if (sub === 'formal-trade') {
+            void this.refreshUrtFormalTradeList();
+        }
+    },
+
+    _urtTradeObserveKey(market, code) {
+        const m = (market || 'CN').toUpperCase();
+        const c = this._gmsNormalizeCode(m, code);
+        return c ? `${m}:${c}` : `${m}:`;
+    },
+
+    _isUrtInTradeObserve(stock, market, code) {
+        const m = market || 'CN';
+        const c = code || String(stock?.code || '').trim();
+        const key = this._urtTradeObserveKey(m, c);
+        return this.urtTradeObserveCodeSet.has(key) || this.urtFormalTradeCodeSet.has(key);
+    },
+
+    async loadUrtObservedCodeSets() {
+        await Promise.all([
+            this.loadUrtTradeObserveCodes(),
+            this.loadUrtFormalTradeCodes(),
+        ]);
+    },
+
+    async loadUrtTradeObserveCodes() {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-trade-observe/codes`);
+            if (!res.ok) return;
+            const data = await res.json();
+            this.urtTradeObserveCodeSet = new Set(Array.isArray(data) ? data : []);
+        } catch (_) { /* ignore */ }
+    },
+
+    async loadUrtFormalTradeCodes() {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-formal-trade/codes`);
+            if (!res.ok) return;
+            const data = await res.json();
+            this.urtFormalTradeCodeSet = new Set(Array.isArray(data) ? data : []);
+        } catch (_) { /* ignore */ }
+    },
+
+    _buildUrtTradeObserveSnapshot(stock) {
+        if (!stock || typeof stock !== 'object') return {};
+        return {
+            code: stock.code,
+            name: stock.name,
+            signal_date: stock.signal_date,
+            close: stock.close,
+            ma20: stock.ma20,
+            yang_count_4: stock.yang_count_4,
+            yang_count_5: stock.yang_count_5,
+            volume_multiple: stock.volume_multiple,
+            volume_ratio: stock.volume_ratio,
+            turnover_rate: stock.turnover_rate,
+            score: stock.score,
+            score_detail: stock.score_detail || null,
+        };
+    },
+
+    _resolveUrtSignalDate(stock) {
+        if (!stock || typeof stock !== 'object') return this.lastUrtSearchDate || null;
+        if (stock.signal_date) return String(stock.signal_date).slice(0, 10);
+        return this.lastUrtSearchDate || null;
+    },
+
+    async refreshUrtTradeObserveList() {
+        const errEl = document.getElementById('urtTradeObserveError');
+        const loadingEl = document.getElementById('urtTradeObserveLoading');
+        const tbody = document.getElementById('urtTradeObserveTableBody');
+        const countEl = document.getElementById('urtTradeObserveCount');
+        const user = (window.CommonUtils && CommonUtils.auth)
+            ? await CommonUtils.auth.ensureLogin({
+                redirect: true,
+                message: '请先登录后查看交易观察列表',
+            })
+            : null;
+        if (!user) return;
+        if (errEl) errEl.style.display = 'none';
+        if (loadingEl) loadingEl.style.display = '';
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-trade-observe/list?page=1&page_size=500`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加载失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const items = data.items || [];
+            this.urtTradeObserveCodeSet = new Set(
+                items.map((it) => this._urtTradeObserveKey(it.market, it.code))
+            );
+            this.renderUrtTradeObserveTable(items);
+            if (countEl) {
+                const total = data.total != null ? data.total : items.length;
+                countEl.textContent = `共 ${total} 只观察股`;
+            }
+        } catch (e) {
+            if (errEl) {
+                errEl.style.display = '';
+                errEl.textContent = e.message || '加载交易观察列表失败';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败</td></tr>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    },
+
+    renderUrtTradeObserveTable(items) {
+        const tbody = document.getElementById('urtTradeObserveTableBody');
+        if (!tbody) return;
+        this.urtTradeObserveItems = Array.isArray(items) ? items : [];
+        if (!this.urtTradeObserveItems.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「观察」加入</td></tr>';
+            return;
+        }
+        const esc = (s) => String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+        const fmtPrice = (v) => (v != null && !isNaN(v)) ? Number(v).toFixed(2) : '--';
+        const fmtDt = (iso) => {
+            if (!iso) return '--';
+            const s = String(iso);
+            return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
+        };
+        tbody.innerHTML = this.urtTradeObserveItems.map((it) => {
+            const snap = it.snapshot || {};
+            const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            return `
+                <tr class="urt-trade-observe-row" data-observe-id="${it.id}">
+                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
+                    <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
+                    <td class="gms-col-price">${fmtPrice(snap.close)}</td>
+                    <td class="gms-col-narrow">${snap.score != null ? Number(snap.score).toFixed(1) : '--'}</td>
+                    <td class="gms-col-narrow">${fmtDt(it.updated_at || it.created_at)}</td>
+                    <td class="gms-col-actions gms-col-actions--wide">
+                        <div class="action-links">
+                            <button type="button" class="gms-op-btn gms-op-btn--primary urt-trade-observe-transfer" data-id="${it.id}" data-code="${esc(it.code)}" data-name="${esc(it.name || '')}" title="转入正式交易">转正式交易</button>
+                            <button type="button" class="gms-op-btn urt-trade-observe-remove" data-id="${it.id}" title="移出交易观察">移除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    async addUrtTradeObserveFromRow(rowIndex, btnEl) {
+        const stocks = this.lastResults.urt;
+        const stock = Array.isArray(stocks) ? stocks[rowIndex] : null;
+        if (!stock) {
+            if (window.CommonUtils) CommonUtils.showToast('未找到该行信号数据，请刷新筛选后重试', 'warning');
+            return;
+        }
+        const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+        if (!user || !user.id) {
+            if (window.CommonUtils) CommonUtils.showToast('请先登录后再加入交易观察', 'warning');
+            window.location.href = 'login.html';
+            return;
+        }
+        const code = String(stock.code || '').trim();
+        const market = 'CN';
+        const key = this._urtTradeObserveKey(market, code);
+        if (this._isUrtInTradeObserve(stock, market, code)) {
+            if (window.CommonUtils) {
+                const inFormal = this.urtFormalTradeCodeSet.has(key);
+                CommonUtils.showToast(inFormal ? '该股票已在正式交易中' : '已在交易观察列表中', 'info');
+            }
+            if (btnEl) {
+                btnEl.textContent = '已观察';
+                btnEl.classList.add('is-added');
+                btnEl.disabled = true;
+            }
+            this.urtTradeObserveCodeSet.add(key);
+            return;
+        }
+        const signalDate = this._resolveUrtSignalDate(stock);
+        if (!signalDate) {
+            if (window.CommonUtils) CommonUtils.showToast('无法确定信号交易日，请先刷新 URT 筛选', 'warning');
+            return;
+        }
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.textContent = '加入中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-trade-observe/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code,
+                    market,
+                    name: stock.name || code,
+                    signal_date: signalDate,
+                    snapshot: this._buildUrtTradeObserveSnapshot(stock),
+                    config_id: this.urtConfigId || null,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            this.urtTradeObserveCodeSet.add(key);
+            if (window.CommonUtils) CommonUtils.showToast(`已加入交易观察：${stock.name || code}`, 'success');
+            if (btnEl) {
+                btnEl.textContent = '已观察';
+                btnEl.classList.add('is-added');
+                btnEl.disabled = true;
+            }
+            if (this.urtSubPanel === 'trade-observe') {
+                void this.refreshUrtTradeObserveList();
+            }
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '加入交易观察失败', 'error');
+            await this.loadUrtObservedCodeSets();
+            const stillIn = this._isUrtInTradeObserve(stock, market, code);
+            if (btnEl) {
+                if (stillIn) {
+                    btnEl.textContent = '已观察';
+                    btnEl.classList.add('is-added');
+                    btnEl.disabled = true;
+                } else {
+                    btnEl.textContent = '观察';
+                    btnEl.classList.remove('is-added');
+                    btnEl.disabled = false;
+                }
+            }
+        }
+    },
+
+    async removeUrtTradeObserve(itemId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) btnEl.disabled = true;
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-trade-observe/${itemId}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `移除失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            if (window.CommonUtils) CommonUtils.showToast('已移出交易观察', 'success');
+            await this.loadUrtObservedCodeSets();
+            void this.refreshUrtTradeObserveList();
+            this._refreshUrtTradeObserveButtonsInSignalTable();
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '移除失败', 'error');
+            if (btnEl) btnEl.disabled = false;
+        }
+    },
+
+    _refreshUrtTradeObserveButtonsInSignalTable() {
+        const tbody = document.getElementById('resultsTableBody-urt');
+        if (!tbody) return;
+        tbody.querySelectorAll('.urt-trade-observe-add').forEach((btn) => {
+            const rowIndex = parseInt(btn.getAttribute('data-row'), 10);
+            const stocks = this.lastResults.urt;
+            const stock = Array.isArray(stocks) ? stocks[rowIndex] : null;
+            if (!stock) return;
+            const code = String(stock.code || '').trim();
+            const key = this._urtTradeObserveKey('CN', code);
+            const added = this._isUrtInTradeObserve(stock, 'CN', code);
+            btn.textContent = added ? '已观察' : '观察';
+            btn.classList.toggle('is-added', added);
+            btn.disabled = added;
+            if (added) this.urtTradeObserveCodeSet.add(key);
+        });
+    },
+
+    openUrtFormalTransferModal(observeId, code, name) {
+        this._urtFormalTransferObserveId = observeId;
+        const label = document.getElementById('urtFormalTransferStockLabel');
+        if (label) label.textContent = `${code} ${name || ''}`.trim();
+        const item = (this.urtTradeObserveItems || []).find((it) => it.id === observeId);
+        const snap = item && item.snapshot ? item.snapshot : {};
+        const priceEl = document.getElementById('urtFormalTransferEntryPrice');
+        if (priceEl && snap.close != null) priceEl.value = Number(snap.close).toFixed(2);
+        else if (priceEl) priceEl.value = '';
+        const lotsEl = document.getElementById('urtFormalTransferLots');
+        if (lotsEl && !lotsEl.value) lotsEl.value = '1';
+        this._showGmsModal(document.getElementById('urtFormalTransferModal'));
+    },
+
+    async submitUrtFormalTransfer() {
+        const observeId = this._urtFormalTransferObserveId;
+        if (!observeId) return;
+        const priceEl = document.getElementById('urtFormalTransferEntryPrice');
+        const lotsEl = document.getElementById('urtFormalTransferLots');
+        const entryPrice = priceEl ? parseFloat(priceEl.value) : NaN;
+        const lots = lotsEl ? parseInt(lotsEl.value, 10) : NaN;
+        if (!entryPrice || entryPrice <= 0 || !lots || lots < 1) {
+            if (window.CommonUtils) CommonUtils.showToast('请填写有效的入场价与仓位', 'warning');
+            return;
+        }
+        const confirmBtn = document.getElementById('urtFormalTransferConfirm');
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = '提交中...';
+            }
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-formal-trade/from-observe/${observeId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entry_price: entryPrice, position_lots: lots }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `转入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            this._hideGmsModal(document.getElementById('urtFormalTransferModal'));
+            this._urtFormalTransferObserveId = null;
+            if (window.CommonUtils) CommonUtils.showToast('已转入正式交易', 'success');
+            await this.loadUrtObservedCodeSets();
+            void this.refreshUrtTradeObserveList();
+            this._refreshUrtTradeObserveButtonsInSignalTable();
+            if (this.urtSubPanel === 'formal-trade') {
+                void this.refreshUrtFormalTradeList();
+            }
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '转入正式交易失败', 'error');
+        } finally {
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = '确认转入';
+            }
+        }
+    },
+
+    async refreshUrtFormalTradeList() {
+        const errEl = document.getElementById('urtFormalTradeError');
+        const loadingEl = document.getElementById('urtFormalTradeLoading');
+        const tbody = document.getElementById('urtFormalTradeTableBody');
+        const countEl = document.getElementById('urtFormalTradeCount');
+        const statusEl = document.getElementById('urtFormalTradeStatusFilter');
+        const user = (window.CommonUtils && CommonUtils.auth)
+            ? await CommonUtils.auth.ensureLogin({
+                redirect: true,
+                message: '请先登录后查看正式交易列表',
+            })
+            : null;
+        if (!user) return;
+        if (errEl) errEl.style.display = 'none';
+        if (loadingEl) loadingEl.style.display = '';
+        const fetchFn = this.getAuthFetchFn();
+        const status = statusEl ? statusEl.value : '';
+        const qs = status ? `?page=1&page_size=500&status=${encodeURIComponent(status)}` : '?page=1&page_size=500';
+        try {
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-formal-trade/list${qs}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加载失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            const items = data.items || [];
+            this.renderUrtFormalTradeTable(items);
+            if (countEl) {
+                const total = data.total != null ? data.total : items.length;
+                countEl.textContent = `共 ${total} 条正式交易`;
+            }
+        } catch (e) {
+            if (errEl) {
+                errEl.style.display = '';
+                errEl.textContent = e.message || '加载正式交易列表失败';
+            }
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="11" class="empty-state">加载失败</td></tr>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    },
+
+    renderUrtFormalTradeTable(items) {
+        const tbody = document.getElementById('urtFormalTradeTableBody');
+        if (!tbody) return;
+        if (!items || !items.length) {
+            tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无正式交易记录</td></tr>';
+            return;
+        }
+        const esc = (s) => String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+        const fmtPrice = (v) => (v != null && !isNaN(v)) ? Number(v).toFixed(2) : '--';
+        const fmtDt = (iso) => {
+            if (!iso) return '--';
+            const s = String(iso);
+            return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
+        };
+        tbody.innerHTML = items.map((it) => {
+            const statusLabel = it.status === 'closed' ? '已平仓' : '持仓中';
+            const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            return `
+                <tr data-trade-id="${it.id}">
+                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td class="gms-col-name"><span class="stock-name">${esc(it.name || '--')}</span></td>
+                    <td class="gms-col-price">${fmtPrice(it.entry_price)}</td>
+                    <td class="gms-col-narrow">${it.position_lots != null ? it.position_lots : '--'}</td>
+                    <td class="gms-col-price">${fmtPrice(it.exit_price)}</td>
+                    <td class="gms-col-narrow">${it.pnl_amount != null ? fmtPrice(it.pnl_amount) : '--'}</td>
+                    <td class="gms-col-narrow">${it.pnl_percent != null ? Number(it.pnl_percent).toFixed(2) + '%' : '--'}</td>
+                    <td class="gms-col-narrow">${statusLabel}</td>
+                    <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
+                    <td class="gms-col-narrow">${fmtDt(it.entry_at)}</td>
+                    <td class="gms-col-actions">
+                        <button type="button" class="gms-op-btn urt-formal-trade-delete" data-id="${it.id}" title="删除">删除</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    async deleteUrtFormalTrade(tradeId, btnEl) {
+        const fetchFn = this.getAuthFetchFn();
+        try {
+            if (btnEl) btnEl.disabled = true;
+            const res = await fetchFn(`${this.API_BASE_URL}/api/stock/urt-formal-trade/${tradeId}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `删除失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            if (window.CommonUtils) CommonUtils.showToast('已删除正式交易记录', 'success');
+            await this.loadUrtObservedCodeSets();
+            void this.refreshUrtFormalTradeList();
+            this._refreshUrtTradeObserveButtonsInSignalTable();
+        } catch (e) {
+            if (window.CommonUtils) CommonUtils.showToast(e.message || '删除失败', 'error');
+            if (btnEl) btnEl.disabled = false;
+        }
     },
 
     _bindGmsBoardPickerEvents() {
@@ -2759,6 +3308,15 @@ const ScreeningPage = {
         const urtContainer = document.getElementById('resultsContainer-urt');
         if (urtContainer) {
             urtContainer.addEventListener('click', (e) => {
+                const observeBtn = e.target.closest('.urt-trade-observe-add');
+                if (observeBtn) {
+                    e.preventDefault();
+                    const rowIndex = observeBtn.getAttribute('data-row');
+                    if (rowIndex != null && rowIndex !== '') {
+                        void this.addUrtTradeObserveFromRow(parseInt(rowIndex, 10), observeBtn);
+                    }
+                    return;
+                }
                 const btn = e.target.closest('.urt-score-detail-toggle');
                 if (!btn) return;
                 e.preventDefault();
@@ -3029,7 +3587,7 @@ const ScreeningPage = {
         if (urtDateEl && urtDateEl.value) {
             params.set('date', urtDateEl.value);
         }
-        if (scope === 'cn') {
+        if (scope === 'cn' || scope === 'hk') {
             const limEl = document.getElementById('urtLimit');
             const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
             if (limRaw !== '') {
@@ -3037,6 +3595,10 @@ const ScreeningPage = {
                 if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
             }
         }
+        const configEl = document.getElementById('urt-config_id');
+        const cid = configEl && configEl.value ? parseInt(configEl.value, 10) : NaN;
+        if (!isNaN(cid) && cid > 0) params.set('config_id', String(cid));
+
         // 单只股票：不传筛选参数，后端跳过硬筛/最低得分，直接计算信号
         if (scope !== 'single') {
             const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
@@ -3045,6 +3607,60 @@ const ScreeningPage = {
             if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
         }
         return params;
+    },
+
+    /** 加载 URT 策略参数版本列表（切换后不自动刷新，须点「刷新筛选」） */
+    async initUrtStrategyConfig() {
+        const selectEl = document.getElementById('urt-config_id');
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">加载中…</option>';
+        try {
+            const res = await fetch(`${this.API_BASE_URL}/api/frontend/urt/strategy-configs`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const json = await res.json();
+            if (!json.success) throw new Error(json.detail || json.message || '接口返回失败');
+            const list = json.data || [];
+            if (!list.length) {
+                selectEl.innerHTML = '<option value="">暂无可用参数版本</option>';
+                return;
+            }
+            const defaultId = json.default_config_id;
+            let preferId = null;
+            try {
+                const saved = sessionStorage.getItem('urtScreeningConfigId');
+                if (saved) preferId = parseInt(saved, 10);
+            } catch (_) { /* ignore */ }
+            selectEl.innerHTML = '';
+            list.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = String(item.id);
+                const label = item.version_label
+                    ? `${item.name}（${item.version_label}）`
+                    : item.name;
+                opt.textContent = item.is_default ? `${label}（默认）` : label;
+                selectEl.appendChild(opt);
+            });
+            const ids = new Set(list.map((x) => x.id));
+            let selected = preferId && ids.has(preferId) ? preferId : defaultId;
+            if (selected == null || !ids.has(selected)) selected = list[0].id;
+            selectEl.value = String(selected);
+            this.urtConfigId = selected;
+            if (!selectEl._urtConfigBound) {
+                selectEl.addEventListener('change', () => {
+                    const v = parseInt(selectEl.value, 10);
+                    this.urtConfigId = !isNaN(v) ? v : null;
+                    try {
+                        if (this.urtConfigId != null) {
+                            sessionStorage.setItem('urtScreeningConfigId', String(this.urtConfigId));
+                        }
+                    } catch (_) { /* ignore */ }
+                });
+                selectEl._urtConfigBound = true;
+            }
+        } catch (e) {
+            console.error('initUrtStrategyConfig:', e);
+            selectEl.innerHTML = '<option value="">参数版本加载失败</option>';
+        }
     },
 
     /** GMS：按代码/名称精准定位（全量拉取后匹配） */
@@ -3382,6 +3998,9 @@ const ScreeningPage = {
                 if (strategy === 'gms' && result.search_date) {
                     this.lastGmsSearchDate = String(result.search_date).slice(0, 10);
                 }
+                if (strategy === 'urt' && result.search_date) {
+                    this.lastUrtSearchDate = String(result.search_date).slice(0, 10);
+                }
                 if (strategy === 'gms') {
                     const traceMeta = result.gms_trace_meta || {};
                     const configSel = document.getElementById('gms-config_id');
@@ -3400,9 +4019,15 @@ const ScreeningPage = {
                 if (strategy === 'gms') {
                     await this.loadGmsObservedCodeSets();
                 }
+                if (strategy === 'urt') {
+                    await this.loadUrtObservedCodeSets();
+                }
                 this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
                 if (strategy === 'gms') {
                     this._refreshGmsTradeObserveButtonsInSignalTable();
+                }
+                if (strategy === 'urt') {
+                    this._refreshUrtTradeObserveButtonsInSignalTable();
                 }
                 if (strategy === 'gms') {
                     if (result.paging) {
@@ -4147,6 +4772,8 @@ const ScreeningPage = {
                     .replace(/'/g, '&#39;')
                     .replace(/</g, '&lt;');
                 const urtCode = String(stock.code || '');
+                const urtMarket = 'CN';
+                const urtAlreadyObserve = this._isUrtInTradeObserve(stock, urtMarket, urtCode);
                 const urtDetailHref = `stock.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 const urtTraceHref = `stock_urt_trace.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 let urtScoreDetailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
@@ -4175,6 +4802,7 @@ const ScreeningPage = {
                         <td class="gms-col-actions">
                             <div class="action-links">
                                 <a href="${urtTraceHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
+                                <button type="button" class="gms-op-btn gms-op-btn--primary urt-trade-observe-add${urtAlreadyObserve ? ' is-added' : ''}" data-row="${index}" data-code="${urtCode}" data-market="${urtMarket}" title="加入交易观察" ${urtAlreadyObserve ? 'disabled' : ''}>${urtAlreadyObserve ? '已观察' : '观察'}</button>
                                 <button type="button" class="gms-op-btn urt-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">明细</button>
                             </div>
                         </td>

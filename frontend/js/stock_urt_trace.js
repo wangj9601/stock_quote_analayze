@@ -31,6 +31,11 @@
             this.forceComputeTaskId = '';
             this.forceComputePollCount = 0;
             this.maxForceComputePolls = 3600;
+            this.backtestRunning = false;
+            this.backtestTaskId = '';
+            this.backtestPollTimer = null;
+            this.backtestPollCount = 0;
+            this.maxBacktestPolls = 3600;
 
             document.getElementById('stockDisplay').textContent =
                 this.code ? `${this.code} ${this.name}` : '--';
@@ -57,6 +62,9 @@
             document.getElementById('prevPage').addEventListener('click', () => this.goToPage(this.currentPage - 1));
             document.getElementById('nextPage').addEventListener('click', () => this.goToPage(this.currentPage + 1));
             document.getElementById('lastPage').addEventListener('click', () => this.goToPage(this.totalPages));
+
+            const btBtn = document.getElementById('btStartBtn');
+            if (btBtn) btBtn.addEventListener('click', () => this.startBacktest());
 
             const tbody = document.querySelector('#traceTable tbody');
             if (tbody) {
@@ -365,6 +373,184 @@
             this.currentPage = p;
             this.renderTable();
             this.updatePagination();
+        }
+
+        setBacktestRunning(running) {
+            this.backtestRunning = !!running;
+            const btn = document.getElementById('btStartBtn');
+            if (btn) {
+                btn.disabled = this.backtestRunning;
+                btn.textContent = this.backtestRunning ? '回测进行中…' : '开始回测';
+            }
+        }
+
+        clearBacktestPoll() {
+            if (this.backtestPollTimer) {
+                clearInterval(this.backtestPollTimer);
+                this.backtestPollTimer = null;
+            }
+            this.backtestPollCount = 0;
+        }
+
+        async startBacktest() {
+            if (this.backtestRunning) return;
+            if (!this.code) {
+                alert('请先通过链接带股票代码进入本页面');
+                return;
+            }
+            const startDate = document.getElementById('startDate')?.value;
+            const endDate = document.getElementById('endDate')?.value;
+            if (!startDate || !endDate) {
+                alert('请填写回测区间的开始日期与结束日期');
+                return;
+            }
+            const pctRaw = parseFloat(String(document.getElementById('btTargetPct')?.value || '10'), 10);
+            if (Number.isNaN(pctRaw) || pctRaw < 0.1 || pctRaw > 100) {
+                alert('目标涨幅请在 0.1%～100% 之间');
+                return;
+            }
+            const targetPct = pctRaw / 100;
+            const horizon = parseInt(document.getElementById('btHorizon')?.value || '20', 10);
+            const minScoreRaw = document.getElementById('btMinScore')?.value;
+            const minScore = minScoreRaw !== '' && minScoreRaw != null ? parseFloat(minScoreRaw) : null;
+            if (horizon < 10 || horizon > 30) {
+                alert('持有窗口应在 10～30 个交易日之间');
+                return;
+            }
+            this.clearBacktestPoll();
+            const resultArea = document.getElementById('btResultArea');
+            const statusArea = document.getElementById('btStatusArea');
+            if (resultArea) {
+                resultArea.style.display = 'none';
+                resultArea.innerHTML = '';
+            }
+            if (statusArea) {
+                statusArea.style.display = 'block';
+                statusArea.innerHTML = '正在提交回测任务…';
+            }
+            this.setBacktestRunning(true);
+            const body = {
+                code: this.code,
+                start_date: startDate,
+                end_date: endDate,
+                target_pct: targetPct,
+                horizon_days: horizon,
+                strategy_config_id: this.configId,
+            };
+            if (minScore != null && !Number.isNaN(minScore)) body.min_score = minScore;
+            try {
+                const resp = await fetch(`${apiBase}/api/stock/urt-backtest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const json = await resp.json().catch(() => ({}));
+                if (!resp.ok || !json.success) {
+                    const detail = json.detail || json.message || resp.statusText;
+                    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+                }
+                this.backtestTaskId = json.data?.task_id || '';
+                if (!this.backtestTaskId) throw new Error('未返回任务 ID');
+                this.pollBacktestOnce();
+                this.backtestPollTimer = setInterval(() => this.pollBacktestOnce(), 2000);
+            } catch (e) {
+                if (statusArea) {
+                    statusArea.innerHTML = `<span class="gms-backtest-error">提交失败: ${escapeHtml(e.message || e)}</span>`;
+                }
+                this.setBacktestRunning(false);
+            }
+        }
+
+        async pollBacktestOnce() {
+            this.backtestPollCount += 1;
+            if (this.backtestPollCount > this.maxBacktestPolls) {
+                this.clearBacktestPoll();
+                this.setBacktestRunning(false);
+                const statusArea = document.getElementById('btStatusArea');
+                if (statusArea) {
+                    statusArea.innerHTML = '<span class="gms-backtest-error">等待超时，请稍后在管理端查看或重试</span>';
+                }
+                return;
+            }
+            try {
+                const resp = await fetch(`${apiBase}/api/stock/urt-backtest/${encodeURIComponent(this.backtestTaskId)}`);
+                const json = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    this.clearBacktestPoll();
+                    this.setBacktestRunning(false);
+                    const statusArea = document.getElementById('btStatusArea');
+                    if (statusArea) {
+                        statusArea.innerHTML = `<span class="gms-backtest-error">查询失败: ${escapeHtml(json.detail || resp.statusText)}</span>`;
+                    }
+                    return;
+                }
+                const task = json.data;
+                if (!task) return;
+                this.renderBacktestStatus(task);
+                const st = task.status;
+                if (st === 'completed' || st === 'failed' || st === 'cancelled') {
+                    this.clearBacktestPoll();
+                    this.setBacktestRunning(false);
+                    if (st === 'completed') {
+                        this.renderBacktestSummary(task);
+                    } else if (st === 'failed') {
+                        const resultArea = document.getElementById('btResultArea');
+                        if (resultArea) {
+                            resultArea.style.display = 'block';
+                            resultArea.innerHTML = `<p class="gms-backtest-error">${escapeHtml(String(task.error || '回测失败'))}</p>`;
+                        }
+                    }
+                }
+            } catch (e) {
+                this.clearBacktestPoll();
+                this.setBacktestRunning(false);
+                const statusArea = document.getElementById('btStatusArea');
+                if (statusArea) {
+                    statusArea.innerHTML = `<span class="gms-backtest-error">轮询异常: ${escapeHtml(e.message || e)}</span>`;
+                }
+            }
+        }
+
+        renderBacktestStatus(task) {
+            const statusArea = document.getElementById('btStatusArea');
+            if (!statusArea) return;
+            statusArea.style.display = 'block';
+            const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
+            const msg = task.message || task.status || '';
+            statusArea.innerHTML = `
+                <div>状态: <strong>${escapeHtml(String(task.status || ''))}</strong>${msg ? ` · ${escapeHtml(String(msg))}` : ''}</div>
+                <div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>
+            `;
+        }
+
+        renderBacktestSummary(task) {
+            const resultArea = document.getElementById('btResultArea');
+            if (!resultArea) return;
+            const summary = task.summary;
+            const cfg = task.config || {};
+            resultArea.style.display = 'block';
+            if (!summary || typeof summary !== 'object') {
+                resultArea.innerHTML = '<p>回测已完成，暂无汇总数据</p>';
+                return;
+            }
+            const hr = summary.hit_rate != null ? (Number(summary.hit_rate) * 100).toFixed(2) + '%' : '--';
+            const samples = summary.total_samples != null ? String(summary.total_samples) : '--';
+            const hits = summary.hit_count != null ? String(summary.hit_count) : '--';
+            const tp = cfg.target_pct != null ? (Number(cfg.target_pct) * 100).toFixed(1) : '--';
+            const hz = cfg.horizon_days != null ? String(cfg.horizon_days) : '--';
+            let html = '<h4>回测报告</h4>';
+            html += `<p>区间 ${escapeHtml(String(cfg.start_date || ''))} ～ ${escapeHtml(String(cfg.end_date || ''))} · 目标 ${tp}% · 窗口 ${hz} 日</p>`;
+            html += '<div class="gms-backtest-summary-grid">';
+            html += `<div class="gms-backtest-summary-item"><strong>命中率</strong><span>${hr}</span></div>`;
+            html += `<div class="gms-backtest-summary-item"><strong>样本数</strong><span>${escapeHtml(samples)}</span></div>`;
+            html += `<div class="gms-backtest-summary-item"><strong>命中次数</strong><span>${escapeHtml(hits)}</span></div>`;
+            html += '</div>';
+            const tid = task.task_id;
+            if (tid) {
+                const exportUrl = `${apiBase}/api/stock/urt-backtest/${encodeURIComponent(tid)}/export`;
+                html += `<p class="gms-bt-export-wrap"><a class="gms-bt-export-link" href="${exportUrl}" download>下载明细 CSV</a></p>`;
+            }
+            resultArea.innerHTML = html;
         }
 
         async fetchData() {

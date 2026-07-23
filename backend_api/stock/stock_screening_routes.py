@@ -2754,7 +2754,7 @@ async def get_volume_shrink_breakout_strategy(
 async def get_urt_strategy(
     scope: str = Query(
         "cn",
-        description="股票范围: cn|all|watchlist|industry_board|concept_board|single",
+        description="股票范围: cn|hk|all|watchlist|industry_board|concept_board|single",
     ),
     limit: Optional[int] = Query(None, ge=1, description="限制扫描数量（全市场建议先设 limit）"),
     date: Optional[str] = Query(None, description="筛选基准日 YYYY-MM-DD"),
@@ -2787,7 +2787,7 @@ async def get_urt_strategy(
 ):
     """
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
-    暂仅 A 股。数据来源对齐 GMS：全部A股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
+    支持 A 股与港股全市场；数据来源对齐 GMS：全部A股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
     scope=single 时跳过硬筛与最低得分过滤，直接计算该股策略信号明细（含未通过买点）。
     """
     if not URT_AVAILABLE or URTFrontendInterface is None:
@@ -2799,12 +2799,14 @@ async def get_urt_strategy(
     scope_raw = (scope or "cn").strip().lower()
     if scope_raw == "all":
         scope_raw = "cn"
-    allowed = {"cn", "watchlist", "industry_board", "concept_board", "single"}
+    allowed = {"cn", "hk", "watchlist", "industry_board", "concept_board", "single"}
     if scope_raw not in allowed:
         raise HTTPException(
             status_code=400,
-            detail="scope 仅支持 cn/all/watchlist/industry_board/concept_board/single",
+            detail="scope 仅支持 cn/hk/all/watchlist/industry_board/concept_board/single",
         )
+
+    urt_market = "HK" if scope_raw == "hk" else "CN"
 
     from backend_core.strategies.urt.data_loader import URTDataLoader, normalize_urt_board_keys
 
@@ -2929,7 +2931,7 @@ async def get_urt_strategy(
         extra_meta["stock_code"] = stock_codes[0]
 
     if empty_msg is not None and stock_codes is not None and len(stock_codes) == 0:
-        eff = URTDataLoader.resolve_effective_history_end_date(db, date)
+        eff = URTDataLoader.resolve_effective_history_end_date(db, date, market=urt_market)
         return JSONResponse(
             {
                 "success": True,
@@ -2949,7 +2951,7 @@ async def get_urt_strategy(
         keys = normalize_urt_board_keys(boards_out) or boards_out
         stock_codes = [c for c in stock_codes if code_matches_vsb_boards(c, keys)]
         if not stock_codes:
-            eff = URTDataLoader.resolve_effective_history_end_date(db, date)
+            eff = URTDataLoader.resolve_effective_history_end_date(db, date, market=urt_market)
             return JSONResponse(
                 {
                     "success": True,
@@ -2987,6 +2989,7 @@ async def get_urt_strategy(
             min_turnover=None if skip_filters else min_turnover,
             min_volume_ratio=None if skip_filters else min_volume_ratio,
             skip_screening_filters=skip_filters,
+            market=urt_market,
         )
 
     try:

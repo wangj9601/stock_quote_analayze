@@ -70,6 +70,16 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="出场模式">
+              <el-select v-model="form.exit_mode" class="w-full">
+                <el-option label="命中率（不止损）" value="hit_rate" />
+                <el-option label="纪律出场（止损/连跌/回撤）" value="risk_exit" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <el-row :gutter="16">
           <el-col :span="24">
@@ -260,6 +270,7 @@ const form = reactive({
   min_score: 70,
   strategy_config_id: undefined as number | undefined,
   use_trace: true,
+  exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit',
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: '',
@@ -420,6 +431,7 @@ async function createTask() {
       min_score: form.min_score,
       strategy_config_id: form.strategy_config_id,
       use_trace: form.use_trace,
+      exit_mode: form.exit_mode,
       stock_pool_mode: mode,
       cn_board_segment: cnBoardSegment.value === 'ALL' ? undefined : cnBoardSegment.value,
     }

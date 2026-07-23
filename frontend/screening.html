@@ -1442,7 +1442,7 @@
                     <li><strong>动能连阳：</strong>4 日内 ≥3 根阳线，或 5 日内 ≥4 根阳线</li>
                     <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（默认 2.5）</li>
                     <li><strong>得分过滤：</strong>默认最低 70 分；可选手动启用换手率/量比硬筛</li>
-                    <li><strong>数据来源：</strong>全部 A 股 / 我的自选 / 行业板块 / 概念板块 / 单只股票（暂仅 A 股）；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
+                    <li><strong>数据来源：</strong>全部 A 股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
                     <li class="condition-item">全市场扫描较慢，联调请先设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
                 </ul>
             </div>
@@ -1454,6 +1454,10 @@
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="urtScopeCN" name="urtScope" value="cn" checked style="margin-right: 5px;">
                         <label for="urtScopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeHK" name="urtScope" value="hk" style="margin-right: 5px;">
+                        <label for="urtScopeHK" style="cursor: pointer;">全部港股</label>
                     </div>
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="urtScopeWatchlist" name="urtScope" value="watchlist" style="margin-right: 5px;">
@@ -1506,7 +1510,14 @@
 
             <div class="parameters-card">
                 <h3>可选参数</h3>
+                <p class="gms-params-refresh-hint">切换参数版本或修改量能/得分后，须点击「刷新筛选」才会重新计算。</p>
                 <div class="parameters-grid">
+                    <div class="parameter-group">
+                        <label for="urt-config_id">策略参数版本</label>
+                        <select id="urt-config_id" class="param-input">
+                            <option value="">加载中…</option>
+                        </select>
+                    </div>
                     <div class="parameter-group">
                         <label for="urtScreeningDate">筛选基准日</label>
                         <input type="date" id="urtScreeningDate" class="param-input">
@@ -1533,6 +1544,17 @@
                 <button id="exportBtn-urt" class="export-btn gms-btn-outline" style="display:none;" data-perm="channel.screening.tab.urt.btn.export">导出CSV</button>
                 <span id="searchDate-urt" class="search-date gms-meta-text"></span>
             </div>
+
+            <div class="gms-integrated-head">
+                <div class="gms-segmented-tabs" role="tablist" aria-label="URT 列表类型">
+                    <button type="button" class="gms-sub-tab active" data-urt-sub="signals" id="urtSubTabSignals">策略信号</button>
+                    <button type="button" class="gms-sub-tab" data-urt-sub="trade-observe" id="urtSubTabTradeObserve">交易观察</button>
+                    <button type="button" class="gms-sub-tab" data-urt-sub="formal-trade" id="urtSubTabFormalTrade">正式交易</button>
+                </div>
+                <p class="gms-integrated-hint">策略信号为当前筛选结果；交易观察为您从信号中标记、便于跟进的股票；正式交易记录实际入场与仓位。</p>
+            </div>
+
+            <div id="urt-sub-signals-wrap" class="gms-sub-panel active">
             <div id="loadingIndicator-urt" class="loading-indicator" style="display:none;">
                 <div class="spinner"></div>
                 <span>正在筛选股票，请稍候...</span>
@@ -1566,6 +1588,92 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+            </div>
+
+            <div id="urt-sub-trade-observe-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="urtTradeObserveRefreshBtn" class="refresh-btn">刷新列表</button>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="urtTradeObserveCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="urtTradeObserveError" class="error-message" style="display:none;"></div>
+                <div id="urtTradeObserveLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载交易观察列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-urt-trade-observe" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-price">收盘</th>
+                                    <th class="gms-col-narrow">得分</th>
+                                    <th class="gms-col-narrow">加入时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="urtTradeObserveTableBody">
+                                <tr>
+                                    <td colspan="7" class="empty-state">请在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="urt-sub-formal-trade-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="urtFormalTradeRefreshBtn" class="refresh-btn">刷新列表</button>
+                        <select id="urtFormalTradeStatusFilter" class="gms-search-input" style="width:auto; min-width:120px;">
+                            <option value="">全部状态</option>
+                            <option value="open">持仓中</option>
+                            <option value="closed">已平仓</option>
+                        </select>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="urtFormalTradeCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="urtFormalTradeError" class="error-message" style="display:none;"></div>
+                <div id="urtFormalTradeLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载正式交易列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-urt-formal-trade" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-price">入场价</th>
+                                    <th class="gms-col-narrow">仓位(手)</th>
+                                    <th class="gms-col-price">出场价</th>
+                                    <th class="gms-col-narrow">盈亏(元)</th>
+                                    <th class="gms-col-narrow">盈亏%</th>
+                                    <th class="gms-col-narrow">状态</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-narrow">入场时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="urtFormalTradeTableBody">
+                                <tr>
+                                    <td colspan="11" class="empty-state">请登录后，在「交易观察」中点击「转正式交易」，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1887,6 +1995,28 @@
             <div class="gms-modal-actions">
                 <button type="button" class="gms-btn-outline" id="gmsFormalTransferCancel">取消</button>
                 <button type="button" class="refresh-btn" id="gmsFormalTransferConfirm">确认转入</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="urtFormalTransferModal" class="gms-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="gms-modal-card" role="dialog" aria-labelledby="urtFormalTransferTitle">
+            <div class="gms-modal-header">
+                <h3 id="urtFormalTransferTitle">转正式交易</h3>
+                <button type="button" class="gms-modal-close" id="urtFormalTransferClose" aria-label="关闭">×</button>
+            </div>
+            <p id="urtFormalTransferStockLabel" class="gms-modal-stock-label"></p>
+            <div class="gms-modal-field">
+                <label for="urtFormalTransferEntryPrice">入场价格</label>
+                <input type="number" id="urtFormalTransferEntryPrice" class="gms-search-input" step="0.01" min="0.01" placeholder="请输入入场价">
+            </div>
+            <div class="gms-modal-field">
+                <label for="urtFormalTransferLots">仓位（手）</label>
+                <input type="number" id="urtFormalTransferLots" class="gms-search-input" step="1" min="1" value="1">
+            </div>
+            <div class="gms-modal-actions">
+                <button type="button" class="gms-btn-outline" id="urtFormalTransferCancel">取消</button>
+                <button type="button" class="refresh-btn" id="urtFormalTransferConfirm">确认转入</button>
             </div>
         </div>
     </div>

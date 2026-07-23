@@ -176,6 +176,36 @@ class URTApiService {
   reportDownloadUrl(reportId: string) {
     return `${API_BASE}${PREFIX}/reports/${reportId}/download`
   }
+
+  reportDownloadXlsxUrl(reportId: string) {
+    return `${API_BASE}${PREFIX}/reports/${reportId}/download-xlsx`
+  }
+
+  backtestExportXlsxUrl(taskId: string) {
+    return `${API_BASE}${PREFIX}/backtests/${taskId}/export-xlsx`
+  }
+
+  async getSystemStatus(): Promise<{
+    runningBacktests: number
+    totalReports: number
+    pendingBacktests?: number
+    failedBacktests?: number
+    systemHealth?: string
+  }> {
+    const res = await this.request<{ success: boolean; data: any }>(`${PREFIX}/system/status`)
+    return res.data
+  }
+
+  async getAuditLogs(params?: { limit?: number; offset?: number; log_type?: string }) {
+    const q = new URLSearchParams()
+    if (params?.limit) q.set('limit', String(params.limit))
+    if (params?.offset) q.set('offset', String(params.offset))
+    if (params?.log_type) q.set('log_type', params.log_type)
+    const res = await this.request<{ success: boolean; data: { items: any[] } }>(
+      `${PREFIX}/audit-logs?${q.toString()}`
+    )
+    return res.data?.items || []
+  }
 }
 
 export const urtApiService = new URTApiService()

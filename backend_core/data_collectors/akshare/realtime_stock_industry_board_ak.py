@@ -215,7 +215,6 @@ class RealtimeStockIndustryBoardCollector:
                         VALUES (:board_code, :board_name, :create_date, :board_code_source)
                         ON CONFLICT (board_code) DO UPDATE SET
                             board_name = EXCLUDED.board_name,
-                            create_date = EXCLUDED.create_date,
                             board_code_source = EXCLUDED.board_code_source
                     '''), {
                         'board_code': stored_code,
@@ -231,7 +230,7 @@ class RealtimeStockIndustryBoardCollector:
             session.commit()
             
             columns = list(df.columns)
-            session.execute(text(f"DELETE FROM {self.table_name}"))
+            # 仅 UPSERT：保留历史实时行情，不整表清空
             for _, row in df.iterrows():
                 if pd.isna(row.get("board_code")) or str(row.get("board_code", "")).strip() == "":
                     continue

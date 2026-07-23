@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -486,3 +486,96 @@ async def get_urt_score_detail(
     except Exception as e:
         logger.exception("urt-score-detail 失败")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class URTStockBacktestBody(BaseModel):
+    """信号追溯页发起的单股 URT 回测（与管理端 stock_pool_mode=single 等价）。"""
+
+    code: str = Field(..., description="股票代码")
+    start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
+    end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
+    target_pct: float = Field(0.10, description="目标涨幅，如 0.10 表示 10%")
+    horizon_days: int = Field(20, ge=10, le=30, description="持有窗口交易日数")
+    min_score: Optional[float] = Field(None, ge=0, le=100, description="最低得分")
+    use_trace: bool = Field(True, description="是否优先读信号追溯表")
+    exit_mode: str = Field("hit_rate", description="hit_rate | risk_exit")
+    strategy_config_id: Optional[int] = Field(None, ge=1, description="URT 策略参数版本 ID")
+
+
+@router.post("/urt-backtest")
+async def create_urt_stock_backtest(body: URTStockBacktestBody, db: Session = Depends(get_db)):
+    """创建单股 URT 回测任务，供追溯页使用（无需 admin token）。"""
+    code = _normalize_code(body.code)
+    if not code:
+        raise HTTPException(status_code=400, detail="股票代码不能为空")
+    try:
+        from backend_api.admin.urt_admin_routes import BacktestCreateBody, _build_backtest_config
+        from backend_core.strategies.urt import backtest_storage, backtest_worker
+
+        bt_body = BacktestCreateBody(
+            start_date=str(body.start_date).strip()[:10],
+            end_date=str(body.end_date).strip()[:10],
+            strategy_config_id=body.strategy_config_id,
+            target_pct=float(body.target_pct),
+            horizon_days=int(body.horizon_days),
+            min_score=body.min_score,
+            use_trace=bool(body.use_trace),
+            exit_mode=body.exit_mode or "hit_rate",
+            stock_pool_mode="single",
+            stock_code=code,
+        )
+        config = _build_backtest_config(db, bt_body)
+        task_name = f"URT单股回测_{code}_{body.start_date[:10]}"
+        task_id = backtest_storage.create_task(config, name=task_name)
+        backtest_worker.start_backtest_task(task_id)
+        return {"success": True, "data": {"task_id": task_id}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("创建 URT 单股回测任务失败")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/urt-backtest/{task_id}")
+async def get_urt_stock_backtest(task_id: str, db: Session = Depends(get_db)):
+    """查询 URT 回测任务状态与结果。"""
+    from backend_api.admin.urt_admin_routes import _attach_urt_trade_meta
+    from backend_core.strategies.urt import backtest_storage
+
+    row = backtest_storage.get_task(task_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    if not cfg.get("trade_logic") or not cfg.get("risk_params"):
+        try:
+            patched = _attach_urt_trade_meta(db, dict(cfg))
+            cfg = {**cfg, "trade_logic": patched.get("trade_logic"), "risk_params": patched.get("risk_params")}
+            row = {**row, "config": cfg}
+        except Exception:
+            logger.exception("URT 前台回测详情补齐交易逻辑失败 task=%s", task_id)
+    if summary and (not summary.get("trade_logic") or not summary.get("risk_params")):
+        row = {
+            **row,
+            "summary": {
+                **summary,
+                "trade_logic": summary.get("trade_logic") or cfg.get("trade_logic"),
+                "risk_params": summary.get("risk_params") or cfg.get("risk_params"),
+            },
+        }
+    return {"success": True, "data": row}
+
+
+@router.get("/urt-backtest/{task_id}/export")
+async def export_urt_stock_backtest(task_id: str):
+    """导出 URT 回测明细 CSV。"""
+    from backend_core.strategies.urt import backtest_storage
+
+    raw = backtest_storage.get_details_csv(task_id)
+    if not raw:
+        raise HTTPException(status_code=404, detail="明细不存在或任务未完成")
+    return Response(
+        content=raw,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="urt_backtest_{task_id[:8]}.csv"'},
+    )
