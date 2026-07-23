@@ -180,7 +180,13 @@ flowchart TD
 
 \[
 I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
+= \frac{\text{分子：价×量之和}}{\text{分母：成交量之和}}
 \]
+
+| 角色 | 含义 |
+|------|------|
+| 分子 | \(\sum_i P_{i,t} V_{i,t}\) |
+| 分母 | \(\sum_i V_{i,t}\) |
 
 实现：`sector_benchmark.compute_vwap_benchmark`。无效价量（≤0）不参与。
 
@@ -193,7 +199,8 @@ I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
 
 ### 4.3 比价与滚动 Z-Score
 
-1. 对齐日期：\(R_t = P_t / I_t\)（双方均 &gt; 0）
+1. 对齐日期：\(R_t = P_t / I_t\)（双方均 &gt; 0）  
+   - **分子** \(P_t\)：个股收盘价；**分母** \(I_t\)：同日板块基准  
 2. 窗口 `w = max(5, z_window)`，对 \(R\) 序列：
 
 \[
@@ -202,9 +209,11 @@ I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
 Z_t = \frac{R_t - \mu_t}{\sigma_t}
 \]
 
-（总体方差口径，分母为 \(w\) 非 \(w-1\)。）\(\sigma\) 过小则 \(Z=0\)。
+Z 的分子为 \(R_t-\mu_t\)，分母为 \(\sigma_t\)（总体方差口径，除以 \(w\) 非 \(w-1\)）。\(\sigma\) 过小则 \(Z=0\)。
 
 实现：`zscore.relative_ratio_series` / `rolling_zscore` / `latest_zscore`。
+
+名词与逐步判定口径以 [信号计算规则](./RPE_比价效应_信号计算规则.md) 为准；选股「明细」面板展示分子/分母说明。
 
 ### 4.4 KDE 支撑 / 阻力
 
@@ -216,11 +225,11 @@ Z_t = \frac{R_t - \mu_t}{\sigma_t}
 
 ### 4.5 结构过滤（盈亏比）
 
-设现价 \(P\)、最近支撑 \(S\)、最近阻力 \(R\)：
+设现价 \(P\)、最近支撑 \(S\)、最近阻力 \(R_{res}\)（避免与比价 \(R\) 混淆）：
 
 - 若无 \(S\) 或 \(P \le S\) → 无效（`below_or_no_support`）
-- 下行空间 \(D = P - S\)；若无 \(R\) → 视为空间充足（通过）
-- 上行空间 \(U = R - P\)；盈亏比 \(\mathrm{RR} = U/D\)，要求 \(\mathrm{RR} \ge \mathrm{min\_rr\_to\_resistance}\)
+- 下行空间 \(D = P - S\)（RR **分母**）；若无 \(R_{res}\) → 视为空间充足（通过，`no_resistance`）
+- 上行空间 \(U = R_{res} - P\)（RR **分子**）；盈亏比 \(\mathrm{RR} = U/D\)，要求 \(\mathrm{RR} \ge \mathrm{min\_rr\_to\_resistance}\)
 
 ### 4.6 流动性过滤
 

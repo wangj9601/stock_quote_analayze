@@ -1660,7 +1660,7 @@ const StockPage = {
         container.innerHTML = html;
     },
 
-    // 更新关键价位
+    // 更新关键价位（后端 KDE 密度峰；阻力升序近→远，支撑降序近→远）
     updateKeyLevels(levels) {
         console.log('[关键价位] 更新数据:', levels);
 
@@ -1669,49 +1669,37 @@ const StockPage = {
             return;
         }
 
-        console.log('[关键价位] 当前价格:', this.currentPrice);
-        console.log('[关键价位] 阻力位数据:', levels.resistance_levels);
-        console.log('[关键价位] 支撑位数据:', levels.support_levels);
+        const curPrice = Number(this.currentPrice);
+        const resistanceElements = document.querySelectorAll(
+            '.level-item:not(.current) .level-value.resistance'
+        );
+        const supportElements = document.querySelectorAll(
+            '.level-item:not(.current) .level-value.support'
+        );
 
-        // 更新阻力位
-        if (levels.resistance_levels && levels.resistance_levels.length > 0) {
-            const resistanceElements = document.querySelectorAll('.level-item:not(.current) .level-value.resistance');
-            console.log('[关键价位] 找到阻力位元素数量:', resistanceElements.length);
-            levels.resistance_levels.forEach((level, index) => {
-                if (resistanceElements[index]) {
-                    // 验证阻力位数据：阻力位必须严格大于当前价格
-                    const curPrice = Number(this.currentPrice);
-                    const lvlValue = Number(level);
-                    if (lvlValue <= curPrice) {
-                        console.warn(`[关键价位] 阻力位${index + 1}数据无效: ${lvlValue.toFixed(2)} <= 当前价格 ${curPrice.toFixed(2)}`);
-                        return; // 跳过无效数据
-                    }
-                    console.log(`[关键价位] 更新阻力位${index + 1}: ${lvlValue.toFixed(2)}`);
-                    resistanceElements[index].textContent = lvlValue.toFixed(2);
-                }
-            });
-        }
+        // DOM 自上而下为 阻力位3/2/1（高→低靠近现价），API 为近→远升序，需反转填入
+        const resists = Array.isArray(levels.resistance_levels)
+            ? levels.resistance_levels
+                  .map((x) => Number(x))
+                  .filter((v) => Number.isFinite(v) && (!Number.isFinite(curPrice) || v > curPrice))
+            : [];
+        const resistForDom = resists.slice().reverse();
+        resistanceElements.forEach((el, index) => {
+            const v = resistForDom[index];
+            el.textContent = v != null && Number.isFinite(v) ? v.toFixed(2) : '--';
+        });
 
-        // 更新支撑位
-        if (levels.support_levels && levels.support_levels.length > 0) {
-            const supportElements = document.querySelectorAll('.level-item:not(.current) .level-value.support');
-            console.log('[关键价位] 找到支撑位元素数量:', supportElements.length);
-            levels.support_levels.forEach((level, index) => {
-                if (supportElements[index]) {
-                    // 验证支撑位数据：支撑位必须严格小于当前价格
-                    const curPrice = Number(this.currentPrice);
-                    const lvlValue = Number(level);
-                    if (lvlValue >= curPrice) {
-                        console.warn(`[关键价位] 支撑位${index + 1}数据无效: ${lvlValue.toFixed(2)} >= 当前价格 ${curPrice.toFixed(2)}`);
-                        return; // 跳过无效数据
-                    }
-                    console.log(`[关键价位] 更新支撑位${index + 1}: ${lvlValue.toFixed(2)}`);
-                    supportElements[index].textContent = lvlValue.toFixed(2);
-                }
-            });
-        }
+        // DOM 为 支撑位1/2/3（近→远），与 API 降序一致
+        const supports = Array.isArray(levels.support_levels)
+            ? levels.support_levels
+                  .map((x) => Number(x))
+                  .filter((v) => Number.isFinite(v) && (!Number.isFinite(curPrice) || v < curPrice))
+            : [];
+        supportElements.forEach((el, index) => {
+            const v = supports[index];
+            el.textContent = v != null && Number.isFinite(v) ? v.toFixed(2) : '--';
+        });
 
-        // 更新当前价格 - 使用最新的实时价格而不是智能分析API返回的价格
         this.updateKeyLevelsCurrentPrice();
     },
 

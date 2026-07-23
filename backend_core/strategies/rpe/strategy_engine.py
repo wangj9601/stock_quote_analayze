@@ -192,6 +192,7 @@ class RPEStrategyEngine:
                 "judgment": {
                     "formula": "入场 = (catch_up 或 允许交易的 lead) AND 未趋势否决 AND 结构有效 AND 流动性通过",
                     "formula_detail": (
+                        "比价 R=P/I（分子=个股收盘，分母=板块量权基准）；"
                         "补涨主路径：Z≤z_catch_up；领涨默认仅观察；"
                         "离场仅认收盘跌破结构支撑，不用固定百分比止损。"
                     ),

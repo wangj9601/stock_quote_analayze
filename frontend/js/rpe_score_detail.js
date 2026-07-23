@@ -85,7 +85,7 @@ const RpeScoreDetail = {
     )}</p>`;
     html += `<p class="urt-buy-logic-detail">${this._esc(
       judgment.formula_detail ||
-        '补涨主路径看 Z 偏低；领涨默认仅观察；离场仅认结构破位。'
+        '比价 R=P/I（分子=个股收盘，分母=板块量权基准）；补涨主路径看 Z 偏低；领涨默认仅观察；离场仅认结构破位。'
     )}</p>`;
 
     if (steps.length) {
@@ -136,24 +136,40 @@ const RpeScoreDetail = {
 
     html += '<div class="gms-score-detail-section"><strong>【关键参数取值】</strong>';
     html += '<table class="gms-weight-table"><thead><tr><th>参数</th><th>取值</th><th>说明</th></tr></thead><tbody>';
+    const pClose = this._fmt(src.close, 2);
+    const iT = this._fmt(detail.i_t, 4);
     const params = [
-      ['板块', `${src.sector_name || '--'}（${src.sector_id || '--'}）`, '簇基准所属板块'],
-      ['收盘价', this._fmt(src.close, 2), '评估日收盘'],
-      ['比价 R=P/I', this._fmt(src.ratio, 4), '个股相对板块基准'],
-      ['板块基准 I_t', this._fmt(detail.i_t, 4), '量权收盘价基准'],
-      ['Z-Score', this._fmt(src.z_score, 3), `滚动窗口 ${detail.z_window != null ? detail.z_window : (th.z_window || 40)}`],
-      ['板块斜率', this._fmt(src.sector_slope, 6), `窗口 ${th.sector_slope_window != null ? th.sector_slope_window : 60}`],
-      ['最近支撑', this._fmt(src.nearest_support, 2), 'KDE 密度峰（下方）'],
-      ['最近阻力', this._fmt(src.nearest_resistance, 2), 'KDE 密度峰（上方）'],
-      ['盈亏比 RR', this._fmt(struct.rr, 2), `阈值 ${th.min_rr_to_resistance != null ? th.min_rr_to_resistance : 1.5}`],
+      ['板块', `${src.sector_name || '--'}（${src.sector_id || '--'}）`, '主板块簇（基准所属板块）'],
+      ['收盘价 P', pClose, '分子（比价 R=P/I）：评估日个股收盘'],
+      ['板块基准 I_t', iT, '分母（比价）：板块成分量权收盘价 ∑(P·V)/∑V'],
+      ['比价 R=P/I', this._fmt(src.ratio, 4), `分子 P=${pClose}，分母 I=${iT}；个股相对板块`],
+      [
+        'Z-Score',
+        this._fmt(src.z_score, 3),
+        `对 R 滚动标准化；窗口 ${detail.z_window != null ? detail.z_window : th.z_window || 40}；分子=R−μ，分母=σ`,
+      ],
+      [
+        '板块斜率',
+        this._fmt(src.sector_slope, 6),
+        `近 ${th.sector_slope_window != null ? th.sector_slope_window : 60} 日 I_t 回归斜率；&lt;0 可趋势否决`,
+      ],
+      ['最近支撑 S', this._fmt(src.nearest_support, 2), 'KDE 密度峰（现价下方）；RR 分母相关'],
+      ['最近阻力', this._fmt(src.nearest_resistance, 2), 'KDE 密度峰（现价上方）；无则「-」且结构可放宽'],
+      [
+        '盈亏比 RR',
+        this._fmt(struct.rr, 2),
+        `分子=到阻力距离，分母=到支撑距离；阈值 ≥ ${
+          th.min_rr_to_resistance != null ? th.min_rr_to_resistance : 1.5
+        }`,
+      ],
       ['结构有效', this._fmt(src.structure_valid), this._reasonText(struct.reason)],
       ['日均成交额', this._fmt(liq.avg_amount, 0), this._reasonText(liq.reason)],
       ['日均换手%', this._fmt(liq.avg_turnover_rate, 2), '流动性窗口均值'],
       ['KDE 带宽', this._fmt(detail.bw, 4), `base_factor=${th.kde_base_factor != null ? th.kde_base_factor : 1}`],
-      ['z_catch_up', this._fmt(th.z_catch_up != null ? th.z_catch_up : -1.5, 2), '补涨阈值'],
-      ['z_lead', this._fmt(th.z_lead != null ? th.z_lead : 2.0, 2), '领涨阈值'],
+      ['z_catch_up', this._fmt(th.z_catch_up != null ? th.z_catch_up : -1.5, 2), '补涨阈值：Z≤该值'],
+      ['z_lead', this._fmt(th.z_lead != null ? th.z_lead : 2.0, 2), '领涨阈值：Z≥该值'],
       ['enable_lead_trade', this._fmt(th.enable_lead_trade != null ? th.enable_lead_trade : false), '领涨是否可交易'],
-      ['enable_trend_veto', this._fmt(th.enable_trend_veto != null ? th.enable_trend_veto : true), '弱势板块否决'],
+      ['enable_trend_veto', this._fmt(th.enable_trend_veto != null ? th.enable_trend_veto : true), '弱势板块否决入场'],
     ];
     params.forEach(([name, val, note]) => {
       html += `<tr><td>${this._esc(name)}</td><td>${val}</td><td>${this._esc(note)}</td></tr>`;
