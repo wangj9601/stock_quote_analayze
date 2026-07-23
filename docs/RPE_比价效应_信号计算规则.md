@@ -1,94 +1,106 @@
 # RPE（比价效应）信号计算规则说明
 
-本文档基于当前代码实现整理，覆盖参数定义、计算公式、过滤规则、信号组装、离场与回测口径，便于策略校验与前后端对齐。
+本文档基于当前代码实现，说明**计算流程、公式、分子/分母含义、名词解释与入场判定**，与选股页「明细」面板口径一致。
 
-更完整的架构、表结构与 API 见：[RPE_STRATEGY_IMPLEMENTATION_DESIGN.md](./RPE_STRATEGY_IMPLEMENTATION_DESIGN.md)  
-业务速览见：[RPE_比价效应_业务简化版.md](./RPE_比价效应_业务简化版.md)
+- 业务速览：[RPE_比价效应_业务简化版.md](./RPE_比价效应_业务简化版.md)  
+- 工程设计：[RPE_STRATEGY_IMPLEMENTATION_DESIGN.md](./RPE_STRATEGY_IMPLEMENTATION_DESIGN.md)  
 
 工程包：`backend_core/strategies/rpe/`（与 GMS **零耦合**）。
 
 ---
 
-## 1. 总体流程
+## 1. 计算流程总览
 
-1. 按行业或概念板块划定成分股簇（默认行业）  
-2. 合成簇基准 \(I_t\)（当日成交量加权收盘价）  
-3. 计算个股相对基准的滚动 Z-Score  
-4. 对 \(I_t\) 做趋势斜率；弱势板块可否决入场  
-5. 成交量加权 KDE 提取支撑/阻力，做结构过滤与流动性过滤  
-6. 输出 `catch_up` / `lead` 及是否 `entry_signal`，可写入 `rpe_signal_trace`
+```mermaid
+flowchart TD
+  A[划定板块簇 / 固定主板块] --> B[合成簇基准 I_t]
+  B --> C[个股比价 R = P / I]
+  C --> D[滚动 Z-Score]
+  B --> E[板块斜率 趋势否决]
+  A --> F[KDE 支撑 / 阻力]
+  F --> G[结构过滤 RR]
+  A --> H[流动性过滤]
+  D --> I[信号类型 catch_up / lead / in_band]
+  E --> J[入场判定]
+  G --> J
+  H --> J
+  I --> J
+  J --> K[entry_signal + 明细 judgment]
+```
 
-单股评估入口：`RPEStrategyEngine.evaluate_in_sector`；全市场：`screen` → 按板 `screen_board` → 去重截断。
+| 步骤 | 做什么 | 代码入口 |
+|------|--------|----------|
+| 1 | 确定板块（单股/自选用**主板块**） | `resolve_primary_board` / `screen_board` |
+| 2 | 算板块量权基准 \(I_t\) | `compute_vwap_benchmark` |
+| 3 | 算比价 \(R=P/I\) 与滚动 \(Z\) | `latest_zscore` |
+| 4 | 算 \(I_t\) 斜率，趋势否决 | `sector_slope` / `trend_veto` |
+| 5 | KDE 取支撑/阻力 | `extract_kde_levels` |
+| 6 | 结构 RR + 流动性 | `structure_filter` / `liquidity_ok` |
+| 7 | 组装信号与入场 | `detect_signal` |
 
----
-
-## 2. 参数一览（默认配置）
-
-来源：`config.get_default_rpe_config()`。库内版本与默认 **深合并**。
-
-### 2.1 一级参数
-
-| 参数名 | 默认值 | 单位/范围 | 作用 |
-|--------|--------|-----------|------|
-| `lookback_days` | 250 | 交易日 | 日线与基准回溯长度 |
-| `z_window` | 40 | ≥5（代码钳制） | 滚动 Z 窗口 |
-| `z_lead` | 2.0 | 无量纲 | 领涨阈值：\(Z \ge z\_lead\) |
-| `z_catch_up` | -1.5 | 无量纲 | 补涨阈值：\(Z \le z\_catch\_up\) |
-| `sector_slope_window` | 60 | ≥5 | \(I_t\) 回归斜率窗口 |
-| `enable_trend_veto` | true | bool | 斜率 &lt; 0 时禁止入场 |
-| `enable_lead_trade` | false | bool | 是否允许领涨 `entry_signal` |
-| `kde_base_factor` | 1.0 | 正数 | KDE 带宽系数 |
-| `kde_grid_points` | 200 | ≥50 | 密度网格点数 |
-| `min_rr_to_resistance` | 1.5 | 倍 | 结构盈亏比下限 |
-
-### 2.2 `liquidity`
-
-| 参数名 | 默认值 | 说明 |
-|--------|--------|------|
-| `lookback_days` | 20 | 近 N 日（代码下限 ≥5） |
-| `min_avg_amount` | 5e6 | 日均成交额（元） |
-| `min_avg_turnover_rate` | 0.5 | 日均换手（%）；无换手数据时仅判成交额 |
-
-### 2.3 `scan` / `backtest`
-
-| 参数名 | 默认值 | 说明 |
-|--------|--------|------|
-| `scan.max_results` | 200 | 结果条数上限 |
-| `scan.min_sector_members` | 5 | 最少成分股数 |
-| `scan.max_boards` | null | 可选板块数上限 |
-| `backtest.horizon_days` | 40 | 回测前瞻天数 |
-| `backtest.target_relative_pct` | 0.08 | 命中率目标涨幅 |
-| `backtest.commission_bps` | 5.0 | 预留 |
-| `backtest.slippage_bps` | 5.0 | 预留 |
+单股评估：`RPEStrategyEngine.evaluate_in_sector`；全市场：`screen` → `screen_board`。
 
 ---
 
-## 3. 簇基准 \(I_t\)
+## 2. 名词解释（与明细面板对齐）
 
-对板块内当日有有效价量的成分股：
+| 名词 / 符号 | 含义 | 明细里怎么看 |
+|-------------|------|----------------|
+| **板块簇** | 同一行业或概念成分股集合；单股追溯固定一个主板块 | 「板块」行：名称 + `board_code` |
+| **收盘价 \(P\)** | 评估日个股收盘价 | 「收盘价」 |
+| **板块基准 \(I_t\)** | 该日板块成分股**成交量加权收盘价**（自建，非外部指数） | 「板块基准 \(I_t\)」 |
+| **比价 \(R\)** | \(R = P / I\)，个股相对板块的价格比 | 「比价 \(R=P/I\)」 |
+| **Z-Score \(Z\)** | 对 \(R\) 序列做滚动标准化后的偏离 | 「Z-Score」+ 窗口（默认 40） |
+| **补涨 catch_up** | \(Z\) 过低：相对板块落后 | 信号类型 |
+| **领涨 lead** | \(Z\) 过高：相对板块强势 | 默认仅观察 |
+| **板块斜率** | 近 N 日 \(I_t\) 线性回归斜率 \(b\) | 「板块斜率」 |
+| **趋势否决** | 斜率 &lt; 0 且开启否决 → 禁止入场 | meta「趋势否决」 |
+| **最近支撑 \(S\)** | 现价下方最近 KDE 密度峰 | 「最近支撑」 |
+| **最近阻力 \(R_{res}\)** | 现价上方最近 KDE 密度峰（无则显示 `-`） | 「最近阻力」 |
+| **盈亏比 RR** | 上行空间 / 下行空间 | 「盈亏比 RR」 |
+| **结构有效** | 站上支撑且 RR 达标（或无阻力视为空间充足） | 「结构有效」 |
+| **入场 entry_signal** | 可交易主信号（补涨主路径） | meta「入场 是/否」 |
+| **结构破位** | 收盘 &lt; 结构支撑 → 策略离场 | 离场规则 |
+
+> 注意：文档里阻力位有时记为 \(R_{res}\)，避免与比价 \(R\) 混淆。
+
+---
+
+## 3. 分子、分母与对应取值
+
+### 3.1 板块基准 \(I_t\)（量权均价）
 
 \[
-I_t = \frac{\sum_i P_{i,t} V_{i,t}}{\sum_i V_{i,t}}
+I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
+= \frac{\text{分子：价×量之和}}{\text{分母：成交量之和}}
 \]
 
-- \(P\)：收盘价；\(V\)：成交量；任一 ≤0 则跳过该成分  
-- 实现：`sector_benchmark.compute_vwap_benchmark`  
-- 输出序列：`[{date, i_t, volume_sum}, ...]` 按日期升序  
+| 角色 | 符号 | 数据来源 | 有效条件 |
+|------|------|----------|----------|
+| **分子项** | \(P_{i,t} V_{i,t}\) | 成分股当日收盘价 × 成交量 | \(P>0\) 且 \(V>0\)，否则跳过该成分 |
+| **分母** | \(\sum V_{i,t}\) | 同上有效成分的成交量合计 | 分母 ≤ 0 则该日无 \(I_t\) |
+| **结果** | \(I_t\) | 写入明细 `detail.i_t` | 例：半导体板 92.1304 |
 
-**板块斜率**：对近 `sector_slope_window` 日 \(I_t\) 做线性回归 \(y = a + b x\)（\(x=0..n-1\)），取 \(b\)。  
-当 `enable_trend_veto=true` 且 \(b < 0\) → `trend_veto=true`，禁止补涨/领涨入场。
+实现：`sector_benchmark.compute_vwap_benchmark`；输出 `[{date, i_t, volume_sum}, ...]`。
 
----
+### 3.2 比价 \(R_t\)（个股相对基准）
 
-## 4. 滚动 Z-Score
+\[
+R_t = \frac{P_t}{I_t}
+= \frac{\text{分子：个股收盘价}}{\text{分母：同日板块基准}}
+\]
 
-### 4.1 比价序列
+| 角色 | 符号 | 含义 | 明细字段 |
+|------|------|------|----------|
+| **分子** | \(P_t\) | 评估日该股收盘价 | `close` / `price` |
+| **分母** | \(I_t\) | 同日簇基准 | `detail.i_t` |
+| **结果** | \(R_t\) | 比价 | `ratio`（例：0.3261） |
 
-对齐基准日期：\(R_t = P_t / I_t\)（\(P_t>0,\ I_t>0\)）。
+约束：\(P_t>0\) 且 \(I_t>0\) 才计入序列；实现：`zscore.relative_ratio_series`。
 
-### 4.2 滚动标准化
+### 3.3 滚动 Z-Score（对 \(R\) 标准化）
 
-窗口 \(w=\max(5,z\_window)\)。对每个 \(t\)（需满窗）：
+窗口 \(w=\max(5,\,z\_window)\)（默认 40）。满窗后：
 
 \[
 \mu_t=\frac{1}{w}\sum_{k=t-w+1}^{t} R_k,\quad
@@ -96,153 +108,149 @@ I_t = \frac{\sum_i P_{i,t} V_{i,t}}{\sum_i V_{i,t}}
 Z_t=\frac{R_t-\mu_t}{\sigma_t}
 \]
 
-- 使用总体方差（除以 \(w\)）  
-- \(\sigma_t \le 10^{-12}\) 时记 \(Z_t=0\)  
-- 序列长度不足窗口 → 无法出 Z（`no_z`）
+| 角色 | 含义 |
+|------|------|
+| **分子** | \(R_t - \mu_t\)：当日比价相对窗口均值的偏离 |
+| **分母** | \(\sigma_t\)：窗口内比价波动（总体标准差，除以 \(w\)） |
+| 特例 | \(\sigma_t \le 10^{-12}\) → \(Z_t=0\)；样本不足 → `no_z` |
 
-### 4.3 阈值与类型
+### 3.4 盈亏比 RR（结构过滤）
 
-| 条件 | `signal_type` | 含义 |
-|------|---------------|------|
-| \(Z \le z\_catch\_up\)（默认 -1.5） | `catch_up` | 相对落后，潜在补涨 |
-| \(Z \ge z\_lead\)（默认 2.0） | `lead` | 相对领涨 |
-| 中间带 | 无 | `reason=in_band` |
+\[
+D = P - S,\quad U = R_{res} - P,\quad
+\mathrm{RR} = \frac{U}{D}
+= \frac{\text{分子：距阻力上行空间}}{\text{分母：距支撑下行空间}}
+\]
 
-`enable_lead_trade` 默认 `false`：领涨默认 `watch_only`，不产生可交易入场。
+| 角色 | 符号 | 含义 |
+|------|------|------|
+| **分子** | \(U\) | 现价到最近阻力的距离 |
+| **分母** | \(D\) | 现价到最近支撑的距离 |
+| 阈值 | `min_rr_to_resistance` | 默认 ≥ 1.5 才结构通过 |
+
+无上方阻力时：不强制算 RR，记 `structure_valid=true`，`reason=no_resistance`（视为空间充足），明细阻力可为 `-`。
+
+---
+
+## 4. 入场判断逻辑（与明细逐步表一致）
+
+**公式（明细原文）：**
+
+> 入场 = (catch_up 或 允许交易的 lead) AND 未趋势否决 AND 结构有效 AND 流动性通过  
+
+**说明：** 补涨主路径看 \(Z\) 偏低；领涨默认仅观察（`enable_lead_trade=false`）；离场仅认结构破位。
+
+### 4.1 逐步条件
+
+| 条件 | 规则（默认） | 通过含义 |
+|------|--------------|----------|
+| 补涨 Z | \(Z \le z\_catch\_up\)（-1.5） | 相对落后，类型可为 `catch_up` |
+| 领涨 Z | \(Z \ge z\_lead\)（2.0） | 相对领涨；默认不单独构成可交易入场 |
+| 板块趋势否决 | `enable_trend_veto` 时要求斜率 ≥ 0 | 斜率 &lt; 0 → 否决入场 |
+| 结构过滤 | 站上支撑，且 RR ≥ 1.5（或无阻力） | `structure_valid` |
+| 流动性 | 近 20 日均额 ≥ 500 万，且换手 ≥ 0.5%（有换手时） | `liquidity_ok` |
+| 入场信号 | catch_up：未否决 + 结构 + 流动性；lead：仅允许交易时同理 | `entry_signal` |
+
+### 4.2 信号类型与 reason
+
+| 条件 | `signal_type` | 典型 `reason` |
+|------|---------------|---------------|
+| \(Z \le -1.5\) 且过滤全过 | `catch_up` | `catch_up_ok` → **入场=是** |
+| \(Z \le -1.5\) 但被挡 | `catch_up` | `catch_up_filtered` → 入场=否，可观察 |
+| \(Z \ge 2\) 默认 | `lead` | `lead_watch` |
+| \(Z \ge 2\) 且允许交易且过滤过 | `lead` | `lead_trade_ok` |
+| 中间带 | 无 / in_band | `in_band` |
+| 算不出 Z | — | `no_z` |
+
+引擎写入 `detail.judgment.steps`（条件、规则、实际值、是否通过），供「明细」展开。
 
 ---
 
 ## 5. KDE 支撑 / 阻力
 
-实现：`kde_levels.extract_kde_levels`。
-
-1. 样本：回溯 bars 的 close、volume；有效点 &lt; 20 → `ok=false`（`insufficient_samples`）  
+1. 样本：回溯 bars 的 close、volume；有效点 &lt; 20 → 失败  
 2. 带宽：\(\mathrm{bw}=\max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma_P/\mu_P)\)  
-3. `gaussian_kde` + 成交量权重（旧 scipy 无 weights 时按权重离散复制）  
-4. 网格：`[0.98 minP, 1.02 maxP]`，`kde_grid_points` 点  
-5. `find_peaks`，prominence ≥ `0.05 * max(density)`；失败则本地极大值回退  
-6. 峰 &lt; 现价 → 支撑（近→远，最多 8）；峰 ≥ 现价 → 阻力（近→远，最多 8）
+3. 成交量加权 `gaussian_kde` → 密度峰  
+4. 峰 &lt; 现价 → 支撑；峰 ≥ 现价 → 阻力（最多各 8 个）  
 
-`nearest_levels`：取现价下方最近支撑、上方最近阻力。
+现价上方无峰 → 最近阻力为空（列表显示 `-`），结构仍可因 `no_resistance` 通过。
 
 ---
 
-## 6. 结构过滤与流动性
+## 6. 离场规则
 
-### 6.1 `structure_filter`
-
-| 情况 | `structure_valid` | reason |
-|------|-------------------|--------|
-| 无支撑或 \(P\le S\) | false | `below_or_no_support` |
-| \(D=P-S\le 0\) | false | `zero_downside` |
-| 无上方阻力 | **true** | `no_resistance`（视为空间充足） |
-| \(U=R-P\le 0\) | false | `at_resistance` |
-| \(\mathrm{RR}=U/D \ge \mathrm{min\_rr}\) | true | `ok` |
-| RR 不足 | false | `rr_too_small` |
-
-默认 `min_rr_to_resistance=1.5`。
-
-### 6.2 `liquidity_ok`
-
-近 N 日：
-
-- 日均成交额 ≥ `min_avg_amount`  
-- 若有换手序列：日均换手 ≥ `min_avg_turnover_rate`  
-
-不满足 → 不给出入场信号。
-
----
-
-## 7. 入场信号组装
-
-`signal_detector.detect_signal`：
-
-**补涨主路径**（`entry_signal=true`）：
-
-- `signal_type=catch_up`  
-- 未 `trend_veto`  
-- `structure_valid`  
-- `liquidity_ok`  
-
-**领涨**：`signal_type=lead`；仅当 `enable_lead_trade=true` 且结构/流动性通过且未否决时才可 `entry_signal`；否则 `watch_only`。
-
-### 7.1 reason 码
-
-| reason | 含义 |
-|--------|------|
-| `catch_up_ok` | 补涨且全部过滤通过，可入场 |
-| `catch_up_filtered` | 补涨但被否决/结构/流动性挡住 |
-| `lead_watch` | 领涨仅观察 |
-| `lead_trade_ok` | 允许领涨交易且通过过滤 |
-| `in_band` | Z 在阈值带内 |
-| `no_z` | 无法计算 Z |
-
-引擎同时写入 `detail.judgment.steps`（逐步规则、实际值、是否通过），供追溯页展示。
-
----
-
-## 8. 离场规则
-
-**禁止**将固定百分比止损作为策略唯一离场理由。
-
-策略内建准绳：
+**禁止**固定百分比止损作为策略唯一离场理由。
 
 - **结构破位** `structure_break`：收盘价 &lt; 最近有效结构支撑  
-
-正式交易 API 若提交 `fixed_pct` / `percent_stop` 等 → HTTP 400。  
-`trade_structure_plan.build_structure_plan` 固定 `exit_rule=structure_break`。
-
-盘中二次确认：观察列表刷新时用 `stock_realtime_quote` 判断现价是否仍在支撑上（无独立盘中 cron）。
+- 正式交易 API 提交 `fixed_pct` / `percent_stop` 等 → HTTP 400  
+- 观察列表可用实时行情二次确认：现价是否仍在支撑上  
 
 ---
 
-## 9. 选股排序与去重
+## 7. 默认参数一览
 
-全市场 `screen` 结果排序优先级（降序）：
+来源：`config.get_default_rpe_config()`；库内版本与默认深合并。
 
-1. `entry_signal`  
-2. `signal_type == catch_up`  
-3. `|z_score|`  
-
-同代码多板块：
-
-- **单股 / 自选 / 强制重算**：每只股票固定一个**主板块**（行业优先；同 kind 取成分股数最多，并列取 `board_code` 升序），追溯全历史使用同一板块，避免按日跳变。  
-- **显式多选板块**等仍可能同股多行时：保留 `|z|` 最大的一条，再截断至 `max_results`。
+| 参数 | 默认 | 作用 |
+|------|------|------|
+| `lookback_days` | 250 | 回溯交易日 |
+| `z_window` | 40 | Z 窗口 |
+| `z_catch_up` | -1.5 | 补涨阈值 |
+| `z_lead` | 2.0 | 领涨阈值 |
+| `sector_slope_window` | 60 | 斜率窗口 |
+| `enable_trend_veto` | true | 弱势板块否决 |
+| `enable_lead_trade` | false | 领涨可否交易 |
+| `kde_base_factor` | 1.0 | KDE 带宽系数 |
+| `min_rr_to_resistance` | 1.5 | 结构 RR 下限 |
+| `liquidity.lookback_days` | 20 | 流动性窗口 |
+| `liquidity.min_avg_amount` | 5e6 | 日均成交额（元） |
+| `liquidity.min_avg_turnover_rate` | 0.5 | 日均换手（%） |
 
 ---
 
-## 10. 数据、调度与存储
+## 8. 主板块与去重
+
+- **单股 / 自选 / 强制重算**：每只股票固定**一个主板块**（行业优先；同 kind 取成分最多，并列 `board_code` 升序），追溯全历史同一板块。  
+- **显式多选板块**撞车：保留 `|Z|` 最大的一条，再截断 `max_results`。
+
+排序（降序）：`entry_signal` → `catch_up` → `|z_score|`。
+
+---
+
+## 9. 完整计算示例（对齐明细面板）
+
+以示意数据（半导体板、补涨入场）：
+
+| 量 | 取值 | 说明 |
+|----|------|------|
+| \(P\) | 30.04 | 分子（比价） |
+| \(I_t\) | 92.1304 | 分母（比价）/ 量权基准 |
+| \(R=P/I\) | 0.3261 | 比价 |
+| \(Z\)（窗 40） | -1.516 | ≤ -1.5 → 补涨通过 |
+| 板块斜率（窗 60） | 0.116 | ≥ 0 → 未否决 |
+| \(S\) / \(R_{res}\) | 25.02 / 51.99 | KDE |
+| \(D=P-S\) | 5.02 | RR 分母 |
+| \(U=R_{res}-P\) | 21.95 | RR 分子 |
+| RR | ≈ 4.38 | ≥ 1.5 → 结构通过 |
+| 日均成交额 | 很大 | 流动性通过 |
+
+逐步：补涨 Z 通过、领涨 Z 未通过、趋势否决通过、结构通过、流动性通过、入场信号通过 → **`catch_up` + 入场=是**（`catch_up_ok`）。  
+离场：收盘跌破支撑 25.02 → `structure_break`。
+
+若斜率 &lt; 0 且开启否决：仍可为 `catch_up`，但入场=否，`catch_up_filtered`。
+
+---
+
+## 10. 数据、调度与回测
 
 | 项 | 说明 |
 |----|------|
 | 行情 | `historical_quotes` |
 | 成分 | `industry_board_constituents` / 概念成分 |
-| 信号表 | `rpe_signal_trace`，按 `config_id` 隔离 |
-| 日终任务 | `rpe_signals_cn`，默认工作日 19:40，`ENABLE_RPE_PRECOMPUTE` |
-| 强制重算 | `rpe_trace_recompute_tasks` + 追溯页 |
-
----
-
-## 11. 回测类型
-
-| `backtest_type` | 行为 |
-|-----------------|------|
-| `signal_hit_rate` | 信号日后 N 日内是否触及 `entry*(1+target_relative_pct)`，且未先结构破位 |
-| `trade_simulation` | T+1 开盘入场；离场：结构破位 → 触及阻力 → 否则持有至 horizon |
+| 信号表 | `rpe_signal_trace`（按 `config_id`） |
+| 日终 | `rpe_signals_cn`，约 19:40，`ENABLE_RPE_PRECOMPUTE` |
+| 强制重算 | 追溯页 → 按主板块全历史回写 |
+| `signal_hit_rate` | N 日内是否触及目标相对涨幅且未先破位 |
+| `trade_simulation` | T+1 开盘入；离场：破位 / 触及阻力 / horizon |
 
 实现：`backtest_runner.py`。
-
----
-
-## 12. 计算示例（示意）
-
-假设某日：
-
-- \(Z=-1.8\) → 类型 `catch_up`  
-- 板块斜率 \(+0.02\) → 未否决  
-- \(P=10\)，\(S=9.5\)，\(R=11.0\) → \(D=0.5\)，\(U=1.0\)，\(\mathrm{RR}=2.0 \ge 1.5\) → 结构通过  
-- 近 20 日均额、换手达标 → 流动性通过  
-
-→ `entry_signal=true`，`reason=catch_up_ok`，结构计划支撑 9.5、阻力 11.0；若日后收盘跌破 9.5 → 结构破位离场。
-
-若同条件但斜率 \(=-0.01\) 且开启否决 → 仍可为 `catch_up`，但 `entry_signal=false`，`watch_only=true`，`reason=catch_up_filtered`。

@@ -1649,7 +1649,7 @@ const StockPage = {
         container.innerHTML = html;
     },
 
-    // 更新关键价位
+    // 更新关键价位（KDE；各侧最多 2 档；近端填「1」，有第二档才显示「2」）
     updateKeyLevels(levels) {
         console.log('[关键价位] 更新数据:', levels);
 
@@ -1658,49 +1658,37 @@ const StockPage = {
             return;
         }
 
-        console.log('[关键价位] 当前价格:', this.currentPrice);
-        console.log('[关键价位] 阻力位数据:', levels.resistance_levels);
-        console.log('[关键价位] 支撑位数据:', levels.support_levels);
+        const curPrice = Number(this.currentPrice);
+        const resists = Array.isArray(levels.resistance_levels)
+            ? levels.resistance_levels
+                  .map((x) => Number(x))
+                  .filter((v) => Number.isFinite(v) && (!Number.isFinite(curPrice) || v > curPrice))
+                  .slice(0, 2)
+            : [];
+        const supports = Array.isArray(levels.support_levels)
+            ? levels.support_levels
+                  .map((x) => Number(x))
+                  .filter((v) => Number.isFinite(v) && (!Number.isFinite(curPrice) || v < curPrice))
+                  .slice(0, 2)
+            : [];
 
-        // 更新阻力位
-        if (levels.resistance_levels && levels.resistance_levels.length > 0) {
-            const resistanceElements = document.querySelectorAll('.level-item:not(.current) .level-value.resistance');
-            console.log('[关键价位] 找到阻力位元素数量:', resistanceElements.length);
-            levels.resistance_levels.forEach((level, index) => {
-                if (resistanceElements[index]) {
-                    // 验证阻力位数据：阻力位必须严格大于当前价格
-                    const curPrice = Number(this.currentPrice);
-                    const lvlValue = Number(level);
-                    if (lvlValue <= curPrice) {
-                        console.warn(`[关键价位] 阻力位${index + 1}数据无效: ${lvlValue.toFixed(2)} <= 当前价格 ${curPrice.toFixed(2)}`);
-                        return; // 跳过无效数据
-                    }
-                    console.log(`[关键价位] 更新阻力位${index + 1}: ${lvlValue.toFixed(2)}`);
-                    resistanceElements[index].textContent = lvlValue.toFixed(2);
-                }
-            });
-        }
+        const setLevel = (role, value, visible) => {
+            const item = document.querySelector(`.key-levels .level-item[data-level-role="${role}"]`);
+            if (!item) return;
+            item.hidden = !visible;
+            const el = item.querySelector('.level-value');
+            if (el) {
+                el.textContent =
+                    value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '--';
+            }
+        };
 
-        // 更新支撑位
-        if (levels.support_levels && levels.support_levels.length > 0) {
-            const supportElements = document.querySelectorAll('.level-item:not(.current) .level-value.support');
-            console.log('[关键价位] 找到支撑位元素数量:', supportElements.length);
-            levels.support_levels.forEach((level, index) => {
-                if (supportElements[index]) {
-                    // 验证支撑位数据：支撑位必须严格小于当前价格
-                    const curPrice = Number(this.currentPrice);
-                    const lvlValue = Number(level);
-                    if (lvlValue >= curPrice) {
-                        console.warn(`[关键价位] 支撑位${index + 1}数据无效: ${lvlValue.toFixed(2)} >= 当前价格 ${curPrice.toFixed(2)}`);
-                        return; // 跳过无效数据
-                    }
-                    console.log(`[关键价位] 更新支撑位${index + 1}: ${lvlValue.toFixed(2)}`);
-                    supportElements[index].textContent = lvlValue.toFixed(2);
-                }
-            });
-        }
+        // API：阻力近→远升序，支撑近→远降序
+        setLevel('resistance-near', resists[0], resists.length >= 1);
+        setLevel('resistance-far', resists[1], resists.length >= 2);
+        setLevel('support-near', supports[0], supports.length >= 1);
+        setLevel('support-far', supports[1], supports.length >= 2);
 
-        // 更新当前价格 - 使用最新的实时价格而不是智能分析API返回的价格
         this.updateKeyLevelsCurrentPrice();
     },
 
@@ -3078,8 +3066,8 @@ const StockPage = {
 
         // 模拟后端返回的关键价位数据
         const mockLevels = {
-            resistance_levels: [23.50, 24.80, 26.20],
-            support_levels: [20.50, 19.20, 18.00],
+            resistance_levels: [23.50, 24.80],
+            support_levels: [20.50, 19.20],
             current_price: 22.19
         };
 
