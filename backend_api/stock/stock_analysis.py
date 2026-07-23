@@ -389,7 +389,7 @@ class KeyLevels:
     # 与 RPE 默认 lookback / kde_base_factor 对齐
     KDE_LOOKBACK_DAYS = 250
     KDE_BASE_FACTOR = 1.0
-    MAX_LEVELS = 3
+    MAX_LEVELS = 2
 
     @staticmethod
     def calculate_key_levels(
@@ -397,7 +397,7 @@ class KeyLevels:
         current_price: float,
         *,
         kde_base_factor: Optional[float] = None,
-        max_levels: int = 3,
+        max_levels: int = 2,
     ) -> Dict:
         """
         用收盘价 + 成交量做 gaussian_kde，密度峰作为支撑/阻力。
@@ -405,7 +405,7 @@ class KeyLevels:
         - 带宽 bw = max(0.01, base_factor * sigma/mu)
         - 现价下方峰 -> 支撑（由近到远）
         - 现价上方峰 -> 阻力（由近到远）
-        展示侧各取最多 max_levels 个；按当前价（可实时）重新划分峰。
+        展示侧各取最多 max_levels 个（默认 2）；按当前价（可实时）重新划分峰。
         """
         empty = {
             "resistance_levels": [],

@@ -1660,7 +1660,7 @@ const StockPage = {
         container.innerHTML = html;
     },
 
-    // 更新关键价位（后端 KDE 密度峰；阻力升序近→远，支撑降序近→远）
+    // 更新关键价位（KDE；各侧最多 2 档；近端填「1」，有第二档才显示「2」）
     updateKeyLevels(levels) {
         console.log('[关键价位] 更新数据:', levels);
 
@@ -1670,35 +1670,35 @@ const StockPage = {
         }
 
         const curPrice = Number(this.currentPrice);
-        const resistanceElements = document.querySelectorAll(
-            '.level-item:not(.current) .level-value.resistance'
-        );
-        const supportElements = document.querySelectorAll(
-            '.level-item:not(.current) .level-value.support'
-        );
-
-        // DOM 自上而下为 阻力位3/2/1（高→低靠近现价），API 为近→远升序，需反转填入
         const resists = Array.isArray(levels.resistance_levels)
             ? levels.resistance_levels
                   .map((x) => Number(x))
                   .filter((v) => Number.isFinite(v) && (!Number.isFinite(curPrice) || v > curPrice))
+                  .slice(0, 2)
             : [];
-        const resistForDom = resists.slice().reverse();
-        resistanceElements.forEach((el, index) => {
-            const v = resistForDom[index];
-            el.textContent = v != null && Number.isFinite(v) ? v.toFixed(2) : '--';
-        });
-
-        // DOM 为 支撑位1/2/3（近→远），与 API 降序一致
         const supports = Array.isArray(levels.support_levels)
             ? levels.support_levels
                   .map((x) => Number(x))
                   .filter((v) => Number.isFinite(v) && (!Number.isFinite(curPrice) || v < curPrice))
+                  .slice(0, 2)
             : [];
-        supportElements.forEach((el, index) => {
-            const v = supports[index];
-            el.textContent = v != null && Number.isFinite(v) ? v.toFixed(2) : '--';
-        });
+
+        const setLevel = (role, value, visible) => {
+            const item = document.querySelector(`.key-levels .level-item[data-level-role="${role}"]`);
+            if (!item) return;
+            item.hidden = !visible;
+            const el = item.querySelector('.level-value');
+            if (el) {
+                el.textContent =
+                    value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '--';
+            }
+        };
+
+        // API：阻力近→远升序，支撑近→远降序
+        setLevel('resistance-near', resists[0], resists.length >= 1);
+        setLevel('resistance-far', resists[1], resists.length >= 2);
+        setLevel('support-near', supports[0], supports.length >= 1);
+        setLevel('support-far', supports[1], supports.length >= 2);
 
         this.updateKeyLevelsCurrentPrice();
     },
@@ -3158,8 +3158,8 @@ const StockPage = {
 
         // 模拟后端返回的关键价位数据
         const mockLevels = {
-            resistance_levels: [23.50, 24.80, 26.20],
-            support_levels: [20.50, 19.20, 18.00],
+            resistance_levels: [23.50, 24.80],
+            support_levels: [20.50, 19.20],
             current_price: 22.19
         };
 

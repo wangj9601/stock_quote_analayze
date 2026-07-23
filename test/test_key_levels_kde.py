@@ -47,15 +47,16 @@ def test_key_levels_uses_kde_peaks():
     assert all(s < current for s in out["support_levels"])
     assert out["resistance_levels"] == sorted(out["resistance_levels"])
     assert out["support_levels"] == sorted(out["support_levels"], reverse=True)
-    assert len(out["resistance_levels"]) <= 3
-    assert len(out["support_levels"]) <= 3
+    assert len(out["resistance_levels"]) <= 2
+    assert len(out["support_levels"]) <= 2
 
-    # 与 RPE 峰划分一致（按当前价）
+    # 与 RPE 峰划分一致（按当前价），展示侧各最多 2 档
     peaks = kde.get("all_peaks") or []
-    expect_r = sorted([round(p, 2) for p in peaks if p > current])[:3]
-    expect_s = sorted([round(p, 2) for p in peaks if 0 < p < current], reverse=True)[:3]
+    expect_r = sorted([round(p, 2) for p in peaks if p > current])[:2]
+    expect_s = sorted([round(p, 2) for p in peaks if 0 < p < current], reverse=True)[:2]
     assert out["resistance_levels"] == expect_r
     assert out["support_levels"] == expect_s
+    assert KeyLevels.MAX_LEVELS == 2
 
 
 def test_key_levels_insufficient_samples():
