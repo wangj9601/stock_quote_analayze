@@ -109,13 +109,9 @@ class ImprovedRealtimeStockIndustryBoardCollector:
                     print(f"[采集] ❌ {field}: 字段不存在")
             
             columns = list(df_filtered.columns)
-            
-            # 清空旧数据
-            print(f"[采集] 清空旧数据...")
-            session.execute(text(f"DELETE FROM {self.table_name}"))
-            
-            # 插入新数据
-            print(f"[采集] 开始插入新数据...")
+
+            # 仅 UPSERT：保留历史实时行情，不整表清空
+            print(f"[采集] 开始写入/更新数据...")
             inserted_count = 0
             for idx, row in df_filtered.iterrows():
                 try:

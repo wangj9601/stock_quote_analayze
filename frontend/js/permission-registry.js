@@ -72,5 +72,4 @@ window.PERMISSION_TAB_MAP = {
   urt: 'channel.screening.tab.urt',
   sbbr: 'channel.screening.tab.sbbr',
   rpe: 'channel.screening.tab.rpe'
-  sbbr: 'channel.screening.tab.sbbr'
 };

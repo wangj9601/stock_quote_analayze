@@ -87,7 +87,6 @@ class ConceptBoardBasicCollector:
                         VALUES (:board_code, :board_name, :create_date, :board_code_source)
                         ON CONFLICT (board_code) DO UPDATE SET
                             board_name = EXCLUDED.board_name,
-                            create_date = EXCLUDED.create_date,
                             board_code_source = EXCLUDED.board_code_source
                         """
                     ),
