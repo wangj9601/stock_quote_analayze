@@ -35,6 +35,8 @@ frontend_router = APIRouter(prefix="/api/frontend/rpe", tags=["rpe-frontend"])
 
 _trace_recompute_table_ready = False
 _trace_recompute_table_lock = threading.Lock()
+_observe_schema_ready = False
+_observe_schema_lock = threading.Lock()
 
 
 def _norm_code(code: str) -> str:
@@ -42,6 +44,27 @@ def _norm_code(code: str) -> str:
     if s.isdigit() and len(s) <= 6:
         return s.zfill(6)
     return s
+
+
+def _ensure_rpe_trade_observe_schema() -> None:
+    """确保观察池相关表存在（生产漏跑迁移时给出可预期错误，避免请求挂死）。"""
+    global _observe_schema_ready
+    if _observe_schema_ready:
+        return
+    with _observe_schema_lock:
+        if _observe_schema_ready:
+            return
+        try:
+            RPETradeObserveStock.__table__.create(bind=engine, checkfirst=True)
+            RPETradeObserveHistory.__table__.create(bind=engine, checkfirst=True)
+            RPEFormalTrade.__table__.create(bind=engine, checkfirst=True)
+        except Exception as e:
+            logger.error("创建 RPE 观察/交易表失败: %s", e, exc_info=True)
+            raise HTTPException(
+                status_code=503,
+                detail=f"RPE 观察表未就绪，请执行 migrations/add_rpe_tables.py: {e}",
+            )
+        _observe_schema_ready = True
 
 
 def _ensure_trace_recompute_task_table() -> None:
@@ -251,6 +274,7 @@ def list_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _ensure_rpe_trade_observe_schema()
     rows = (
         db.query(RPETradeObserveStock)
         .filter(RPETradeObserveStock.user_id == current_user.id)
@@ -309,36 +333,44 @@ def add_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _ensure_rpe_trade_observe_schema()
     code = _norm_code(body.code)
-    existing = (
-        db.query(RPETradeObserveStock)
-        .filter(
-            RPETradeObserveStock.user_id == current_user.id,
-            RPETradeObserveStock.market == (body.market or "CN"),
-            RPETradeObserveStock.code == code,
+    try:
+        existing = (
+            db.query(RPETradeObserveStock)
+            .filter(
+                RPETradeObserveStock.user_id == current_user.id,
+                RPETradeObserveStock.market == (body.market or "CN"),
+                RPETradeObserveStock.code == code,
+            )
+            .first()
         )
-        .first()
-    )
-    if existing:
-        return {"id": existing.id, "ok": True, "duplicated": True}
-    sd = None
-    if body.signal_date:
-        try:
-            sd = datetime.strptime(body.signal_date[:10], "%Y-%m-%d").date()
-        except ValueError:
-            sd = None
-    row = RPETradeObserveStock(
-        user_id=current_user.id,
-        market=body.market or "CN",
-        code=code,
-        name=body.name,
-        signal_snapshot_json=body.signal_snapshot,
-        signal_date=sd,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": row.id, "ok": True}
+        if existing:
+            return {"id": existing.id, "ok": True, "duplicated": True}
+        sd = None
+        if body.signal_date:
+            try:
+                sd = datetime.strptime(body.signal_date[:10], "%Y-%m-%d").date()
+            except ValueError:
+                sd = None
+        row = RPETradeObserveStock(
+            user_id=current_user.id,
+            market=body.market or "CN",
+            code=code,
+            name=body.name,
+            signal_snapshot_json=body.signal_snapshot,
+            signal_date=sd,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return {"id": row.id, "ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("RPE 加入观察失败 code=%s: %s", code, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"加入观察失败: {e}")
 
 
 @stock_router.delete("/rpe-trade-observe/{item_id}")
@@ -347,6 +379,7 @@ def delete_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _ensure_rpe_trade_observe_schema()
     row = (
         db.query(RPETradeObserveStock)
         .filter(RPETradeObserveStock.id == item_id, RPETradeObserveStock.user_id == current_user.id)
@@ -377,6 +410,7 @@ def list_formal_trades(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _ensure_rpe_trade_observe_schema()
     q = db.query(RPEFormalTrade).filter(RPEFormalTrade.user_id == current_user.id)
     if status:
         q = q.filter(RPEFormalTrade.status == status)
@@ -421,6 +455,7 @@ def formal_from_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _ensure_rpe_trade_observe_schema()
     obs = (
         db.query(RPETradeObserveStock)
         .filter(RPETradeObserveStock.id == observe_id, RPETradeObserveStock.user_id == current_user.id)

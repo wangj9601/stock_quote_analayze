@@ -28,6 +28,7 @@ def _int_env(name: str, default: int) -> int:
 GMS_SCREENING_TIMEOUT = max(60, _int_env("GMS_SCREENING_TIMEOUT", 600))
 VSB_SCREENING_TIMEOUT = max(60, _int_env("VSB_SCREENING_TIMEOUT", 600))
 URT_SCREENING_TIMEOUT = max(60, _int_env("URT_SCREENING_TIMEOUT", 600))
+RPE_SCREENING_TIMEOUT = max(60, _int_env("RPE_SCREENING_TIMEOUT", 600))
 
 from backend_api.services.gms_selection_snapshot import (
     build_param_hash,
@@ -54,10 +55,14 @@ from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
 
 logger = logging.getLogger(__name__)
 logger.info(
-    "选股接口超时: PVFRS_SCREENING_TIMEOUT=%ss, GMS_SCREENING_TIMEOUT=%ss, VSB_SCREENING_TIMEOUT=%ss（全A股请保证网关超时≥此值）",
+    "选股接口超时: PVFRS_SCREENING_TIMEOUT=%ss, GMS_SCREENING_TIMEOUT=%ss, "
+    "VSB_SCREENING_TIMEOUT=%ss, URT_SCREENING_TIMEOUT=%ss, RPE_SCREENING_TIMEOUT=%ss"
+    "（全A股请保证网关超时≥此值）",
     PVFRS_SCREENING_TIMEOUT,
     GMS_SCREENING_TIMEOUT,
     VSB_SCREENING_TIMEOUT,
+    URT_SCREENING_TIMEOUT,
+    RPE_SCREENING_TIMEOUT,
 )
 
 router = APIRouter(prefix="/api/screening", tags=["screening"])
@@ -3580,25 +3585,49 @@ async def get_rpe_strategy(
     if scope_raw in ("industry_board", "concept_board") and effective_max < 2000:
         effective_max = 2000
 
+    # 长耗时计算在线程池中用独立 Session；请求级 db 提前归还连接池，避免拖死其它接口（如观察池 add）
+    try:
+        db.close()
+    except Exception:
+        pass
+
     loop = asyncio.get_event_loop()
+    _codes = codes
+    _board_codes = board_codes
+    _board_kind = board_kind
+    _entry_only = effective_entry_only
+    _signal_type = None if scope_raw == "single" else signal_type
+    _trace_only = trace_only and scope_raw == "cn" and not board_codes and not codes
+    _include_no_signal = include_no_signal
+    _scope_for_engine = scope_raw if scope_raw == "cn" else "cn"
 
     def _run():
         return RPEFrontendInterface.get_selection_results(
             date=date,
             config_id=config_id,
-            scope=scope_raw if scope_raw == "cn" else "cn",
-            codes=codes,
-            board_codes=board_codes,
-            board_kind=board_kind,
-            entry_only=effective_entry_only,
-            signal_type=None if scope_raw == "single" else signal_type,
-            trace_only=trace_only and scope_raw == "cn" and not board_codes and not codes,
+            scope=_scope_for_engine,
+            codes=_codes,
+            board_codes=_board_codes,
+            board_kind=_board_kind,
+            entry_only=_entry_only,
+            signal_type=_signal_type,
+            trace_only=_trace_only,
             max_results=effective_max,
-            include_no_signal=include_no_signal,
-            db=db,
+            include_no_signal=_include_no_signal,
         )
 
-    result = await loop.run_in_executor(None, _run)
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _run),
+            timeout=RPE_SCREENING_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("RPE 选股超时(%ss)，scope=%s", RPE_SCREENING_TIMEOUT, scope_raw)
+        raise HTTPException(
+            status_code=504,
+            detail=f"RPE选股计算超时（超过{RPE_SCREENING_TIMEOUT}秒），请缩小范围或稍后重试",
+        )
+
     return JSONResponse(
         {
             "success": True,
