@@ -2,6 +2,8 @@
 # 与 backend_api/requirements-minimal 合并安装时，以较高下界为准（如 numpy>=2.1 以支持 Py3.13 Windows wheel）。
 pandas>=1.5.0,<3
 numpy>=1.21.0,<3
+# RPE 比价效应 KDE 支撑/阻力（gaussian_kde / find_peaks）；未装时会回退直方图，但生产建议安装
+scipy>=1.7.0,<2
 
 # 数据采集
 akshare>=1.17.70

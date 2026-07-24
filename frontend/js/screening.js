@@ -3095,10 +3095,12 @@ const ScreeningPage = {
     // 绑定事件
     bindEvents() {
         // 绑定所有刷新按钮（仅带 data-strategy 的真正「刷新筛选」）
+        // rpe / sbbr 由独立脚本（rpe_screening.js / sbbr_screening.js）自行处理，勿走通用 loadScreeningResults
+        const externalRefreshStrategies = new Set(['rpe', 'sbbr']);
         document.querySelectorAll('.refresh-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const strategy = btn.dataset.strategy;
-                if (!strategy) return;
+                if (!strategy || externalRefreshStrategies.has(strategy)) return;
                 this.loadScreeningResults(strategy);
             });
         });
@@ -3823,6 +3825,10 @@ const ScreeningPage = {
         const resetGmsPage = options.resetGmsPage !== false;
         if (!strategy) {
             strategy = this.currentStrategy;
+        }
+        // 比价效应 / 做小做底由独立模块刷新，避免落入「未知的策略类型」
+        if (strategy === 'rpe' || strategy === 'sbbr') {
+            return;
         }
         if (strategy === 'gms' && resetGmsPage) {
             this.gmsPage = 1;

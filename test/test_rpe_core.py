@@ -47,10 +47,35 @@ def test_kde_levels_basic():
     closes = [10 + random.random() for _ in range(40)] + [9.0] * 20 + [11.0] * 20
     volumes = [100 + random.random() * 50 for _ in closes]
     res = extract_kde_levels(closes, volumes, base_factor=1.0)
+    assert res.get("ok") is True
     assert "support_levels" in res
     assert "resistance_levels" in res
     near = nearest_levels(closes[-1], res["support_levels"], res["resistance_levels"])
     assert "nearest_support" in near
+
+
+def test_kde_histogram_fallback_without_scipy(monkeypatch):
+    import builtins
+    import random
+
+    random.seed(2)
+    closes = [10 + random.random() for _ in range(30)] + [8.5] * 25 + [12.0] * 25 + [10.1]
+    volumes = [80 + random.random() * 40 for _ in closes]
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "scipy" or name.startswith("scipy."):
+            raise ImportError("scipy disabled for test")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    res = extract_kde_levels(closes, volumes, base_factor=1.0)
+    assert res.get("ok") is True
+    assert res.get("method") == "histogram_fallback"
+    assert res.get("reason") == "ok_histogram_fallback"
+    # 至少一侧应能给出峰位（取决于现价位置）
+    assert (res.get("support_levels") or res.get("resistance_levels"))
 
 
 def test_filters_and_signal():
