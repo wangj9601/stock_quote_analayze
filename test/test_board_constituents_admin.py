@@ -57,7 +57,9 @@ class TestBoardConstituentsHelpers:
     def test_resolve_delete_board_code(self):
         assert _resolve_delete_board_code("industry", "BK0420") == "BK0420"
         assert _resolve_delete_board_code("industry", "医疗服务") == "医疗服务"
+        assert _resolve_delete_board_code("industry", "881001") == "881001"
         assert _resolve_delete_board_code("concept", "BK0428") == "BK0428"
+        assert _resolve_delete_board_code("concept", "881001") == "881001"
         assert _resolve_delete_board_code("concept", "医疗服务") == ""
 
     def test_normalize_stock_code(self):

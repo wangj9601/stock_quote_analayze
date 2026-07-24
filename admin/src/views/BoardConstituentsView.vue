@@ -238,8 +238,8 @@
             <el-input
               v-model="boardEditForm.board_code"
               :placeholder="boardType === 'industry'
-                ? 'BK+数字，或中文/英文代码'
-                : 'BK+数字，如 BK0428'"
+                ? 'BK+数字、纯数字，或中文/英文代码'
+                : 'BK+数字或纯数字，如 BK0428 / 881001'"
               clearable
               class="flex-1"
             />
@@ -253,7 +253,7 @@
           </div>
           <p class="text-xs text-gray-500 mt-1">
             <template v-if="isBoardCreateMode">
-              可手动填写，或点「换一个」自动生成全局唯一的 BK 编码；留空保存时也会自动生成。
+              可手动填写（支持 BK+数字或纯数字；行业另支持中文/英文），或点「换一个」自动生成全局唯一的 BK 编码；留空保存时也会自动生成。
             </template>
             <template v-else>
               可修改板块代码；点「换一个」可填入下一个可用 BK 编码。修改后将同步更新该板块下全部成分股。
@@ -531,6 +531,7 @@ function isValidBoardCode(type: BoardType, code: string): boolean {
   const c = code.trim()
   if (!c) return false
   if (/^BK\d+$/i.test(c)) return true
+  if (/^\d{1,20}$/.test(c)) return true
   if (type === 'industry') {
     return /^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9._\-·]{0,19}$/.test(c)
   }
@@ -758,8 +759,8 @@ async function submitBoardEdit() {
   if (code && !isValidBoardCode(boardType.value, code)) {
     ElMessage.warning(
       boardType.value === 'industry'
-        ? '行业板块代码须为 BK+数字、中文或英文字符'
-        : '板块代码须为 BK+数字 格式',
+        ? '行业板块代码须为 BK+数字、纯数字，或中文/英文字符'
+        : '概念板块代码须为 BK+数字或纯数字',
     )
     return
   }
