@@ -233,19 +233,17 @@
       @opened="onBoardEditDialogOpened"
     >
       <el-form label-width="88px" @submit.prevent>
-        <el-form-item label="板块代码" :required="!isBoardCreateAutoCode">
+        <el-form-item label="板块代码" :required="!isBoardCreateMode">
           <div class="flex gap-2 w-full">
             <el-input
               v-model="boardEditForm.board_code"
-              :placeholder="isBoardCreateAutoCode
-                ? '保存时自动生成 BK 编码'
-                : (boardType === 'industry' ? '中文/英文/BK编码' : 'BK+数字，如 BK0428')"
-              :readonly="isBoardCreateAutoCode"
-              :clearable="!isBoardCreateAutoCode"
+              :placeholder="boardType === 'industry'
+                ? 'BK+数字，或中文/英文代码'
+                : 'BK+数字，如 BK0428'"
+              clearable
               class="flex-1"
             />
             <el-button
-              v-if="isBoardCreateAutoCode"
               size="default"
               :loading="loadingNextBoardCode"
               @click="refreshBoardCode"
@@ -253,8 +251,13 @@
               换一个
             </el-button>
           </div>
-          <p v-if="isBoardCreateAutoCode" class="text-xs text-gray-500 mt-1">
-            行业/概念板块新增时使用 BK+数字 编码，且全局不可重复；保存时自动生成，也可点「换一个」预览。
+          <p class="text-xs text-gray-500 mt-1">
+            <template v-if="isBoardCreateMode">
+              可手动填写，或点「换一个」自动生成全局唯一的 BK 编码；留空保存时也会自动生成。
+            </template>
+            <template v-else>
+              可修改板块代码；点「换一个」可填入下一个可用 BK 编码。修改后将同步更新该板块下全部成分股。
+            </template>
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
@@ -296,7 +299,7 @@
           <p class="text-xs text-gray-500 mt-1">关闭后网站 GMS 选股页的行业/概念板块选择器中不再展示该板块。</p>
         </el-form-item>
         <p v-if="boardEditForm.original_board_code" class="text-xs text-gray-500">
-          修改代码将同步更新该板块下全部成分股的 board_code。
+          当前原代码：{{ boardEditForm.original_board_code }}；若与上方不一致，保存时将执行改码并联动成分股。
         </p>
       </el-form>
       <template #footer>
@@ -522,7 +525,7 @@ const boardEditForm = reactive({
 const togglingTradeObserve = ref<string | null>(null)
 const togglingFrontendVisible = ref<string | null>(null)
 
-const isBoardCreateAutoCode = computed(() => !boardEditForm.original_board_code)
+const isBoardCreateMode = computed(() => !boardEditForm.original_board_code)
 
 function isValidBoardCode(type: BoardType, code: string): boolean {
   const c = code.trim()
@@ -748,11 +751,11 @@ async function toggleBoardFrontendVisible(row: BoardSummary, val: boolean) {
 async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
-  if (!isBoardCreateAutoCode && !code) {
+  if (!isBoardCreateMode.value && !code) {
     ElMessage.warning('请填写板块代码')
     return
   }
-  if (code && !isBoardCreateAutoCode && !isValidBoardCode(boardType.value, code)) {
+  if (code && !isValidBoardCode(boardType.value, code)) {
     ElMessage.warning(
       boardType.value === 'industry'
         ? '行业板块代码须为 BK+数字、中文或英文字符'

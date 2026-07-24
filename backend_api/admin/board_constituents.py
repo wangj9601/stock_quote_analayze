@@ -855,7 +855,7 @@ async def save_board_info(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """新增或编辑板块基础信息（支持改名并联动成分股）。"""
+    """新增或编辑板块基础信息（支持修改板块代码并联动成分股）。"""
     raw_code = (body.board_code or "").strip()
     board_name = (body.board_name or "").strip() or None
     now = datetime.now().replace(microsecond=0)

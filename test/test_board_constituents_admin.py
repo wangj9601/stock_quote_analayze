@@ -118,6 +118,24 @@ class TestBoardConstituentsHelpers:
         except ValueError:
             pass
 
+    def test_save_board_body_rename_keeps_codes(self):
+        body = SaveBoardInfoBody(
+            board_type="concept",
+            board_code="BK0500",
+            board_name="电力",
+            original_board_code="BK0428",
+        )
+        assert body.board_code == "BK0500"
+        assert body.original_board_code == "BK0428"
+        industry = SaveBoardInfoBody(
+            board_type="industry",
+            board_code="BK1028",
+            board_name="半导体",
+            original_board_code="医疗服务",
+        )
+        assert industry.board_code == "BK1028"
+        assert industry.original_board_code == "医疗服务"
+
     def test_set_board_trade_observe_body_validation(self):
         body = SetBoardTradeObserveBody(
             board_type="concept",
