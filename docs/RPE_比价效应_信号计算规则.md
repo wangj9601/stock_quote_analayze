@@ -168,12 +168,14 @@ D = P - S,\quad U = R_{res} - P,\quad
 
 ## 5. KDE 支撑 / 阻力
 
-1. 样本：回溯 bars 的 close、volume；有效点 &lt; 20 → 失败  
+1. 样本：回溯 bars 的 close、volume；有效点（价&gt;0 且量&gt;0）&lt; 20 → `insufficient_samples`，支撑/阻力为空  
 2. 带宽：\(\mathrm{bw}=\max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma_P/\mu_P)\)  
-3. 成交量加权 `gaussian_kde` → 密度峰  
-4. 峰 &lt; 现价 → 支撑；峰 ≥ 现价 → 阻力（最多各 8 个）  
+3. **优先**成交量加权 `scipy.stats.gaussian_kde` → 密度峰  
+4. **生产注意**：若 API 环境未安装 `scipy`（旧版 `requirements-minimal` 曾缺此项），会回退直方图平滑（`ok_histogram_fallback`）；部署应执行 `pip install scipy` 或重装 `requirements-prod.txt`  
+5. 峰 &lt; 现价 → 支撑；峰 ≥ 现价 → 阻力（最多各 8 个）  
 
-现价上方无峰 → 最近阻力为空（列表显示 `-`），结构仍可因 `no_resistance` 通过。
+现价上方无峰 → 最近阻力为空（列表显示 `-`），结构仍可因 `no_resistance` 通过。  
+若两侧均为 `-`，请在选股「明细」中查看 **KDE 状态**（`detail.kde_reason`）。
 
 ---
 

@@ -57,7 +57,9 @@ class TestBoardConstituentsHelpers:
     def test_resolve_delete_board_code(self):
         assert _resolve_delete_board_code("industry", "BK0420") == "BK0420"
         assert _resolve_delete_board_code("industry", "医疗服务") == "医疗服务"
+        assert _resolve_delete_board_code("industry", "881001") == "881001"
         assert _resolve_delete_board_code("concept", "BK0428") == "BK0428"
+        assert _resolve_delete_board_code("concept", "881001") == "881001"
         assert _resolve_delete_board_code("concept", "医疗服务") == ""
 
     def test_normalize_stock_code(self):
@@ -117,6 +119,24 @@ class TestBoardConstituentsHelpers:
             assert False, "无效来源应失败"
         except ValueError:
             pass
+
+    def test_save_board_body_rename_keeps_codes(self):
+        body = SaveBoardInfoBody(
+            board_type="concept",
+            board_code="BK0500",
+            board_name="电力",
+            original_board_code="BK0428",
+        )
+        assert body.board_code == "BK0500"
+        assert body.original_board_code == "BK0428"
+        industry = SaveBoardInfoBody(
+            board_type="industry",
+            board_code="BK1028",
+            board_name="半导体",
+            original_board_code="医疗服务",
+        )
+        assert industry.board_code == "BK1028"
+        assert industry.original_board_code == "医疗服务"
 
     def test_set_board_trade_observe_body_validation(self):
         body = SetBoardTradeObserveBody(

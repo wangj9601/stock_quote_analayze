@@ -45,6 +45,9 @@ const RpeScoreDetail = {
       ok: '通过',
       thin_liquidity: '流动性不足',
       no_bars: '缺少行情',
+      insufficient_samples: '有效价量样本不足（需≥20）',
+      bad_stats: '价格统计无效（均值/波动为0）',
+      ok_histogram_fallback: '已用直方图回退计算支撑/阻力（建议安装 scipy）',
     };
     return map[code] || code || '--';
   },
@@ -155,6 +158,7 @@ const RpeScoreDetail = {
       ],
       ['最近支撑 S', this._fmt(src.nearest_support, 2), 'KDE 密度峰（现价下方）；RR 分母相关'],
       ['最近阻力', this._fmt(src.nearest_resistance, 2), 'KDE 密度峰（现价上方）；无则「-」且结构可放宽'],
+      ['KDE 状态', this._esc(this._reasonText(detail.kde_reason)), detail.kde_reason || '--'],
       [
         '盈亏比 RR',
         this._fmt(struct.rr, 2),
