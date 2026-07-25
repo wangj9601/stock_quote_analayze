@@ -15,6 +15,7 @@ from backend_api.admin.board_constituents import (
     SetBoardFrontendVisibleBody,
     _clear_all_concept_boards,
     _clear_all_industry_boards,
+    _assert_board_name_source_unique,
     _assert_concept_board_name_unique,
     _generate_next_concept_board_code,
     _industry_board_src_sql,
@@ -27,6 +28,7 @@ from backend_api.admin.board_constituents import (
     _normalize_stock_code,
     _read_board_trade_observe_flag,
     _sync_concept_board_basic_from_import,
+    _sync_industry_board_basic_from_import,
     _upsert_board_basic,
     _resolve_stock_lookup_codes,
     _tables,
@@ -142,15 +144,28 @@ class TestBoardConstituentsHelpers:
     def test_upsert_board_basic_preserves_flag_when_not_provided(self):
         executed: list[dict] = []
 
+        class _R:
+            def __init__(self, row=None, scalar_val=None):
+                self._row = row
+                self._scalar = scalar_val
+
+            def fetchone(self):
+                return self._row
+
+            def scalar(self):
+                return self._scalar
+
         class _DB:
             def execute(self, sql, params=None):
                 executed.append({"sql": str(sql), "params": params or {}})
                 sql_s = str(sql)
                 if "SELECT trade_observe_flag" in sql_s:
-                    return type("R", (), {"fetchone": lambda self: None})()
+                    return _R(row=None)
+                if "SELECT 1 FROM" in sql_s:
+                    return _R(scalar_val=None)
                 if "SELECT board_code_source" in sql_s:
-                    return type("R", (), {"fetchone": lambda self: None})()
-                return type("R", (), {})()
+                    return _R(row=None)
+                return _R()
 
         now = __import__("datetime").datetime(2026, 6, 6, 12, 0, 0)
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now)
@@ -159,7 +174,7 @@ class TestBoardConstituentsHelpers:
         assert "board_code_source" in executed[-1]["sql"]
         assert executed[-1]["params"]["board_code"] == "BK0428"
         assert executed[-1]["params"]["frontend_visible_flag"] is True
-        assert executed[-1]["params"]["board_code_source"] == "eastmoney"
+        assert executed[-1]["params"]["board_code_source"] == "manual"
 
         executed.clear()
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now, trade_observe_flag=True)
@@ -212,9 +227,9 @@ class TestBoardConstituentsHelpers:
             pass
 
     def test_format_bk_board_code(self):
-        assert _format_bk_board_code(428) == "BK0428"
-        assert _format_bk_board_code(1253) == "BK1253"
-        assert _format_bk_board_code(10000) == "BK10000"
+        assert _format_bk_board_code(428) == "0428"
+        assert _format_bk_board_code(1253) == "1253"
+        assert _format_bk_board_code(10000) == "10000"
 
     def test_generate_next_concept_board_code(self):
         class _Q:
@@ -229,16 +244,20 @@ class TestBoardConstituentsHelpers:
                 return _Q([("BK0428",), ("BK1253",), ("BK0999",)])
 
         db = _DB()
-        assert _generate_next_concept_board_code(db) == "BK1254"
-        assert _generate_next_concept_board_code(db, after_code="BK1254") == "BK1255"
-        assert _generate_next_concept_board_code(db, after_code="BK1253") == "BK1254"
+        assert _generate_next_concept_board_code(db) == "1254"
+        assert _generate_next_concept_board_code(db, after_code="BK1254") == "1255"
+        assert _generate_next_concept_board_code(db, after_code="BK1253") == "1254"
 
-    def test_concept_board_name_unique(self):
+    def test_board_name_source_unique_allows_same_name_diff_source(self):
+        """同名不同代码来源应放行；同名同来源才拒绝。"""
+
         class _DB:
             def __init__(self, row):
                 self._row = row
+                self.last_params = None
 
             def execute(self, *args, **kwargs):
+                self.last_params = kwargs.get("params") or (args[1] if len(args) > 1 else None)
                 outer = self
 
                 class _R:
@@ -247,53 +266,83 @@ class TestBoardConstituentsHelpers:
 
                 return _R()
 
+        # 同名 + 同来源 → 拒绝
         try:
-            _assert_concept_board_name_unique(
+            _assert_board_name_source_unique(
                 _DB(("BK1638",)),
+                "concept",
                 "华为海思概念",
+                "manual",
             )
-            assert False, "应拒绝重复名称"
+            assert False, "同名同来源应拒绝"
         except HTTPException as e:
             assert e.status_code == 400
             assert "已存在" in str(e.detail)
+            assert "手动维护" in str(e.detail)
 
-        _assert_concept_board_name_unique(
+        # 排除自身代码 → 放行
+        _assert_board_name_source_unique(
             _DB(("BK1638",)),
+            "concept",
             "华为海思概念",
+            "manual",
             exclude_codes=["BK1638"],
         )
-        _assert_concept_board_name_unique(_DB(None), "新板块")
-        _assert_concept_board_name_unique(_DB(("BK1638",)), "  ")
+        # 库中无冲突 → 放行（同名不同来源由查询条件保证）
+        _assert_board_name_source_unique(_DB(None), "industry", "电力", "tonghuashun")
+        _assert_board_name_source_unique(_DB(("BK1638",)), "concept", "  ", "manual")
+
+        # 兼容旧函数：默认按 manual 维度校验
+        try:
+            _assert_concept_board_name_unique(_DB(("BK1638",)), "华为海思概念")
+            assert False, "应拒绝"
+        except HTTPException as e:
+            assert e.status_code == 400
+
+    def _make_import_sync_db(self, executed, *, dup_code=None, existing_source=None):
+        """构造导入 sync 用的假 DB：可模拟同名同来源冲突与已有来源。"""
+
+        class _R:
+            def __init__(self, row=None, scalar_val=None):
+                self._row = row
+                self._scalar = scalar_val
+
+            def fetchone(self):
+                return self._row
+
+            def scalar(self):
+                return self._scalar
+
+        class _DB:
+            def execute(self, sql, params=None):
+                sql_s = str(sql)
+                if "INSERT INTO" in sql_s:
+                    executed.append(params)
+                    return _R()
+                if "board_code <> :code" in sql_s:
+                    return _R(row=(dup_code,) if dup_code else None)
+                if "SELECT board_code_source" in sql_s:
+                    if existing_source is None:
+                        return _R(row=None)
+                    return _R(row=(existing_source,))
+                if "SELECT 1 FROM" in sql_s:
+                    return _R(scalar_val=1 if existing_source is not None else None)
+                if "SELECT trade_observe_flag" in sql_s:
+                    return _R(row=None)
+                if "ADD COLUMN" in sql_s or "information_schema" in sql_s:
+                    return _R()
+                return _R(row=None)
+
+        return _DB()
 
     def test_sync_concept_board_basic_from_import(self):
         from datetime import datetime
 
         executed: list[dict] = []
-
-        class _DB:
-            def execute(self, sql, params=None):
-                sql_s = str(sql)
-                if "board_code <> :code" in sql_s:
-                    return type("R", (), {"fetchone": lambda self: None})()
-                return type("R", (), {"fetchone": lambda self: None})()
-
-            def _record(self, params):
-                executed.append(params)
-
-        class _DBWrap:
-            def __init__(self):
-                self.inner = _DB()
-
-            def execute(self, sql, params=None):
-                sql_s = str(sql)
-                if "INSERT INTO concept_board_basic_info" in sql_s:
-                    executed.append(params)
-                return self.inner.execute(sql, params)
-
         issues: list = []
         now = datetime(2026, 6, 6, 12, 0, 0)
         count = _sync_concept_board_basic_from_import(
-            _DBWrap(),
+            self._make_import_sync_db(executed),
             [
                 {"board_code": "BK1641", "board_name": "苹果概念", "stock_code": "000001", "stock_name": "平安银行"},
                 {"board_code": "BK1641", "board_name": "苹果概念", "stock_code": "000002", "stock_name": "万科A"},
@@ -307,8 +356,114 @@ class TestBoardConstituentsHelpers:
         assert len(executed) == 2
         assert executed[0]["board_code"] == "BK1641"
         assert executed[0]["board_name"] == "苹果概念"
+        assert executed[0]["board_code_source"] == "manual"
         assert executed[1]["board_code"] == "BK1642"
         assert executed[1]["board_name"] is None
+
+    def test_sync_concept_keeps_name_on_duplicate(self):
+        """同名不再清空 board_name；同名同来源仅告警。"""
+        from datetime import datetime
+
+        executed: list[dict] = []
+        issues: list = []
+        now = datetime(2026, 6, 6, 12, 0, 0)
+        count = _sync_concept_board_basic_from_import(
+            self._make_import_sync_db(executed, dup_code="BK1000"),
+            [
+                {"board_code": "BK1641", "board_name": "苹果概念", "stock_code": "000001", "stock_name": "平安银行"},
+            ],
+            now,
+            issues,
+        )
+        assert count == 1
+        assert executed[0]["board_name"] == "苹果概念"
+        assert executed[0]["board_code_source"] == "manual"
+        assert len(issues) == 1
+        assert "同名且同代码来源" in issues[0]["message"]
+        assert "仅写入板块代码" not in issues[0]["message"]
+
+    def test_sync_industry_import_defaults_manual_source(self):
+        from datetime import datetime
+
+        executed: list[dict] = []
+        issues: list = []
+        now = datetime(2026, 6, 6, 12, 0, 0)
+        count = _sync_industry_board_basic_from_import(
+            self._make_import_sync_db(executed),
+            [
+                {"board_code": "881001", "board_name": "银行", "stock_code": "000001", "stock_name": "平安银行"},
+                {"board_code": "881002", "board_name": "银行", "stock_code": "600036", "stock_name": "招商银行"},
+            ],
+            now,
+            issues,
+        )
+        assert count == 2
+        assert all(e["board_name"] == "银行" for e in executed)
+        assert all(e["board_code_source"] == "manual" for e in executed)
+
+    def test_sync_industry_preserves_existing_source(self):
+        from datetime import datetime
+
+        executed: list[dict] = []
+        issues: list = []
+        now = datetime(2026, 6, 6, 12, 0, 0)
+        count = _sync_industry_board_basic_from_import(
+            self._make_import_sync_db(executed, existing_source="eastmoney"),
+            [
+                {"board_code": "BK0420", "board_name": "医疗服务", "stock_code": "000001", "stock_name": "平安银行"},
+            ],
+            now,
+            issues,
+        )
+        assert count == 1
+        assert executed[0]["board_code_source"] == "eastmoney"
+        assert executed[0]["board_name"] == "医疗服务"
+
+    def test_sync_industry_board_basic_keeps_name_on_duplicate(self):
+        """同名冲突时仍写入名称；跳过「名称当代码」的别名行。"""
+        from datetime import datetime
+
+        executed: list[dict] = []
+        existing_names = {"种植业与林业": "旧板块"}
+
+        class _DBWrap:
+            def execute(self, sql, params=None):
+                sql_s = str(sql)
+                params = params or {}
+                if "INSERT INTO industry_board_basic_info" in sql_s:
+                    executed.append(dict(params))
+                    return type("R", (), {"fetchone": lambda self: None})()
+                if "board_code <> :code" in sql_s:
+                    name = params.get("name")
+                    code = params.get("code")
+                    owner = existing_names.get(name)
+                    if owner and owner != code:
+                        return type("R", (), {"fetchone": lambda self: (owner,)})()
+                    return type("R", (), {"fetchone": lambda self: None})()
+                return type("R", (), {"fetchone": lambda self: None})()
+
+        issues: list = []
+        now = datetime(2026, 6, 6, 12, 0, 0)
+        count = _sync_industry_board_basic_from_import(
+            _DBWrap(),
+            [
+                {"board_code": "881101", "board_name": "种植业与林业", "stock_code": "", "stock_name": ""},
+                {"board_code": "种植业与林业", "board_name": "种植业与林业", "stock_code": "", "stock_name": ""},
+                {"board_code": "81180", "board_name": "石油加工贸易", "stock_code": "", "stock_name": ""},
+            ],
+            now,
+            issues,
+        )
+        codes = {e["board_code"] for e in executed}
+        assert "881101" in codes
+        assert "81180" in codes
+        assert "种植业与林业" not in codes  # 别名行跳过
+        row_881101 = next(e for e in executed if e["board_code"] == "881101")
+        assert row_881101["board_name"] == "种植业与林业"  # 同名冲突仍保留名称
+        assert row_881101["board_code_source"] == "manual"
+        assert count == 2
+        assert any("仍写入名称" in (i.get("message") or "") for i in issues)
+        assert any("跳过别名板块" in (i.get("message") or "") for i in issues)
 
     def test_clear_all_concept_boards(self):
         deleted: dict[str, int] = {"cons": 0, "basic": 0}

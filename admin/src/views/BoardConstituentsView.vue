@@ -102,12 +102,10 @@
               row-key="board_code"
               @current-change="onSelectBoard"
               @selection-change="onBoardSelectionChange"
+              @select-all="onBoardSelectAll"
             >
-            <el-table-column
-              type="selection"
-              width="42"
-              reserve-selection
-            />
+            <!-- 不使用 reserve-selection：表头全选/取消仅作用于当前页，避免跨页累加误选 -->
+            <el-table-column type="selection" width="42" />
             <el-table-column prop="board_code" label="代码" min-width="100" show-overflow-tooltip />
             <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
             <el-table-column prop="board_code_source_label" label="代码来源" width="88" show-overflow-tooltip />
@@ -238,8 +236,8 @@
             <el-input
               v-model="boardEditForm.board_code"
               :placeholder="isBoardCreateAutoCode
-                ? '保存时自动生成 BK 编码'
-                : (boardType === 'industry' ? '中文/英文/BK编码' : 'BK+数字，如 BK0428')"
+                ? '保存时自动生成数字编码（不加 BK）'
+                : (boardType === 'industry' ? '数字/BK/中文/英文' : '数字或 BK+数字，如 0428')"
               :readonly="isBoardCreateAutoCode"
               :clearable="!isBoardCreateAutoCode"
               class="flex-1"
@@ -254,14 +252,14 @@
             </el-button>
           </div>
           <p v-if="isBoardCreateAutoCode" class="text-xs text-gray-500 mt-1">
-            行业/概念板块新增时使用 BK+数字 编码，且全局不可重复；保存时自动生成，也可点「换一个」预览。
+            行业/概念板块新增时自动生成纯数字编码（不加 BK），且全局不可重复；也可点「换一个」预览。存量 BK 编码仍可继续使用。
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
           <el-input
             ref="boardNameInputRef"
             v-model="boardEditForm.board_name"
-            placeholder="展示名称"
+            placeholder="展示名称（可与其它板块同名）"
             clearable
             @keyup.enter="submitBoardEdit"
           />
@@ -275,7 +273,9 @@
               :value="opt.value"
             />
           </el-select>
-          <p class="text-xs text-gray-500 mt-1">标识板块代码取自哪家数据源；东财同步的板块一般为「东方财富」。</p>
+          <p class="text-xs text-gray-500 mt-1">
+            标识板块代码取自哪家数据源；名称允许重复，用代码来源区分不同记录。东财同步一般为「东方财富」，手工/导入新建默认为「手动维护」。
+          </p>
         </el-form-item>
         <el-form-item label="交易观察">
           <el-switch
@@ -429,7 +429,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableInstance } from 'element-plus'
 import {
@@ -528,6 +528,7 @@ function isValidBoardCode(type: BoardType, code: string): boolean {
   const c = code.trim()
   if (!c) return false
   if (/^BK\d+$/i.test(c)) return true
+  if (/^\d{1,20}$/.test(c)) return true
   if (type === 'industry') {
     return /^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9._\-·]{0,19}$/.test(c)
   }
@@ -549,6 +550,11 @@ function onBoardSelectionChange(rows: BoardSummary[]) {
   selectedBoardRows.value = rows
 }
 
+/** 表头全选/取消全选：仅当前页 boards，与 selectedBoardRows / 删除选中对齐 */
+function onBoardSelectAll(rows: BoardSummary[]) {
+  selectedBoardRows.value = rows
+}
+
 async function loadBoards() {
   boardsLoading.value = true
   try {
@@ -560,6 +566,10 @@ async function loadBoards() {
     })
     boards.value = res.data || []
     boardTotal.value = res.total || 0
+    // 分页/查询刷新后清空勾选，保证「删除选中」只针对当前页可见选择
+    selectedBoardRows.value = []
+    await nextTick()
+    boardTableRef.value?.clearSelection()
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载板块列表失败')
   } finally {
@@ -755,8 +765,8 @@ async function submitBoardEdit() {
   if (code && !isBoardCreateAutoCode && !isValidBoardCode(boardType.value, code)) {
     ElMessage.warning(
       boardType.value === 'industry'
-        ? '行业板块代码须为 BK+数字、中文或英文字符'
-        : '板块代码须为 BK+数字 格式',
+        ? '行业板块代码须为数字、BK+数字、中文或英文字符'
+        : '板块代码须为数字或 BK+数字 格式',
     )
     return
   }

@@ -1,4 +1,4 @@
-"""BK 板块编码工具单元测试"""
+"""板块编码工具单元测试（自动生成不加 BK）。"""
 
 import os
 import sys
@@ -12,26 +12,36 @@ from backend_api.utils.bk_board_code import (
     is_valid_industry_board_code,
     normalize_bk_board_code,
     normalize_industry_board_code,
+    parse_bk_num,
 )
 
 
 class TestBkBoardCode:
     def test_format_bk_board_code(self):
-        assert format_bk_board_code(428) == "BK0428"
-        assert format_bk_board_code(1253) == "BK1253"
-        assert format_bk_board_code(10000) == "BK10000"
+        assert format_bk_board_code(428) == "0428"
+        assert format_bk_board_code(1253) == "1253"
+        assert format_bk_board_code(10000) == "10000"
 
     def test_normalize_and_validate(self):
         assert normalize_bk_board_code(" bk0479 ") == "BK0479"
+        assert normalize_bk_board_code("0428") == "0428"
         assert normalize_bk_board_code("玻璃") == ""
         assert is_valid_bk_board_code("BK0428") is True
+        assert is_valid_bk_board_code("0428") is True
         assert is_valid_bk_board_code("玻璃") is False
+
+    def test_parse_bk_num(self):
+        assert parse_bk_num("BK0428") == 428
+        assert parse_bk_num("0428") == 428
+        assert parse_bk_num("1253") == 1253
+        assert parse_bk_num("玻璃") is None
 
     def test_normalize_industry_board_code(self):
         assert normalize_industry_board_code("BK0428") == "BK0428"
+        assert normalize_industry_board_code("0428") == "0428"
         assert normalize_industry_board_code("医疗服务") == "医疗服务"
         assert normalize_industry_board_code("IT服务") == "IT服务"
-        assert normalize_industry_board_code("123") == ""
+        assert normalize_industry_board_code("123") == "123"
         assert is_valid_industry_board_code("贵金属") is True
 
     def test_generate_next_bk_board_code(self):
@@ -44,8 +54,9 @@ class TestBkBoardCode:
 
         class _DB:
             def execute(self, *args, **kwargs):
-                return _Q([("BK0428",), ("BK1253",)])
+                return _Q([("BK0428",), ("BK1253",), ("1001",)])
 
         db = _DB()
-        assert generate_next_bk_board_code(db) == "BK1254"
-        assert generate_next_bk_board_code(db, after_code="BK1253") == "BK1254"
+        assert generate_next_bk_board_code(db) == "1254"
+        assert generate_next_bk_board_code(db, after_code="BK1253") == "1254"
+        assert generate_next_bk_board_code(db, after_code="1253") == "1254"
