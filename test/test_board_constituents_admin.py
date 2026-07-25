@@ -13,10 +13,13 @@ from backend_api.admin.board_constituents import (
     SaveBoardInfoBody,
     SetBoardTradeObserveBody,
     SetBoardFrontendVisibleBody,
+    EXPORT_ALL_COLUMNS,
     _clear_all_concept_boards,
     _clear_all_industry_boards,
     _assert_board_name_source_unique,
     _assert_concept_board_name_unique,
+    _export_all_board_src_sql,
+    _format_export_board_code_source,
     _generate_next_concept_board_code,
     _industry_board_src_sql,
     _industry_board_list_src_sql,
@@ -103,6 +106,15 @@ class TestBoardConstituentsHelpers:
             board_name="电力",
         )
         assert body.board_code is None
+        # 概念板新增可传自定义数字编码
+        custom = SaveBoardInfoBody(
+            board_type="concept",
+            board_code="900001",
+            board_name="自定义概念",
+            board_code_source="manual",
+        )
+        assert custom.board_code == "900001"
+        assert custom.board_code_source == "manual"
         src_body = SaveBoardInfoBody(
             board_type="industry",
             board_code="BK0428",
@@ -119,6 +131,21 @@ class TestBoardConstituentsHelpers:
             assert False, "无效来源应失败"
         except ValueError:
             pass
+
+    def test_export_all_includes_board_code_source(self):
+        assert "board_code_source" in EXPORT_ALL_COLUMNS
+        assert EXPORT_ALL_COLUMNS.index("board_code_source") == 2
+        ind_sql = _export_all_board_src_sql("industry", _tables("industry"))
+        con_sql = _export_all_board_src_sql("concept", _tables("concept"))
+        assert "board_code_source" in ind_sql
+        assert "board_code_source" in con_sql
+        assert "industry_board_basic_info" in ind_sql
+        assert "concept_board_basic_info" in con_sql
+        # 与列表「代码来源」一致：导出中文标签
+        assert _format_export_board_code_source("eastmoney") == "东方财富"
+        assert _format_export_board_code_source("manual") == "手动维护"
+        assert _format_export_board_code_source(None) == "东方财富"
+        assert _format_export_board_code_source("tonghuashun") == "同花顺"
 
     def test_set_board_trade_observe_body_validation(self):
         body = SetBoardTradeObserveBody(
@@ -174,7 +201,7 @@ class TestBoardConstituentsHelpers:
         assert "board_code_source" in executed[-1]["sql"]
         assert executed[-1]["params"]["board_code"] == "BK0428"
         assert executed[-1]["params"]["frontend_visible_flag"] is True
-        assert executed[-1]["params"]["board_code_source"] == "manual"
+        assert executed[-1]["params"]["board_code_source"] == "tonghuashun"
 
         executed.clear()
         _upsert_board_basic(_DB(), "concept", "BK0428", "电力", now, trade_observe_flag=True)
@@ -182,9 +209,9 @@ class TestBoardConstituentsHelpers:
 
         executed.clear()
         _upsert_board_basic(
-            _DB(), "concept", "BK0428", "电力", now, board_code_source="tonghuashun"
+            _DB(), "concept", "BK0428", "电力", now, board_code_source="manual"
         )
-        assert executed[-1]["params"]["board_code_source"] == "tonghuashun"
+        assert executed[-1]["params"]["board_code_source"] == "manual"
 
     def test_read_board_trade_observe_flag(self):
         class _DB:
@@ -356,7 +383,7 @@ class TestBoardConstituentsHelpers:
         assert len(executed) == 2
         assert executed[0]["board_code"] == "BK1641"
         assert executed[0]["board_name"] == "苹果概念"
-        assert executed[0]["board_code_source"] == "manual"
+        assert executed[0]["board_code_source"] == "tonghuashun"
         assert executed[1]["board_code"] == "BK1642"
         assert executed[1]["board_name"] is None
 
@@ -377,12 +404,12 @@ class TestBoardConstituentsHelpers:
         )
         assert count == 1
         assert executed[0]["board_name"] == "苹果概念"
-        assert executed[0]["board_code_source"] == "manual"
+        assert executed[0]["board_code_source"] == "tonghuashun"
         assert len(issues) == 1
         assert "同名且同代码来源" in issues[0]["message"]
         assert "仅写入板块代码" not in issues[0]["message"]
 
-    def test_sync_industry_import_defaults_manual_source(self):
+    def test_sync_industry_import_defaults_tonghuashun_source(self):
         from datetime import datetime
 
         executed: list[dict] = []
@@ -399,7 +426,7 @@ class TestBoardConstituentsHelpers:
         )
         assert count == 2
         assert all(e["board_name"] == "银行" for e in executed)
-        assert all(e["board_code_source"] == "manual" for e in executed)
+        assert all(e["board_code_source"] == "tonghuashun" for e in executed)
 
     def test_sync_industry_preserves_existing_source(self):
         from datetime import datetime
@@ -460,7 +487,7 @@ class TestBoardConstituentsHelpers:
         assert "种植业与林业" not in codes  # 别名行跳过
         row_881101 = next(e for e in executed if e["board_code"] == "881101")
         assert row_881101["board_name"] == "种植业与林业"  # 同名冲突仍保留名称
-        assert row_881101["board_code_source"] == "manual"
+        assert row_881101["board_code_source"] == "tonghuashun"
         assert count == 2
         assert any("仍写入名称" in (i.get("message") or "") for i in issues)
         assert any("跳过别名板块" in (i.get("message") or "") for i in issues)

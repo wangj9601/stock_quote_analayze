@@ -557,9 +557,9 @@ def _read_board_code_source(db: Session, board_type: BoardType, board_code: str)
         {"code": board_code},
     ).fetchone()
     if not row:
-        # 无记录时用手动默认，避免导入新建被标成「东方财富」
+        # 无记录时用管理端新增/导入默认（同花顺），避免导入新建被标成「东方财富」
         return DEFAULT_BOARD_CODE_SOURCE
-    # 有记录但来源为空：按历史默认东方财富
+    # 有记录但来源为空：按历史默认东方财富（LEGACY）
     return resolve_board_code_source(row[0])
 
 
@@ -1487,6 +1487,61 @@ async def sync_board_constituents(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
+EXPORT_ALL_COLUMNS = [
+    "board_code",
+    "board_name",
+    "board_code_source",
+    "stock_code",
+    "stock_name",
+    "updated_at",
+]
+
+
+def _export_all_board_src_sql(board_type: BoardType, t: dict[str, str]) -> str:
+    """导出全部用的板块源：含 board_name / board_code_source。"""
+    if board_type == "industry":
+        return f"""
+            SELECT
+                board_code,
+                MAX(board_name) AS board_name,
+                MAX(board_code_source) AS board_code_source
+            FROM (
+                SELECT board_code, board_name, board_code_source FROM {t['basic']}
+                UNION ALL
+                SELECT DISTINCT
+                    board_code,
+                    NULL::varchar AS board_name,
+                    NULL::varchar AS board_code_source
+                FROM {t['constituents']}
+                WHERE board_code IS NOT NULL AND board_code <> ''
+            ) u
+            WHERE board_code IS NOT NULL AND board_code <> ''
+            GROUP BY board_code
+        """
+    return f"""
+        SELECT
+            board_code,
+            MAX(board_name) AS board_name,
+            MAX(board_code_source) AS board_code_source
+        FROM (
+            SELECT board_code, board_name, board_code_source FROM {t['basic']}
+            UNION ALL
+            SELECT
+                board_code,
+                NULL AS board_name,
+                NULL AS board_code_source
+            FROM {t['constituents']}
+        ) u
+        WHERE board_code IS NOT NULL AND board_code <> ''
+        GROUP BY board_code
+    """
+
+
+def _format_export_board_code_source(raw: Any) -> str:
+    """导出「代码来源」：与列表一致，输出中文标签。"""
+    return board_code_source_label(resolve_board_code_source(raw))
+
+
 @router.get("/export/all")
 async def export_all_constituents(
     board_type: BoardType = Query(...),
@@ -1496,37 +1551,16 @@ async def export_all_constituents(
 ):
     """导出当前类型下全部板块成分股（含无成分股的板块基本信息行）。"""
     _ = current_user
+    ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     label = "industry" if board_type == "industry" else "concept"
-    if board_type == "industry":
-        board_src_sql = f"""
-            SELECT board_code, MAX(board_name) AS board_name
-            FROM (
-                SELECT board_code, board_name FROM {t['basic']}
-                UNION ALL
-                SELECT DISTINCT board_code, NULL::varchar AS board_name
-                FROM {t['constituents']}
-                WHERE board_code IS NOT NULL AND board_code <> ''
-            ) u
-            WHERE board_code IS NOT NULL AND board_code <> ''
-            GROUP BY board_code
-        """
-    else:
-        board_src_sql = f"""
-            SELECT board_code, MAX(board_name) AS board_name
-            FROM (
-                SELECT board_code, board_name FROM {t['basic']}
-                UNION ALL
-                SELECT board_code, NULL AS board_name FROM {t['constituents']}
-            ) u
-            WHERE board_code IS NOT NULL AND board_code <> ''
-            GROUP BY board_code
-        """
+    board_src_sql = _export_all_board_src_sql(board_type, t)
     sql = text(
         f"""
         SELECT
             b.board_code,
             COALESCE(b.board_name, '') AS board_name,
+            b.board_code_source,
             COALESCE(c.stock_code, '') AS stock_code,
             COALESCE(c.stock_name, '') AS stock_name,
             c.updated_at
@@ -1536,14 +1570,15 @@ async def export_all_constituents(
         """
     )
     rows = db.execute(sql).fetchall()
-    cols = ["board_code", "board_name", "stock_code", "stock_name", "updated_at"]
+    cols = list(EXPORT_ALL_COLUMNS)
     data = [
         [
             str(r[0] or ""),
             str(r[1] or ""),
-            str(r[2] or ""),
+            _format_export_board_code_source(r[2]),
             str(r[3] or ""),
-            r[4].strftime("%Y-%m-%d %H:%M:%S") if r[4] else "",
+            str(r[4] or ""),
+            r[5].strftime("%Y-%m-%d %H:%M:%S") if r[5] else "",
         ]
         for r in rows
     ]
@@ -1579,11 +1614,11 @@ async def download_all_constituents_template(
     _: Any = Depends(get_current_admin),
 ):
     """下载全量成分股导入模板。"""
-    cols = ["board_code", "board_name", "stock_code", "stock_name"]
+    cols = ["board_code", "board_name", "board_code_source", "stock_code", "stock_name"]
     sample = [
-        ["IT服务", "IT服务", "000001", "平安银行"],
-        ["IT服务", "IT服务", "", "神州数码"],
-        ["半导体", "半导体", "688981", "中芯国际"],
+        ["IT服务", "IT服务", "手动维护", "000001", "平安银行"],
+        ["IT服务", "IT服务", "手动维护", "", "神州数码"],
+        ["半导体", "半导体", "东方财富", "688981", "中芯国际"],
     ]
     if format == "csv":
         sio = StringIO()

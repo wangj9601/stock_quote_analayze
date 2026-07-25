@@ -231,19 +231,20 @@
       @opened="onBoardEditDialogOpened"
     >
       <el-form label-width="88px" @submit.prevent>
-        <el-form-item label="板块代码" :required="!isBoardCreateAutoCode">
+        <el-form-item label="板块代码" :required="!!boardEditForm.original_board_code">
           <div class="flex gap-2 w-full">
             <el-input
               v-model="boardEditForm.board_code"
-              :placeholder="isBoardCreateAutoCode
-                ? '保存时自动生成数字编码（不加 BK）'
+              :placeholder="isBoardCreate
+                ? (boardType === 'industry'
+                  ? '可改：数字/BK/中文/英文；留空则保存时自动生成'
+                  : '可改：数字或 BK+数字；留空则保存时自动生成')
                 : (boardType === 'industry' ? '数字/BK/中文/英文' : '数字或 BK+数字，如 0428')"
-              :readonly="isBoardCreateAutoCode"
-              :clearable="!isBoardCreateAutoCode"
+              clearable
               class="flex-1"
             />
             <el-button
-              v-if="isBoardCreateAutoCode"
+              v-if="isBoardCreate"
               size="default"
               :loading="loadingNextBoardCode"
               @click="refreshBoardCode"
@@ -251,8 +252,8 @@
               换一个
             </el-button>
           </div>
-          <p v-if="isBoardCreateAutoCode" class="text-xs text-gray-500 mt-1">
-            行业/概念板块新增时自动生成纯数字编码（不加 BK），且全局不可重复；也可点「换一个」预览。存量 BK 编码仍可继续使用。
+          <p v-if="isBoardCreate" class="text-xs text-gray-500 mt-1">
+            新增时预填纯数字编码（不加 BK，全局唯一），可直接修改或点「换一个」；留空则保存时自动生成。存量 BK 编码仍可继续使用。
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
@@ -516,13 +517,14 @@ const boardEditForm = reactive({
   board_name: '',
   trade_observe_flag: false,
   frontend_visible_flag: true,
-  board_code_source: 'manual',
+  board_code_source: 'tonghuashun',
   original_board_code: '' as string,
 })
 const togglingTradeObserve = ref<string | null>(null)
 const togglingFrontendVisible = ref<string | null>(null)
 
-const isBoardCreateAutoCode = computed(() => !boardEditForm.original_board_code)
+/** 新增弹窗（未绑定已有 original_board_code）；代码可手动改，也可点「换一个」或留空由后端生成 */
+const isBoardCreate = computed(() => !boardEditForm.original_board_code)
 
 function isValidBoardCode(type: BoardType, code: string): boolean {
   const c = code.trim()
@@ -663,14 +665,15 @@ function openBoardEditDialog(row?: BoardSummary) {
     boardEditForm.board_name = row.board_name || ''
     boardEditForm.trade_observe_flag = !!row.trade_observe_flag
     boardEditForm.frontend_visible_flag = row.frontend_visible_flag !== false
-    boardEditForm.board_code_source = row.board_code_source || 'manual'
+    // 存量空值与列表展示一致，按 LEGACY（东方财富）回填，避免误改成同花顺
+    boardEditForm.board_code_source = row.board_code_source || 'eastmoney'
     boardEditForm.original_board_code = row.board_code
   } else {
     boardEditForm.board_code = ''
     boardEditForm.board_name = ''
     boardEditForm.trade_observe_flag = false
     boardEditForm.frontend_visible_flag = true
-    boardEditForm.board_code_source = 'manual'
+    boardEditForm.board_code_source = 'tonghuashun'
     boardEditForm.original_board_code = ''
   }
   boardEditVisible.value = true
@@ -707,7 +710,7 @@ function resetBoardEditForm() {
   boardEditForm.board_name = ''
   boardEditForm.trade_observe_flag = false
   boardEditForm.frontend_visible_flag = true
-  boardEditForm.board_code_source = 'manual'
+  boardEditForm.board_code_source = 'tonghuashun'
   boardEditForm.original_board_code = ''
 }
 
@@ -758,11 +761,11 @@ async function toggleBoardFrontendVisible(row: BoardSummary, val: boolean) {
 async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
-  if (!isBoardCreateAutoCode && !code) {
+  if (!isBoardCreate.value && !code) {
     ElMessage.warning('请填写板块代码')
     return
   }
-  if (code && !isBoardCreateAutoCode && !isValidBoardCode(boardType.value, code)) {
+  if (code && !isValidBoardCode(boardType.value, code)) {
     ElMessage.warning(
       boardType.value === 'industry'
         ? '行业板块代码须为数字、BK+数字、中文或英文字符'
