@@ -1,4 +1,4 @@
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/username/repository)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/wangj9601/stock_quote_analayze)
 # 股票分析系统管理后台 - 现代化版本
 
 基于 Vue 3 + TypeScript + Vite + Element Plus 构建的现代化管理后台系统。
