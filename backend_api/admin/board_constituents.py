@@ -30,7 +30,7 @@ from backend_api.models import ConceptBoardConstituent, IndustryBoardConstituent
 from backend_api.utils.board_code_source import (
     BOARD_CODE_SOURCE_OPTIONS,
     DEFAULT_BOARD_CODE_SOURCE,
-    SYNC_BOARD_CODE_SOURCE,
+    LEGACY_DEFAULT_BOARD_CODE_SOURCE,
     board_code_source_label,
     normalize_board_code_source,
     resolve_board_code_source,
@@ -70,6 +70,7 @@ def _is_valid_board_code_for_type(board_type: BoardType, code: str) -> bool:
 
 
 def _resolve_delete_board_code(board_type: BoardType, raw: Any) -> str:
+    """删除时使用：按板块类型规范化代码。"""
     """删除时使用：按板块类型规范化（支持 BK / 纯数字等）。"""
     return _normalize_board_code_for_type(board_type, raw)
 
@@ -404,7 +405,7 @@ def _generate_next_concept_board_code(
     db: Session,
     after_code: Optional[str] = None,
 ) -> str:
-    """兼容旧名：生成全局未占用的 BK 编码。"""
+    """兼容旧名：生成全局未占用的数字编码（不加 BK）。"""
     return generate_next_bk_board_code(db, after_code=after_code)
 
 
@@ -419,6 +420,9 @@ def _assert_board_code_format(board_type: BoardType, code: str) -> None:
     if _is_valid_board_code_for_type(board_type, code):
         return
     if board_type == "industry":
+        detail = "行业板块代码须为数字、BK+数字、中文或英文字符（1~20 位）"
+    else:
+        detail = "板块代码须为数字或 BK+数字 格式（如 0428 或 BK0428）"
         detail = "行业板块代码须为 BK+数字、纯数字，或中文/英文字符（1~20 位）"
     else:
         detail = "概念板块代码须为 BK+数字或纯数字（1~20 位）"
@@ -427,7 +431,7 @@ def _assert_board_code_format(board_type: BoardType, code: str) -> None:
 
 class SaveBoardInfoBody(BaseModel):
     board_type: BoardType
-    board_code: Optional[str] = Field(None, description="保存后的板块代码；概念板块新增可留空自动生成")
+    board_code: Optional[str] = Field(None, description="保存后的板块代码；新增可留空自动生成数字编码")
     board_name: Optional[str] = None
     trade_observe_flag: Optional[bool] = Field(
         None,
@@ -460,6 +464,8 @@ class SaveBoardInfoBody(BaseModel):
                 raise ValueError("板块代码无效")
             if not _is_valid_board_code_for_type(bt, code):
                 if bt == "industry":
+                    raise ValueError("行业板块代码须为数字、BK+数字、中文或英文字符")
+                raise ValueError("板块代码须为数字或 BK+数字 格式")
                     raise ValueError("行业板块代码须为 BK+数字、纯数字，或中文/英文字符")
                 raise ValueError("概念板块代码须为 BK+数字或纯数字")
             self.board_code = code
@@ -559,7 +565,9 @@ def _read_board_code_source(db: Session, board_type: BoardType, board_code: str)
         {"code": board_code},
     ).fetchone()
     if not row:
-        return SYNC_BOARD_CODE_SOURCE
+        # 无记录时用管理端新增/导入默认（同花顺），避免导入新建被标成「东方财富」
+        return DEFAULT_BOARD_CODE_SOURCE
+    # 有记录但来源为空：按历史默认东方财富（LEGACY）
     return resolve_board_code_source(row[0])
 
 
@@ -611,34 +619,97 @@ def _upsert_board_basic(
     )
 
 
+def _assert_board_name_source_unique(
+    db: Session,
+    board_type: BoardType,
+    board_name: str,
+    board_code_source: str,
+    exclude_codes: Optional[list[str]] = None,
+) -> None:
+    """同名且同代码来源不可重复；名称本身允许重复（靠 board_code_source 区分）。"""
+    name = (board_name or "").strip()
+    if not name:
+        return
+    source = resolve_board_code_source(board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
+    excludes = {
+        _normalize_board_code_for_type(board_type, c) for c in (exclude_codes or []) if c
+    }
+    t = _tables(board_type)
+    row = db.execute(
+        text(
+            f"""
+            SELECT board_code FROM {t['basic']}
+            WHERE TRIM(board_name) = :name
+              AND COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :source
+            LIMIT 1
+            """
+        ),
+        {
+            "name": name,
+            "source": source,
+            "legacy": LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+        },
+    ).fetchone()
+    if not row:
+        return
+    code = _normalize_board_code_for_type(board_type, row[0])
+    if code not in excludes:
+        label = board_code_source_label(source)
+        raise HTTPException(
+            status_code=400,
+            detail=f"板块名称「{name}」在代码来源「{label}」下已存在（{code}）",
+        )
+
+
 def _assert_concept_board_name_unique(
     db: Session,
     board_name: str,
     exclude_codes: Optional[list[str]] = None,
+    board_code_source: str = DEFAULT_BOARD_CODE_SOURCE,
 ) -> None:
-    """概念板块名称不可与其它板块重复（编辑时排除当前板块代码）。"""
+    """兼容旧调用：概念板按「名称 + 代码来源」唯一。"""
+    _assert_board_name_source_unique(
+        db,
+        "concept",
+        board_name,
+        board_code_source,
+        exclude_codes=exclude_codes,
+    )
+
+
+def _find_same_name_source_board(
+    db: Session,
+    board_type: BoardType,
+    board_name: str,
+    board_code_source: str,
+    exclude_code: str,
+) -> Optional[str]:
+    """查找同名且同代码来源的其它板块代码；无则返回 None。"""
     name = (board_name or "").strip()
     if not name:
-        return
-    excludes = {_normalize_board_code(c) for c in (exclude_codes or []) if c}
+        return None
+    source = resolve_board_code_source(board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
+    t = _tables(board_type)
     row = db.execute(
         text(
-            """
-            SELECT board_code FROM concept_board_basic_info
+            f"""
+            SELECT board_code FROM {t['basic']}
             WHERE TRIM(board_name) = :name
+              AND board_code <> :code
+              AND COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :source
             LIMIT 1
             """
         ),
-        {"name": name},
+        {
+            "name": name,
+            "code": exclude_code,
+            "source": source,
+            "legacy": LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+        },
     ).fetchone()
     if not row:
-        return
-    code = _normalize_board_code(row[0])
-    if code not in excludes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"概念板块名称「{name}」已存在（{code}）",
-        )
+        return None
+    return _normalize_board_code_for_type(board_type, row[0])
 
 
 def _clear_all_concept_boards(db: Session) -> tuple[int, int]:
@@ -676,30 +747,62 @@ def _sync_industry_board_basic_from_import(
         elif name and not board_names[code]:
             board_names[code] = name
 
+    # 文件中常见「中文名既当代码又当名称」的别名行：若已有其它代码占用同名，则跳过该别名板，避免冲掉数字码名称
+    name_owners: dict[str, str] = {}
+    for code, name in board_names.items():
+        n = (name or "").strip()
+        if not n:
+            continue
+        owner = name_owners.get(n)
+        if owner is None:
+            name_owners[n] = code
+        elif owner == n and code != n:
+            # 优先由数字/业务代码代表该名称，而不是「名称当代码」的别名行
+            name_owners[n] = code
+
     synced = 0
     for code in sorted(board_names.keys()):
-        raw_name = board_names[code]
-        upsert_name: Optional[str] = raw_name.strip() or None if raw_name else None
-        if upsert_name:
-            dup = db.execute(
-                text(
-                    """
-                    SELECT board_code FROM industry_board_basic_info
-                    WHERE TRIM(board_name) = :name AND board_code <> :code
-                    LIMIT 1
-                    """
+        raw_name = (board_names[code] or "").strip()
+        upsert_name: Optional[str] = raw_name or None
+
+        # 跳过纯别名行：board_code == board_name，且同名已由其它代码代表
+        if (
+            upsert_name
+            and code == upsert_name
+            and name_owners.get(upsert_name) not in (None, code)
+        ):
+            issues.append({
+                "row_no": 0,
+                "board_code": code,
+                "message": (
+                    f"跳过别名板块「{code}」：同名已由 {name_owners[upsert_name]} 导入"
                 ),
-                {"name": upsert_name, "code": code},
-            ).fetchone()
-            if dup:
-                dup_code = _normalize_board_code_for_type("industry", dup[0])
+            })
+            continue
+
+        # 导入新建默认手动维护；已存在记录保留原代码来源（_upsert 在 source=None 时保留）
+        effective_source = _read_board_code_source(db, "industry", code)
+        if upsert_name:
+            dup_code = _find_same_name_source_board(
+                db, "industry", upsert_name, effective_source, code
+            )
+            if dup_code:
                 issues.append({
                     "row_no": 0,
                     "board_code": code,
-                    "message": f"板块名称「{upsert_name}」已与 {dup_code} 重复，仅写入板块代码",
+                    "message": (
+                        f"板块名称「{upsert_name}」与 {dup_code} 同名且同代码来源，仍写入名称"
+                    ),
                 })
-                upsert_name = None
-        _upsert_board_basic(db, "industry", code, upsert_name, now)
+
+        _upsert_board_basic(
+            db,
+            "industry",
+            code,
+            upsert_name,
+            now,
+            board_code_source=None,
+        )
         synced += 1
     return synced
 
@@ -726,26 +829,28 @@ def _sync_concept_board_basic_from_import(
     for code in sorted(board_names.keys()):
         raw_name = board_names[code]
         upsert_name: Optional[str] = raw_name.strip() or None if raw_name else None
+        # 允许同名；仅同名+同代码来源时告警，绝不因同名清空名称
+        effective_source = _read_board_code_source(db, "concept", code)
         if upsert_name:
-            dup = db.execute(
-                text(
-                    """
-                    SELECT board_code FROM concept_board_basic_info
-                    WHERE TRIM(board_name) = :name AND board_code <> :code
-                    LIMIT 1
-                    """
-                ),
-                {"name": upsert_name, "code": code},
-            ).fetchone()
-            if dup:
-                dup_code = _normalize_board_code(dup[0])
+            dup_code = _find_same_name_source_board(
+                db, "concept", upsert_name, effective_source, code
+            )
+            if dup_code:
                 issues.append({
                     "row_no": 0,
                     "board_code": code,
-                    "message": f"板块名称「{upsert_name}」已与 {dup_code} 重复，仅写入板块代码",
+                    "message": (
+                        f"板块名称「{upsert_name}」与 {dup_code} 同名且同代码来源，仍写入名称"
+                    ),
                 })
-                upsert_name = None
-        _upsert_board_basic(db, "concept", code, upsert_name, now)
+        _upsert_board_basic(
+            db,
+            "concept",
+            code,
+            upsert_name,
+            now,
+            board_code_source=None,
+        )
         synced += 1
     return synced
 
@@ -838,12 +943,12 @@ async def get_next_board_code(
     board_type: BoardType = Query(...),
     after_code: Optional[str] = Query(
         None,
-        description="当前预览编码；传入后返回其后的下一个可用 BK 编码",
+        description="当前预览编码；传入后返回其后的下一个可用数字编码（不加 BK）",
     ),
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """预览下一个可用 BK 编码（行业/概念均全局唯一）。"""
+    """预览下一个可用数字编码（行业/概念均全局唯一，不加 BK）。"""
     _ = current_user
     code = generate_next_bk_board_code(db, after_code=after_code)
     return {"success": True, "data": {"board_code": code}}
@@ -886,13 +991,6 @@ async def save_board_info(
             exclude_codes=[c for c in {new_code, old_code} if c],
         )
 
-    if body.board_type == "concept" and board_name:
-        _assert_concept_board_name_unique(
-            db,
-            board_name,
-            exclude_codes=[c for c in {new_code, old_code} if c],
-        )
-
     source_to_save = (
         resolve_board_code_source(body.board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
         if body.board_code_source is not None
@@ -902,6 +1000,14 @@ async def save_board_info(
             else _read_board_code_source(db, body.board_type, old_code)
         )
     )
+    if board_name:
+        _assert_board_name_source_unique(
+            db,
+            body.board_type,
+            board_name,
+            source_to_save,
+            exclude_codes=[c for c in {new_code, old_code} if c],
+        )
 
     if old_code != new_code:
         _rename_board_records(
@@ -1389,6 +1495,61 @@ async def sync_board_constituents(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
+EXPORT_ALL_COLUMNS = [
+    "board_code",
+    "board_name",
+    "board_code_source",
+    "stock_code",
+    "stock_name",
+    "updated_at",
+]
+
+
+def _export_all_board_src_sql(board_type: BoardType, t: dict[str, str]) -> str:
+    """导出全部用的板块源：含 board_name / board_code_source。"""
+    if board_type == "industry":
+        return f"""
+            SELECT
+                board_code,
+                MAX(board_name) AS board_name,
+                MAX(board_code_source) AS board_code_source
+            FROM (
+                SELECT board_code, board_name, board_code_source FROM {t['basic']}
+                UNION ALL
+                SELECT DISTINCT
+                    board_code,
+                    NULL::varchar AS board_name,
+                    NULL::varchar AS board_code_source
+                FROM {t['constituents']}
+                WHERE board_code IS NOT NULL AND board_code <> ''
+            ) u
+            WHERE board_code IS NOT NULL AND board_code <> ''
+            GROUP BY board_code
+        """
+    return f"""
+        SELECT
+            board_code,
+            MAX(board_name) AS board_name,
+            MAX(board_code_source) AS board_code_source
+        FROM (
+            SELECT board_code, board_name, board_code_source FROM {t['basic']}
+            UNION ALL
+            SELECT
+                board_code,
+                NULL AS board_name,
+                NULL AS board_code_source
+            FROM {t['constituents']}
+        ) u
+        WHERE board_code IS NOT NULL AND board_code <> ''
+        GROUP BY board_code
+    """
+
+
+def _format_export_board_code_source(raw: Any) -> str:
+    """导出「代码来源」：与列表一致，输出中文标签。"""
+    return board_code_source_label(resolve_board_code_source(raw))
+
+
 @router.get("/export/all")
 async def export_all_constituents(
     board_type: BoardType = Query(...),
@@ -1398,37 +1559,16 @@ async def export_all_constituents(
 ):
     """导出当前类型下全部板块成分股（含无成分股的板块基本信息行）。"""
     _ = current_user
+    ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     label = "industry" if board_type == "industry" else "concept"
-    if board_type == "industry":
-        board_src_sql = f"""
-            SELECT board_code, MAX(board_name) AS board_name
-            FROM (
-                SELECT board_code, board_name FROM {t['basic']}
-                UNION ALL
-                SELECT DISTINCT board_code, NULL::varchar AS board_name
-                FROM {t['constituents']}
-                WHERE board_code IS NOT NULL AND board_code <> ''
-            ) u
-            WHERE board_code IS NOT NULL AND board_code <> ''
-            GROUP BY board_code
-        """
-    else:
-        board_src_sql = f"""
-            SELECT board_code, MAX(board_name) AS board_name
-            FROM (
-                SELECT board_code, board_name FROM {t['basic']}
-                UNION ALL
-                SELECT board_code, NULL AS board_name FROM {t['constituents']}
-            ) u
-            WHERE board_code IS NOT NULL AND board_code <> ''
-            GROUP BY board_code
-        """
+    board_src_sql = _export_all_board_src_sql(board_type, t)
     sql = text(
         f"""
         SELECT
             b.board_code,
             COALESCE(b.board_name, '') AS board_name,
+            b.board_code_source,
             COALESCE(c.stock_code, '') AS stock_code,
             COALESCE(c.stock_name, '') AS stock_name,
             c.updated_at
@@ -1438,14 +1578,15 @@ async def export_all_constituents(
         """
     )
     rows = db.execute(sql).fetchall()
-    cols = ["board_code", "board_name", "stock_code", "stock_name", "updated_at"]
+    cols = list(EXPORT_ALL_COLUMNS)
     data = [
         [
             str(r[0] or ""),
             str(r[1] or ""),
-            str(r[2] or ""),
+            _format_export_board_code_source(r[2]),
             str(r[3] or ""),
-            r[4].strftime("%Y-%m-%d %H:%M:%S") if r[4] else "",
+            str(r[4] or ""),
+            r[5].strftime("%Y-%m-%d %H:%M:%S") if r[5] else "",
         ]
         for r in rows
     ]
@@ -1481,11 +1622,11 @@ async def download_all_constituents_template(
     _: Any = Depends(get_current_admin),
 ):
     """下载全量成分股导入模板。"""
-    cols = ["board_code", "board_name", "stock_code", "stock_name"]
+    cols = ["board_code", "board_name", "board_code_source", "stock_code", "stock_name"]
     sample = [
-        ["IT服务", "IT服务", "000001", "平安银行"],
-        ["IT服务", "IT服务", "", "神州数码"],
-        ["半导体", "半导体", "688981", "中芯国际"],
+        ["IT服务", "IT服务", "手动维护", "000001", "平安银行"],
+        ["IT服务", "IT服务", "手动维护", "", "神州数码"],
+        ["半导体", "半导体", "东方财富", "688981", "中芯国际"],
     ]
     if format == "csv":
         sio = StringIO()

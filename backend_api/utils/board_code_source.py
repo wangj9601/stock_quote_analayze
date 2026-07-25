@@ -13,7 +13,8 @@ BOARD_CODE_SOURCE_OPTIONS: List[Dict[str, str]] = [
 ]
 
 BOARD_CODE_SOURCE_VALUES = {o["value"] for o in BOARD_CODE_SOURCE_OPTIONS}
-DEFAULT_BOARD_CODE_SOURCE = "manual"
+# 管理端新增/导入默认：同花顺；东财同步用 SYNC；存量空值展示用 LEGACY
+DEFAULT_BOARD_CODE_SOURCE = "tonghuashun"
 SYNC_BOARD_CODE_SOURCE = "eastmoney"
 LEGACY_DEFAULT_BOARD_CODE_SOURCE = "eastmoney"
 

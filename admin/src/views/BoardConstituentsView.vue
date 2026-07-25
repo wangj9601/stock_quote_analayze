@@ -102,12 +102,10 @@
               row-key="board_code"
               @current-change="onSelectBoard"
               @selection-change="onBoardSelectionChange"
+              @select-all="onBoardSelectAll"
             >
-            <el-table-column
-              type="selection"
-              width="42"
-              reserve-selection
-            />
+            <!-- 不使用 reserve-selection：表头全选/取消仅作用于当前页，避免跨页累加误选 -->
+            <el-table-column type="selection" width="42" />
             <el-table-column prop="board_code" label="代码" min-width="100" show-overflow-tooltip />
             <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
             <el-table-column prop="board_code_source_label" label="代码来源" width="88" show-overflow-tooltip />
@@ -233,6 +231,15 @@
       @opened="onBoardEditDialogOpened"
     >
       <el-form label-width="88px" @submit.prevent>
+        <el-form-item label="板块代码" :required="!!boardEditForm.original_board_code">
+          <div class="flex gap-2 w-full">
+            <el-input
+              v-model="boardEditForm.board_code"
+              :placeholder="isBoardCreate
+                ? (boardType === 'industry'
+                  ? '可改：数字/BK/中文/英文；留空则保存时自动生成'
+                  : '可改：数字或 BK+数字；留空则保存时自动生成')
+                : (boardType === 'industry' ? '数字/BK/中文/英文' : '数字或 BK+数字，如 0428')"
         <el-form-item label="板块代码" :required="!isBoardCreateMode">
           <div class="flex gap-2 w-full">
             <el-input
@@ -244,6 +251,7 @@
               class="flex-1"
             />
             <el-button
+              v-if="isBoardCreate"
               size="default"
               :loading="loadingNextBoardCode"
               @click="refreshBoardCode"
@@ -251,6 +259,8 @@
               换一个
             </el-button>
           </div>
+          <p v-if="isBoardCreate" class="text-xs text-gray-500 mt-1">
+            新增时预填纯数字编码（不加 BK，全局唯一），可直接修改或点「换一个」；留空则保存时自动生成。存量 BK 编码仍可继续使用。
           <p class="text-xs text-gray-500 mt-1">
             <template v-if="isBoardCreateMode">
               可手动填写（支持 BK+数字或纯数字；行业另支持中文/英文），或点「换一个」自动生成全局唯一的 BK 编码；留空保存时也会自动生成。
@@ -264,7 +274,7 @@
           <el-input
             ref="boardNameInputRef"
             v-model="boardEditForm.board_name"
-            placeholder="展示名称"
+            placeholder="展示名称（可与其它板块同名）"
             clearable
             @keyup.enter="submitBoardEdit"
           />
@@ -278,7 +288,9 @@
               :value="opt.value"
             />
           </el-select>
-          <p class="text-xs text-gray-500 mt-1">标识板块代码取自哪家数据源；东财同步的板块一般为「东方财富」。</p>
+          <p class="text-xs text-gray-500 mt-1">
+            标识板块代码取自哪家数据源；名称允许重复，用代码来源区分不同记录。东财同步一般为「东方财富」，手工/导入新建默认为「手动维护」。
+          </p>
         </el-form-item>
         <el-form-item label="交易观察">
           <el-switch
@@ -432,7 +444,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableInstance } from 'element-plus'
 import {
@@ -519,12 +531,14 @@ const boardEditForm = reactive({
   board_name: '',
   trade_observe_flag: false,
   frontend_visible_flag: true,
-  board_code_source: 'manual',
+  board_code_source: 'tonghuashun',
   original_board_code: '' as string,
 })
 const togglingTradeObserve = ref<string | null>(null)
 const togglingFrontendVisible = ref<string | null>(null)
 
+/** 新增弹窗（未绑定已有 original_board_code）；代码可手动改，也可点「换一个」或留空由后端生成 */
+const isBoardCreate = computed(() => !boardEditForm.original_board_code)
 const isBoardCreateMode = computed(() => !boardEditForm.original_board_code)
 
 function isValidBoardCode(type: BoardType, code: string): boolean {
@@ -553,6 +567,11 @@ function onBoardSelectionChange(rows: BoardSummary[]) {
   selectedBoardRows.value = rows
 }
 
+/** 表头全选/取消全选：仅当前页 boards，与 selectedBoardRows / 删除选中对齐 */
+function onBoardSelectAll(rows: BoardSummary[]) {
+  selectedBoardRows.value = rows
+}
+
 async function loadBoards() {
   boardsLoading.value = true
   try {
@@ -564,6 +583,10 @@ async function loadBoards() {
     })
     boards.value = res.data || []
     boardTotal.value = res.total || 0
+    // 分页/查询刷新后清空勾选，保证「删除选中」只针对当前页可见选择
+    selectedBoardRows.value = []
+    await nextTick()
+    boardTableRef.value?.clearSelection()
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载板块列表失败')
   } finally {
@@ -657,14 +680,15 @@ function openBoardEditDialog(row?: BoardSummary) {
     boardEditForm.board_name = row.board_name || ''
     boardEditForm.trade_observe_flag = !!row.trade_observe_flag
     boardEditForm.frontend_visible_flag = row.frontend_visible_flag !== false
-    boardEditForm.board_code_source = row.board_code_source || 'manual'
+    // 存量空值与列表展示一致，按 LEGACY（东方财富）回填，避免误改成同花顺
+    boardEditForm.board_code_source = row.board_code_source || 'eastmoney'
     boardEditForm.original_board_code = row.board_code
   } else {
     boardEditForm.board_code = ''
     boardEditForm.board_name = ''
     boardEditForm.trade_observe_flag = false
     boardEditForm.frontend_visible_flag = true
-    boardEditForm.board_code_source = 'manual'
+    boardEditForm.board_code_source = 'tonghuashun'
     boardEditForm.original_board_code = ''
   }
   boardEditVisible.value = true
@@ -701,7 +725,7 @@ function resetBoardEditForm() {
   boardEditForm.board_name = ''
   boardEditForm.trade_observe_flag = false
   boardEditForm.frontend_visible_flag = true
-  boardEditForm.board_code_source = 'manual'
+  boardEditForm.board_code_source = 'tonghuashun'
   boardEditForm.original_board_code = ''
 }
 
@@ -752,6 +776,7 @@ async function toggleBoardFrontendVisible(row: BoardSummary, val: boolean) {
 async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
+  if (!isBoardCreate.value && !code) {
   if (!isBoardCreateMode.value && !code) {
     ElMessage.warning('请填写板块代码')
     return
@@ -759,6 +784,8 @@ async function submitBoardEdit() {
   if (code && !isValidBoardCode(boardType.value, code)) {
     ElMessage.warning(
       boardType.value === 'industry'
+        ? '行业板块代码须为数字、BK+数字、中文或英文字符'
+        : '板块代码须为数字或 BK+数字 格式',
         ? '行业板块代码须为 BK+数字、纯数字，或中文/英文字符'
         : '概念板块代码须为 BK+数字或纯数字',
     )
