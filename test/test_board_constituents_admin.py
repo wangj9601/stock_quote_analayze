@@ -406,6 +406,40 @@ class TestBoardConstituentsHelpers:
         assert executed[1]["board_code"] == "BK1642"
         assert executed[1]["board_name"] is None
 
+    def test_sync_concept_import_respects_file_board_code_source(self):
+        """全量导入应保留文件中的东财/同花顺来源，不能全部落成默认同花顺。"""
+        from datetime import datetime
+
+        executed: list[dict] = []
+        issues: list = []
+        now = datetime(2026, 6, 6, 12, 0, 0)
+        count = _sync_concept_board_basic_from_import(
+            self._make_import_sync_db(executed),
+            [
+                {
+                    "board_code": "BK1641",
+                    "board_name": "苹果概念",
+                    "board_code_source": "东方财富",
+                    "stock_code": "000001",
+                    "stock_name": "平安银行",
+                },
+                {
+                    "board_code": "1680",
+                    "board_name": "储能",
+                    "board_code_source": "同花顺",
+                    "stock_code": "000002",
+                    "stock_name": "万科A",
+                },
+            ],
+            now,
+            issues,
+        )
+        assert count == 2
+        assert len(issues) == 0
+        by_code = {e["board_code"]: e for e in executed}
+        assert by_code["BK1641"]["board_code_source"] == "eastmoney"
+        assert by_code["1680"]["board_code_source"] == "tonghuashun"
+
     def test_sync_concept_keeps_name_on_duplicate(self):
         """同名不再清空 board_name；同名同来源仅告警。"""
         from datetime import datetime

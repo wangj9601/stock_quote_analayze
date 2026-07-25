@@ -730,17 +730,23 @@ def _sync_industry_board_basic_from_import(
     now: datetime,
     issues: List[Dict[str, Any]],
 ) -> int:
-    """从全量导入数据同步 industry_board_basic_info（按板块代码聚合名称）。"""
+    """从全量导入数据同步 industry_board_basic_info（按板块代码聚合名称/来源）。"""
     board_names: dict[str, str] = {}
+    board_sources: dict[str, Optional[str]] = {}
     for r in rows:
         code = _normalize_board_code_for_type("industry", r.get("board_code"))
         if not code:
             continue
         name = (r.get("board_name") or "").strip()
+        src = normalize_board_code_source(r.get("board_code_source"))
         if code not in board_names:
             board_names[code] = name
-        elif name and not board_names[code]:
-            board_names[code] = name
+            board_sources[code] = src
+        else:
+            if name and not board_names[code]:
+                board_names[code] = name
+            if src and not board_sources.get(code):
+                board_sources[code] = src
 
     # 文件中常见「中文名既当代码又当名称」的别名行：若已有其它代码占用同名，则跳过该别名板，避免冲掉数字码名称
     name_owners: dict[str, str] = {}
@@ -759,6 +765,7 @@ def _sync_industry_board_basic_from_import(
     for code in sorted(board_names.keys()):
         raw_name = (board_names[code] or "").strip()
         upsert_name: Optional[str] = raw_name or None
+        file_source = board_sources.get(code)
 
         # 跳过纯别名行：board_code == board_name，且同名已由其它代码代表
         if (
@@ -775,8 +782,12 @@ def _sync_industry_board_basic_from_import(
             })
             continue
 
-        # 导入新建默认手动维护；已存在记录保留原代码来源（_upsert 在 source=None 时保留）
-        effective_source = _read_board_code_source(db, "industry", code)
+        # 文件有来源则写入；否则保留库中已有（无记录时 _upsert 走默认同花顺）
+        effective_source = (
+            file_source
+            if file_source
+            else _read_board_code_source(db, "industry", code)
+        )
         if upsert_name:
             dup_code = _find_same_name_source_board(
                 db, "industry", upsert_name, effective_source, code
@@ -796,7 +807,7 @@ def _sync_industry_board_basic_from_import(
             code,
             upsert_name,
             now,
-            board_code_source=None,
+            board_code_source=file_source,
         )
         synced += 1
     return synced
@@ -808,24 +819,35 @@ def _sync_concept_board_basic_from_import(
     now: datetime,
     issues: List[Dict[str, Any]],
 ) -> int:
-    """从全量导入数据同步 concept_board_basic_info（按板块代码聚合名称）。"""
+    """从全量导入数据同步 concept_board_basic_info（按板块代码聚合名称/来源）。"""
     board_names: dict[str, str] = {}
+    board_sources: dict[str, Optional[str]] = {}
     for r in rows:
         code = _normalize_board_code(r.get("board_code"))
         if not code:
             continue
         name = (r.get("board_name") or "").strip()
+        src = normalize_board_code_source(r.get("board_code_source"))
         if code not in board_names:
             board_names[code] = name
-        elif name and not board_names[code]:
-            board_names[code] = name
+            board_sources[code] = src
+        else:
+            if name and not board_names[code]:
+                board_names[code] = name
+            if src and not board_sources.get(code):
+                board_sources[code] = src
 
     synced = 0
     for code in sorted(board_names.keys()):
         raw_name = board_names[code]
         upsert_name: Optional[str] = raw_name.strip() or None if raw_name else None
+        file_source = board_sources.get(code)
         # 允许同名；仅同名+同代码来源时告警，绝不因同名清空名称
-        effective_source = _read_board_code_source(db, "concept", code)
+        effective_source = (
+            file_source
+            if file_source
+            else _read_board_code_source(db, "concept", code)
+        )
         if upsert_name:
             dup_code = _find_same_name_source_board(
                 db, "concept", upsert_name, effective_source, code
@@ -844,7 +866,7 @@ def _sync_concept_board_basic_from_import(
             code,
             upsert_name,
             now,
-            board_code_source=None,
+            board_code_source=file_source,
         )
         synced += 1
     return synced

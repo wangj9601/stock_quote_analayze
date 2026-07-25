@@ -18,6 +18,13 @@ CODE_ALIASES = {"stock_code", "code", "股票代码", "代码", "证券代码"}
 NAME_ALIASES = {"stock_name", "name", "股票名称", "名称", "证券名称"}
 BOARD_CODE_ALIASES = {"board_code", "板块代码", "板块编码", "板块"}
 BOARD_NAME_ALIASES = {"board_name", "板块名称", "板块名"}
+BOARD_SOURCE_ALIASES = {
+    "board_code_source",
+    "代码来源",
+    "板块代码来源",
+    "来源",
+    "source",
+}
 
 _OLE_XLS_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 # 东财导出名称后缀：优刻得-W、云从科技-UW、云天励飞-U 等，库中通常仅存简称
@@ -165,27 +172,20 @@ def parse_constituents_file(filename: str, content: bytes) -> Tuple[List[Dict[st
 
 
 def _normalize_import_board_code(raw: str, board_type: str = "concept") -> str:
+    """导入侧板块代码规范化：与 bk_board_code 工具层一致，纯数字不加 BK。"""
+    from backend_api.utils.bk_board_code import (
+        normalize_concept_board_code,
+        normalize_industry_board_code,
+    )
+
     s = str(raw or "").strip()
     s = s.lstrip("'").lstrip("’").strip()
-    if board_type == "industry":
-        from backend_api.utils.bk_board_code import normalize_industry_board_code
-
-        code = normalize_industry_board_code(s)
-        if code:
-            return code
-        su = s.upper()
-        if re.match(r"^\d+\.0$", su):
-            su = su[:-2]
-        if re.match(r"^\d{4,}$", su):
-            return normalize_industry_board_code(f"BK{su}") or f"BK{su}"
-        return ""
-    s = s.upper()
-    if re.match(r"^\d+\.0$", s):
+    # Excel 数字常变成 "1680.0"
+    if re.match(r"^\d+\.0$", s, re.IGNORECASE):
         s = s[:-2]
-    s = s.lstrip("'").lstrip("’").strip()
-    if re.match(r"^\d{4,}$", s):
-        s = f"BK{s}"
-    return s
+    if board_type == "industry":
+        return normalize_industry_board_code(s)
+    return normalize_concept_board_code(s)
 
 
 def _hint_missing_board_column(columns: List[str], name_col: Optional[str], code_col: Optional[str]) -> str:
@@ -227,6 +227,7 @@ def parse_all_constituents_file(
     df.columns = [str(c).strip() for c in df.columns]
     board_col = _pick_col(list(df.columns), BOARD_CODE_ALIASES)
     board_name_col = _pick_col(list(df.columns), BOARD_NAME_ALIASES)
+    board_source_col = _pick_col(list(df.columns), BOARD_SOURCE_ALIASES)
     code_col = _pick_col(list(df.columns), CODE_ALIASES)
     name_col = _pick_col(list(df.columns), NAME_ALIASES)
     if not board_col:
@@ -242,6 +243,9 @@ def parse_all_constituents_file(
         row_no = int(idx) + 2
         board_code = _normalize_import_board_code(_cell_str(row.get(board_col)), board_type=board_type)
         board_name = _cell_str(row.get(board_name_col)) if board_name_col else ""
+        board_code_source = (
+            _cell_str(row.get(board_source_col)) if board_source_col else ""
+        )
         stock_name = _cell_str(row.get(name_col)) if name_col else ""
         stock_code = _cell_str(row.get(code_col)) if code_col else ""
         if stock_code:
@@ -258,6 +262,7 @@ def parse_all_constituents_file(
             rows.append({
                 "board_code": board_code,
                 "board_name": board_name,
+                "board_code_source": board_code_source,
                 "stock_code": "",
                 "stock_name": "",
             })
@@ -277,6 +282,7 @@ def parse_all_constituents_file(
         rows.append({
             "board_code": board_code,
             "board_name": board_name,
+            "board_code_source": board_code_source,
             "stock_code": stock_code,
             "stock_name": stock_name,
         })

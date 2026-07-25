@@ -140,11 +140,41 @@ class TestBoardConstituentsImport:
             "IT服务,IT服务,,神州数码\n"
             "半导体,半导体,688981,中芯国际\n"
         )
-        rows, issues = parse_all_constituents_file("all.csv", csv_text.encode("utf-8-sig"))
+        rows, issues = parse_all_constituents_file(
+            "all.csv", csv_text.encode("utf-8-sig"), board_type="industry"
+        )
         assert len(rows) == 3
         assert rows[0]["board_code"] == "IT服务"
         assert rows[1]["stock_name"] == "神州数码"
         assert rows[2]["board_code"] == "半导体"
+        assert not issues
+
+    def test_parse_all_concept_keeps_numeric_without_bk(self):
+        csv_text = (
+            "board_code,board_name,stock_code,stock_name\n"
+            "1680,储能,000001,平安银行\n"
+            "BK1681,光伏,000002,万科A\n"
+        )
+        rows, issues = parse_all_constituents_file(
+            "concept.csv", csv_text.encode("utf-8-sig"), board_type="concept"
+        )
+        assert len(rows) == 2
+        assert rows[0]["board_code"] == "1680"
+        assert rows[1]["board_code"] == "BK1681"
+        assert not issues
+
+    def test_parse_all_preserves_board_code_source(self):
+        csv_text = (
+            "board_code,board_name,board_code_source,stock_code,stock_name\n"
+            "BK1680,储能,东方财富,000001,平安银行\n"
+            "1681,光伏,同花顺,000002,万科A\n"
+        )
+        rows, issues = parse_all_constituents_file(
+            "concept.csv", csv_text.encode("utf-8-sig"), board_type="concept"
+        )
+        assert len(rows) == 2
+        assert rows[0]["board_code_source"] == "东方财富"
+        assert rows[1]["board_code_source"] == "同花顺"
         assert not issues
 
     def test_parse_all_board_only_row(self):
@@ -163,11 +193,14 @@ class TestBoardConstituentsImport:
     def test_normalize_import_board_code_from_excel_number(self):
         from backend_api.admin.board_constituents_import import _normalize_import_board_code
 
-        assert _normalize_import_board_code("1680") == "BK1680"
-        assert _normalize_import_board_code("1680.0") == "BK1680"
+        # 概念/数字型编码：纯数字原样保留，不强制加 BK；已有 BK 仍保留
+        assert _normalize_import_board_code("1680") == "1680"
+        assert _normalize_import_board_code("1680.0") == "1680"
         assert _normalize_import_board_code("BK1680") == "BK1680"
         assert _normalize_import_board_code("IT服务", board_type="industry") == "IT服务"
         assert _normalize_import_board_code("医疗服务", board_type="industry") == "医疗服务"
+        assert _normalize_import_board_code("1680", board_type="industry") == "1680"
+        assert _normalize_import_board_code("1680.0", board_type="industry") == "1680"
 
     def test_parse_all_constituents_missing_board_col(self):
         csv_text = "stock_code,stock_name\n000001,平安银行\n"
