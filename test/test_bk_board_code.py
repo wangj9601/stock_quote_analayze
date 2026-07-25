@@ -9,8 +9,10 @@ from backend_api.utils.bk_board_code import (
     format_bk_board_code,
     generate_next_bk_board_code,
     is_valid_bk_board_code,
+    is_valid_concept_board_code,
     is_valid_industry_board_code,
     normalize_bk_board_code,
+    normalize_concept_board_code,
     normalize_industry_board_code,
     parse_bk_num,
 )
@@ -42,7 +44,16 @@ class TestBkBoardCode:
         assert normalize_industry_board_code("医疗服务") == "医疗服务"
         assert normalize_industry_board_code("IT服务") == "IT服务"
         assert normalize_industry_board_code("123") == "123"
+        assert normalize_industry_board_code("881001") == "881001"
         assert is_valid_industry_board_code("贵金属") is True
+        assert is_valid_industry_board_code("123") is True
+
+    def test_normalize_concept_board_code(self):
+        assert normalize_concept_board_code("BK0428") == "BK0428"
+        assert normalize_concept_board_code("881001") == "881001"
+        assert normalize_concept_board_code("医疗服务") == ""
+        assert is_valid_concept_board_code("881001") is True
+        assert is_valid_concept_board_code("医疗服务") is False
 
     def test_generate_next_bk_board_code(self):
         class _Q:

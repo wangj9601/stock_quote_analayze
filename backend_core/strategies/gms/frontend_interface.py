@@ -197,10 +197,11 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
     """
     将 engine.screen 单条结果完整写入 gms_signal_trace，便于后续优先读表。
     回测与选股均依赖此表：优先读 trace，缺失时增量计算并回填。
+    单条失败用 SAVEPOINT 回滚，避免污染整批事务（PostgreSQL InFailedSqlTransaction）。
     """
+    code = result.get("code") or result.get("symbol") or ""
     try:
         from backend_api.models import GMSSignalTrace
-        code = result.get("code") or result.get("symbol") or ""
         market_type = result.get("market_type") or _infer_market_type(code)
         if not code:
             return
@@ -241,37 +242,19 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
             mom_ratio_d1_judge=sd.get("mom_ratio_d1_judge") or None,
             mom_deviation_judge=sd.get("mom_deviation_judge") or None,
             mom_volume_judge=sd.get("mom_volume_judge") or None,
+            risk_tags=result.get("risk_tags"),
+            score_detail=result.get("score_detail"),
         )
-        db.merge(rec)
-        rt = result.get("risk_tags")
-        sd_full = result.get("score_detail")
-        if rt is not None or sd_full is not None:
-            try:
-                import json
-                from sqlalchemy import text as sql_text
-
-                db.execute(
-                    sql_text(
-                        """
-                        UPDATE gms_signal_trace
-                        SET risk_tags = CAST(:rt AS JSONB),
-                            score_detail = COALESCE(CAST(:sd AS JSONB), score_detail)
-                        WHERE code = :code AND date = :dt AND market_type = :mt AND config_id = :cid
-                        """
-                    ),
-                    {
-                        "rt": json.dumps(rt or [], ensure_ascii=False),
-                        "sd": json.dumps(sd_full, ensure_ascii=False, default=str) if sd_full else None,
-                        "code": code,
-                        "dt": date,
-                        "mt": market_type,
-                        "cid": int(config_id),
-                    },
-                )
-            except Exception:
-                pass
+        with db.begin_nested():
+            db.merge(rec)
+            db.flush()
     except Exception as e:
-        logger.warning("回填 gms_signal_trace 失败 %s: %s", result.get("code"), e)
+        # begin_nested 失败或外层已 aborted：整事务回滚，保证后续股票可继续写
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning("回填 gms_signal_trace 失败 %s: %s", code or result.get("code"), e)
 
 
 class GMSFrontendInterface:

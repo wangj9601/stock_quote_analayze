@@ -240,6 +240,13 @@
                   ? '可改：数字/BK/中文/英文；留空则保存时自动生成'
                   : '可改：数字或 BK+数字；留空则保存时自动生成')
                 : (boardType === 'industry' ? '数字/BK/中文/英文' : '数字或 BK+数字，如 0428')"
+        <el-form-item label="板块代码" :required="!isBoardCreateMode">
+          <div class="flex gap-2 w-full">
+            <el-input
+              v-model="boardEditForm.board_code"
+              :placeholder="boardType === 'industry'
+                ? 'BK+数字、纯数字，或中文/英文代码'
+                : 'BK+数字或纯数字，如 BK0428 / 881001'"
               clearable
               class="flex-1"
             />
@@ -254,6 +261,13 @@
           </div>
           <p v-if="isBoardCreate" class="text-xs text-gray-500 mt-1">
             新增时预填纯数字编码（不加 BK，全局唯一），可直接修改或点「换一个」；留空则保存时自动生成。存量 BK 编码仍可继续使用。
+          <p class="text-xs text-gray-500 mt-1">
+            <template v-if="isBoardCreateMode">
+              可手动填写（支持 BK+数字或纯数字；行业另支持中文/英文），或点「换一个」自动生成全局唯一的 BK 编码；留空保存时也会自动生成。
+            </template>
+            <template v-else>
+              可修改板块代码；点「换一个」可填入下一个可用 BK 编码。修改后将同步更新该板块下全部成分股。
+            </template>
           </p>
         </el-form-item>
         <el-form-item label="板块名称">
@@ -297,7 +311,7 @@
           <p class="text-xs text-gray-500 mt-1">关闭后网站 GMS 选股页的行业/概念板块选择器中不再展示该板块。</p>
         </el-form-item>
         <p v-if="boardEditForm.original_board_code" class="text-xs text-gray-500">
-          修改代码将同步更新该板块下全部成分股的 board_code。
+          当前原代码：{{ boardEditForm.original_board_code }}；若与上方不一致，保存时将执行改码并联动成分股。
         </p>
       </el-form>
       <template #footer>
@@ -525,6 +539,7 @@ const togglingFrontendVisible = ref<string | null>(null)
 
 /** 新增弹窗（未绑定已有 original_board_code）；代码可手动改，也可点「换一个」或留空由后端生成 */
 const isBoardCreate = computed(() => !boardEditForm.original_board_code)
+const isBoardCreateMode = computed(() => !boardEditForm.original_board_code)
 
 function isValidBoardCode(type: BoardType, code: string): boolean {
   const c = code.trim()
@@ -762,6 +777,7 @@ async function submitBoardEdit() {
   if (savingBoard.value) return
   const code = boardEditForm.board_code.trim()
   if (!isBoardCreate.value && !code) {
+  if (!isBoardCreateMode.value && !code) {
     ElMessage.warning('请填写板块代码')
     return
   }
@@ -770,6 +786,8 @@ async function submitBoardEdit() {
       boardType.value === 'industry'
         ? '行业板块代码须为数字、BK+数字、中文或英文字符'
         : '板块代码须为数字或 BK+数字 格式',
+        ? '行业板块代码须为 BK+数字、纯数字，或中文/英文字符'
+        : '概念板块代码须为 BK+数字或纯数字',
     )
     return
   }

@@ -19,17 +19,19 @@ import math
 
 def _sanitize_for_json(obj):
     """递归将 nan/inf 与 numpy 标量转为 JSON 可序列化值。"""
+    # bool 须先于 int（bool 是 int 子类）；已提前返回后无需再排除 bool
     if obj is None or isinstance(obj, (bool, str)):
         return obj
-    if isinstance(obj, int) and not isinstance(obj, bool):
+    if isinstance(obj, int):
         return obj
     if isinstance(obj, float):
         if math.isnan(obj) or math.isinf(obj):
             return None
         return obj
-    if hasattr(obj, 'item'):  # numpy 标量
+    item = getattr(obj, "item", None)  # numpy 标量
+    if callable(item):
         try:
-            return _sanitize_for_json(obj.item())
+            return _sanitize_for_json(item())
         except (ValueError, AttributeError, TypeError):
             return None
     if isinstance(obj, dict):
@@ -54,24 +56,28 @@ except Exception:
     pass
 
 # 导入中间件（优先包内路径，避免仅能在 backend_api 目录下启动时才能 import middleware）
+# 使用 Any 避免 try/except 多路径导入时 basedpyright 将本地 fallback class 与包内类判定为不兼容
+from typing import Any, Optional
+
+RequestLoggingMiddleware: Any
 try:
-    from backend_api.middleware import RequestLoggingMiddleware
+    from backend_api.middleware import RequestLoggingMiddleware as RequestLoggingMiddleware
     print("RequestLoggingMiddleware 导入成功 (backend_api.middleware)")
 except ImportError:
     try:
-        from middleware import RequestLoggingMiddleware
+        from middleware import RequestLoggingMiddleware as RequestLoggingMiddleware
         print("RequestLoggingMiddleware 导入成功 (legacy middleware)")
     except ImportError as e:
         print(f"RequestLoggingMiddleware 导入失败: {e}")
         from starlette.middleware.base import BaseHTTPMiddleware
 
-        class RequestLoggingMiddleware(BaseHTTPMiddleware):
+        class _RequestLoggingMiddlewareFallback(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
                 return await call_next(request)
 
-# 导入 FastAPI 和其它模块
-from typing import Optional
+        RequestLoggingMiddleware = _RequestLoggingMiddlewareFallback
 
+# 导入 FastAPI 和其它模块
 from fastapi import FastAPI, Request, Response, Query, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -333,10 +339,17 @@ _NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "
 
 async def _orm_stock_code_pg_check():
     """PostgreSQL 下 StockBasicInfo.code 与整数比较时是否编译出 CAST（用于排查 text=integer）。"""
+    from typing import Any, cast
+
     from sqlalchemy import select
     from sqlalchemy.dialects import postgresql
 
-    from backend_api.models import StockBasicInfo
+    # models 包经 importlib 动态加载，类型上可能为 None；cast 后供静态检查与运行时共用
+    from backend_api.models import StockBasicInfo as _StockBasicInfo
+
+    StockBasicInfo = cast(Any, _StockBasicInfo)
+    if StockBasicInfo is None:
+        return {"error": "StockBasicInfo model not available"}
 
     stmt = select(StockBasicInfo).where(StockBasicInfo.code == 2709).limit(1)
     compiled = stmt.compile(dialect=postgresql.dialect())
@@ -584,8 +597,10 @@ if auth_router is not None:
         print(f"   认证路由前缀: {auth_router.prefix}")
         print(f"   认证路由数量: {len(auth_router.routes)}")
         for route in auth_router.routes:
-            if hasattr(route, 'path') and hasattr(route, 'methods'):
-                print(f"   - {list(route.methods)} {route.path}")
+            path = getattr(route, "path", None)
+            methods = getattr(route, "methods", None)
+            if path is not None and methods is not None:
+                print(f"   - {list(methods)} {path}")
 else:
     print("认证路由未注册")
     import traceback
@@ -660,8 +675,9 @@ try:
         print(f"   - 路由数量: {len(admin_indicators_router.routes)}")
         # 打印所有路由路径
         for route in admin_indicators_router.routes:
-            if hasattr(route, 'path'):
-                print(f"   - 路由路径: {route.path}")
+            path = getattr(route, "path", None)
+            if path is not None:
+                print(f"   - 路由路径: {path}")
 except ImportError as e:
     print(f"admin_indicators_router 导入失败: {e}")
     admin_indicators_router = None
@@ -844,8 +860,10 @@ try:
         print(f"   - 路由数量: {len(pvfrs_admin_router.routes)}")
         # 打印所有路由路径
         for route in pvfrs_admin_router.routes:
-            if hasattr(route, 'path'):
-                print(f"   - 路由路径: {route.path}")
+            # BaseRoute 无 path；hasattr 不能收窄类型，用 getattr
+            path = getattr(route, "path", None)
+            if path is not None:
+                print(f"   - 路由路径: {path}")
 except ImportError as e:
     print(f"pvfrs_admin_router 导入失败: {e}")
     import traceback
@@ -990,12 +1008,17 @@ async def list_routes():
     """列出已注册的路由（调试用）。"""
     routes = []
     for route in app.routes:
-        if hasattr(route, "path"):
-            routes.append({
-                "path": route.path,
-                "name": route.name,
-                "methods": list(route.methods) if hasattr(route, "methods") else None
-            })
+        # BaseRoute 无 path/name/methods；APIRoute/Mount 等子类才有。
+        # hasattr 不能收窄类型，故用 getattr 供 basedpyright 通过。
+        path = getattr(route, "path", None)
+        if path is None:
+            continue
+        methods = getattr(route, "methods", None)
+        routes.append({
+            "path": path,
+            "name": getattr(route, "name", None),
+            "methods": list(methods) if methods is not None else None,
+        })
     return routes
 
 
@@ -1016,8 +1039,13 @@ async def startup_event():
         logger.info("数据库初始化完成")
 
         try:
-            from backend_api.models import StockBasicInfo
+            from typing import Any, cast
 
+            from backend_api.models import StockBasicInfo as _StockBasicInfo
+
+            StockBasicInfo = cast(Any, _StockBasicInfo)
+            if StockBasicInfo is None:
+                raise RuntimeError("StockBasicInfo model not available")
             code_t = StockBasicInfo.__table__.c.code.type
             logger.info(
                 "StockBasicInfo.code 列类型: %s（若为 StockCodeTextPK 列，ORM 与 int 比较会按字符串绑定）",

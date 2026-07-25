@@ -39,8 +39,10 @@ from backend_api.utils.bk_board_code import (
     assert_bk_available_for_board_type,
     generate_next_bk_board_code,
     is_valid_bk_board_code,
+    is_valid_concept_board_code,
     is_valid_industry_board_code,
     normalize_bk_board_code,
+    normalize_concept_board_code,
     normalize_industry_board_code,
 )
 
@@ -58,17 +60,18 @@ def _normalize_board_code(raw: Any) -> str:
 def _normalize_board_code_for_type(board_type: BoardType, raw: Any) -> str:
     if board_type == "industry":
         return normalize_industry_board_code(raw)
-    return normalize_bk_board_code(raw)
+    return normalize_concept_board_code(raw)
 
 
 def _is_valid_board_code_for_type(board_type: BoardType, code: str) -> bool:
     if board_type == "industry":
         return is_valid_industry_board_code(code)
-    return is_valid_bk_board_code(code)
+    return is_valid_concept_board_code(code)
 
 
 def _resolve_delete_board_code(board_type: BoardType, raw: Any) -> str:
     """删除时使用：按板块类型规范化代码。"""
+    """删除时使用：按板块类型规范化（支持 BK / 纯数字等）。"""
     return _normalize_board_code_for_type(board_type, raw)
 
 
@@ -420,6 +423,9 @@ def _assert_board_code_format(board_type: BoardType, code: str) -> None:
         detail = "行业板块代码须为数字、BK+数字、中文或英文字符（1~20 位）"
     else:
         detail = "板块代码须为数字或 BK+数字 格式（如 0428 或 BK0428）"
+        detail = "行业板块代码须为 BK+数字、纯数字，或中文/英文字符（1~20 位）"
+    else:
+        detail = "概念板块代码须为 BK+数字或纯数字（1~20 位）"
     raise HTTPException(status_code=400, detail=detail)
 
 
@@ -460,6 +466,8 @@ class SaveBoardInfoBody(BaseModel):
                 if bt == "industry":
                     raise ValueError("行业板块代码须为数字、BK+数字、中文或英文字符")
                 raise ValueError("板块代码须为数字或 BK+数字 格式")
+                    raise ValueError("行业板块代码须为 BK+数字、纯数字，或中文/英文字符")
+                raise ValueError("概念板块代码须为 BK+数字或纯数字")
             self.board_code = code
         if self.board_code_source is not None and str(self.board_code_source).strip():
             src = normalize_board_code_source(self.board_code_source)
@@ -952,7 +960,7 @@ async def save_board_info(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """新增或编辑板块基础信息（支持改名并联动成分股）。"""
+    """新增或编辑板块基础信息（支持修改板块代码并联动成分股）。"""
     raw_code = (body.board_code or "").strip()
     board_name = (body.board_name or "").strip() or None
     now = datetime.now().replace(microsecond=0)

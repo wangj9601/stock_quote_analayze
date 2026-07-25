@@ -27,6 +27,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.gms.btn.export', name: 'GMS导出', level: 3, parent_code: 'channel.screening.tab.gms', channel_code: 'screening', sort_order: 20 },
   { code: 'channel.screening.tab.pvfrs.btn.refresh', name: 'PVFRS刷新', level: 3, parent_code: 'channel.screening.tab.pvfrs', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.vsb.btn.refresh', name: 'VSB刷新', level: 3, parent_code: 'channel.screening.tab.vsb', channel_code: 'screening', sort_order: 10 },
+  { code: 'channel.screening.tab.vsb.btn.add_observe', name: '加入观察', level: 3, parent_code: 'channel.screening.tab.vsb', channel_code: 'screening', sort_order: 20 },
   { code: 'channel.screening.tab.urt.btn.refresh', name: 'URT刷新', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.urt.btn.export', name: 'URT导出', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 20 },
   { code: 'channel.screening.tab.urt.btn.observe', name: 'URT交易观察', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 30 },

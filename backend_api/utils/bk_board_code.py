@@ -17,6 +17,9 @@ NUMERIC_BOARD_CODE_RE = re.compile(r"^\d{1,20}$")
 BOARD_NUM_CODE_RE = re.compile(r"^(?:BK)?(\d+)$", re.IGNORECASE)
 INDUSTRY_BOARD_CODE_MAX_LEN = 20
 # 行业板块：BK/纯数字，或含中文/英文字母的业务代码（可含数字与 ._-·）
+# 纯数字业务编码（如同花顺等）
+NUMERIC_BOARD_CODE_RE = re.compile(r"^\d{1,20}$")
+# 行业板块：含中文/英文字母的业务代码（可含数字与 ._-·）
 INDUSTRY_TEXT_BOARD_CODE_RE = re.compile(
     r"^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9._\-·]{0,19}$"
 )
@@ -58,6 +61,17 @@ def normalize_bk_board_code(raw: object) -> str:
     return ""
 
 
+def normalize_numeric_board_code(raw: object) -> str:
+    """纯数字板块代码（1~20 位）。"""
+    s = str(raw or "").strip()
+    s = s.lstrip("'").lstrip("’").strip()
+    if not s or len(s) > INDUSTRY_BOARD_CODE_MAX_LEN:
+        return ""
+    if NUMERIC_BOARD_CODE_RE.fullmatch(s):
+        return s
+    return ""
+
+
 def is_valid_bk_board_code(code: object) -> bool:
     return bool(normalize_bk_board_code(code))
 
@@ -67,6 +81,13 @@ def normalize_industry_board_code(raw: object) -> str:
     num_like = normalize_bk_board_code(raw)
     if num_like:
         return num_like
+    """行业板块代码：BK+数字、纯数字，或中文/英文字符组成的业务编码。"""
+    bk = normalize_bk_board_code(raw)
+    if bk:
+        return bk
+    num = normalize_numeric_board_code(raw)
+    if num:
+        return num
     s = str(raw or "").strip()
     s = s.lstrip("'").lstrip("’").strip()
     if not s or len(s) > INDUSTRY_BOARD_CODE_MAX_LEN:
@@ -78,6 +99,18 @@ def normalize_industry_board_code(raw: object) -> str:
 
 def is_valid_industry_board_code(code: object) -> bool:
     return bool(normalize_industry_board_code(code))
+
+
+def normalize_concept_board_code(raw: object) -> str:
+    """概念板块代码：BK+数字，或纯数字。"""
+    bk = normalize_bk_board_code(raw)
+    if bk:
+        return bk
+    return normalize_numeric_board_code(raw)
+
+
+def is_valid_concept_board_code(code: object) -> bool:
+    return bool(normalize_concept_board_code(code))
 
 
 def parse_bk_num(code: object) -> Optional[int]:
