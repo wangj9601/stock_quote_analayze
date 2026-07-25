@@ -9,8 +9,13 @@
         "scss",
         "vue"
     ],
-    "python.defaultInterpreterPath": "C:\\Users\\admin\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\python.exe",
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
     "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "python.analysis.venvPath": "${workspaceFolder}",
+    "python.analysis.venv": ".venv",
+    "basedpyright.analysis.extraPaths": [
         "${workspaceFolder}"
     ]
 }
