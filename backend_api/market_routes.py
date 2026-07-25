@@ -225,7 +225,7 @@ def get_industry_board(db: Session = Depends(get_db)):
 # 行业板块目录（仅 basic_info，供 GMS 筛选等下拉使用）
 @router.get("/industry_board/catalog")
 def get_industry_board_catalog(db: Session = Depends(get_db)):
-    """行业板块代码/名称列表；与管理端一致，仅 industry_board_basic_info，同名去重。"""
+    """行业板块代码/名称列表；含代码来源，同名不同来源可并存。"""
     try:
         data = fetch_industry_board_catalog(db)
         return JSONResponse({"success": True, "data": data})
@@ -244,13 +244,20 @@ def get_industry_board_catalog(db: Session = Depends(get_db)):
 # 获取概念板块列表（基本信息表）
 @router.get("/concept_board")
 def get_concept_board(db: Session = Depends(get_db)):
-    """获取概念板块列表（从 concept_board_basic_info 读取，按创建时间倒序）。"""
+    """获取概念板块列表（从 concept_board_basic_info 读取，含代码来源）。"""
     try:
+        from backend_api.utils.board_code_source import (
+            LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+            board_code_source_label,
+            resolve_board_code_source,
+        )
+
         rows = db.execute(
             text(
                 """
                 SELECT board_code, board_name, create_date,
-                       COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
+                       COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
+                       board_code_source
                 FROM concept_board_basic_info
                 WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
                   AND COALESCE(frontend_visible_flag, TRUE) = TRUE
@@ -258,15 +265,21 @@ def get_concept_board(db: Session = Depends(get_db)):
                 """
             )
         ).fetchall()
-        data = [
-            {
-                "board_code": row[0],
-                "board_name": row[1],
-                "create_date": row[2].isoformat() if row[2] else None,
-                "trade_observe_flag": bool(row[3]),
-            }
-            for row in rows
-        ]
+        data = []
+        for row in rows:
+            source = resolve_board_code_source(
+                row[4], fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+            )
+            data.append(
+                {
+                    "board_code": row[0],
+                    "board_name": row[1],
+                    "create_date": row[2].isoformat() if row[2] else None,
+                    "trade_observe_flag": bool(row[3]),
+                    "board_code_source": source,
+                    "board_code_source_label": board_code_source_label(source),
+                }
+            )
         return JSONResponse({"success": True, "data": data})
     except Exception as e:
         tb = traceback.format_exc()

@@ -1,34 +1,43 @@
 """行业板块成分股查询工具。"""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_api.models import IndustryBoardConstituent
 from backend_api.utils.bk_board_code import is_valid_bk_board_code
+from backend_api.utils.board_code_source import (
+    LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+    board_code_source_label,
+    resolve_board_code_source,
+)
 
 
 def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """同名板块只保留一条：优先 BK 编码，合并 trade_observe_flag。"""
-    from backend_api.utils.bk_board_code import is_valid_bk_board_code
-
-    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    """同名同来源只保留一条：优先 BK 编码，合并 trade_observe_flag；不同来源可并存。"""
+    buckets: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     for raw in items:
         code = str(raw.get("board_code") or "").strip()
         if not code:
             continue
         name = str(raw.get("board_name") or "").strip() or code
+        source = resolve_board_code_source(
+            raw.get("board_code_source"),
+            fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+        )
         entry = {
             "board_code": code,
             "board_name": name,
             "trade_observe_flag": bool(raw.get("trade_observe_flag")),
+            "board_code_source": source,
+            "board_code_source_label": board_code_source_label(source),
         }
-        buckets.setdefault(name, []).append(entry)
+        buckets.setdefault((name, source), []).append(entry)
 
     out: List[Dict[str, Any]] = []
-    for name, group in buckets.items():
+    for _key, group in buckets.items():
         if len(group) == 1:
             out.append(group[0])
             continue
@@ -41,12 +50,12 @@ def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str,
         chosen = dict(group[0])
         chosen["trade_observe_flag"] = any(bool(x.get("trade_observe_flag")) for x in group)
         out.append(chosen)
-    out.sort(key=lambda x: (x["board_name"], x["board_code"]))
+    out.sort(key=lambda x: (x["board_name"], x["board_code_source"], x["board_code"]))
     return out
 
 
 def fetch_industry_board_catalog(db: Session, *, frontend_only: bool = True) -> List[Dict[str, Any]]:
-    """GMS 等行业板块选择器：仅 basic_info，并按展示名称去重。"""
+    """GMS 等行业板块选择器：仅 basic_info；同名不同代码来源可并存。"""
     visible_filter = (
         "AND COALESCE(frontend_visible_flag, TRUE) = TRUE"
         if frontend_only
@@ -55,7 +64,9 @@ def fetch_industry_board_catalog(db: Session, *, frontend_only: bool = True) -> 
     rows = db.execute(
         text(
             f"""
-            SELECT board_code, board_name, COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag
+            SELECT board_code, board_name,
+                   COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
+                   board_code_source
             FROM industry_board_basic_info
             WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
               {visible_filter}
@@ -68,6 +79,7 @@ def fetch_industry_board_catalog(db: Session, *, frontend_only: bool = True) -> 
             "board_code": str(r[0]),
             "board_name": r[1],
             "trade_observe_flag": bool(r[2]),
+            "board_code_source": r[3],
         }
         for r in rows
     ]

@@ -1595,6 +1595,35 @@
     flex-shrink: 0;
 }
 
+.gms-board-picker-source-filters {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.gms-board-source-btn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #475569;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.gms-board-source-btn:hover {
+    border-color: #94a3b8;
+    color: #1e293b;
+}
+
+.gms-board-source-btn.active {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
 .gms-board-picker-search {
     flex: 1;
     min-width: 180px;
@@ -1602,7 +1631,7 @@
 
 .gms-board-picker-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
     gap: 4px 14px;
     flex: 1;
     min-height: 240px;
@@ -1638,6 +1667,27 @@
     margin: 0;
 }
 
+.gms-board-picker-item-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.gms-board-picker-item-text .gms-board-picker-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gms-board-picker-item-text .gms-board-picker-source {
+    font-size: 11px;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .gms-board-picker-item span {
     line-height: 1.35;
     overflow: hidden;
@@ -1656,7 +1706,7 @@
 
 @media (min-width: 1200px) {
     .gms-board-picker-list {
-        grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
     }
 }
 
@@ -1667,7 +1717,7 @@
     }
 
     .gms-board-picker-list {
-        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         min-height: 200px;
         max-height: min(52vh, 420px);
     }

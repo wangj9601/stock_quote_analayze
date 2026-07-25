@@ -422,9 +422,6 @@ def _assert_board_code_format(board_type: BoardType, code: str) -> None:
     if board_type == "industry":
         detail = "行业板块代码须为数字、BK+数字、中文或英文字符（1~20 位）"
     else:
-        detail = "板块代码须为数字或 BK+数字 格式（如 0428 或 BK0428）"
-        detail = "行业板块代码须为 BK+数字、纯数字，或中文/英文字符（1~20 位）"
-    else:
         detail = "概念板块代码须为 BK+数字或纯数字（1~20 位）"
     raise HTTPException(status_code=400, detail=detail)
 
@@ -465,8 +462,6 @@ class SaveBoardInfoBody(BaseModel):
             if not _is_valid_board_code_for_type(bt, code):
                 if bt == "industry":
                     raise ValueError("行业板块代码须为数字、BK+数字、中文或英文字符")
-                raise ValueError("板块代码须为数字或 BK+数字 格式")
-                    raise ValueError("行业板块代码须为 BK+数字、纯数字，或中文/英文字符")
                 raise ValueError("概念板块代码须为 BK+数字或纯数字")
             self.board_code = code
         if self.board_code_source is not None and str(self.board_code_source).strip():

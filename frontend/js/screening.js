@@ -65,6 +65,8 @@ const ScreeningPage = {
     /** 板块选择弹窗：industry | concept */
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
+    /** 板块选择弹窗代码来源筛选：all | eastmoney | tonghuashun */
+    _gmsBoardPickerSourceFilter: 'all',
     /** 板块选择弹窗归属：gms | urt | rpe */
     _gmsBoardPickerOwner: 'gms',
 
@@ -855,6 +857,19 @@ const ScreeningPage = {
         const searchEl = document.getElementById('gmsBoardPickerSearch');
         if (searchEl) {
             searchEl.addEventListener('input', () => this._renderGmsBoardPickerList());
+        }
+        const sourceFilterWrap = document.querySelector('#gmsBoardPickerModal .gms-board-picker-source-filters');
+        if (sourceFilterWrap) {
+            sourceFilterWrap.addEventListener('click', (e) => {
+                const btn = e.target.closest('.gms-board-source-btn');
+                if (!btn) return;
+                const source = String(btn.getAttribute('data-board-source') || 'all').trim() || 'all';
+                this._gmsBoardPickerSourceFilter = source;
+                sourceFilterWrap.querySelectorAll('.gms-board-source-btn').forEach((el) => {
+                    el.classList.toggle('active', el === btn);
+                });
+                this._renderGmsBoardPickerList();
+            });
         }
         const listEl = document.getElementById('gmsBoardPickerList');
         if (listEl) {
@@ -2554,10 +2569,31 @@ const ScreeningPage = {
         return kind === 'industry' ? this.gmsIndustryBoardCatalog : this.gmsConceptBoardCatalog;
     },
 
+    _gmsBoardSourceValue(board) {
+        const raw = String(board?.board_code_source || '').trim().toLowerCase();
+        if (raw) return raw;
+        return 'eastmoney';
+    },
+
+    _gmsBoardSourceLabel(board) {
+        const label = String(board?.board_code_source_label || '').trim();
+        if (label) return label;
+        const map = {
+            eastmoney: '东方财富',
+            tonghuashun: '同花顺',
+            huatai: '华泰',
+            manual: '手动维护',
+            other: '其他',
+        };
+        return map[this._gmsBoardSourceValue(board)] || '东方财富';
+    },
+
     _gmsBoardLabel(board) {
         const code = String(board?.board_code || '').trim();
         const name = String(board?.board_name || '').trim();
-        return name || code;
+        const base = name || code;
+        const src = this._gmsBoardSourceLabel(board);
+        return src ? `${base}（${src}）` : base;
     },
 
     /** 板块目录中已标记交易观察的板块代码 */
@@ -2598,7 +2634,7 @@ const ScreeningPage = {
         }
     },
 
-    /** 行业板块同名去重（优先 BK 编码；兼容旧缓存/接口） */
+    /** 行业板块同名同来源去重（优先 BK；不同代码来源可并存） */
     _dedupeGmsIndustryBoardCatalog(boards) {
         const list = Array.isArray(boards) ? boards : [];
         const buckets = new Map();
@@ -2606,24 +2642,42 @@ const ScreeningPage = {
             const code = String(b?.board_code || '').trim();
             if (!code) return;
             const name = String(b?.board_name || '').trim() || code;
-            const prev = buckets.get(name);
+            const source = this._gmsBoardSourceValue(b);
+            const key = `${name}||${source}`;
+            const prev = buckets.get(key);
             const isBk = /^BK\d+$/i.test(code);
             const observeFlag = !!(b?.trade_observe_flag || prev?.trade_observe_flag);
+            const normalized = {
+                ...b,
+                board_code_source: source,
+                board_code_source_label: b?.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
+                trade_observe_flag: !!b?.trade_observe_flag,
+            };
             if (!prev) {
-                buckets.set(name, { ...b, trade_observe_flag: !!b?.trade_observe_flag });
+                buckets.set(key, normalized);
                 return;
             }
             const prevBk = /^BK\d+$/i.test(String(prev.board_code || ''));
             if (!prevBk && isBk) {
-                buckets.set(name, { ...b, trade_observe_flag: observeFlag });
+                buckets.set(key, { ...normalized, trade_observe_flag: observeFlag });
             } else {
-                buckets.set(name, { ...prev, trade_observe_flag: observeFlag });
+                buckets.set(key, { ...prev, trade_observe_flag: observeFlag });
             }
         });
         return Array.from(buckets.values()).sort((a, b) => String(a.board_name || a.board_code).localeCompare(
             String(b.board_name || b.board_code),
             'zh-CN',
         ));
+    },
+
+    _syncGmsBoardPickerSourceFilterUi() {
+        const wrap = document.querySelector('#gmsBoardPickerModal .gms-board-picker-source-filters');
+        if (!wrap) return;
+        const current = this._gmsBoardPickerSourceFilter || 'all';
+        wrap.querySelectorAll('.gms-board-source-btn').forEach((el) => {
+            const src = String(el.getAttribute('data-board-source') || 'all');
+            el.classList.toggle('active', src === current);
+        });
     },
 
     updateGmsIndustryBoardSummary() {
@@ -2661,8 +2715,9 @@ const ScreeningPage = {
     },
 
     async openGmsBoardPickerModal(kind, owner = 'gms') {
-        if (kind === 'industry') await this.loadGmsIndustryBoardOptions();
-        else await this.loadGmsConceptBoardOptions();
+        // 强制重拉，避免后端升级后仍用缺来源字段的旧缓存（会导致「同花顺」筛空）
+        if (kind === 'industry') await this.loadGmsIndustryBoardOptions(true);
+        else await this.loadGmsConceptBoardOptions(true);
 
         this._gmsBoardPickerKind = kind;
         if (owner === 'urt') this._gmsBoardPickerOwner = 'urt';
@@ -2693,6 +2748,8 @@ const ScreeningPage = {
         }
         const searchEl = document.getElementById('gmsBoardPickerSearch');
         if (searchEl) searchEl.value = '';
+        this._gmsBoardPickerSourceFilter = 'all';
+        this._syncGmsBoardPickerSourceFilterUi();
         this._renderGmsBoardPickerList();
         this._showGmsModal(document.getElementById('gmsBoardPickerModal'));
     },
@@ -2704,16 +2761,21 @@ const ScreeningPage = {
         const catalog = this._gmsBoardCatalogByKind(kind);
         const draft = this._gmsBoardPickerDraft;
         const filter = String(document.getElementById('gmsBoardPickerSearch')?.value || '').trim().toLowerCase();
+        const sourceFilter = this._gmsBoardPickerSourceFilter || 'all';
         const esc = (s) => String(s ?? '')
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;');
 
         const filtered = catalog.filter((b) => {
+            if (sourceFilter !== 'all' && this._gmsBoardSourceValue(b) !== sourceFilter) {
+                return false;
+            }
             if (!filter) return true;
             const name = String(b.board_name || '').toLowerCase();
             const code = String(b.board_code || '').toLowerCase();
-            return name.includes(filter) || code.includes(filter);
+            const src = this._gmsBoardSourceLabel(b).toLowerCase();
+            return name.includes(filter) || code.includes(filter) || src.includes(filter);
         });
 
         if (!filtered.length) {
@@ -2723,9 +2785,11 @@ const ScreeningPage = {
 
         listEl.innerHTML = filtered.map((b) => {
             const code = String(b.board_code || '').trim();
-            const label = this._gmsBoardLabel(b);
+            const name = String(b.board_name || '').trim() || code;
+            const srcLabel = this._gmsBoardSourceLabel(b);
+            const title = this._gmsBoardLabel(b);
             const checked = draft.has(code) ? ' checked' : '';
-            return `<label class="gms-board-picker-item" title="${esc(label)}"><input type="checkbox" value="${esc(code)}"${checked}><span>${esc(label)}</span></label>`;
+            return `<label class="gms-board-picker-item" title="${esc(title)}"><input type="checkbox" value="${esc(code)}"${checked}><span class="gms-board-picker-item-text"><span class="gms-board-picker-name">${esc(name)}</span><span class="gms-board-picker-source">${esc(srcLabel)}</span></span></label>`;
         }).join('');
     },
 
@@ -2936,9 +3000,9 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
-    /** 加载行业板块选项 */
-    async loadGmsIndustryBoardOptions() {
-        if (this._gmsIndustryBoardsLoaded && this.gmsIndustryBoardCatalog.length) return;
+    /** 加载行业板块选项 @param {boolean} [force] 强制重新拉取 */
+    async loadGmsIndustryBoardOptions(force = false) {
+        if (!force && this._gmsIndustryBoardsLoaded && this.gmsIndustryBoardCatalog.length) return;
         try {
             const res = await fetch(`${this.API_BASE_URL}/api/market/industry_board/catalog`);
             const data = await res.json();
@@ -2952,14 +3016,15 @@ const ScreeningPage = {
         } catch (e) {
             console.warn('[GMS] 加载行业板块列表失败', e);
             this.gmsIndustryBoardCatalog = [];
+            this._gmsIndustryBoardsLoaded = false;
             const summary = document.getElementById('gmsIndustryBoardSummary');
             if (summary) summary.textContent = '加载失败，请刷新页面';
         }
     },
 
-    /** 加载概念板块选项 */
-    async loadGmsConceptBoardOptions() {
-        if (this._gmsConceptBoardsLoaded && this.gmsConceptBoardCatalog.length) return;
+    /** 加载概念板块选项 @param {boolean} [force] 强制重新拉取 */
+    async loadGmsConceptBoardOptions(force = false) {
+        if (!force && this._gmsConceptBoardsLoaded && this.gmsConceptBoardCatalog.length) return;
         try {
             const res = await fetch(`${this.API_BASE_URL}/api/market/concept_board`);
             const data = await res.json();
@@ -2968,12 +3033,20 @@ const ScreeningPage = {
                 String(b.board_name || b.board_code),
                 'zh-CN'
             ));
-            this.gmsConceptBoardCatalog = boards;
+            this.gmsConceptBoardCatalog = boards.map((b) => {
+                const source = this._gmsBoardSourceValue(b);
+                return {
+                    ...b,
+                    board_code_source: source,
+                    board_code_source_label: b.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
+                };
+            });
             this._gmsConceptBoardsLoaded = true;
             this._applyGmsTradeObserveBoardDefaults('concept');
         } catch (e) {
             console.warn('[GMS] 加载概念板块列表失败', e);
             this.gmsConceptBoardCatalog = [];
+            this._gmsConceptBoardsLoaded = false;
             const summary = document.getElementById('gmsConceptBoardSummary');
             if (summary) summary.textContent = '加载失败，请刷新页面';
         }
