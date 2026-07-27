@@ -167,6 +167,33 @@ const RpeScoreDetail = {
         }`,
       ],
       ['结构有效', this._fmt(src.structure_valid), this._reasonText(struct.reason)],
+      [
+        '流动性分档',
+        this._esc(liq.board_segment_label || liq.board_segment || th.liquidity_board_segment || '--'),
+        '上市板别：主板/中小板/创业板/科创板/北证',
+      ],
+      [
+        '应用均额门槛',
+        this._fmt(
+          liq.min_avg_amount_applied != null
+            ? liq.min_avg_amount_applied
+            : th.liquidity_min_avg_amount,
+          0
+        ),
+        '人民币元（成交额，非手数）',
+      ],
+      [
+        '换手门槛%',
+        this._fmt(
+          liq.min_avg_turnover_rate_applied != null
+            ? liq.min_avg_turnover_rate_applied
+            : th.liquidity_min_avg_turnover_rate != null
+              ? th.liquidity_min_avg_turnover_rate
+              : 0.8,
+          2
+        ),
+        '近窗口日均换手下限',
+      ],
       ['日均成交额', this._fmt(liq.avg_amount, 0), this._reasonText(liq.reason)],
       ['日均换手%', this._fmt(liq.avg_turnover_rate, 2), '流动性窗口均值'],
       ['KDE 带宽', this._fmt(detail.bw, 4), `base_factor=${th.kde_base_factor != null ? th.kde_base_factor : 1}`],

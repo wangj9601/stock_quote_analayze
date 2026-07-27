@@ -85,6 +85,7 @@ def test_filters_and_signal():
     assert st["structure_valid"] is True
     assert structure_break(8.9, 9.0) is True
     bars = [{"amount": 8_000_000, "turnover_rate": 1.0} for _ in range(20)]
+    # 未传板别时沿用传入/默认 min_avg_amount=500万
     assert liquidity_ok(bars)["liquidity_ok"] is True
     cfg = get_default_rpe_config()
     sig = detect_signal(

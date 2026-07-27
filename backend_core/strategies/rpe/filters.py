@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
+from .listed_board import board_segment_label, resolve_min_avg_amount
+
 
 def trend_veto(sector_slope: Optional[float], enabled: bool = True) -> bool:
     """返回 True 表示应否决（禁止入选）。"""
@@ -49,10 +51,35 @@ def liquidity_ok(
     *,
     lookback: int = 20,
     min_avg_amount: float = 5_000_000.0,
-    min_avg_turnover_rate: float = 0.5,
+    min_avg_turnover_rate: float = 0.8,
+    stock_code: Optional[str] = None,
+    liq_cfg: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    """
+    近 lookback 日均成交额（元）与均换手（%）。
+    若传入 stock_code + liq_cfg，则按上市板别分层取均额门槛。
+    """
     if not bars:
-        return {"liquidity_ok": False, "reason": "no_bars"}
+        return {
+            "liquidity_ok": False,
+            "reason": "no_bars",
+            "board_segment": None,
+            "board_segment_label": None,
+            "min_avg_amount_applied": None,
+        }
+
+    segment = None
+    segment_label = None
+    applied = float(min_avg_amount)
+    if stock_code is not None or liq_cfg is not None:
+        segment, applied = resolve_min_avg_amount(stock_code, liq_cfg)
+        segment_label = board_segment_label(segment)
+        if liq_cfg and liq_cfg.get("min_avg_turnover_rate") is not None:
+            try:
+                min_avg_turnover_rate = float(liq_cfg.get("min_avg_turnover_rate"))
+            except (TypeError, ValueError):
+                pass
+
     window = bars[-max(5, int(lookback)) :]
     amounts = []
     turnovers = []
@@ -71,7 +98,7 @@ def liquidity_ok(
                 pass
     avg_amt = sum(amounts) / len(amounts) if amounts else 0.0
     avg_tr = sum(turnovers) / len(turnovers) if turnovers else 0.0
-    ok = avg_amt >= float(min_avg_amount)
+    ok = avg_amt >= float(applied)
     if turnovers:
         ok = ok and avg_tr >= float(min_avg_turnover_rate)
     return {
@@ -79,6 +106,10 @@ def liquidity_ok(
         "avg_amount": avg_amt,
         "avg_turnover_rate": avg_tr,
         "reason": "ok" if ok else "thin_liquidity",
+        "board_segment": segment,
+        "board_segment_label": segment_label,
+        "min_avg_amount_applied": applied,
+        "min_avg_turnover_rate_applied": float(min_avg_turnover_rate),
     }
 
 

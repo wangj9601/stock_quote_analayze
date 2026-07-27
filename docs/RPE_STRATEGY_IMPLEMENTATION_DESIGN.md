@@ -132,11 +132,14 @@ flowchart TD
 
 ### 3.2 流动性子配置 `liquidity`
 
-| 参数 | 默认 | 含义 |
+| 参数 | 默认 | 说明 |
 |------|------|------|
-| `lookback_days` | 20 | 近 N 日（实现下限 ≥5） |
-| `min_avg_amount` | 5_000_000 | 日均成交额下限（元） |
-| `min_avg_turnover_rate` | 0.5 | 日均换手下限（%）；若窗口内无换手字段则只判成交额 |
+| `lookback_days` | 20 | 滚动窗口 |
+| `min_avg_amount` | 5_000_000 | 无 `by_board` 时的回退均额（**人民币元**） |
+| `min_avg_turnover_rate` | 0.8 | 日均换手下限（%）；无换手字段则只判成交额 |
+| `min_avg_amount_by_board` | 见下 | 按上市板别分层均额（人民币元，非手数） |
+
+`min_avg_amount_by_board` 默认：`MAIN` 3000 万、`SZ_SME` 2000 万、`CYB`/`KCB` 1500 万、`BJ`/`DEFAULT` 500 万。详见 [RPE_流动性过滤_分层改造方案.md](./RPE_流动性过滤_分层改造方案.md)。
 
 ### 3.3 扫描子配置 `scan`
 
@@ -233,7 +236,8 @@ Z 的分子为 \(R_t-\mu_t\)，分母为 \(\sigma_t\)（总体方差口径，除
 
 ### 4.6 流动性过滤
 
-近 N 日平均成交额、平均换手（有值时）同时达到下限 → `liquidity_ok`。
+近 N 日平均成交额（**人民币元**）、平均换手（有值时）同时达到下限 → `liquidity_ok`。  
+均额门槛按上市板别分层（主板 / 中小板 / 创业板 / 科创板 / 北证），换手默认 0.8%。实现：`listed_board.resolve_min_avg_amount` + `filters.liquidity_ok`。
 
 ### 4.7 入场信号组装（`detect_signal`）
 
@@ -270,7 +274,7 @@ else:
 | `sector_benchmark.py` | VWAP 基准 \(I_t\)、线性斜率 |
 | `zscore.py` | 比价序列与滚动 Z |
 | `kde_levels.py` | 成交量加权 KDE + peaks + nearest |
-| `filters.py` | 趋势否决、结构、流动性、破位判定 |
+| `filters.py` / `listed_board.py` | 趋势否决、结构、分层流动性、破位判定 |
 | `signal_detector.py` | catch_up / lead / entry / reason |
 | `trade_structure_plan.py` | 结构价位计划（禁固定 % 止损） |
 | `strategy_engine.py` | 单股评估、按板块/全市场选股、去重排序 |

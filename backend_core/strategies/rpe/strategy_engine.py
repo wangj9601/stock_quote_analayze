@@ -76,7 +76,9 @@ class RPEStrategyEngine:
             bars,
             lookback=int(liq_cfg.get("lookback_days", 20)),
             min_avg_amount=float(liq_cfg.get("min_avg_amount", 5_000_000)),
-            min_avg_turnover_rate=float(liq_cfg.get("min_avg_turnover_rate", 0.5)),
+            min_avg_turnover_rate=float(liq_cfg.get("min_avg_turnover_rate", 0.8)),
+            stock_code=code_n,
+            liq_cfg=liq_cfg,
         )
         sig = detect_signal(
             z_score=zinfo.get("z_score"),
@@ -101,6 +103,14 @@ class RPEStrategyEngine:
         veto = bool(sig.get("trend_veto"))
         struct_ok = bool(struct.get("structure_valid"))
         liq_ok = bool(liq.get("liquidity_ok"))
+        liq_lookback = int(liq_cfg.get("lookback_days", 20))
+        liq_amt_gate = liq.get("min_avg_amount_applied")
+        if liq_amt_gate is None:
+            liq_amt_gate = float(liq_cfg.get("min_avg_amount", 5_000_000))
+        liq_tr_gate = liq.get("min_avg_turnover_rate_applied")
+        if liq_tr_gate is None:
+            liq_tr_gate = float(liq_cfg.get("min_avg_turnover_rate", 0.8))
+        liq_seg_label = liq.get("board_segment_label") or "默认"
         judgment_steps = [
             {
                 "name": "补涨 Z 阈值",
@@ -130,13 +140,16 @@ class RPEStrategyEngine:
             {
                 "name": "流动性",
                 "rule": (
-                    f"近{liq_cfg.get('lookback_days', 20)}日均额≥"
-                    f"{liq_cfg.get('min_avg_amount', 5_000_000)}且换手≥"
-                    f"{liq_cfg.get('min_avg_turnover_rate', 0.5)}%"
+                    f"{liq_seg_label}近{liq_lookback}日均额≥{liq_amt_gate}"
+                    f"（人民币元）且换手≥{liq_tr_gate}%"
                 ),
                 "actual": liq.get("avg_amount"),
                 "pass": liq_ok,
-                "note": liq.get("reason"),
+                "note": (
+                    f"{liq.get('reason')}; "
+                    f"换手={liq.get('avg_turnover_rate')}; "
+                    f"分档={liq.get('board_segment')}"
+                ),
             },
             {
                 "name": "入场信号",
@@ -188,12 +201,16 @@ class RPEStrategyEngine:
                     "enable_lead_trade": enable_lead_trade,
                     "kde_base_factor": float(cfg.get("kde_base_factor", 1.0)),
                     "sector_slope_window": int(cfg.get("sector_slope_window", 60)),
+                    "liquidity_board_segment": liq.get("board_segment"),
+                    "liquidity_min_avg_amount": liq_amt_gate,
+                    "liquidity_min_avg_turnover_rate": liq_tr_gate,
                 },
                 "judgment": {
                     "formula": "入场 = (catch_up 或 允许交易的 lead) AND 未趋势否决 AND 结构有效 AND 流动性通过",
                     "formula_detail": (
                         "比价 R=P/I（分子=个股收盘，分母=板块量权基准）；"
                         "补涨主路径：Z≤z_catch_up；领涨默认仅观察；"
+                        "流动性按上市板别分层均额（人民币元）+ 换手；"
                         "离场仅认收盘跌破结构支撑，不用固定百分比止损。"
                     ),
                     "steps": judgment_steps,

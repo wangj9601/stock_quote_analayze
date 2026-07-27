@@ -148,7 +148,7 @@ D = P - S,\quad U = R_{res} - P,\quad
 | 领涨 Z | \(Z \ge z\_lead\)（2.0） | 相对领涨；默认不单独构成可交易入场 |
 | 板块趋势否决 | `enable_trend_veto` 时要求斜率 ≥ 0 | 斜率 &lt; 0 → 否决入场 |
 | 结构过滤 | 站上支撑，且 RR ≥ 1.5（或无阻力） | `structure_valid` |
-| 流动性 | 近 20 日均额 ≥ 500 万，且换手 ≥ 0.5%（有换手时） | `liquidity_ok` |
+| 流动性 | 近 20 日均额 ≥ **本档人民币门槛**，且换手 ≥ 0.8%（有换手时） | `liquidity_ok` |
 | 入场信号 | catch_up：未否决 + 结构 + 流动性；lead：仅允许交易时同理 | `entry_signal` |
 
 ### 4.2 信号类型与 reason
@@ -205,8 +205,21 @@ D = P - S,\quad U = R_{res} - P,\quad
 | `kde_base_factor` | 1.0 | KDE 带宽系数 |
 | `min_rr_to_resistance` | 1.5 | 结构 RR 下限 |
 | `liquidity.lookback_days` | 20 | 流动性窗口 |
-| `liquidity.min_avg_amount` | 5e6 | 日均成交额（元） |
-| `liquidity.min_avg_turnover_rate` | 0.5 | 日均换手（%） |
+| `liquidity.min_avg_amount` | 5e6 | 无分档配置时的回退均额（人民币元） |
+| `liquidity.min_avg_turnover_rate` | 0.8 | 日均换手（%） |
+| `liquidity.min_avg_amount_by_board` | 见下表 | 按上市板别分层的均额门槛（人民币元，非手数） |
+
+分层均额默认（近 20 日，单位：元）：
+
+| 分档 | 代码段 | 均额下限 |
+|------|--------|----------|
+| MAIN 主板 | 60x / 000 / 001 | 3000 万 |
+| SZ_SME 中小板 | 002 | 2000 万 |
+| CYB 创业板 | 300 | 1500 万 |
+| KCB 科创板 | 688 | 1500 万 |
+| BJ 北证 / DEFAULT | 北证前缀等 | 500 万 |
+
+详见 [RPE_流动性过滤_分层改造方案.md](./RPE_流动性过滤_分层改造方案.md)。
 
 ---
 

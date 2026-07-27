@@ -25,8 +25,18 @@ def get_default_rpe_config() -> Dict[str, Any]:
         "min_rr_to_resistance": 1.5,
         "liquidity": {
             "lookback_days": 20,
+            # 兼容旧配置：无 by_board 时全市场回退该值（元）
             "min_avg_amount": 5_000_000.0,
-            "min_avg_turnover_rate": 0.5,
+            "min_avg_turnover_rate": 0.8,
+            # 分层绝对均额门槛（人民币元，非手数）
+            "min_avg_amount_by_board": {
+                "MAIN": 30_000_000.0,
+                "SZ_SME": 20_000_000.0,
+                "CYB": 15_000_000.0,
+                "KCB": 15_000_000.0,
+                "BJ": 5_000_000.0,
+                "DEFAULT": 5_000_000.0,
+            },
         },
         "scan": {
             "max_results": 200,
