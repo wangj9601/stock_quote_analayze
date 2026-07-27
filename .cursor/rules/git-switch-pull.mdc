@@ -1,0 +1,27 @@
+---
+description: 切换分支后必须 pull 同步远程
+alwaysApply: true
+---
+
+# Git：切换分支后必须 pull
+
+切换到本地已有分支（如 `main`、功能分支）或检出远程分支后，**必须立刻执行 pull**，再开展后续工作。
+
+## 要求
+
+1. `git checkout <branch>` / `git switch <branch>` 成功后，立即对该分支执行 `git pull`（优先 fast-forward；跟踪远程时用默认 upstream）。
+2. 新建并跟踪远程分支时：`git checkout -b <branch> origin/<branch>` 后仍确认已与远程同步；若本地已存在对应远程跟踪，切换后同样 `git pull`。
+3. pull 失败（冲突、网络、无 upstream）时：先向用户说明状态，再询问如何处理；不要假装已同步。
+4. 工作区有未提交改动导致无法切换/pull 时：先说明并征求用户意见（暂存、提交或丢弃），不要强行覆盖。
+
+## 示例
+
+```bash
+# ✅ GOOD
+git checkout main
+git pull
+
+# ❌ BAD：只切换不拉取
+git checkout main
+# 直接开始改代码
+```
