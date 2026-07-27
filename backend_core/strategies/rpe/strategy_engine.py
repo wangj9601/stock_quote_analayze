@@ -17,6 +17,14 @@ from .zscore import latest_zscore
 logger = logging.getLogger(__name__)
 
 
+def _bars_for_lookback(bars: List[Dict[str, Any]], lookback: int) -> List[Dict[str, Any]]:
+    """评估用 K 线截断到 lookback（与日终选股一致，避免全历史 KDE 带宽过大）。"""
+    n = max(1, int(lookback))
+    if not bars or len(bars) <= n:
+        return bars
+    return bars[-n:]
+
+
 class RPEStrategyEngine:
     def __init__(self, db_session=None, config: Optional[Dict] = None):
         self.loader = RPEDataLoader(db_session)
@@ -39,23 +47,26 @@ class RPEStrategyEngine:
         cfg = config or self.config
         code_n = _norm_code(code)
         bars = panel.get(code_n)
-        if not bars or len(bars) < int(cfg.get("z_window", 40)) + 5:
+        min_need = int(cfg.get("z_window", 40)) + 5
+        if not bars or len(bars) < min_need:
+            return None
+
+        # 若评估日不是最新 bar，先按日截断
+        if trade_date and bars[-1]["date"] > trade_date:
+            bars = [b for b in bars if b["date"] <= trade_date]
+            if not bars:
+                return None
+
+        # 统一 lookback：日终选股与全历史重算逐日评估均只用近 N 日，保证 KDE/Z 口径一致
+        lookback = max(int(cfg.get("lookback_days", 250)), min_need)
+        bars = _bars_for_lookback(bars, lookback)
+        if len(bars) < min_need:
             return None
 
         closes_map = {b["date"]: b["close"] for b in bars}
         zinfo = latest_zscore(closes_map, benchmark, int(cfg.get("z_window", 40)))
         if not zinfo:
             return None
-
-        # 若评估日不是最新 bar，截断
-        if trade_date and bars[-1]["date"] > trade_date:
-            bars = [b for b in bars if b["date"] <= trade_date]
-            if not bars:
-                return None
-            closes_map = {b["date"]: b["close"] for b in bars}
-            zinfo = latest_zscore(closes_map, benchmark, int(cfg.get("z_window", 40)))
-            if not zinfo:
-                return None
 
         kde = extract_kde_levels(
             [b["close"] for b in bars],
@@ -193,6 +204,8 @@ class RPEStrategyEngine:
                 "bw": kde.get("bw"),
                 "i_t": zinfo.get("i_t"),
                 "z_window": int(cfg.get("z_window", 40)),
+                "lookback_days_applied": lookback,
+                "bars_used": len(bars),
                 "thresholds": {
                     "z_lead": z_lead,
                     "z_catch_up": z_catch,

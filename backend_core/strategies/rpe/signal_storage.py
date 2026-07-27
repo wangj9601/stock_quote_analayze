@@ -179,10 +179,12 @@ def recompute_trace_for_stock(
     progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> int:
     """
-    对单股按**固定主板块**全量历史日滚动重算 RPE 信号，写入 rpe_signal_trace。
+    对单股按**固定主板块**按交易日滚动重算 RPE 信号，写入 rpe_signal_trace。
 
     - 先删除该 code + config_id 旧记录
     - 主板块：行业优先（成分最多）；无行业则概念；全程只用这一板块，避免追溯页按日跳变
+    - 面板可拉全历史以便逐日 as-of；**每个评估日**内 Z/KDE/流动性仍只使用 config.lookback_days
+      （与日终选股一致，避免全历史 KDE 带宽过大导致支撑缺失）
     - 每个可评交易日写入一行（含无入场信号日，便于追溯页查看 Z 序列）
     返回写入条数。
     """

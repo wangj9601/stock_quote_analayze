@@ -168,13 +168,15 @@ D = P - S,\quad U = R_{res} - P,\quad
 
 ## 5. KDE 支撑 / 阻力
 
-1. 样本：回溯 bars 的 close、volume；有效点（价&gt;0 且量&gt;0）&lt; 20 → `insufficient_samples`，支撑/阻力为空  
+1. 样本：评估日前近 `lookback_days`（默认 **250**）根 K 线的 close、volume；有效点（价&gt;0 且量&gt;0）&lt; 20 → `insufficient_samples`，支撑/阻力为空  
+   - **强制口径**：无论日终选股还是追溯全历史重算，KDE/Z 均只使用该窗口，禁止用全历史算密度（全历史带宽过大易抹平低位峰，导致「无支撑」）  
 2. 带宽：\(\mathrm{bw}=\max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma_P/\mu_P)\)  
 3. **优先**成交量加权 `scipy.stats.gaussian_kde` → 密度峰  
-4. **生产注意**：若 API 环境未安装 `scipy`（旧版 `requirements-minimal` 曾缺此项），会回退直方图平滑（`ok_histogram_fallback`）；部署应执行 `pip install scipy` 或重装 `requirements-prod.txt`  
+4. **生产注意**：若 API 环境未安装 `scipy`，会回退直方图平滑（`ok_histogram_fallback`）；部署应保证 `scipy` 可用  
 5. 峰 &lt; 现价 → 支撑；峰 ≥ 现价 → 阻力（最多各 8 个）  
 
 现价上方无峰 → 最近阻力为空（列表显示 `-`），结构仍可因 `no_resistance` 通过。  
+现价下方无峰 → 最近支撑为空；常见于带宽过大或价格跌破唯一密度峰之后。  
 若两侧均为 `-`，请在选股「明细」中查看 **KDE 状态**（`detail.kde_reason`）。
 
 ---
@@ -264,7 +266,7 @@ D = P - S,\quad U = R_{res} - P,\quad
 | 成分 | `industry_board_constituents` / 概念成分 |
 | 信号表 | `rpe_signal_trace`（按 `config_id`） |
 | 日终 | `rpe_signals_cn`，约 19:40，`ENABLE_RPE_PRECOMPUTE` |
-| 强制重算 | 追溯页 → 按主板块全历史回写 |
+| 强制重算 | 追溯页 → 按主板块逐日回写；每日 Z/KDE 仍截断为 `lookback_days` |
 | `signal_hit_rate` | N 日内是否触及目标相对涨幅且未先破位 |
 | `trade_simulation` | T+1 开盘入；离场：破位 / 触及阻力 / horizon |
 

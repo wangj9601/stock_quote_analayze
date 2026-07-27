@@ -119,7 +119,7 @@ flowchart TD
 
 | 参数 | 类型 | 默认 | 含义 | 影响环节 |
 |------|------|------|------|----------|
-| `lookback_days` | int | 250 | 拉取日线与合成基准的回溯交易日数 | 数据加载、KDE 样本 |
+| `lookback_days` | int | 250 | 日线回溯；**评估时 Z/KDE 强制截断到该窗口**（全历史重算亦同） | 数据加载、KDE 样本 |
 | `z_window` | int | 40 | 滚动 Z 窗口（实现侧下限钳制为 ≥5） | Z-Score |
 | `z_lead` | float | 2.0 | \(Z \ge\) 此值 → 领涨 | 信号类型 |
 | `z_catch_up` | float | -1.5 | \(Z \le\) 此值 → 补涨 | 信号类型 |
@@ -220,11 +220,11 @@ Z 的分子为 \(R_t-\mu_t\)，分母为 \(\sigma_t\)（总体方差口径，除
 
 ### 4.4 KDE 支撑 / 阻力
 
-1. 回溯窗口内 close、volume 组成加权样本；样本数 &lt; 20 → KDE 失败，结构通常不通过
-2. \(\mathrm{bw} = \max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma/\mu)\)
-3. `scipy.stats.gaussian_kde`（优先 `weights`；旧版则按权重离散复制）
-4. 在 \([0.98\min P,\ 1.02\max P]\) 上评估密度，`find_peaks`（prominence ≥ 5% max density）
-5. 低于现价的峰 → 支撑（由近到远）；不低于现价的峰 → 阻力
+1. 使用评估日前近 `lookback_days`（默认 250）根 close、volume；样本数 &lt; 20 → KDE 失败  
+2. `evaluate_in_sector` 在计算前强制截断，避免追溯全历史重算把远古波动计入带宽  
+3. \(\mathrm{bw} = \max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma/\mu)\)  
+4. `scipy.stats.gaussian_kde`（优先 `weights`；不可用则直方图回退）  
+5. 低于现价的峰 → 支撑；不低于现价的峰 → 阻力
 
 ### 4.5 结构过滤（盈亏比）
 
