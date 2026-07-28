@@ -820,24 +820,25 @@ def _register_urt_signal_precompute_jobs():
         logging.error("导入 URT 预计算任务失败，跳过注册: %s", e)
         return
 
+    # A 股：日 K 约 16:02 采完；默认 16:45 预计算，便于 17:30 前后推送（避开下班 18:35 才算完）
     scheduler.add_job(
         scheduled_urt_signals_cn,
         "cron",
         day_of_week=_cron("SCHED_URT_SIGNALS_CN_DOW", "mon-fri"),
-        hour=_cron_int("SCHED_URT_SIGNALS_CN_HOUR", 18),
-        minute=_cron_int("SCHED_URT_SIGNALS_CN_MINUTE", 35),
+        hour=_cron_int("SCHED_URT_SIGNALS_CN_HOUR", 16),
+        minute=_cron_int("SCHED_URT_SIGNALS_CN_MINUTE", 45),
         id="urt_signals_cn",
     )
     scheduler.add_job(
         scheduled_urt_signals_hk,
         "cron",
         day_of_week=_cron("SCHED_URT_SIGNALS_HK_DOW", "mon-fri"),
-        hour=_cron_int("SCHED_URT_SIGNALS_HK_HOUR", 19),
-        minute=_cron_int("SCHED_URT_SIGNALS_HK_MINUTE", 5),
+        hour=_cron_int("SCHED_URT_SIGNALS_HK_HOUR", 17),
+        minute=_cron_int("SCHED_URT_SIGNALS_HK_MINUTE", 20),
         id="urt_signals_hk",
     )
     logging.info(
-        "已注册 URT 信号预计算任务（ENABLE_URT_PRECOMPUTE=true）：A股 18:35，港股 19:05"
+        "已注册 URT 信号预计算任务（ENABLE_URT_PRECOMPUTE=true）：A股 16:45，港股 17:20"
     )
 
 

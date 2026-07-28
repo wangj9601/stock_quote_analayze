@@ -183,7 +183,7 @@ admin/  # /urt-management 参数配置页
 |----|------|
 | 表 | `urt_signal_trace`（PK: `code`+`date`+`config_id`），含得分、硬筛字段、`score_detail` JSON |
 | 配置 | `urt_strategy_configs.precompute_enabled`；默认版本或开关开启才算 |
-| 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 18:35，`ENABLE_URT_PRECOMPUTE` |
+| 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 **16:45**（港股 17:20），`ENABLE_URT_PRECOMPUTE`；`urt_daily` 推送建议 **17:30**（须晚于预计算） |
 | 选股 | `URTFrontendInterface.screen` 无 Query 覆盖时优先读 `urt_signal_trace` |
 | 手动 | `POST /api/admin/urt/precompute/run` |
 

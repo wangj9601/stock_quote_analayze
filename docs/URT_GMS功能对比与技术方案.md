@@ -66,7 +66,7 @@ flowchart TD
 | 前台信号 | `/api/stock/urt-signal-trace*`、`/urt-score-detail` |
 | Admin | `/api/admin/urt/*`，页面 `/urt-management` |
 | 表 | `urt_strategy_configs`、`urt_signal_trace`、`urt_backtest_tasks`、`urt_trace_recompute_tasks` |
-| 调度 | `ENABLE_URT_PRECOMPUTE`，默认工作日 18:35 |
+| 调度 | `ENABLE_URT_PRECOMPUTE`，默认工作日 A 股 **16:45** / 港股 **17:20** |
 
 ## 4. 待优化 / 待实现技术方案
 
@@ -150,3 +150,5 @@ python generate_urt_completion_excel.py
 ## 7. 收盘推送（urt_daily）
 
 管理端配置 `report_type=urt_daily` 后，系统将按推送时间对自选股中的 A 股标的生成 URT 上升趋势策略买点 Excel，经邮件/企业微信发送；A 股休市日自动跳过，管道与 `gms_daily` 一致。
+
+**时间建议**：推送设单点且晚于 A 股预计算（默认 16:45），例如 **17:30**；勿设多个偏早时间点（行情/预计算未就绪会推到旧信号日）。
