@@ -936,6 +936,17 @@ if urt_admin_router is not None:
 else:
     print("URT admin 路由未注册")
 
+# 环境数据同步（生产网关 + 管理端包装）
+try:
+    from backend_api.env_sync.gateway_routes import router as env_sync_gateway_router
+    from backend_api.env_sync.admin_routes import router as env_sync_admin_router
+
+    app.include_router(env_sync_gateway_router)
+    app.include_router(env_sync_admin_router)
+    print("环境同步路由注册成功 (/api/env-sync/v1, /api/admin/env-sync)")
+except Exception as e:
+    print(f"环境同步路由注册失败: {e}")
+
 # 尝试导入 ETF admin 路由
 try:
     from backend_api.admin.etf_admin_routes import router as etf_admin_router

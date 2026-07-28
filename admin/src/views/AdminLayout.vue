@@ -96,6 +96,7 @@ const menuItems = [
   { path: '/rpe-management', name: '比价效应RPE', icon: TrendCharts },
   { path: '/urt-management', name: 'URT上升趋势策略', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
+  { path: '/env-sync', name: '环境数据同步', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },
   { path: '/models', name: '预测模型', icon: Cpu },

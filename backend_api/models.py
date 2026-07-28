@@ -2327,3 +2327,44 @@ class RPETraceRecomputeTask(Base):
     error = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+# ========== 环境数据同步 ==========
+
+class EnvSyncServerConfig(Base):
+    """生产端 Sync Key（单行 id=1）：仅存哈希，用于校验对端请求。"""
+
+    __tablename__ = "env_sync_server_config"
+
+    id = Column(Integer, primary_key=True, default=1)
+    enabled = Column(Boolean, nullable=False, default=False)
+    sync_key_hash = Column(String(128), nullable=True)
+    key_hint = Column(String(16), nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class EnvSyncClientConfig(Base):
+    """本地客户端：生产 Base URL + Sync Key（单行 id=1）。"""
+
+    __tablename__ = "env_sync_client_config"
+
+    id = Column(Integer, primary_key=True, default=1)
+    enabled = Column(Boolean, nullable=False, default=False)
+    prod_base_url = Column(String(500), nullable=False, default="")
+    sync_key = Column(String(500), nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class EnvSyncAuditLog(Base):
+    """环境同步操作审计。"""
+
+    __tablename__ = "env_sync_audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    direction = Column(String(16), nullable=False)  # pull / push / import / export
+    modules = Column(JSON, nullable=True)
+    operator = Column(String(100), nullable=True)
+    success = Column(Boolean, nullable=False, default=False)
+    summary = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)

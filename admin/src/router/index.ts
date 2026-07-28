@@ -156,6 +156,11 @@ const routes = [
         component: () => import('@/views/EmailManagementView.vue')
       },
       {
+        path: 'env-sync',
+        name: 'EnvSync',
+        component: () => import('@/views/EnvSyncView.vue')
+      },
+      {
         path: 'email-sender-config',
         redirect: { path: '/report-management', query: { tab: 'sender' } }
       },
