@@ -390,9 +390,12 @@ class PushService:
         push_time: str,
         config_id: Optional[int] = None,
         db_session=None,
+        *,
+        force: bool = False,
     ) -> PushResult:
         """
         向单个用户推送报告。若传入 config_id 则使用该任务配置，否则使用该用户的第一条配置（兼容）。
+        force=True 时忽略配置 enabled=False（供管理端手工立即推送）。
         """
         logger.info(f"开始向用户 {user_id} 推送报告，推送时间: {push_time}")
         log_push_event(
@@ -417,9 +420,20 @@ class PushService:
                     record_id=None,
                     error_message=error_msg
                 )
+
+            if config_id is not None and int(config.user_id) != int(user_id):
+                error_msg = f"推送配置 {config_id} 不属于用户 {user_id}"
+                logger.error(error_msg)
+                return PushResult(
+                    user_id=user_id,
+                    success=False,
+                    channel_results=[],
+                    record_id=None,
+                    error_message=error_msg,
+                )
             
-            # 检查推送是否启用
-            if not config.enabled:
+            # 检查推送是否启用（管理端 force 可跳过）
+            if not config.enabled and not force:
                 error_msg = f"用户 {user_id} 推送功能已禁用"
                 logger.warning(error_msg)
                 # 记录用户未配置事件

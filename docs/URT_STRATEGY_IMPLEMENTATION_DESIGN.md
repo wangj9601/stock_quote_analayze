@@ -185,7 +185,7 @@ admin/  # /urt-management 参数配置页
 | 配置 | `urt_strategy_configs.precompute_enabled`；默认版本或开关开启才算 |
 | 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 **16:45**（港股 17:20），`ENABLE_URT_PRECOMPUTE`；`urt_daily` 推送建议 **17:30**（须晚于预计算） |
 | 选股 | `URTFrontendInterface.screen` 无 Query 覆盖时优先读 `urt_signal_trace` |
-| 手动 | `POST /api/admin/urt/precompute/run` |
+| 手动 | `POST /api/admin/urt/precompute/run?date=&config_id=&market=CN|HK`；管理端「URT上升趋势策略」页「信号预计算」支持选日期 |
 
 ### 回测管理
 

@@ -37,8 +37,14 @@
             {{ row.wechat_app_profile || '默认' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button
+              link
+              type="warning"
+              :loading="triggeringId === row.id"
+              @click="confirmTrigger(row)"
+            >立即推送</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="confirmDelete(row)">删除</el-button>
           </template>
@@ -225,6 +231,7 @@ const PUSH_TIME_OPTIONS = (() => {
 const loading = ref(false)
 const submitLoading = ref(false)
 const addLoading = ref(false)
+const triggeringId = ref<number | null>(null)
 const editVisible = ref(false)
 const addTaskVisible = ref(false)
 const editFormRef = ref()
@@ -403,6 +410,45 @@ function confirmDelete(row: { id: number; username?: string; email?: string; rep
       ElMessage.error('删除失败：' + msg)
     }
   }).catch(() => {})
+}
+
+function confirmTrigger(row: {
+  id: number
+  enabled: boolean
+  username?: string
+  email?: string
+  report_type_label?: string
+  report_type?: string
+}) {
+  const label = `${row.username ?? row.email ?? ''} - ${row.report_type_label ?? row.report_type ?? ''}`
+  const tip = row.enabled
+    ? `确定立即向该用户推送「${label}」吗？将按当前配置渠道发送，不受定时推送时间限制。`
+    : `该推送任务当前未启用。确定仍要强制立即推送「${label}」吗？`
+  ElMessageBox.confirm(tip, '立即推送', {
+    confirmButtonText: '立即推送',
+    cancelButtonText: '取消',
+    type: row.enabled ? 'warning' : 'error'
+  })
+    .then(async () => {
+      triggeringId.value = row.id
+      try {
+        const res = await pushService.triggerPushConfigById(row.id, { force: !row.enabled })
+        if (res.success) {
+          ElMessage.success(res.message || '推送成功')
+        } else {
+          ElMessage.error(res.message || '推送失败')
+        }
+      } catch (e: unknown) {
+        const msg =
+          e && typeof e === 'object' && 'response' in e
+            ? (e as { response?: { data?: { detail?: string } } }).response?.data?.detail
+            : String(e)
+        ElMessage.error('立即推送失败：' + msg)
+      } finally {
+        triggeringId.value = null
+      }
+    })
+    .catch(() => {})
 }
 
 async function submitEdit() {

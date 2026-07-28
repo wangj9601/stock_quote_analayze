@@ -776,6 +776,66 @@ def admin_update_push_config_by_id_patch(
     )
 
 
+@admin_router.post("/configs/{config_id}/trigger", response_model=TriggerPushResponse)
+def admin_trigger_push_config(
+    config_id: int,
+    force: bool = Query(
+        False,
+        description="配置未启用时仍强制推送（管理端手工立即推送）",
+    ),
+    current_admin: User = Depends(get_current_admin),
+    config_service: ConfigService = Depends(get_config_service),
+    push_service: PushService = Depends(get_push_service),
+):
+    """
+    管理端按推送任务 id 立即推送（支持 urt_daily / gms_daily 等全部报告类型）。
+    不走休市跳过与定时去重；push_time 记为 MHH:MM:SS（≤10 字符）。
+    """
+    try:
+        config = config_service.get_config_by_id(config_id)
+        if not config:
+            raise HTTPException(status_code=404, detail="推送配置不存在")
+        if not config.enabled and not force:
+            raise HTTPException(
+                status_code=400,
+                detail="该推送任务未启用；如需仍推送请传 force=true",
+            )
+        # PushRecord.push_time 为 String(10)
+        push_time = f"M{datetime.now().strftime('%H:%M:%S')}"
+        result = push_service.push_to_user(
+            user_id=int(config.user_id),
+            push_time=push_time,
+            config_id=int(config.id),
+            force=bool(force),
+        )
+        logger.info(
+            "管理端立即推送 config_id=%s user_id=%s report_type=%s admin=%s success=%s",
+            config_id,
+            config.user_id,
+            config.report_type,
+            getattr(current_admin, "id", None),
+            result.success,
+        )
+        if result.success:
+            return TriggerPushResponse(
+                success=True,
+                message=f"已立即推送（{config.report_type}）",
+                record_id=result.record_id,
+            )
+        return TriggerPushResponse(
+            success=False,
+            message=f"推送失败: {result.error_message}",
+            record_id=result.record_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "管理端立即推送失败: config_id=%s error=%s", config_id, e, exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=f"立即推送失败: {str(e)}")
+
+
 @admin_router.delete("/configs/{config_id}")
 def admin_delete_push_config_by_id(
     config_id: int,

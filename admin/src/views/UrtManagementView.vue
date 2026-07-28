@@ -4,12 +4,17 @@
       <div class="header-row">
         <div>
           <h2>URT 上升趋势策略</h2>
-          <p class="subtitle">参数配置、多数据源回测、任务详情与统计分析报告</p>
+          <p class="subtitle">参数配置、信号预计算、多数据源回测与报告分析</p>
         </div>
-        <el-button type="success" size="small" @click="refreshSystemStatus">
-          <el-icon><Refresh /></el-icon>
-          刷新状态
-        </el-button>
+        <div class="header-actions">
+          <el-button type="warning" size="small" @click="openPrecompute">
+            信号预计算
+          </el-button>
+          <el-button type="success" size="small" @click="refreshSystemStatus">
+            <el-icon><Refresh /></el-icon>
+            刷新状态
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -56,14 +61,72 @@
         <UrtAuditLogs ref="auditRef" />
       </el-tab-pane>
     </el-tabs>
+
+    <el-dialog
+      v-model="precomputeVisible"
+      title="URT 信号预计算"
+      width="480px"
+      @open="loadPrecomputeConfigs"
+    >
+      <el-form label-width="100px">
+        <el-form-item label="交易日" required>
+          <el-date-picker
+            v-model="precomputeForm.date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择交易日"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="市场">
+          <el-radio-group v-model="precomputeForm.market">
+            <el-radio-button label="CN">A股</el-radio-button>
+            <el-radio-button label="HK">港股</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="参数版本">
+          <el-select
+            v-model="precomputeForm.config_id"
+            clearable
+            filterable
+            placeholder="空=全部预计算启用版本"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="c in precomputeConfigs"
+              :key="c.id"
+              :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
+              :value="c.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="候选上限">
+          <el-input-number
+            v-model="precomputeForm.limit"
+            :min="1"
+            :max="10000"
+            controls-position="right"
+            placeholder="可选，调试用"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <p class="precompute-hint">
+          将扫描全市场硬筛命中并写入 urt_signal_trace；任务在后台执行，完成后选股/推送可读缓存。
+        </p>
+      </el-form>
+      <template #footer>
+        <el-button @click="precomputeVisible = false">取消</el-button>
+        <el-button type="primary" :loading="precomputing" @click="submitPrecompute">启动预计算</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { provide, ref, watch } from 'vue'
+import { provide, reactive, ref, watch } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { urtApiService } from '@/services/urtApi'
+import { urtApiService, type URTStrategyConfig } from '@/services/urtApi'
 import UrtStrategyConfiguration from '@/components/urt/StrategyConfiguration.vue'
 import UrtBacktestManagement from '@/components/urt/BacktestManagement.vue'
 import UrtReportAnalysis from '@/components/urt/ReportAnalysis.vue'
@@ -82,6 +145,56 @@ const systemStatus = ref({
   totalReports: 0,
   systemHealth: 'ok',
 })
+
+const precomputeVisible = ref(false)
+const precomputing = ref(false)
+const precomputeConfigs = ref<URTStrategyConfig[]>([])
+const precomputeForm = reactive({
+  date: new Date().toISOString().slice(0, 10),
+  market: 'CN' as 'CN' | 'HK',
+  config_id: undefined as number | undefined,
+  limit: undefined as number | undefined,
+})
+
+function openPrecompute() {
+  if (!precomputeForm.date) {
+    precomputeForm.date = new Date().toISOString().slice(0, 10)
+  }
+  precomputeVisible.value = true
+}
+
+async function loadPrecomputeConfigs() {
+  try {
+    precomputeConfigs.value = await urtApiService.listStrategyConfigs(true)
+  } catch {
+    precomputeConfigs.value = []
+  }
+}
+
+async function submitPrecompute() {
+  if (!precomputeForm.date) {
+    ElMessage.warning('请选择交易日')
+    return
+  }
+  precomputing.value = true
+  try {
+    const res = await urtApiService.runPrecompute({
+      date: precomputeForm.date,
+      market: precomputeForm.market,
+      config_id: precomputeForm.config_id,
+      limit: precomputeForm.limit,
+    })
+    const msg =
+      (res as { message?: string })?.message ||
+      `预计算已启动（${precomputeForm.market} / ${precomputeForm.date}）`
+    ElMessage.success(msg)
+    precomputeVisible.value = false
+  } catch (e: any) {
+    ElMessage.error(e?.message || '启动预计算失败')
+  } finally {
+    precomputing.value = false
+  }
+}
 
 async function refreshSystemStatus() {
   try {
@@ -112,6 +225,11 @@ refreshSystemStatus()
   gap: 12px;
   margin-bottom: 12px;
 }
+.header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .page-header h2 {
   margin: 0 0 4px;
   font-size: 20px;
@@ -136,5 +254,11 @@ refreshSystemStatus()
   font-size: 12px;
   color: #6b7280;
   margin-top: 4px;
+}
+.precompute-hint {
+  margin: 0 0 0 100px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
 }
 </style>

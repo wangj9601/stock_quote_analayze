@@ -504,23 +504,44 @@ async def screen_preview(
 
 @router.post("/precompute/run")
 async def run_precompute(
-    date: Optional[str] = Query(None),
-    config_id: Optional[int] = Query(None),
-    limit: Optional[int] = Query(None, ge=1),
+    date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD，空则取行情最新日"),
+    config_id: Optional[int] = Query(None, description="参数版本；空则对所有预计算启用版本"),
+    limit: Optional[int] = Query(None, ge=1, description="候选股上限（调试用）"),
+    market: str = Query("CN", description="CN=A股 / HK=港股"),
 ):
+    mkt = (market or "CN").strip().upper()
+    if mkt not in ("CN", "HK"):
+        raise HTTPException(status_code=400, detail="market 须为 CN 或 HK")
+    trade_date = (date or "").strip()[:10] or None
+
     def _job():
         from backend_core.strategies.urt.scheduled_precompute import (
             run_urt_precompute_ashare,
             run_urt_precompute_for_config,
+            run_urt_precompute_hk,
         )
 
         if config_id is not None:
-            run_urt_precompute_for_config(int(config_id), trade_date=date, limit=limit)
+            run_urt_precompute_for_config(
+                int(config_id),
+                trade_date=trade_date,
+                limit=limit,
+                market=mkt,
+            )
+        elif mkt == "HK":
+            run_urt_precompute_hk(trade_date=trade_date, limit=limit)
         else:
-            run_urt_precompute_ashare(trade_date=date, limit=limit)
+            run_urt_precompute_ashare(trade_date=trade_date, limit=limit)
 
     threading.Thread(target=_job, daemon=True, name="urt-precompute-manual").start()
-    return {"success": True, "message": "预计算任务已启动"}
+    return {
+        "success": True,
+        "message": "预计算任务已启动",
+        "date": trade_date,
+        "config_id": config_id,
+        "market": mkt,
+        "limit": limit,
+    }
 
 
 @router.post("/backtests")

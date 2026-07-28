@@ -135,6 +135,20 @@ export class PushService {
     )
   }
 
+  /** 管理员按任务 id 立即推送（支持 URT/GMS 等）；force=true 时未启用也可推 */
+  async triggerPushConfigById(
+    configId: number,
+    options?: { force?: boolean }
+  ): Promise<{ success: boolean; message: string; record_id?: number | null }> {
+    const params: Record<string, boolean> = {}
+    if (options?.force) params.force = true
+    return apiService.post<{ success: boolean; message: string; record_id?: number | null }>(
+      `${this.base}/configs/${configId}/trigger`,
+      undefined,
+      { params }
+    )
+  }
+
   async getEmailLogs(params: {
     user_id?: number
     start_date?: string

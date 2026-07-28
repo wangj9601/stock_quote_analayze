@@ -95,12 +95,19 @@ class URTApiService {
     return this.request(`${PREFIX}/screen-preview?${q.toString()}`, { method: 'POST' })
   }
 
-  async runPrecompute(params?: { date?: string; config_id?: number; limit?: number }) {
+  async runPrecompute(params?: {
+    date?: string
+    config_id?: number
+    limit?: number
+    market?: 'CN' | 'HK' | string
+  }) {
     const q = new URLSearchParams()
     if (params?.date) q.set('date', params.date)
     if (params?.config_id) q.set('config_id', String(params.config_id))
     if (params?.limit) q.set('limit', String(params.limit))
-    return this.request(`${PREFIX}/precompute/run?${q.toString()}`, { method: 'POST' })
+    if (params?.market) q.set('market', params.market)
+    const qs = q.toString()
+    return this.request(`${PREFIX}/precompute/run${qs ? `?${qs}` : ''}`, { method: 'POST' })
   }
 
   async createBacktest(body: Record<string, any>) {

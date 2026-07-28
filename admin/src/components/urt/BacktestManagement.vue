@@ -190,10 +190,37 @@
 
         <el-form-item>
           <el-button type="primary" :loading="creating" @click="createTask">创建并运行</el-button>
-          <el-button :loading="precomputing" @click="runPrecompute">手动预计算</el-button>
+          <el-button :loading="precomputing" @click="openPrecomputeDialog">手动预计算</el-button>
         </el-form-item>
       </el-form>
     </el-card>
+
+    <el-dialog v-model="precomputeVisible" title="URT 信号预计算" width="440px">
+      <el-form label-width="90px">
+        <el-form-item label="交易日" required>
+          <el-date-picker
+            v-model="precomputeDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择交易日"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="市场">
+          <el-radio-group v-model="precomputeMarket">
+            <el-radio-button label="CN">A股</el-radio-button>
+            <el-radio-button label="HK">港股</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="参数版本">
+          <span>{{ form.strategy_config_id ? `ID ${form.strategy_config_id}` : '默认/全部启用版本' }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="precomputeVisible = false">取消</el-button>
+        <el-button type="primary" :loading="precomputing" @click="runPrecompute">启动</el-button>
+      </template>
+    </el-dialog>
 
     <el-card class="mt-3" shadow="never">
       <template #header>
@@ -300,6 +327,9 @@ const tasks = ref<any[]>([])
 const loading = ref(false)
 const creating = ref(false)
 const precomputing = ref(false)
+const precomputeVisible = ref(false)
+const precomputeDate = ref(new Date().toISOString().slice(0, 10))
+const precomputeMarket = ref<'CN' | 'HK'>('CN')
 const statusFilter = ref('')
 const selectedIds = ref<string[]>([])
 const detailVisible = ref(false)
@@ -453,11 +483,25 @@ async function createTask() {
   }
 }
 
+function openPrecomputeDialog() {
+  precomputeDate.value = form.end_date || new Date().toISOString().slice(0, 10)
+  precomputeVisible.value = true
+}
+
 async function runPrecompute() {
+  if (!precomputeDate.value) {
+    ElMessage.warning('请选择交易日')
+    return
+  }
   precomputing.value = true
   try {
-    await urtApiService.runPrecompute({ config_id: form.strategy_config_id })
-    ElMessage.success('预计算已启动（后台）')
+    await urtApiService.runPrecompute({
+      date: precomputeDate.value,
+      config_id: form.strategy_config_id,
+      market: precomputeMarket.value,
+    })
+    ElMessage.success(`预计算已启动（${precomputeMarket.value} / ${precomputeDate.value}）`)
+    precomputeVisible.value = false
   } catch (e: any) {
     ElMessage.error(e.message || '启动失败')
   } finally {
