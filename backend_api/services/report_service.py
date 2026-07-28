@@ -1114,9 +1114,79 @@ class ReportService:
             error_message=None,
         )
 
+    @staticmethod
+    def _urt_row_meets_report_filter(row: Dict[str, Any]) -> bool:
+        """
+        推送 Excel 收录规则（与 URT 连阳硬筛一致，不另行放宽）：
+        - 正式买点（buy_signal=True）一律收录；
+        - 非买点自选股：4日阳≥3 或 5日阳≥4（默认 yang_rule_a / yang_rule_b）。
+        """
+        if bool(row.get("buy_signal")):
+            return True
+        # 优先用策略已算好的规则结果
+        if row.get("rule_a_ok") is True or row.get("rule_b_ok") is True:
+            return True
+        if row.get("rule_a_ok") is False and row.get("rule_b_ok") is False:
+            return False
+        try:
+            y4 = int(row.get("yang_count_4") or 0)
+        except (TypeError, ValueError):
+            y4 = 0
+        try:
+            y5 = int(row.get("yang_count_5") or 0)
+        except (TypeError, ValueError):
+            y5 = 0
+        # 与 indicators 默认一致：规则A window=4 min=3；规则B window=5 min=4
+        return y4 >= 3 or y5 >= 4
+
+    @staticmethod
+    def _urt_report_excel_row(r: Dict[str, Any], *, report_date: str, code_to_name: Dict[str, str]) -> Dict[str, Any]:
+        """对齐选股页导出列：代码/名称/信号日/收盘/MA20/4日阳/5日阳/量能倍数/量比/换手%/得分。"""
+        code = str(r.get("code") or "").strip()
+        if code.isdigit():
+            code = code.zfill(6)
+        name = (r.get("name") or "").strip() or code_to_name.get(code, "")
+        signal_date = r.get("signal_date") or r.get("date") or report_date
+
+        def _round(v: Any, n: int):
+            if v is None or v == "":
+                return ""
+            try:
+                return round(float(v), n)
+            except (TypeError, ValueError):
+                return ""
+
+        def _int_or_blank(v: Any):
+            if v is None or v == "":
+                return ""
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return ""
+
+        return {
+            "股票代码": "\u2060" + str(code),
+            "股票名称": name,
+            "信号日": str(signal_date)[:10] if signal_date else "",
+            "收盘": _round(r.get("close"), 2),
+            "MA20": _round(r.get("ma20"), 2),
+            "4日阳": _int_or_blank(r.get("yang_count_4")),
+            "5日阳": _int_or_blank(r.get("yang_count_5")),
+            "量能倍数": _round(r.get("volume_multiple"), 2),
+            "量比": _round(r.get("volume_ratio"), 2),
+            "换手%": _round(r.get("turnover_rate"), 2),
+            "得分": _round(r.get("score"), 1),
+            "是否买点": "是" if bool(r.get("buy_signal")) else "否",
+        }
+
     def _generate_urt_report_for_user(self, user_id: int) -> ReportResult:
         """
-        生成该用户自选股范围内的 URT 上升趋势策略买点报告（仅 A 股）。
+        生成该用户自选股范围内的 URT 上升趋势策略报告（仅 A 股）。
+
+        收录：
+        1) 当日买点；
+        2) 无买点但满足连阳硬筛（4日≥3阳 或 5日≥4阳）的自选股。
+        列对齐选股页：代码/名称/信号日/收盘/MA20/4日阳/5日阳/量能倍数/量比/换手%/得分。
         """
         watchlist = self.get_user_watchlist(user_id)
         if not watchlist:
@@ -1171,11 +1241,14 @@ class ReportService:
         try:
             from backend_core.strategies.urt import URTFrontendInterface
 
+            # 跳过选股硬筛，拿到自选全量可算明细（含非买点），再按推送规则过滤
             payload = URTFrontendInterface.screen(
                 self.db,
                 scope="watchlist",
                 stock_codes=stock_pool,
-                prefer_cache=True,
+                prefer_cache=False,
+                force_realtime=True,
+                skip_screening_filters=True,
             )
         except Exception as e:
             logger.exception("URT 自选股选股失败: %s", e)
@@ -1186,11 +1259,20 @@ class ReportService:
                 error_message=str(e),
             )
 
-        results = payload.get("data") or [] if isinstance(payload, dict) else []
+        raw_results = payload.get("data") or [] if isinstance(payload, dict) else []
         report_date = (
             str(payload.get("search_date") or "")[:10]
             if isinstance(payload, dict) and payload.get("search_date")
             else datetime.now().strftime("%Y-%m-%d")
+        )
+
+        results = [r for r in raw_results if isinstance(r, dict) and self._urt_row_meets_report_filter(r)]
+        results.sort(
+            key=lambda x: (
+                1 if bool(x.get("buy_signal")) else 0,
+                float(x.get("score") or 0),
+            ),
+            reverse=True,
         )
 
         if not results:
@@ -1205,38 +1287,19 @@ class ReportService:
                     has_data=False,
                     missing_data_stocks=[],
                 ),
-                error_message="当日自选股范围内无 URT 买点",
+                error_message="当日自选股范围内无 URT 买点，且无满足连阳条件（4日≥3阳或5日≥4阳）的标的",
             )
 
-        rows: List[Dict[str, Any]] = []
-        for r in results:
-            code = str(r.get("code") or "").strip()
-            if code.isdigit():
-                code = code.zfill(6)
-            name = (r.get("name") or "").strip() or code_to_name.get(code, "")
-            signal_date = r.get("signal_date") or report_date
-            score = r.get("score")
-            close = r.get("close")
-            ma20 = r.get("ma20")
-            vol_mult = r.get("volume_multiple")
-            buy_signal = r.get("buy_signal")
-
-            rows.append({
-                "代码": "\u2060" + str(code),
-                "名称": name,
-                "信号日": str(signal_date)[:10] if signal_date else "",
-                "得分": round(float(score), 2) if score is not None else "",
-                "收盘": round(float(close), 2) if close is not None else "",
-                "MA20": round(float(ma20), 4) if ma20 is not None else "",
-                "量能倍数": round(float(vol_mult), 4) if vol_mult is not None else "",
-                "buy_signal": bool(buy_signal) if buy_signal is not None else True,
-            })
+        rows = [
+            self._urt_report_excel_row(r, report_date=report_date, code_to_name=code_to_name)
+            for r in results
+        ]
 
         filename = f"urt_{user_id}_{report_date.replace('-', '')}.xlsx"
         filepath = os.path.join(self.report_dir, filename)
         df = pd.DataFrame(rows)
-        if "代码" in df.columns:
-            df["代码"] = df["代码"].astype(str)
+        if "股票代码" in df.columns:
+            df["股票代码"] = df["股票代码"].astype(str)
         df.to_excel(filepath, index=False, sheet_name="URT策略信号列表")
         try:
             from openpyxl import load_workbook
@@ -1249,14 +1312,18 @@ class ReportService:
                 if cell.value is not None:
                     title_to_col[str(cell.value).strip()] = cell.column
             desired = {
-                "代码": 12,
-                "名称": 18,
+                "股票代码": 12,
+                "股票名称": 16,
                 "信号日": 13,
+                "收盘": 10,
+                "MA20": 10,
+                "4日阳": 8,
+                "5日阳": 8,
+                "量能倍数": 10,
+                "量比": 10,
+                "换手%": 10,
                 "得分": 10,
-                "收盘": 12,
-                "MA20": 12,
-                "量能倍数": 12,
-                "buy_signal": 12,
+                "是否买点": 10,
             }
             for title, width in desired.items():
                 col_idx = title_to_col.get(title)
@@ -1266,8 +1333,15 @@ class ReportService:
         except Exception as e:
             logger.warning("URT 报告 Excel 列宽样式应用失败: %s", e)
 
+        buy_n = sum(1 for r in results if bool(r.get("buy_signal")))
         file_size = os.path.getsize(filepath)
-        logger.info("生成 URT 自选股报告成功: %s, 买点数: %s", filepath, len(rows))
+        logger.info(
+            "生成 URT 自选股报告成功: %s, 总行数=%s, 买点=%s, 阳线补充=%s",
+            filepath,
+            len(rows),
+            buy_n,
+            len(rows) - buy_n,
+        )
         return ReportResult(
             success=True,
             file_path=filepath,
