@@ -54,29 +54,51 @@ def export_modules(
     bundles: Dict[str, Any] = {}
     label = _env_label()
 
+    def _stage(name: str, fn):
+        try:
+            return fn()
+        except Exception as e:
+            # 确保调用方可 rollback；附带阶段名便于排查
+            raise RuntimeError(f"export 阶段 [{name}] 失败: {type(e).__name__}: {e}") from e
+
     if parts["strategy"]:
-        bundles["strategy_configs"] = export_strategy_configs(
-            db, env_label=label, tables=parts["strategy"]
+        bundles["strategy_configs"] = _stage(
+            "strategy_configs",
+            lambda: export_strategy_configs(
+                db, env_label=label, tables=parts["strategy"]
+            ),
         )
     if parts["observe"]:
-        bundles["trade_observe"] = export_trade_observe(
-            db, env_label=label, tables=parts["observe"]
+        bundles["trade_observe"] = _stage(
+            "trade_observe",
+            lambda: export_trade_observe(
+                db, env_label=label, tables=parts["observe"]
+            ),
         )
     if parts["basic"]:
-        bundles["stock_basic"] = export_stock_basic(
-            db, env_label=label, tables=set(parts["basic"])
+        bundles["stock_basic"] = _stage(
+            "stock_basic",
+            lambda: export_stock_basic(
+                db, env_label=label, tables=set(parts["basic"])
+            ),
         )
     if parts["board"]:
-        bundles["board_data"] = export_board_data(
-            db, env_label=label, tables=set(parts["board"])
+        bundles["board_data"] = _stage(
+            "board_data",
+            lambda: export_board_data(
+                db, env_label=label, tables=set(parts["board"])
+            ),
         )
     if parts["quotes"]:
-        bundles["quotes"] = export_quotes(
-            db,
-            start=date_range["start"],
-            end=date_range["end"],
-            tables=set(parts["quotes"]),
-            env_label=label,
+        bundles["quotes"] = _stage(
+            "quotes",
+            lambda: export_quotes(
+                db,
+                start=date_range["start"],
+                end=date_range["end"],
+                tables=set(parts["quotes"]),
+                env_label=label,
+            ),
         )
 
     out: Dict[str, Any] = {"success": True, "modules": resources, "bundles": bundles}

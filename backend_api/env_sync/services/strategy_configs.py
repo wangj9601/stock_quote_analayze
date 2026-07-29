@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Type
 
 from sqlalchemy.orm import Session
 
-from backend_api.env_sync.bundle import empty_result, json_safe, make_bundle
+from backend_api.env_sync.bundle import empty_result, json_safe, make_bundle, table_exists
 from backend_api.models import (
     GMSRuntimeConfig,
     GMSStrategyConfig,
@@ -16,6 +16,10 @@ from backend_api.models import (
     SBBRStrategyConfig,
     URTStrategyConfig,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 STRATEGY_TABLES = {
     "gms_strategy_configs": GMSStrategyConfig,
@@ -56,6 +60,11 @@ def export_strategy_configs(
     items: Dict[str, Any] = {}
     for key, model in STRATEGY_TABLES.items():
         if key not in selected:
+            continue
+        tname = getattr(model, "__tablename__", "") or ""
+        if tname and not table_exists(db, tname):
+            logger.warning("env_sync export skip missing table: %s", tname)
+            items[key] = []
             continue
         fields = _strategy_fields(model)
         rows = db.query(model).order_by(model.id.asc()).all()

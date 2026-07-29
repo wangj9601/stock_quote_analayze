@@ -24,6 +24,8 @@ xlrd>=2.0.1
 python-dotenv==1.0.1
 pydantic>=2.11.7,<3
 aiohttp==3.11.18
+# env_sync 管理端 pull/push 调用远端 HTTP
+httpx==0.26.0
 
 # 报告导出（admin/pvfrs_admin_routes：HTML -> PDF，延迟 import）
 xhtml2pdf

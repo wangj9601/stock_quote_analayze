@@ -115,6 +115,9 @@ try:
         RPEBacktestTask = getattr(models_module, 'RPEBacktestTask', None)
         RPEPrecomputeRun = getattr(models_module, 'RPEPrecomputeRun', None)
         RPETraceRecomputeTask = getattr(models_module, 'RPETraceRecomputeTask', None)
+        EnvSyncServerConfig = getattr(models_module, 'EnvSyncServerConfig', None)
+        EnvSyncClientConfig = getattr(models_module, 'EnvSyncClientConfig', None)
+        EnvSyncAuditLog = getattr(models_module, 'EnvSyncAuditLog', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
         StockBasicInfoHK = getattr(models_module, 'StockBasicInfoHK', None)
         StockPriceData = getattr(models_module, 'StockPriceData', None)
@@ -252,6 +255,9 @@ except Exception as e:
     RPEBacktestTask = None
     RPEPrecomputeRun = None
     RPETraceRecomputeTask = None
+    EnvSyncServerConfig = None
+    EnvSyncClientConfig = None
+    EnvSyncAuditLog = None
     StockCodeTextPK = None
     StockBasicInfo = None
     StockBasicInfoHK = None
@@ -394,6 +400,9 @@ __all__ = [
     'RPEBacktestTask',
     'RPEPrecomputeRun',
     'RPETraceRecomputeTask',
+    'EnvSyncServerConfig',
+    'EnvSyncClientConfig',
+    'EnvSyncAuditLog',
     'StockBasicInfo',
     'StockBasicInfoHK',
     'StockPriceData',

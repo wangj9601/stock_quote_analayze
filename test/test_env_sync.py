@@ -352,13 +352,10 @@ def test_admin_pull_mocks_remote(db):
 
         text = ""
 
-    with patch("backend_api.env_sync.admin_routes.httpx.Client") as Client:
-        inst = MagicMock()
-        inst.__enter__.return_value = inst
-        inst.__exit__.return_value = False
-        inst.get.return_value = FakeResp()
-        Client.return_value = inst
-
+    with patch(
+        "backend_api.env_sync.admin_routes.remote_http.get",
+        return_value=FakeResp(),
+    ):
         client = TestClient(app)
         res = client.post(
             "/api/admin/env-sync/pull",

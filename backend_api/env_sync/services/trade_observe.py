@@ -15,6 +15,7 @@ from backend_api.env_sync.bundle import (
     merge_results,
     parse_date,
     parse_dt,
+    table_exists,
 )
 from backend_api.models import (
     GmsFormalTrade,
@@ -33,6 +34,10 @@ from backend_api.models import (
     URTStrategyConfig,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _username_map(db: Session) -> Dict[int, str]:
     return {int(u.id): str(u.username) for u in db.query(User.id, User.username).all()}
@@ -50,11 +55,18 @@ def export_trade_observe(
 ) -> Dict[str, Any]:
     selected = set(tables) if tables else None
     umap = _username_map(db)
-    urt_cfg_names = {
-        int(c.id): c.name for c in db.query(URTStrategyConfig.id, URTStrategyConfig.name).all()
-    }
+    urt_cfg_names: Dict[int, Any] = {}
+    if table_exists(db, "urt_strategy_configs"):
+        urt_cfg_names = {
+            int(c.id): c.name
+            for c in db.query(URTStrategyConfig.id, URTStrategyConfig.name).all()
+        }
 
     def pack_observe(model: Type, with_urt_cfg: bool = False) -> List[Dict]:
+        tname = getattr(model, "__tablename__", "") or ""
+        if tname and not table_exists(db, tname):
+            logger.warning("env_sync export skip missing table: %s", tname)
+            return []
         out = []
         for r in db.query(model).all():
             uname = umap.get(int(r.user_id))
@@ -83,6 +95,10 @@ def export_trade_observe(
         return out
 
     def pack_history(model: Type, with_urt_cfg: bool = False) -> List[Dict]:
+        tname = getattr(model, "__tablename__", "") or ""
+        if tname and not table_exists(db, tname):
+            logger.warning("env_sync export skip missing table: %s", tname)
+            return []
         out = []
         for r in db.query(model).all():
             uname = umap.get(int(r.user_id))
@@ -108,6 +124,10 @@ def export_trade_observe(
         return out
 
     def pack_formal(model: Type, extra_fields: List[str]) -> List[Dict]:
+        tname = getattr(model, "__tablename__", "") or ""
+        if tname and not table_exists(db, tname):
+            logger.warning("env_sync export skip missing table: %s", tname)
+            return []
         out = []
         for r in db.query(model).all():
             uname = umap.get(int(r.user_id))
@@ -141,22 +161,25 @@ def export_trade_observe(
         return out
 
     reserves = []
-    for r in db.query(SBBRReserveBox).all():
-        uname = umap.get(int(r.user_id))
-        if not uname:
-            continue
-        reserves.append(
-            {
-                "username": uname,
-                "stock_code": r.stock_code,
-                "stock_name": r.stock_name,
-                "industry_note": r.industry_note,
-                "status": r.status,
-                "created_at": json_safe(r.created_at),
-                "updated_at": json_safe(r.updated_at),
-                "_source_id": r.id,
-            }
-        )
+    if table_exists(db, "sbbr_reserve_box"):
+        for r in db.query(SBBRReserveBox).all():
+            uname = umap.get(int(r.user_id))
+            if not uname:
+                continue
+            reserves.append(
+                {
+                    "username": uname,
+                    "stock_code": r.stock_code,
+                    "stock_name": r.stock_name,
+                    "industry_note": r.industry_note,
+                    "status": r.status,
+                    "created_at": json_safe(r.created_at),
+                    "updated_at": json_safe(r.updated_at),
+                    "_source_id": r.id,
+                }
+            )
+    else:
+        logger.warning("env_sync export skip missing table: sbbr_reserve_box")
 
     items = {
         "gms_trade_observe_stocks": pack_observe(GmsTradeObserveStock),

@@ -945,7 +945,15 @@ try:
     app.include_router(env_sync_admin_router)
     print("环境同步路由注册成功 (/api/env-sync/v1, /api/admin/env-sync)")
 except Exception as e:
+    import traceback
+
     print(f"环境同步路由注册失败: {e}")
+    traceback.print_exc()
+    print(
+        "提示: 若管理端「环境数据同步」页出现 /api/admin/env-sync/* 404，"
+        "请确认生产已部署含 backend_api/env_sync 的版本，并执行 "
+        "python migrations/add_env_sync_tables.py 后重启 API"
+    )
 
 # 尝试导入 ETF admin 路由
 try:

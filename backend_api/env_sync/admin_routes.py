@@ -6,7 +6,6 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
 from backend_api.env_sync import DEFAULT_RESOURCES
+from backend_api.env_sync import remote_http
 from backend_api.env_sync.config_store import (
     get_client_config_public,
     get_server_config_public,
@@ -62,7 +62,24 @@ def _prod_headers(key: str) -> Dict[str, str]:
         "Authorization": f"Bearer {key}",
         "X-Env-Sync-Key": key,
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
+
+
+def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
+    text = (body or "")[:400]
+    if status_code == 401:
+        return (
+            f"{action} 失败 HTTP 401：生产 Sync Key 无效或未启用校验。"
+            f"请在生产管理端「服务端 Sync Key」生成并启用后，把同一明文 Key 填到本地客户端。"
+            f" 响应: {text}"
+        )
+    if status_code == 404:
+        return (
+            f"{action} 失败 HTTP 404：生产未注册 /api/env-sync/v1。"
+            f"请确认生产已部署 env_sync 并安装 httpx 后重启 API。 响应: {text}"
+        )
+    return f"{action} 失败 HTTP {status_code}: {text}"
 
 
 @router.get("/server-config")
@@ -119,8 +136,7 @@ def admin_test_connection(
         raise HTTPException(status_code=400, detail=str(e))
     url = f"{cred['prod_base_url']}/api/env-sync/v1/health"
     try:
-        with httpx.Client(timeout=20.0) as client:
-            resp = client.get(url, headers=_prod_headers(cred["sync_key"]))
+        resp = remote_http.get(url, headers=_prod_headers(cred["sync_key"]), timeout=20.0)
         ok = resp.status_code == 200
         write_audit(
             db,
@@ -134,7 +150,7 @@ def admin_test_connection(
         if not ok:
             raise HTTPException(
                 status_code=400,
-                detail=f"连通失败 HTTP {resp.status_code}: {resp.text[:300]}",
+                detail=_remote_fail_detail("连通测试", resp.status_code, resp.text),
             )
         return {"success": True, "message": "连接生产环境同步网关成功", "data": resp.json()}
     except HTTPException:
@@ -171,12 +187,13 @@ def admin_pull(
         params["end_date"] = body.end_date
     url = f"{cred['prod_base_url']}/api/env-sync/v1/export?{urlencode(params)}"
     try:
-        with httpx.Client(timeout=_SYNC_TIMEOUT) as client:
-            resp = client.get(url, headers=_prod_headers(cred["sync_key"]))
+        resp = remote_http.get(
+            url, headers=_prod_headers(cred["sync_key"]), timeout=_SYNC_TIMEOUT
+        )
         if resp.status_code != 200:
             raise HTTPException(
                 status_code=400,
-                detail=f"生产 export 失败 HTTP {resp.status_code}: {resp.text[:400]}",
+                detail=_remote_fail_detail("生产 export", resp.status_code, resp.text),
             )
         remote = resp.json()
         bundles = remote.get("bundles") or {}
@@ -231,16 +248,16 @@ def admin_push(
             db, mods, start_date=body.start_date, end_date=body.end_date
         )
         url = f"{cred['prod_base_url']}/api/env-sync/v1/import"
-        with httpx.Client(timeout=_SYNC_TIMEOUT) as client:
-            resp = client.post(
-                url,
-                headers=_prod_headers(cred["sync_key"]),
-                json={"bundles": local.get("bundles") or {}, "modules": mods},
-            )
+        resp = remote_http.post(
+            url,
+            headers=_prod_headers(cred["sync_key"]),
+            json_body={"bundles": local.get("bundles") or {}, "modules": mods},
+            timeout=_SYNC_TIMEOUT,
+        )
         if resp.status_code != 200:
             raise HTTPException(
                 status_code=400,
-                detail=f"生产 import 失败 HTTP {resp.status_code}: {resp.text[:400]}",
+                detail=_remote_fail_detail("生产 import", resp.status_code, resp.text),
             )
         remote = resp.json()
         write_audit(

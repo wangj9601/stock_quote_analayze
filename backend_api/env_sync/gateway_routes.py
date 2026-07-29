@@ -66,15 +66,16 @@ def export_data(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        err = f"{type(e).__name__}: {e}"
         write_audit(
             db,
             direction="export",
             modules=None,
             operator="env-sync-key",
             success=False,
-            error_message=str(e),
+            error_message=err,
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=err)
 
 
 @router.post("/import")
@@ -101,12 +102,13 @@ def import_data(
     except HTTPException:
         raise
     except Exception as e:
+        err = f"{type(e).__name__}: {e}"
         write_audit(
             db,
             direction="import",
             modules=list((body.bundles or {}).keys()),
             operator="env-sync-key",
             success=False,
-            error_message=str(e),
+            error_message=err,
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=err)

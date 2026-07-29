@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -11,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from backend_api.env_sync.auth import generate_sync_key, hash_sync_key, key_hint, mask_key
 from backend_api.models import EnvSyncClientConfig, EnvSyncServerConfig, EnvSyncAuditLog
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_server_row(db: Session) -> EnvSyncServerConfig:
@@ -143,15 +146,30 @@ def write_audit(
     summary: Any = None,
     error_message: Optional[str] = None,
 ) -> None:
-    db.add(
-        EnvSyncAuditLog(
-            direction=direction,
-            modules=modules,
-            operator=operator,
-            success=success,
-            summary=summary,
-            error_message=error_message,
-            created_at=datetime.now(),
+    """写入审计。先 rollback 清掉失败事务，避免 InFailedSqlTransaction 掩盖真实错误。
+
+    约定：业务数据须在调用前已 commit（export 只读；import 各模块内已 commit）。
+    """
+    try:
+        db.rollback()
+    except Exception:
+        logger.debug("env_sync write_audit: pre-rollback ignored", exc_info=True)
+    try:
+        db.add(
+            EnvSyncAuditLog(
+                direction=direction,
+                modules=modules,
+                operator=operator,
+                success=success,
+                summary=summary,
+                error_message=(error_message or "")[:4000] if error_message else None,
+                created_at=datetime.now(),
+            )
         )
-    )
-    db.commit()
+        db.commit()
+    except Exception:
+        logger.exception("env_sync write_audit failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass

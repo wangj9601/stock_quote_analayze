@@ -10,6 +10,16 @@ from typing import Any, Dict, List, Optional
 SCHEMA_VERSION = 1
 
 
+def table_exists(db: Any, table_name: str) -> bool:
+    """当前库是否存在物理表（缺迁移时 export 可跳过，避免整单 500）。"""
+    from sqlalchemy import inspect
+
+    bind = db.get_bind() if hasattr(db, "get_bind") else getattr(db, "bind", None)
+    if bind is None:
+        return False
+    return bool(inspect(bind).has_table(table_name))
+
+
 def json_safe(value: Any) -> Any:
     if value is None:
         return None
