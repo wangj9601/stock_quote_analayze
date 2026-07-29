@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Set
 
-from sqlalchemy import text
+from sqlalchemy import String, cast, text
 from sqlalchemy.orm import Session
 
 from backend_api.env_sync.bundle import (
@@ -474,18 +474,21 @@ def export_quotes(
     want = tables or set(QUOTE_TABLES)
     items: Dict[str, Any] = {}
     meta = {"start_date": start.isoformat(), "end_date": end.isoformat()}
+    # A股 historical_quotes.date 在生产 PG 常为 TEXT；ORM 标 Date 时直接与 date 比较会生成
+    # `text >= date` 报错。统一 CAST 成字符串再按 YYYY-MM-DD 字典序比较（与 URT/GMS 一致）。
+    sd, ed = start.isoformat(), end.isoformat()
+    cn_date_text = cast(HistoricalQuotes.date, String)
 
     if "historical_quotes" in want:
         q = (
             db.query(HistoricalQuotes)
-            .filter(HistoricalQuotes.date >= start, HistoricalQuotes.date <= end)
-            .order_by(HistoricalQuotes.date, HistoricalQuotes.code)
+            .filter(cn_date_text >= sd, cn_date_text <= ed)
+            .order_by(cn_date_text, HistoricalQuotes.code)
         )
         items["historical_quotes"] = [_row_dict(r, CN_QUOTE_FIELDS) for r in q.all()]
 
     if "historical_quotes_hk" in want:
-        # HK date 为字符串
-        sd, ed = start.isoformat(), end.isoformat()
+        # 港股 date 为 TEXT，按 YYYY-MM-DD 字符串区间即可
         q = (
             db.query(HistoricalQuotesHK)
             .filter(HistoricalQuotesHK.date >= sd, HistoricalQuotesHK.date <= ed)
@@ -515,11 +518,15 @@ def import_quotes(
             if not code or not d:
                 result["skipped"] += 1
                 continue
+            d_key = d.isoformat()
             try:
                 with db.begin_nested():
                     existing = (
                         db.query(HistoricalQuotes)
-                        .filter(HistoricalQuotes.code == code, HistoricalQuotes.date == d)
+                        .filter(
+                            HistoricalQuotes.code == code,
+                            cast(HistoricalQuotes.date, String) == d_key,
+                        )
                         .first()
                     )
                     payload = {f: raw.get(f) for f in CN_QUOTE_FIELDS if f not in ("code", "date")}
@@ -532,7 +539,7 @@ def import_quotes(
                         db.add(HistoricalQuotes(code=code, date=d, **payload))
                         result["created"] += 1
             except Exception as e:
-                result["errors"].append(f"historical_quotes/{code}/{d}: {e}")
+                result["errors"].append(f"historical_quotes/{code}/{d_key}: {e}")
 
     def upsert_hk(rows: List[Dict]):
         for raw in rows:
