@@ -8,7 +8,11 @@ from typing import Any, Dict, List, Optional
 from .config import RPEConfigManager
 from .data_loader import RPEDataLoader, _norm_code
 from .filters import liquidity_ok, structure_break, structure_filter, trend_veto
-from .kde_levels import extract_kde_levels, nearest_levels
+from .kde_levels import (
+    KDE_LOOKBACK_MAX,
+    extract_kde_levels_expand_support,
+    nearest_levels,
+)
 from .sector_benchmark import compute_vwap_benchmark, sector_slope
 from .signal_detector import detect_signal
 from .trade_structure_plan import build_structure_plan
@@ -57,9 +61,15 @@ class RPEStrategyEngine:
             if not bars:
                 return None
 
-        # 统一 lookback：日终选股与全历史重算逐日评估均只用近 N 日，保证 KDE/Z 口径一致
+        # Z/流动性用 lookback_days；KDE 可额外扩到 kde_lookback_max（支撑缺失时递推）
         lookback = max(int(cfg.get("lookback_days", 250)), min_need)
-        bars = _bars_for_lookback(bars, lookback)
+        kde_max = max(
+            lookback,
+            int(cfg.get("kde_lookback_max", KDE_LOOKBACK_MAX)),
+        )
+        # panel 可能已拉到 kde_max；Z 仍只用近 lookback 日，保证信号口径稳定
+        bars_full = _bars_for_lookback(bars, kde_max)
+        bars = _bars_for_lookback(bars_full, lookback)
         if len(bars) < min_need:
             return None
 
@@ -68,13 +78,17 @@ class RPEStrategyEngine:
         if not zinfo:
             return None
 
-        kde = extract_kde_levels(
-            [b["close"] for b in bars],
-            [b["volume"] for b in bars],
+        price = float(zinfo["price"])
+        kde = extract_kde_levels_expand_support(
+            [b["close"] for b in bars_full],
+            [b["volume"] for b in bars_full],
+            price=price,
+            initial_lookback=lookback,
+            step=int(cfg.get("kde_lookback_step", 250)),
+            max_lookback=kde_max,
             base_factor=float(cfg.get("kde_base_factor", 1.0)),
             grid_points=int(cfg.get("kde_grid_points", 200)),
         )
-        price = float(zinfo["price"])
         near = nearest_levels(price, kde.get("support_levels") or [], kde.get("resistance_levels") or [])
         struct = structure_filter(
             price,
@@ -205,7 +219,10 @@ class RPEStrategyEngine:
                 "i_t": zinfo.get("i_t"),
                 "z_window": int(cfg.get("z_window", 40)),
                 "lookback_days_applied": lookback,
+                "kde_lookback_used": kde.get("lookback_used"),
+                "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
                 "bars_used": len(bars),
+                "bars_full_for_kde": len(bars_full),
                 "thresholds": {
                     "z_lead": z_lead,
                     "z_catch_up": z_catch,
@@ -213,6 +230,8 @@ class RPEStrategyEngine:
                     "enable_trend_veto": enable_veto,
                     "enable_lead_trade": enable_lead_trade,
                     "kde_base_factor": float(cfg.get("kde_base_factor", 1.0)),
+                    "kde_lookback_step": int(cfg.get("kde_lookback_step", 250)),
+                    "kde_lookback_max": kde_max,
                     "sector_slope_window": int(cfg.get("sector_slope_window", 60)),
                     "liquidity_board_segment": liq.get("board_segment"),
                     "liquidity_min_avg_amount": liq_amt_gate,
@@ -266,6 +285,7 @@ class RPEStrategyEngine:
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         lookback = int(cfg.get("lookback_days", 250))
+        kde_max = max(lookback, int(cfg.get("kde_lookback_max", KDE_LOOKBACK_MAX)))
         min_members = int((cfg.get("scan") or {}).get("min_sector_members", 5))
         members = self.loader.load_board_members(board_code, board_kind=board_kind)
         if len(members) < min_members:
@@ -279,7 +299,8 @@ class RPEStrategyEngine:
                 if cn and cn not in name_map:
                     codes.append(cn)
                     name_map[cn] = None
-        panel = self.loader.load_sector_panel(codes, end_date=date, lookback=lookback)
+        # 拉足 KDE 最大回看；Z/斜率仍在 evaluate 内截断到 lookback_days
+        panel = self.loader.load_sector_panel(codes, end_date=date, lookback=kde_max)
         if len(panel) < min_members:
             return []
         date_members = self.loader.build_date_members(panel)
@@ -297,7 +318,7 @@ class RPEStrategyEngine:
             # 目标股有日线但未进 panel 键名时再补一次
             for c in filt:
                 if c not in panel:
-                    bars = self.loader.load_bars(c, end_date=date, limit=lookback)
+                    bars = self.loader.load_bars(c, end_date=date, limit=kde_max)
                     if bars:
                         panel[c] = bars
                         eval_codes.append(c)

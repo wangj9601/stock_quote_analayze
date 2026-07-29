@@ -623,9 +623,16 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 "pe_dynamic": fmt(db_stock_data.pe_dynamic),
                 "average_price": fmt(None),
             }
-            # 计算均价
+            # 计算均价：成交额(元) / 成交量。
+            # volume 有时为「手」、有时为「股」；若均价相对现价偏离过大，按手×100 再算。
             if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
-                 result["average_price"] = fmt(db_stock_data.amount / db_stock_data.volume)
+                amt = float(db_stock_data.amount)
+                vol = float(db_stock_data.volume)
+                px = float(db_stock_data.current_price or 0) or None
+                avg = amt / vol
+                if px and px > 0 and avg > px * 8:
+                    avg = amt / (vol * 100.0)
+                result["average_price"] = fmt(avg)
         else: # history_db
             result = {
                 "code": code,
@@ -644,7 +651,13 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 "average_price": fmt(None),
             }
             if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
-                 result["average_price"] = fmt(db_stock_data.amount / db_stock_data.volume)
+                amt = float(db_stock_data.amount)
+                vol = float(db_stock_data.volume)
+                px = float(db_stock_data.close or 0) or None
+                avg = amt / vol
+                if px and px > 0 and avg > px * 8:
+                    avg = amt / (vol * 100.0)
+                result["average_price"] = fmt(avg)
 
         print(f"[realtime_quote_by_code] 从{source}输出数据: {result}")
         return JSONResponse({"success": True, "data": result})

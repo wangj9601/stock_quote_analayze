@@ -62,13 +62,34 @@ const StockPage = {
 
     // 初始化
     async init() {
-        // 先加载header组件
-        await this.loadHeader();
+        if (this._initialized) {
+            console.warn('[StockPage] 已初始化，跳过重复 init');
+            return;
+        }
+        this._initialized = true;
 
-        this.bindEvents();
-        this.initCharts();
+        try {
+            // 先加载header组件
+            await this.loadHeader();
+        } catch (e) {
+            console.error('[StockPage] loadHeader 失败:', e);
+        }
+
+        try {
+            this.bindEvents();
+        } catch (e) {
+            console.error('[StockPage] bindEvents 失败:', e);
+        }
+
+        try {
+            this.initCharts();
+        } catch (e) {
+            console.error('[StockPage] initCharts 失败:', e);
+        }
+
+        // 行情静态信息必须加载，不依赖图表初始化是否成功
         this.loadStockData();
-        this.checkWatchlistStatus(); // 检查自选股状态
+        this.checkWatchlistStatus();
         this.startDataUpdate();
     },
 
@@ -103,9 +124,12 @@ const StockPage = {
     // 绑定事件
     bindEvents() {
         // 自选股切换
-        document.querySelector('.watchlist-toggle').addEventListener('click', () => {
-            this.toggleWatchlist();
-        });
+        const watchlistBtn = document.querySelector('.watchlist-toggle');
+        if (watchlistBtn) {
+            watchlistBtn.addEventListener('click', () => {
+                this.toggleWatchlist();
+            });
+        }
 
         // 图表类型切换
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -139,17 +163,25 @@ const StockPage = {
             });
         });
 
-        // 指标选择
-        document.querySelector('.indicator-select').addEventListener('change', (e) => {
-            this.updateMainIndicator(e.target.value);
-        });
-
-        document.querySelector('.sub-indicator-select-1').addEventListener('change', (e) => {
-            this.updateSubIndicator(1, e.target.value);
-        });
-        document.querySelector('.sub-indicator-select-2').addEventListener('change', (e) => {
-            this.updateSubIndicator(2, e.target.value);
-        });
+        // 指标选择（元素缺失时不阻断后续行情加载）
+        const mainInd = document.querySelector('.indicator-select');
+        if (mainInd) {
+            mainInd.addEventListener('change', (e) => {
+                this.updateMainIndicator(e.target.value);
+            });
+        }
+        const sub1 = document.querySelector('.sub-indicator-select-1');
+        if (sub1) {
+            sub1.addEventListener('change', (e) => {
+                this.updateSubIndicator(1, e.target.value);
+            });
+        }
+        const sub2 = document.querySelector('.sub-indicator-select-2');
+        if (sub2) {
+            sub2.addEventListener('change', (e) => {
+                this.updateSubIndicator(2, e.target.value);
+            });
+        }
 
         // 搜索功能
         this.bindSearchEvents();
@@ -1120,13 +1152,21 @@ const StockPage = {
         }
     },
 
-    // 更新股票信息
+    // 更新股票信息（限定在 stock-header，避免误改其它区域）
     updateStockInfo() {
-        document.querySelector('.stock-name').textContent = this.stockName || '-';
-        document.querySelector('.stock-code').textContent = this.stockCode || '-';
+        const header = document.querySelector('.stock-header');
+        if (!header) return;
+        const nameEl = header.querySelector('.stock-name');
+        const codeEl = header.querySelector('.stock-code');
+        if (nameEl) nameEl.textContent = this.stockName || '-';
+        if (codeEl) codeEl.textContent = this.stockCode || '-';
+        if (this.stockName && this.stockCode) {
+            document.title = `${this.stockName}(${this.stockCode}) - 个股详情`;
+        }
 
         // 更新当前价格，并根据与昨收价格比较设置颜色
-        const currentPriceElement = document.querySelector('.current-price');
+        const currentPriceElement = header.querySelector('.current-price');
+        if (!currentPriceElement) return;
         currentPriceElement.textContent = this.currentPrice ? Number(this.currentPrice).toFixed(2) : '-';
         // 根据当前价格和昨收价格比较设置颜色类
         if (this.currentPrice !== null && this.currentPrice !== undefined && !isNaN(this.currentPrice) &&
@@ -1144,18 +1184,23 @@ const StockPage = {
             currentPriceElement.className = 'current-price';  // 数据无效，默认颜色
         }
 
-        const changeElement = document.querySelector('.price-change');
-        const change = this.priceChange ? Number(this.priceChange) : 0;
-        const changePercent = this.priceChangePercent ? Number(this.priceChangePercent) : 0;
-        const changeText = `${change > 0 ? '+' : ''}${change.toFixed(2)} (${change > 0 ? '+' : ''}${changePercent.toFixed(2)}%)`;
-        changeElement.textContent = changeText;
-        changeElement.className = `price-change ${change > 0 ? 'positive' : 'negative'}`;
+        const changeElement = header.querySelector('.price-change');
+        if (changeElement) {
+            const change = this.priceChange ? Number(this.priceChange) : 0;
+            const changePercent = this.priceChangePercent ? Number(this.priceChangePercent) : 0;
+            const changeText = `${change > 0 ? '+' : ''}${change.toFixed(2)} (${change > 0 ? '+' : ''}${changePercent.toFixed(2)}%)`;
+            changeElement.textContent = changeText;
+            changeElement.className = `price-change ${change > 0 ? 'positive' : 'negative'}`;
+        }
 
-        document.querySelector('.price-time').textContent = new Date().toLocaleTimeString();
+        const timeEl = header.querySelector('.price-time');
+        if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
     },
 
     // 更新股票详情
     updateStockDetails() {
+        const header = document.querySelector('.stock-header');
+        if (!header) return;
         // 取API最新数据
         const d = {
             '今开': this.open,
@@ -1168,9 +1213,11 @@ const StockPage = {
             '换手率': this.turnover_rate,
             '市盈率': null
         };
-        document.querySelectorAll('.detail-item').forEach(item => {
-            const label = item.querySelector('.label').textContent;
+        header.querySelectorAll('.detail-item').forEach(item => {
+            const labelEl = item.querySelector('.label');
             const valueElement = item.querySelector('.value');
+            if (!labelEl || !valueElement) return;
+            const label = labelEl.textContent.trim();
             let val = d[label];
             if (val === undefined || val === null || val === '') {
                 valueElement.textContent = '-';
@@ -1184,7 +1231,13 @@ const StockPage = {
                     else if (v >= 10000) valueElement.textContent = (v / 10000).toFixed(2) + '万手';
                     else valueElement.textContent = v.toFixed(0) + '手';
                 } else if (label === '成交额') {
-                    valueElement.textContent = (val / 100000000).toFixed(2) + '亿';
+                    valueElement.textContent = (Number(val) / 100000000).toFixed(2) + '亿';
+                } else if (label === '换手率') {
+                    const t = Number(val);
+                    valueElement.textContent = Number.isFinite(t) ? `${t.toFixed(2)}%` : String(val);
+                } else if (label === '均价') {
+                    const avg = Number(val);
+                    valueElement.textContent = Number.isFinite(avg) ? avg.toFixed(2) : String(val);
                 } else {
                     valueElement.textContent = val;
                 }
@@ -3744,7 +3797,10 @@ const StockPage = {
 
 };
 
-// DOM加载完成后初始化
+// DOM加载完成后初始化（仅当页面未托管 init 时，避免与 stock.html 动态加载重复）
 document.addEventListener('DOMContentLoaded', () => {
-    StockPage.init();
+    if (window.__STOCK_PAGE_MANAGED_INIT__) return;
+    if (typeof StockPage !== 'undefined' && StockPage.init) {
+        StockPage.init();
+    }
 }); 

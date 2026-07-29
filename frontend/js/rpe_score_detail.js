@@ -156,9 +156,24 @@ const RpeScoreDetail = {
         this._fmt(src.sector_slope, 6),
         `近 ${th.sector_slope_window != null ? th.sector_slope_window : 60} 日 I_t 回归斜率；&lt;0 可趋势否决`,
       ],
-      ['最近支撑 S', this._fmt(src.nearest_support, 2), 'KDE 密度峰（现价下方）；RR 分母相关'],
+      [
+        '最近支撑 S',
+        this._fmt(src.nearest_support, 2),
+        `KDE 密度峰（现价下方）；无则扩窗至 ${
+          th.kde_lookback_max != null ? th.kde_lookback_max : 750
+        } 日再找；RR 分母相关`,
+      ],
       ['最近阻力', this._fmt(src.nearest_resistance, 2), 'KDE 密度峰（现价上方）；无则「-」且结构可放宽'],
       ['KDE 状态', this._esc(this._reasonText(detail.kde_reason)), detail.kde_reason || '--'],
+      [
+        'KDE 回看',
+        detail.kde_lookback_used != null
+          ? `${detail.kde_lookback_used}${detail.kde_lookback_expanded ? '（已扩窗）' : ''}`
+          : '--',
+        `初始 ${th.lookback_days != null ? th.lookback_days : detail.lookback_days_applied || 250} 日；无支撑则 +${
+          th.kde_lookback_step != null ? th.kde_lookback_step : 250
+        }，上限 ${th.kde_lookback_max != null ? th.kde_lookback_max : 750}`,
+      ],
       [
         '盈亏比 RR',
         this._fmt(struct.rr, 2),

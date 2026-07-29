@@ -23,13 +23,13 @@
             <div class="container">
                 <div class="stock-info">
                     <div class="stock-name-section">
-                        <h1 class="stock-name">平安银行</h1>
-                        <span class="stock-code">000001</span>
+                        <h1 class="stock-name">加载中…</h1>
+                        <span class="stock-code">--</span>
                         <button class="watchlist-toggle">⭐ 自选</button>
                     </div>
                     <div class="stock-price-section">
                         <div class="current-price">--</div>
-                        <div class="price-change positive">--</div>
+                        <div class="price-change">--</div>
                         <div class="price-time">--</div>
                     </div>
                 </div>
@@ -426,14 +426,28 @@
             document.head.appendChild(echartsScript);
         }
 
+        // 由本页动态加载 stock.js / stock_hk.js 并负责 init，避免脚本内 DOMContentLoaded 再 init 一次
+        window.__STOCK_PAGE_MANAGED_INIT__ = true;
+
         // 根据股票类型动态加载对应的JS文件
         (async function () {
             // 从URL获取股票代码
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');
+            const name = urlParams.get('name');
+            // 先用 URL 参数填标题区，避免长期停留在占位文案
+            const nameEl = document.querySelector('.stock-header .stock-name');
+            const codeEl = document.querySelector('.stock-header .stock-code');
+            if (codeEl && code) codeEl.textContent = code;
+            if (nameEl && name) nameEl.textContent = name;
+            if (code && name) document.title = `${name}(${code}) - 个股详情`;
 
             if (!code) {
                 console.error('缺少股票代码参数');
+                if (nameEl) nameEl.textContent = '缺少股票代码';
+                if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+                    CommonUtils.showToast('请从行情/自选进入个股详情（URL 需带 code 参数）', 'error');
+                }
                 return;
             }
 

@@ -214,3 +214,101 @@ def nearest_levels(
             nearest_resistance = float(r)
             break
     return {"nearest_support": nearest_support, "nearest_resistance": nearest_resistance}
+
+
+# 支撑缺失时回看递推：250 → 500 → 750（约 3 年交易日）
+KDE_LOOKBACK_STEP = 250
+KDE_LOOKBACK_MAX = 750
+
+
+def _split_peaks_by_price(
+    peaks: Sequence[float], price: float
+) -> Tuple[List[float], List[float]]:
+    supports = sorted([float(p) for p in peaks if 0 < float(p) < price], reverse=True)
+    resistances = sorted([float(p) for p in peaks if float(p) >= price])
+    return supports, resistances
+
+
+def extract_kde_levels_expand_support(
+    closes: Sequence[float],
+    volumes: Sequence[float],
+    *,
+    price: Optional[float] = None,
+    initial_lookback: int = KDE_LOOKBACK_STEP,
+    step: int = KDE_LOOKBACK_STEP,
+    max_lookback: int = KDE_LOOKBACK_MAX,
+    base_factor: float = 1.0,
+    grid_points: int = 200,
+) -> Dict[str, Any]:
+    """
+    用近端窗口做成交量加权 KDE；若现价下方无支撑峰，则按 step 扩大回看，
+    直至找到支撑或达到 max_lookback（默认 750≈3 年）。
+
+    closes/volumes 须按时间升序；函数内部只取末尾窗口，不会超过传入长度。
+    """
+    n = len(closes)
+    empty = {
+        "support_levels": [],
+        "resistance_levels": [],
+        "all_peaks": [],
+        "bw": None,
+        "ok": False,
+        "reason": "insufficient_samples",
+        "lookback_used": 0,
+        "lookback_expanded": False,
+        "method": None,
+    }
+    if n < 20:
+        return empty
+
+    try:
+        ref_price = float(price) if price is not None else float(closes[-1])
+    except (TypeError, ValueError):
+        return empty
+    if ref_price <= 0:
+        return empty
+
+    init_lb = max(20, int(initial_lookback))
+    max_lb = max(init_lb, int(max_lookback))
+    step_n = max(1, int(step))
+
+    last: Dict[str, Any] = empty
+    used = init_lb
+    while True:
+        take = min(used, n)
+        kde = extract_kde_levels(
+            list(closes[-take:]),
+            list(volumes[-take:]),
+            base_factor=base_factor,
+            grid_points=grid_points,
+        )
+        peaks = [float(p) for p in (kde.get("all_peaks") or []) if p is not None]
+        supports, resistances = _split_peaks_by_price(peaks, ref_price)
+        out = dict(kde)
+        out["support_levels"] = supports[:8]
+        out["resistance_levels"] = resistances[:8]
+        out["all_peaks"] = peaks
+        out["lookback_used"] = take
+        out["lookback_expanded"] = take > min(init_lb, n)
+        out["last_price"] = ref_price
+        last = out
+
+        if supports:
+            if out["lookback_expanded"] and out.get("reason") in ("ok", "ok_histogram_fallback", None):
+                out["reason"] = (
+                    f"{out.get('reason') or 'ok'}_expanded_{take}"
+                )
+            return out
+
+        if take >= n or used >= max_lb:
+            break
+        used = min(used + step_n, max_lb)
+
+    if last is empty:
+        return empty
+    if not last.get("support_levels"):
+        # 已扩到上限仍无支撑
+        reason = last.get("reason") or "ok"
+        last["reason"] = f"{reason}_no_support_after_expand"
+    return last
+

@@ -62,13 +62,25 @@ const StockPage = {
 
     // 初始化
     async init() {
-        // 先加载header组件
-        await this.loadHeader();
+        if (this._initialized) return;
+        this._initialized = true;
 
-        this.bindEvents();
-        this.initCharts();
+        try {
+            await this.loadHeader();
+        } catch (e) {
+            console.warn('[StockPage HK] loadHeader failed:', e);
+        }
+
+        try {
+            this.bindEvents();
+            this.initCharts();
+        } catch (e) {
+            console.warn('[StockPage HK] bindEvents/initCharts failed:', e);
+        }
+
+        // 行情数据必须加载，不因前置步骤失败而跳过
         this.loadStockData();
-        this.checkWatchlistStatus(); // 检查自选股状态
+        this.checkWatchlistStatus();
         this.startDataUpdate();
     },
 
@@ -3549,7 +3561,8 @@ const StockPage = {
 
 };
 
-// DOM加载完成后初始化
+// DOM加载完成后初始化（页面脚本自行托管时跳过，避免双重 init）
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.__STOCK_PAGE_MANAGED_INIT__) return;
     StockPage.init();
 }); 

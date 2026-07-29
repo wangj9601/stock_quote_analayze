@@ -386,8 +386,10 @@ class TradingRecommendation:
 class KeyLevels:
     """关键价位分析类（成交量加权 KDE，与 RPE 比价效应结构位同一思路）。"""
 
-    # 与 RPE 默认 lookback / kde_base_factor 对齐
+    # 与 RPE 默认 lookback / kde 递推上限对齐：250 → 500 → 750（约 3 年）
     KDE_LOOKBACK_DAYS = 250
+    KDE_LOOKBACK_STEP = 250
+    KDE_LOOKBACK_MAX = 750
     KDE_BASE_FACTOR = 1.0
     MAX_LEVELS = 2
 
@@ -398,13 +400,16 @@ class KeyLevels:
         *,
         kde_base_factor: Optional[float] = None,
         max_levels: int = 2,
+        initial_lookback: Optional[int] = None,
+        max_lookback: Optional[int] = None,
     ) -> Dict:
         """
         用收盘价 + 成交量做 gaussian_kde，密度峰作为支撑/阻力。
-        口径对齐 backend_core.strategies.rpe.kde_levels.extract_kde_levels：
+        口径对齐 backend_core.strategies.rpe.kde_levels：
         - 带宽 bw = max(0.01, base_factor * sigma/mu)
         - 现价下方峰 -> 支撑（由近到远）
         - 现价上方峰 -> 阻力（由近到远）
+        - 无支撑时按 250 日递推扩大回看，最多约 3 年（750 日）
         展示侧各取最多 max_levels 个（默认 2）；按当前价（可实时）重新划分峰。
         """
         empty = {
@@ -415,6 +420,8 @@ class KeyLevels:
             "kde_bw": None,
             "kde_ok": False,
             "kde_reason": "insufficient_samples",
+            "kde_lookback_used": 0,
+            "kde_lookback_expanded": False,
         }
         if not historical_data or len(historical_data) < 20:
             return empty
@@ -434,15 +441,22 @@ class KeyLevels:
             except (TypeError, ValueError, KeyError):
                 continue
 
-        from backend_core.strategies.rpe.kde_levels import extract_kde_levels
+        from backend_core.strategies.rpe.kde_levels import extract_kde_levels_expand_support
 
         factor = KeyLevels.KDE_BASE_FACTOR if kde_base_factor is None else float(kde_base_factor)
-        kde = extract_kde_levels(closes, volumes, base_factor=factor)
-        peaks = [float(p) for p in (kde.get("all_peaks") or []) if p is not None]
-
-        # 按页面当前价划分（与实时价对齐）；阻力严格 > 现价，支撑严格 < 现价
-        supports = sorted([p for p in peaks if 0 < p < price], reverse=True)
-        resistances = sorted([p for p in peaks if p > price])
+        init_lb = int(initial_lookback or KeyLevels.KDE_LOOKBACK_DAYS)
+        max_lb = int(max_lookback or KeyLevels.KDE_LOOKBACK_MAX)
+        kde = extract_kde_levels_expand_support(
+            closes,
+            volumes,
+            price=price,
+            initial_lookback=init_lb,
+            step=KeyLevels.KDE_LOOKBACK_STEP,
+            max_lookback=max_lb,
+            base_factor=factor,
+        )
+        supports = [float(x) for x in (kde.get("support_levels") or [])]
+        resistances = [float(x) for x in (kde.get("resistance_levels") or [])]
 
         n = max(1, int(max_levels or KeyLevels.MAX_LEVELS))
         return {
@@ -453,6 +467,8 @@ class KeyLevels:
             "kde_bw": kde.get("bw"),
             "kde_ok": bool(kde.get("ok")),
             "kde_reason": kde.get("reason") or ("ok" if kde.get("ok") else "no_peaks"),
+            "kde_lookback_used": int(kde.get("lookback_used") or 0),
+            "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
         }
 
 
@@ -552,9 +568,9 @@ class StockAnalysisService:
     def get_stock_analysis(self, stock_code: str) -> Dict:
         """获取股票智能分析结果"""
         try:
-            # 获取历史数据（关键价位 KDE 与 RPE 对齐，默认约 250 根）
+            # 获取历史数据（关键价位 KDE：最多约 3 年，支撑缺失时 250→500→750 递推）
             historical_data = self._get_historical_data(
-                stock_code, days=KeyLevels.KDE_LOOKBACK_DAYS
+                stock_code, days=KeyLevels.KDE_LOOKBACK_MAX
             )
             if not historical_data:
                 logger.warning(f"股票 {stock_code} 无法获取历史数据，返回空分析结果")
