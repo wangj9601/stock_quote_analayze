@@ -79,6 +79,12 @@ def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
             f"{action} 失败 HTTP 404：生产未注册 /api/env-sync/v1。"
             f"请确认生产已部署 env_sync 并安装 httpx 后重启 API。 响应: {text}"
         )
+    if status_code == 413:
+        return (
+            f"{action} 失败 HTTP 413：请求体过大，被生产 nginx 拒绝（Request Entity Too Large）。"
+            f"请在生产 nginx 的 location /api/ 将 client_max_body_size 调整为 200m 后 reload；"
+            f"或缩小同步范围（尤其缩短行情日期）。 响应: {text}"
+        )
     return f"{action} 失败 HTTP {status_code}: {text}"
 
 
@@ -236,7 +242,10 @@ def admin_push(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """导出本地，push 到生产 import。"""
+    """导出本地，push 到生产 import。
+
+    按 bundle 分批 POST，避免整包 JSON 超过生产 nginx ``client_max_body_size``（413）。
+    """
     try:
         mods = normalize_modules(body.modules)
         cred = resolve_client_credentials(db)
@@ -248,32 +257,52 @@ def admin_push(
             db, mods, start_date=body.start_date, end_date=body.end_date
         )
         url = f"{cred['prod_base_url']}/api/env-sync/v1/import"
-        resp = remote_http.post(
-            url,
-            headers=_prod_headers(cred["sync_key"]),
-            json_body={"bundles": local.get("bundles") or {}, "modules": mods},
-            timeout=_SYNC_TIMEOUT,
-        )
-        if resp.status_code != 200:
-            raise HTTPException(
-                status_code=400,
-                detail=_remote_fail_detail("生产 import", resp.status_code, resp.text),
+        headers = _prod_headers(cred["sync_key"])
+        bundles = local.get("bundles") or {}
+        if not bundles:
+            raise HTTPException(status_code=400, detail="本地导出结果为空，无可推送数据")
+
+        merged_results: Dict[str, Any] = {}
+        # 大包分批：strategy / observe / basic / board / quotes 各推一次
+        for bundle_key, bundle_data in bundles.items():
+            resp = remote_http.post(
+                url,
+                headers=headers,
+                json_body={
+                    "bundles": {bundle_key: bundle_data},
+                    "modules": mods,
+                },
+                timeout=_SYNC_TIMEOUT,
             )
-        remote = resp.json()
+            if resp.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=_remote_fail_detail(
+                        f"生产 import[{bundle_key}]",
+                        resp.status_code,
+                        resp.text,
+                    ),
+                )
+            remote = resp.json() or {}
+            part = remote.get("results") or {}
+            if isinstance(part, dict):
+                merged_results.update(part)
+
         write_audit(
             db,
             direction="push",
             modules=mods,
             operator=_operator(admin),
             success=True,
-            summary=remote.get("results"),
+            summary=merged_results,
         )
         return {
             "success": True,
             "direction": "push",
             "modules": mods,
             "date_range": local.get("date_range"),
-            "results": remote.get("results"),
+            "results": merged_results,
+            "push_batches": list(bundles.keys()),
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
