@@ -1515,6 +1515,44 @@
     min-width: 96px;
 }
 
+.kde-levels-candidates {
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.kde-levels-candidates-title {
+    font-size: 0.9rem;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+
+.kde-levels-candidates ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.kde-levels-candidate-btn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #1f2937;
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.kde-levels-candidate-btn:hover {
+    border-color: #2563eb;
+    color: #2563eb;
+}
+
 .kde-levels-empty {
     margin-top: 1.25rem;
     padding: 1.25rem;

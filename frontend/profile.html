@@ -381,8 +381,8 @@
                         <div class="kde-levels-form">
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="kdeLevelsStockCode">股票代码</label>
-                                    <input type="text" id="kdeLevelsStockCode" placeholder="如 600519 或 00700" autocomplete="off">
+                                    <label for="kdeLevelsStockCode">股票代码 / 名称</label>
+                                    <input type="text" id="kdeLevelsStockCode" placeholder="如 600519、00700 或 贵州茅台" autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label for="kdeLevelsWatchlist">从自选选择</label>
@@ -396,6 +396,10 @@
                                         data-perm="channel.profile.tab.kde_levels.btn.calc">计算</button>
                                 </div>
                             </div>
+                        </div>
+                        <div class="kde-levels-candidates" id="kdeLevelsCandidates" hidden>
+                            <div class="kde-levels-candidates-title">匹配到多只股票，请选择：</div>
+                            <ul id="kdeLevelsCandidateList"></ul>
                         </div>
                         <div class="kde-levels-result" id="kdeLevelsResult" hidden>
                             <div class="kde-levels-summary" id="kdeLevelsSummary"></div>
@@ -420,7 +424,7 @@
                             <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
                         </div>
                         <div class="kde-levels-empty" id="kdeLevelsEmpty">
-                            输入股票代码或从自选选择后点击「计算」。
+                            输入股票代码或名称，也可从自选选择后点击「计算」。
                         </div>
                     </div>
                 </div>

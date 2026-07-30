@@ -114,6 +114,50 @@ const ProfilePage = {
         }
     },
 
+    hideKdeLevelsCandidates() {
+        const box = document.getElementById('kdeLevelsCandidates');
+        const list = document.getElementById('kdeLevelsCandidateList');
+        if (box) box.hidden = true;
+        if (list) list.innerHTML = '';
+    },
+
+    renderKdeLevelsCandidates(candidates, message) {
+        const box = document.getElementById('kdeLevelsCandidates');
+        const list = document.getElementById('kdeLevelsCandidateList');
+        const title = box && box.querySelector('.kde-levels-candidates-title');
+        const resultEl = document.getElementById('kdeLevelsResult');
+        const emptyEl = document.getElementById('kdeLevelsEmpty');
+        if (!box || !list) return;
+
+        if (title) {
+            title.textContent = message || '匹配到多只股票，请选择：';
+        }
+        const items = Array.isArray(candidates) ? candidates : [];
+        list.innerHTML = items.map((item) => {
+            const code = String(item.code || '').trim();
+            const name = String(item.name || '').trim();
+            const label = name ? `${code} ${name}` : code;
+            const safeCode = code.replace(/"/g, '&quot;');
+            return `<li><button type="button" class="kde-levels-candidate-btn" data-code="${safeCode}">${label}</button></li>`;
+        }).join('');
+
+        list.querySelectorAll('.kde-levels-candidate-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const code = btn.getAttribute('data-code') || '';
+                const codeInput = document.getElementById('kdeLevelsStockCode');
+                if (codeInput) codeInput.value = code;
+                this.hideKdeLevelsCandidates();
+                this.calculateKdeLevels();
+            });
+        });
+
+        box.hidden = false;
+        if (resultEl) resultEl.hidden = true;
+        if (emptyEl) {
+            emptyEl.hidden = true;
+        }
+    },
+
     async calculateKdeLevels() {
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
 
@@ -123,20 +167,24 @@ const ProfilePage = {
         const emptyEl = document.getElementById('kdeLevelsEmpty');
         if (!codeInput) return;
 
-        let code = codeInput.value.trim().toUpperCase();
-        if (code.includes(' ')) {
-            code = code.split(/\s+/)[0];
-        }
-        if (!code || (code.length !== 5 && code.length !== 6)) {
-            CommonUtils.showToast('请输入正确的股票代码（A股6位 / 港股5位）', 'warning');
+        let query = codeInput.value.trim();
+        if (!query) {
+            CommonUtils.showToast('请输入股票代码或名称', 'warning');
             codeInput.focus();
             return;
+        }
+        // 「600519 贵州茅台」类输入：首段为数字代码时取代码
+        const firstToken = query.split(/\s+/)[0];
+        const firstBody = /^(sh|sz)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
+        if (/^\d{4,6}$/.test(firstBody)) {
+            query = firstToken;
         }
 
         if (calcBtn) {
             calcBtn.disabled = true;
             calcBtn.textContent = '计算中…';
         }
+        this.hideKdeLevelsCandidates();
         if (emptyEl) {
             emptyEl.hidden = false;
             emptyEl.textContent = '正在计算…';
@@ -144,13 +192,23 @@ const ProfilePage = {
         if (resultEl) resultEl.hidden = true;
 
         try {
-            const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(code)}?max_levels=8`;
+            const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?max_levels=8`;
             const resp = await authFetch(url);
             const payload = await resp.json().catch(() => ({}));
+            const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+            if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
+                this.renderKdeLevelsCandidates(candidates, payload.message);
+                CommonUtils.showToast(payload.message || '请从候选中选择股票', 'warning');
+                return;
+            }
             if (!resp.ok && !payload.data) {
                 throw new Error(payload.message || '计算失败');
             }
             const data = payload.data || {};
+            if (data.stock_code && codeInput) {
+                const name = data.stock_name || '';
+                codeInput.value = name ? `${data.stock_code} ${name}` : data.stock_code;
+            }
             this.renderKdeLevelsResult(data, payload.success !== false, payload.message);
         } catch (e) {
             console.error('KDE 支撑压力计算失败:', e);
@@ -177,6 +235,8 @@ const ProfilePage = {
         const nearR = document.getElementById('kdeNearestResistance');
         const supportList = document.getElementById('kdeSupportList');
         const resistList = document.getElementById('kdeResistanceList');
+
+        this.hideKdeLevelsCandidates();
 
         const fmt = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--');
         const fillList = (ul, values) => {
