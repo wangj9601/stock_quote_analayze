@@ -144,46 +144,71 @@ def _resolve_gms_stock_name(db: Session, code: str, market_type_hint: Optional[s
     code = str(code).strip()
     if not code:
         return "股票"
-    mt = (market_type_hint or "").strip().upper()
+    names = _batch_resolve_gms_stock_names(db, [(code, market_type_hint)])
+    return names.get(code) or f"股票{code}"
 
+
+def _batch_resolve_gms_stock_names(
+    db: Session,
+    pairs: List[tuple],
+) -> Dict[str, str]:
+    """
+    批量解析证券简称，避免选股列表 N+1。
+    pairs: [(code, market_type_hint), ...]
+    """
     from backend_api.models import StockBasicInfo, StockBasicInfoHK, FundBasicInfo
 
-    if mt == "HK":
-        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
-        if info and info.name:
-            return info.name
+    out: Dict[str, str] = {}
+    if not pairs:
+        return out
 
-    info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code).first()
-    if not info and code.startswith("SZ"):
-        info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
-    if not info and code.startswith("SH"):
-        info = db.query(StockBasicInfo).filter(StockBasicInfo.code == code[2:]).first()
-    if info and info.name:
-        return info.name
+    cn_codes: List[str] = []
+    hk_codes: List[str] = []
+    etf_codes: List[str] = []
+    all_codes: List[str] = []
+    for code, mt_hint in pairs:
+        c = str(code or "").strip()
+        if not c:
+            continue
+        all_codes.append(c)
+        mt = (mt_hint or "").strip().upper()
+        if mt == "HK" or (len(c) == 5 and c.isdigit()):
+            hk_codes.append(c)
+        elif mt == "ETF" or (len(c) >= 6 and c.isdigit() and c[0] in "518"):
+            etf_codes.append(c)
+        else:
+            cn_codes.append(c)
+            # 6 位数字也可能是 ETF，一并查基金表
+            if len(c) >= 6 and c.isdigit():
+                etf_codes.append(c)
 
-    if mt == "ETF":
-        finfo = db.query(FundBasicInfo).filter(FundBasicInfo.code == code).first()
-        if finfo and finfo.name:
-            return finfo.name
+    cn_codes = list(dict.fromkeys(cn_codes))
+    hk_codes = list(dict.fromkeys(hk_codes))
+    etf_codes = list(dict.fromkeys(etf_codes))
 
-    # 159xxx 等深市 ETF：历史上会被误判进「港股」分支但不在 HK 表，此处统一从基金表兜底
-    if len(code) >= 6 and code.isdigit():
-        finfo = db.query(FundBasicInfo).filter(FundBasicInfo.code == code).first()
-        if finfo and finfo.name:
-            return finfo.name
+    if cn_codes:
+        for row in db.query(StockBasicInfo.code, StockBasicInfo.name).filter(
+            StockBasicInfo.code.in_(cn_codes)
+        ):
+            if row.name:
+                out[str(row.code).strip()] = row.name
+    if hk_codes:
+        for row in db.query(StockBasicInfoHK.code, StockBasicInfoHK.name).filter(
+            StockBasicInfoHK.code.in_(hk_codes)
+        ):
+            if row.name and str(row.code).strip() not in out:
+                out[str(row.code).strip()] = row.name
+    if etf_codes:
+        for row in db.query(FundBasicInfo.code, FundBasicInfo.name).filter(
+            FundBasicInfo.code.in_(etf_codes)
+        ):
+            if row.name and str(row.code).strip() not in out:
+                out[str(row.code).strip()] = row.name
 
-    if len(code) == 5 and code.isdigit():
-        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
-        if info and info.name:
-            return info.name
-
-    if mt != "HK":
-        info = db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == code).first()
-        if info and info.name:
-            return info.name
-
-    return f"股票{code}"
-
+    for c in all_codes:
+        if c not in out:
+            out[c] = f"股票{c}"
+    return out
 
 def _fallback_gms_indicator_market_type(symbol: str, scope: str, cn_codes: set) -> str:
     """与 strategy_engine 一致：用于指标表兜底查询的 market_type（CN / ETF / HK）。"""
@@ -1993,9 +2018,18 @@ async def get_gms_strategy(
                 return "右侧"
             return "--"
 
+        name_map = _batch_resolve_gms_stock_names(
+            db,
+            [
+                (str(r["symbol"]).strip(), r.get("market_type"))
+                for r in selection_results
+                if r.get("symbol") is not None
+            ],
+        )
+
         for r in selection_results:
             code = str(r["symbol"]).strip()
-            name = _resolve_gms_stock_name(db, code, r.get("market_type"))
+            name = name_map.get(code) or f"股票{code}"
 
             current_price = r.get("d") or 0
             change_percent = None
@@ -2044,6 +2078,7 @@ async def get_gms_strategy(
 
         # 兜底补全：避免前端出现“有信号但 Δ/F/Z/d 全空白 / 得分明细为空”
         # 仅对缺失关键字段的条目补全，且尽量不增加全市场的额外负担
+        _gms_score_fb_used = 0
         for item in results_data:
             need_fill = (
                 item.get("delta") is None
@@ -2079,6 +2114,7 @@ async def get_gms_strategy(
             # 兼容历史 trace：
             # 1) score_detail 为空/全空；
             # 2) 关键细项缺失（前端“计算指标细项”依赖这几个键）
+            # 注意：仅缺 ma60_d 不触发整行重算（全市场 N 次极慢）；由明细面板可选展示。
             score_detail_empty = (
                 not isinstance(sd, dict)
                 or len(sd) == 0
@@ -2092,12 +2128,20 @@ async def get_gms_strategy(
                     if sd.get(k) is None or sd.get(k) == "":
                         score_detail_missing_keys = True
                         break
-                if sd.get("ma60_d") is None:
-                    score_detail_missing_keys = True
                 if _mechanism == "tiered_dual_penalty" and sd.get("score_penalty_deduction") is None:
                     score_detail_missing_keys = True
 
+            # 快照/完整 trace 命中时限制得分兜底：空明细必补；仅缺字段时最多 30 条，避免全市场逐只重算
+            _cache_layer = str((gms_meta or {}).get("cache_layer") or "")
+            _do_score_fallback = False
             if score_detail_empty or score_detail_missing_keys:
+                if score_detail_empty or _cache_layer not in ("snapshot", "trace"):
+                    _do_score_fallback = True
+                elif _gms_score_fb_used < 30:
+                    _gms_score_fb_used += 1
+                    _do_score_fallback = True
+
+            if _do_score_fallback:
                 score_fallback = _fill_gms_score_fallback(db, item.get("symbol"), target_date, mt, config)
                 if score_fallback:
                     for k, v in score_fallback.items():

@@ -167,6 +167,18 @@ def _trace_row_to_result(row) -> dict:
     risk_tags = getattr(row, "risk_tags", None)
     if risk_tags is None and hasattr(row, "__dict__"):
         risk_tags = row.__dict__.get("risk_tags")
+    # 合并库内 JSON 明细（含 ratio_d / avg_volume_20d 等），避免读出后被列级重建冲掉、触发昂贵兜底重算
+    stored_sd = getattr(row, "score_detail", None)
+    if isinstance(stored_sd, dict) and stored_sd:
+        merged = dict(stored_sd)
+        for k, v in score_detail.items():
+            if merged.get(k) is None and v is not None:
+                merged[k] = v
+        score_detail = merged
+    # 顶层展示字段从明细回填
+    ratio_d = score_detail.get("ratio_d")
+    avg_volume_20d = score_detail.get("avg_volume_20d")
+    current_volume = score_detail.get("current_volume")
     out = {
         "symbol": code_str,
         "code": code_str,
@@ -184,9 +196,12 @@ def _trace_row_to_result(row) -> dict:
         "d": d,
         "ratio_d20": getattr(row, "ratio_d20", None),
         "ratio_d1": getattr(row, "ratio_d1", None),
+        "ratio_d": ratio_d,
         "fz_ratio": getattr(row, "fz_ratio", None),
         "rising_days": getattr(row, "rising_days", None),
         "falling_days": getattr(row, "falling_days", None),
+        "avg_volume_20d": avg_volume_20d,
+        "current_volume": current_volume,
         "score_detail": score_detail,
         "risk_tags": risk_tags or [],
     }
@@ -282,6 +297,78 @@ class GMSFrontendInterface:
         self.min_score = min_score
         self.max_results = max_results
 
+    def _market_types_for_scope(self, market: str) -> List[str]:
+        m = (market or "all").strip().lower()
+        if m == "cn":
+            return ["CN"]
+        if m == "hk":
+            return ["HK"]
+        if m == "etf":
+            return ["ETF"]
+        return ["CN", "HK", "ETF"]
+
+    def _precompute_succeeded(self, date: str, market: str) -> bool:
+        """当日该 market/config 预计算是否已成功（用于跳过全市场建池）。"""
+        try:
+            from sqlalchemy import bindparam, text
+
+            m = (market or "all").strip().lower()
+            # 预计算任务按 cn/hk/all 记录；scope=all 时 cn/hk/all 任一成功且有量即可快读
+            if m == "all":
+                markets = ["cn", "hk", "all"]
+            elif m in ("cn", "hk", "etf"):
+                markets = [m]
+            else:
+                markets = ["all"]
+            stmt = text(
+                """
+                SELECT status, stock_count
+                FROM gms_precompute_runs
+                WHERE config_id = :cid
+                  AND trade_date = :d
+                  AND market IN :markets
+                  AND status = 'success'
+                  AND COALESCE(stock_count, 0) > 0
+                ORDER BY finished_at DESC NULLS LAST, started_at DESC
+                LIMIT 1
+                """
+            ).bindparams(bindparam("markets", expanding=True))
+            row = self.db.execute(
+                stmt, {"cid": int(self.config_id), "d": date, "markets": markets}
+            ).first()
+            return bool(row)
+        except Exception:
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            return False
+
+    def _load_traces_for_market(self, date: str, market: str) -> List[dict]:
+        """直接按日+配置+市场读 gms_signal_trace，避免先建全市场股票池再巨型 IN。"""
+        from backend_api.models import GMSSignalTrace
+
+        mts = self._market_types_for_scope(market)
+        rows = (
+            self.db.query(GMSSignalTrace)
+            .filter(
+                GMSSignalTrace.date == date,
+                GMSSignalTrace.config_id == self.config_id,
+                GMSSignalTrace.market_type.in_(mts),
+                GMSSignalTrace.score_total.isnot(None),
+            )
+            .all()
+        )
+        out: List[dict] = []
+        seen = set()
+        for row in rows:
+            key = (str(row.code).strip(), str(row.market_type or "").strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(_trace_row_to_result(row))
+        return out
+
     def get_selection_results(
         self,
         date: Optional[str] = None,
@@ -305,6 +392,74 @@ class GMSFrontendInterface:
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
         date = str(date).strip()[:10]
+
+        # 快路径：无显式股票池且允许读 trace 时，直接按市场读表。
+        # 预计算已成功或 trace_only 时跳过 historical_quotes DISTINCT 建池（全 A 最重）。
+        if stock_pool is None and self.use_trace:
+            fast_traces = self._load_traces_for_market(date, market)
+            if cn_board_segment:
+                from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+                allowed = set(
+                    filter_stock_codes_by_board_segment(
+                        [str(r.get("symbol") or "") for r in fast_traces],
+                        cn_board_segment,
+                    )
+                )
+                fast_traces = [
+                    r
+                    for r in fast_traces
+                    if str(r.get("market_type") or "").upper() != "CN"
+                    or str(r.get("symbol") or "") in allowed
+                ]
+            if exclude_st and fast_traces:
+                from backend_api.utils.st_stock_filter import filter_codes_exclude_st
+
+                kept = set(
+                    filter_codes_exclude_st(
+                        self.db, [str(r.get("symbol") or "") for r in fast_traces]
+                    )
+                )
+                fast_traces = [r for r in fast_traces if str(r.get("symbol") or "") in kept]
+
+            precompute_ok = self._precompute_succeeded(date, market)
+            # 有足够缓存且（预计算成功 或 仅读缓存）→ 不再建池/补算
+            if fast_traces and (trace_only or precompute_ok):
+                combined = fast_traces
+                if self.min_score > 0:
+                    combined = [
+                        r for r in combined if (r.get("score_total") or 0) >= self.min_score
+                    ]
+                if self.max_results and len(combined) > self.max_results:
+                    combined = sorted(
+                        combined, key=lambda x: -(x.get("score_total") or 0)
+                    )[: self.max_results]
+                meta: Dict[str, Any] = enrich_trace_meta(
+                    {
+                        "from_trace_count": len(fast_traces),
+                        "computed_count": 0,
+                        "requested_count": len(fast_traces),
+                        "trace_complete": bool(precompute_ok) or bool(trace_only and fast_traces),
+                        "config_id": self.config_id,
+                        "use_trace": True,
+                        "batch_size": _GMS_BATCH_SIZE,
+                        "fast_path": "trace_market",
+                        "precompute_ok": precompute_ok,
+                    }
+                )
+                # trace_only 且预计算未确认时：不谎称 complete，便于前端决定是否二次请求
+                if trace_only and not precompute_ok:
+                    meta["trace_complete"] = False
+                    meta = enrich_trace_meta(meta)
+                logger.info(
+                    "GMS 快路径读 trace date=%s market=%s rows=%s precompute_ok=%s trace_only=%s",
+                    date,
+                    market,
+                    len(fast_traces),
+                    precompute_ok,
+                    trace_only,
+                )
+                return (combined, meta) if return_meta else combined
 
         if stock_pool is None:
             stock_pool = self._get_stock_pool(date, market)
