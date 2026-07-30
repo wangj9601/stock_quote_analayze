@@ -1,6 +1,9 @@
 """
 迁移：URT 核心表（urt_strategy_configs、urt_signal_trace、urt_backtest_tasks）
 对齐 backend_api/models.py 中 URTStrategyConfig / URTSignalTrace / URTBacktestTask。
+
+若表已存在但缺 precompute_enabled 列，请另跑（勿在请求路径 ALTER）：
+  python migrations/add_urt_precompute_enabled_column.py
 """
 
 import os

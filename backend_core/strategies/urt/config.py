@@ -261,27 +261,16 @@ class URTConfigManager:
         return int(row.id)
 
     def ensure_default_row(self, db) -> Optional[int]:
-        """若表为空则写入 default 版本；并尽量补齐预计算相关表/字段。"""
-        try:
-            from sqlalchemy import text
-            from backend_api.models import URTStrategyConfig, URTSignalTrace, URTBacktestTask
+        """若表为空则写入 default 版本。
 
-            URTStrategyConfig.__table__.create(bind=db.get_bind(), checkfirst=True)
-            URTSignalTrace.__table__.create(bind=db.get_bind(), checkfirst=True)
-            URTBacktestTask.__table__.create(bind=db.get_bind(), checkfirst=True)
-            try:
-                db.execute(
-                    text(
-                        "ALTER TABLE urt_strategy_configs "
-                        "ADD COLUMN IF NOT EXISTS precompute_enabled BOOLEAN NOT NULL DEFAULT FALSE"
-                    )
-                )
-                db.commit()
-            except Exception:
-                try:
-                    db.rollback()
-                except Exception:
-                    pass
+        不再在请求路径执行 CREATE/ALTER（易与 idle in transaction 互相锁死）。
+        缺表/缺列请跑迁移：
+          - python migrations/add_urt_core_tables.py
+          - python migrations/add_urt_precompute_enabled_column.py
+        """
+        try:
+            from backend_api.models import URTStrategyConfig
+
             existing = db.query(URTStrategyConfig).first()
             if existing:
                 return int(existing.id)
