@@ -415,6 +415,8 @@ class KeyLevels:
         empty = {
             "resistance_levels": [],
             "support_levels": [],
+            "nearest_support": None,
+            "nearest_resistance": None,
             "current_price": current_price,
             "method": "kde_volume_weighted",
             "kde_bw": None,
@@ -422,6 +424,9 @@ class KeyLevels:
             "kde_reason": "insufficient_samples",
             "kde_lookback_used": 0,
             "kde_lookback_expanded": False,
+            "kde_lookback_initial": KeyLevels.KDE_LOOKBACK_DAYS,
+            "kde_lookback_max": KeyLevels.KDE_LOOKBACK_MAX,
+            "kde_base_factor": KeyLevels.KDE_BASE_FACTOR,
         }
         if not historical_data or len(historical_data) < 20:
             return empty
@@ -441,7 +446,10 @@ class KeyLevels:
             except (TypeError, ValueError, KeyError):
                 continue
 
-        from backend_core.strategies.rpe.kde_levels import extract_kde_levels_expand_support
+        from backend_core.strategies.rpe.kde_levels import (
+            extract_kde_levels_expand_support,
+            nearest_levels,
+        )
 
         factor = KeyLevels.KDE_BASE_FACTOR if kde_base_factor is None else float(kde_base_factor)
         init_lb = int(initial_lookback or KeyLevels.KDE_LOOKBACK_DAYS)
@@ -457,11 +465,16 @@ class KeyLevels:
         )
         supports = [float(x) for x in (kde.get("support_levels") or [])]
         resistances = [float(x) for x in (kde.get("resistance_levels") or [])]
+        near = nearest_levels(price, supports, resistances)
 
         n = max(1, int(max_levels or KeyLevels.MAX_LEVELS))
+        ns = near.get("nearest_support")
+        nr = near.get("nearest_resistance")
         return {
             "resistance_levels": [round(x, 2) for x in resistances[:n]],
             "support_levels": [round(x, 2) for x in supports[:n]],
+            "nearest_support": round(float(ns), 2) if ns is not None else None,
+            "nearest_resistance": round(float(nr), 2) if nr is not None else None,
             "current_price": price,
             "method": "kde_volume_weighted",
             "kde_bw": kde.get("bw"),
@@ -469,6 +482,9 @@ class KeyLevels:
             "kde_reason": kde.get("reason") or ("ok" if kde.get("ok") else "no_peaks"),
             "kde_lookback_used": int(kde.get("lookback_used") or 0),
             "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
+            "kde_lookback_initial": init_lb,
+            "kde_lookback_max": max_lb,
+            "kde_base_factor": factor,
         }
 
 
@@ -565,6 +581,81 @@ class StockAnalysisService:
             logger.error(f"Gemini 分析异常: {str(e)}")
             return f"AI 分析服务暂不可用: {str(e)}"
     
+    def get_key_levels_only(
+        self,
+        stock_code: str,
+        *,
+        max_levels: int = 8,
+    ) -> Dict:
+        """仅计算 KDE 支撑/压力位（不跑技术指标与预测），供「我的」频道小工具使用。"""
+        try:
+            code = str(stock_code or "").strip()
+            historical_data = self._get_historical_data(
+                code, days=KeyLevels.KDE_LOOKBACK_MAX
+            )
+            if not historical_data:
+                return {
+                    "success": False,
+                    "error": "无法获取历史数据",
+                    "data": {
+                        "stock_code": code,
+                        "stock_name": "",
+                        "resistance_levels": [],
+                        "support_levels": [],
+                        "nearest_support": None,
+                        "nearest_resistance": None,
+                        "current_price": 0.0,
+                        "method": "kde_volume_weighted",
+                        "kde_ok": False,
+                        "kde_reason": "no_historical_data",
+                        "kde_lookback_used": 0,
+                        "kde_lookback_expanded": False,
+                        "kde_lookback_initial": KeyLevels.KDE_LOOKBACK_DAYS,
+                        "kde_lookback_max": KeyLevels.KDE_LOOKBACK_MAX,
+                        "kde_base_factor": KeyLevels.KDE_BASE_FACTOR,
+                        "description": (
+                            "成交量加权 KDE：对日K收盘价按成交量加权估计密度峰，"
+                            f"初始回看 {KeyLevels.KDE_LOOKBACK_DAYS} 日，"
+                            f"无支撑时递推至最多约 {KeyLevels.KDE_LOOKBACK_MAX} 日。"
+                        ),
+                    },
+                }
+
+            current_price = self._get_current_price(code)
+            if not current_price:
+                current_price = float(historical_data[-1]["close"])
+
+            levels = KeyLevels.calculate_key_levels(
+                historical_data,
+                current_price,
+                max_levels=max(1, int(max_levels or 8)),
+            )
+            stock_name = ""
+            for row in reversed(historical_data):
+                name = (row.get("name") or "").strip()
+                if name:
+                    stock_name = name
+                    break
+
+            return {
+                "success": True,
+                "data": {
+                    "stock_code": code,
+                    "stock_name": stock_name,
+                    **levels,
+                    "description": (
+                        "成交量加权 KDE（与 RPE 结构位同口径）：日K close+volume；"
+                        f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
+                        f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
+                        f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
+                        "现价下方峰为支撑，上方峰为压力（阻力）。"
+                    ),
+                },
+            }
+        except Exception as e:
+            logger.error(f"计算关键价位失败 {stock_code}: {str(e)}")
+            return {"success": False, "error": f"计算失败: {str(e)}"}
+
     def get_stock_analysis(self, stock_code: str) -> Dict:
         """获取股票智能分析结果"""
         try:
@@ -594,6 +685,8 @@ class StockAnalysisService:
                         "key_levels": {
                             "resistance_levels": [],
                             "support_levels": [],
+                            "nearest_support": None,
+                            "nearest_resistance": None,
                             "current_price": 0.0
                         },
                         "current_price": 0.0,

@@ -58,6 +58,7 @@
                     <button class="profile-tab" data-tab="transactions" data-perm="channel.profile.tab.transactions">交易记录</button>
                     <button class="profile-tab" data-tab="trading-logs" data-perm="channel.profile.tab.trading_logs">交易日志</button>
                     <button class="profile-tab" data-tab="analysis" data-perm="channel.profile.tab.analysis">投资分析</button>
+                    <button class="profile-tab" data-tab="kde-levels" data-perm="channel.profile.tab.kde_levels">支撑压力</button>
                     <button class="profile-tab" data-tab="settings" data-perm="channel.profile.tab.settings">账户设置</button>
                 </div>
 
@@ -363,6 +364,63 @@
                                 </form>
                                 <div class="trading-log-list" id="tradeLogList"></div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 支撑 / 压力位（KDE） -->
+                <div class="tab-panel" id="kde-levels">
+                    <div class="kde-levels-section">
+                        <div class="kde-levels-header">
+                            <h3>支撑 / 压力位</h3>
+                            <p class="kde-levels-hint">
+                                复用 RPE 成交量加权 KDE：对日K收盘价按成交量加权提取密度峰；
+                                默认初始回看 250 日，无支撑时递推至最多约 750 日（约 3 年）。
+                            </p>
+                        </div>
+                        <div class="kde-levels-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="kdeLevelsStockCode">股票代码</label>
+                                    <input type="text" id="kdeLevelsStockCode" placeholder="如 600519 或 00700" autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label for="kdeLevelsWatchlist">从自选选择</label>
+                                    <select id="kdeLevelsWatchlist">
+                                        <option value="">-- 可选自选股 --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group kde-levels-actions">
+                                    <label>&nbsp;</label>
+                                    <button type="button" class="btn btn-primary" id="kdeLevelsCalcBtn"
+                                        data-perm="channel.profile.tab.kde_levels.btn.calc">计算</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="kde-levels-result" id="kdeLevelsResult" hidden>
+                            <div class="kde-levels-summary" id="kdeLevelsSummary"></div>
+                            <div class="kde-levels-grid">
+                                <div class="kde-levels-card support">
+                                    <h4>支撑位</h4>
+                                    <ul id="kdeSupportList"></ul>
+                                </div>
+                                <div class="kde-levels-card current">
+                                    <h4>现价</h4>
+                                    <div class="kde-levels-price" id="kdeCurrentPrice">--</div>
+                                    <div class="kde-levels-near">
+                                        <div>最近支撑：<strong id="kdeNearestSupport">--</strong></div>
+                                        <div>最近压力：<strong id="kdeNearestResistance">--</strong></div>
+                                    </div>
+                                </div>
+                                <div class="kde-levels-card resistance">
+                                    <h4>压力（阻力）位</h4>
+                                    <ul id="kdeResistanceList"></ul>
+                                </div>
+                            </div>
+                            <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
+                        </div>
+                        <div class="kde-levels-empty" id="kdeLevelsEmpty">
+                            输入股票代码或从自选选择后点击「计算」。
                         </div>
                     </div>
                 </div>

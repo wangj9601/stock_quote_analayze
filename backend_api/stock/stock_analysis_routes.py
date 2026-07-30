@@ -185,35 +185,43 @@ async def get_trading_recommendation(
 @router.get("/levels/{stock_code}")
 async def get_key_levels(
     stock_code: str,
+    max_levels: int = Query(8, description="每侧最多返回档位数", ge=1, le=8),
     db: Session = Depends(get_db)
 ):
     """
-    获取关键价位
-    
-    Args:
-        stock_code: 股票代码
-        
-    Returns:
-        支撑位和阻力位
+    获取个股 KDE 支撑 / 压力（阻力）位。
+
+    轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
     """
     try:
+        code = str(stock_code or "").strip()
+        if not code or (len(code) != 6 and len(code) != 5):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "股票代码格式错误（A股6位，港股5位）"},
+            )
+
         analysis_service = StockAnalysisService()
-        result = analysis_service.get_stock_analysis(stock_code)
-        
-        if "error" in result:
+        result = analysis_service.get_key_levels_only(code, max_levels=max_levels)
+
+        if not result.get("success"):
+            # 数据不足时仍返回 data，便于前端展示说明
+            if "data" in result:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "message": result.get("error") or "无法计算关键价位",
+                        "data": result.get("data") or {},
+                    },
+                )
             return JSONResponse(
                 status_code=500,
-                content={"success": False, "message": result["error"]}
+                content={"success": False, "message": result.get("error") or "获取关键价位失败"},
             )
-        
-        # 只返回关键价位部分
-        levels_data = result["data"]["key_levels"]
-        
-        return JSONResponse(content={
-            "success": True,
-            "data": levels_data
-        })
-        
+
+        return JSONResponse(content={"success": True, "data": result["data"]})
+
     except Exception as e:
         logger.error(f"获取关键价位失败: {str(e)}")
         return JSONResponse(

@@ -57,6 +57,10 @@ def test_key_levels_uses_kde_peaks():
     assert out["resistance_levels"] == expect_r
     assert out["support_levels"] == expect_s
     assert KeyLevels.MAX_LEVELS == 2
+    assert out.get("nearest_support") == (expect_s[0] if expect_s else None)
+    assert out.get("nearest_resistance") == (expect_r[0] if expect_r else None)
+    assert out.get("kde_lookback_initial") == KeyLevels.KDE_LOOKBACK_DAYS
+    assert out.get("kde_lookback_max") == KeyLevels.KDE_LOOKBACK_MAX
 
 
 def test_key_levels_insufficient_samples():
@@ -64,3 +68,13 @@ def test_key_levels_insufficient_samples():
     assert out["resistance_levels"] == []
     assert out["support_levels"] == []
     assert out["kde_ok"] is False
+    assert out.get("nearest_support") is None
+    assert out.get("nearest_resistance") is None
+
+
+def test_key_levels_max_levels_param():
+    bars = _fake_bars(n=120, seed=11)
+    out = KeyLevels.calculate_key_levels(bars, 15.0, max_levels=8)
+    assert len(out["support_levels"]) <= 8
+    assert len(out["resistance_levels"]) <= 8
+    assert out["method"] == "kde_volume_weighted"

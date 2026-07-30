@@ -60,9 +60,11 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.profile.tab.transactions", "name": "交易记录", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 30},
     {"code": "channel.profile.tab.trading_logs", "name": "交易日志", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 40},
     {"code": "channel.profile.tab.analysis", "name": "投资分析", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 50},
+    {"code": "channel.profile.tab.kde_levels", "name": "支撑压力", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 55},
     {"code": "channel.profile.tab.settings", "name": "账户设置", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 60},
 
     # ── 三级：个人中心按钮 ──
+    {"code": "channel.profile.tab.kde_levels.btn.calc", "name": "计算支撑压力", "level": 3, "parent_code": "channel.profile.tab.kde_levels", "channel_code": "profile", "sort_order": 10},
     {"code": "channel.profile.tab.settings.btn.change_password", "name": "修改密码", "level": 3, "parent_code": "channel.profile.tab.settings", "channel_code": "profile", "sort_order": 10},
 
     # ── 二级：自选股标签页 ──

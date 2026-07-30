@@ -38,6 +38,9 @@ const ProfilePage = {
                 if (target === 'trading-logs') {
                     this.refreshTradingLogs();
                 }
+                if (target === 'kde-levels') {
+                    this.loadKdeWatchlistOptions();
+                }
             });
         });
     },
@@ -52,6 +55,169 @@ const ProfilePage = {
 
         // 绑定交易表单事件
         this.bindTradeModal();
+        this.bindKdeLevelsTool();
+    },
+
+    bindKdeLevelsTool() {
+        const calcBtn = document.getElementById('kdeLevelsCalcBtn');
+        const codeInput = document.getElementById('kdeLevelsStockCode');
+        const watchSelect = document.getElementById('kdeLevelsWatchlist');
+
+        if (calcBtn) {
+            calcBtn.addEventListener('click', () => this.calculateKdeLevels());
+        }
+        if (codeInput) {
+            codeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.calculateKdeLevels();
+                }
+            });
+        }
+        if (watchSelect) {
+            watchSelect.addEventListener('change', () => {
+                const val = watchSelect.value.trim();
+                if (val && codeInput) {
+                    codeInput.value = val;
+                }
+            });
+        }
+    },
+
+    async loadKdeWatchlistOptions() {
+        const select = document.getElementById('kdeLevelsWatchlist');
+        if (!select || select.dataset.loaded === '1') return;
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        try {
+            const resp = await authFetch(`${API_BASE_URL}/api/watchlist`);
+            if (!resp.ok) return;
+            const payload = await resp.json();
+            const list = Array.isArray(payload)
+                ? payload
+                : (payload.data || payload.items || payload.stocks || []);
+            if (!Array.isArray(list)) return;
+            const seen = new Set();
+            const opts = ['<option value="">-- 可选自选股 --</option>'];
+            (list || []).forEach((item) => {
+                const code = String(item.code || item.stock_code || '').trim();
+                if (!code || seen.has(code)) return;
+                seen.add(code);
+                const name = item.name || item.stock_name || '';
+                const label = name ? `${code} ${name}` : code;
+                opts.push(`<option value="${code}">${label}</option>`);
+            });
+            select.innerHTML = opts.join('');
+            select.dataset.loaded = '1';
+        } catch (e) {
+            console.warn('加载自选股列表失败:', e);
+        }
+    },
+
+    async calculateKdeLevels() {
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const codeInput = document.getElementById('kdeLevelsStockCode');
+        const calcBtn = document.getElementById('kdeLevelsCalcBtn');
+        const resultEl = document.getElementById('kdeLevelsResult');
+        const emptyEl = document.getElementById('kdeLevelsEmpty');
+        if (!codeInput) return;
+
+        let code = codeInput.value.trim().toUpperCase();
+        if (code.includes(' ')) {
+            code = code.split(/\s+/)[0];
+        }
+        if (!code || (code.length !== 5 && code.length !== 6)) {
+            CommonUtils.showToast('请输入正确的股票代码（A股6位 / 港股5位）', 'warning');
+            codeInput.focus();
+            return;
+        }
+
+        if (calcBtn) {
+            calcBtn.disabled = true;
+            calcBtn.textContent = '计算中…';
+        }
+        if (emptyEl) {
+            emptyEl.hidden = false;
+            emptyEl.textContent = '正在计算…';
+        }
+        if (resultEl) resultEl.hidden = true;
+
+        try {
+            const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(code)}?max_levels=8`;
+            const resp = await authFetch(url);
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok && !payload.data) {
+                throw new Error(payload.message || '计算失败');
+            }
+            const data = payload.data || {};
+            this.renderKdeLevelsResult(data, payload.success !== false, payload.message);
+        } catch (e) {
+            console.error('KDE 支撑压力计算失败:', e);
+            CommonUtils.showToast(e.message || '计算失败', 'error');
+            if (emptyEl) {
+                emptyEl.hidden = false;
+                emptyEl.textContent = e.message || '计算失败，请稍后重试。';
+            }
+        } finally {
+            if (calcBtn) {
+                calcBtn.disabled = false;
+                calcBtn.textContent = '计算';
+            }
+        }
+    },
+
+    renderKdeLevelsResult(data, ok, message) {
+        const resultEl = document.getElementById('kdeLevelsResult');
+        const emptyEl = document.getElementById('kdeLevelsEmpty');
+        const summaryEl = document.getElementById('kdeLevelsSummary');
+        const metaEl = document.getElementById('kdeLevelsMeta');
+        const priceEl = document.getElementById('kdeCurrentPrice');
+        const nearS = document.getElementById('kdeNearestSupport');
+        const nearR = document.getElementById('kdeNearestResistance');
+        const supportList = document.getElementById('kdeSupportList');
+        const resistList = document.getElementById('kdeResistanceList');
+
+        const fmt = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--');
+        const fillList = (ul, values) => {
+            if (!ul) return;
+            const arr = Array.isArray(values) ? values : [];
+            if (!arr.length) {
+                ul.innerHTML = '<li class="muted">暂无</li>';
+                return;
+            }
+            ul.innerHTML = arr.map((x, i) => `<li><span class="idx">${i + 1}</span>${fmt(x)}</li>`).join('');
+        };
+
+        const code = data.stock_code || '';
+        const name = data.stock_name || '';
+        const title = name ? `${code} ${name}` : (code || '结果');
+        if (summaryEl) {
+            summaryEl.textContent = ok
+                ? title
+                : `${title}${message ? `（${message}）` : ''}`;
+        }
+        if (priceEl) priceEl.textContent = fmt(data.current_price);
+        if (nearS) nearS.textContent = fmt(data.nearest_support);
+        if (nearR) nearR.textContent = fmt(data.nearest_resistance);
+        fillList(supportList, data.support_levels);
+        fillList(resistList, data.resistance_levels);
+
+        const used = data.kde_lookback_used;
+        const expanded = data.kde_lookback_expanded;
+        const initLb = data.kde_lookback_initial || 250;
+        const maxLb = data.kde_lookback_max || 750;
+        const parts = [
+            data.description || '成交量加权 KDE 支撑 / 压力',
+            used != null ? `实际回看 ${used} 日` : null,
+            expanded ? '（已扩窗）' : null,
+            `默认初始 ${initLb} / 上限 ${maxLb}`,
+            data.kde_reason ? `状态：${data.kde_reason}` : null,
+        ].filter(Boolean);
+        if (metaEl) metaEl.textContent = parts.join(' · ');
+
+        if (emptyEl) emptyEl.hidden = true;
+        if (resultEl) resultEl.hidden = false;
     },
 
     initTradingLogs() {
