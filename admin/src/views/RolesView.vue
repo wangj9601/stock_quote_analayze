@@ -7,27 +7,34 @@
           <el-button type="primary" @click="openCreate">新建角色</el-button>
         </div>
       </template>
-      <el-table :data="roles" v-loading="loading" stripe>
-        <el-table-column prop="code" label="Code" width="140" />
-        <el-table-column prop="name" label="名称" width="160" />
-        <el-table-column prop="description" label="描述" min-width="200" />
-        <el-table-column label="系统内置" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.is_system ? 'info' : 'success'">{{ row.is_system ? '是' : '否' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="goPermissions(row)">配置权限</el-button>
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" :disabled="row.is_system" @click="removeRole(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll">
+        <el-table :data="roles" v-loading="loading" stripe>
+          <el-table-column prop="code" label="Code" width="140" />
+          <el-table-column prop="name" label="名称" width="160" />
+          <el-table-column prop="description" label="描述" min-width="200" />
+          <el-table-column label="系统内置" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.is_system ? 'info' : 'success'">{{ row.is_system ? '是' : '否' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="260" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" @click="goPermissions(row)">配置权限</el-button>
+              <el-button size="small" @click="openEdit(row)">编辑</el-button>
+              <el-button size="small" type="danger" :disabled="row.is_system" @click="removeRole(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑角色' : '新建角色'" width="480px">
-      <el-form :model="form" label-width="80px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editing ? '编辑角色' : '新建角色'"
+      class="dialog-responsive"
+      width="min(480px, 92vw)"
+    >
+      <el-form :model="form" label-width="80px" class="role-form">
         <el-form-item label="Code" v-if="!editing">
           <el-input v-model="form.code" placeholder="如 vip" />
         </el-form-item>
@@ -117,5 +124,12 @@ onMounted(loadRoles)
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 768px) {
+  .role-form :deep(.el-form-item__label) {
+    justify-content: flex-start;
+  }
 }
 </style>

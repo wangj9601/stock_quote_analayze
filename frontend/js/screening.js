@@ -75,6 +75,7 @@ const ScreeningPage = {
         await this.loadHeader();
         this.bindEvents();
         this.initStrategyTabs();
+        this.initStrategyInfoCollapse();
         this.initVsbIntegratedTabs();
         this.initGmsIntegratedTabs();
         this.initUrtIntegratedTabs();
@@ -85,6 +86,22 @@ const ScreeningPage = {
         this.ensureActiveStrategyVisible();
         this.applyVsbHashOnLoad();
         void this.initUrtStrategyConfig();
+    },
+
+    /** 窄屏下策略说明默认折叠，避免占满首屏导致列表/按钮不可见 */
+    initStrategyInfoCollapse() {
+        document.querySelectorAll('.strategy-info-card').forEach((card) => {
+            if (card.querySelector('.strategy-info-toggle')) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'strategy-info-toggle';
+            btn.textContent = '展开策略说明';
+            btn.addEventListener('click', () => {
+                const open = card.classList.toggle('is-expanded');
+                btn.textContent = open ? '收起策略说明' : '展开策略说明';
+            });
+            card.appendChild(btn);
+        });
     },
 
     /** 默认策略 Tab 被权限隐藏时，切换到第一个可见且有权限的策略 */
@@ -3809,7 +3826,15 @@ const ScreeningPage = {
         const traceUrl = `${apiBaseUrl}/api/screening/gms-strategy?${queryString}&trace_only=true`;
         let result = await this.handleHttpAndParseScreening('gms', await fetchFn(traceUrl));
         const meta = result.gms_trace_meta || {};
-        if (meta.trace_complete !== true) {
+        // 二次全量计算仅在几乎无缓存时触发，避免「有预计算仍再算一遍全市场」
+        const fromTrace = Number(meta.from_trace_count || 0);
+        const hitRate = Number(meta.trace_hit_rate || 0);
+        const layer = String(meta.cache_layer || '');
+        const needFullCompute =
+            meta.trace_complete !== true &&
+            layer !== 'snapshot' &&
+            (fromTrace === 0 || hitRate < 0.5);
+        if (needFullCompute) {
             const fullUrl = `${apiBaseUrl}/api/screening/gms-strategy?${queryString}`;
             result = await this.handleHttpAndParseScreening('gms', await fetchFn(fullUrl));
         }

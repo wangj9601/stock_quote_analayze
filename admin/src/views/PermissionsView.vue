@@ -7,12 +7,14 @@
           <el-button type="primary" :loading="syncing" @click="syncRegistry">从注册表同步</el-button>
         </div>
       </template>
-      <el-tree
-        :data="tree"
-        node-key="code"
-        default-expand-all
-        :props="{ label: renderLabel, children: 'children' }"
-      />
+      <div class="tree-scroll">
+        <el-tree
+          :data="tree"
+          node-key="code"
+          default-expand-all
+          :props="{ label: renderLabel, children: 'children' }"
+        />
+      </div>
     </el-card>
   </div>
 </template>
@@ -61,5 +63,12 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tree-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 </style>

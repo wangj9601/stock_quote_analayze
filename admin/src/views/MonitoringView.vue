@@ -19,7 +19,7 @@
 
     <!-- 监控概览 -->
     <el-row :gutter="20" class="mb-6">
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="overview-card">
           <div class="overview-item">
             <div class="overview-icon success">
@@ -32,7 +32,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="overview-card">
           <div class="overview-item">
             <div class="overview-icon warning">
@@ -45,7 +45,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="overview-card">
           <div class="overview-item">
             <div class="overview-icon info">
@@ -58,7 +58,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card class="overview-card">
           <div class="overview-item">
             <div class="overview-icon danger">
@@ -82,35 +82,37 @@
         </div>
       </template>
       
-      <el-table :data="databaseTables" stripe style="width: 100%" height="400">
-        <el-table-column prop="name" label="业务表名" min-width="180" sortable />
-        <el-table-column prop="table_size" label="表大小 (MB)" width="120" sortable>
-          <template #default="{ row }">
-            {{ row.table_size.toFixed(2) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="index_size" label="索引大小 (MB)" width="130" sortable>
-          <template #default="{ row }">
-            {{ row.index_size.toFixed(2) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="total_size" label="合计 (MB)" width="120" sortable>
-          <template #default="{ row }">
-            <span :class="{'text-danger': row.total_size > 1000, 'text-warning': row.total_size > 500}">
-              {{ row.total_size.toFixed(2) }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="占比" min-width="150">
-          <template #default="{ row }">
-            <el-progress 
-              :percentage="getTablePercentage(row.total_size)" 
-              :stroke-width="12"
-              :color="getTableColor(row.total_size)"
-            />
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll">
+        <el-table :data="databaseTables" stripe style="width: 100%" height="400">
+          <el-table-column prop="name" label="业务表名" min-width="180" sortable />
+          <el-table-column prop="table_size" label="表大小 (MB)" width="120" sortable>
+            <template #default="{ row }">
+              {{ row.table_size.toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="index_size" label="索引大小 (MB)" width="130" sortable>
+            <template #default="{ row }">
+              {{ row.index_size.toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_size" label="合计 (MB)" width="120" sortable>
+            <template #default="{ row }">
+              <span :class="{'text-danger': row.total_size > 1000, 'text-warning': row.total_size > 500}">
+                {{ row.total_size.toFixed(2) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="占比" min-width="150">
+            <template #default="{ row }">
+              <el-progress 
+                :percentage="getTablePercentage(row.total_size)" 
+                :stroke-width="12"
+                :color="getTableColor(row.total_size)"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
 
     <!-- 系统健康状态 -->
@@ -123,7 +125,7 @@
       </template>
       
       <el-row :gutter="20">
-        <el-col :span="12">
+        <el-col :xs="24" :sm="24" :md="12">
           <div class="health-section">
             <h4 class="mb-4">资源使用率</h4>
             <div class="metric-item">
@@ -153,7 +155,7 @@
           </div>
         </el-col>
         
-        <el-col :span="12">
+        <el-col :xs="24" :sm="24" :md="12">
           <div class="health-section">
             <h4 class="mb-4">服务状态</h4>
             <div class="service-list">
@@ -217,49 +219,51 @@
         </div>
       </template>
       
-      <el-table :data="alerts" v-loading="alertsLoading" stripe>
-        <el-table-column prop="level" label="级别" width="80">
-          <template #default="{ row }">
-            <el-tag :type="getAlertLevelType(row.level)" size="small">
-              {{ row.level }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="title" label="标题" min-width="200" />
-        <el-table-column prop="message" label="消息" min-width="300" show-overflow-tooltip />
-        <el-table-column prop="source" label="来源" width="120" />
-        <el-table-column prop="timestamp" label="时间" width="180">
-          <template #default="{ row }">
-            {{ formatDateTime(row.timestamp) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="acknowledged" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.acknowledged ? 'success' : 'warning'" size="small">
-              {{ row.acknowledged ? '已确认' : '未确认' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120">
-          <template #default="{ row }">
-            <el-button 
-              v-if="!row.acknowledged"
-              size="small" 
-              type="primary"
-              @click="acknowledgeAlert(row.id)"
-            >
-              确认
-            </el-button>
-            <el-button 
-              size="small" 
-              type="danger"
-              @click="resolveAlert(row.id)"
-            >
-              解决
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll">
+        <el-table :data="alerts" v-loading="alertsLoading" stripe>
+          <el-table-column prop="level" label="级别" width="80">
+            <template #default="{ row }">
+              <el-tag :type="getAlertLevelType(row.level)" size="small">
+                {{ row.level }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="标题" min-width="200" />
+          <el-table-column prop="message" label="消息" min-width="300" show-overflow-tooltip />
+          <el-table-column prop="source" label="来源" width="120" />
+          <el-table-column prop="timestamp" label="时间" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.timestamp) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="acknowledged" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.acknowledged ? 'success' : 'warning'" size="small">
+                {{ row.acknowledged ? '已确认' : '未确认' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ row }">
+              <el-button 
+                v-if="!row.acknowledged"
+                size="small" 
+                type="primary"
+                @click="acknowledgeAlert(row.id)"
+              >
+                确认
+              </el-button>
+              <el-button 
+                size="small" 
+                type="danger"
+                @click="resolveAlert(row.id)"
+              >
+                解决
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
       
       <div class="mt-4 flex justify-center">
         <el-pagination

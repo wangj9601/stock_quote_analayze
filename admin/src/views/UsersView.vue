@@ -115,14 +115,15 @@
 
     <!-- 用户表格 -->
     <el-card class="table-section">
-      <el-table
-        :data="filteredUsers"
-        :loading="loading"
-        stripe
-        style="width: 100%"
-        :max-height="tableHeight"
-        class="responsive-table"
-      >
+      <div class="table-scroll">
+        <el-table
+          :data="filteredUsers"
+          :loading="loading"
+          stripe
+          style="width: 100%"
+          :max-height="tableHeight"
+          class="responsive-table"
+        >
         <el-table-column prop="id" label="ID" width="80" min-width="60" />
         <el-table-column prop="username" label="用户名" min-width="120" show-overflow-tooltip />
         <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
@@ -205,6 +206,7 @@
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <!-- 分页 -->
       <div class="pagination-section">
@@ -224,7 +226,8 @@
     <el-dialog
       v-model="showCreateDialog"
       title="新增用户"
-      width="500px"
+      class="dialog-responsive"
+      width="min(500px, 92vw)"
       @close="resetCreateForm"
     >
       <el-form
@@ -265,7 +268,8 @@
     <el-dialog
       v-model="showEditDialog"
       title="编辑用户"
-      width="500px"
+      class="dialog-responsive"
+      width="min(500px, 92vw)"
       @close="resetEditForm"
     >
       <el-form
@@ -308,7 +312,8 @@
     <el-dialog
       v-model="showChangePasswordDialog"
       title="修改密码"
-      width="450px"
+      class="dialog-responsive"
+      width="min(450px, 92vw)"
     >
       <el-form label-width="100px">
         <el-form-item label="新密码">

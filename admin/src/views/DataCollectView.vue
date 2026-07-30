@@ -33,7 +33,7 @@
                 <el-form @submit.prevent="startCollection" :model="form" label-width="120px">
                   <!-- 日期范围 -->
                   <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="开始日期" required>
                         <el-date-picker
                           v-model="form.start_date"
@@ -45,7 +45,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="结束日期" required>
                         <el-date-picker
                           v-model="form.end_date"
@@ -161,7 +161,7 @@
                 <el-form @submit.prevent="startTushareCollection" :model="tushareForm" label-width="120px">
                   <!-- 日期范围 -->
                   <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="开始日期" required>
                         <el-date-picker
                           v-model="tushareForm.start_date"
@@ -173,7 +173,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="结束日期" required>
                         <el-date-picker
                           v-model="tushareForm.end_date"
@@ -251,7 +251,7 @@
                 <el-form @submit.prevent="startRealtimeHistoricalCollection" :model="realtimeHistForm" label-width="120px">
                   <!-- 日期范围 -->
                   <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="开始日期" required>
                         <el-date-picker
                           v-model="realtimeHistForm.start_date"
@@ -263,7 +263,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="结束日期" required>
                         <el-date-picker
                           v-model="realtimeHistForm.end_date"
@@ -331,7 +331,7 @@
                 <el-form @submit.prevent="startFileCollection" :model="fileForm" label-width="120px">
                   <!-- 日期范围 -->
                   <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="开始日期" required>
                         <el-date-picker
                           v-model="fileForm.start_date"
@@ -343,7 +343,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="结束日期" required>
                         <el-date-picker
                           v-model="fileForm.end_date"
@@ -511,7 +511,7 @@
                 <el-form @submit.prevent="startHKCollection" :model="hkForm" label-width="120px">
                   <!-- 日期范围 -->
                   <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="开始日期" required>
                         <el-date-picker
                           v-model="hkForm.start_date"
@@ -523,7 +523,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="结束日期" required>
                         <el-date-picker
                           v-model="hkForm.end_date"
@@ -656,7 +656,7 @@
                 <el-form label-width="120px">
                   <!-- 日期范围 -->
                   <el-row :gutter="20">
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="开始日期" required>
                         <el-date-picker
                           v-model="hkFileForm.start_date"
@@ -668,7 +668,7 @@
                         />
                       </el-form-item>
                     </el-col>
-                    <el-col :span="12">
+                    <el-col :xs="24" :sm="12">
                       <el-form-item label="结束日期" required>
                         <el-date-picker
                           v-model="hkFileForm.end_date"
@@ -875,7 +875,7 @@
             <el-form @submit.prevent="startETFCollection" :model="etfForm" label-width="120px">
               <!-- 日期范围 -->
               <el-row :gutter="20">
-                <el-col :span="12">
+                <el-col :xs="24" :sm="12">
                   <el-form-item label="开始日期" required>
                     <el-date-picker
                       v-model="etfForm.start_date"
@@ -887,7 +887,7 @@
                     />
                   </el-form-item>
                 </el-col>
-                <el-col :span="12">
+                <el-col :xs="24" :sm="12">
                   <el-form-item label="结束日期" required>
                     <el-date-picker
                       v-model="etfForm.end_date"
@@ -982,6 +982,7 @@
           </div>
 
           <!-- 节假日表格 -->
+          <div class="table-scroll">
           <el-table
             :data="calendarList"
             v-loading="calendarLoading"
@@ -1009,6 +1010,7 @@
               </template>
             </el-table-column>
           </el-table>
+          </div>
 
           <div class="mt-3 text-gray-400 text-xs">
             <el-icon class="mr-1"><InfoFilled /></el-icon>
@@ -1111,7 +1113,8 @@
   <el-dialog
     v-model="holidayDialogVisible"
     :title="holidayDialogMode === 'add' ? '新增节假日' : '编辑节假日'"
-    width="480px"
+    class="dialog-responsive"
+    width="min(480px, 92vw)"
     destroy-on-close
   >
     <el-form :model="holidayForm" label-width="100px" label-position="right">
@@ -1148,7 +1151,13 @@
   </el-dialog>
 
   <!-- 批量导入对话框 -->
-  <el-dialog v-model="batchImportDialogVisible" title="批量导入节假日" width="560px" destroy-on-close>
+  <el-dialog
+    v-model="batchImportDialogVisible"
+    title="批量导入节假日"
+    class="dialog-responsive"
+    width="min(560px, 92vw)"
+    destroy-on-close
+  >
     <div class="mb-4 text-sm text-gray-500">
       <div class="flex items-end justify-between">
         <div>

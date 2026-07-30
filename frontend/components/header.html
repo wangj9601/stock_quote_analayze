@@ -3,7 +3,12 @@
         <img src="img/logo.svg" alt="logo" class="logo-img">
         <span class="logo-title">股票分析</span>
     </div>
-    <nav class="nav-bar">
+    <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false" aria-controls="mainNavBar">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+    </button>
+    <nav class="nav-bar" id="mainNavBar">
         <a href="index.html" class="nav-link" id="nav-home" data-perm="channel.home">首页</a>
         <a href="watchlist.html" class="nav-link" id="nav-watchlist" data-perm="channel.watchlist">自选股</a>
         <a href="markets.html" class="nav-link" id="nav-quotes" data-perm="channel.quotes">行情</a>
@@ -13,7 +18,7 @@
         <a href="profile.html" class="nav-link" id="nav-profile" data-perm="channel.profile">我的</a>
     </nav>
     <div class="header-actions">
-        <button class="search-btn">🔍</button>
+        <button class="search-btn" type="button" aria-label="搜索">🔍</button>
         <div class="user-menu" id="userMenu">
             <span id="userStatus" class="user-status">未登录</span>
             <div class="user-dropdown" id="userDropdown" style="display:none;">
@@ -24,6 +29,7 @@
         </div>
     </div>
 </div>
+<div class="nav-overlay" id="navOverlay" hidden></div>
 
 <!-- 股票搜索模态框（隐藏） -->
 <div id="stockSearchModal" class="stock-search-modal" style="display:none !important; visibility:hidden !important;">
@@ -43,33 +49,36 @@
 </div>
 
 <!-- 修改密码弹窗（隐藏） -->
-<div id="changePasswordModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 10000; align-items: center; justify-content: center;">
-    <div style="width: 360px; background: #fff; border-radius: 8px; box-shadow: 0 12px 28px rgba(0,0,0,0.18); overflow: hidden;">
-        <div style="padding: 14px 16px; font-weight: 600; border-bottom: 1px solid #f0f0f0;">修改密码</div>
-        <form id="changePasswordForm" style="padding: 16px;">
-            <div style="margin-bottom: 12px;">
-                <label for="oldPassword" style="display:block; color:#374151; font-size:14px; margin-bottom:6px;">旧密码</label>
-                <input id="oldPassword" type="password" placeholder="请输入旧密码" style="width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #e5e7eb; border-radius:6px; outline:none;" />
+<div id="changePasswordModal" class="cp-modal" style="display:none;">
+    <div class="cp-modal-panel">
+        <div class="cp-modal-title">修改密码</div>
+        <form id="changePasswordForm" class="cp-modal-form">
+            <div class="cp-field">
+                <label for="oldPassword">旧密码</label>
+                <input id="oldPassword" type="password" placeholder="请输入旧密码" />
             </div>
-            <div style="margin-bottom: 12px;">
-                <label for="newPassword" style="display:block; color:#374151; font-size:14px; margin-bottom:6px;">新密码</label>
-                <input id="newPassword" type="password" placeholder="至少6位" style="width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #e5e7eb; border-radius:6px; outline:none;" />
+            <div class="cp-field">
+                <label for="newPassword">新密码</label>
+                <input id="newPassword" type="password" placeholder="至少6位" />
             </div>
-            <div style="margin-bottom: 4px;">
-                <label for="confirmPassword" style="display:block; color:#374151; font-size:14px; margin-bottom:6px;">确认新密码</label>
-                <input id="confirmPassword" type="password" placeholder="再次输入新密码" style="width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #e5e7eb; border-radius:6px; outline:none;" />
+            <div class="cp-field">
+                <label for="confirmPassword">确认新密码</label>
+                <input id="confirmPassword" type="password" placeholder="再次输入新密码" />
             </div>
         </form>
-        <div style="display:flex; gap:8px; justify-content:flex-end; padding: 12px 16px; border-top:1px solid #f0f0f0;">
-            <button id="cpCancelBtn" type="button" style="padding:8px 14px; border:1px solid #e5e7eb; background:#fff; border-radius:6px; cursor:pointer;">取消</button>
-            <button id="cpSubmitBtn" type="button" style="padding:8px 14px; border:0; background:#2563eb; color:#fff; border-radius:6px; cursor:pointer;">确定</button>
+        <div class="cp-modal-actions">
+            <button id="cpCancelBtn" type="button" class="cp-btn-cancel">取消</button>
+            <button id="cpSubmitBtn" type="button" class="cp-btn-ok">确定</button>
         </div>
     </div>
-    
 </div>
 
 <style>
-/* 内联样式确保用户菜单正常工作 */
+:root {
+    --bp-md: 768px;
+    --bp-sm: 480px;
+}
+
 .main-header {
     display: flex !important;
     align-items: center !important;
@@ -79,11 +88,15 @@
     padding: 0 32px !important;
     height: 56px !important;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 9000 !important;
 }
 
 .logo-area {
     display: flex !important;
     align-items: center !important;
+    flex-shrink: 0 !important;
 }
 
 .logo-img {
@@ -99,6 +112,30 @@
     letter-spacing: 2px !important;
 }
 
+.nav-toggle {
+    display: none !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    width: 40px !important;
+    height: 40px !important;
+    margin-left: auto !important;
+    margin-right: 8px !important;
+    padding: 8px !important;
+    border: 1px solid #174b7a !important;
+    border-radius: 6px !important;
+    background: transparent !important;
+    cursor: pointer !important;
+}
+
+.nav-toggle-bar {
+    display: block !important;
+    width: 20px !important;
+    height: 2px !important;
+    background: #fff !important;
+    border-radius: 1px !important;
+}
+
 .nav-bar {
     display: flex !important;
     align-items: center !important;
@@ -112,16 +149,30 @@
     padding: 8px 12px !important;
     border-radius: 4px !important;
     transition: background 0.2s !important;
+    white-space: nowrap !important;
 }
 
 .nav-link.active, .nav-link:hover {
     background: #174b7a !important;
 }
 
+.nav-overlay {
+    display: none !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0,0,0,0.45) !important;
+    z-index: 8990 !important;
+}
+
+.nav-overlay.is-open {
+    display: block !important;
+}
+
 .header-actions {
     display: flex !important;
     align-items: center !important;
     gap: 16px !important;
+    flex-shrink: 0 !important;
 }
 
 .search-btn {
@@ -221,14 +272,72 @@
     opacity: 1 !important;
 }
 
-/* 股票搜索模态框样式 */
+.cp-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+.cp-modal-panel {
+    width: min(360px, 92vw);
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+    overflow: hidden;
+}
+.cp-modal-title {
+    padding: 14px 16px;
+    font-weight: 600;
+    border-bottom: 1px solid #f0f0f0;
+}
+.cp-modal-form { padding: 16px; }
+.cp-field { margin-bottom: 12px; }
+.cp-field label {
+    display: block;
+    color: #374151;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+.cp-field input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    outline: none;
+}
+.cp-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 16px;
+    border-top: 1px solid #f0f0f0;
+}
+.cp-btn-cancel {
+    padding: 8px 14px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.cp-btn-ok {
+    padding: 8px 14px;
+    border: 0;
+    background: #2563eb;
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
 .stock-search-modal {
     position: fixed !important;
     inset: 0 !important;
     background: rgba(0, 0, 0, 0.45) !important;
     z-index: 10001 !important;
-    display: none !important; /* 默认隐藏 */
-    visibility: hidden !important; /* 默认隐藏 */
+    display: none !important;
+    visibility: hidden !important;
     align-items: center !important;
     justify-content: center !important;
 }
@@ -240,8 +349,8 @@
 }
 
 .stock-search-modal-content {
-    width: 500px !important;
-    max-width: 90vw !important;
+    width: min(500px, 92vw) !important;
+    max-width: 92vw !important;
     background: #fff !important;
     border-radius: 8px !important;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18) !important;
@@ -376,17 +485,77 @@
     color: #666 !important;
 }
 
-.stock-search-empty {
+.stock-search-empty,
+.stock-search-loading {
     padding: 40px 20px !important;
     text-align: center !important;
     color: #999 !important;
     font-size: 14px !important;
 }
 
-.stock-search-loading {
-    padding: 40px 20px !important;
-    text-align: center !important;
-    color: #666 !important;
-    font-size: 14px !important;
+@media (max-width: 768px) {
+    .main-header {
+        padding: 0 12px !important;
+        gap: 8px !important;
+    }
+    .logo-title {
+        font-size: 16px !important;
+        letter-spacing: 1px !important;
+    }
+    .nav-toggle {
+        display: flex !important;
+        order: 2 !important;
+    }
+    .header-actions {
+        order: 3 !important;
+        gap: 8px !important;
+    }
+    .user-menu {
+        margin-left: 0 !important;
+        min-width: 0 !important;
+        padding: 2px 8px 2px 4px !important;
+    }
+    .user-status {
+        max-width: 72px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        font-size: 13px !important;
+    }
+    .nav-bar {
+        display: none !important;
+        position: fixed !important;
+        top: 56px !important;
+        left: 0 !important;
+        right: 0 !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0 !important;
+        background: #03213a !important;
+        padding: 8px 0 calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.25) !important;
+        z-index: 8995 !important;
+        max-height: calc(100vh - 56px) !important;
+        max-height: calc(100dvh - 56px) !important;
+        overflow-y: auto !important;
+    }
+    .nav-bar.is-open {
+        display: flex !important;
+    }
+    .nav-bar .nav-link {
+        padding: 14px 20px !important;
+        font-size: 16px !important;
+        border-radius: 0 !important;
+        border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+    }
+    body.nav-drawer-open {
+        overflow: hidden !important;
+    }
 }
-</style> 
+
+@media (max-width: 480px) {
+    .logo-title {
+        font-size: 15px !important;
+    }
+}
+</style>

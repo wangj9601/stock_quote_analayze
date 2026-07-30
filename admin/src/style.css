@@ -54,3 +54,28 @@ a.nav-item.router-link-exact-active {
 .el-loading-mask {
   z-index: 9999;
 }
+:root {
+  --bp-md: 768px;
+  --bp-sm: 480px;
+}
+
+.table-scroll,
+.responsive-table {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dialog-responsive,
+.el-dialog.dialog-responsive {
+  width: min(520px, 92vw) !important;
+}
+
+@media (max-width: 768px) {
+  .el-dialog {
+    width: min(92vw, 520px) !important;
+  }
+  .el-form--label-top .el-form-item__label {
+    padding-bottom: 4px;
+  }
+}

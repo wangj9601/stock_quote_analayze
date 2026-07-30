@@ -7,6 +7,9 @@
     padding: 0 32px;
     height: 56px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    position: sticky;
+    top: 0;
+    z-index: 9000;
 }
 
 .logo-area {
@@ -24,6 +27,30 @@
     font-size: 20px;
     font-weight: bold;
     letter-spacing: 2px;
+}
+
+.nav-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    margin-right: 8px;
+    padding: 8px;
+    border: 1px solid #174b7a;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.nav-toggle-bar {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
 }
 
 .nav-bar {
@@ -145,7 +172,6 @@
     border-radius: 0 0 6px 6px;
 }
 
-/* 用户菜单打开状态 */
 .user-menu.open {
     background: #2a4258;
 }
@@ -154,7 +180,6 @@
     display: flex;
 }
 
-/* 下拉菜单动画 */
 @keyframes dropdownFadeIn {
     from {
         opacity: 0;
@@ -166,27 +191,48 @@
     }
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
     .main-header {
-        padding: 0 16px;
+        padding: 0 12px;
     }
-    
+
+    .nav-toggle {
+        display: flex;
+    }
+
     .nav-bar {
-        gap: 12px;
+        display: none;
+        position: fixed;
+        top: 56px;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        background: #03213a;
+        z-index: 8995;
+        padding: 8px 0;
+        max-height: calc(100dvh - 56px);
+        overflow-y: auto;
     }
-    
+
+    .nav-bar.is-open {
+        display: flex;
+    }
+
     .nav-link {
-        font-size: 14px;
-        padding: 6px 8px;
+        font-size: 16px;
+        padding: 14px 20px;
+        border-radius: 0;
     }
-    
+
     .user-menu {
         min-width: 60px;
         padding: 2px 10px 2px 4px;
+        margin-left: 0;
     }
-    
+
     .user-status {
         font-size: 13px;
     }
-} 
+}

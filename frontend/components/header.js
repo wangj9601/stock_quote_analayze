@@ -51,7 +51,9 @@ async function loadHeader(activePage) {
     setTimeout(() => {
         console.log('开始初始化用户菜单...');
         initUserMenu();
+        initMobileNav();
     }, 100);
+
 
     await loadPermissionEngine();
     
@@ -68,6 +70,39 @@ async function loadHeader(activePage) {
             CommonUtils.auth.updateUserDisplay(CommonUtils.auth.getUserInfo());
         }, 200);
     }
+}
+
+// 移动端顶栏汉堡菜单 / 抽屉
+function initMobileNav() {
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('mainNavBar');
+    const overlay = document.getElementById('navOverlay');
+    if (!toggle || !nav) return;
+
+    const setOpen = (open) => {
+        nav.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.setAttribute('aria-label', open ? '关闭菜单' : '打开菜单');
+        document.body.classList.toggle('nav-drawer-open', open);
+        if (overlay) {
+            overlay.hidden = !open;
+            overlay.classList.toggle('is-open', open);
+        }
+    };
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setOpen(!nav.classList.contains('is-open'));
+    });
+    if (overlay) {
+        overlay.addEventListener('click', () => setOpen(false));
+    }
+    nav.querySelectorAll('a.nav-link').forEach((a) => {
+        a.addEventListener('click', () => setOpen(false));
+    });
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) setOpen(false);
+    });
 }
 
 // 初始化用户菜单

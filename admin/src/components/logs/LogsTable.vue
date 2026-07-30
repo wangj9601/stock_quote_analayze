@@ -1,5 +1,5 @@
 <template>
-  <div class="logs-table">
+  <div class="logs-table table-scroll">
     <el-card>
       <el-table
         :data="logs"

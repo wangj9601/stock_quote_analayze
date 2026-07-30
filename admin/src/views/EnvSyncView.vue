@@ -14,10 +14,10 @@
     </el-card>
 
     <el-row :gutter="16">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card v-loading="loadingClient">
           <template #header>客户端配置（本地 → 生产）</template>
-          <el-form label-width="120px">
+          <el-form label-width="120px" class="env-sync-form">
             <el-form-item label="启用">
               <el-switch v-model="clientForm.enabled" />
             </el-form-item>
@@ -46,10 +46,10 @@
         </el-card>
       </el-col>
 
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card v-loading="loadingServer">
           <template #header>服务端 Sync Key（本机作为被同步方）</template>
-          <el-form label-width="120px">
+          <el-form label-width="120px" class="env-sync-form">
             <el-form-item label="启用校验">
               <el-switch v-model="serverForm.enabled" />
             </el-form-item>
@@ -140,7 +140,7 @@
           </div>
         </el-form-item>
         <el-form-item>
-          <el-button type="success" :loading="pulling" @click="doPull">从生产 Pull</el-button>
+          <el-button type="success" :loading="pulling" @click="confirmPull">从生产 Pull</el-button>
           <el-button type="danger" :loading="pushing" @click="confirmPush">Push 到生产</el-button>
         </el-form-item>
       </el-form>
@@ -287,9 +287,6 @@ async function loadAll() {
     moduleGroups.value = (mods.groups || []) as ModuleGroup[]
     defaultResources.value = mods.default_resources || []
     dateRangeRequired.value = mods.date_range_required || ['historical_quotes', 'historical_quotes_hk']
-    if (!selectedModules.value.length) {
-      selectDefault()
-    }
   } catch (e: any) {
     ElMessage.error(e.message || '加载失败')
   } finally {
@@ -384,12 +381,26 @@ function summarize(res: any): string {
   return lines.join('\n') || JSON.stringify(res, null, 2)
 }
 
-async function doPull() {
+async function confirmPull() {
   if (!selectedModules.value.length) {
     ElMessage.warning('请至少选择一个模块')
     return
   }
   if (!assertDateRange()) return
+  const mods = selectedModules.value.join('、')
+  const range =
+    quotesSelected.value && startDate.value && endDate.value
+      ? `\n行情区间：${startDate.value} ~ ${endDate.value}`
+      : ''
+  try {
+    await ElMessageBox.confirm(
+      `将从生产拉取并写入本地数据库（选中模块：${mods}）${range}\n本地同名数据可能被覆盖，是否继续？`,
+      '从生产 Pull',
+      { type: 'warning', confirmButtonText: '确认 Pull', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
   pulling.value = true
   lastResultText.value = ''
   try {
@@ -443,6 +454,22 @@ onMounted(loadAll)
 <style scoped>
 .env-sync-view {
   padding: 0;
+}
+@media (max-width: 768px) {
+  .env-sync-form {
+    --el-form-label-width: auto;
+  }
+  .env-sync-form :deep(.el-form-item) {
+    display: block;
+  }
+  .env-sync-form :deep(.el-form-item__label) {
+    justify-content: flex-start;
+    margin-bottom: 4px;
+  }
+  .card-head,
+  .head-actions {
+    flex-wrap: wrap;
+  }
 }
 .card-head {
   display: flex;

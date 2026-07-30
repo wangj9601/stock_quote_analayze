@@ -13,27 +13,27 @@
       <el-tab-pane label="基本信息查询" name="query">
         <el-card>
           <el-row :gutter="12" class="mb-4">
-            <el-col :span="7">
+            <el-col :xs="24" :sm="12" :md="7">
               <el-input v-model="currentQuery.keyword" placeholder="代码/名称" clearable />
             </el-col>
-            <el-col :span="5">
+            <el-col :xs="24" :sm="12" :md="5">
               <el-checkbox v-model="currentQuery.empty_shares">仅缺股本</el-checkbox>
             </el-col>
-            <el-col :span="4">
+            <el-col :xs="24" :sm="12" :md="4">
               <el-select v-model="currentQuery.delisted_filter" style="width: 100%" placeholder="退市筛选">
                 <el-option label="全部股票" value="all" />
                 <el-option label="仅退市" value="only" />
                 <el-option label="排除退市" value="exclude" />
               </el-select>
             </el-col>
-            <el-col :span="4">
+            <el-col :xs="24" :sm="12" :md="4">
               <el-select v-model="currentCollectFilter" style="width: 100%" placeholder="采集标志">
                 <el-option label="全部" value="all" />
                 <el-option label="启用" value="enabled" />
                 <el-option label="停用" value="disabled" />
               </el-select>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="24" :md="8">
               <el-button type="primary" :loading="loading" @click="loadList">查询</el-button>
               <el-button
                 v-if="mainTab === 'CN'"
@@ -52,32 +52,34 @@
             <el-button :disabled="!selectedRows.length" @click="batchSetCollect(false)">批量停用采集</el-button>
           </div>
 
-          <el-table ref="tableRef" :data="rows" :loading="loading" stripe @selection-change="onSelectionChange">
-            <el-table-column type="selection" width="42" />
-            <el-table-column prop="code" label="代码" width="100" />
-            <el-table-column prop="name" label="名称" min-width="120" />
-            <el-table-column prop="total_shares" label="总股本" min-width="110" />
-            <el-table-column prop="free_float_shares" label="流通股本" min-width="110" />
-            <el-table-column prop="industry" label="行业" min-width="110">
-              <template #default="scope">
-                {{ displayOptionalText(scope.row.industry) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="listing_date" label="上市日期" min-width="100">
-              <template #default="scope">
-                {{ displayOptionalText(scope.row.listing_date) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="shares_updated_at" label="更新时间" min-width="170" />
-            <el-table-column label="采集/处理" min-width="120">
-              <template #default="scope">
-                <el-switch
-                  :model-value="scope.row.collect_enabled"
-                  @change="(v: boolean) => toggleCollectFlag(scope.row, v)"
-                />
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="table-scroll">
+            <el-table ref="tableRef" :data="rows" :loading="loading" stripe @selection-change="onSelectionChange">
+              <el-table-column type="selection" width="42" />
+              <el-table-column prop="code" label="代码" width="100" />
+              <el-table-column prop="name" label="名称" min-width="120" />
+              <el-table-column prop="total_shares" label="总股本" min-width="110" />
+              <el-table-column prop="free_float_shares" label="流通股本" min-width="110" />
+              <el-table-column prop="industry" label="行业" min-width="110">
+                <template #default="scope">
+                  {{ displayOptionalText(scope.row.industry) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="listing_date" label="上市日期" min-width="100">
+                <template #default="scope">
+                  {{ displayOptionalText(scope.row.listing_date) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="shares_updated_at" label="更新时间" min-width="170" />
+              <el-table-column label="采集/处理" min-width="120">
+                <template #default="scope">
+                  <el-switch
+                    :model-value="scope.row.collect_enabled"
+                    @change="(v: boolean) => toggleCollectFlag(scope.row, v)"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
 
           <div class="mt-4 flex justify-end">
             <el-pagination
@@ -136,11 +138,13 @@
             <template #header>预校验结果</template>
             <div>有效行：{{ currentValidateResult.valid_rows }}，无效行：{{ currentValidateResult.invalid_rows }}</div>
             <div>市场分布：A股 {{ currentValidateResult.market_count?.CN || 0 }}，港股 {{ currentValidateResult.market_count?.HK || 0 }}</div>
-            <el-table :data="currentValidateResult.issues || []" size="small" class="mt-3">
-              <el-table-column prop="row_no" label="行号" width="80" />
-              <el-table-column prop="code" label="代码" width="120" />
-              <el-table-column prop="message" label="错误信息" min-width="220" />
-            </el-table>
+            <div class="table-scroll">
+              <el-table :data="currentValidateResult.issues || []" size="small" class="mt-3">
+                <el-table-column prop="row_no" label="行号" width="80" />
+                <el-table-column prop="code" label="代码" width="120" />
+                <el-table-column prop="message" label="错误信息" min-width="220" />
+              </el-table>
+            </div>
           </el-card>
 
           <el-card v-if="currentExecuteResult" class="mt-4">
@@ -149,11 +153,13 @@
               总行数 {{ currentExecuteResult.total_rows }}，成功 {{ currentExecuteResult.success }}，
               跳过 {{ currentExecuteResult.skipped }}，失败 {{ currentExecuteResult.failed }}
             </div>
-            <el-table :data="currentExecuteResult.failed_sample || []" size="small" class="mt-3">
-              <el-table-column prop="row_no" label="行号" width="80" />
-              <el-table-column prop="code" label="代码" width="120" />
-              <el-table-column prop="message" label="错误信息" min-width="220" />
-            </el-table>
+            <div class="table-scroll">
+              <el-table :data="currentExecuteResult.failed_sample || []" size="small" class="mt-3">
+                <el-table-column prop="row_no" label="行号" width="80" />
+                <el-table-column prop="code" label="代码" width="120" />
+                <el-table-column prop="message" label="错误信息" min-width="220" />
+              </el-table>
+            </div>
           </el-card>
         </el-card>
       </el-tab-pane>
@@ -168,20 +174,20 @@
             title="导出列含：code、name、market、total_shares、free_float_shares、listing_date、industry、shares_updated_at、collect_enabled。可按下方条件筛选后导出全部匹配行（不分页）。"
           />
           <el-row :gutter="12" class="mb-4">
-            <el-col :span="8">
+            <el-col :xs="24" :sm="12" :md="8">
               <el-input v-model="currentExportFilters.keyword" placeholder="代码/名称（可选）" clearable />
             </el-col>
-            <el-col :span="5">
+            <el-col :xs="24" :sm="12" :md="5">
               <el-checkbox v-model="currentExportFilters.empty_shares">仅缺股本</el-checkbox>
             </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :md="6">
               <el-select v-model="currentExportFilters.delisted_filter" style="width: 100%" placeholder="退市筛选">
                 <el-option label="全部股票" value="all" />
                 <el-option label="仅退市" value="only" />
                 <el-option label="排除退市" value="exclude" />
               </el-select>
             </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :md="6">
               <el-select v-model="currentExportCollectFilter" style="width: 100%" placeholder="采集标志">
                 <el-option label="全部" value="all" />
                 <el-option label="启用" value="enabled" />
