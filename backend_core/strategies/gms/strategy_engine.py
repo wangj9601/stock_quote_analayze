@@ -14,6 +14,7 @@ from .signal_detector import GMSSignalDetector
 from .models import GMSIndicators
 from .config import GMSConfigManager
 from .scoring._helpers import resolve_mechanism_id
+from .json_safe import sanitize_for_pg_json
 
 from .risk_tags import build_risk_tags, detect_trend_break
 
@@ -149,7 +150,7 @@ class GMSStrategyEngine:
                 st = ind.score_total
                 signal_strength = st / 100.0 if st is not None and st > 0 else 0.0
 
-                score_detail = {
+                score_detail = sanitize_for_pg_json({
                     "score_accumulation": ind.score_accumulation,
                     "score_balance": ind.score_balance,
                     "score_momentum": ind.score_momentum,
@@ -220,7 +221,7 @@ class GMSStrategyEngine:
                     "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),
                     "penalties": getattr(ind, "penalty_details", []) or [],
                     "risk_tags": risk_tags,
-                }
+                })
 
                 results.append({
                     "symbol": ind.code,

@@ -10,6 +10,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from backend_core.strategies.gms.json_safe import sanitize_for_pg_json
+
 logger = logging.getLogger(__name__)
 
 # 回测/预计算：某日全市场扫描无买点时写入占位，避免重复全市场计算
@@ -192,7 +194,7 @@ def upsert_trace_rows(
             volume_multiple=r.get("volume_multiple"),
             volume_ratio=r.get("volume_ratio"),
             turnover_rate=r.get("turnover_rate"),
-            score_detail=r.get("score_detail"),
+            score_detail=sanitize_for_pg_json(r.get("score_detail")),
             created_at=now,
         )
         if existing:

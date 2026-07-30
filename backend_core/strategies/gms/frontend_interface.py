@@ -14,6 +14,7 @@ from sqlalchemy import cast, distinct, func, String
 from .data_loader import GMSDataLoader
 from .strategy_engine import GMSStrategyEngine
 from .config import GMSConfigManager
+from .json_safe import sanitize_for_pg_json
 
 from backend_api.services.gms_selection_snapshot import enrich_trace_meta
 
@@ -220,7 +221,9 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
         market_type = result.get("market_type") or _infer_market_type(code)
         if not code:
             return
-        sd = result.get("score_detail") or {}
+        # PG JSON 不接受 NaN/Inf（常见于缺失 ma60_d 等浮点字段）
+        sd = sanitize_for_pg_json(result.get("score_detail") or {})
+        risk_tags = sanitize_for_pg_json(result.get("risk_tags"))
         rec = GMSSignalTrace(
             code=code,
             date=date,
@@ -257,8 +260,8 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
             mom_ratio_d1_judge=sd.get("mom_ratio_d1_judge") or None,
             mom_deviation_judge=sd.get("mom_deviation_judge") or None,
             mom_volume_judge=sd.get("mom_volume_judge") or None,
-            risk_tags=result.get("risk_tags"),
-            score_detail=result.get("score_detail"),
+            risk_tags=risk_tags,
+            score_detail=sd,
         )
         with db.begin_nested():
             db.merge(rec)
