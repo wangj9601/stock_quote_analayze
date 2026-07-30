@@ -605,6 +605,7 @@ class StockAnalysisService:
                         "nearest_support": None,
                         "nearest_resistance": None,
                         "current_price": 0.0,
+                        "current_price_source": None,
                         "method": "kde_volume_weighted",
                         "kde_ok": False,
                         "kde_reason": "no_historical_data",
@@ -621,9 +622,9 @@ class StockAnalysisService:
                     },
                 }
 
-            current_price = self._get_current_price(code)
-            if not current_price:
-                current_price = float(historical_data[-1]["close"])
+            current_price, price_source = self._resolve_anchor_price(
+                code, historical_data
+            )
 
             levels = KeyLevels.calculate_key_levels(
                 historical_data,
@@ -643,12 +644,14 @@ class StockAnalysisService:
                     "stock_code": code,
                     "stock_name": stock_name,
                     **levels,
+                    "current_price_source": price_source,
                     "description": (
                         "成交量加权 KDE（与 RPE 结构位同口径）：日K close+volume；"
                         f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
                         f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
                         f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
                         "现价下方峰为支撑，上方峰为压力（阻力）。"
+                        "现价优先实时行情表，无有效价时回退日K收盘。"
                     ),
                 },
             }
@@ -694,10 +697,10 @@ class StockAnalysisService:
                     }
                 }
             
-            # 获取当前价格
-            current_price = self._get_current_price(stock_code)
-            if not current_price:
-                current_price = float(historical_data[-1]['close'])
+            # 现价：优先 A/港实时行情表有效价，否则日K最新收盘
+            current_price, price_source = self._resolve_anchor_price(
+                stock_code, historical_data
+            )
             
             # 计算技术指标
             technical_indicators = self._calculate_technical_indicators(stock_code, historical_data)
@@ -712,8 +715,9 @@ class StockAnalysisService:
                 price_prediction=price_prediction
             )
             
-            # 关键价位
+            # 关键价位（KDE 历史序列仍用日K；仅现价锚点用实时优先价）
             key_levels = KeyLevels.calculate_key_levels(historical_data, current_price)
+            key_levels["current_price_source"] = price_source
             
             # AI 深度分析 (Gemini) - 已屏蔽，避免配额超限
             # try:
@@ -864,70 +868,69 @@ class StockAnalysisService:
             traceback.print_exc()
             return []
     
-    def _get_current_price(self, stock_code: str) -> Optional[float]:
-        """获取当前价格（支持A股和港股）"""
-        try:
-            is_hk = self._is_hk_stock(stock_code)
-            
-            if is_hk:
-                # 港股：从stock_realtime_quote_hk表获取
-                latest_date_result = pd.read_sql_query("""
-                    SELECT MAX(trade_date) as latest_date 
-                    FROM stock_realtime_quote_hk 
-                    WHERE change_percent IS NOT NULL
-                """, self.db.bind)
-                
-                stock = None
-                if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
-                    latest_trade_date = latest_date_result.iloc[0]['latest_date']
-                    if isinstance(latest_trade_date, str):
-                        latest_trade_date = latest_trade_date[:10]
-                    else:
-                        latest_trade_date = str(latest_trade_date)[:10]
-                    
-                    stock = self.db.query(StockRealtimeQuoteHK).filter(
-                        StockRealtimeQuoteHK.code == stock_code,
-                        StockRealtimeQuoteHK.trade_date == latest_trade_date
-                    ).first()
-                
-                if stock:
-                    return float(stock.current_price) if stock.current_price else None
-            else:
-                # A股：优先从实时行情API获取最新价格
-                import akshare as ak
-                
-                try:
-                    df_bid_ask = ak.stock_bid_ask_em(symbol=stock_code)
-                    if not df_bid_ask.empty:
-                        bid_ask_dict = dict(zip(df_bid_ask['item'], df_bid_ask['value']))
-                        current_price = bid_ask_dict.get("最新")
-                        if current_price:
-                            return float(current_price)
-                except Exception as e:
-                    logger.warning(f"从实时API获取价格失败: {str(e)}")
-                
-                # 如果实时API失败，从数据库获取
-                latest_date_result = pd.read_sql_query("""
-                    SELECT MAX(trade_date) as latest_date 
-                    FROM stock_realtime_quote 
-                    WHERE change_percent IS NOT NULL AND change_percent != 0
-                """, self.db.bind)
-                
-                stock = None
-                if not latest_date_result.empty and latest_date_result.iloc[0]['latest_date'] is not None:
-                    latest_trade_date = latest_date_result.iloc[0]['latest_date']
-                    stock = self.db.query(StockRealtimeQuote).filter(
-                        StockRealtimeQuote.code == stock_code,
-                        StockRealtimeQuote.trade_date == latest_trade_date
-                    ).first()
-                
-                if stock:
-                    return float(stock.current_price) if stock.current_price else None
-            
+    @staticmethod
+    def _valid_price(value) -> Optional[float]:
+        """有效现价：可转 float 且 > 0（排除 None / 0 / 空）。"""
+        if value is None:
             return None
+        try:
+            px = float(value)
+        except (TypeError, ValueError):
+            return None
+        return px if px > 0 else None
+
+    def _get_current_price(self, stock_code: str) -> Optional[float]:
+        """
+        从对应市场实时行情表取该股最新一条的有效现价（current_price）。
+        A 股：stock_realtime_quote；港股：stock_realtime_quote_hk。
+        无有效价时返回 None（由调用方回退日K收盘）。
+        """
+        try:
+            code = str(stock_code or "").strip()
+            if not code:
+                return None
+            is_hk = self._is_hk_stock(code)
+            if is_hk:
+                row = (
+                    self.db.query(StockRealtimeQuoteHK)
+                    .filter(StockRealtimeQuoteHK.code == code)
+                    .order_by(desc(StockRealtimeQuoteHK.trade_date))
+                    .first()
+                )
+            else:
+                row = (
+                    self.db.query(StockRealtimeQuote)
+                    .filter(StockRealtimeQuote.code == code)
+                    .order_by(desc(StockRealtimeQuote.trade_date))
+                    .first()
+                )
+            if not row:
+                return None
+            return self._valid_price(getattr(row, "current_price", None))
         except Exception as e:
             logger.error(f"获取当前价格失败: {str(e)}")
             return None
+
+    def _resolve_anchor_price(
+        self, stock_code: str, historical_data: Optional[List[Dict]] = None
+    ) -> Tuple[float, str]:
+        """
+        支撑/压力及分析用的现价锚点：
+        1) 优先实时行情表有效最新价 -> source='realtime'
+        2) 否则日K最新收盘 -> source='daily_close'
+        """
+        realtime = self._get_current_price(stock_code)
+        if realtime is not None:
+            return float(realtime), "realtime"
+        close_px = None
+        if historical_data:
+            try:
+                close_px = self._valid_price(historical_data[-1].get("close"))
+            except (TypeError, ValueError, AttributeError, IndexError):
+                close_px = None
+        if close_px is not None:
+            return float(close_px), "daily_close"
+        return 0.0, "daily_close"
     
     def _calculate_technical_indicators(self, stock_code: str, historical_data: List[Dict]) -> Dict:
         """获取或计算技术指标"""

@@ -44,10 +44,82 @@ def test_get_key_levels_only_success():
     assert data["stock_code"] == "600519"
     assert data["stock_name"] == "贵州茅台"
     assert data["method"] == "kde_volume_weighted"
+    assert data["current_price"] == 15.0
+    assert data["current_price_source"] == "realtime"
     assert "description" in data
     assert data["kde_lookback_initial"] == KeyLevels.KDE_LOOKBACK_DAYS
     assert isinstance(data["support_levels"], list)
     assert isinstance(data["resistance_levels"], list)
+
+
+def test_get_key_levels_only_fallback_daily_close():
+    """实时表无有效价时，现价回退日K最新收盘，并标注 daily_close。"""
+    bars = _fake_bars()
+    last_close = float(bars[-1]["close"])
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    with patch.object(svc, "_get_historical_data", return_value=bars), patch.object(
+        svc, "_get_current_price", return_value=None
+    ):
+        result = svc.get_key_levels_only("600519", max_levels=8)
+
+    assert result["success"] is True
+    data = result["data"]
+    assert data["current_price"] == last_close
+    assert data["current_price_source"] == "daily_close"
+
+
+def test_get_key_levels_only_rejects_zero_realtime():
+    """实时表 current_price=0 视为无效，回退日K。"""
+    bars = _fake_bars()
+    last_close = float(bars[-1]["close"])
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    # _resolve_anchor_price 经 _valid_price；直接测 resolve
+    with patch.object(svc, "_get_current_price", return_value=None):
+        px, src = svc._resolve_anchor_price("600519", bars)
+    assert px == last_close
+    assert src == "daily_close"
+    assert StockAnalysisService._valid_price(0) is None
+    assert StockAnalysisService._valid_price(0.0) is None
+    assert StockAnalysisService._valid_price(None) is None
+    assert StockAnalysisService._valid_price(12.3) == 12.3
+
+
+def test_get_current_price_uses_a_share_realtime_table():
+    """A 股从 stock_realtime_quote 按 trade_date 降序取 current_price。"""
+    row = MagicMock()
+    row.current_price = 18.66
+    q = MagicMock()
+    q.filter.return_value = q
+    q.order_by.return_value = q
+    q.first.return_value = row
+
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    svc.db = MagicMock()
+    svc.db.query.return_value = q
+    with patch.object(svc, "_is_hk_stock", return_value=False):
+        assert svc._get_current_price("600519") == 18.66
+    from models import StockRealtimeQuote
+
+    svc.db.query.assert_called_with(StockRealtimeQuote)
+
+
+def test_get_current_price_uses_hk_realtime_table():
+    """港股从 stock_realtime_quote_hk 取有效现价。"""
+    row = MagicMock()
+    row.current_price = 88.5
+    q = MagicMock()
+    q.filter.return_value = q
+    q.order_by.return_value = q
+    q.first.return_value = row
+
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    svc.db = MagicMock()
+    svc.db.query.return_value = q
+    with patch.object(svc, "_is_hk_stock", return_value=True):
+        assert svc._get_current_price("00700") == 88.5
+    from models import StockRealtimeQuoteHK
+
+    svc.db.query.assert_called_with(StockRealtimeQuoteHK)
 
 
 def test_get_key_levels_only_no_history():
