@@ -67,14 +67,47 @@ def test_expand_modules_granular():
     assert "gms_strategy_configs" in expand_modules(["strategy_configs"])
     assert expand_modules(["basic_info"]) == ["stock_basic_info", "stock_basic_info_hk"]
     assert expand_modules(["quotes"]) == ["historical_quotes", "historical_quotes_hk"]
+    assert expand_modules(["permissions"]) == [
+        "frontend_permissions",
+        "frontend_roles",
+        "role_permissions",
+    ]
+    assert expand_modules(["permissions_resources"]) == [
+        "frontend_permissions",
+        "frontend_roles",
+        "role_permissions",
+    ]
+    assert expand_modules(["stock_basic"]) == ["stock_basic_info", "stock_basic_info_hk"]
+    assert "frontend_permissions" not in expand_modules(None)
     assert needs_date_range(["historical_quotes"]) is True
     assert needs_date_range(["stock_basic_info"]) is False
     assert set(ALL_RESOURCES) >= set(DEFAULT_RESOURCES)
+    assert "frontend_permissions" in ALL_RESOURCES
     try:
         expand_modules(["no_such"])
         assert False
     except ValueError:
         pass
+
+
+def test_filter_modules_for_bundle():
+    from backend_api.env_sync import filter_modules_for_bundle
+
+    mods = [
+        "gms_strategy_configs",
+        "frontend_permissions",
+        "frontend_roles",
+        "stock_basic_info",
+    ]
+    assert filter_modules_for_bundle("permissions_resources", mods) == [
+        "frontend_permissions",
+        "frontend_roles",
+    ]
+    assert filter_modules_for_bundle("strategy_configs", mods) == [
+        "gms_strategy_configs",
+    ]
+    assert filter_modules_for_bundle("stock_basic", mods) == ["stock_basic_info"]
+    assert filter_modules_for_bundle("unknown_bundle", mods) == []
 
 
 def test_quotes_require_date_range(db):
@@ -156,6 +189,91 @@ def test_stock_basic_roundtrip(db):
     row = db.query(StockBasicInfo).filter_by(code="000001").first()
     assert row is not None
     assert row.name == "平安银行"
+
+
+def test_permissions_resources_roundtrip(db):
+    from backend_api.env_sync.services import export_modules, import_modules
+    from backend_api.env_sync.services.permissions_resources import (
+        export_permissions_resources,
+        import_permissions_resources,
+    )
+    from backend_api.models import FrontendPermission, FrontendRole, RolePermission
+
+    db.add(
+        FrontendPermission(
+            code="menu.root",
+            name="根菜单",
+            level=1,
+            parent_code=None,
+            channel_code=None,
+            sort_order=1,
+            is_active=True,
+        )
+    )
+    db.add(
+        FrontendPermission(
+            code="menu.child",
+            name="子菜单",
+            level=2,
+            parent_code="menu.root",
+            channel_code="web",
+            sort_order=2,
+            is_active=True,
+        )
+    )
+    role = FrontendRole(
+        code="standard",
+        name="标准用户",
+        description="desc",
+        is_system=True,
+    )
+    db.add(role)
+    db.flush()
+    root = db.query(FrontendPermission).filter_by(code="menu.root").first()
+    child = db.query(FrontendPermission).filter_by(code="menu.child").first()
+    db.add(RolePermission(role_id=role.id, permission_id=root.id))
+    db.add(RolePermission(role_id=role.id, permission_id=child.id))
+    db.commit()
+
+    bundle = export_permissions_resources(db)
+    assert len(bundle["items"]["frontend_permissions"]) == 2
+    assert len(bundle["items"]["frontend_roles"]) == 1
+    assert len(bundle["items"]["role_permissions"]) == 2
+    assert bundle["items"]["role_permissions"][0]["role_code"] == "standard"
+
+    # 清空后整包导入
+    db.query(RolePermission).delete()
+    db.query(FrontendPermission).delete()
+    db.query(FrontendRole).delete()
+    db.commit()
+
+    result = import_permissions_resources(db, bundle)
+    assert result["created"] >= 3  # 2 perms + 1 role + links
+    assert db.query(FrontendPermission).count() == 2
+    assert db.query(FrontendRole).filter_by(code="standard").first() is not None
+    assert db.query(RolePermission).count() == 2
+
+    # upsert：改名后再次导入应 updated
+    bundle["items"]["frontend_permissions"][0]["name"] = "根菜单改"
+    result2 = import_permissions_resources(
+        db, bundle, tables=["frontend_permissions"]
+    )
+    assert result2["updated"] >= 1
+    assert (
+        db.query(FrontendPermission).filter_by(code="menu.root").first().name
+        == "根菜单改"
+    )
+
+    # 编排层：仅勾选权限模块
+    out = export_modules(db, ["frontend_permissions", "frontend_roles"])
+    assert "permissions_resources" in out["bundles"]
+    assert "role_permissions" not in out["bundles"]["permissions_resources"]["items"]
+    imported = import_modules(
+        db,
+        out["bundles"],
+        modules=["frontend_permissions", "frontend_roles"],
+    )
+    assert "permissions_resources" in imported["results"]
 
 
 def test_verify_sync_key_hash(db):
@@ -364,3 +482,107 @@ def test_admin_pull_mocks_remote(db):
         assert res.status_code == 200, res.text
         assert res.json()["success"] is True
         assert db.query(GMSStrategyConfig).filter_by(name="pulled").first() is not None
+
+
+def test_admin_push_filters_modules_per_bundle(db):
+    """Push 分批时 modules 只含当前 bundle 细项，且含 permissions_resources。"""
+    from backend_api.models import EnvSyncClientConfig, FrontendPermission
+
+    app = FastAPI()
+    app.include_router(admin_router)
+
+    admin = MagicMock()
+    admin.id = 9
+    admin.username = "admin"
+    app.dependency_overrides[get_current_admin] = lambda: admin
+
+    def _db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = _db
+
+    db.add(
+        EnvSyncClientConfig(
+            id=1,
+            enabled=True,
+            prod_base_url="http://prod.example",
+            sync_key="secret",
+            updated_at=datetime.now(),
+        )
+    )
+    db.add(
+        FrontendPermission(
+            code="menu.root",
+            name="根",
+            level=1,
+            parent_code=None,
+            channel_code=None,
+            sort_order=1,
+            is_active=True,
+        )
+    )
+    db.add(
+        GMSStrategyConfig(
+            name="push-cfg",
+            config_params={},
+            is_active=True,
+            is_default=False,
+        )
+    )
+    db.commit()
+
+    posted = []
+
+    class FakeResp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"success": True, "results": {"ok": True}}
+
+    def _fake_post(url, headers=None, json_body=None, timeout=None):
+        posted.append(json_body)
+        return FakeResp()
+
+    with patch(
+        "backend_api.env_sync.admin_routes.remote_http.post",
+        side_effect=_fake_post,
+    ):
+        client = TestClient(app)
+        res = client.post(
+            "/api/admin/env-sync/push",
+            json={
+                "modules": [
+                    "gms_strategy_configs",
+                    "frontend_permissions",
+                ]
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["success"] is True
+
+    assert len(posted) == 2
+    by_bundle = {next(iter(p["bundles"].keys())): p for p in posted}
+    assert "strategy_configs" in by_bundle
+    assert "permissions_resources" in by_bundle
+    assert by_bundle["strategy_configs"]["modules"] == ["gms_strategy_configs"]
+    assert by_bundle["permissions_resources"]["modules"] == ["frontend_permissions"]
+    # 不得把权限细项塞进策略批次
+    assert "frontend_permissions" not in (
+        by_bundle["strategy_configs"]["modules"] or []
+    )
+
+
+def test_remote_fail_detail_unknown_module_hint():
+    from backend_api.env_sync.admin_routes import _remote_fail_detail
+
+    msg = _remote_fail_detail(
+        "生产 import[permissions_resources]",
+        400,
+        '{"detail":"未知同步模块: frontend_permissions"}',
+    )
+    assert "部署" in msg
+    assert "frontend_permissions" in msg

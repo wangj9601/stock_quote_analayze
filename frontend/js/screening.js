@@ -69,6 +69,8 @@ const ScreeningPage = {
     _gmsBoardPickerSourceFilter: 'all',
     /** 板块选择弹窗归属：gms | urt | rpe */
     _gmsBoardPickerOwner: 'gms',
+    /** 板块选择弹窗正在刷新选项 */
+    _gmsBoardPickerRefreshing: false,
 
     // 初始化
     async init() {
@@ -870,6 +872,10 @@ const ScreeningPage = {
         const clearBtn = document.getElementById('gmsBoardPickerClear');
         if (clearBtn) {
             clearBtn.addEventListener('click', () => this._gmsBoardPickerClearVisible());
+        }
+        const refreshBtn = document.getElementById('gmsBoardPickerRefresh');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => void this.refreshGmsBoardPickerOptions());
         }
         const searchEl = document.getElementById('gmsBoardPickerSearch');
         if (searchEl) {
@@ -2830,6 +2836,74 @@ const ScreeningPage = {
         });
     },
 
+    /**
+     * 弹窗内刷新板块选项：清缓存后强制重拉，按板块代码保留当前勾选。
+     * GMS / URT / RPE 共用同一弹窗，均可使用。
+     */
+    async refreshGmsBoardPickerOptions() {
+        const kind = this._gmsBoardPickerKind;
+        if (!kind || this._gmsBoardPickerRefreshing) return;
+
+        const btn = document.getElementById('gmsBoardPickerRefresh');
+        const listEl = document.getElementById('gmsBoardPickerList');
+        const kindLabel = kind === 'industry' ? '行业' : '概念';
+        const preserved = new Set(
+            Array.from(this._gmsBoardPickerDraft || []).map((c) => String(c || '').trim()).filter(Boolean),
+        );
+
+        this._gmsBoardPickerRefreshing = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '刷新中…';
+        }
+        if (listEl) {
+            listEl.classList.add('gms-board-picker-list--loading');
+            listEl.setAttribute('aria-busy', 'true');
+        }
+
+        try {
+            const ok = kind === 'industry'
+                ? await this.loadGmsIndustryBoardOptions(true)
+                : await this.loadGmsConceptBoardOptions(true);
+            if (!ok) {
+                throw new Error(`刷新${kindLabel}板块选项失败`);
+            }
+
+            const catalog = this._gmsBoardCatalogByKind(kind);
+            const validCodes = new Set(
+                catalog.map((b) => String(b.board_code || '').trim()).filter(Boolean),
+            );
+            let nextDraft = new Set([...preserved].filter((code) => validCodes.has(code)));
+            if ((this._gmsBoardPickerOwner || 'gms') === 'gms') {
+                nextDraft = this._mergeGmsTradeObserveBoardSelection(kind, nextDraft);
+            }
+            this._gmsBoardPickerDraft = nextDraft;
+            this._renderGmsBoardPickerList();
+
+            if (window.CommonUtils) {
+                CommonUtils.showToast(
+                    `已刷新${kindLabel}板块选项（共 ${catalog.length} 个）`,
+                    'success',
+                );
+            }
+        } catch (e) {
+            console.warn('[板块选择] 刷新选项失败', e);
+            if (window.CommonUtils) {
+                CommonUtils.showToast(e.message || `刷新${kindLabel}板块选项失败`, 'error');
+            }
+        } finally {
+            this._gmsBoardPickerRefreshing = false;
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '刷新';
+            }
+            if (listEl) {
+                listEl.classList.remove('gms-board-picker-list--loading');
+                listEl.removeAttribute('aria-busy');
+            }
+        }
+    },
+
     confirmGmsBoardPicker() {
         const kind = this._gmsBoardPickerKind;
         const codes = Array.from(this._gmsBoardPickerDraft);
@@ -3017,35 +3091,48 @@ const ScreeningPage = {
         wrap.style.display = show ? 'flex' : 'none';
     },
 
-    /** 加载行业板块选项 @param {boolean} [force] 强制重新拉取 */
+    /**
+     * 加载行业板块选项
+     * @param {boolean} [force] 强制重新拉取
+     * @returns {Promise<boolean>} 是否加载成功
+     */
     async loadGmsIndustryBoardOptions(force = false) {
-        if (!force && this._gmsIndustryBoardsLoaded && this.gmsIndustryBoardCatalog.length) return;
+        if (!force && this._gmsIndustryBoardsLoaded && this.gmsIndustryBoardCatalog.length) return true;
         try {
             const res = await fetch(`${this.API_BASE_URL}/api/market/industry_board/catalog`);
             const data = await res.json();
             if (!res.ok || data.success === false) {
                 throw new Error(data.message || `HTTP ${res.status}`);
             }
-            const boards = data.success && Array.isArray(data.data) ? data.data : [];
+            const boards = Array.isArray(data.data) ? data.data : [];
             this.gmsIndustryBoardCatalog = this._dedupeGmsIndustryBoardCatalog(boards);
             this._gmsIndustryBoardsLoaded = true;
             this._applyGmsTradeObserveBoardDefaults('industry');
+            return true;
         } catch (e) {
             console.warn('[GMS] 加载行业板块列表失败', e);
             this.gmsIndustryBoardCatalog = [];
             this._gmsIndustryBoardsLoaded = false;
             const summary = document.getElementById('gmsIndustryBoardSummary');
             if (summary) summary.textContent = '加载失败，请刷新页面';
+            return false;
         }
     },
 
-    /** 加载概念板块选项 @param {boolean} [force] 强制重新拉取 */
+    /**
+     * 加载概念板块选项
+     * @param {boolean} [force] 强制重新拉取
+     * @returns {Promise<boolean>} 是否加载成功
+     */
     async loadGmsConceptBoardOptions(force = false) {
-        if (!force && this._gmsConceptBoardsLoaded && this.gmsConceptBoardCatalog.length) return;
+        if (!force && this._gmsConceptBoardsLoaded && this.gmsConceptBoardCatalog.length) return true;
         try {
             const res = await fetch(`${this.API_BASE_URL}/api/market/concept_board`);
             const data = await res.json();
-            const boards = data.success && Array.isArray(data.data) ? data.data : [];
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || `HTTP ${res.status}`);
+            }
+            const boards = Array.isArray(data.data) ? data.data : [];
             boards.sort((a, b) => String(a.board_name || a.board_code).localeCompare(
                 String(b.board_name || b.board_code),
                 'zh-CN'
@@ -3060,12 +3147,14 @@ const ScreeningPage = {
             });
             this._gmsConceptBoardsLoaded = true;
             this._applyGmsTradeObserveBoardDefaults('concept');
+            return true;
         } catch (e) {
             console.warn('[GMS] 加载概念板块列表失败', e);
             this.gmsConceptBoardCatalog = [];
             this._gmsConceptBoardsLoaded = false;
             const summary = document.getElementById('gmsConceptBoardSummary');
             if (summary) summary.textContent = '加载失败，请刷新页面';
+            return false;
         }
     },
 
@@ -4219,7 +4308,7 @@ const ScreeningPage = {
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
             } else if (strategy === 'urt') {
-                colSpan = 12;
+                colSpan = 14;
             } else {
                 colSpan = 12;
             }
@@ -4651,7 +4740,7 @@ const ScreeningPage = {
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
             } else if (strategy === 'urt') {
-                colSpan = 12;
+                colSpan = 14;
             } else {
                 colSpan = 12;
             }
@@ -4890,6 +4979,28 @@ const ScreeningPage = {
                     if (scoreVal >= 85) scoreClass = 'strength-high';
                     else if (scoreVal >= 70) scoreClass = 'strength-mid';
                 }
+                const urtSd = stock.score_detail && typeof stock.score_detail === 'object' ? stock.score_detail : {};
+                const urtSt = urtSd.structure && typeof urtSd.structure === 'object' ? urtSd.structure : {};
+                const urtSupport = stock.nearest_support != null
+                    ? stock.nearest_support
+                    : (Array.isArray(stock.support_levels) && stock.support_levels.length
+                        ? stock.support_levels[0]
+                        : urtSt.nearest_support);
+                const urtResist = stock.nearest_resistance != null
+                    ? stock.nearest_resistance
+                    : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                        ? stock.resistance_levels[0]
+                        : urtSt.nearest_resistance);
+                const urtSupportTitle = Array.isArray(stock.support_levels) && stock.support_levels.length
+                    ? stock.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    : (Array.isArray(urtSt.support_levels) && urtSt.support_levels.length
+                        ? urtSt.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                        : '');
+                const urtResistTitle = Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                    ? stock.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    : (Array.isArray(urtSt.resistance_levels) && urtSt.resistance_levels.length
+                        ? urtSt.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                        : '');
                 html += `
                     <tr data-urt-row="${index}">
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${urtCode}</a></td>
@@ -4902,6 +5013,8 @@ const ScreeningPage = {
                         <td class="gms-col-narrow">${stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '--'}</td>
                         <td class="gms-col-narrow">${stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '--'}</td>
                         <td class="gms-col-narrow">${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
+                        <td class="gms-col-price support" title="${urtSupportTitle || ''}">${urtSupport != null && Number.isFinite(Number(urtSupport)) ? Number(urtSupport).toFixed(2) : '--'}</td>
+                        <td class="gms-col-price resistance" title="${urtResistTitle || ''}">${urtResist != null && Number.isFinite(Number(urtResist)) ? Number(urtResist).toFixed(2) : '--'}</td>
                         <td class="gms-col-narrow"><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-actions">
                             <div class="action-links">
@@ -4912,7 +5025,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row urt-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="12" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
+                        <td colspan="14" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
                     </tr>
                 `;
             } else if (strategy === 'one-yang-three-lines') {
@@ -5501,9 +5614,22 @@ const ScreeningPage = {
         } else if (strategy === 'urt') {
             headers = [
                 '股票代码', '股票名称', '信号日', '收盘', 'MA20', '4日阳', '5日阳',
-                '量能倍数', '量比', '换手%', '得分',
+                '量能倍数', '量比', '换手%', '支撑', '阻力', '得分',
             ];
-            rows = data.map((stock) => [
+            rows = data.map((stock) => {
+                const sd = stock.score_detail && typeof stock.score_detail === 'object' ? stock.score_detail : {};
+                const st = sd.structure && typeof sd.structure === 'object' ? sd.structure : {};
+                const support = stock.nearest_support != null
+                    ? stock.nearest_support
+                    : (Array.isArray(stock.support_levels) && stock.support_levels.length
+                        ? stock.support_levels[0]
+                        : st.nearest_support);
+                const resist = stock.nearest_resistance != null
+                    ? stock.nearest_resistance
+                    : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                        ? stock.resistance_levels[0]
+                        : st.nearest_resistance);
+                return [
                 `\u2060${stock.code}`,
                 stock.name,
                 stock.signal_date || '',
@@ -5514,8 +5640,11 @@ const ScreeningPage = {
                 stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '',
                 stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '',
                 stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '',
+                support != null && Number.isFinite(Number(support)) ? Number(support).toFixed(2) : '',
+                resist != null && Number.isFinite(Number(resist)) ? Number(resist).toFixed(2) : '',
                 stock.score != null ? Number(stock.score).toFixed(1) : '',
-            ]);
+                ];
+            });
             filename = `上升趋势策略筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else {
             // 通用导出（如果需要支持其他策略）

@@ -26,6 +26,10 @@ from backend_api.env_sync.services.trade_observe import (
     export_trade_observe,
     import_trade_observe,
 )
+from backend_api.env_sync.services.permissions_resources import (
+    export_permissions_resources,
+    import_permissions_resources,
+)
 
 
 def _env_label() -> str:
@@ -100,6 +104,13 @@ def export_modules(
                 env_label=label,
             ),
         )
+    if parts["permissions"]:
+        bundles["permissions_resources"] = _stage(
+            "permissions_resources",
+            lambda: export_permissions_resources(
+                db, env_label=label, tables=parts["permissions"]
+            ),
+        )
 
     out: Dict[str, Any] = {"success": True, "modules": resources, "bundles": bundles}
     if date_range["start"] and date_range["end"]:
@@ -117,7 +128,9 @@ def import_modules(
     modules: List[str] | None = None,
 ) -> Dict[str, Any]:
     """
-    bundles: { strategy_configs|trade_observe|stock_basic|board_data|quotes: SyncBundle }
+    bundles: {
+      strategy_configs|trade_observe|stock_basic|board_data|quotes|permissions_resources: SyncBundle
+    }
     modules: 可选，限制导入细项；为空则导入包内全部 items。
     """
     results: Dict[str, Any] = {}
@@ -147,4 +160,9 @@ def import_modules(
     if "quotes" in (bundles or {}):
         tables = set(parts["quotes"]) if parts else None
         results["quotes"] = import_quotes(db, bundles["quotes"], tables=tables)
+    if "permissions_resources" in (bundles or {}):
+        tables = parts["permissions"] if parts else None
+        results["permissions_resources"] = import_permissions_resources(
+            db, bundles["permissions_resources"], tables=tables
+        )
     return {"success": True, "results": results}

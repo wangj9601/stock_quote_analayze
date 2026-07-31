@@ -9,6 +9,10 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 
 MODULE_STRATEGY_CONFIGS = "strategy_configs"
 MODULE_TRADE_OBSERVE = "trade_observe"
+MODULE_STOCK_BASIC = "stock_basic"
+MODULE_BOARD_DATA = "board_data"
+MODULE_QUOTES = "quotes"
+MODULE_PERMISSIONS_RESOURCES = "permissions_resources"
 
 # —— 策略配置细项（与 strategy_configs.STRATEGY_TABLES 一致）——
 RESOURCE_STRATEGY = [
@@ -55,6 +59,13 @@ RESOURCE_QUOTES = [
     "historical_quotes_hk",
 ]
 
+# —— 权限与角色（不含用户及用户级覆盖）——
+RESOURCE_PERMISSIONS = [
+    "frontend_permissions",
+    "frontend_roles",
+    "role_permissions",
+]
+
 DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES)
 
 ALL_RESOURCES = (
@@ -63,14 +74,30 @@ ALL_RESOURCES = (
     + RESOURCE_BASIC
     + RESOURCE_BOARD
     + RESOURCE_QUOTES
+    + RESOURCE_PERMISSIONS
 )
 
 # 未指定 modules 时的默认范围：不含基本信息/板块/行情（避免误拉大数据）
 DEFAULT_RESOURCES = RESOURCE_STRATEGY + RESOURCE_OBSERVE
 
+# bundle key → 细项资源（与 export_modules 产出的 bundles 键一致）
+BUNDLE_RESOURCES: Dict[str, List[str]] = {
+    MODULE_STRATEGY_CONFIGS: list(RESOURCE_STRATEGY),
+    MODULE_TRADE_OBSERVE: list(RESOURCE_OBSERVE),
+    MODULE_STOCK_BASIC: list(RESOURCE_BASIC),
+    MODULE_BOARD_DATA: list(RESOURCE_BOARD),
+    MODULE_QUOTES: list(RESOURCE_QUOTES),
+    MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
+}
+
 GROUP_EXPAND: Dict[str, List[str]] = {
     MODULE_STRATEGY_CONFIGS: list(RESOURCE_STRATEGY),
     MODULE_TRADE_OBSERVE: list(RESOURCE_OBSERVE),
+    # bundle 键别名：与 export/import 的 bundles 键对齐，避免只认细项名
+    MODULE_STOCK_BASIC: list(RESOURCE_BASIC),
+    MODULE_BOARD_DATA: list(RESOURCE_BOARD),
+    MODULE_QUOTES: list(RESOURCE_QUOTES),
+    MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
     "gms_config_all": [
         "gms_strategy_configs",
         "gms_runtime_config",
@@ -100,7 +127,8 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     ],
     "basic_info": list(RESOURCE_BASIC),
     "board_info": list(RESOURCE_BOARD),
-    "quotes": list(RESOURCE_QUOTES),
+    # quotes 已由 MODULE_QUOTES 覆盖
+    "permissions": list(RESOURCE_PERMISSIONS),
 }
 
 MODULE_CATALOG: List[Dict[str, Any]] = [
@@ -262,6 +290,27 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
             },
         ],
     },
+    {
+        "group": "permissions",
+        "name": "权限与角色",
+        "items": [
+            {
+                "code": "frontend_permissions",
+                "name": "权限资源树",
+                "desc": "frontend_permissions 注册表/资源树（按 code upsert，不含用户级覆盖）",
+            },
+            {
+                "code": "frontend_roles",
+                "name": "角色定义",
+                "desc": "frontend_roles（按 code upsert，不含用户-角色绑定）",
+            },
+            {
+                "code": "role_permissions",
+                "name": "角色-权限映射",
+                "desc": "role_permissions；导入时按角色覆盖映射（建议与权限资源树一并勾选）",
+            },
+        ],
+    },
 ]
 
 
@@ -299,7 +348,18 @@ def split_resources(resources: Sequence[str]) -> Dict[str, List[str]]:
         "basic": [r for r in resources if r in RESOURCE_BASIC],
         "board": [r for r in resources if r in RESOURCE_BOARD],
         "quotes": [r for r in resources if r in RESOURCE_QUOTES],
+        "permissions": [r for r in resources if r in RESOURCE_PERMISSIONS],
     }
+
+
+def filter_modules_for_bundle(
+    bundle_key: str, modules: Sequence[str]
+) -> List[str]:
+    """Push 分批时：只把属于该 bundle 的细项发给生产 import，避免跨类污染白名单校验。"""
+    allowed = set(BUNDLE_RESOURCES.get(bundle_key) or [])
+    if not allowed:
+        return []
+    return [m for m in modules if m in allowed]
 
 
 def needs_date_range(resources: Sequence[str]) -> bool:
@@ -347,6 +407,11 @@ def catalog_for_api() -> Dict[str, Any]:
                 "code": "quotes",
                 "name": "行情（全部）",
                 "desc": "A股+港股历史行情，须日期范围",
+            },
+            {
+                "code": "permissions",
+                "name": "权限与角色（全部）",
+                "desc": "权限资源树+角色定义+角色-权限映射",
             },
         ],
         "all_resources": list(ALL_RESOURCES),

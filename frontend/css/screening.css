@@ -1505,6 +1505,16 @@
     max-width: 4rem;
 }
 
+#resultsContainer-urt .results-table td.support {
+    color: #16a34a;
+    font-variant-numeric: tabular-nums;
+}
+
+#resultsContainer-urt .results-table td.resistance {
+    color: #dc2626;
+    font-variant-numeric: tabular-nums;
+}
+
 /* 操作列：固定右侧，横向滚动时始终可见 */
 #resultsContainer-gms .results-table th.gms-col-actions,
 #resultsContainer-gms .results-table td.gms-col-actions,
@@ -1700,6 +1710,11 @@
     margin-bottom: 14px;
     background: #fafafa;
     align-content: start;
+}
+
+.gms-board-picker-list.gms-board-picker-list--loading {
+    opacity: 0.55;
+    pointer-events: none;
 }
 
 .gms-board-picker-item {

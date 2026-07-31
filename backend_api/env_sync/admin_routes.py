@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
-from backend_api.env_sync import DEFAULT_RESOURCES
+from backend_api.env_sync import DEFAULT_RESOURCES, filter_modules_for_bundle
 from backend_api.env_sync import remote_http
 from backend_api.env_sync.config_store import (
     get_client_config_public,
@@ -84,6 +84,12 @@ def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
             f"{action} 失败 HTTP 413：请求体过大，被生产 nginx 拒绝（Request Entity Too Large）。"
             f"请在生产 nginx 的 location /api/ 将 client_max_body_size 调整为 200m 后 reload；"
             f"或缩小同步范围（尤其缩短行情日期）。 响应: {text}"
+        )
+    if status_code == 400 and "未知同步模块" in text:
+        return (
+            f"{action} 失败 HTTP 400：生产端不识别该同步模块（{text}）。"
+            f"若涉及 frontend_permissions / frontend_roles / role_permissions / permissions_resources，"
+            f"请将含权限资源同步的 env_sync 版本部署到生产并重启 API 后再试。"
         )
     return f"{action} 失败 HTTP {status_code}: {text}"
 
@@ -263,14 +269,16 @@ def admin_push(
             raise HTTPException(status_code=400, detail="本地导出结果为空，无可推送数据")
 
         merged_results: Dict[str, Any] = {}
-        # 大包分批：strategy / observe / basic / board / quotes 各推一次
+        # 大包分批：strategy / observe / basic / board / quotes / permissions 各推一次；
+        # modules 仅带本 bundle 细项，避免把其它类 code 交给生产 expand_modules 白名单。
         for bundle_key, bundle_data in bundles.items():
+            batch_mods = filter_modules_for_bundle(bundle_key, mods)
             resp = remote_http.post(
                 url,
                 headers=headers,
                 json_body={
                     "bundles": {bundle_key: bundle_data},
-                    "modules": mods,
+                    "modules": batch_mods or None,
                 },
                 timeout=_SYNC_TIMEOUT,
             )
