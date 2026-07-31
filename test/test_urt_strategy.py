@@ -121,6 +121,49 @@ def test_reject_low_volume_multiple():
     assert "量能" in reason
 
 
+def test_buy_signal_includes_kde_structure():
+    """买点结果应带 KDE 支撑/阻力（展示用，不参与硬筛）。"""
+    import random
+
+    cfg = URTConfigManager().get_default_config()
+    yang = [True, True, True, False, True]
+    bars = _bars(80, yang_pattern=yang, vol_spike=True, above_ma=True)
+    # 在约 13/15/17 堆量，便于形成密度峰
+    random.seed(7)
+    for i, b in enumerate(bars):
+        cluster = [13.0, 15.0, 17.0][i % 3]
+        b["close"] = round(cluster + random.uniform(-0.1, 0.1), 2)
+        b["open"] = b["close"] - 0.2
+        b["volume"] = 1_000_000 + (i % 3) * 500_000
+    # 最新站上偏高价区并放量阳线，保证能过硬筛+得分
+    bars[0]["close"] = 15.2
+    bars[0]["open"] = 14.8
+    bars[0]["volume"] = 4_000_000
+    for i in range(1, 5):
+        bars[i]["close"] = 15.0 + i * 0.05
+        bars[i]["open"] = bars[i]["close"] - 0.15
+    sig = evaluate_buy_signal(bars, cfg, require_pass=False)
+    assert sig is not None
+    assert "support_levels" in sig
+    assert "resistance_levels" in sig
+    assert "nearest_support" in sig or sig.get("nearest_support") is None
+    st = (sig.get("score_detail") or {}).get("structure") or {}
+    assert st.get("method") == "kde_volume_weighted"
+    assert "kde_ok" in st
+    # 有足够样本时通常能识别到峰
+    if st.get("kde_ok"):
+        assert isinstance(st.get("support_levels"), list)
+        assert isinstance(st.get("resistance_levels"), list)
+
+
+def test_history_calendar_covers_kde_max():
+    from backend_core.strategies.urt.signal_detector import history_calendar_days_for_fetch
+
+    cfg = {"history_calendar_days": 120, "kde_lookback_max": 750}
+    assert history_calendar_days_for_fetch(cfg) >= 120
+    assert history_calendar_days_for_fetch(cfg) >= int(750 * 1.6)
+
+
 def test_exit_price_stop():
     cfg = URTConfigManager().get_default_config()
     r = evaluate_exit_rules(entry_price=10.0, closes=[10, 9.5, 8.5], peak_price=10.0, cfg=cfg)

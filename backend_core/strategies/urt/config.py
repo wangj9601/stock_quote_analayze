@@ -45,6 +45,12 @@ class URTConfigManager:
             "min_turnover": 0.0,
             "min_volume_ratio": 0.0,
             "history_calendar_days": 120,
+            # KDE 支撑/阻力（与 RPE / 个股关键价位同口径；不参与硬筛）
+            "kde_lookback_days": 250,
+            "kde_lookback_step": 250,
+            "kde_lookback_max": 750,
+            "kde_base_factor": 1.0,
+            "kde_grid_points": 200,
             "risk": {
                 "stop_loss_pct_min": 5,
                 "stop_loss_pct_max": 10,

@@ -3,10 +3,106 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .indicators import build_indicators, hard_filter_pass
 from .scoring import compute_score_breakdown
+
+
+def history_calendar_days_for_fetch(cfg: Dict[str, Any]) -> int:
+    """
+    拉历史 K 线用日历跨度：至少覆盖策略 history_calendar_days，
+    并保证足以支撑 KDE 最大回看（交易日 ×1.6 近似换算）。
+    """
+    hist = int(cfg.get("history_calendar_days") or 120)
+    kde_max = int(cfg.get("kde_lookback_max") or 750)
+    kde_cal = int(kde_max * 1.6) + 40
+    return max(hist, kde_cal)
+
+
+def _compute_structure_levels(
+    bars_desc: List[Dict[str, Any]],
+    cfg: Dict[str, Any],
+    *,
+    price: Optional[float],
+) -> Dict[str, Any]:
+    """
+    成交量加权 KDE 支撑/阻力（与 RPE / 个股关键价位同口径）。
+    bars_desc 为日期 DESC（最新在前）；内部转为升序喂给 KDE。
+    """
+    empty = {
+        "support_levels": [],
+        "resistance_levels": [],
+        "nearest_support": None,
+        "nearest_resistance": None,
+        "kde_ok": False,
+        "kde_reason": "insufficient_samples",
+        "kde_bw": None,
+        "kde_lookback_used": 0,
+        "kde_lookback_expanded": False,
+    }
+    if not bars_desc or price is None:
+        return empty
+    try:
+        px = float(price)
+    except (TypeError, ValueError):
+        return empty
+    if px <= 0:
+        return empty
+
+    # DESC → ASC
+    asc = list(reversed(bars_desc))
+    closes: List[float] = []
+    volumes: List[float] = []
+    for b in asc:
+        try:
+            c = float(b.get("close") or 0)
+            v = float(b.get("volume") or 0)
+        except (TypeError, ValueError):
+            continue
+        if c > 0:
+            closes.append(c)
+            volumes.append(v if v > 0 else 0.0)
+    if len(closes) < 20:
+        return empty
+
+    from backend_core.strategies.rpe.kde_levels import (
+        extract_kde_levels_expand_support,
+        nearest_levels,
+    )
+
+    init_lb = int(cfg.get("kde_lookback_days") or cfg.get("kde_lookback_initial") or 250)
+    step = int(cfg.get("kde_lookback_step") or 250)
+    max_lb = int(cfg.get("kde_lookback_max") or 750)
+    base = float(cfg.get("kde_base_factor") or 1.0)
+    grid = int(cfg.get("kde_grid_points") or 200)
+
+    kde = extract_kde_levels_expand_support(
+        closes,
+        volumes,
+        price=px,
+        initial_lookback=init_lb,
+        step=step,
+        max_lookback=max_lb,
+        base_factor=base,
+        grid_points=grid,
+    )
+    supports = [round(float(x), 2) for x in (kde.get("support_levels") or [])[:8]]
+    resists = [round(float(x), 2) for x in (kde.get("resistance_levels") or [])[:8]]
+    near = nearest_levels(px, supports, resists)
+    ns = near.get("nearest_support")
+    nr = near.get("nearest_resistance")
+    return {
+        "support_levels": supports,
+        "resistance_levels": resists,
+        "nearest_support": round(float(ns), 2) if ns is not None else None,
+        "nearest_resistance": round(float(nr), 2) if nr is not None else None,
+        "kde_ok": bool(kde.get("ok")),
+        "kde_reason": kde.get("reason") or ("ok" if kde.get("ok") else "no_peaks"),
+        "kde_bw": kde.get("bw"),
+        "kde_lookback_used": int(kde.get("lookback_used") or 0),
+        "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
+    }
 
 
 def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -169,6 +265,7 @@ def evaluate_buy_signal(
     """
     对截至最新日的 DESC K 线判定 URT 买点。
     require_pass=True：仅硬筛+得分通过才返回；False：始终返回指标与得分明细（供明细页）。
+    同时计算成交量加权 KDE 支撑/阻力（展示用，不参与硬筛）。
     """
     ind = build_indicators(bars_desc, cfg)
     if not ind:
@@ -187,6 +284,23 @@ def evaluate_buy_signal(
         yang_rule = "4d3+5d4"
     elif not ind.get("rule_a_ok") and not ind.get("rule_b_ok"):
         yang_rule = "none"
+
+    structure = _compute_structure_levels(bars_desc, cfg, price=ind.get("close"))
+    # 持久化进 score_detail，预计算重读无需改表
+    if isinstance(score_detail, dict):
+        score_detail = dict(score_detail)
+        score_detail["structure"] = {
+            "support_levels": structure["support_levels"],
+            "resistance_levels": structure["resistance_levels"],
+            "nearest_support": structure["nearest_support"],
+            "nearest_resistance": structure["nearest_resistance"],
+            "kde_ok": structure["kde_ok"],
+            "kde_reason": structure["kde_reason"],
+            "kde_bw": structure["kde_bw"],
+            "kde_lookback_used": structure["kde_lookback_used"],
+            "kde_lookback_expanded": structure["kde_lookback_expanded"],
+            "method": "kde_volume_weighted",
+        }
 
     payload = {
         "signal_date": ind.get("date"),
@@ -211,6 +325,14 @@ def evaluate_buy_signal(
         "filter_ok": ok,
         "filter_reason": reason,
         "score_ok": score_ok,
+        "support_levels": structure["support_levels"],
+        "resistance_levels": structure["resistance_levels"],
+        "nearest_support": structure["nearest_support"],
+        "nearest_resistance": structure["nearest_resistance"],
+        "kde_ok": structure["kde_ok"],
+        "kde_reason": structure["kde_reason"],
+        "kde_lookback_used": structure["kde_lookback_used"],
+        "kde_lookback_expanded": structure["kde_lookback_expanded"],
     }
     payload["buy_logic"] = build_buy_logic(payload, cfg)
     return payload

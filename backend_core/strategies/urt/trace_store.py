@@ -388,6 +388,8 @@ def query_buy_signals_for_date(
         q = q.limit(int(limit))
     out: List[Dict[str, Any]] = []
     for row in q.all():
+        sd = row.score_detail if isinstance(row.score_detail, dict) else {}
+        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
         out.append(
             {
                 "code": row.code,
@@ -410,6 +412,10 @@ def query_buy_signals_for_date(
                 "score_detail": row.score_detail,
                 "buy_signal": True,
                 "from_cache": True,
+                "support_levels": st.get("support_levels") or [],
+                "resistance_levels": st.get("resistance_levels") or [],
+                "nearest_support": st.get("nearest_support"),
+                "nearest_resistance": st.get("nearest_resistance"),
             }
         )
     return out

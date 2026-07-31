@@ -423,6 +423,10 @@ async def get_urt_score_detail(
                     fields["filter_ok"] = buy_logic.get("filter_ok")
                     fields["score_ok"] = buy_logic.get("score_ok")
                     fields["filter_reason"] = buy_logic.get("filter_reason") or None
+                    sd = cached.score_detail if isinstance(cached.score_detail, dict) else {}
+                    st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+                    fields["nearest_support"] = st.get("nearest_support")
+                    fields["nearest_resistance"] = st.get("nearest_resistance")
                     return {
                         "success": True,
                         "source": "urt_signal_trace",
@@ -437,19 +441,27 @@ async def get_urt_score_detail(
                         "filter_ok": buy_logic.get("filter_ok"),
                         "score_ok": buy_logic.get("score_ok"),
                         "filter_reason": buy_logic.get("filter_reason") or None,
+                        "support_levels": st.get("support_levels") or [],
+                        "resistance_levels": st.get("resistance_levels") or [],
+                        "nearest_support": st.get("nearest_support"),
+                        "nearest_resistance": st.get("nearest_resistance"),
                         "fields": fields,
                     }
+
+        from backend_core.strategies.urt.signal_detector import history_calendar_days_for_fetch
 
         loader = URTDataLoader(db)
         effective = URTDataLoader.resolve_effective_history_end_date(db, date)
         start_s, end_s = URTDataLoader.default_date_window(
-            int(cfg.get("history_calendar_days") or 120), effective
+            history_calendar_days_for_fetch(cfg), effective
         )
         hist = loader.fetch_historical_desc(code_n, start_date=start_s, end_date=end_s)
         hist = [b for b in hist if str(b.get("date") or "")[:10] <= effective]
         detail = evaluate_buy_signal(hist, cfg, require_pass=False)
         if not detail:
             raise HTTPException(status_code=404, detail="数据不足，无法计算明细")
+        sd = detail.get("score_detail") if isinstance(detail.get("score_detail"), dict) else {}
+        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
         return {
             "success": True,
             "source": "realtime",
@@ -464,6 +476,10 @@ async def get_urt_score_detail(
             "filter_ok": detail.get("filter_ok"),
             "score_ok": detail.get("score_ok"),
             "filter_reason": detail.get("filter_reason"),
+            "support_levels": detail.get("support_levels") or st.get("support_levels") or [],
+            "resistance_levels": detail.get("resistance_levels") or st.get("resistance_levels") or [],
+            "nearest_support": detail.get("nearest_support", st.get("nearest_support")),
+            "nearest_resistance": detail.get("nearest_resistance", st.get("nearest_resistance")),
             "fields": {
                 "close": detail.get("close"),
                 "open": detail.get("open"),
@@ -479,6 +495,8 @@ async def get_urt_score_detail(
                 "filter_ok": detail.get("filter_ok"),
                 "filter_reason": detail.get("filter_reason"),
                 "score_ok": detail.get("score_ok"),
+                "nearest_support": detail.get("nearest_support", st.get("nearest_support")),
+                "nearest_resistance": detail.get("nearest_resistance", st.get("nearest_resistance")),
             },
         }
     except HTTPException:
