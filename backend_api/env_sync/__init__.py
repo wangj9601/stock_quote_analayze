@@ -12,6 +12,7 @@ MODULE_TRADE_OBSERVE = "trade_observe"
 MODULE_STOCK_BASIC = "stock_basic"
 MODULE_BOARD_DATA = "board_data"
 MODULE_QUOTES = "quotes"
+MODULE_ADJ_FACTORS = "adj_factors"
 MODULE_PERMISSIONS_RESOURCES = "permissions_resources"
 
 # —— 策略配置细项（与 strategy_configs.STRATEGY_TABLES 一致）——
@@ -59,6 +60,11 @@ RESOURCE_QUOTES = [
     "historical_quotes_hk",
 ]
 
+# —— 复权因子（须日期范围，按 trade_date）——
+RESOURCE_ADJ_FACTORS = [
+    "stock_adj_factor",
+]
+
 # —— 权限与角色（不含用户及用户级覆盖）——
 RESOURCE_PERMISSIONS = [
     "frontend_permissions",
@@ -66,7 +72,7 @@ RESOURCE_PERMISSIONS = [
     "role_permissions",
 ]
 
-DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES)
+DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES + RESOURCE_ADJ_FACTORS)
 
 ALL_RESOURCES = (
     RESOURCE_STRATEGY
@@ -74,6 +80,7 @@ ALL_RESOURCES = (
     + RESOURCE_BASIC
     + RESOURCE_BOARD
     + RESOURCE_QUOTES
+    + RESOURCE_ADJ_FACTORS
     + RESOURCE_PERMISSIONS
 )
 
@@ -87,6 +94,7 @@ BUNDLE_RESOURCES: Dict[str, List[str]] = {
     MODULE_STOCK_BASIC: list(RESOURCE_BASIC),
     MODULE_BOARD_DATA: list(RESOURCE_BOARD),
     MODULE_QUOTES: list(RESOURCE_QUOTES),
+    MODULE_ADJ_FACTORS: list(RESOURCE_ADJ_FACTORS),
     MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
 }
 
@@ -97,6 +105,7 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     MODULE_STOCK_BASIC: list(RESOURCE_BASIC),
     MODULE_BOARD_DATA: list(RESOURCE_BOARD),
     MODULE_QUOTES: list(RESOURCE_QUOTES),
+    MODULE_ADJ_FACTORS: list(RESOURCE_ADJ_FACTORS),
     MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
     "gms_config_all": [
         "gms_strategy_configs",
@@ -291,6 +300,19 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
         ],
     },
     {
+        "group": "adj_factors",
+        "name": "复权因子（须指定日期范围）",
+        "requires_date_range": True,
+        "items": [
+            {
+                "code": "stock_adj_factor",
+                "name": "A股复权因子",
+                "desc": "StockAdjFactor（stock_adj_factor），按 trade_date 区间 upsert",
+                "requires_date_range": True,
+            },
+        ],
+    },
+    {
         "group": "permissions",
         "name": "权限与角色",
         "items": [
@@ -348,6 +370,7 @@ def split_resources(resources: Sequence[str]) -> Dict[str, List[str]]:
         "basic": [r for r in resources if r in RESOURCE_BASIC],
         "board": [r for r in resources if r in RESOURCE_BOARD],
         "quotes": [r for r in resources if r in RESOURCE_QUOTES],
+        "adj_factors": [r for r in resources if r in RESOURCE_ADJ_FACTORS],
         "permissions": [r for r in resources if r in RESOURCE_PERMISSIONS],
     }
 
@@ -407,6 +430,11 @@ def catalog_for_api() -> Dict[str, Any]:
                 "code": "quotes",
                 "name": "行情（全部）",
                 "desc": "A股+港股历史行情，须日期范围",
+            },
+            {
+                "code": "adj_factors",
+                "name": "复权因子（全部）",
+                "desc": "stock_adj_factor，须日期范围",
             },
             {
                 "code": "permissions",

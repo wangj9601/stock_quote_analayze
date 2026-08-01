@@ -121,7 +121,7 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item v-if="quotesSelected" label="行情区间">
+        <el-form-item v-if="quotesSelected" label="日期区间">
           <div class="date-row">
             <el-date-picker
               v-model="startDate"
@@ -286,7 +286,11 @@ async function loadAll() {
 
     moduleGroups.value = (mods.groups || []) as ModuleGroup[]
     defaultResources.value = mods.default_resources || []
-    dateRangeRequired.value = mods.date_range_required || ['historical_quotes', 'historical_quotes_hk']
+    dateRangeRequired.value = mods.date_range_required || [
+      'historical_quotes',
+      'historical_quotes_hk',
+      'stock_adj_factor',
+    ]
   } catch (e: any) {
     ElMessage.error(e.message || '加载失败')
   } finally {
@@ -390,7 +394,7 @@ async function confirmPull() {
   const mods = selectedModules.value.join('、')
   const range =
     quotesSelected.value && startDate.value && endDate.value
-      ? `\n行情区间：${startDate.value} ~ ${endDate.value}`
+      ? `\n日期区间：${startDate.value} ~ ${endDate.value}`
       : ''
   try {
     await ElMessageBox.confirm(

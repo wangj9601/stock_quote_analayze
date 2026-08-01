@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session
 
 from backend_api.env_sync import expand_modules, needs_date_range, split_resources
 from backend_api.env_sync.services.market_data import (
+    export_adj_factors,
     export_board_data,
     export_quotes,
     export_stock_basic,
+    import_adj_factors,
     import_board_data,
     import_quotes,
     import_stock_basic,
@@ -104,6 +106,17 @@ def export_modules(
                 env_label=label,
             ),
         )
+    if parts["adj_factors"]:
+        bundles["adj_factors"] = _stage(
+            "adj_factors",
+            lambda: export_adj_factors(
+                db,
+                start=date_range["start"],
+                end=date_range["end"],
+                tables=set(parts["adj_factors"]),
+                env_label=label,
+            ),
+        )
     if parts["permissions"]:
         bundles["permissions_resources"] = _stage(
             "permissions_resources",
@@ -129,7 +142,7 @@ def import_modules(
 ) -> Dict[str, Any]:
     """
     bundles: {
-      strategy_configs|trade_observe|stock_basic|board_data|quotes|permissions_resources: SyncBundle
+      strategy_configs|trade_observe|stock_basic|board_data|quotes|adj_factors|permissions_resources: SyncBundle
     }
     modules: 可选，限制导入细项；为空则导入包内全部 items。
     """
@@ -160,6 +173,11 @@ def import_modules(
     if "quotes" in (bundles or {}):
         tables = set(parts["quotes"]) if parts else None
         results["quotes"] = import_quotes(db, bundles["quotes"], tables=tables)
+    if "adj_factors" in (bundles or {}):
+        tables = set(parts["adj_factors"]) if parts else None
+        results["adj_factors"] = import_adj_factors(
+            db, bundles["adj_factors"], tables=tables
+        )
     if "permissions_resources" in (bundles or {}):
         tables = parts["permissions"] if parts else None
         results["permissions_resources"] = import_permissions_resources(

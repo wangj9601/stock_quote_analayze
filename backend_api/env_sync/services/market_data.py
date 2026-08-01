@@ -16,9 +16,16 @@ from backend_api.env_sync.bundle import (
     parse_date,
     parse_dt,
 )
-from backend_api.models import HistoricalQuotes, HistoricalQuotesHK, StockBasicInfo, StockBasicInfoHK
+from backend_api.models import (
+    HistoricalQuotes,
+    HistoricalQuotesHK,
+    StockAdjFactor,
+    StockBasicInfo,
+    StockBasicInfoHK,
+)
 
 QUOTE_TABLES = ("historical_quotes", "historical_quotes_hk")
+ADJ_FACTOR_TABLES = ("stock_adj_factor",)
 BASIC_TABLES = ("stock_basic_info", "stock_basic_info_hk")
 BOARD_TABLES = (
     "industry_board_basic_info",
@@ -50,13 +57,17 @@ def validate_date_range(
     ed = parse_date(end_date)
     if require or sd or ed:
         if not sd or not ed:
-            raise ValueError("同步行情数据时必须指定 start_date 与 end_date（YYYY-MM-DD）")
+            raise ValueError(
+                "同步行情/复权因子时必须指定 start_date 与 end_date（YYYY-MM-DD）"
+            )
         if sd > ed:
             raise ValueError("start_date 不能晚于 end_date")
         span = (ed - sd).days + 1
         lim = _max_quote_days()
         if span > lim:
-            raise ValueError(f"行情日期跨度 {span} 天超过上限 {lim} 天，请缩小范围后分批同步")
+            raise ValueError(
+                f"日期跨度 {span} 天超过上限 {lim} 天，请缩小范围后分批同步"
+            )
     return {"start": sd, "end": ed}
 
 
@@ -570,5 +581,105 @@ def import_quotes(
         upsert_cn(items.get("historical_quotes") or [])
     if "historical_quotes_hk" in want:
         upsert_hk(items.get("historical_quotes_hk") or [])
+    db.commit()
+    return result
+
+
+ADJ_FACTOR_FIELDS = [
+    "code",
+    "trade_date",
+    "source",
+    "adj_factor",
+    "updated_at",
+]
+
+
+def export_adj_factors(
+    db: Session,
+    *,
+    start: date,
+    end: date,
+    tables: Optional[Set[str]] = None,
+    env_label: str = "local",
+) -> Dict[str, Any]:
+    want = tables or set(ADJ_FACTOR_TABLES)
+    items: Dict[str, Any] = {}
+    meta = {"start_date": start.isoformat(), "end_date": end.isoformat()}
+
+    if "stock_adj_factor" in want:
+        q = (
+            db.query(StockAdjFactor)
+            .filter(StockAdjFactor.trade_date >= start, StockAdjFactor.trade_date <= end)
+            .order_by(
+                StockAdjFactor.trade_date,
+                StockAdjFactor.code,
+                StockAdjFactor.source,
+            )
+        )
+        items["stock_adj_factor"] = [_row_dict(r, ADJ_FACTOR_FIELDS) for r in q.all()]
+
+    bundle = make_bundle(module="adj_factors", items=items, env_label=env_label)
+    bundle["date_range"] = meta
+    return bundle
+
+
+def import_adj_factors(
+    db: Session,
+    bundle: Dict[str, Any],
+    *,
+    tables: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
+    result = empty_result()
+    items = (bundle or {}).get("items") or {}
+    want = tables or set(ADJ_FACTOR_TABLES)
+
+    if "stock_adj_factor" not in want:
+        return result
+
+    for raw in items.get("stock_adj_factor") or []:
+        code = str(raw.get("code") or "").strip()
+        d = parse_date(raw.get("trade_date"))
+        source = str(raw.get("source") or "").strip()
+        adj = raw.get("adj_factor")
+        if not code or not d or not source or adj is None:
+            result["skipped"] += 1
+            continue
+        try:
+            adj_f = float(adj)
+        except (TypeError, ValueError):
+            result["skipped"] += 1
+            continue
+        try:
+            with db.begin_nested():
+                existing = (
+                    db.query(StockAdjFactor)
+                    .filter(
+                        StockAdjFactor.code == code,
+                        StockAdjFactor.trade_date == d,
+                        StockAdjFactor.source == source,
+                    )
+                    .first()
+                )
+                updated_at = parse_dt(raw.get("updated_at")) or datetime.now()
+                if existing:
+                    existing.adj_factor = adj_f
+                    existing.updated_at = updated_at
+                    result["updated"] += 1
+                else:
+                    db.add(
+                        StockAdjFactor(
+                            code=code,
+                            trade_date=d,
+                            source=source,
+                            adj_factor=adj_f,
+                            updated_at=updated_at,
+                        )
+                    )
+                    result["created"] += 1
+        except Exception as e:
+            result["errors"].append(
+                f"stock_adj_factor/{code}/{d.isoformat()}/{source}: {e}"
+            )
+
     db.commit()
     return result

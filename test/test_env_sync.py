@@ -67,6 +67,8 @@ def test_expand_modules_granular():
     assert "gms_strategy_configs" in expand_modules(["strategy_configs"])
     assert expand_modules(["basic_info"]) == ["stock_basic_info", "stock_basic_info_hk"]
     assert expand_modules(["quotes"]) == ["historical_quotes", "historical_quotes_hk"]
+    assert expand_modules(["adj_factors"]) == ["stock_adj_factor"]
+    assert expand_modules(["stock_adj_factor"]) == ["stock_adj_factor"]
     assert expand_modules(["permissions"]) == [
         "frontend_permissions",
         "frontend_roles",
@@ -80,9 +82,12 @@ def test_expand_modules_granular():
     assert expand_modules(["stock_basic"]) == ["stock_basic_info", "stock_basic_info_hk"]
     assert "frontend_permissions" not in expand_modules(None)
     assert needs_date_range(["historical_quotes"]) is True
+    assert needs_date_range(["stock_adj_factor"]) is True
     assert needs_date_range(["stock_basic_info"]) is False
     assert set(ALL_RESOURCES) >= set(DEFAULT_RESOURCES)
     assert "frontend_permissions" in ALL_RESOURCES
+    assert "stock_adj_factor" in ALL_RESOURCES
+    assert "stock_adj_factor" not in expand_modules(None)
     try:
         expand_modules(["no_such"])
         assert False
@@ -107,6 +112,9 @@ def test_filter_modules_for_bundle():
         "gms_strategy_configs",
     ]
     assert filter_modules_for_bundle("stock_basic", mods) == ["stock_basic_info"]
+    assert filter_modules_for_bundle("adj_factors", ["stock_adj_factor", "historical_quotes"]) == [
+        "stock_adj_factor"
+    ]
     assert filter_modules_for_bundle("unknown_bundle", mods) == []
 
 
@@ -173,6 +181,64 @@ def test_quotes_require_date_range(db):
     result = import_quotes(db, out["bundles"]["quotes"])
     assert result["created"] == 1
     assert db.query(HistoricalQuotes).count() == 1
+
+
+def test_adj_factors_require_date_range_and_roundtrip(db):
+    from datetime import date
+
+    from backend_api.env_sync.services import export_modules
+    from backend_api.env_sync.services.market_data import import_adj_factors
+    from backend_api.models import StockAdjFactor
+
+    try:
+        export_modules(db, ["stock_adj_factor"])
+        assert False
+    except ValueError as e:
+        assert "start_date" in str(e)
+
+    db.add(
+        StockAdjFactor(
+            code="000001",
+            trade_date=date(2024, 1, 2),
+            source="sina",
+            adj_factor=1.25,
+        )
+    )
+    db.add(
+        StockAdjFactor(
+            code="000001",
+            trade_date=date(2024, 1, 10),
+            source="sina",
+            adj_factor=1.3,
+        )
+    )
+    db.commit()
+
+    out = export_modules(
+        db,
+        ["stock_adj_factor"],
+        start_date="2024-01-01",
+        end_date="2024-01-05",
+    )
+    rows = out["bundles"]["adj_factors"]["items"]["stock_adj_factor"]
+    assert len(rows) == 1
+    assert rows[0]["trade_date"] == "2024-01-02"
+    assert rows[0]["source"] == "sina"
+    assert abs(float(rows[0]["adj_factor"]) - 1.25) < 1e-9
+
+    db.query(StockAdjFactor).delete()
+    db.commit()
+    result = import_adj_factors(db, out["bundles"]["adj_factors"])
+    assert result["created"] == 1
+    row = db.query(StockAdjFactor).filter_by(code="000001").first()
+    assert row is not None
+    assert abs(row.adj_factor - 1.25) < 1e-9
+
+    # 再次导入应更新
+    rows[0]["adj_factor"] = 1.5
+    result2 = import_adj_factors(db, out["bundles"]["adj_factors"])
+    assert result2["updated"] == 1
+    assert abs(db.query(StockAdjFactor).filter_by(code="000001").first().adj_factor - 1.5) < 1e-9
 
 
 def test_stock_basic_roundtrip(db):

@@ -269,7 +269,7 @@ def admin_push(
             raise HTTPException(status_code=400, detail="本地导出结果为空，无可推送数据")
 
         merged_results: Dict[str, Any] = {}
-        # 大包分批：strategy / observe / basic / board / quotes / permissions 各推一次；
+        # 大包分批：strategy / observe / basic / board / quotes / adj_factors / permissions 各推一次；
         # modules 仅带本 bundle 细项，避免把其它类 code 交给生产 expand_modules 白名单。
         for bundle_key, bundle_data in bundles.items():
             batch_mods = filter_modules_for_bundle(bundle_key, mods)
