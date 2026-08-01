@@ -206,10 +206,15 @@ const ProfilePage = {
         if (resultEl) resultEl.hidden = true;
 
         try {
+            const factorSourceEl = document.getElementById('kdeLevelsFactorSource');
+            const factorSource = (factorSourceEl && factorSourceEl.value) || 'auto';
             const qs = new URLSearchParams({
                 max_levels: '8',
                 adjust,
             });
+            if (adjust === 'qfq') {
+                qs.set('factor_source', factorSource);
+            }
             const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
             const resp = await authFetch(url);
             const payload = await resp.json().catch(() => ({}));
@@ -289,8 +294,13 @@ const ProfilePage = {
         const expanded = data.kde_lookback_expanded;
         const initLb = data.kde_lookback_initial || 250;
         const maxLb = data.kde_lookback_max || 750;
+        const srcMap = {
+            akshare_sina_qfq: '新浪',
+            baostock_qfq: 'BaoStock',
+        };
+        const srcText = srcMap[data.adj_factor_source] || data.adj_factor_source || '未知';
         const adjustLabel = data.price_adjust === 'qfq'
-            ? `前复权（因子：${data.adj_factor_source || 'akshare_sina_qfq'}${data.adj_factor_asof ? `，截至 ${data.adj_factor_asof}` : ''}${data.factor_fetched ? '，本次已拉取' : '，已用缓存'}）`
+            ? `前复权（因子：${srcText}${data.adj_factor_asof ? `，截至 ${data.adj_factor_asof}` : ''}${data.factor_fetched ? '，本次已拉取' : '，已用缓存'}）`
             : '不复权日K';
         const parts = [
             adjustLabel,

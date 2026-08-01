@@ -145,6 +145,7 @@ def _levels_response_for_code(
     db: Session,
     adjust: str = "none",
     refresh_factor: bool = False,
+    factor_source: str = "auto",
 ) -> JSONResponse:
     try:
         from backend_api.utils.adj_quotes import (
@@ -182,7 +183,10 @@ def _levels_response_for_code(
             from .stock_analysis import KeyLevels
 
             ensured = ensure_adj_factors(
-                db, code, force_refresh=bool(refresh_factor)
+                db,
+                code,
+                force_refresh=bool(refresh_factor),
+                factor_source=factor_source or "auto",
             )
             raw_bars = analysis_service._get_historical_data(
                 code, days=KeyLevels.KDE_LOOKBACK_MAX
@@ -192,6 +196,7 @@ def _levels_response_for_code(
                 "source": ensured.get("source"),
                 "adj_factor_asof": ensured.get("adj_factor_asof"),
                 "factor_fetched": ensured.get("factor_fetched"),
+                "factor_source": ensured.get("factor_source"),
             }
         except AdjQuotesError as e:
             return JSONResponse(
@@ -408,7 +413,11 @@ async def get_key_levels_by_query(
     q: str = Query(..., description="股票代码或名称"),
     max_levels: int = Query(8, description="每侧最多返回档位数", ge=1, le=8),
     adjust: str = Query("none", description="价格口径：none=不复权，qfq=前复权现算"),
-    refresh_factor: bool = Query(False, description="强制重新拉取新浪复权因子"),
+    refresh_factor: bool = Query(False, description="强制重新拉取复权因子"),
+    factor_source: str = Query(
+        "auto",
+        description="因子源：auto=新浪优先BaoStock备用，sina=仅新浪，baostock=仅BaoStock",
+    ),
     db: Session = Depends(get_db),
 ):
     """按 query 参数 q（代码或名称）计算 KDE 支撑/压力位。"""
@@ -417,6 +426,7 @@ async def get_key_levels_by_query(
         max_levels=max_levels,
         adjust=adjust,
         refresh_factor=refresh_factor,
+        factor_source=factor_source,
         db=db,
     )
 
@@ -426,7 +436,11 @@ async def get_key_levels(
     stock_code: str,
     max_levels: int = Query(8, description="每侧最多返回档位数", ge=1, le=8),
     adjust: str = Query("none", description="价格口径：none=不复权，qfq=前复权现算"),
-    refresh_factor: bool = Query(False, description="强制重新拉取新浪复权因子"),
+    refresh_factor: bool = Query(False, description="强制重新拉取复权因子"),
+    factor_source: str = Query(
+        "auto",
+        description="因子源：auto=新浪优先BaoStock备用，sina=仅新浪，baostock=仅BaoStock",
+    ),
     db: Session = Depends(get_db)
 ):
     """
@@ -434,7 +448,8 @@ async def get_key_levels(
 
     轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
     stock_code 支持 A股/港股代码，或股票名称（精确唯一则直接计算；多候选返回 candidates）。
-    adjust=qfq 时按需拉取新浪前复权因子写入 stock_adj_factor，再对不复权日K现算后计算 KDE。
+    adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor（主源新浪，备用 BaoStock），
+    再对不复权日K现算后计算 KDE。
     """
     try:
         resolved = resolve_levels_stock_identifier(db, stock_code)
@@ -471,6 +486,7 @@ async def get_key_levels(
             db=db,
             adjust=adjust,
             refresh_factor=refresh_factor,
+            factor_source=factor_source,
         )
 
     except Exception as e:

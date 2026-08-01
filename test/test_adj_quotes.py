@@ -14,9 +14,14 @@ sys.path.insert(0, str(ROOT / "backend_api"))
 
 from utils.adj_quotes import (  # noqa: E402
     AdjQuotesError,
+    SOURCE_AKSHARE_SINA_QFQ,
+    SOURCE_BAOSTOCK_QFQ,
     apply_qfq_to_bars,
     ensure_adj_factors,
+    fetch_baostock_qfq_factors,
+    fetch_qfq_factors,
     fetch_sina_qfq_factors,
+    to_baostock_symbol,
     to_sina_symbol,
 )
 
@@ -103,8 +108,130 @@ def test_ensure_uses_cache_when_fresh():
 
     db.execute.side_effect = _execute
 
-    with patch("utils.adj_quotes.fetch_sina_qfq_factors") as fetch_mock:
+    with patch("utils.adj_quotes.fetch_qfq_factors") as fetch_mock:
         out = ensure_adj_factors(db, "600519", max_age_days=5, force_refresh=False)
     fetch_mock.assert_not_called()
     assert out["factor_fetched"] is False
     assert out["adj_factor_asof"] == today.strftime("%Y-%m-%d")
+
+
+def test_to_baostock_symbol():
+    assert to_baostock_symbol("600519") == "sh.600519"
+    assert to_baostock_symbol("000001") == "sz.000001"
+
+
+def test_fetch_qfq_factors_auto_falls_back_to_baostock():
+    bao_rows = [
+        {
+            "code": "600519",
+            "trade_date": date(2024, 1, 2),
+            "adj_factor": 1.1,
+            "source": SOURCE_BAOSTOCK_QFQ,
+        }
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_sina_qfq_factors",
+        side_effect=AdjQuotesError("新浪限流"),
+    ), patch(
+        "utils.adj_quotes.fetch_baostock_qfq_factors",
+        return_value=bao_rows,
+    ):
+        rows, src = fetch_qfq_factors("600519", factor_source="auto")
+    assert src == SOURCE_BAOSTOCK_QFQ
+    assert rows[0]["adj_factor"] == 1.1
+
+
+def test_fetch_qfq_factors_baostock_only():
+    bao_rows = [
+        {
+            "code": "600519",
+            "trade_date": date(2024, 1, 2),
+            "adj_factor": 0.9,
+            "source": SOURCE_BAOSTOCK_QFQ,
+        }
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_sina_qfq_factors"
+    ) as sina_mock, patch(
+        "utils.adj_quotes.fetch_baostock_qfq_factors",
+        return_value=bao_rows,
+    ):
+        rows, src = fetch_qfq_factors("600519", factor_source="baostock")
+    sina_mock.assert_not_called()
+    assert src == SOURCE_BAOSTOCK_QFQ
+    assert len(rows) == 1
+
+
+def test_fetch_baostock_parses_rows():
+    class FakeRs:
+        error_code = "0"
+        fields = [
+            "code",
+            "dividOperateDate",
+            "foreAdjustFactor",
+            "backAdjustFactor",
+            "adjustFactor",
+        ]
+        _rows = [
+            ["sh.600519", "2024-01-02", "0.8", "1.2", "1.2"],
+            ["sh.600519", "2024-06-01", "0.9", "1.1", "1.1"],
+        ]
+        _i = -1
+
+        def next(self):
+            self._i += 1
+            return self._i < len(self._rows)
+
+        def get_row_data(self):
+            return self._rows[self._i]
+
+    class FakeBs:
+        def login(self):
+            return MagicMock(error_code="0")
+
+        def logout(self):
+            return None
+
+        def query_adjust_factor(self, **kwargs):
+            return FakeRs()
+
+    with patch.dict(sys.modules, {"baostock": FakeBs()}):
+        rows = fetch_baostock_qfq_factors("600519")
+    assert len(rows) == 2
+    assert rows[0]["source"] == SOURCE_BAOSTOCK_QFQ
+    assert rows[0]["adj_factor"] == 0.8
+    assert rows[1]["adj_factor"] == 0.9
+
+
+def test_ensure_force_refresh_uses_factor_source():
+    db = MagicMock()
+    today = date.today()
+
+    def _execute(sql, params=None):
+        result = MagicMock()
+        result.fetchone.return_value = (today, None, SOURCE_AKSHARE_SINA_QFQ)
+        result.fetchall.return_value = [(today, 1.0)]
+        return result
+
+    db.execute.side_effect = _execute
+    bao_rows = [
+        {
+            "code": "600519",
+            "trade_date": today,
+            "adj_factor": 1.0,
+            "source": SOURCE_BAOSTOCK_QFQ,
+        }
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_qfq_factors",
+        return_value=(bao_rows, SOURCE_BAOSTOCK_QFQ),
+    ) as fetch_mock, patch(
+        "utils.adj_quotes.upsert_adj_factors", return_value=1
+    ):
+        out = ensure_adj_factors(
+            db, "600519", force_refresh=True, factor_source="baostock"
+        )
+    fetch_mock.assert_called_once()
+    assert fetch_mock.call_args.kwargs.get("factor_source") == "baostock"
+    assert out["source"] == SOURCE_BAOSTOCK_QFQ
+    assert out["factor_fetched"] is True

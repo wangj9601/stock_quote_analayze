@@ -17,6 +17,7 @@ psycopg2-binary==2.9.10
 pandas>=2.2.3,<3
 numpy>=2.1.0,<3
 akshare>=1.17.70
+baostock>=0.8.8
 openpyxl>=3.1.5,<4.0.0
 xlrd>=2.0.1
 

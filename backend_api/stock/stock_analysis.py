@@ -683,6 +683,7 @@ class StockAnalysisService:
                     "adj_factor_source": meta.get("source"),
                     "adj_factor_asof": meta.get("adj_factor_asof"),
                     "factor_fetched": bool(meta.get("factor_fetched")),
+                    "factor_source": meta.get("factor_source"),
                     "description": desc,
                 },
             }

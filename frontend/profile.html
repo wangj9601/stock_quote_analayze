@@ -376,7 +376,8 @@
                             <p class="kde-levels-hint">
                                 复用 RPE 成交量加权 KDE：对日K收盘价按成交量加权提取密度峰；
                                 默认初始回看 250 日，无支撑时递推至最多约 750 日（约 3 年）。
-                                「计算」使用不复权日K；「按前复权计算」按需拉取新浪复权因子现算后再求位（仅 A 股）。
+                                「计算」使用不复权日K；「按前复权计算」按需拉取复权因子现算后再求位（仅 A 股）。
+                                因子源默认自动（新浪优先，失败则 BaoStock 备用）。
                             </p>
                         </div>
                         <div class="kde-levels-form">
@@ -389,6 +390,14 @@
                                     <label for="kdeLevelsWatchlist">从自选选择</label>
                                     <select id="kdeLevelsWatchlist">
                                         <option value="">-- 可选自选股 --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="kdeLevelsFactorSource">复权因子源</label>
+                                    <select id="kdeLevelsFactorSource">
+                                        <option value="auto" selected>自动（新浪→BaoStock）</option>
+                                        <option value="sina">新浪（AkShare）</option>
+                                        <option value="baostock">BaoStock</option>
                                     </select>
                                 </div>
                                 <div class="form-group kde-levels-actions">
