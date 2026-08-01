@@ -252,19 +252,14 @@ def test_ensure_force_refresh_uses_factor_source():
 
 
 def test_ensure_prefer_db_uses_stale_without_refetch():
-    """再次计算：库内有因子即使超过 max_age 也优先读库，不打外网。"""
+    """整策略前复权：库内有因子即读库，不因过期打外网。"""
     db = MagicMock()
     stale = date(2020, 1, 2)
 
     def _execute(sql, params=None):
-        sql_s = str(sql)
         result = MagicMock()
-        if "ORDER BY trade_date DESC" in sql_s:
-            result.fetchone.return_value = (stale, None, SOURCE_AKSHARE_SINA_QFQ)
-            result.fetchall.return_value = []
-        else:
-            result.fetchone.return_value = None
-            result.fetchall.return_value = [(stale, 0.85), (date(2020, 6, 1), 0.9)]
+        result.fetchone.return_value = None
+        result.fetchall.return_value = [(stale, 0.85), (date(2020, 6, 1), 0.9)]
         return result
 
     db.execute.side_effect = _execute
@@ -277,6 +272,49 @@ def test_ensure_prefer_db_uses_stale_without_refetch():
     assert out["from_db"] is True
     assert out["source"] == SOURCE_AKSHARE_SINA_QFQ
     assert len(out["factors"]) == 2
+
+
+def test_ensure_without_prefer_db_refetches_when_stale():
+    """prefer_db=False 且因子过期时，才允许打外网刷新。"""
+    db = MagicMock()
+    stale = date(2020, 1, 2)
+    today = date.today()
+    state = {"phase": "meta"}
+
+    def _execute(sql, params=None):
+        sql_s = str(sql)
+        result = MagicMock()
+        if "ORDER BY trade_date DESC" in sql_s:
+            result.fetchone.return_value = (stale, None, SOURCE_AKSHARE_SINA_QFQ)
+            result.fetchall.return_value = []
+            return result
+        if state["phase"] == "after":
+            result.fetchall.return_value = [(today, 1.0)]
+        else:
+            # 首次 load：有陈旧数据
+            result.fetchall.return_value = [(stale, 0.85)]
+        result.fetchone.return_value = None
+        return result
+
+    def _upsert(db, rows, source=SOURCE_AKSHARE_SINA_QFQ):
+        state["phase"] = "after"
+        return 1
+
+    db.execute.side_effect = _execute
+    with patch(
+        "utils.adj_quotes.fetch_qfq_factors",
+        return_value=(
+            [{"code": "600519", "trade_date": today, "adj_factor": 1.0, "source": SOURCE_AKSHARE_SINA_QFQ}],
+            SOURCE_AKSHARE_SINA_QFQ,
+        ),
+    ) as fetch_mock, patch(
+        "utils.adj_quotes.upsert_adj_factors", side_effect=_upsert
+    ):
+        out = ensure_adj_factors(
+            db, "600519", max_age_days=5, force_refresh=False, prefer_db=False
+        )
+    fetch_mock.assert_called_once()
+    assert out["factor_fetched"] is True
 
 
 def test_ensure_fetches_and_upserts_when_db_empty():

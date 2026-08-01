@@ -198,6 +198,7 @@ def _compute_levels_payload(
                 code,
                 force_refresh=bool(refresh_factor),
                 factor_source=factor_source or "auto",
+                prefer_db=True,
             )
             raw_bars = analysis_service._get_historical_data(
                 code, days=KeyLevels.KDE_LOOKBACK_MAX

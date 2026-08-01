@@ -332,7 +332,7 @@ class RPEDataLoader:
     ) -> List[Dict[str, Any]]:
         """对已加载的不复权 bars 现算前复权；失败返回空列表（从 panel 中剔除，避免混口径）。
 
-        因子经 ensure_adj_factors：优先读 stock_adj_factor；缺失则拉取并 UPSERT 入库。
+        因子：prefer_db=True → 优先 stock_adj_factor；库中没有才调第三方并 UPSERT。
         """
         try:
             from backend_api.utils.adj_quotes import (
@@ -350,6 +350,7 @@ class RPEDataLoader:
             cache_key = f"{code}|{factor_source or 'auto'}|{int(bool(refresh_factor))}"
             ensured = self._qfq_factor_cache.get(cache_key)
             if ensured is None:
+                # 整策略前复权：强制优先读库，禁止因“过期”批量打外网
                 ensured = ensure_adj_factors(
                     db,
                     code,
@@ -360,12 +361,12 @@ class RPEDataLoader:
                 self._qfq_factor_cache[cache_key] = ensured
                 if ensured.get("factor_fetched"):
                     logger.info(
-                        "RPE 复权因子已入库 code=%s source=%s asof=%s",
+                        "RPE 复权因子外网补齐并入库 code=%s source=%s asof=%s",
                         code,
                         ensured.get("source"),
                         ensured.get("adj_factor_asof"),
                     )
-                elif ensured.get("from_db"):
+                else:
                     logger.debug(
                         "RPE 复权因子读库 code=%s source=%s asof=%s",
                         code,
