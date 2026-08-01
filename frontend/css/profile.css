@@ -1515,6 +1515,24 @@
     min-width: 96px;
 }
 
+.kde-levels-btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.kde-levels-btn-row .btn-outline {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+}
+
+.kde-levels-btn-row .btn-outline:hover {
+    border-color: #94a3b8;
+    background: #f8fafc;
+}
+
 .kde-levels-candidates {
     margin-top: 1rem;
     padding: 0.85rem 1rem;

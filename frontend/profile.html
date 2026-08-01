@@ -376,6 +376,7 @@
                             <p class="kde-levels-hint">
                                 复用 RPE 成交量加权 KDE：对日K收盘价按成交量加权提取密度峰；
                                 默认初始回看 250 日，无支撑时递推至最多约 750 日（约 3 年）。
+                                「计算」使用不复权日K；「按前复权计算」按需拉取新浪复权因子现算后再求位（仅 A 股）。
                             </p>
                         </div>
                         <div class="kde-levels-form">
@@ -392,8 +393,12 @@
                                 </div>
                                 <div class="form-group kde-levels-actions">
                                     <label>&nbsp;</label>
-                                    <button type="button" class="btn btn-primary" id="kdeLevelsCalcBtn"
-                                        data-perm="channel.profile.tab.kde_levels.btn.calc">计算</button>
+                                    <div class="kde-levels-btn-row">
+                                        <button type="button" class="btn btn-primary" id="kdeLevelsCalcBtn"
+                                            data-perm="channel.profile.tab.kde_levels.btn.calc">计算</button>
+                                        <button type="button" class="btn btn-outline" id="kdeLevelsCalcQfqBtn"
+                                            data-perm="channel.profile.tab.kde_levels.btn.calc_qfq">按前复权计算</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -424,7 +429,7 @@
                             <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
                         </div>
                         <div class="kde-levels-empty" id="kdeLevelsEmpty">
-                            输入股票代码或名称，也可从自选选择后点击「计算」。
+                            输入股票代码或名称，也可从自选选择后点击「计算」或「按前复权计算」。
                         </div>
                     </div>
                 </div>

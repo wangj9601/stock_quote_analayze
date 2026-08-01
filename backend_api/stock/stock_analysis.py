@@ -586,13 +586,27 @@ class StockAnalysisService:
         stock_code: str,
         *,
         max_levels: int = 8,
+        historical_data: Optional[List[Dict]] = None,
+        price_adjust: str = "none",
+        adj_meta: Optional[Dict] = None,
     ) -> Dict:
-        """仅计算 KDE 支撑/压力位（不跑技术指标与预测），供「我的」频道小工具使用。"""
+        """仅计算 KDE 支撑/压力位（不跑技术指标与预测），供「我的」频道小工具使用。
+
+        price_adjust:
+          - none: 使用库内不复权日K（默认）
+          - qfq: 调用方传入已现算前复权的 historical_data
+        """
         try:
             code = str(stock_code or "").strip()
-            historical_data = self._get_historical_data(
-                code, days=KeyLevels.KDE_LOOKBACK_MAX
-            )
+            adjust = str(price_adjust or "none").strip().lower() or "none"
+            if adjust not in ("none", "qfq"):
+                adjust = "none"
+            meta = adj_meta or {}
+
+            if historical_data is None:
+                historical_data = self._get_historical_data(
+                    code, days=KeyLevels.KDE_LOOKBACK_MAX
+                )
             if not historical_data:
                 return {
                     "success": False,
@@ -606,6 +620,7 @@ class StockAnalysisService:
                         "nearest_resistance": None,
                         "current_price": 0.0,
                         "current_price_source": None,
+                        "price_adjust": adjust,
                         "method": "kde_volume_weighted",
                         "kde_ok": False,
                         "kde_reason": "no_historical_data",
@@ -638,6 +653,25 @@ class StockAnalysisService:
                     stock_name = name
                     break
 
+            if adjust == "qfq":
+                desc = (
+                    "成交量加权 KDE（前复权现算）：不复权日K × 新浪前复权因子 "
+                    "(P_qfq = P_raw × f_t / f_T)；volume 不复权；"
+                    f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
+                    f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
+                    f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
+                    "现价下方峰为支撑，上方峰为压力。现价优先实时行情表。"
+                )
+            else:
+                desc = (
+                    "成交量加权 KDE（与 RPE 结构位同口径）：日K close+volume（不复权）；"
+                    f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
+                    f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
+                    f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
+                    "现价下方峰为支撑，上方峰为压力（阻力）。"
+                    "现价优先实时行情表，无有效价时回退日K收盘。"
+                )
+
             return {
                 "success": True,
                 "data": {
@@ -645,14 +679,11 @@ class StockAnalysisService:
                     "stock_name": stock_name,
                     **levels,
                     "current_price_source": price_source,
-                    "description": (
-                        "成交量加权 KDE（与 RPE 结构位同口径）：日K close+volume；"
-                        f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
-                        f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
-                        f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
-                        "现价下方峰为支撑，上方峰为压力（阻力）。"
-                        "现价优先实时行情表，无有效价时回退日K收盘。"
-                    ),
+                    "price_adjust": adjust,
+                    "adj_factor_source": meta.get("source"),
+                    "adj_factor_asof": meta.get("adj_factor_asof"),
+                    "factor_fetched": bool(meta.get("factor_fetched")),
+                    "description": desc,
                 },
             }
         except Exception as e:

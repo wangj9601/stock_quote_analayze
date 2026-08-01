@@ -138,9 +138,80 @@ def resolve_levels_stock_identifier(db: Session, raw: str) -> Dict[str, Any]:
     }
 
 
-def _levels_response_for_code(code: str, max_levels: int) -> JSONResponse:
+def _levels_response_for_code(
+    code: str,
+    max_levels: int,
+    *,
+    db: Session,
+    adjust: str = "none",
+    refresh_factor: bool = False,
+) -> JSONResponse:
+    try:
+        from backend_api.utils.adj_quotes import (
+            AdjQuotesError,
+            apply_qfq_to_bars,
+            ensure_adj_factors,
+        )
+    except ImportError:
+        from utils.adj_quotes import (  # type: ignore
+            AdjQuotesError,
+            apply_qfq_to_bars,
+            ensure_adj_factors,
+        )
+
     analysis_service = StockAnalysisService()
-    result = analysis_service.get_key_levels_only(code, max_levels=max_levels)
+    adjust_n = str(adjust or "none").strip().lower() or "none"
+    if adjust_n not in ("none", "qfq"):
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "adjust 仅支持 none 或 qfq"},
+        )
+
+    historical_data = None
+    adj_meta = None
+    if adjust_n == "qfq":
+        if analysis_service._is_hk_stock(code):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "前复权计算目前仅支持 A 股，港股暂不支持",
+                },
+            )
+        try:
+            from .stock_analysis import KeyLevels
+
+            ensured = ensure_adj_factors(
+                db, code, force_refresh=bool(refresh_factor)
+            )
+            raw_bars = analysis_service._get_historical_data(
+                code, days=KeyLevels.KDE_LOOKBACK_MAX
+            )
+            historical_data = apply_qfq_to_bars(raw_bars, ensured["factors"])
+            adj_meta = {
+                "source": ensured.get("source"),
+                "adj_factor_asof": ensured.get("adj_factor_asof"),
+                "factor_fetched": ensured.get("factor_fetched"),
+            }
+        except AdjQuotesError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": e.message},
+            )
+        except Exception as e:
+            logger.exception("前复权因子处理失败 code=%s", code)
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "message": f"前复权处理失败: {e}"},
+            )
+
+    result = analysis_service.get_key_levels_only(
+        code,
+        max_levels=max_levels,
+        historical_data=historical_data,
+        price_adjust=adjust_n,
+        adj_meta=adj_meta,
+    )
 
     if not result.get("success"):
         if "data" in result:
@@ -336,16 +407,26 @@ async def get_trading_recommendation(
 async def get_key_levels_by_query(
     q: str = Query(..., description="股票代码或名称"),
     max_levels: int = Query(8, description="每侧最多返回档位数", ge=1, le=8),
+    adjust: str = Query("none", description="价格口径：none=不复权，qfq=前复权现算"),
+    refresh_factor: bool = Query(False, description="强制重新拉取新浪复权因子"),
     db: Session = Depends(get_db),
 ):
     """按 query 参数 q（代码或名称）计算 KDE 支撑/压力位。"""
-    return await get_key_levels(stock_code=q, max_levels=max_levels, db=db)
+    return await get_key_levels(
+        stock_code=q,
+        max_levels=max_levels,
+        adjust=adjust,
+        refresh_factor=refresh_factor,
+        db=db,
+    )
 
 
 @router.get("/levels/{stock_code}")
 async def get_key_levels(
     stock_code: str,
     max_levels: int = Query(8, description="每侧最多返回档位数", ge=1, le=8),
+    adjust: str = Query("none", description="价格口径：none=不复权，qfq=前复权现算"),
+    refresh_factor: bool = Query(False, description="强制重新拉取新浪复权因子"),
     db: Session = Depends(get_db)
 ):
     """
@@ -353,6 +434,7 @@ async def get_key_levels(
 
     轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
     stock_code 支持 A股/港股代码，或股票名称（精确唯一则直接计算；多候选返回 candidates）。
+    adjust=qfq 时按需拉取新浪前复权因子写入 stock_adj_factor，再对不复权日K现算后计算 KDE。
     """
     try:
         resolved = resolve_levels_stock_identifier(db, stock_code)
@@ -383,7 +465,13 @@ async def get_key_levels(
                 content={"success": False, "message": "股票代码格式错误（A股6位，港股5位）"},
             )
 
-        return _levels_response_for_code(code, max_levels)
+        return _levels_response_for_code(
+            code,
+            max_levels,
+            db=db,
+            adjust=adjust,
+            refresh_factor=refresh_factor,
+        )
 
     except Exception as e:
         logger.error(f"获取关键价位失败: {str(e)}")

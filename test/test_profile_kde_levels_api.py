@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend_api"))
@@ -259,7 +261,10 @@ def test_levels_route_uses_lightweight_method():
     body = resp.json()
     assert body["success"] is True
     assert body["data"]["nearest_support"] == 14.5
-    Cls.return_value.get_key_levels_only.assert_called_once_with("600519", max_levels=8)
+    kwargs = Cls.return_value.get_key_levels_only.call_args
+    assert kwargs.args[0] == "600519"
+    assert kwargs.kwargs.get("max_levels") == 8
+    assert kwargs.kwargs.get("price_adjust") == "none"
 
 
 def test_levels_route_accepts_name_via_query():
@@ -312,7 +317,97 @@ def test_levels_route_accepts_name_via_query():
     body = resp.json()
     assert body["success"] is True
     assert body["data"]["stock_code"] == "600519"
-    Cls.return_value.get_key_levels_only.assert_called_once_with("600519", max_levels=8)
+    kwargs = Cls.return_value.get_key_levels_only.call_args
+    assert kwargs.args[0] == "600519"
+    assert kwargs.kwargs.get("max_levels") == 8
+    assert kwargs.kwargs.get("price_adjust") == "none"
+
+
+def test_levels_route_qfq_applies_factors():
+    from datetime import date
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import get_db
+    from stock.stock_analysis_routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+
+    def _fake_db():
+        yield MagicMock()
+
+    app.dependency_overrides[get_db] = _fake_db
+    client = TestClient(app)
+
+    resolved = {"status": "ok", "code": "600519", "name": "贵州茅台", "candidates": []}
+    bars = [
+        {"date": "2024-01-02", "close": 10.0, "volume": 1, "name": "贵州茅台"},
+        {"date": "2024-01-03", "close": 20.0, "volume": 1, "name": "贵州茅台"},
+    ]
+    ensured = {
+        "factors": [(date(2024, 1, 2), 1.0), (date(2024, 1, 3), 2.0)],
+        "factor_fetched": True,
+        "source": "akshare_sina_qfq",
+        "adj_factor_asof": "2024-01-03",
+    }
+    fake_result = {
+        "success": True,
+        "data": {
+            "stock_code": "600519",
+            "price_adjust": "qfq",
+            "support_levels": [],
+            "resistance_levels": [],
+        },
+    }
+
+    with patch("stock.stock_analysis_routes.resolve_levels_stock_identifier", return_value=resolved), patch(
+        "stock.stock_analysis_routes.StockAnalysisService"
+    ) as Cls, patch(
+        "backend_api.utils.adj_quotes.ensure_adj_factors", return_value=ensured
+    ), patch(
+        "utils.adj_quotes.ensure_adj_factors", return_value=ensured
+    ):
+        svc = Cls.return_value
+        svc._is_hk_stock.return_value = False
+        svc._get_historical_data.return_value = bars
+        svc.get_key_levels_only.return_value = fake_result
+        resp = client.get("/api/analysis/levels/600519?adjust=qfq&max_levels=8")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    call_kw = svc.get_key_levels_only.call_args.kwargs
+    assert call_kw.get("price_adjust") == "qfq"
+    assert call_kw.get("historical_data") is not None
+    assert call_kw["historical_data"][0]["close"] == pytest.approx(5.0)
+    assert call_kw["adj_meta"]["factor_fetched"] is True
+
+
+def test_levels_route_qfq_rejects_hk():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import get_db
+    from stock.stock_analysis_routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+
+    def _fake_db():
+        yield MagicMock()
+
+    app.dependency_overrides[get_db] = _fake_db
+    client = TestClient(app)
+
+    resolved = {"status": "ok", "code": "00700", "name": "腾讯", "candidates": []}
+    with patch("stock.stock_analysis_routes.resolve_levels_stock_identifier", return_value=resolved), patch(
+        "stock.stock_analysis_routes.StockAnalysisService"
+    ) as Cls:
+        Cls.return_value._is_hk_stock.return_value = True
+        resp = client.get("/api/analysis/levels/00700?adjust=qfq")
+
+    assert resp.status_code == 400
+    assert "港股" in resp.json()["message"]
 
 
 def test_levels_route_ambiguous_candidates():

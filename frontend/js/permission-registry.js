@@ -53,6 +53,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.profile.tab.kde_levels', name: '支撑压力', level: 2, parent_code: 'channel.profile', channel_code: 'profile', sort_order: 55 },
   { code: 'channel.profile.tab.settings', name: '账户设置', level: 2, parent_code: 'channel.profile', channel_code: 'profile', sort_order: 60 },
   { code: 'channel.profile.tab.kde_levels.btn.calc', name: '计算支撑压力', level: 3, parent_code: 'channel.profile.tab.kde_levels', channel_code: 'profile', sort_order: 10 },
+  { code: 'channel.profile.tab.kde_levels.btn.calc_qfq', name: '按前复权计算支撑压力', level: 3, parent_code: 'channel.profile.tab.kde_levels', channel_code: 'profile', sort_order: 20 },
   { code: 'channel.profile.tab.settings.btn.change_password', name: '修改密码', level: 3, parent_code: 'channel.profile.tab.settings', channel_code: 'profile', sort_order: 10 },
 
   { code: 'channel.watchlist.tab.default', name: '自选股列表', level: 2, parent_code: 'channel.watchlist', channel_code: 'watchlist', sort_order: 10 },

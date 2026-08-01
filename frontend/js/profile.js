@@ -60,17 +60,21 @@ const ProfilePage = {
 
     bindKdeLevelsTool() {
         const calcBtn = document.getElementById('kdeLevelsCalcBtn');
+        const calcQfqBtn = document.getElementById('kdeLevelsCalcQfqBtn');
         const codeInput = document.getElementById('kdeLevelsStockCode');
         const watchSelect = document.getElementById('kdeLevelsWatchlist');
 
         if (calcBtn) {
-            calcBtn.addEventListener('click', () => this.calculateKdeLevels());
+            calcBtn.addEventListener('click', () => this.calculateKdeLevels({ adjust: 'none' }));
+        }
+        if (calcQfqBtn) {
+            calcQfqBtn.addEventListener('click', () => this.calculateKdeLevels({ adjust: 'qfq' }));
         }
         if (codeInput) {
             codeInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    this.calculateKdeLevels();
+                    this.calculateKdeLevels({ adjust: 'none' });
                 }
             });
         }
@@ -147,7 +151,7 @@ const ProfilePage = {
                 const codeInput = document.getElementById('kdeLevelsStockCode');
                 if (codeInput) codeInput.value = code;
                 this.hideKdeLevelsCandidates();
-                this.calculateKdeLevels();
+                this.calculateKdeLevels({ adjust: this._kdeLevelsPendingAdjust || 'none' });
             });
         });
 
@@ -158,11 +162,15 @@ const ProfilePage = {
         }
     },
 
-    async calculateKdeLevels() {
+    async calculateKdeLevels(options = {}) {
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const adjust = (options.adjust === 'qfq') ? 'qfq' : 'none';
+        this._kdeLevelsPendingAdjust = adjust;
 
         const codeInput = document.getElementById('kdeLevelsStockCode');
         const calcBtn = document.getElementById('kdeLevelsCalcBtn');
+        const calcQfqBtn = document.getElementById('kdeLevelsCalcQfqBtn');
         const resultEl = document.getElementById('kdeLevelsResult');
         const emptyEl = document.getElementById('kdeLevelsEmpty');
         if (!codeInput) return;
@@ -182,17 +190,27 @@ const ProfilePage = {
 
         if (calcBtn) {
             calcBtn.disabled = true;
-            calcBtn.textContent = '计算中…';
+            if (adjust === 'none') calcBtn.textContent = '计算中…';
+        }
+        if (calcQfqBtn) {
+            calcQfqBtn.disabled = true;
+            if (adjust === 'qfq') calcQfqBtn.textContent = '获取因子并计算…';
         }
         this.hideKdeLevelsCandidates();
         if (emptyEl) {
             emptyEl.hidden = false;
-            emptyEl.textContent = '正在计算…';
+            emptyEl.textContent = adjust === 'qfq'
+                ? '正在获取复权因子并计算…'
+                : '正在计算…';
         }
         if (resultEl) resultEl.hidden = true;
 
         try {
-            const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?max_levels=8`;
+            const qs = new URLSearchParams({
+                max_levels: '8',
+                adjust,
+            });
+            const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
             const resp = await authFetch(url);
             const payload = await resp.json().catch(() => ({}));
             const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
@@ -221,6 +239,10 @@ const ProfilePage = {
             if (calcBtn) {
                 calcBtn.disabled = false;
                 calcBtn.textContent = '计算';
+            }
+            if (calcQfqBtn) {
+                calcQfqBtn.disabled = false;
+                calcQfqBtn.textContent = '按前复权计算';
             }
         }
     },
@@ -267,7 +289,11 @@ const ProfilePage = {
         const expanded = data.kde_lookback_expanded;
         const initLb = data.kde_lookback_initial || 250;
         const maxLb = data.kde_lookback_max || 750;
+        const adjustLabel = data.price_adjust === 'qfq'
+            ? `前复权（因子：${data.adj_factor_source || 'akshare_sina_qfq'}${data.adj_factor_asof ? `，截至 ${data.adj_factor_asof}` : ''}${data.factor_fetched ? '，本次已拉取' : '，已用缓存'}）`
+            : '不复权日K';
         const parts = [
+            adjustLabel,
             data.description || '成交量加权 KDE 支撑 / 压力',
             used != null ? `实际回看 ${used} 日` : null,
             expanded ? '（已扩窗）' : null,

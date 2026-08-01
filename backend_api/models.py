@@ -718,6 +718,23 @@ class HistoricalQuotes(Base):
     sixty_day_change_percent = Column(Float)   # 60天升跌%
     remarks = Column(String)                   # 备注
 
+
+class StockAdjFactor(Base):
+    """A 股每日复权因子（累计）；查询层现算前复权价，不物化 qfq K 线。"""
+
+    __tablename__ = "stock_adj_factor"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    trade_date = Column(Date, primary_key=True)
+    adj_factor = Column(Float, nullable=False)
+    source = Column(String(64))
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("ix_stock_adj_factor_trade_date", "trade_date"),
+        Index("ix_stock_adj_factor_code_updated", "code", "updated_at"),
+    )
+
+
 class HistoricalQuotesHK(Base):
     __tablename__ = 'historical_quotes_hk'
     code = Column(StockCodeTextPK(), primary_key=True)
