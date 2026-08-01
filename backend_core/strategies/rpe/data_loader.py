@@ -21,6 +21,8 @@ def _norm_code(code: str) -> str:
 class RPEDataLoader:
     def __init__(self, db_session=None):
         self._db = db_session
+        # 同一次选股/重算内缓存 ensure_adj_factors 结果，避免成分股重复读库/拉因子
+        self._qfq_factor_cache: Dict[str, Dict[str, Any]] = {}
 
     def _session(self):
         if self._db is not None:
@@ -328,7 +330,10 @@ class RPEDataLoader:
         factor_source: str = "auto",
         refresh_factor: bool = False,
     ) -> List[Dict[str, Any]]:
-        """对已加载的不复权 bars 现算前复权；失败返回空列表（从 panel 中剔除，避免混口径）。"""
+        """对已加载的不复权 bars 现算前复权；失败返回空列表（从 panel 中剔除，避免混口径）。
+
+        因子经 ensure_adj_factors：优先读 stock_adj_factor；缺失则拉取并 UPSERT 入库。
+        """
         try:
             from backend_api.utils.adj_quotes import (
                 AdjQuotesError,
@@ -342,12 +347,31 @@ class RPEDataLoader:
                 ensure_adj_factors,
             )
         try:
-            ensured = ensure_adj_factors(
-                db,
-                code,
-                force_refresh=bool(refresh_factor),
-                factor_source=factor_source or "auto",
-            )
+            cache_key = f"{code}|{factor_source or 'auto'}|{int(bool(refresh_factor))}"
+            ensured = self._qfq_factor_cache.get(cache_key)
+            if ensured is None:
+                ensured = ensure_adj_factors(
+                    db,
+                    code,
+                    force_refresh=bool(refresh_factor),
+                    factor_source=factor_source or "auto",
+                    prefer_db=True,
+                )
+                self._qfq_factor_cache[cache_key] = ensured
+                if ensured.get("factor_fetched"):
+                    logger.info(
+                        "RPE 复权因子已入库 code=%s source=%s asof=%s",
+                        code,
+                        ensured.get("source"),
+                        ensured.get("adj_factor_asof"),
+                    )
+                elif ensured.get("from_db"):
+                    logger.debug(
+                        "RPE 复权因子读库 code=%s source=%s asof=%s",
+                        code,
+                        ensured.get("source"),
+                        ensured.get("adj_factor_asof"),
+                    )
             return apply_qfq_to_bars(bars, ensured["factors"])
         except AdjQuotesError as e:
             logger.warning("RPE qfq bars skip %s: %s", code, e)

@@ -443,6 +443,15 @@ def _is_fresh(latest_td: Optional[date], max_age_days: int) -> bool:
     return age <= max(0, int(max_age_days))
 
 
+def _candidate_factor_sources(factor_source: str) -> List[str]:
+    """按 factor_source 偏好返回要检索的 stock_adj_factor.source 列表。"""
+    src_pref = normalize_factor_source(factor_source)
+    if src_pref == FACTOR_SOURCE_AUTO:
+        return [SOURCE_AKSHARE_SINA_QFQ, SOURCE_BAOSTOCK_QFQ]
+    tag = _factor_source_tag(src_pref)
+    return [tag] if tag else [SOURCE_AKSHARE_SINA_QFQ]
+
+
 def ensure_adj_factors(
     db: Session,
     code: str,
@@ -450,46 +459,95 @@ def ensure_adj_factors(
     max_age_days: int = DEFAULT_FACTOR_MAX_AGE_DAYS,
     force_refresh: bool = False,
     factor_source: str = FACTOR_SOURCE_AUTO,
+    prefer_db: bool = True,
 ) -> Dict[str, Any]:
-    """确保库内有较新的前复权因子；不足则按 factor_source 拉取并 UPSERT。
+    """确保可用前复权因子：优先读 stock_adj_factor，缺失再拉取并 UPSERT 入库。
+
+    策略：
+      1) 未 force_refresh 时，先读库（新鲜优先；prefer_db=True 时非新鲜也可用库内因子）
+      2) 库中无因子或 force_refresh 时，按 factor_source 拉取并写入 stock_adj_factor
+      3) 最终一律从 stock_adj_factor 再读出后返回（保证读写同口径）
 
     factor_source: auto | sina | baostock
       auto：生产默认优先读/拉归一化新浪，不足再 BaoStock。
       sina：仅归一化新浪；baostock：仅 BaoStock（原样）。
     按 source 分桶存储与读取，两源互不覆盖。
-    返回：{ factors, factor_fetched, source, adj_factor_asof, factor_source }
+    返回：{ factors, factor_fetched, source, adj_factor_asof, factor_source, from_db }
     """
     code_n = normalize_a_share_code(code)
     if not code_n.isdigit() or len(code_n) != 6:
         raise AdjQuotesError("前复权计算目前仅支持 A 股（6 位代码），港股暂不支持")
 
     src_pref = normalize_factor_source(factor_source)
+    candidates = _candidate_factor_sources(src_pref)
     factor_fetched = False
     source: Optional[str] = None
+    from_db = False
 
     if not force_refresh:
-        if src_pref == FACTOR_SOURCE_AUTO:
-            for cand in (SOURCE_AKSHARE_SINA_QFQ, SOURCE_BAOSTOCK_QFQ):
-                latest_td, _, src = _latest_factor_meta(db, code_n, source=cand)
-                if _is_fresh(latest_td, max_age_days):
-                    source = src or cand
-                    break
-        else:
-            tag = _factor_source_tag(src_pref)
-            assert tag is not None
-            latest_td, _, src = _latest_factor_meta(db, code_n, source=tag)
+        # 1) 新鲜因子优先
+        for cand in candidates:
+            latest_td, _, src = _latest_factor_meta(db, code_n, source=cand)
             if _is_fresh(latest_td, max_age_days):
-                source = src or tag
+                factors = load_adj_factors_from_db(db, code_n, source=src or cand)
+                if factors:
+                    source = src or cand
+                    from_db = True
+                    asof = factors[-1][0]
+                    logger.debug(
+                        "复权因子命中库(新鲜) code=%s source=%s rows=%s asof=%s",
+                        code_n,
+                        source,
+                        len(factors),
+                        _bar_date_str(asof),
+                    )
+                    return {
+                        "factors": factors,
+                        "factor_fetched": False,
+                        "source": source,
+                        "adj_factor_asof": _bar_date_str(asof),
+                        "factor_source": src_pref,
+                        "from_db": True,
+                    }
+        # 2) 再次计算：库内已有则优先用（不必等新鲜），避免整板重算反复打外网
+        if prefer_db:
+            for cand in candidates:
+                factors = load_adj_factors_from_db(db, code_n, source=cand)
+                if factors:
+                    source = cand
+                    from_db = True
+                    asof = factors[-1][0]
+                    logger.info(
+                        "复权因子命中 stock_adj_factor code=%s source=%s rows=%s asof=%s",
+                        code_n,
+                        source,
+                        len(factors),
+                        _bar_date_str(asof),
+                    )
+                    return {
+                        "factors": factors,
+                        "factor_fetched": False,
+                        "source": source,
+                        "adj_factor_asof": _bar_date_str(asof),
+                        "factor_source": src_pref,
+                        "from_db": True,
+                    }
 
-    if source is None:
-        rows, fetched_source = fetch_qfq_factors(code_n, factor_source=src_pref)
-        upsert_adj_factors(db, rows, source=fetched_source)
-        factor_fetched = True
-        source = fetched_source
+    # 3) 库空或强制刷新：拉取并写入 stock_adj_factor
+    rows, fetched_source = fetch_qfq_factors(code_n, factor_source=src_pref)
+    written = upsert_adj_factors(db, rows, source=fetched_source)
+    factor_fetched = True
+    source = fetched_source
+    logger.info(
+        "复权因子已写入 stock_adj_factor code=%s source=%s upsert_rows=%s",
+        code_n,
+        source,
+        written,
+    )
 
     factors = load_adj_factors_from_db(db, code_n, source=source)
     if not factors:
-        raise AdjQuotesError("复权因子为空，无法按前复权计算")
+        raise AdjQuotesError("复权因子为空，无法按前复权计算（写入后仍读不到）")
     asof = factors[-1][0]
     return {
         "factors": factors,
@@ -497,6 +555,7 @@ def ensure_adj_factors(
         "source": source or SOURCE_AKSHARE_SINA_QFQ,
         "adj_factor_asof": _bar_date_str(asof),
         "factor_source": src_pref,
+        "from_db": from_db,
     }
 
 

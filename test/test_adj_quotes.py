@@ -249,3 +249,78 @@ def test_ensure_force_refresh_uses_factor_source():
     assert fetch_mock.call_args.kwargs.get("factor_source") == "baostock"
     assert out["source"] == SOURCE_BAOSTOCK_QFQ
     assert out["factor_fetched"] is True
+
+
+def test_ensure_prefer_db_uses_stale_without_refetch():
+    """再次计算：库内有因子即使超过 max_age 也优先读库，不打外网。"""
+    db = MagicMock()
+    stale = date(2020, 1, 2)
+
+    def _execute(sql, params=None):
+        sql_s = str(sql)
+        result = MagicMock()
+        if "ORDER BY trade_date DESC" in sql_s:
+            result.fetchone.return_value = (stale, None, SOURCE_AKSHARE_SINA_QFQ)
+            result.fetchall.return_value = []
+        else:
+            result.fetchone.return_value = None
+            result.fetchall.return_value = [(stale, 0.85), (date(2020, 6, 1), 0.9)]
+        return result
+
+    db.execute.side_effect = _execute
+    with patch("utils.adj_quotes.fetch_qfq_factors") as fetch_mock:
+        out = ensure_adj_factors(
+            db, "600519", max_age_days=5, force_refresh=False, prefer_db=True
+        )
+    fetch_mock.assert_not_called()
+    assert out["factor_fetched"] is False
+    assert out["from_db"] is True
+    assert out["source"] == SOURCE_AKSHARE_SINA_QFQ
+    assert len(out["factors"]) == 2
+
+
+def test_ensure_fetches_and_upserts_when_db_empty():
+    db = MagicMock()
+    today = date.today()
+    state = {"written": False}
+
+    def _execute(sql, params=None):
+        sql_s = str(sql)
+        result = MagicMock()
+        if "ORDER BY trade_date DESC" in sql_s:
+            result.fetchone.return_value = None
+            result.fetchall.return_value = []
+            return result
+        # load_adj_factors_from_db：写入前为空，写入后有数据
+        if state["written"]:
+            result.fetchall.return_value = [(today, 1.0)]
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    def _upsert(db, rows, source=SOURCE_AKSHARE_SINA_QFQ):
+        state["written"] = True
+        return len(rows)
+
+    db.execute.side_effect = _execute
+    rows = [
+        {
+            "code": "600519",
+            "trade_date": today,
+            "adj_factor": 1.0,
+            "source": SOURCE_AKSHARE_SINA_QFQ,
+        }
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_qfq_factors",
+        return_value=(rows, SOURCE_AKSHARE_SINA_QFQ),
+    ) as fetch_mock, patch(
+        "utils.adj_quotes.upsert_adj_factors", side_effect=_upsert
+    ) as upsert_mock:
+        out = ensure_adj_factors(db, "600519", prefer_db=True)
+    fetch_mock.assert_called_once()
+    upsert_mock.assert_called_once()
+    assert out["factor_fetched"] is True
+    assert out["from_db"] is False
+    assert len(out["factors"]) == 1
