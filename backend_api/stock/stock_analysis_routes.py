@@ -416,7 +416,7 @@ async def get_key_levels_by_query(
     refresh_factor: bool = Query(False, description="强制重新拉取复权因子"),
     factor_source: str = Query(
         "auto",
-        description="因子源：auto=新浪优先BaoStock备用，sina=仅新浪，baostock=仅BaoStock",
+        description="因子源：auto=归一化新浪优先BaoStock备用，sina=仅归一化新浪，baostock=仅BaoStock",
     ),
     db: Session = Depends(get_db),
 ):
@@ -439,7 +439,7 @@ async def get_key_levels(
     refresh_factor: bool = Query(False, description="强制重新拉取复权因子"),
     factor_source: str = Query(
         "auto",
-        description="因子源：auto=新浪优先BaoStock备用，sina=仅新浪，baostock=仅BaoStock",
+        description="因子源：auto=归一化新浪优先BaoStock备用，sina=仅归一化新浪，baostock=仅BaoStock",
     ),
     db: Session = Depends(get_db)
 ):
@@ -448,7 +448,7 @@ async def get_key_levels(
 
     轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
     stock_code 支持 A股/港股代码，或股票名称（精确唯一则直接计算；多候选返回 candidates）。
-    adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor（主源新浪，备用 BaoStock），
+    adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor（生产默认归一化新浪，备用 BaoStock），
     再对不复权日K现算后计算 KDE。
     """
     try:

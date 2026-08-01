@@ -21,6 +21,7 @@ from utils.adj_quotes import (  # noqa: E402
     fetch_baostock_qfq_factors,
     fetch_qfq_factors,
     fetch_sina_qfq_factors,
+    normalize_sina_factor_to_internal,
     to_baostock_symbol,
     to_sina_symbol,
 )
@@ -66,7 +67,18 @@ def test_apply_qfq_missing_factors_raises():
         apply_qfq_to_bars([{"date": "2024-01-02", "close": 1.0}], [])
 
 
+def test_normalize_sina_factor_to_internal():
+    assert normalize_sina_factor_to_internal(1.0) == pytest.approx(1.0)
+    assert normalize_sina_factor_to_internal(1.5) == pytest.approx(1.0 / 1.5)
+    assert normalize_sina_factor_to_internal(2.0) == pytest.approx(0.5)
+    with pytest.raises(AdjQuotesError):
+        normalize_sina_factor_to_internal(0)
+    with pytest.raises(AdjQuotesError):
+        normalize_sina_factor_to_internal(-1.0)
+
+
 def test_fetch_sina_qfq_factors_parses_df():
+    # mock 新浪原始形态 [1.0, 1.5]；入库后应为倒数归一化
     df = pd.DataFrame(
         {
             "date": ["2024-01-02", "2024-01-03", "1900-01-01"],
@@ -80,8 +92,8 @@ def test_fetch_sina_qfq_factors_parses_df():
     # 1900-01-01 占位行应丢弃
     assert len(rows) == 2
     assert rows[0]["code"] == "600519"
-    assert rows[0]["adj_factor"] == 1.0
-    assert rows[1]["adj_factor"] == 1.5
+    assert rows[0]["adj_factor"] == pytest.approx(1.0)
+    assert rows[1]["adj_factor"] == pytest.approx(1.0 / 1.5)
     assert all(r["trade_date"].year > 1900 for r in rows)
     fake_ak.stock_zh_a_daily.assert_called()
     assert fake_ak.stock_zh_a_daily.call_args.kwargs.get("adjust") == "qfq-factor"

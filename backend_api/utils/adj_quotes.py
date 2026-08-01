@@ -1,11 +1,16 @@
 """不复权行情 + 复权因子 → 查询/内存层现算前复权。
 
-因子来源：
-  - 主源：AkShare 新浪 `stock_zh_a_daily(adjust=\"qfq-factor\")`
-  - 备用：BaoStock `query_adjust_factor` → `foreAdjustFactor`
+内部约定（与 BaoStock 一致）：
+  P_qfq = P_raw * f_t / f_T（f_T 为序列最新因子日，约 f_T≈1；历史因子通常 ≤1）。
+  volume / amount 不乘因子。因子按日对齐时对缺口做 forward-fill。
 
-公式：P_qfq = P_raw * f_t / f_T（f_T 为序列最新因子日；volume/amount 不乘）。
-因子按日对齐时对缺口做 forward-fill（沿用上一有效因子至下一事件前）。
+因子来源（生产默认：归一化新浪优先，BaoStock 备用）：
+  - 主源：AkShare 新浪 `stock_zh_a_daily(adjust=\"qfq-factor\")`
+    新浪原始 qfq-factor 为「历史>1、最新≈1」的倒数形态；入库前取倒数归一化
+    为内部约定（历史≤1、最新≈1），见 normalize_sina_factor_to_internal。
+  - 备用：BaoStock `query_adjust_factor` → `foreAdjustFactor`（原样入库，已符合内部约定）。
+
+factor_source=auto：归一化新浪 → 失败再用 BaoStock。
 """
 
 from __future__ import annotations
@@ -108,6 +113,21 @@ def _is_valid_factor_trade_date(td: date) -> bool:
     return td is not None and td > date(1900, 1, 1)
 
 
+def normalize_sina_factor_to_internal(factor: float) -> float:
+    """将新浪原始 qfq-factor 归一化为内部约定（取倒数）。
+
+    新浪：历史因子通常 >1、最新≈1；内部/BaoStock：历史通常 ≤1、最新≈1。
+    factor 必须 >0，否则抛 AdjQuotesError。
+    """
+    try:
+        f = float(factor)
+    except (TypeError, ValueError) as e:
+        raise AdjQuotesError(f"新浪复权因子无效：{factor}") from e
+    if f <= 0:
+        raise AdjQuotesError(f"新浪复权因子必须为正数，当前：{factor}")
+    return 1.0 / f
+
+
 def _factor_source_tag(factor_source: str) -> Optional[str]:
     """UI/参数 factor_source → 库内 source 标签；auto 返回 None。"""
     src = normalize_factor_source(factor_source)
@@ -119,7 +139,7 @@ def _factor_source_tag(factor_source: str) -> Optional[str]:
 
 
 def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
-    """调用 AkShare 新浪接口拉取前复权因子序列。"""
+    """调用 AkShare 新浪接口拉取前复权因子，入库前取倒数归一化为内部约定。"""
     import akshare as ak
 
     symbol = to_sina_symbol(code)
@@ -143,11 +163,13 @@ def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
                 if td is None or not _is_valid_factor_trade_date(td):
                     continue
                 try:
-                    f = float(r.get(factor_col))
+                    f_raw = float(r.get(factor_col))
                 except (TypeError, ValueError):
                     continue
-                if f <= 0:
+                if f_raw <= 0:
                     continue
+                # 新浪原始为倒数形态 → 归一化为内部约定后再入库
+                f = normalize_sina_factor_to_internal(f_raw)
                 rows.append(
                     {
                         "code": normalize_a_share_code(code),
@@ -266,27 +288,27 @@ def fetch_qfq_factors(
     if src == FACTOR_SOURCE_BAOSTOCK:
         return _try_bao(), SOURCE_BAOSTOCK_QFQ
 
-    # auto：新浪 → BaoStock
+    # auto：生产默认归一化新浪 → BaoStock 备用
     try:
         return _try_sina(), SOURCE_AKSHARE_SINA_QFQ
     except AdjQuotesError as e:
-        errors.append(f"新浪：{e.message}")
-        logger.warning("新浪复权因子失败，尝试 BaoStock：%s", e.message)
+        errors.append(f"归一化新浪：{e.message}")
+        logger.warning("归一化新浪复权因子失败，尝试 BaoStock：%s", e.message)
     except Exception as e:
-        errors.append(f"新浪：{e}")
-        logger.warning("新浪复权因子异常，尝试 BaoStock：%s", e)
+        errors.append(f"归一化新浪：{e}")
+        logger.warning("归一化新浪复权因子异常，尝试 BaoStock：%s", e)
 
     try:
         return _try_bao(), SOURCE_BAOSTOCK_QFQ
     except AdjQuotesError as e:
         errors.append(f"BaoStock：{e.message}")
         raise AdjQuotesError(
-            "获取复权因子失败（已尝试新浪与 BaoStock）。" + "；".join(errors)
+            "获取复权因子失败（已尝试归一化新浪与 BaoStock）。" + "；".join(errors)
         ) from e
     except Exception as e:
         errors.append(f"BaoStock：{e}")
         raise AdjQuotesError(
-            "获取复权因子失败（已尝试新浪与 BaoStock）。" + "；".join(errors)
+            "获取复权因子失败（已尝试归一化新浪与 BaoStock）。" + "；".join(errors)
         ) from e
 
 
@@ -432,7 +454,9 @@ def ensure_adj_factors(
     """确保库内有较新的前复权因子；不足则按 factor_source 拉取并 UPSERT。
 
     factor_source: auto | sina | baostock
-    按 source 分桶存储与读取，新浪与 BaoStock 互不覆盖。
+      auto：生产默认优先读/拉归一化新浪，不足再 BaoStock。
+      sina：仅归一化新浪；baostock：仅 BaoStock（原样）。
+    按 source 分桶存储与读取，两源互不覆盖。
     返回：{ factors, factor_fetched, source, adj_factor_asof, factor_source }
     """
     code_n = normalize_a_share_code(code)

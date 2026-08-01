@@ -655,7 +655,7 @@ class StockAnalysisService:
 
             if adjust == "qfq":
                 desc = (
-                    "成交量加权 KDE（前复权现算）：不复权日K × 新浪前复权因子 "
+                    "成交量加权 KDE（前复权现算）：不复权日K × 归一化复权因子 "
                     "(P_qfq = P_raw × f_t / f_T)；volume 不复权；"
                     f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
                     f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"

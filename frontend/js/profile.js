@@ -295,7 +295,7 @@ const ProfilePage = {
         const initLb = data.kde_lookback_initial || 250;
         const maxLb = data.kde_lookback_max || 750;
         const srcMap = {
-            akshare_sina_qfq: '新浪',
+            akshare_sina_qfq: '新浪（已归一化）',
             baostock_qfq: 'BaoStock',
         };
         const srcText = srcMap[data.adj_factor_source] || data.adj_factor_source || '未知';
