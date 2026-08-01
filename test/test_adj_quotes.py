@@ -69,18 +69,20 @@ def test_apply_qfq_missing_factors_raises():
 def test_fetch_sina_qfq_factors_parses_df():
     df = pd.DataFrame(
         {
-            "date": ["2024-01-02", "2024-01-03"],
-            "qfq_factor": [1.0, 1.5],
+            "date": ["2024-01-02", "2024-01-03", "1900-01-01"],
+            "qfq_factor": [1.0, 1.5, 14.5],
         }
     )
     fake_ak = MagicMock()
     fake_ak.stock_zh_a_daily.return_value = df
     with patch.dict(sys.modules, {"akshare": fake_ak}):
         rows = fetch_sina_qfq_factors("600519")
+    # 1900-01-01 占位行应丢弃
     assert len(rows) == 2
     assert rows[0]["code"] == "600519"
     assert rows[0]["adj_factor"] == 1.0
     assert rows[1]["adj_factor"] == 1.5
+    assert all(r["trade_date"].year > 1900 for r in rows)
     fake_ak.stock_zh_a_daily.assert_called()
     assert fake_ak.stock_zh_a_daily.call_args.kwargs.get("adjust") == "qfq-factor"
 

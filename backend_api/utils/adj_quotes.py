@@ -103,6 +103,21 @@ def _bar_date_str(d: date) -> str:
     return d.strftime("%Y-%m-%d")
 
 
+def _is_valid_factor_trade_date(td: date) -> bool:
+    """过滤新浪等源返回的 1900-01-01 占位无效日。"""
+    return td is not None and td > date(1900, 1, 1)
+
+
+def _factor_source_tag(factor_source: str) -> Optional[str]:
+    """UI/参数 factor_source → 库内 source 标签；auto 返回 None。"""
+    src = normalize_factor_source(factor_source)
+    if src == FACTOR_SOURCE_SINA:
+        return SOURCE_AKSHARE_SINA_QFQ
+    if src == FACTOR_SOURCE_BAOSTOCK:
+        return SOURCE_BAOSTOCK_QFQ
+    return None
+
+
 def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
     """调用 AkShare 新浪接口拉取前复权因子序列。"""
     import akshare as ak
@@ -125,7 +140,7 @@ def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
             )
             for _, r in df.iterrows():
                 td = _parse_trade_date(r.get(date_col))
-                if td is None:
+                if td is None or not _is_valid_factor_trade_date(td):
                     continue
                 try:
                     f = float(r.get(factor_col))
@@ -203,7 +218,7 @@ def fetch_baostock_qfq_factors(
             if not raw:
                 continue
             td = _parse_trade_date(raw[date_i] if date_i < len(raw) else None)
-            if td is None:
+            if td is None or not _is_valid_factor_trade_date(td):
                 continue
             try:
                 f = float(raw[factor_i])
@@ -281,7 +296,7 @@ def upsert_adj_factors(
     *,
     source: str = SOURCE_AKSHARE_SINA_QFQ,
 ) -> int:
-    """PostgreSQL UPSERT 写入 stock_adj_factor。"""
+    """PostgreSQL UPSERT 写入 stock_adj_factor（冲突键含 source，多源并存）。"""
     if not rows:
         return 0
     now = datetime.now()
@@ -290,9 +305,8 @@ def upsert_adj_factors(
         """
         INSERT INTO stock_adj_factor (code, trade_date, adj_factor, source, updated_at)
         VALUES (:code, :trade_date, :adj_factor, :source, :updated_at)
-        ON CONFLICT (code, trade_date) DO UPDATE SET
+        ON CONFLICT (code, trade_date, source) DO UPDATE SET
             adj_factor = EXCLUDED.adj_factor,
-            source = EXCLUDED.source,
             updated_at = EXCLUDED.updated_at
         """
     )
@@ -301,7 +315,7 @@ def upsert_adj_factors(
         td = r.get("trade_date")
         if isinstance(td, str):
             td = _parse_trade_date(td)
-        if not code or not isinstance(td, date):
+        if not code or not isinstance(td, date) or not _is_valid_factor_trade_date(td):
             continue
         try:
             f = float(r.get("adj_factor"))
@@ -324,18 +338,28 @@ def upsert_adj_factors(
     return n
 
 
-def load_adj_factors_from_db(db: Session, code: str) -> List[Tuple[date, float]]:
+def load_adj_factors_from_db(
+    db: Session,
+    code: str,
+    *,
+    source: str,
+) -> List[Tuple[date, float]]:
+    """按 code + source 加载因子序列（不同来源互不混用）。"""
     code_n = normalize_a_share_code(code)
+    src = str(source or "").strip()
+    if not src:
+        raise AdjQuotesError("加载复权因子时必须指定 source")
     rows = db.execute(
         text(
             """
             SELECT trade_date, adj_factor
             FROM stock_adj_factor
-            WHERE code = :code
+            WHERE code = :code AND source = :source
+              AND trade_date > DATE '1900-01-01'
             ORDER BY trade_date ASC
             """
         ),
-        {"code": code_n},
+        {"code": code_n, "source": src},
     ).fetchall()
     out: List[Tuple[date, float]] = []
     for r in rows:
@@ -344,7 +368,7 @@ def load_adj_factors_from_db(db: Session, code: str) -> List[Tuple[date, float]]
             td = td.date()
         if not isinstance(td, date):
             td = _parse_trade_date(td)
-        if td is None:
+        if td is None or not _is_valid_factor_trade_date(td):
             continue
         try:
             f = float(r[1])
@@ -356,19 +380,23 @@ def load_adj_factors_from_db(db: Session, code: str) -> List[Tuple[date, float]]
 
 
 def _latest_factor_meta(
-    db: Session, code: str
+    db: Session,
+    code: str,
+    *,
+    source: str,
 ) -> Tuple[Optional[date], Optional[datetime], Optional[str]]:
     row = db.execute(
         text(
             """
             SELECT trade_date, updated_at, source
             FROM stock_adj_factor
-            WHERE code = :code
+            WHERE code = :code AND source = :source
+              AND trade_date > DATE '1900-01-01'
             ORDER BY trade_date DESC
             LIMIT 1
             """
         ),
-        {"code": normalize_a_share_code(code)},
+        {"code": normalize_a_share_code(code), "source": str(source)},
     ).fetchone()
     if not row:
         return None, None, None
@@ -386,6 +414,13 @@ def _latest_factor_meta(
     return td, upd if isinstance(upd, datetime) else None, row[2]
 
 
+def _is_fresh(latest_td: Optional[date], max_age_days: int) -> bool:
+    if latest_td is None:
+        return False
+    age = (date.today() - latest_td).days
+    return age <= max(0, int(max_age_days))
+
+
 def ensure_adj_factors(
     db: Session,
     code: str,
@@ -397,6 +432,7 @@ def ensure_adj_factors(
     """确保库内有较新的前复权因子；不足则按 factor_source 拉取并 UPSERT。
 
     factor_source: auto | sina | baostock
+    按 source 分桶存储与读取，新浪与 BaoStock 互不覆盖。
     返回：{ factors, factor_fetched, source, adj_factor_asof, factor_source }
     """
     code_n = normalize_a_share_code(code)
@@ -404,20 +440,30 @@ def ensure_adj_factors(
         raise AdjQuotesError("前复权计算目前仅支持 A 股（6 位代码），港股暂不支持")
 
     src_pref = normalize_factor_source(factor_source)
-    latest_td, _updated_at, source = _latest_factor_meta(db, code_n)
-    fresh = False
-    if latest_td is not None and not force_refresh:
-        age = (date.today() - latest_td).days
-        fresh = age <= max(0, int(max_age_days))
-
     factor_fetched = False
-    if not fresh:
+    source: Optional[str] = None
+
+    if not force_refresh:
+        if src_pref == FACTOR_SOURCE_AUTO:
+            for cand in (SOURCE_AKSHARE_SINA_QFQ, SOURCE_BAOSTOCK_QFQ):
+                latest_td, _, src = _latest_factor_meta(db, code_n, source=cand)
+                if _is_fresh(latest_td, max_age_days):
+                    source = src or cand
+                    break
+        else:
+            tag = _factor_source_tag(src_pref)
+            assert tag is not None
+            latest_td, _, src = _latest_factor_meta(db, code_n, source=tag)
+            if _is_fresh(latest_td, max_age_days):
+                source = src or tag
+
+    if source is None:
         rows, fetched_source = fetch_qfq_factors(code_n, factor_source=src_pref)
         upsert_adj_factors(db, rows, source=fetched_source)
         factor_fetched = True
         source = fetched_source
 
-    factors = load_adj_factors_from_db(db, code_n)
+    factors = load_adj_factors_from_db(db, code_n, source=source)
     if not factors:
         raise AdjQuotesError("复权因子为空，无法按前复权计算")
     asof = factors[-1][0]

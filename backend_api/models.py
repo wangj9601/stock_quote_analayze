@@ -720,17 +720,21 @@ class HistoricalQuotes(Base):
 
 
 class StockAdjFactor(Base):
-    """A 股每日复权因子（累计）；查询层现算前复权价，不物化 qfq K 线。"""
+    """A 股每日复权因子（累计）；查询层现算前复权价，不物化 qfq K 线。
+
+    主键含 source，使新浪 / BaoStock 等来源可并存、互不覆盖。
+    """
 
     __tablename__ = "stock_adj_factor"
     code = Column(StockCodeTextPK(), primary_key=True)
     trade_date = Column(Date, primary_key=True)
+    source = Column(String(64), primary_key=True, nullable=False)
     adj_factor = Column(Float, nullable=False)
-    source = Column(String(64))
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
         Index("ix_stock_adj_factor_trade_date", "trade_date"),
+        Index("ix_stock_adj_factor_code_source", "code", "source"),
         Index("ix_stock_adj_factor_code_updated", "code", "updated_at"),
     )
 

@@ -30,9 +30,9 @@ def run() -> None:
                     code VARCHAR(32) NOT NULL,
                     trade_date DATE NOT NULL,
                     adj_factor DOUBLE PRECISION NOT NULL,
-                    source VARCHAR(64),
+                    source VARCHAR(64) NOT NULL DEFAULT 'akshare_sina_qfq',
                     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (code, trade_date)
+                    PRIMARY KEY (code, trade_date, source)
                 )
                 """
             )
