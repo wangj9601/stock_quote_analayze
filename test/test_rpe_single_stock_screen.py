@@ -94,10 +94,28 @@ class _FakeLoader:
     def list_boards(self, board_kind: str = "industry", limit: Optional[int] = None):
         return []
 
-    def load_bars(self, code: str, *, end_date=None, limit=None):
+    def load_bars(
+        self,
+        code: str,
+        *,
+        end_date=None,
+        limit=None,
+        adjust="none",
+        factor_source="auto",
+        refresh_factor=False,
+    ):
         return _make_bars()
 
-    def load_sector_panel(self, member_codes, *, end_date=None, lookback=None):
+    def load_sector_panel(
+        self,
+        member_codes,
+        *,
+        end_date=None,
+        lookback=None,
+        adjust="none",
+        factor_source="auto",
+        refresh_factor=False,
+    ):
         return {str(c).zfill(6): _make_bars() for c in member_codes}
 
     def build_date_members(self, panel):

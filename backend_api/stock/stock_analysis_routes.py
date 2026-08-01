@@ -1,13 +1,29 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import logging
 from database import get_db
 from .stock_analysis import StockAnalysisService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analysis", tags=["智能分析"])
+
+_BATCH_LEVELS_MAX_CODES = 300
+
+
+class LevelsBatchRequest(BaseModel):
+    """批量计算 KDE 支撑/阻力（供选股列表「按前复权计算」等）。"""
+
+    codes: List[str] = Field(default_factory=list, description="股票代码列表")
+    adjust: str = Field("qfq", description="价格口径：none 或 qfq")
+    max_levels: int = Field(8, ge=1, le=8)
+    refresh_factor: bool = False
+    factor_source: str = Field(
+        "auto",
+        description="因子源：auto / sina / baostock",
+    )
 
 
 def _normalize_levels_stock_code(raw: str) -> str:
@@ -138,7 +154,7 @@ def resolve_levels_stock_identifier(db: Session, raw: str) -> Dict[str, Any]:
     }
 
 
-def _levels_response_for_code(
+def _compute_levels_payload(
     code: str,
     max_levels: int,
     *,
@@ -146,7 +162,8 @@ def _levels_response_for_code(
     adjust: str = "none",
     refresh_factor: bool = False,
     factor_source: str = "auto",
-) -> JSONResponse:
+) -> Tuple[int, Dict[str, Any]]:
+    """计算单股 KDE 关键价位，返回 (http_status, body)。"""
     try:
         from backend_api.utils.adj_quotes import (
             AdjQuotesError,
@@ -163,22 +180,16 @@ def _levels_response_for_code(
     analysis_service = StockAnalysisService()
     adjust_n = str(adjust or "none").strip().lower() or "none"
     if adjust_n not in ("none", "qfq"):
-        return JSONResponse(
-            status_code=400,
-            content={"success": False, "message": "adjust 仅支持 none 或 qfq"},
-        )
+        return 400, {"success": False, "message": "adjust 仅支持 none 或 qfq"}
 
     historical_data = None
     adj_meta = None
     if adjust_n == "qfq":
         if analysis_service._is_hk_stock(code):
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "message": "前复权计算目前仅支持 A 股，港股暂不支持",
-                },
-            )
+            return 400, {
+                "success": False,
+                "message": "前复权计算目前仅支持 A 股，港股暂不支持",
+            }
         try:
             from .stock_analysis import KeyLevels
 
@@ -199,16 +210,10 @@ def _levels_response_for_code(
                 "factor_source": ensured.get("factor_source"),
             }
         except AdjQuotesError as e:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "message": e.message},
-            )
+            return 400, {"success": False, "message": e.message}
         except Exception as e:
             logger.exception("前复权因子处理失败 code=%s", code)
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": f"前复权处理失败: {e}"},
-            )
+            return 500, {"success": False, "message": f"前复权处理失败: {e}"}
 
     result = analysis_service.get_key_levels_only(
         code,
@@ -220,20 +225,55 @@ def _levels_response_for_code(
 
     if not result.get("success"):
         if "data" in result:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "message": result.get("error") or "无法计算关键价位",
-                    "data": result.get("data") or {},
-                },
-            )
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": result.get("error") or "获取关键价位失败"},
-        )
+            return 200, {
+                "success": False,
+                "message": result.get("error") or "无法计算关键价位",
+                "data": result.get("data") or {},
+            }
+        return 500, {
+            "success": False,
+            "message": result.get("error") or "获取关键价位失败",
+        }
 
-    return JSONResponse(content={"success": True, "data": result["data"]})
+    return 200, {"success": True, "data": result["data"]}
+
+
+def _levels_response_for_code(
+    code: str,
+    max_levels: int,
+    *,
+    db: Session,
+    adjust: str = "none",
+    refresh_factor: bool = False,
+    factor_source: str = "auto",
+) -> JSONResponse:
+    status, content = _compute_levels_payload(
+        code,
+        max_levels,
+        db=db,
+        adjust=adjust,
+        refresh_factor=refresh_factor,
+        factor_source=factor_source,
+    )
+    return JSONResponse(status_code=status, content=content)
+
+
+def _normalize_batch_codes(raw_codes: List[str]) -> List[str]:
+    """去重并归一化代码，保持原序。"""
+    seen = set()
+    out: List[str] = []
+    for raw in raw_codes or []:
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        code = _normalize_levels_stock_code(s)
+        if not code or code in seen:
+            continue
+        if code.isdigit() and len(code) not in (5, 6):
+            continue
+        seen.add(code)
+        out.append(code)
+    return out
 
 @router.get("/stock/{stock_code}")
 async def get_stock_analysis(
@@ -428,6 +468,93 @@ async def get_key_levels_by_query(
         refresh_factor=refresh_factor,
         factor_source=factor_source,
         db=db,
+    )
+
+
+@router.post("/levels/batch")
+async def get_key_levels_batch(
+    body: LevelsBatchRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    批量计算 KDE 支撑/阻力。
+
+    供比价效应选股列表「按前复权计算」：只刷新支撑/阻力口径，不改写 rpe_signal_trace。
+    单股失败不影响其它代码；港股在 adjust=qfq 时记为失败项。
+    """
+    codes = _normalize_batch_codes(body.codes)
+    if not codes:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "请提供至少一个有效股票代码"},
+        )
+    if len(codes) > _BATCH_LEVELS_MAX_CODES:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": f"单次最多 {_BATCH_LEVELS_MAX_CODES} 只，当前 {len(codes)} 只",
+            },
+        )
+
+    adjust_n = str(body.adjust or "qfq").strip().lower() or "qfq"
+    if adjust_n not in ("none", "qfq"):
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "adjust 仅支持 none 或 qfq"},
+        )
+
+    items: List[Dict[str, Any]] = []
+    ok_count = 0
+    for code in codes:
+        status, payload = _compute_levels_payload(
+            code,
+            int(body.max_levels or 8),
+            db=db,
+            adjust=adjust_n,
+            refresh_factor=bool(body.refresh_factor),
+            factor_source=body.factor_source or "auto",
+        )
+        data = payload.get("data") or {}
+        if payload.get("success") and status < 400:
+            ok_count += 1
+            items.append(
+                {
+                    "code": code,
+                    "success": True,
+                    "nearest_support": data.get("nearest_support"),
+                    "nearest_resistance": data.get("nearest_resistance"),
+                    "support_levels": data.get("support_levels") or [],
+                    "resistance_levels": data.get("resistance_levels") or [],
+                    "current_price": data.get("current_price"),
+                    "price_adjust": data.get("price_adjust") or adjust_n,
+                    "message": None,
+                }
+            )
+        else:
+            items.append(
+                {
+                    "code": code,
+                    "success": False,
+                    "nearest_support": data.get("nearest_support"),
+                    "nearest_resistance": data.get("nearest_resistance"),
+                    "support_levels": data.get("support_levels") or [],
+                    "resistance_levels": data.get("resistance_levels") or [],
+                    "current_price": data.get("current_price"),
+                    "price_adjust": adjust_n,
+                    "message": payload.get("message") or "计算失败",
+                }
+            )
+
+    return JSONResponse(
+        content={
+            "success": True,
+            "adjust": adjust_n,
+            "total": len(codes),
+            "ok_count": ok_count,
+            "fail_count": len(codes) - ok_count,
+            "items": items,
+        }
     )
 
 

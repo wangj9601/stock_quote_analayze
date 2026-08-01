@@ -131,9 +131,19 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    height: 38px;
     min-height: 38px;
+    padding: 0 16px;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 6px;
     text-decoration: none;
     box-sizing: border-box;
+    vertical-align: middle;
+}
+/* outline 有 1px 边框，refresh 无边框时补透明边框，避免视觉高度差 */
+.params-section .param-actions .refresh-btn {
+    border: 1px solid transparent;
 }
 .params-section .gms-meta-text {
     flex: 1 1 100%;

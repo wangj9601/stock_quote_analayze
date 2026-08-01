@@ -37,11 +37,29 @@ class _BoardLoader:
     def load_board_members(self, board_code, board_kind="industry"):
         return [{"code": f"{i:06d}", "name": f"S{i}"} for i in range(1, 8)]
 
-    def load_bars(self, code, *, end_date=None, limit=None):
+    def load_bars(
+        self,
+        code,
+        *,
+        end_date=None,
+        limit=None,
+        adjust="none",
+        factor_source="auto",
+        refresh_factor=False,
+    ):
         # 全员同价，Z 接近 0 → 多数无 catch_up/lead 信号
         return _bars()
 
-    def load_sector_panel(self, member_codes, *, end_date=None, lookback=None):
+    def load_sector_panel(
+        self,
+        member_codes,
+        *,
+        end_date=None,
+        lookback=None,
+        adjust="none",
+        factor_source="auto",
+        refresh_factor=False,
+    ):
         return {str(c).zfill(6): _bars() for c in member_codes}
 
     def build_date_members(self, panel):

@@ -255,13 +255,19 @@ def get_concept_board(db: Session = Depends(get_db)):
         rows = db.execute(
             text(
                 """
-                SELECT board_code, board_name, create_date,
-                       COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
-                       board_code_source
-                FROM concept_board_basic_info
-                WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
-                  AND COALESCE(frontend_visible_flag, TRUE) = TRUE
-                ORDER BY create_date DESC NULLS LAST, board_code
+                SELECT b.board_code, b.board_name, b.create_date,
+                       COALESCE(b.trade_observe_flag, FALSE) AS trade_observe_flag,
+                       b.board_code_source,
+                       COALESCE(cnt.n, 0) AS stock_count
+                FROM concept_board_basic_info b
+                LEFT JOIN (
+                    SELECT board_code, COUNT(*) AS n
+                    FROM concept_board_constituents
+                    GROUP BY board_code
+                ) cnt ON cnt.board_code = b.board_code
+                WHERE b.board_code IS NOT NULL AND TRIM(b.board_code) <> ''
+                  AND COALESCE(b.frontend_visible_flag, TRUE) = TRUE
+                ORDER BY b.create_date DESC NULLS LAST, b.board_code
                 """
             )
         ).fetchall()
@@ -270,6 +276,10 @@ def get_concept_board(db: Session = Depends(get_db)):
             source = resolve_board_code_source(
                 row[4], fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
             )
+            try:
+                stock_count = int(row[5] or 0)
+            except (TypeError, ValueError):
+                stock_count = 0
             data.append(
                 {
                     "board_code": row[0],
@@ -278,6 +288,7 @@ def get_concept_board(db: Session = Depends(get_db)):
                     "trade_observe_flag": bool(row[3]),
                     "board_code_source": source,
                     "board_code_source_label": board_code_source_label(source),
+                    "stock_count": stock_count,
                 }
             )
         return JSONResponse({"success": True, "data": data})

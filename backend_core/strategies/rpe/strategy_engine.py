@@ -187,6 +187,7 @@ class RPEStrategyEngine:
                 "note": sig.get("reason"),
             },
         ]
+        price_adjust = "qfq" if any(b.get("price_adjust") == "qfq" for b in bars_full) else "none"
         return {
             "code": code_n,
             "symbol": code_n,
@@ -210,6 +211,7 @@ class RPEStrategyEngine:
             "structure_valid": bool(struct.get("structure_valid")),
             "liquidity_ok": bool(liq.get("liquidity_ok")),
             "structure_plan": plan,
+            "price_adjust": price_adjust,
             "detail": {
                 "signal_reason": sig.get("reason"),
                 "structure": struct,
@@ -217,6 +219,7 @@ class RPEStrategyEngine:
                 "kde_reason": kde.get("reason"),
                 "bw": kde.get("bw"),
                 "i_t": zinfo.get("i_t"),
+                "price_adjust": price_adjust,
                 "z_window": int(cfg.get("z_window", 40)),
                 "lookback_days_applied": lookback,
                 "kde_lookback_used": kde.get("lookback_used"),
@@ -282,6 +285,9 @@ class RPEStrategyEngine:
         board_kind: str = "industry",
         include_no_signal: bool = False,
         codes_filter: Optional[set] = None,
+        price_adjust: str = "none",
+        factor_source: str = "auto",
+        refresh_factor: bool = False,
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         lookback = int(cfg.get("lookback_days", 250))
@@ -299,8 +305,16 @@ class RPEStrategyEngine:
                 if cn and cn not in name_map:
                     codes.append(cn)
                     name_map[cn] = None
+        adjust_n = str(price_adjust or "none").strip().lower() or "none"
         # 拉足 KDE 最大回看；Z/斜率仍在 evaluate 内截断到 lookback_days
-        panel = self.loader.load_sector_panel(codes, end_date=date, lookback=kde_max)
+        panel = self.loader.load_sector_panel(
+            codes,
+            end_date=date,
+            lookback=kde_max,
+            adjust=adjust_n,
+            factor_source=factor_source,
+            refresh_factor=refresh_factor,
+        )
         if len(panel) < min_members:
             return []
         date_members = self.loader.build_date_members(panel)
@@ -318,7 +332,14 @@ class RPEStrategyEngine:
             # 目标股有日线但未进 panel 键名时再补一次
             for c in filt:
                 if c not in panel:
-                    bars = self.loader.load_bars(c, end_date=date, limit=kde_max)
+                    bars = self.loader.load_bars(
+                        c,
+                        end_date=date,
+                        limit=kde_max,
+                        adjust=adjust_n,
+                        factor_source=factor_source,
+                        refresh_factor=refresh_factor,
+                    )
                     if bars:
                         panel[c] = bars
                         eval_codes.append(c)
@@ -396,6 +417,9 @@ class RPEStrategyEngine:
         max_results: Optional[int] = None,
         board_kind: str = "industry",
         include_no_signal: bool = False,
+        price_adjust: str = "none",
+        factor_source: str = "auto",
+        refresh_factor: bool = False,
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         scan = cfg.get("scan") or {}
@@ -403,6 +427,7 @@ class RPEStrategyEngine:
         trade_date = date or self.loader.resolve_trade_date()
         kind = "concept" if board_kind == "concept" else "industry"
         code_filter = {_norm_code(c) for c in codes} if codes else None
+        adjust_n = str(price_adjust or "none").strip().lower() or "none"
 
         board_jobs: List[Dict[str, str]]
         if board_codes:
@@ -441,6 +466,9 @@ class RPEStrategyEngine:
                 board_kind=b.get("board_kind") or kind,
                 include_no_signal=include_no_signal,
                 codes_filter=code_filter,
+                price_adjust=adjust_n,
+                factor_source=factor_source,
+                refresh_factor=refresh_factor,
             )
             for r in rows:
                 if code_filter is not None and r["code"] not in code_filter:

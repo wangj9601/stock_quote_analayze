@@ -1,4 +1,4 @@
-"""RPE 前端选股接口：优先读 trace。"""
+"""RPE 前端选股接口：优先读 trace；前复权现算不写 trace。"""
 
 from __future__ import annotations
 
@@ -24,6 +24,9 @@ class RPEFrontendInterface:
         trace_only: bool = False,
         max_results: int = 200,
         include_no_signal: bool = False,
+        adjust: str = "none",
+        factor_source: str = "auto",
+        refresh_factor: bool = False,
         db=None,
     ) -> Dict[str, Any]:
         from backend_api.database import SessionLocal
@@ -41,6 +44,11 @@ class RPEFrontendInterface:
             engine = RPEStrategyEngine(db_session=session, config=cfg)
             trade_date = date or engine.loader.resolve_trade_date()
             kind = "concept" if board_kind == "concept" else "industry"
+            adjust_n = str(adjust or "none").strip().lower() or "none"
+            if adjust_n not in ("none", "qfq"):
+                adjust_n = "none"
+            # 前复权必须整簇现算，禁止走预计算 trace
+            use_trace = bool(trace_only) and adjust_n == "none"
 
             resolved_boards: Optional[List[str]] = None
             if board_codes:
@@ -48,7 +56,7 @@ class RPEFrontendInterface:
             elif board_code:
                 resolved_boards = [str(board_code).strip()]
 
-            if trace_only and scope == "cn" and not resolved_boards and not codes:
+            if use_trace and scope == "cn" and not resolved_boards and not codes:
                 rows = load_traces(
                     session,
                     trade_date=trade_date,
@@ -62,6 +70,7 @@ class RPEFrontendInterface:
                     "search_date": trade_date,
                     "config_id": cid,
                     "source": "trace",
+                    "price_adjust": "none",
                     "total": len(rows),
                 }
 
@@ -75,7 +84,8 @@ class RPEFrontendInterface:
                         "data": [],
                         "search_date": trade_date,
                         "config_id": cid,
-                        "source": "live",
+                        "source": "live_qfq" if adjust_n == "qfq" else "live",
+                        "price_adjust": adjust_n,
                         "total": 0,
                         "message": message,
                     }
@@ -90,23 +100,48 @@ class RPEFrontendInterface:
                 max_results=max_results,
                 board_kind=kind,
                 include_no_signal=include_no_signal,
+                price_adjust=adjust_n,
+                factor_source=factor_source or "auto",
+                refresh_factor=bool(refresh_factor),
             )
 
-            try:
-                upsert_signal_traces(session, rows, config_id=cid, trade_date=trade_date)
-            except Exception as e:
-                logger.warning("RPE save traces skipped: %s", e)
+            # 前复权现算仅供对照，禁止回写 rpe_signal_trace（避免污染不复权预计算）
+            if adjust_n != "qfq":
+                try:
+                    upsert_signal_traces(session, rows, config_id=cid, trade_date=trade_date)
+                except Exception as e:
+                    logger.warning("RPE save traces skipped: %s", e)
 
             out: Dict[str, Any] = {
                 "data": rows,
                 "search_date": trade_date,
                 "config_id": cid,
-                "source": "live",
+                "source": "live_qfq" if adjust_n == "qfq" else "live",
+                "price_adjust": adjust_n,
                 "total": len(rows),
             }
-            if not rows and codes and include_no_signal:
+            if not rows and resolved_boards:
+                min_members = int((cfg.get("scan") or {}).get("min_sector_members", 5))
+                reasons = []
+                for bc in resolved_boards:
+                    members = engine.loader.load_board_members(bc, board_kind=kind)
+                    if len(members) < min_members:
+                        reasons.append(
+                            f"板块 {bc} 有效成分 {len(members)} 只（需≥{min_members}；可能选中了无成分的重复编码）"
+                        )
+                if reasons:
+                    out["message"] = "；".join(reasons)
+                else:
+                    out["message"] = (
+                        "已定位板块但未能计算出有效 Z-Score（可能日线不足、成分过少或前复权因子缺失）"
+                        if adjust_n == "qfq"
+                        else "已定位板块但未能计算出有效 Z-Score（可能日线不足或成分股过少）"
+                    )
+            elif not rows and codes and include_no_signal:
                 out["message"] = (
-                    "已定位板块但未能计算出有效 Z-Score（可能日线不足或成分股过少）"
+                    "已定位板块但未能计算出有效 Z-Score（可能日线不足、成分股过少或前复权因子缺失）"
+                    if adjust_n == "qfq"
+                    else "已定位板块但未能计算出有效 Z-Score（可能日线不足或成分股过少）"
                 )
             return out
         finally:

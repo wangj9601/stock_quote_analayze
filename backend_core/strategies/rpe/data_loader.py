@@ -251,6 +251,9 @@ class RPEDataLoader:
         *,
         end_date: Optional[str] = None,
         limit: Optional[int] = 250,
+        adjust: str = "none",
+        factor_source: str = "auto",
+        refresh_factor: bool = False,
     ) -> List[Dict[str, Any]]:
         db = self._session()
         own = self._db is None
@@ -299,6 +302,15 @@ class RPEDataLoader:
                         "turnover_rate": float(r[7]) if r[7] is not None else None,
                     }
                 )
+            adjust_n = str(adjust or "none").strip().lower() or "none"
+            if adjust_n == "qfq" and bars:
+                bars = self._apply_qfq_bars(
+                    db,
+                    code_n,
+                    bars,
+                    factor_source=factor_source,
+                    refresh_factor=refresh_factor,
+                )
             return bars
         except Exception as e:
             logger.warning("load_bars %s failed: %s", code, e)
@@ -307,17 +319,67 @@ class RPEDataLoader:
             if own:
                 db.close()
 
+    def _apply_qfq_bars(
+        self,
+        db,
+        code: str,
+        bars: List[Dict[str, Any]],
+        *,
+        factor_source: str = "auto",
+        refresh_factor: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """对已加载的不复权 bars 现算前复权；失败返回空列表（从 panel 中剔除，避免混口径）。"""
+        try:
+            from backend_api.utils.adj_quotes import (
+                AdjQuotesError,
+                apply_qfq_to_bars,
+                ensure_adj_factors,
+            )
+        except ImportError:
+            from utils.adj_quotes import (  # type: ignore
+                AdjQuotesError,
+                apply_qfq_to_bars,
+                ensure_adj_factors,
+            )
+        try:
+            ensured = ensure_adj_factors(
+                db,
+                code,
+                force_refresh=bool(refresh_factor),
+                factor_source=factor_source or "auto",
+            )
+            return apply_qfq_to_bars(bars, ensured["factors"])
+        except AdjQuotesError as e:
+            logger.warning("RPE qfq bars skip %s: %s", code, e)
+            return []
+        except Exception as e:
+            logger.warning("RPE qfq bars failed %s: %s", code, e)
+            return []
+
     def load_sector_panel(
         self,
         member_codes: List[str],
         *,
         end_date: Optional[str] = None,
         lookback: Optional[int] = 250,
+        adjust: str = "none",
+        factor_source: str = "auto",
+        refresh_factor: bool = False,
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """批量加载成分股 bars（逐只；lookback=None 表示拉全历史）。"""
+        """批量加载成分股 bars（逐只；lookback=None 表示拉全历史）。
+
+        adjust=qfq 时对 OHLC 现算前复权（成交额/换手不变），保证板块基准与个股同口径。
+        """
         out: Dict[str, List[Dict[str, Any]]] = {}
         for code in member_codes:
-            bars = self.load_bars(code, end_date=end_date, limit=lookback)
+            bars = self.load_bars(
+                code,
+                end_date=end_date,
+                limit=lookback,
+                adjust=adjust,
+                factor_source=factor_source,
+                refresh_factor=refresh_factor,
+            )
             if bars:
                 out[_norm_code(code)] = bars
         return out

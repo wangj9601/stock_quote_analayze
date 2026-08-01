@@ -295,3 +295,124 @@ def resolve_industry_board_codes(db: Session, raw_codes: List[str]) -> List[str]
             if resolved and resolved not in out:
                 out.append(resolved)
     return out
+
+
+def _concept_constituent_count(db: Session, board_code: str) -> int:
+    row = db.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM concept_board_constituents
+            WHERE board_code = :code
+            """
+        ),
+        {"code": board_code},
+    ).scalar()
+    try:
+        return int(row or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def prefer_concept_board_with_constituents(db: Session, board_code: str) -> str:
+    """
+    若指定概念板块无成分股，则回退到同名+同来源中成分最多的板块。
+    用于修复「数据中心（AIDC）」等同花顺重复编码（一空一满）导致选股为 0。
+    """
+    code = normalize_concept_board_code(board_code) or str(board_code or "").strip()
+    if not code:
+        return ""
+    n = _concept_constituent_count(db, code)
+    if n > 0:
+        return code
+
+    meta = db.execute(
+        text(
+            """
+            SELECT TRIM(board_name) AS board_name, COALESCE(board_code_source, '') AS src
+            FROM concept_board_basic_info
+            WHERE board_code = :code
+            LIMIT 1
+            """
+        ),
+        {"code": code},
+    ).fetchone()
+    if not meta:
+        return code
+    name = str(meta[0] or "").strip()
+    src = str(meta[1] or "").strip()
+    if not name:
+        return code
+
+    alt = db.execute(
+        text(
+            """
+            SELECT b.board_code, COUNT(c.stock_code) AS n
+            FROM concept_board_basic_info b
+            LEFT JOIN concept_board_constituents c ON c.board_code = b.board_code
+            WHERE TRIM(b.board_name) = :name
+              AND COALESCE(b.board_code_source, '') = :src
+            GROUP BY b.board_code
+            HAVING COUNT(c.stock_code) > 0
+            ORDER BY COUNT(c.stock_code) DESC, b.board_code ASC
+            LIMIT 1
+            """
+        ),
+        {"name": name, "src": src},
+    ).fetchone()
+    if not alt:
+        return code
+    resolved = normalize_concept_board_code(alt[0]) or str(alt[0])
+    return resolved or code
+
+
+def resolve_concept_board_codes(db: Session, raw_codes: List[str]) -> List[str]:
+    """解析概念板块代码；无成分时自动切到同名同来源有成分的编码。"""
+    out: List[str] = []
+    for raw in raw_codes:
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        code = normalize_concept_board_code(s)
+        if code:
+            hit = db.execute(
+                text(
+                    """
+                    SELECT board_code FROM concept_board_basic_info WHERE board_code = :code
+                    UNION
+                    SELECT DISTINCT board_code FROM concept_board_constituents
+                    WHERE board_code = :code LIMIT 1
+                    """
+                ),
+                {"code": code},
+            ).fetchone()
+            if hit:
+                resolved = prefer_concept_board_with_constituents(
+                    db, normalize_concept_board_code(hit[0]) or str(hit[0])
+                )
+                if resolved and resolved not in out:
+                    out.append(resolved)
+                continue
+        # 按名称：优先取有成分的同名板
+        row = db.execute(
+            text(
+                """
+                SELECT b.board_code, COUNT(c.stock_code) AS n
+                FROM concept_board_basic_info b
+                LEFT JOIN concept_board_constituents c ON c.board_code = b.board_code
+                WHERE TRIM(b.board_name) = :name OR b.board_code = :name
+                GROUP BY b.board_code
+                ORDER BY COUNT(c.stock_code) DESC,
+                         CASE WHEN UPPER(b.board_code) LIKE 'BK%%' THEN 0 ELSE 1 END,
+                         b.board_code ASC
+                LIMIT 1
+                """
+            ),
+            {"name": s},
+        ).fetchone()
+        if row:
+            resolved = prefer_concept_board_with_constituents(
+                db, normalize_concept_board_code(row[0]) or str(row[0])
+            )
+            if resolved and resolved not in out:
+                out.append(resolved)
+    return out

@@ -2693,6 +2693,50 @@ const ScreeningPage = {
         ));
     },
 
+    /** 概念板块同名同来源去重：优先保留成分股更多的编码（避免同花顺空壳板盖住有成分板） */
+    _dedupeGmsConceptBoardCatalog(boards) {
+        const list = Array.isArray(boards) ? boards : [];
+        const buckets = new Map();
+        list.forEach((b) => {
+            const code = String(b?.board_code || '').trim();
+            if (!code) return;
+            const name = String(b?.board_name || '').trim() || code;
+            const source = this._gmsBoardSourceValue(b);
+            const key = `${name}||${source}`;
+            const count = Number(b?.stock_count);
+            const stockCount = Number.isFinite(count) ? count : 0;
+            const observeFlag = !!(b?.trade_observe_flag);
+            const normalized = {
+                ...b,
+                board_code_source: source,
+                board_code_source_label: b?.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
+                trade_observe_flag: observeFlag,
+                stock_count: stockCount,
+            };
+            const prev = buckets.get(key);
+            if (!prev) {
+                buckets.set(key, normalized);
+                return;
+            }
+            const prevCount = Number(prev.stock_count) || 0;
+            if (stockCount > prevCount) {
+                buckets.set(key, {
+                    ...normalized,
+                    trade_observe_flag: observeFlag || !!prev.trade_observe_flag,
+                });
+            } else {
+                buckets.set(key, {
+                    ...prev,
+                    trade_observe_flag: observeFlag || !!prev.trade_observe_flag,
+                });
+            }
+        });
+        return Array.from(buckets.values()).sort((a, b) => String(a.board_name || a.board_code).localeCompare(
+            String(b.board_name || b.board_code),
+            'zh-CN',
+        ));
+    },
+
     _syncGmsBoardPickerSourceFilterUi() {
         const wrap = document.querySelector('#gmsBoardPickerModal .gms-board-picker-source-filters');
         if (!wrap) return;
@@ -2810,9 +2854,12 @@ const ScreeningPage = {
             const code = String(b.board_code || '').trim();
             const name = String(b.board_name || '').trim() || code;
             const srcLabel = this._gmsBoardSourceLabel(b);
-            const title = this._gmsBoardLabel(b);
+            const count = Number(b.stock_count);
+            const countTxt = Number.isFinite(count) ? `${count}只` : '';
+            const title = `${this._gmsBoardLabel(b)}${countTxt ? ` · ${countTxt}` : ''} · ${code}`;
             const checked = draft.has(code) ? ' checked' : '';
-            return `<label class="gms-board-picker-item" title="${esc(title)}"><input type="checkbox" value="${esc(code)}"${checked}><span class="gms-board-picker-item-text"><span class="gms-board-picker-name">${esc(name)}</span><span class="gms-board-picker-source">${esc(srcLabel)}</span></span></label>`;
+            const sourceLine = countTxt ? `${srcLabel} · ${countTxt}` : srcLabel;
+            return `<label class="gms-board-picker-item" title="${esc(title)}"><input type="checkbox" value="${esc(code)}"${checked}><span class="gms-board-picker-item-text"><span class="gms-board-picker-name">${esc(name)}</span><span class="gms-board-picker-source">${esc(sourceLine)}</span></span></label>`;
         }).join('');
     },
 
@@ -3133,18 +3180,17 @@ const ScreeningPage = {
                 throw new Error(data.message || `HTTP ${res.status}`);
             }
             const boards = Array.isArray(data.data) ? data.data : [];
-            boards.sort((a, b) => String(a.board_name || a.board_code).localeCompare(
-                String(b.board_name || b.board_code),
-                'zh-CN'
-            ));
-            this.gmsConceptBoardCatalog = boards.map((b) => {
+            const mapped = boards.map((b) => {
                 const source = this._gmsBoardSourceValue(b);
+                const count = Number(b?.stock_count);
                 return {
                     ...b,
                     board_code_source: source,
                     board_code_source_label: b.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
+                    stock_count: Number.isFinite(count) ? count : 0,
                 };
             });
+            this.gmsConceptBoardCatalog = this._dedupeGmsConceptBoardCatalog(mapped);
             this._gmsConceptBoardsLoaded = true;
             this._applyGmsTradeObserveBoardDefaults('concept');
             return true;

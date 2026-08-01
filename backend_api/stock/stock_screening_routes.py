@@ -3509,6 +3509,19 @@ async def get_rpe_strategy(
     stock_code: Optional[str] = Query(
         None, description="scope=single 时：股票代码或名称（如 000001 / 平安银行）"
     ),
+    code: Optional[List[str]] = Query(
+        None,
+        description="限定重算的 A 股代码列表；全市场+adjust=qfq 时必传当前列表代码",
+    ),
+    adjust: str = Query(
+        "none",
+        description="价格口径：none=不复权（可写 trace）；qfq=整策略前复权现算（不写 trace）",
+    ),
+    factor_source: str = Query(
+        "auto",
+        description="前复权因子源：auto|sina|baostock（仅 adjust=qfq 生效）",
+    ),
+    refresh_factor: bool = Query(False, description="强制重新拉取复权因子"),
     trace_only: bool = Query(False),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
     token: Optional[str] = Depends(oauth2_scheme_optional),
@@ -3521,6 +3534,7 @@ async def get_rpe_strategy(
     scope=industry_board|concept_board：返回所选板块成分股策略结果，默认包含未出现信号的股票；
     勾选「仅入场信号」或指定 signal_type 时仍按条件过滤。
     scope=watchlist：按自选股代码列表解析所属板块后计算信号。
+    adjust=qfq：对板块成分与标的统一前复权后重算 Z/KDE/结构/入场等，结果不落库污染 rpe_signal_trace。
     """
     try:
         from backend_core.strategies.rpe.frontend_interface import RPEFrontendInterface
@@ -3535,11 +3549,24 @@ async def get_rpe_strategy(
     if scope_raw == "all":
         scope_raw = "cn"
 
+    adjust_n = str(adjust or "none").strip().lower() or "none"
+    if adjust_n not in ("none", "qfq"):
+        raise HTTPException(status_code=400, detail="adjust 仅支持 none 或 qfq")
+
     codes = None
     board_codes = None
     board_kind = "industry"
     extra_meta: Dict[str, Any] = {}
     include_no_signal = False
+
+    # 显式 code 列表：全市场前复权重算 / 限定子集
+    qfq_codes: List[str] = []
+    if code:
+        for c in code:
+            n = _normalize_stock_code_for_gms_pool(str(c or "").strip())
+            if n and n.isdigit() and len(n) == 6:
+                qfq_codes.append(n)
+        qfq_codes = list(dict.fromkeys(qfq_codes))
 
     if scope_raw in ("watchlist", "single"):
         if scope_raw == "single":
@@ -3610,6 +3637,16 @@ async def get_rpe_strategy(
         )
         if not board_codes:
             raise HTTPException(status_code=400, detail="concept_board 需要选择概念板块")
+        try:
+            from backend_api.utils.bk_board_code import resolve_concept_board_codes
+
+            resolved = resolve_concept_board_codes(db, board_codes)
+            if resolved:
+                board_codes = resolved
+        except Exception:
+            pass
+        if not board_codes:
+            raise HTTPException(status_code=400, detail="未找到有效的概念板块代码")
         include_no_signal = True
     elif scope_raw != "cn":
         raise HTTPException(
@@ -3617,9 +3654,27 @@ async def get_rpe_strategy(
             detail="scope 仅支持 cn|watchlist|industry_board|concept_board|single",
         )
 
+    # 全市场 + 前复权：必须带当前列表 code，避免扫全市场板块超时/误写对照结果
+    if scope_raw == "cn" and adjust_n == "qfq":
+        if not qfq_codes:
+            raise HTTPException(
+                status_code=400,
+                detail="全市场前复权重算请先刷新筛选，再对当前列表执行（需传 code）",
+            )
+        codes = qfq_codes
+        include_no_signal = True
+    elif qfq_codes and scope_raw == "cn" and adjust_n == "none":
+        # 允许用 code 限定不复权子集现算（仍可写 trace）
+        codes = qfq_codes
+        include_no_signal = True
+
     # 单股明细时不强制 entry_only（与 URT 对齐：直接看策略信号）
     # 行业/概念板块：保留用户勾选的「仅入场」；未勾选时 include_no_signal 返回无信号成分股
     effective_entry_only = False if scope_raw == "single" else entry_only
+    # 前复权重算列表：返回全部目标股，便于对照更新整表
+    if adjust_n == "qfq" and codes:
+        effective_entry_only = False
+        include_no_signal = True
     # 勾选「仅入场」时无需强制 include_no_signal（引擎会按 entry_signal 过滤）
     if effective_entry_only:
         include_no_signal = False
@@ -3628,6 +3683,8 @@ async def get_rpe_strategy(
     effective_max = max_results or 200
     if scope_raw in ("industry_board", "concept_board") and effective_max < 2000:
         effective_max = 2000
+    if adjust_n == "qfq" and codes and effective_max < len(codes):
+        effective_max = min(2000, len(codes))
 
     # 长耗时计算在线程池中用独立 Session；请求级 db 提前归还连接池，避免拖死其它接口（如观察池 add）
     try:
@@ -3641,9 +3698,18 @@ async def get_rpe_strategy(
     _board_kind = board_kind
     _entry_only = effective_entry_only
     _signal_type = None if scope_raw == "single" else signal_type
-    _trace_only = trace_only and scope_raw == "cn" and not board_codes and not codes
+    _trace_only = (
+        trace_only
+        and adjust_n == "none"
+        and scope_raw == "cn"
+        and not board_codes
+        and not codes
+    )
     _include_no_signal = include_no_signal
     _scope_for_engine = scope_raw if scope_raw == "cn" else "cn"
+    _adjust = adjust_n
+    _factor_source = (factor_source or "auto").strip().lower() or "auto"
+    _refresh_factor = bool(refresh_factor)
 
     def _run():
         return RPEFrontendInterface.get_selection_results(
@@ -3658,6 +3724,9 @@ async def get_rpe_strategy(
             trace_only=_trace_only,
             max_results=effective_max,
             include_no_signal=_include_no_signal,
+            adjust=_adjust,
+            factor_source=_factor_source,
+            refresh_factor=_refresh_factor,
         )
 
     try:
@@ -3666,7 +3735,7 @@ async def get_rpe_strategy(
             timeout=RPE_SCREENING_TIMEOUT,
         )
     except asyncio.TimeoutError:
-        logger.warning("RPE 选股超时(%ss)，scope=%s", RPE_SCREENING_TIMEOUT, scope_raw)
+        logger.warning("RPE 选股超时(%ss)，scope=%s adjust=%s", RPE_SCREENING_TIMEOUT, scope_raw, adjust_n)
         raise HTTPException(
             status_code=504,
             detail=f"RPE选股计算超时（超过{RPE_SCREENING_TIMEOUT}秒），请缩小范围或稍后重试",
@@ -3682,6 +3751,7 @@ async def get_rpe_strategy(
             "scope": scope_raw,
             "config_id": result.get("config_id"),
             "source": result.get("source"),
+            "price_adjust": result.get("price_adjust") or adjust_n,
             "message": result.get("message"),
             "board_kind": board_kind if scope_raw in ("industry_board", "concept_board") else None,
             "board_codes": board_codes,

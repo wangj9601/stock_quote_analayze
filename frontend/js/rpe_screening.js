@@ -175,81 +175,103 @@
       : [];
   }
 
-  async function refreshSignals() {
-    const loading = document.getElementById('rpeLoading');
+  function collectResultCodes() {
     const body = document.getElementById('rpeResultsBody');
-    showErr('');
-    if (loading) loading.style.display = 'flex';
-    try {
-      await loadObserveMap();
-      const scope = document.getElementById('rpeScope').value || 'cn';
-      const date = document.getElementById('rpeDate').value || '';
-      const entryOnly = document.getElementById('rpeEntryOnly').checked;
-      const traceOnly = document.getElementById('rpeTraceOnly').checked;
-      const signalType = document.getElementById('rpeSignalType').value || '';
-      const stockCode = (document.getElementById('rpeStockCode').value || '').trim();
-      const industryCodes = selectedIndustryCodes();
-      const conceptCodes = selectedConceptCodes();
+    if (!body) return [];
+    const codes = [];
+    const seen = new Set();
+    body.querySelectorAll('tr[data-code]').forEach((tr) => {
+      if (tr.classList.contains('rpe-score-detail-row')) return;
+      const c = normCode(tr.getAttribute('data-code'));
+      if (!c || seen.has(c)) return;
+      seen.add(c);
+      codes.push(c);
+    });
+    return codes;
+  }
 
-      if (scope === 'industry_board' && !industryCodes.length) {
-        throw new Error('请先选择行业板块（与 GMS 相同的选择面板）');
-      }
-      if (scope === 'concept_board' && !conceptCodes.length) {
-        throw new Error('请先选择概念板块（与 GMS 相同的选择面板）');
-      }
-      if (scope === 'single' && !stockCode) {
-        throw new Error('单股范围需要填写股票代码');
-      }
+  function buildRpeQuery({ adjust = 'none', extraCodes = null } = {}) {
+    const scope = document.getElementById('rpeScope').value || 'cn';
+    const date = document.getElementById('rpeDate').value || '';
+    const entryOnly = document.getElementById('rpeEntryOnly').checked;
+    const traceOnly = document.getElementById('rpeTraceOnly').checked;
+    const signalType = document.getElementById('rpeSignalType').value || '';
+    const stockCode = (document.getElementById('rpeStockCode').value || '').trim();
+    const industryCodes = selectedIndustryCodes();
+    const conceptCodes = selectedConceptCodes();
 
-      const q = new URLSearchParams({
-        scope,
-        entry_only: String(entryOnly),
-        max_results: scope === 'industry_board' || scope === 'concept_board' ? '2000' : '200',
+    if (scope === 'industry_board' && !industryCodes.length) {
+      throw new Error('请先选择行业板块（与 GMS 相同的选择面板）');
+    }
+    if (scope === 'concept_board' && !conceptCodes.length) {
+      throw new Error('请先选择概念板块（与 GMS 相同的选择面板）');
+    }
+    if (scope === 'single' && !stockCode) {
+      throw new Error('单股范围需要填写股票代码');
+    }
+
+    const adjustN = adjust === 'qfq' ? 'qfq' : 'none';
+    const q = new URLSearchParams({
+      scope,
+      entry_only: String(entryOnly),
+      max_results: scope === 'industry_board' || scope === 'concept_board' ? '2000' : '200',
+      adjust: adjustN,
+    });
+    if (date) q.set('date', date);
+    if (signalType) q.set('signal_type', signalType);
+    if (stockCode) q.set('stock_code', stockCode);
+    if (adjustN === 'qfq') {
+      q.set('factor_source', 'auto');
+    } else if (traceOnly && scope === 'cn') {
+      q.set('trace_only', 'true');
+    }
+    industryCodes.forEach((c) => q.append('industry_board_code', c));
+    conceptCodes.forEach((c) => q.append('concept_board_code', c));
+    if (Array.isArray(extraCodes)) {
+      extraCodes.forEach((c) => {
+        const n = normCode(c);
+        if (n) q.append('code', n);
       });
-      if (date) q.set('date', date);
-      if (signalType) q.set('signal_type', signalType);
-      if (stockCode) q.set('stock_code', stockCode);
-      if (traceOnly && scope === 'cn') q.set('trace_only', 'true');
-      industryCodes.forEach((code) => q.append('industry_board_code', code));
-      conceptCodes.forEach((code) => q.append('concept_board_code', code));
+    }
+    return { q, scope, adjustN };
+  }
 
-      let data = await api(`/api/screening/rpe-strategy?${q}`);
-      if (traceOnly && scope === 'cn' && (!data.data || !data.data.length)) {
-        q.delete('trace_only');
-        data = await api(`/api/screening/rpe-strategy?${q}`);
-      }
-      const rows = data.data || [];
-      document.getElementById('rpeResultsCount').textContent = `共 ${rows.length} 只`;
-      const metaParts = [
-        `日期 ${data.search_date || '-'}`,
-        `来源 ${data.source || 'live'}`,
-        `config ${data.config_id || ''}`,
-      ];
-      if (data.stock_code) metaParts.push(`个股 ${data.stock_code}`);
-      document.getElementById('rpeSearchMeta').textContent = metaParts.join(' · ');
-      if (!rows.length) {
-        const emptyMsg = data.message
-          ? `无结果：${data.message}`
-          : '无符合条件的结果';
-        if (data.message) showErr(data.message);
-        body.innerHTML = `<tr><td colspan="11" class="empty-state">${emptyMsg}</td></tr>`;
-        return;
-      }
-      body.innerHTML = rows
-        .map((r, index) => {
-          let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
-          if (window.RpeScoreDetail && typeof window.RpeScoreDetail.buildHtml === 'function') {
-            detailHtml = window.RpeScoreDetail.buildHtml(r);
-          }
-          return `<tr data-rpe-row="${index}">
+  function renderSignalRows(data) {
+    const body = document.getElementById('rpeResultsBody');
+    const rows = data.data || [];
+    document.getElementById('rpeResultsCount').textContent = `共 ${rows.length} 只`;
+    const metaParts = [
+      `日期 ${data.search_date || '-'}`,
+      `来源 ${data.source || 'live'}`,
+      `config ${data.config_id || ''}`,
+    ];
+    if (data.price_adjust === 'qfq' || data.source === 'live_qfq') {
+      metaParts.push('价格口径 前复权(不落库)');
+    }
+    if (data.stock_code) metaParts.push(`个股 ${data.stock_code}`);
+    document.getElementById('rpeSearchMeta').textContent = metaParts.join(' · ');
+    if (!rows.length) {
+      const emptyMsg = data.message ? `无结果：${data.message}` : '无符合条件的结果';
+      if (data.message) showErr(data.message);
+      body.innerHTML = `<tr><td colspan="11" class="empty-state">${emptyMsg}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows
+      .map((r, index) => {
+        let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
+        if (window.RpeScoreDetail && typeof window.RpeScoreDetail.buildHtml === 'function') {
+          detailHtml = window.RpeScoreDetail.buildHtml(r);
+        }
+        const qfqTitle = r.price_adjust === 'qfq' ? '前复权' : '';
+        return `<tr data-rpe-row="${index}" data-code="${r.code || ''}">
             <td>${r.code || ''}</td>
             <td>${r.name || ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
-            <td>${fmt(r.z_score, 2)}</td>
+            <td title="${qfqTitle}">${fmt(r.z_score, 2)}</td>
             <td>${signalLabel(r)}</td>
             <td>${yn(r.entry_signal)}</td>
-            <td>${fmt(r.nearest_support)}</td>
-            <td>${fmt(r.nearest_resistance)}</td>
+            <td class="rpe-nearest-support" title="${qfqTitle}">${fmt(r.nearest_support)}</td>
+            <td class="rpe-nearest-resistance" title="${qfqTitle}">${fmt(r.nearest_resistance)}</td>
             <td>${yn(r.structure_valid)}</td>
             <td>${yn(r.liquidity_ok)}</td>
             <td>
@@ -263,13 +285,132 @@
           <tr class="gms-score-detail-row rpe-score-detail-row" data-detail-for="${index}" style="display:none;">
             <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
-        })
-        .join('');
+      })
+      .join('');
+  }
+
+  async function refreshSignals() {
+    const loading = document.getElementById('rpeLoading');
+    const body = document.getElementById('rpeResultsBody');
+    showErr('');
+    if (loading) loading.style.display = 'flex';
+    try {
+      await loadObserveMap();
+      const { q, scope } = buildRpeQuery({ adjust: 'none' });
+      const traceOnly = document.getElementById('rpeTraceOnly').checked;
+      let data = await api(`/api/screening/rpe-strategy?${q}`);
+      if (traceOnly && scope === 'cn' && (!data.data || !data.data.length)) {
+        q.delete('trace_only');
+        data = await api(`/api/screening/rpe-strategy?${q}`);
+      }
+      renderSignalRows(data);
     } catch (e) {
       showErr(e.message || String(e));
       body.innerHTML = '<tr><td colspan="11" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
+    }
+  }
+
+  const QFQ_CODE_CHUNK = 15;
+
+  async function recomputeQfqStrategy() {
+    if (typeof CommonUtils !== 'undefined' && typeof CommonUtils.checkLoginAndHandleExpiry === 'function') {
+      if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+    }
+    const btn = document.getElementById('rpeQfqLevelsBtn');
+    const loading = document.getElementById('rpeLoading');
+    showErr('');
+
+    const scope = document.getElementById('rpeScope')?.value || 'cn';
+    const listCodes = collectResultCodes();
+    if (scope === 'cn' && !listCodes.length) {
+      showErr('请先「刷新筛选」得到股票列表，再按前复权重算整策略');
+      if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+        CommonUtils.showToast('请先刷新筛选得到列表', 'warning');
+      }
+      return;
+    }
+
+    const prevBtnText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '前复权重算中…';
+    }
+    if (loading) {
+      loading.style.display = 'flex';
+      const span = loading.querySelector('span');
+      if (span) span.textContent = '前复权整策略重算中…';
+    }
+
+    try {
+      await loadObserveMap();
+      let merged = [];
+      let lastMeta = {};
+
+      if (scope === 'cn') {
+        for (let i = 0; i < listCodes.length; i += QFQ_CODE_CHUNK) {
+          const chunk = listCodes.slice(i, i + QFQ_CODE_CHUNK);
+          if (loading) {
+            const span = loading.querySelector('span');
+            if (span) {
+              span.textContent = `前复权重算 ${Math.min(i + chunk.length, listCodes.length)}/${listCodes.length}…`;
+            }
+          }
+          if (btn) {
+            btn.textContent = `前复权 ${Math.min(i + chunk.length, listCodes.length)}/${listCodes.length}`;
+          }
+          const { q } = buildRpeQuery({ adjust: 'qfq', extraCodes: chunk });
+          const data = await api(`/api/screening/rpe-strategy?${q}`);
+          lastMeta = data;
+          merged = merged.concat(data.data || []);
+        }
+        // 按 code 去重（后写覆盖），再按入场/|Z| 排序与后端一致
+        const byCode = new Map();
+        merged.forEach((r) => {
+          const c = normCode(r.code);
+          if (c) byCode.set(c, r);
+        });
+        const rows = Array.from(byCode.values()).sort((a, b) => {
+          const ae = a.entry_signal ? 1 : 0;
+          const be = b.entry_signal ? 1 : 0;
+          if (be !== ae) return be - ae;
+          return Math.abs(b.z_score || 0) - Math.abs(a.z_score || 0);
+        });
+        renderSignalRows({
+          ...lastMeta,
+          data: rows,
+          total: rows.length,
+          source: 'live_qfq',
+          price_adjust: 'qfq',
+        });
+      } else {
+        const { q } = buildRpeQuery({ adjust: 'qfq' });
+        const data = await api(`/api/screening/rpe-strategy?${q}`);
+        renderSignalRows(data);
+        merged = data.data || [];
+      }
+
+      const n = (document.getElementById('rpeResultsBody')?.querySelectorAll('tr[data-code]:not(.rpe-score-detail-row)') || []).length;
+      const toastMsg = `前复权整策略重算完成：${n} 只（未写入预计算）`;
+      if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+        CommonUtils.showToast(toastMsg, 'success');
+      }
+    } catch (e) {
+      showErr(e.message || String(e));
+      if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+        CommonUtils.showToast(e.message || '前复权重算失败', 'error');
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevBtnText || '按前复权计算';
+      }
+      if (loading) {
+        loading.style.display = 'none';
+        const span = loading.querySelector('span');
+        if (span) span.textContent = '筛选中...';
+      }
     }
   }
 
@@ -373,6 +514,7 @@
     });
 
     document.getElementById('rpeRefreshBtn')?.addEventListener('click', () => refreshSignals());
+    document.getElementById('rpeQfqLevelsBtn')?.addEventListener('click', () => recomputeQfqStrategy());
     document.getElementById('rpeStockCode')?.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       const scope = document.getElementById('rpeScope')?.value || 'cn';
