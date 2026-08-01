@@ -18,6 +18,8 @@ from backend_api.env_sync.services.market_data import (
     import_board_data,
     import_quotes,
     import_stock_basic,
+    max_adj_factor_sync_days,
+    max_quote_sync_days,
     validate_date_range,
 )
 from backend_api.env_sync.services.strategy_configs import (
@@ -52,11 +54,33 @@ def export_modules(
 ) -> Dict[str, Any]:
     resources = expand_modules(modules)
     parts = split_resources(resources)
-    date_range = validate_date_range(
-        start_date,
-        end_date,
-        require=needs_date_range(resources),
-    )
+    has_quotes = bool(parts["quotes"])
+    has_adj = bool(parts["adj_factors"])
+
+    # 行情强制日期（默认跨度 366 天）；复权因子日期可选（不填=全库，填写默认可跨约 11 年）
+    if has_quotes:
+        date_range = validate_date_range(
+            start_date,
+            end_date,
+            require=True,
+            max_days=max_quote_sync_days(),
+            label="行情",
+        )
+    elif has_adj or start_date or end_date:
+        date_range = validate_date_range(
+            start_date,
+            end_date,
+            require=False,
+            max_days=max_adj_factor_sync_days(),
+            label="复权因子",
+        )
+    else:
+        date_range = validate_date_range(
+            start_date,
+            end_date,
+            require=needs_date_range(resources),
+        )
+
     bundles: Dict[str, Any] = {}
     label = _env_label()
 
@@ -107,12 +131,14 @@ def export_modules(
             ),
         )
     if parts["adj_factors"]:
+        adj_start = date_range["start"]
+        adj_end = date_range["end"]
         bundles["adj_factors"] = _stage(
             "adj_factors",
             lambda: export_adj_factors(
                 db,
-                start=date_range["start"],
-                end=date_range["end"],
+                start=adj_start,
+                end=adj_end,
                 tables=set(parts["adj_factors"]),
                 env_label=label,
             ),
@@ -131,6 +157,8 @@ def export_modules(
             "start_date": date_range["start"].isoformat(),
             "end_date": date_range["end"].isoformat(),
         }
+    elif has_adj:
+        out["date_range"] = {"mode": "full"}
     return out
 
 

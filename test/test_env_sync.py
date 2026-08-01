@@ -82,7 +82,7 @@ def test_expand_modules_granular():
     assert expand_modules(["stock_basic"]) == ["stock_basic_info", "stock_basic_info_hk"]
     assert "frontend_permissions" not in expand_modules(None)
     assert needs_date_range(["historical_quotes"]) is True
-    assert needs_date_range(["stock_adj_factor"]) is True
+    assert needs_date_range(["stock_adj_factor"]) is False
     assert needs_date_range(["stock_basic_info"]) is False
     assert set(ALL_RESOURCES) >= set(DEFAULT_RESOURCES)
     assert "frontend_permissions" in ALL_RESOURCES
@@ -183,18 +183,42 @@ def test_quotes_require_date_range(db):
     assert db.query(HistoricalQuotes).count() == 1
 
 
-def test_adj_factors_require_date_range_and_roundtrip(db):
+def test_iter_adj_factor_push_chunks():
+    from backend_api.env_sync.services.market_data import iter_adj_factor_push_chunks
+
+    rows = [
+        {
+            "code": "000001",
+            "trade_date": "2024-01-01",
+            "source": "sina",
+            "adj_factor": 1.0 + i * 0.01,
+        }
+        for i in range(25)
+    ]
+    bundle = {
+        "module": "adj_factors",
+        "items": {"stock_adj_factor": rows},
+        "date_range": {"mode": "full"},
+    }
+    parts = iter_adj_factor_push_chunks(bundle, chunk_rows=10)
+    assert len(parts) == 3
+    assert len(parts[0]["items"]["stock_adj_factor"]) == 10
+    assert len(parts[2]["items"]["stock_adj_factor"]) == 5
+    assert parts[1]["chunk"]["offset"] == 10
+    assert parts[1]["chunk"]["total"] == 25
+    assert iter_adj_factor_push_chunks(bundle, chunk_rows=100) == [bundle]
+
+
+def test_adj_factors_full_and_long_range_roundtrip(db):
     from datetime import date
 
     from backend_api.env_sync.services import export_modules
-    from backend_api.env_sync.services.market_data import import_adj_factors
+    from backend_api.env_sync.services.market_data import (
+        DEFAULT_ADJ_FACTOR_MAX_DAYS,
+        import_adj_factors,
+        validate_date_range,
+    )
     from backend_api.models import StockAdjFactor
-
-    try:
-        export_modules(db, ["stock_adj_factor"])
-        assert False
-    except ValueError as e:
-        assert "start_date" in str(e)
 
     db.add(
         StockAdjFactor(
@@ -214,6 +238,13 @@ def test_adj_factors_require_date_range_and_roundtrip(db):
     )
     db.commit()
 
+    # 不填日期 = 全库
+    full = export_modules(db, ["stock_adj_factor"])
+    assert full.get("date_range", {}).get("mode") == "full"
+    full_rows = full["bundles"]["adj_factors"]["items"]["stock_adj_factor"]
+    assert len(full_rows) == 2
+
+    # 按区间过滤
     out = export_modules(
         db,
         ["stock_adj_factor"],
@@ -225,6 +256,22 @@ def test_adj_factors_require_date_range_and_roundtrip(db):
     assert rows[0]["trade_date"] == "2024-01-02"
     assert rows[0]["source"] == "sina"
     assert abs(float(rows[0]["adj_factor"]) - 1.25) < 1e-9
+
+    # 10 年以上区间允许（默认约 11 年）
+    validate_date_range(
+        "2015-01-01",
+        "2025-12-31",
+        require=False,
+        max_days=DEFAULT_ADJ_FACTOR_MAX_DAYS,
+        label="复权因子",
+    )
+    long_out = export_modules(
+        db,
+        ["stock_adj_factor"],
+        start_date="2015-01-01",
+        end_date="2025-12-31",
+    )
+    assert len(long_out["bundles"]["adj_factors"]["items"]["stock_adj_factor"]) == 2
 
     db.query(StockAdjFactor).delete()
     db.commit()

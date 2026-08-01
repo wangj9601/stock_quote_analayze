@@ -35,10 +35,12 @@ BOARD_TABLES = (
 )
 
 DEFAULT_QUOTE_MAX_DAYS = 366
+# 复权因子体积远小于日 K：默认约 11 年（>10 年），可用环境变量覆盖
+DEFAULT_ADJ_FACTOR_MAX_DAYS = 4018
 UPSERT_CHUNK = 800
 
 
-def _max_quote_days() -> int:
+def max_quote_sync_days() -> int:
     import os
 
     try:
@@ -47,26 +49,40 @@ def _max_quote_days() -> int:
         return DEFAULT_QUOTE_MAX_DAYS
 
 
+def max_adj_factor_sync_days() -> int:
+    import os
+
+    try:
+        return max(
+            1,
+            int(os.getenv("ENV_SYNC_ADJ_FACTOR_MAX_DAYS") or DEFAULT_ADJ_FACTOR_MAX_DAYS),
+        )
+    except ValueError:
+        return DEFAULT_ADJ_FACTOR_MAX_DAYS
+
+
 def validate_date_range(
     start_date: Optional[str],
     end_date: Optional[str],
     *,
     require: bool = False,
+    max_days: Optional[int] = None,
+    label: str = "数据",
 ) -> Dict[str, Optional[date]]:
     sd = parse_date(start_date)
     ed = parse_date(end_date)
     if require or sd or ed:
         if not sd or not ed:
             raise ValueError(
-                "同步行情/复权因子时必须指定 start_date 与 end_date（YYYY-MM-DD）"
+                f"同步{label}时必须指定 start_date 与 end_date（YYYY-MM-DD）"
             )
         if sd > ed:
             raise ValueError("start_date 不能晚于 end_date")
         span = (ed - sd).days + 1
-        lim = _max_quote_days()
+        lim = max_quote_sync_days() if max_days is None else max(1, int(max_days))
         if span > lim:
             raise ValueError(
-                f"日期跨度 {span} 天超过上限 {lim} 天，请缩小范围后分批同步"
+                f"{label}日期跨度 {span} 天超过上限 {lim} 天，请缩小范围后分批同步"
             )
     return {"start": sd, "end": ed}
 
@@ -597,30 +613,141 @@ ADJ_FACTOR_FIELDS = [
 def export_adj_factors(
     db: Session,
     *,
-    start: date,
-    end: date,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
     tables: Optional[Set[str]] = None,
     env_label: str = "local",
 ) -> Dict[str, Any]:
+    """导出复权因子。
+
+    - start/end 均给定：按 trade_date 闭区间过滤
+    - 均未给定：全表导出
+    """
     want = tables or set(ADJ_FACTOR_TABLES)
     items: Dict[str, Any] = {}
-    meta = {"start_date": start.isoformat(), "end_date": end.isoformat()}
+    use_range = start is not None and end is not None
+    meta: Dict[str, Any] = {
+        "mode": "range" if use_range else "full",
+    }
+    if use_range:
+        meta["start_date"] = start.isoformat()
+        meta["end_date"] = end.isoformat()
 
     if "stock_adj_factor" in want:
-        q = (
-            db.query(StockAdjFactor)
-            .filter(StockAdjFactor.trade_date >= start, StockAdjFactor.trade_date <= end)
-            .order_by(
-                StockAdjFactor.trade_date,
-                StockAdjFactor.code,
-                StockAdjFactor.source,
+        q = db.query(StockAdjFactor)
+        if use_range:
+            q = q.filter(
+                StockAdjFactor.trade_date >= start,
+                StockAdjFactor.trade_date <= end,
             )
+        q = q.order_by(
+            StockAdjFactor.trade_date,
+            StockAdjFactor.code,
+            StockAdjFactor.source,
         )
         items["stock_adj_factor"] = [_row_dict(r, ADJ_FACTOR_FIELDS) for r in q.all()]
 
     bundle = make_bundle(module="adj_factors", items=items, env_label=env_label)
     bundle["date_range"] = meta
     return bundle
+
+
+def _prepare_adj_factor_rows(
+    raw_rows: List[Dict],
+    result: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    for raw in raw_rows:
+        code = str(raw.get("code") or "").strip()
+        d = parse_date(raw.get("trade_date"))
+        source = str(raw.get("source") or "").strip()
+        adj = raw.get("adj_factor")
+        if not code or not d or not source or adj is None:
+            result["skipped"] += 1
+            continue
+        try:
+            adj_f = float(adj)
+        except (TypeError, ValueError):
+            result["skipped"] += 1
+            continue
+        prepared.append(
+            {
+                "code": code,
+                "trade_date": d,
+                "source": source,
+                "adj_factor": adj_f,
+                "updated_at": parse_dt(raw.get("updated_at")) or datetime.now(),
+            }
+        )
+    return prepared
+
+
+def _import_adj_factors_orm(
+    db: Session,
+    prepared: List[Dict[str, Any]],
+    result: Dict[str, Any],
+) -> None:
+    """SQLite / 小数据量：逐行 upsert，便于统计 created/updated。"""
+    for row in prepared:
+        code, d, source = row["code"], row["trade_date"], row["source"]
+        try:
+            with db.begin_nested():
+                existing = (
+                    db.query(StockAdjFactor)
+                    .filter(
+                        StockAdjFactor.code == code,
+                        StockAdjFactor.trade_date == d,
+                        StockAdjFactor.source == source,
+                    )
+                    .first()
+                )
+                if existing:
+                    existing.adj_factor = row["adj_factor"]
+                    existing.updated_at = row["updated_at"]
+                    result["updated"] += 1
+                else:
+                    db.add(StockAdjFactor(**row))
+                    result["created"] += 1
+        except Exception as e:
+            result["errors"].append(
+                f"stock_adj_factor/{code}/{d.isoformat()}/{source}: {e}"
+            )
+
+
+def _import_adj_factors_pg_bulk(
+    db: Session,
+    prepared: List[Dict[str, Any]],
+    result: Dict[str, Any],
+) -> None:
+    """PostgreSQL 批量 UPSERT，避免全库同步时逐行 ORM 拖垮网关。"""
+    sql = text(
+        """
+        INSERT INTO stock_adj_factor (code, trade_date, adj_factor, source, updated_at)
+        VALUES (:code, :trade_date, :adj_factor, :source, :updated_at)
+        ON CONFLICT (code, trade_date, source) DO UPDATE SET
+            adj_factor = EXCLUDED.adj_factor,
+            updated_at = EXCLUDED.updated_at
+        RETURNING (xmax = 0) AS is_insert
+        """
+    )
+    for i in range(0, len(prepared), UPSERT_CHUNK):
+        chunk = prepared[i : i + UPSERT_CHUNK]
+        try:
+            for row in chunk:
+                is_insert = db.execute(sql, row).scalar()
+                if is_insert:
+                    result["created"] += 1
+                else:
+                    result["updated"] += 1
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            # 本块失败时回退 ORM，尽量不整单失败
+            result["errors"].append(
+                f"stock_adj_factor bulk chunk@{i}: {e}; fallback orm"
+            )
+            _import_adj_factors_orm(db, chunk, result)
+            db.commit()
 
 
 def import_adj_factors(
@@ -636,50 +763,41 @@ def import_adj_factors(
     if "stock_adj_factor" not in want:
         return result
 
-    for raw in items.get("stock_adj_factor") or []:
-        code = str(raw.get("code") or "").strip()
-        d = parse_date(raw.get("trade_date"))
-        source = str(raw.get("source") or "").strip()
-        adj = raw.get("adj_factor")
-        if not code or not d or not source or adj is None:
-            result["skipped"] += 1
-            continue
-        try:
-            adj_f = float(adj)
-        except (TypeError, ValueError):
-            result["skipped"] += 1
-            continue
-        try:
-            with db.begin_nested():
-                existing = (
-                    db.query(StockAdjFactor)
-                    .filter(
-                        StockAdjFactor.code == code,
-                        StockAdjFactor.trade_date == d,
-                        StockAdjFactor.source == source,
-                    )
-                    .first()
-                )
-                updated_at = parse_dt(raw.get("updated_at")) or datetime.now()
-                if existing:
-                    existing.adj_factor = adj_f
-                    existing.updated_at = updated_at
-                    result["updated"] += 1
-                else:
-                    db.add(
-                        StockAdjFactor(
-                            code=code,
-                            trade_date=d,
-                            source=source,
-                            adj_factor=adj_f,
-                            updated_at=updated_at,
-                        )
-                    )
-                    result["created"] += 1
-        except Exception as e:
-            result["errors"].append(
-                f"stock_adj_factor/{code}/{d.isoformat()}/{source}: {e}"
-            )
+    prepared = _prepare_adj_factor_rows(items.get("stock_adj_factor") or [], result)
+    if not prepared:
+        return result
 
-    db.commit()
+    bind = db.get_bind()
+    dialect = getattr(getattr(bind, "dialect", None), "name", "") or ""
+    if dialect == "postgresql":
+        _import_adj_factors_pg_bulk(db, prepared, result)
+    else:
+        _import_adj_factors_orm(db, prepared, result)
+        db.commit()
     return result
+
+
+def iter_adj_factor_push_chunks(
+    bundle: Dict[str, Any],
+    *,
+    chunk_rows: int,
+) -> List[Dict[str, Any]]:
+    """将 adj_factors bundle 按行数切开，供 Push 分多次 POST，避免生产 502/413。"""
+    chunk_rows = max(1, int(chunk_rows))
+    items = (bundle or {}).get("items") or {}
+    rows = list(items.get("stock_adj_factor") or [])
+    if len(rows) <= chunk_rows:
+        return [bundle]
+    base = {k: v for k, v in bundle.items() if k != "items"}
+    out: List[Dict[str, Any]] = []
+    total = len(rows)
+    for i in range(0, total, chunk_rows):
+        part = dict(base)
+        part["items"] = {"stock_adj_factor": rows[i : i + chunk_rows]}
+        part["chunk"] = {
+            "offset": i,
+            "size": min(chunk_rows, total - i),
+            "total": total,
+        }
+        out.append(part)
+    return out

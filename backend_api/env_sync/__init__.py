@@ -60,7 +60,7 @@ RESOURCE_QUOTES = [
     "historical_quotes_hk",
 ]
 
-# —— 复权因子（须日期范围，按 trade_date）——
+# —— 复权因子（日期可选：不填=全库；填写则按 trade_date 过滤）——
 RESOURCE_ADJ_FACTORS = [
     "stock_adj_factor",
 ]
@@ -72,7 +72,9 @@ RESOURCE_PERMISSIONS = [
     "role_permissions",
 ]
 
-DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES + RESOURCE_ADJ_FACTORS)
+# 行情必须带日期；复权因子日期可选（不填全库）
+DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES)
+DATE_RANGE_OPTIONAL = frozenset(RESOURCE_ADJ_FACTORS)
 
 ALL_RESOURCES = (
     RESOURCE_STRATEGY
@@ -301,14 +303,16 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
     },
     {
         "group": "adj_factors",
-        "name": "复权因子（须指定日期范围）",
-        "requires_date_range": True,
+        "name": "复权因子（日期可选，不填则全库）",
+        "requires_date_range": False,
+        "date_range_optional": True,
         "items": [
             {
                 "code": "stock_adj_factor",
                 "name": "A股复权因子",
-                "desc": "StockAdjFactor（stock_adj_factor），按 trade_date 区间 upsert",
-                "requires_date_range": True,
+                "desc": "StockAdjFactor；不填日期=全表；填写则按 trade_date 区间（默认可跨约 11 年）",
+                "requires_date_range": False,
+                "date_range_optional": True,
             },
         ],
     },
@@ -389,6 +393,10 @@ def needs_date_range(resources: Sequence[str]) -> bool:
     return any(r in DATE_RANGE_REQUIRED for r in resources)
 
 
+def allows_optional_date_range(resources: Sequence[str]) -> bool:
+    return any(r in DATE_RANGE_OPTIONAL for r in resources)
+
+
 def catalog_for_api() -> Dict[str, Any]:
     groups = []
     for g in MODULE_CATALOG:
@@ -398,12 +406,14 @@ def catalog_for_api() -> Dict[str, Any]:
                 "group_name": g["name"],
                 "name": g["name"],
                 "requires_date_range": bool(g.get("requires_date_range")),
+                "date_range_optional": bool(g.get("date_range_optional")),
                 "items": g["items"],
             }
         )
     return {
         "groups": groups,
         "date_range_required": list(DATE_RANGE_REQUIRED),
+        "date_range_optional": list(DATE_RANGE_OPTIONAL),
         "default_resources": list(DEFAULT_RESOURCES),
         "legacy_modules": [
             {
@@ -434,7 +444,7 @@ def catalog_for_api() -> Dict[str, Any]:
             {
                 "code": "adj_factors",
                 "name": "复权因子（全部）",
-                "desc": "stock_adj_factor，须日期范围",
+                "desc": "stock_adj_factor；日期可选，不填则全库",
             },
             {
                 "code": "permissions",

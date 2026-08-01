@@ -107,6 +107,14 @@
                   <el-tag v-if="g.requires_date_range" size="small" type="warning" class="ml-tag">
                     须日期
                   </el-tag>
+                  <el-tag
+                    v-else-if="g.date_range_optional"
+                    size="small"
+                    type="info"
+                    class="ml-tag"
+                  >
+                    日期可选/全库
+                  </el-tag>
                 </el-checkbox>
               </div>
               <el-checkbox-group v-model="selectedModules" class="group-items">
@@ -121,7 +129,7 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item v-if="quotesSelected" label="日期区间">
+        <el-form-item v-if="showDateRange" label="日期区间">
           <div class="date-row">
             <el-date-picker
               v-model="startDate"
@@ -136,7 +144,7 @@
               value-format="YYYY-MM-DD"
               placeholder="结束日期"
             />
-            <span class="sub-hint inline">单次跨度上限由服务端 ENV_SYNC_QUOTE_MAX_DAYS 控制（默认 366 天）</span>
+            <span class="sub-hint inline">{{ dateRangeHint }}</span>
           </div>
         </el-form-item>
         <el-form-item>
@@ -162,11 +170,18 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { envSyncApi } from '@/services/envSyncApi'
 
-type ModuleItem = { code: string; name: string; desc?: string; requires_date_range?: boolean }
+type ModuleItem = {
+  code: string
+  name: string
+  desc?: string
+  requires_date_range?: boolean
+  date_range_optional?: boolean
+}
 type ModuleGroup = {
   group: string
   group_name: string
   requires_date_range?: boolean
+  date_range_optional?: boolean
   items: ModuleItem[]
 }
 
@@ -199,12 +214,26 @@ const moduleGroups = ref<ModuleGroup[]>([])
 const selectedModules = ref<string[]>([])
 const defaultResources = ref<string[]>([])
 const dateRangeRequired = ref<string[]>([])
+const dateRangeOptional = ref<string[]>([])
 const startDate = ref<string>('')
 const endDate = ref<string>('')
 
 const quotesSelected = computed(() =>
   selectedModules.value.some((c) => dateRangeRequired.value.includes(c))
 )
+const adjSelected = computed(() =>
+  selectedModules.value.some((c) => dateRangeOptional.value.includes(c))
+)
+const showDateRange = computed(() => quotesSelected.value || adjSelected.value)
+const dateRangeHint = computed(() => {
+  if (quotesSelected.value && adjSelected.value) {
+    return '行情必须填日期（默认≤366天）；与行情同批时复权因子也按该区间。全库同步请单独勾选复权因子且不填日期。'
+  }
+  if (quotesSelected.value) {
+    return '行情必须填日期；单次跨度由 ENV_SYNC_QUOTE_MAX_DAYS 控制（默认 366 天）'
+  }
+  return '复权因子可不填=全库；填写则按 trade_date 过滤，跨度由 ENV_SYNC_ADJ_FACTOR_MAX_DAYS 控制（默认约 11 年）'
+})
 
 function allCodes(): string[] {
   return moduleGroups.value.flatMap((g) => g.items.map((i) => i.code))
@@ -247,12 +276,18 @@ function clearAll() {
 }
 
 function assertDateRange(): boolean {
-  if (!quotesSelected.value) return true
-  if (!startDate.value || !endDate.value) {
-    ElMessage.warning('勾选行情时必须填写开始/结束日期')
+  const hasStart = !!startDate.value
+  const hasEnd = !!endDate.value
+  if (quotesSelected.value) {
+    if (!hasStart || !hasEnd) {
+      ElMessage.warning('勾选行情时必须填写开始/结束日期')
+      return false
+    }
+  } else if (adjSelected.value && (hasStart || hasEnd) && !(hasStart && hasEnd)) {
+    ElMessage.warning('复权因子若按区间同步，请同时填写开始与结束日期；都不填则为全库')
     return false
   }
-  if (startDate.value > endDate.value) {
+  if (hasStart && hasEnd && startDate.value > endDate.value) {
     ElMessage.warning('开始日期不能晚于结束日期')
     return false
   }
@@ -260,8 +295,20 @@ function assertDateRange(): boolean {
 }
 
 function datePayload() {
-  if (!quotesSelected.value) return undefined
-  return { start_date: startDate.value, end_date: endDate.value }
+  if (startDate.value && endDate.value) {
+    return { start_date: startDate.value, end_date: endDate.value }
+  }
+  return undefined
+}
+
+function formatConfirmRange(): string {
+  if (startDate.value && endDate.value) {
+    return `\n日期区间：${startDate.value} ~ ${endDate.value}`
+  }
+  if (adjSelected.value && !quotesSelected.value) {
+    return '\n复权因子：全库同步'
+  }
+  return ''
 }
 
 async function loadAll() {
@@ -289,8 +336,8 @@ async function loadAll() {
     dateRangeRequired.value = mods.date_range_required || [
       'historical_quotes',
       'historical_quotes_hk',
-      'stock_adj_factor',
     ]
+    dateRangeOptional.value = mods.date_range_optional || ['stock_adj_factor']
   } catch (e: any) {
     ElMessage.error(e.message || '加载失败')
   } finally {
@@ -370,7 +417,11 @@ function summarize(res: any): string {
   const results = res?.results || {}
   const lines: string[] = []
   if (res?.date_range) {
-    lines.push(`date_range: ${res.date_range.start_date} ~ ${res.date_range.end_date}`)
+    if (res.date_range.mode === 'full') {
+      lines.push('date_range: full（全库）')
+    } else if (res.date_range.start_date && res.date_range.end_date) {
+      lines.push(`date_range: ${res.date_range.start_date} ~ ${res.date_range.end_date}`)
+    }
   }
   for (const [mod, r] of Object.entries(results)) {
     const x = r as any
@@ -392,10 +443,7 @@ async function confirmPull() {
   }
   if (!assertDateRange()) return
   const mods = selectedModules.value.join('、')
-  const range =
-    quotesSelected.value && startDate.value && endDate.value
-      ? `\n日期区间：${startDate.value} ~ ${endDate.value}`
-      : ''
+  const range = formatConfirmRange()
   try {
     await ElMessageBox.confirm(
       `将从生产拉取并写入本地数据库（选中模块：${mods}）${range}\n本地同名数据可能被覆盖，是否继续？`,
@@ -427,9 +475,11 @@ async function confirmPush() {
     return
   }
   if (!assertDateRange()) return
+  const mods = selectedModules.value.join('、')
+  const range = formatConfirmRange()
   try {
     await ElMessageBox.confirm(
-      '将把本地选中模块数据覆盖写入生产环境，请确认生产已备份且 Sync Key 正确。是否继续？',
+      `将把本地选中模块数据覆盖写入生产环境（选中：${mods}）${range}\n请确认生产已备份且 Sync Key 正确。是否继续？`,
       'Push 到生产',
       { type: 'warning', confirmButtonText: '确认 Push', cancelButtonText: '取消' }
     )

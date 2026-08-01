@@ -23,13 +23,26 @@ from backend_api.env_sync.config_store import (
     update_server_config,
     write_audit,
 )
+from backend_api.env_sync.bundle import merge_results
 from backend_api.env_sync.services import export_modules, import_modules, normalize_modules
+from backend_api.env_sync.services.market_data import iter_adj_factor_push_chunks
 from backend_api.models import User
 
 router = APIRouter(prefix="/api/admin/env-sync", tags=["admin-env-sync"])
 
-# 行情同步可能较大，拉长超时
+# 行情/复权因子同步可能较大，拉长超时
 _SYNC_TIMEOUT = 600.0
+# 全库 stock_adj_factor 一次 POST 易触发生产 nginx/gunicorn 502，按行分块推送
+_DEFAULT_PUSH_ROW_CHUNK = 2000
+
+
+def _push_row_chunk_size() -> int:
+    import os
+
+    try:
+        return max(100, int(os.getenv("ENV_SYNC_PUSH_ROW_CHUNK") or _DEFAULT_PUSH_ROW_CHUNK))
+    except ValueError:
+        return _DEFAULT_PUSH_ROW_CHUNK
 
 
 class ServerConfigUpdate(BaseModel):
@@ -84,6 +97,13 @@ def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
             f"{action} 失败 HTTP 413：请求体过大，被生产 nginx 拒绝（Request Entity Too Large）。"
             f"请在生产 nginx 的 location /api/ 将 client_max_body_size 调整为 200m 后 reload；"
             f"或缩小同步范围（尤其缩短行情日期）。 响应: {text}"
+        )
+    if status_code == 502:
+        return (
+            f"{action} 失败 HTTP 502：生产 nginx 上游无响应（常见：导入超时/进程被杀/"
+            f"全库复权因子单包过大）。请确认生产已部署含 adj_factors 的 env_sync；"
+            f"本地 Push 已按行分块（ENV_SYNC_PUSH_ROW_CHUNK，默认 2000）。"
+            f"若仍 502，可再调小分块或检查生产 gunicorn/uvicorn timeout 与 API 日志。 响应: {text}"
         )
     if status_code == 400 and "未知同步模块" in text:
         return (
@@ -269,32 +289,59 @@ def admin_push(
             raise HTTPException(status_code=400, detail="本地导出结果为空，无可推送数据")
 
         merged_results: Dict[str, Any] = {}
-        # 大包分批：strategy / observe / basic / board / quotes / adj_factors / permissions 各推一次；
+        push_batches: List[str] = []
+        row_chunk = _push_row_chunk_size()
+        # 大包分批：strategy / observe / basic / board / quotes / adj_factors / permissions；
+        # adj_factors 再按行切开，避免单次 JSON/导入过重触发生产 502。
         # modules 仅带本 bundle 细项，避免把其它类 code 交给生产 expand_modules 白名单。
         for bundle_key, bundle_data in bundles.items():
             batch_mods = filter_modules_for_bundle(bundle_key, mods)
-            resp = remote_http.post(
-                url,
-                headers=headers,
-                json_body={
-                    "bundles": {bundle_key: bundle_data},
-                    "modules": batch_mods or None,
-                },
-                timeout=_SYNC_TIMEOUT,
-            )
-            if resp.status_code != 200:
-                raise HTTPException(
-                    status_code=400,
-                    detail=_remote_fail_detail(
-                        f"生产 import[{bundle_key}]",
-                        resp.status_code,
-                        resp.text,
-                    ),
+            if bundle_key == "adj_factors":
+                chunk_bundles = iter_adj_factor_push_chunks(
+                    bundle_data, chunk_rows=row_chunk
                 )
-            remote = resp.json() or {}
-            part = remote.get("results") or {}
-            if isinstance(part, dict):
-                merged_results.update(part)
+            else:
+                chunk_bundles = [bundle_data]
+
+            for ci, chunk_data in enumerate(chunk_bundles):
+                label = (
+                    f"{bundle_key}"
+                    if len(chunk_bundles) == 1
+                    else f"{bundle_key}[{ci + 1}/{len(chunk_bundles)}]"
+                )
+                push_batches.append(label)
+                resp = remote_http.post(
+                    url,
+                    headers=headers,
+                    json_body={
+                        "bundles": {bundle_key: chunk_data},
+                        "modules": batch_mods or None,
+                    },
+                    timeout=_SYNC_TIMEOUT,
+                )
+                if resp.status_code != 200:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=_remote_fail_detail(
+                            f"生产 import[{label}]",
+                            resp.status_code,
+                            resp.text,
+                        ),
+                    )
+                remote = resp.json() or {}
+                part = remote.get("results") or {}
+                if isinstance(part, dict):
+                    for mod_key, mod_res in part.items():
+                        if (
+                            mod_key in merged_results
+                            and isinstance(merged_results[mod_key], dict)
+                            and isinstance(mod_res, dict)
+                        ):
+                            merged_results[mod_key] = merge_results(
+                                merged_results[mod_key], mod_res
+                            )
+                        else:
+                            merged_results[mod_key] = mod_res
 
         write_audit(
             db,
@@ -310,7 +357,7 @@ def admin_push(
             "modules": mods,
             "date_range": local.get("date_range"),
             "results": merged_results,
-            "push_batches": list(bundles.keys()),
+            "push_batches": push_batches,
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
