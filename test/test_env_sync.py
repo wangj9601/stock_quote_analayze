@@ -209,6 +209,46 @@ def test_iter_adj_factor_push_chunks():
     assert iter_adj_factor_push_chunks(bundle, chunk_rows=100) == [bundle]
 
 
+def test_push_adj_rows_adaptive_splits_on_502(monkeypatch):
+    from backend_api.env_sync import admin_routes
+    from backend_api.env_sync.remote_http import RemoteResponse
+
+    calls = {"n": 0, "sizes": []}
+
+    def fake_post(url, *, headers=None, json_body=None, timeout=30.0):
+        calls["n"] += 1
+        rows = json_body["bundles"]["adj_factors"]["items"]["stock_adj_factor"]
+        calls["sizes"].append(len(rows))
+        if len(rows) > 80:
+            return RemoteResponse(status_code=502, text="bad gateway")
+        return RemoteResponse(
+            status_code=200,
+            text='{"results":{"adj_factors":{"created":%d,"updated":0,"skipped":0,"errors":[]}}}'
+            % len(rows),
+        )
+
+    monkeypatch.setattr(admin_routes.remote_http, "post", fake_post)
+    merged: dict = {}
+    batches: list = []
+    rows = [{"code": "000001", "trade_date": "2024-01-01", "source": "sina", "adj_factor": 1.0}] * 200
+    admin_routes._push_adj_rows_adaptive(
+        url="https://example.test/api/env-sync/v1/import",
+        headers={},
+        batch_mods=["stock_adj_factor"],
+        base_bundle={"module": "adj_factors", "items": {}},
+        rows=rows,
+        label="adj_factors[1/1]",
+        merged_results=merged,
+        push_batches=batches,
+    )
+    assert merged["adj_factors"]["created"] == 200
+    assert any(s > 80 for s in calls["sizes"])  # 先大后拆
+    assert all(s <= 80 for s in calls["sizes"] if s != 200) or max(
+        s for s in calls["sizes"] if s <= 80
+    ) <= 80
+    assert len(batches) >= 2
+
+
 def test_adj_factors_full_and_long_range_roundtrip(db):
     from datetime import date
 

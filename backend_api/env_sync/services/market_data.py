@@ -719,7 +719,7 @@ def _import_adj_factors_pg_bulk(
     prepared: List[Dict[str, Any]],
     result: Dict[str, Any],
 ) -> None:
-    """PostgreSQL 批量 UPSERT，避免全库同步时逐行 ORM 拖垮网关。"""
+    """PostgreSQL 批量 UPSERT（executemany），避免逐行往返拖垮网关。"""
     sql = text(
         """
         INSERT INTO stock_adj_factor (code, trade_date, adj_factor, source, updated_at)
@@ -727,22 +727,18 @@ def _import_adj_factors_pg_bulk(
         ON CONFLICT (code, trade_date, source) DO UPDATE SET
             adj_factor = EXCLUDED.adj_factor,
             updated_at = EXCLUDED.updated_at
-        RETURNING (xmax = 0) AS is_insert
         """
     )
     for i in range(0, len(prepared), UPSERT_CHUNK):
         chunk = prepared[i : i + UPSERT_CHUNK]
         try:
-            for row in chunk:
-                is_insert = db.execute(sql, row).scalar()
-                if is_insert:
-                    result["created"] += 1
-                else:
-                    result["updated"] += 1
+            # Session.connection().execute(list) → executemany
+            db.connection().execute(sql, chunk)
+            # 批量路径不区分 insert/update，计入 updated 表示已 upsert
+            result["updated"] += len(chunk)
             db.commit()
         except Exception as e:
             db.rollback()
-            # 本块失败时回退 ORM，尽量不整单失败
             result["errors"].append(
                 f"stock_adj_factor bulk chunk@{i}: {e}; fallback orm"
             )
