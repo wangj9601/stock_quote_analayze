@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend_api"))
 
+import utils.adj_quotes as adj_quotes_mod  # noqa: E402
 from utils.adj_quotes import (  # noqa: E402
     AdjQuotesError,
     SOURCE_AKSHARE_SINA_QFQ,
@@ -22,6 +23,7 @@ from utils.adj_quotes import (  # noqa: E402
     fetch_qfq_factors,
     fetch_sina_qfq_factors,
     normalize_sina_factor_to_internal,
+    throttle_third_party_fetch,
     to_baostock_symbol,
     to_sina_symbol,
 )
@@ -362,3 +364,30 @@ def test_ensure_fetches_and_upserts_when_db_empty():
     assert out["factor_fetched"] is True
     assert out["from_db"] is False
     assert len(out["factors"]) == 1
+
+
+def test_throttle_third_party_fetch_waits_between_calls(monkeypatch):
+    """批量外网补因子时，第二次起需等待配置的间隔。"""
+    adj_quotes_mod._last_third_party_fetch_mono = 0.0
+    monkeypatch.setenv("ADJ_FACTOR_FETCH_INTERVAL_SEC", "5")
+    mono = [100.0]
+    sleeps = []
+
+    def fake_mono():
+        return mono[0]
+
+    def fake_sleep(sec):
+        sleeps.append(sec)
+        mono[0] += float(sec)
+
+    monkeypatch.setattr(adj_quotes_mod.time, "monotonic", fake_mono)
+    monkeypatch.setattr(adj_quotes_mod.time, "sleep", fake_sleep)
+
+    throttle_third_party_fetch(label="a")
+    assert sleeps == []  # 首次不等待
+
+    # 距上次仅过 1s → 应再等约 4s
+    mono[0] = adj_quotes_mod._last_third_party_fetch_mono + 1.0
+    throttle_third_party_fetch(label="b")
+    assert len(sleeps) == 1
+    assert abs(sleeps[0] - 4.0) < 1e-6

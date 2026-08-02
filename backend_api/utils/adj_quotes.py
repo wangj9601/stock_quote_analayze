@@ -16,7 +16,9 @@ factor_source=auto：归一化新浪 → 失败再用 BaoStock。
 from __future__ import annotations
 
 import logging
+import os
 import random
+import threading
 import time
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -29,6 +31,11 @@ logger = logging.getLogger(__name__)
 SOURCE_AKSHARE_SINA_QFQ = "akshare_sina_qfq"
 SOURCE_BAOSTOCK_QFQ = "baostock_qfq"
 DEFAULT_FACTOR_MAX_AGE_DAYS = 5
+# 批量前复权重算时，第三方因子接口全局最小间隔（秒）；0=不限速
+DEFAULT_FACTOR_FETCH_INTERVAL_SEC = 5.0
+
+_fetch_interval_lock = threading.Lock()
+_last_third_party_fetch_mono: float = 0.0
 
 FACTOR_SOURCE_AUTO = "auto"
 FACTOR_SOURCE_SINA = "sina"
@@ -138,10 +145,50 @@ def _factor_source_tag(factor_source: str) -> Optional[str]:
     return None
 
 
+def third_party_fetch_interval_sec() -> float:
+    """第三方复权因子拉取最小间隔（秒），环境变量 ADJ_FACTOR_FETCH_INTERVAL_SEC。"""
+    try:
+        return max(
+            0.0,
+            float(
+                os.getenv("ADJ_FACTOR_FETCH_INTERVAL_SEC")
+                or DEFAULT_FACTOR_FETCH_INTERVAL_SEC
+            ),
+        )
+    except ValueError:
+        return DEFAULT_FACTOR_FETCH_INTERVAL_SEC
+
+
+def throttle_third_party_fetch(*, label: str = "") -> None:
+    """批量补齐因子时限速，避免新浪/BaoStock IP 限制。
+
+    首次调用不等待；之后保证两次第三方请求间隔 ≥ 配置秒数。
+    读库命中不会走到此处。
+    """
+    global _last_third_party_fetch_mono
+    interval = third_party_fetch_interval_sec()
+    if interval <= 0:
+        return
+    with _fetch_interval_lock:
+        now = time.monotonic()
+        if _last_third_party_fetch_mono > 0:
+            wait = interval - (now - _last_third_party_fetch_mono)
+            if wait > 0:
+                logger.info(
+                    "复权因子第三方限速等待 %.1fs（间隔 %.1fs）%s",
+                    wait,
+                    interval,
+                    f" [{label}]" if label else "",
+                )
+                time.sleep(wait)
+        _last_third_party_fetch_mono = time.monotonic()
+
+
 def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
     """调用 AkShare 新浪接口拉取前复权因子，入库前取倒数归一化为内部约定。"""
     import akshare as ak
 
+    throttle_third_party_fetch(label=f"sina:{normalize_a_share_code(code)}")
     symbol = to_sina_symbol(code)
     last_err: Optional[Exception] = None
     for attempt in range(3):
@@ -208,6 +255,7 @@ def fetch_baostock_qfq_factors(
             "未安装 baostock，无法使用备用因子源。请执行：pip install baostock"
         ) from e
 
+    throttle_third_party_fetch(label=f"baostock:{normalize_a_share_code(code)}")
     symbol = to_baostock_symbol(code)
     end = end_date or date.today().strftime("%Y-%m-%d")
     lg = None

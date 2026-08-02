@@ -75,17 +75,20 @@ class EnvSyncApiService {
         group_name: string
         name?: string
         requires_date_range?: boolean
+        date_range_optional?: boolean
         items: Array<{
           code: string
           name: string
           desc?: string
           requires_date_range?: boolean
+          date_range_optional?: boolean
         }>
       }>
       legacy_modules?: Array<{ code: string; name: string; desc?: string }>
       all_resources?: string[]
       default_resources?: string[]
       date_range_required?: string[]
+      date_range_optional?: string[]
     }>(`${PREFIX}/modules`)
   }
 
