@@ -31,8 +31,9 @@ logger = logging.getLogger(__name__)
 SOURCE_AKSHARE_SINA_QFQ = "akshare_sina_qfq"
 SOURCE_BAOSTOCK_QFQ = "baostock_qfq"
 DEFAULT_FACTOR_MAX_AGE_DAYS = 5
-# 批量前复权重算时，第三方因子接口全局最小间隔（秒）；0=不限速
-DEFAULT_FACTOR_FETCH_INTERVAL_SEC = 5.0
+# 批量前复权补因子：是否限速 + 间隔秒数（见 ADJ_FACTOR_FETCH_THROTTLE_*）
+DEFAULT_FACTOR_FETCH_THROTTLE_ENABLED = True
+DEFAULT_FACTOR_FETCH_INTERVAL_SEC = 3.0
 
 _fetch_interval_lock = threading.Lock()
 _last_third_party_fetch_mono: float = 0.0
@@ -145,8 +146,23 @@ def _factor_source_tag(factor_source: str) -> Optional[str]:
     return None
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return str(raw).strip().lower() in ("1", "true", "yes", "on", "y")
+
+
+def third_party_fetch_throttle_enabled() -> bool:
+    """是否启用第三方复权因子拉取限速：ADJ_FACTOR_FETCH_THROTTLE_ENABLED。"""
+    return _env_flag(
+        "ADJ_FACTOR_FETCH_THROTTLE_ENABLED",
+        DEFAULT_FACTOR_FETCH_THROTTLE_ENABLED,
+    )
+
+
 def third_party_fetch_interval_sec() -> float:
-    """第三方复权因子拉取最小间隔（秒），环境变量 ADJ_FACTOR_FETCH_INTERVAL_SEC。"""
+    """限速开启时的最小间隔（秒）：ADJ_FACTOR_FETCH_INTERVAL_SEC。"""
     try:
         return max(
             0.0,
@@ -162,10 +178,13 @@ def third_party_fetch_interval_sec() -> float:
 def throttle_third_party_fetch(*, label: str = "") -> None:
     """批量补齐因子时限速，避免新浪/BaoStock IP 限制。
 
+    需 ADJ_FACTOR_FETCH_THROTTLE_ENABLED=true，并配置 ADJ_FACTOR_FETCH_INTERVAL_SEC。
     首次调用不等待；之后保证两次第三方请求间隔 ≥ 配置秒数。
     读库命中不会走到此处。
     """
     global _last_third_party_fetch_mono
+    if not third_party_fetch_throttle_enabled():
+        return
     interval = third_party_fetch_interval_sec()
     if interval <= 0:
         return

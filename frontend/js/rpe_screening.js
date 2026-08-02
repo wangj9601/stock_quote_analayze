@@ -312,7 +312,7 @@
     }
   }
 
-  // 后端对第三方因子拉取有约 5s 全局限速；单请求代码数不宜过大以免超时
+  // 后端可按 env 开启第三方因子限速；单请求代码数不宜过大以免超时
   const QFQ_CODE_CHUNK = 8;
 
   async function recomputeQfqStrategy() {

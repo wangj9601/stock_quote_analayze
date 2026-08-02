@@ -367,9 +367,10 @@ def test_ensure_fetches_and_upserts_when_db_empty():
 
 
 def test_throttle_third_party_fetch_waits_between_calls(monkeypatch):
-    """批量外网补因子时，第二次起需等待配置的间隔。"""
+    """开启限速时，第二次起需等待配置的间隔。"""
     adj_quotes_mod._last_third_party_fetch_mono = 0.0
-    monkeypatch.setenv("ADJ_FACTOR_FETCH_INTERVAL_SEC", "5")
+    monkeypatch.setenv("ADJ_FACTOR_FETCH_THROTTLE_ENABLED", "true")
+    monkeypatch.setenv("ADJ_FACTOR_FETCH_INTERVAL_SEC", "3")
     mono = [100.0]
     sleeps = []
 
@@ -386,8 +387,20 @@ def test_throttle_third_party_fetch_waits_between_calls(monkeypatch):
     throttle_third_party_fetch(label="a")
     assert sleeps == []  # 首次不等待
 
-    # 距上次仅过 1s → 应再等约 4s
+    # 距上次仅过 1s → 应再等约 2s
     mono[0] = adj_quotes_mod._last_third_party_fetch_mono + 1.0
     throttle_third_party_fetch(label="b")
     assert len(sleeps) == 1
-    assert abs(sleeps[0] - 4.0) < 1e-6
+    assert abs(sleeps[0] - 2.0) < 1e-6
+
+
+def test_throttle_third_party_fetch_disabled(monkeypatch):
+    """关闭限速开关时不 sleep。"""
+    adj_quotes_mod._last_third_party_fetch_mono = 0.0
+    monkeypatch.setenv("ADJ_FACTOR_FETCH_THROTTLE_ENABLED", "false")
+    monkeypatch.setenv("ADJ_FACTOR_FETCH_INTERVAL_SEC", "3")
+    sleeps = []
+    monkeypatch.setattr(adj_quotes_mod.time, "sleep", lambda s: sleeps.append(s))
+    throttle_third_party_fetch(label="a")
+    throttle_third_party_fetch(label="b")
+    assert sleeps == []
