@@ -302,6 +302,10 @@ const ScreeningPage = {
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.refreshUrtTradeObserveList());
         }
+        const urtQfqBtn = document.getElementById('urtQfqLevelsBtn');
+        if (urtQfqBtn) {
+            urtQfqBtn.addEventListener('click', () => void this.recomputeUrtQfqLevels());
+        }
         const formalRefreshBtn = document.getElementById('urtFormalTradeRefreshBtn');
         if (formalRefreshBtn) {
             formalRefreshBtn.addEventListener('click', () => this.refreshUrtFormalTradeList());
@@ -653,6 +657,147 @@ const ScreeningPage = {
             btn.disabled = added;
             if (added) this.urtTradeObserveCodeSet.add(key);
         });
+    },
+
+    /**
+     * URT 策略信号列表：按前复权批量重算 KDE 支撑/阻力（不改得分与买卖点）。
+     */
+    async recomputeUrtQfqLevels() {
+        if (typeof CommonUtils !== 'undefined' && typeof CommonUtils.checkLoginAndHandleExpiry === 'function') {
+            if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        }
+        const stocks = this.lastResults.urt;
+        if (!Array.isArray(stocks) || !stocks.length) {
+            if (window.CommonUtils) {
+                CommonUtils.showToast('请先「刷新筛选」得到股票列表，再按前复权计算支撑/阻力', 'warning');
+            }
+            return;
+        }
+
+        const isAShare = (code) => {
+            const c = String(code || '').trim().replace(/^(SH|SZ)/i, '');
+            return /^\d{6}$/.test(c);
+        };
+        const codes = [];
+        const seen = new Set();
+        stocks.forEach((s) => {
+            const c = String(s.code || '').trim().replace(/^(SH|SZ)/i, '');
+            if (!isAShare(c) || seen.has(c)) return;
+            seen.add(c);
+            codes.push(c);
+        });
+        if (!codes.length) {
+            if (window.CommonUtils) {
+                CommonUtils.showToast('当前列表无 A 股代码（前复权暂不支持港股）', 'warning');
+            }
+            return;
+        }
+
+        const btn = document.getElementById('urtQfqLevelsBtn');
+        const loading = document.getElementById('loadingIndicator-urt');
+        const prevBtnText = btn ? btn.textContent : '';
+        const CHUNK = 8;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '前复权重算中…';
+        }
+        if (loading) {
+            loading.style.display = 'flex';
+            const span = loading.querySelector('span');
+            if (span) span.textContent = '前复权支撑/阻力重算中…';
+        }
+
+        const byCode = new Map();
+        let okCount = 0;
+        let failCount = 0;
+        try {
+            const fetchFn = this.getAuthFetchFn();
+            for (let i = 0; i < codes.length; i += CHUNK) {
+                const chunk = codes.slice(i, i + CHUNK);
+                if (loading) {
+                    const span = loading.querySelector('span');
+                    if (span) {
+                        span.textContent = `前复权支撑/阻力 ${Math.min(i + chunk.length, codes.length)}/${codes.length}…`;
+                    }
+                }
+                if (btn) {
+                    btn.textContent = `前复权 ${Math.min(i + chunk.length, codes.length)}/${codes.length}`;
+                }
+                const res = await fetchFn(`${this.API_BASE_URL}/api/analysis/levels/batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        codes: chunk,
+                        adjust: 'qfq',
+                        max_levels: 8,
+                        refresh_factor: false,
+                        factor_source: 'auto',
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) {
+                    throw new Error(data.message || data.detail || `批量计算失败 HTTP ${res.status}`);
+                }
+                (data.items || []).forEach((it) => {
+                    const c = String(it.code || '').trim();
+                    if (!c) return;
+                    byCode.set(c, it);
+                    if (it.success) okCount += 1;
+                    else failCount += 1;
+                });
+            }
+
+            stocks.forEach((stock) => {
+                const c = String(stock.code || '').trim().replace(/^(SH|SZ)/i, '');
+                const it = byCode.get(c);
+                if (!it || !it.success) return;
+                stock.nearest_support = it.nearest_support;
+                stock.nearest_resistance = it.nearest_resistance;
+                stock.support_levels = Array.isArray(it.support_levels) ? it.support_levels : [];
+                stock.resistance_levels = Array.isArray(it.resistance_levels) ? it.resistance_levels : [];
+                stock.price_adjust = it.price_adjust || 'qfq';
+                if (stock.score_detail && typeof stock.score_detail === 'object') {
+                    const st = stock.score_detail.structure && typeof stock.score_detail.structure === 'object'
+                        ? stock.score_detail.structure
+                        : (stock.score_detail.structure = {});
+                    st.nearest_support = stock.nearest_support;
+                    st.nearest_resistance = stock.nearest_resistance;
+                    st.support_levels = stock.support_levels;
+                    st.resistance_levels = stock.resistance_levels;
+                }
+            });
+
+            this.renderResults(stocks, this.lastUrtSearchDate || null, 'urt');
+            this._refreshUrtTradeObserveButtonsInSignalTable();
+
+            const searchDate = document.getElementById('searchDate-urt');
+            if (searchDate) {
+                const base = this.lastUrtSearchDate
+                    ? `筛选时间: ${this.lastUrtSearchDate}`
+                    : (searchDate.textContent || '').replace(/\s*·\s*支撑阻力前复权.*$/, '');
+                searchDate.textContent = `${base} · 支撑阻力前复权（成功 ${okCount}${failCount ? `，失败 ${failCount}` : ''}）`;
+            }
+            if (window.CommonUtils) {
+                CommonUtils.showToast(
+                    `前复权支撑/阻力已更新：成功 ${okCount}${failCount ? `，失败 ${failCount}` : ''}（未改得分）`,
+                    failCount ? 'warning' : 'success'
+                );
+            }
+        } catch (e) {
+            if (window.CommonUtils) {
+                CommonUtils.showToast(e.message || '前复权支撑/阻力计算失败', 'error');
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = prevBtnText || '按前复权计算';
+            }
+            if (loading) {
+                loading.style.display = 'none';
+                const span = loading.querySelector('span');
+                if (span) span.textContent = '正在筛选股票，请稍候...';
+            }
+        }
     },
 
     openUrtFormalTransferModal(observeId, code, name) {
@@ -5037,16 +5182,17 @@ const ScreeningPage = {
                     : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
                         ? stock.resistance_levels[0]
                         : urtSt.nearest_resistance);
+                const urtQfqTag = stock.price_adjust === 'qfq' ? '前复权 ' : '';
                 const urtSupportTitle = Array.isArray(stock.support_levels) && stock.support_levels.length
-                    ? stock.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    ? `${urtQfqTag}${stock.support_levels.map((x) => Number(x).toFixed(2)).join('、')}`
                     : (Array.isArray(urtSt.support_levels) && urtSt.support_levels.length
-                        ? urtSt.support_levels.map((x) => Number(x).toFixed(2)).join('、')
-                        : '');
+                        ? `${urtQfqTag}${urtSt.support_levels.map((x) => Number(x).toFixed(2)).join('、')}`
+                        : urtQfqTag.trim());
                 const urtResistTitle = Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
-                    ? stock.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    ? `${urtQfqTag}${stock.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')}`
                     : (Array.isArray(urtSt.resistance_levels) && urtSt.resistance_levels.length
-                        ? urtSt.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
-                        : '');
+                        ? `${urtQfqTag}${urtSt.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')}`
+                        : urtQfqTag.trim());
                 html += `
                     <tr data-urt-row="${index}">
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${urtCode}</a></td>

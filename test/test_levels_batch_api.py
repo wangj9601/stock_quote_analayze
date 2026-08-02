@@ -1,4 +1,4 @@
-"""批量 KDE 支撑/阻力接口（RPE 选股「按前复权计算」）。"""
+"""批量 KDE 支撑/阻力接口（URT/RPE 选股「按前复权计算」）。"""
 
 import sys
 from pathlib import Path

@@ -626,6 +626,27 @@
     margin-bottom: 20px;
 }
 
+.screening-actions .refresh-btn,
+.screening-actions .gms-btn-outline,
+.screening-actions .export-btn {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 16px;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 6px;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.screening-actions .refresh-btn {
+    border: 1px solid transparent;
+}
+
 .refresh-btn {
     padding: 10px 24px;
     background: #1976d2;

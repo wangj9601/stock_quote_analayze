@@ -30,6 +30,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.vsb.btn.add_observe', name: '加入观察', level: 3, parent_code: 'channel.screening.tab.vsb', channel_code: 'screening', sort_order: 20 },
   { code: 'channel.screening.tab.urt.btn.refresh', name: 'URT刷新', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.urt.btn.export', name: 'URT导出', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 20 },
+  { code: 'channel.screening.tab.urt.btn.calc_qfq', name: 'URT按前复权计算支撑阻力', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 25 },
   { code: 'channel.screening.tab.urt.btn.observe', name: 'URT交易观察', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 30 },
   { code: 'channel.screening.tab.urt.btn.formal', name: 'URT正式交易', level: 3, parent_code: 'channel.screening.tab.urt', channel_code: 'screening', sort_order: 40 },
   { code: 'channel.screening.tab.vsb.btn.add_observe', name: '加入观察', level: 3, parent_code: 'channel.screening.tab.vsb', channel_code: 'screening', sort_order: 20 },

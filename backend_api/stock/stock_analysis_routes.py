@@ -480,7 +480,7 @@ async def get_key_levels_batch(
     """
     批量计算 KDE 支撑/阻力。
 
-    供比价效应选股列表「按前复权计算」：只刷新支撑/阻力口径，不改写 rpe_signal_trace。
+    供 URT/RPE 等选股列表「按前复权计算」：只刷新支撑/阻力口径，不改写策略信号与得分。
     单股失败不影响其它代码；港股在 adjust=qfq 时记为失败项。
     """
     codes = _normalize_batch_codes(body.codes)
