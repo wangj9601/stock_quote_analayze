@@ -1140,6 +1140,111 @@ class ReportService:
         return y4 >= 3 or y5 >= 4
 
     @staticmethod
+    def _urt_report_field_legend_rows() -> List[Dict[str, str]]:
+        """
+        URT 推送 Excel「字段说明」sheet 行数据。
+        与 indicators / scoring / signal_detector / 本文件收录过滤逻辑一致。
+        """
+        return [
+            {
+                "字段名": "（列表收录）",
+                "含义": "本表写入哪些自选股",
+                "计算/取值规则": (
+                    "仅用户自选中的 A 股；正式买点（是否买点=是）一律收录；"
+                    "非买点须满足连阳硬筛：4日阳≥3 或 5日阳≥4（默认 yang_rule_a/b）。"
+                    "排序：买点优先，再按得分降序。"
+                ),
+            },
+            {
+                "字段名": "股票代码",
+                "含义": "A 股六位证券代码",
+                "计算/取值规则": "自选股代码规范化为 6 位；港股/5 位码不进入本表。",
+            },
+            {
+                "字段名": "股票名称",
+                "含义": "证券简称",
+                "计算/取值规则": "优先取策略返回名称，否则用自选股名称。",
+            },
+            {
+                "字段名": "信号日",
+                "含义": "指标与买点判定所依据的交易日",
+                "计算/取值规则": "取策略 signal_date（或 date）；缺省为报告生成日 search_date。",
+            },
+            {
+                "字段名": "收盘",
+                "含义": "信号日收盘价",
+                "计算/取值规则": "信号日 K 线收盘价，保留 2 位小数。",
+            },
+            {
+                "字段名": "MA20",
+                "含义": "收盘价简单移动平均（默认 20 日）",
+                "计算/取值规则": (
+                    "含信号日在内最近 ma_period（默认 20）根收盘价算术平均；"
+                    "硬筛要求收盘 ≥ MA20（站上均线）。"
+                ),
+            },
+            {
+                "字段名": "4日阳",
+                "含义": "近 4 个交易日阳线根数",
+                "计算/取值规则": (
+                    "含信号日向前共 4 日，阳线判定 close>open；"
+                    "规则 A 默认要求 ≥3（yang_rule_a）。"
+                ),
+            },
+            {
+                "字段名": "5日阳",
+                "含义": "近 5 个交易日阳线根数",
+                "计算/取值规则": (
+                    "含信号日向前共 5 日，阳线判定 close>open；"
+                    "规则 B 默认要求 ≥4（yang_rule_b）。连阳硬筛为规则 A 或 B 任一通过。"
+                ),
+            },
+            {
+                "字段名": "量能倍数",
+                "含义": "当日成交量相对近均量的倍数",
+                "计算/取值规则": (
+                    "当日成交量 / 过去 volume_lookback（默认 20）日均量（不含当日）；"
+                    "硬筛默认要求 ≥ volume_multiple（默认 2.5）。"
+                ),
+            },
+            {
+                "字段名": "量比",
+                "含义": "相对前日成交量之比（近似量比）",
+                "计算/取值规则": (
+                    "当日成交量 / 前一日成交量；默认不参与硬筛与加分"
+                    "（use_volume_ratio=false）；开启后须 ≥ min_volume_ratio。"
+                ),
+            },
+            {
+                "字段名": "换手%",
+                "含义": "信号日换手率（%）",
+                "计算/取值规则": (
+                    "取行情库当日 turnover_rate；默认不参与硬筛与加分"
+                    "（use_turnover=false）；开启后须 ≥ min_turnover。"
+                ),
+            },
+            {
+                "字段名": "得分",
+                "含义": "URT 综合得分（上限 100）",
+                "计算/取值规则": (
+                    "分项合计后封顶 100："
+                    "站上 MA20 得 10；连阳强度最高 40（5日≥5→40，≥4→36，4日≥4→34，≥3→30，否则 4日阳×8）；"
+                    "量能超额最高约 40（达阈值得 30，超额再加最多 10）；"
+                    "可选换手/量比各最多 5（须配置开启）。买点另要求得分 ≥ min_score（默认 70）。"
+                ),
+            },
+            {
+                "字段名": "是否买点",
+                "含义": "当日是否发出 URT 正式买点",
+                "计算/取值规则": (
+                    "是=硬筛全部通过 且 得分≥min_score；"
+                    "硬筛默认：站上 MA20 ∧ 连阳(4日≥3或5日≥4) ∧ 量能倍数≥阈值"
+                    "（可选换手/量比下限）。否=未达买点但仍可能因连阳条件被本表收录。"
+                ),
+            },
+        ]
+
+    @staticmethod
     def _urt_report_excel_row(r: Dict[str, Any], *, report_date: str, code_to_name: Dict[str, str]) -> Dict[str, Any]:
         """对齐选股页导出列：代码/名称/信号日/收盘/MA20/4日阳/5日阳/量能倍数/量比/换手%/得分。"""
         code = str(r.get("code") or "").strip()
@@ -1355,7 +1460,10 @@ class ReportService:
         df = pd.DataFrame(rows)
         if "股票代码" in df.columns:
             df["股票代码"] = df["股票代码"].astype(str)
-        df.to_excel(filepath, index=False, sheet_name="URT策略信号列表")
+        legend_df = pd.DataFrame(self._urt_report_field_legend_rows())
+        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="URT策略信号列表")
+            legend_df.to_excel(writer, index=False, sheet_name="字段说明")
         try:
             from openpyxl import load_workbook
             from openpyxl.utils import get_column_letter
@@ -1384,6 +1492,17 @@ class ReportService:
                 col_idx = title_to_col.get(title)
                 if col_idx:
                     ws.column_dimensions[get_column_letter(col_idx)].width = width
+            if "字段说明" in wb.sheetnames:
+                ws_legend = wb["字段说明"]
+                legend_widths = {"字段名": 14, "含义": 28, "计算/取值规则": 72}
+                legend_title_to_col = {}
+                for cell in ws_legend[1]:
+                    if cell.value is not None:
+                        legend_title_to_col[str(cell.value).strip()] = cell.column
+                for title, width in legend_widths.items():
+                    col_idx = legend_title_to_col.get(title)
+                    if col_idx:
+                        ws_legend.column_dimensions[get_column_letter(col_idx)].width = width
             wb.save(filepath)
         except Exception as e:
             logger.warning("URT 报告 Excel 列宽样式应用失败: %s", e)

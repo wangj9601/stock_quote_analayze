@@ -58,6 +58,36 @@ def test_urt_report_excel_row_columns_match_screening():
     assert row["是否买点"] == "是"
 
 
+def test_urt_report_field_legend_covers_excel_columns():
+    """字段说明须覆盖信号列表全部列，并含收录规则说明。"""
+    legend = ReportService._urt_report_field_legend_rows()
+    assert legend
+    assert list(legend[0].keys()) == ["字段名", "含义", "计算/取值规则"]
+    names = [r["字段名"] for r in legend]
+    assert "（列表收录）" in names
+    for col in (
+        "股票代码",
+        "股票名称",
+        "信号日",
+        "收盘",
+        "MA20",
+        "4日阳",
+        "5日阳",
+        "量能倍数",
+        "量比",
+        "换手%",
+        "得分",
+        "是否买点",
+    ):
+        assert col in names
+    # 关键计算口径应出现在说明文案中
+    text = "\n".join(f"{r['含义']}|{r['计算/取值规则']}" for r in legend)
+    assert "close>open" in text
+    assert "volume_lookback" in text
+    assert "min_score" in text
+    assert "4日阳≥3" in text or "4日≥3" in text
+
+
 def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
     db = MagicMock()
     svc = ReportService(db)
@@ -147,6 +177,14 @@ def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
     codes = [str(c).replace("\u2060", "").zfill(6) for c in df["股票代码"].tolist()]
     assert codes == ["000011", "000533"]
     assert df["是否买点"].tolist() == ["是", "否"]
+
+    legend = pd.read_excel(result.file_path, sheet_name="字段说明")
+    assert list(legend.columns) == ["字段名", "含义", "计算/取值规则"]
+    legend_names = legend["字段名"].astype(str).tolist()
+    assert "是否买点" in legend_names
+    assert "量能倍数" in legend_names
+    assert "得分" in legend_names
+    assert any("收录" in n for n in legend_names)
 
 
 def test_generate_urt_report_excludes_codes_outside_watchlist(tmp_path):
