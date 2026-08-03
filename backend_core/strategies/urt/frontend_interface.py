@@ -123,6 +123,30 @@ class URTFrontendInterface:
         data: List[Dict[str, Any]] = []
         data_source = "realtime"
         require_pass = not skip_screening_filters
+        scope_norm = str(scope or "all").strip().lower()
+        # scope=watchlist 时必须显式传入股票池；空列表=无标的，禁止回落到全市场
+        if scope_norm == "watchlist" and stock_codes is None:
+            logger.warning("URT screen scope=watchlist 但未传 stock_codes，返回空结果（拒绝全市场）")
+            return {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "strategy_name": "上升趋势策略",
+                "scope": scope,
+                "parameters": {
+                    "config_id": resolved_id,
+                    "market": mkt,
+                    "screening_date_requested": req_norm,
+                    "screening_date_effective": effective,
+                    "data_source": "none",
+                    "skip_screening_filters": bool(skip_screening_filters),
+                },
+                "search_date": effective,
+                "data_source": "none",
+                "skip_screening_filters": bool(skip_screening_filters),
+                "message": "scope=watchlist 需要 stock_codes",
+            }
+
         # 无 Query 覆盖时优先读预计算；限定股票池时再按代码过滤
         # 单股跳过筛选时不走「仅买点」缓存，避免未过筛股票查不到
         if (
@@ -139,10 +163,10 @@ class URTFrontendInterface:
                     trade_date=effective,
                     config_id=resolved_id,
                     min_score=float(cfg.get("min_score") or 70),
-                    limit=None if stock_codes else limit,
+                    limit=None if stock_codes is not None else limit,
                 )
                 if cached:
-                    if stock_codes:
+                    if stock_codes is not None:
                         if mkt == "HK":
                             allow = {
                                 str(c).strip().zfill(5) if str(c).strip().isdigit() else str(c).strip()

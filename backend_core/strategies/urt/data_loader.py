@@ -70,8 +70,11 @@ class URTDataLoader:
         from backend_api.models import StockBasicInfo
 
         def _normalize(c: str) -> Optional[str]:
-            s = str(c).strip()
+            s = str(c).replace("\u2060", "").strip()
+            # 5 位数字是港股码，禁止抬成 6 位 A 股（00981→000981）
             if len(s) == 5 and s.isdigit():
+                return None
+            if s.isdigit() and 0 < len(s) < 6:
                 s = s.zfill(6)
             if len(s) == 6 and s.isdigit():
                 return s
@@ -92,7 +95,8 @@ class URTDataLoader:
                 for p in URT_BOARD_PREFIX_GROUPS[key]
             ]
             qry = qry.filter(or_(*like_clauses))
-        if stock_codes:
+        # 必须用 is not None：空列表表示「限定池为空」，不能当成「不限池」扫全市场
+        if stock_codes is not None:
             cleaned = [_normalize(c) for c in stock_codes]
             cleaned = [c for c in cleaned if c]
             if not cleaned:
@@ -124,7 +128,7 @@ class URTDataLoader:
             )
             .order_by(StockBasicInfoHK.code)
         )
-        if stock_codes:
+        if stock_codes is not None:
             cleaned = [normalize_hk_code(c) for c in stock_codes]
             cleaned = [c for c in cleaned if c]
             if not cleaned:

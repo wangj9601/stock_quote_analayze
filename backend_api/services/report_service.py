@@ -321,7 +321,7 @@ class ReportService:
             elif report_type == 'gms_daily':
                 return self._generate_gms_report_for_user(user_id)
             elif report_type == 'urt_daily':
-                return self._generate_urt_report_for_user(user_id)
+                return self._generate_urt_report_for_user(user_id, stock_codes=stock_codes)
             else:
                 return ReportResult(
                     success=False,
@@ -1179,7 +1179,9 @@ class ReportService:
             "是否买点": "是" if bool(r.get("buy_signal")) else "否",
         }
 
-    def _generate_urt_report_for_user(self, user_id: int) -> ReportResult:
+    def _generate_urt_report_for_user(
+        self, user_id: int, stock_codes: Optional[List[str]] = None
+    ) -> ReportResult:
         """
         生成该用户自选股范围内的 URT 上升趋势策略报告（仅 A 股）。
 
@@ -1187,8 +1189,10 @@ class ReportService:
         1) 当日买点；
         2) 无买点但满足连阳硬筛（4日≥3阳 或 5日≥4阳）的自选股。
         列对齐选股页：代码/名称/信号日/收盘/MA20/4日阳/5日阳/量能倍数/量比/换手%/得分。
+
+        stock_codes: 推送任务可选子集；None 表示该用户全部自选股。
         """
-        watchlist = self.get_user_watchlist(user_id)
+        watchlist = self.get_user_watchlist(user_id, stock_codes)
         if not watchlist:
             return ReportResult(
                 success=True,
@@ -1205,17 +1209,28 @@ class ReportService:
             )
 
         def _norm_cn_code(raw: str) -> str:
-            s = str(raw or "").strip()
-            if not s:
+            """A 股代码规范化：禁止把 5 位港股码 zfill(6) 抬成 A 股（00981→000981）。"""
+            s = str(raw or "").replace("\u2060", "").strip()
+            if not s or not s.isdigit():
                 return s
-            return s.zfill(6) if s.isdigit() else s
+            if len(s) == 5:
+                return ""
+            if len(s) > 6:
+                return ""
+            return s.zfill(6)
 
         stock_pool: List[str] = []
         code_to_name: Dict[str, str] = {}
+        skipped_hk_like: List[str] = []
         for item in watchlist:
             market = (item.get("market") or "").strip().upper()
-            raw_code = str(item.get("stock_code") or "").strip()
-            if market != "CN" and not (raw_code.isdigit() and len(raw_code) <= 6):
+            raw_code = str(item.get("stock_code") or "").replace("\u2060", "").strip()
+            # 港股 / 5 位数字码不得进入 A 股 URT 池（否则 00981 会被当成 000981）
+            if market == "HK" or (raw_code.isdigit() and len(raw_code) == 5):
+                if len(skipped_hk_like) < 20:
+                    skipped_hk_like.append(raw_code)
+                continue
+            if market and market != "CN":
                 continue
             code = _norm_cn_code(raw_code)
             if not code or not code.isdigit() or len(code) != 6:
@@ -1237,6 +1252,14 @@ class ReportService:
                 ),
                 error_message="自选股中无 A 股标的",
             )
+
+        logger.info(
+            "URT 日报 user_id=%s A股自选池=%s 只 sample=%s skipped_hk_like=%s",
+            user_id,
+            len(stock_pool),
+            stock_pool[:8],
+            skipped_hk_like,
+        )
 
         try:
             from backend_core.strategies.urt import URTFrontendInterface
@@ -1269,19 +1292,31 @@ class ReportService:
         allow = set(stock_pool)
         in_pool: List[Dict[str, Any]] = []
         leaked = 0
+        leaked_codes: List[str] = []
         for r in raw_results:
             if not isinstance(r, dict):
                 continue
-            code = _norm_cn_code(str(r.get("code") or ""))
+            code = _norm_cn_code(str(r.get("code") or "").replace("\u2060", "").strip())
             if code not in allow:
                 leaked += 1
+                if len(leaked_codes) < 20:
+                    leaked_codes.append(code)
                 continue
             in_pool.append(r)
+        logger.info(
+            "URT 日报 user_id=%s screen返回=%s 池内=%s 剔除非自选=%s leaked_sample=%s",
+            user_id,
+            len(raw_results),
+            len(in_pool),
+            leaked,
+            leaked_codes,
+        )
         if leaked:
             logger.warning(
-                "URT 日报 user_id=%s 过滤掉非自选股结果 %s 条（应仅含自选池）",
+                "URT 日报 user_id=%s 过滤掉非自选股结果 %s 条（应仅含自选池） codes=%s",
                 user_id,
                 leaked,
+                leaked_codes,
             )
 
         results = [r for r in in_pool if self._urt_row_meets_report_filter(r)]
@@ -1313,7 +1348,9 @@ class ReportService:
             for r in results
         ]
 
-        filename = f"urt_{user_id}_{report_date.replace('-', '')}.xlsx"
+        # 文件名带生成时刻，避免与历史同日报告混淆（微信下载出现 urt_9_20260731(1).xlsx）
+        gen_ts = datetime.now().strftime("%H%M%S")
+        filename = f"urt_{user_id}_{report_date.replace('-', '')}_{gen_ts}.xlsx"
         filepath = os.path.join(self.report_dir, filename)
         df = pd.DataFrame(rows)
         if "股票代码" in df.columns:

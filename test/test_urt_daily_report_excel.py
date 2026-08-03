@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -201,3 +202,153 @@ def test_generate_urt_report_excludes_codes_outside_watchlist(tmp_path):
     codes = [str(c).replace("\u2060", "").zfill(6) for c in df["股票代码"].tolist()]
     assert codes == ["000011"]
     assert "000981" not in codes
+    # 新文件名含生成时刻，避免与历史同日文件混淆
+    assert "urt_9_20260731_" in os.path.basename(result.file_path)
+    assert result.file_path.endswith(".xlsx")
+
+
+def test_generate_urt_report_passes_config_stock_codes_subset(tmp_path):
+    """推送任务配置的 stock_codes 子集应传给 get_user_watchlist。"""
+    db = MagicMock()
+    svc = ReportService(db)
+    svc.report_dir = str(tmp_path)
+    svc.get_user_watchlist = MagicMock(
+        return_value=[
+            {"stock_code": "000011", "stock_name": "深物业A", "market": "CN"},
+        ]
+    )
+    payload = {
+        "success": True,
+        "search_date": "2026-07-31",
+        "data": [
+            {
+                "code": "000011",
+                "name": "深物业A",
+                "signal_date": "2026-07-31",
+                "close": 8.15,
+                "ma20": 6.74,
+                "yang_count_4": 3,
+                "yang_count_5": 3,
+                "volume_multiple": 3.0,
+                "volume_ratio": 2.0,
+                "turnover_rate": 5.0,
+                "score": 80.0,
+                "buy_signal": True,
+            },
+        ],
+    }
+    with patch("backend_core.strategies.urt.URTFrontendInterface.screen", return_value=payload):
+        result = svc._generate_urt_report_for_user(9, stock_codes=["000011"])
+    assert result.success is True
+    svc.get_user_watchlist.assert_called_with(9, ["000011"])
+
+
+def test_urt_screen_watchlist_scope_without_codes_returns_empty():
+    """scope=watchlist 且未传 stock_codes 时不得回落全市场。"""
+    from backend_core.strategies.urt.frontend_interface import URTFrontendInterface
+
+    db = MagicMock()
+    with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.urt.frontend_interface.URTConfigManager"
+    ) as cm_cls, patch(
+        "backend_core.strategies.urt.frontend_interface.URTDataLoader"
+    ) as loader_cls:
+        cm = cm_cls.return_value
+        cm.get_config.return_value = {"min_score": 70}
+        cm.merge_overrides.side_effect = lambda base, **kw: dict(base)
+        loader_cls.resolve_effective_history_end_date.return_value = "2026-07-31"
+        out = URTFrontendInterface.screen(db, scope="watchlist", stock_codes=None)
+    assert out["data"] == []
+    assert out["total"] == 0
+    loader_cls.return_value.list_a_share_candidates.assert_not_called()
+
+
+def test_generate_urt_report_excludes_hk_00981_mapped_to_a_share(tmp_path):
+    """港股 00981 不得经 zfill(6) 变成 A 股 000981 写入日报。"""
+    db = MagicMock()
+    svc = ReportService(db)
+    svc.report_dir = str(tmp_path)
+    svc.get_user_watchlist = MagicMock(
+        return_value=[
+            {"stock_code": "000011", "stock_name": "深物业A", "market": "CN"},
+            {"stock_code": "00981", "stock_name": "山子高科", "market": "HK"},
+            {"stock_code": "00100", "stock_name": "MINIMAX-W", "market": "HK"},
+        ]
+    )
+    payload = {
+        "success": True,
+        "search_date": "2026-07-31",
+        "data": [
+            {
+                "code": "000011",
+                "name": "深物业A",
+                "signal_date": "2026-07-31",
+                "close": 8.15,
+                "ma20": 6.74,
+                "yang_count_4": 3,
+                "yang_count_5": 3,
+                "volume_multiple": 3.0,
+                "volume_ratio": 2.0,
+                "turnover_rate": 5.0,
+                "score": 80.0,
+                "buy_signal": True,
+            },
+            {
+                "code": "000981",
+                "name": "山子高科",
+                "signal_date": "2026-07-31",
+                "close": 2.66,
+                "ma20": 2.57,
+                "yang_count_4": 4,
+                "yang_count_5": 5,
+                "volume_multiple": 1.35,
+                "volume_ratio": 1.31,
+                "turnover_rate": 3.27,
+                "score": 66.2,
+                "buy_signal": False,
+                "rule_a_ok": True,
+                "rule_b_ok": True,
+            },
+            {
+                "code": "000100",
+                "name": "TCL科技",
+                "signal_date": "2026-07-31",
+                "close": 4.0,
+                "ma20": 3.9,
+                "yang_count_4": 3,
+                "yang_count_5": 4,
+                "volume_multiple": 2.0,
+                "volume_ratio": 2.0,
+                "turnover_rate": 3.0,
+                "score": 70.0,
+                "buy_signal": True,
+            },
+        ],
+    }
+    with patch(
+        "backend_core.strategies.urt.URTFrontendInterface.screen", return_value=payload
+    ) as screen_mock:
+        result = svc._generate_urt_report_for_user(9)
+    assert result.success is True
+    # screen 只应收到真正的 A 股池
+    assert screen_mock.call_args.kwargs["stock_codes"] == ["000011"]
+    df = pd.read_excel(result.file_path, sheet_name="URT策略信号列表")
+    codes = [str(c).replace("\u2060", "").zfill(6) for c in df["股票代码"].tolist()]
+    assert codes == ["000011"]
+    assert "000981" not in codes
+    assert "000100" not in codes
+
+
+def test_urt_data_loader_rejects_five_digit_hk_codes():
+    """list_a_share_candidates 不得把 00981 规范化为 000981。"""
+    from backend_core.strategies.urt.data_loader import URTDataLoader
+
+    db = MagicMock()
+    loader = URTDataLoader(db, market="CN")
+    out = loader.list_a_share_candidates(stock_codes=["00981", "00100"])
+    assert out == []
+    # 清洗后为空应提前返回，不执行 qry.all()
+    order_by_mock = (
+        db.query.return_value.filter.return_value.filter.return_value.filter.return_value.order_by
+    )
+    assert order_by_mock.return_value.all.call_count == 0
