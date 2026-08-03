@@ -8,9 +8,11 @@
   - 主源：AkShare 新浪 `stock_zh_a_daily(adjust=\"qfq-factor\")`
     新浪原始 qfq-factor 为「历史>1、最新≈1」的倒数形态；入库前取倒数归一化
     为内部约定（历史≤1、最新≈1），见 normalize_sina_factor_to_internal。
+    符号：沪 sh / 深 sz / 北交所 bj（不可把 92xxxx 误标为 sh）。
   - 备用：BaoStock `query_adjust_factor` → `foreAdjustFactor`（原样入库，已符合内部约定）。
+    BaoStock 仅支持沪深，北交所不走备用源。
 
-factor_source=auto：归一化新浪 → 失败再用 BaoStock。
+factor_source=auto：归一化新浪 → 失败再用 BaoStock（北交所除外）。
 """
 
 from __future__ import annotations
@@ -47,6 +49,9 @@ FACTOR_SOURCE_CHOICES = (
     FACTOR_SOURCE_BAOSTOCK,
 )
 
+# 与 VSB_BOARD_PREFIX_GROUPS["BJ"] 对齐：北交所/北证代码段
+BSE_CODE_PREFIXES = ("43", "83", "87", "88", "92")
+
 
 class AdjQuotesError(Exception):
     """前复权现算/因子拉取业务错误（可直接展示给用户）。"""
@@ -58,24 +63,48 @@ class AdjQuotesError(Exception):
 
 def normalize_a_share_code(code: str) -> str:
     s = str(code or "").strip().upper()
-    if s.startswith(("SH", "SZ")) and len(s) > 2:
+    if s.startswith(("SH", "SZ", "BJ")) and len(s) > 2:
         s = s[2:]
     return s
 
 
+def is_bse_a_share_code(code: str) -> bool:
+    """是否北交所/北证 6 位 A 股（43/83/87/88/92 开头）。"""
+    c = normalize_a_share_code(code)
+    return len(c) == 6 and c.isdigit() and c.startswith(BSE_CODE_PREFIXES)
+
+
 def to_sina_symbol(code: str) -> str:
-    """A 股 6 位代码 → 新浪 symbol（sh600519 / sz000001）。"""
+    """A 股 6 位代码 → 新浪 symbol（sh600519 / sz000001 / bj920263）。
+
+    注意：不可把北交所 92xxxx 误标为 sh（旧规则 startswith('9') 会踩坑）；
+    新浪北交所前缀为 bj。
+    """
     c = normalize_a_share_code(code)
     if not c.isdigit() or len(c) != 6:
         raise AdjQuotesError(f"仅支持 A 股 6 位代码获取复权因子，当前：{code}")
+    if is_bse_a_share_code(c):
+        return f"bj{c}"
+    # 5/6/9：沪市基金与主板、沪 B（900xxx）；92 已在上方归 bj
     if c.startswith(("5", "6", "9")):
         return f"sh{c}"
     return f"sz{c}"
 
 
 def to_baostock_symbol(code: str) -> str:
-    """A 股 6 位代码 → BaoStock symbol（sh.600519 / sz.000001）。"""
-    sina = to_sina_symbol(code)
+    """A 股 6 位代码 → BaoStock symbol（sh.600519 / sz.000001）。
+
+    BaoStock 仅支持 sh./sz.，不支持北交所；对北交所直接抛可读错误，避免误用 sh.92xxxx。
+    """
+    c = normalize_a_share_code(code)
+    if not c.isdigit() or len(c) != 6:
+        raise AdjQuotesError(f"仅支持 A 股 6 位代码获取复权因子，当前：{code}")
+    if is_bse_a_share_code(c):
+        raise AdjQuotesError(
+            f"BaoStock 不支持北交所代码（{c}），仅支持沪深 sh./sz.；"
+            "请改用新浪因子、库内 stock_adj_factor，或不复权计算"
+        )
+    sina = to_sina_symbol(c)
     return f"{sina[:2]}.{sina[2:]}"
 
 
@@ -203,6 +232,22 @@ def throttle_third_party_fetch(*, label: str = "") -> None:
         _last_third_party_fetch_mono = time.monotonic()
 
 
+def _friendly_sina_factor_error(symbol: str, err: BaseException) -> str:
+    """将 akshare/新浪侧常见解析失败转为可读说明。
+
+    新浪 qfq.js 经 akshare 用 eval 解析；错误 symbol（如北交所误标 sh）常返回
+    404 HTML，触发 SyntaxError: invalid syntax (<string>, line 1)。
+    """
+    msg = str(err).strip() or err.__class__.__name__
+    low = msg.lower()
+    if "invalid syntax" in low or isinstance(err, SyntaxError):
+        return (
+            f"新浪复权因子响应无法解析（{symbol}）：{msg}。"
+            "常见原因是市场前缀错误或该代码无因子数据"
+        )
+    return f"获取新浪复权因子失败：{msg}"
+
+
 def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
     """调用 AkShare 新浪接口拉取前复权因子，入库前取倒数归一化为内部约定。"""
     import akshare as ak
@@ -257,7 +302,7 @@ def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
                 "拉取新浪 qfq-factor 失败 %s attempt=%s: %s", symbol, attempt + 1, e
             )
             time.sleep(sleep_s)
-    raise AdjQuotesError(f"获取新浪复权因子失败：{last_err}")
+    raise AdjQuotesError(_friendly_sina_factor_error(symbol, last_err or Exception("未知错误")))
 
 
 def fetch_baostock_qfq_factors(
@@ -355,15 +400,23 @@ def fetch_qfq_factors(
     if src == FACTOR_SOURCE_BAOSTOCK:
         return _try_bao(), SOURCE_BAOSTOCK_QFQ
 
-    # auto：生产默认归一化新浪 → BaoStock 备用
+    # auto：生产默认归一化新浪 → BaoStock 备用（北交所无 BaoStock，不再空跑 sh.92xxxx）
+    code_n = normalize_a_share_code(code)
     try:
         return _try_sina(), SOURCE_AKSHARE_SINA_QFQ
     except AdjQuotesError as e:
         errors.append(f"归一化新浪：{e.message}")
-        logger.warning("归一化新浪复权因子失败，尝试 BaoStock：%s", e.message)
+        logger.warning("归一化新浪复权因子失败，尝试备用源：%s", e.message)
     except Exception as e:
         errors.append(f"归一化新浪：{e}")
-        logger.warning("归一化新浪复权因子异常，尝试 BaoStock：%s", e)
+        logger.warning("归一化新浪复权因子异常，尝试备用源：%s", e)
+
+    if is_bse_a_share_code(code_n):
+        raise AdjQuotesError(
+            "获取复权因子失败（北交所暂无可用第三方备用源；BaoStock 不支持北交所）。"
+            + "；".join(errors)
+            + "。若库内无 stock_adj_factor，请改用不复权计算"
+        )
 
     try:
         return _try_bao(), SOURCE_BAOSTOCK_QFQ

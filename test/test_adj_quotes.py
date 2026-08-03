@@ -22,6 +22,8 @@ from utils.adj_quotes import (  # noqa: E402
     fetch_baostock_qfq_factors,
     fetch_qfq_factors,
     fetch_sina_qfq_factors,
+    is_bse_a_share_code,
+    normalize_a_share_code,
     normalize_sina_factor_to_internal,
     throttle_third_party_fetch,
     to_baostock_symbol,
@@ -35,6 +37,21 @@ def test_to_sina_symbol_sh_sz():
     assert to_sina_symbol("sh600519") == "sh600519"
     with pytest.raises(AdjQuotesError):
         to_sina_symbol("00700")
+
+
+def test_to_sina_symbol_bse_uses_bj_not_sh():
+    """北交所 92/43/83/87/88 必须用 bj，不可误标 sh（旧 startswith('9') 缺陷）。"""
+    assert to_sina_symbol("920263") == "bj920263"
+    assert to_sina_symbol("bj920263") == "bj920263"
+    assert to_sina_symbol("430047") == "bj430047"
+    assert to_sina_symbol("830799") == "bj830799"
+    assert to_sina_symbol("872925") == "bj872925"
+    assert to_sina_symbol("920799") == "bj920799"
+    # 沪 B 股 900xxx 仍为 sh
+    assert to_sina_symbol("900901") == "sh900901"
+    assert is_bse_a_share_code("920263") is True
+    assert is_bse_a_share_code("900901") is False
+    assert normalize_a_share_code("BJ920263") == "920263"
 
 
 def test_apply_qfq_to_bars_formula():
@@ -134,6 +151,57 @@ def test_ensure_uses_cache_when_fresh():
 def test_to_baostock_symbol():
     assert to_baostock_symbol("600519") == "sh.600519"
     assert to_baostock_symbol("000001") == "sz.000001"
+
+
+def test_to_baostock_symbol_rejects_bse():
+    """BaoStock 不支持北交所，禁止生成 sh.920263 空跑。"""
+    with pytest.raises(AdjQuotesError, match="北交所"):
+        to_baostock_symbol("920263")
+    with pytest.raises(AdjQuotesError, match="北交所"):
+        to_baostock_symbol("430047")
+
+
+def test_fetch_sina_qfq_factors_uses_bj_for_bse():
+    df = pd.DataFrame(
+        {
+            "date": ["2024-01-02", "2024-06-14"],
+            "qfq_factor": [1.05, 1.0],
+        }
+    )
+    fake_ak = MagicMock()
+    fake_ak.stock_zh_a_daily.return_value = df
+    with patch.dict(sys.modules, {"akshare": fake_ak}):
+        rows = fetch_sina_qfq_factors("920263")
+    assert fake_ak.stock_zh_a_daily.call_args.kwargs.get("symbol") == "bj920263"
+    assert rows[0]["code"] == "920263"
+    assert len(rows) == 2
+
+
+def test_fetch_sina_maps_invalid_syntax_to_readable_error(monkeypatch):
+    """新浪/akshare eval 失败时给出可读错误（不再原样抛 invalid syntax）。"""
+    fake_ak = MagicMock()
+    fake_ak.stock_zh_a_daily.side_effect = SyntaxError(
+        "invalid syntax (<string>, line 1)"
+    )
+    monkeypatch.setattr(adj_quotes_mod.time, "sleep", lambda *_a, **_k: None)
+    with patch.dict(sys.modules, {"akshare": fake_ak}):
+        with pytest.raises(AdjQuotesError, match="无法解析") as ei:
+            fetch_sina_qfq_factors("600519")
+    assert "invalid syntax" in ei.value.message
+
+
+def test_fetch_qfq_factors_auto_skips_baostock_for_bse():
+    """北交所新浪失败后不再尝试 BaoStock（避免 sh.92xxxx）。"""
+    with patch(
+        "utils.adj_quotes.fetch_sina_qfq_factors",
+        side_effect=AdjQuotesError("新浪限流"),
+    ), patch(
+        "utils.adj_quotes.fetch_baostock_qfq_factors"
+    ) as bao_mock:
+        with pytest.raises(AdjQuotesError, match="北交所") as ei:
+            fetch_qfq_factors("920263", factor_source="auto")
+    bao_mock.assert_not_called()
+    assert "BaoStock 不支持" in ei.value.message or "北交所" in ei.value.message
 
 
 def test_fetch_qfq_factors_auto_falls_back_to_baostock():

@@ -183,7 +183,7 @@ const ProfilePage = {
         }
         // 「600519 贵州茅台」类输入：首段为数字代码时取代码
         const firstToken = query.split(/\s+/)[0];
-        const firstBody = /^(sh|sz)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
+        const firstBody = /^(sh|sz|bj)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
         if (/^\d{4,6}$/.test(firstBody)) {
             query = firstToken;
         }
