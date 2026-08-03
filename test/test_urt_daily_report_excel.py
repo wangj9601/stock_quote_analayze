@@ -146,3 +146,58 @@ def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
     codes = [str(c).replace("\u2060", "").zfill(6) for c in df["股票代码"].tolist()]
     assert codes == ["000011", "000533"]
     assert df["是否买点"].tolist() == ["是", "否"]
+
+
+def test_generate_urt_report_excludes_codes_outside_watchlist(tmp_path):
+    """选股接口若误返回非自选代码，日报不得写入 Excel。"""
+    db = MagicMock()
+    svc = ReportService(db)
+    svc.report_dir = str(tmp_path)
+    svc.get_user_watchlist = MagicMock(
+        return_value=[
+            {"stock_code": "000011", "stock_name": "深物业A", "market": "CN"},
+        ]
+    )
+    payload = {
+        "success": True,
+        "search_date": "2026-07-31",
+        "data": [
+            {
+                "code": "000011",
+                "name": "深物业A",
+                "signal_date": "2026-07-31",
+                "close": 8.15,
+                "ma20": 6.74,
+                "yang_count_4": 3,
+                "yang_count_5": 3,
+                "volume_multiple": 3.0,
+                "volume_ratio": 2.0,
+                "turnover_rate": 5.0,
+                "score": 80.0,
+                "buy_signal": True,
+            },
+            {
+                "code": "000981",
+                "name": "山子高科",
+                "signal_date": "2026-07-31",
+                "close": 2.66,
+                "ma20": 2.57,
+                "yang_count_4": 4,
+                "yang_count_5": 5,
+                "volume_multiple": 1.35,
+                "volume_ratio": 1.31,
+                "turnover_rate": 3.27,
+                "score": 66.2,
+                "buy_signal": False,
+                "rule_a_ok": True,
+                "rule_b_ok": True,
+            },
+        ],
+    }
+    with patch("backend_core.strategies.urt.URTFrontendInterface.screen", return_value=payload):
+        result = svc._generate_urt_report_for_user(9)
+    assert result.success is True
+    df = pd.read_excel(result.file_path, sheet_name="URT策略信号列表")
+    codes = [str(c).replace("\u2060", "").zfill(6) for c in df["股票代码"].tolist()]
+    assert codes == ["000011"]
+    assert "000981" not in codes

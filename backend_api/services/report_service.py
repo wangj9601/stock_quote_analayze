@@ -1266,7 +1266,25 @@ class ReportService:
             else datetime.now().strftime("%Y-%m-%d")
         )
 
-        results = [r for r in raw_results if isinstance(r, dict) and self._urt_row_meets_report_filter(r)]
+        allow = set(stock_pool)
+        in_pool: List[Dict[str, Any]] = []
+        leaked = 0
+        for r in raw_results:
+            if not isinstance(r, dict):
+                continue
+            code = _norm_cn_code(str(r.get("code") or ""))
+            if code not in allow:
+                leaked += 1
+                continue
+            in_pool.append(r)
+        if leaked:
+            logger.warning(
+                "URT 日报 user_id=%s 过滤掉非自选股结果 %s 条（应仅含自选池）",
+                user_id,
+                leaked,
+            )
+
+        results = [r for r in in_pool if self._urt_row_meets_report_filter(r)]
         results.sort(
             key=lambda x: (
                 1 if bool(x.get("buy_signal")) else 0,

@@ -800,6 +800,21 @@ def admin_trigger_push_config(
                 status_code=400,
                 detail="该推送任务未启用；如需仍推送请传 force=true",
             )
+        # 与定时任务区分：管理端手工「立即推送」入口
+        action_label = (
+            "URT策略通知立即推送"
+            if config.report_type == "urt_daily"
+            else "管理端立即推送"
+        )
+        logger.info(
+            "%s（非定时任务）: config_id=%s user_id=%s report_type=%s admin_id=%s force=%s",
+            action_label,
+            config_id,
+            config.user_id,
+            config.report_type,
+            getattr(current_admin, "id", None),
+            bool(force),
+        )
         # PushRecord.push_time 为 String(10)
         push_time = f"M{datetime.now().strftime('%H:%M:%S')}"
         result = push_service.push_to_user(
@@ -807,14 +822,6 @@ def admin_trigger_push_config(
             push_time=push_time,
             config_id=int(config.id),
             force=bool(force),
-        )
-        logger.info(
-            "管理端立即推送 config_id=%s user_id=%s report_type=%s admin=%s success=%s",
-            config_id,
-            config.user_id,
-            config.report_type,
-            getattr(current_admin, "id", None),
-            result.success,
         )
         if result.success:
             return TriggerPushResponse(
