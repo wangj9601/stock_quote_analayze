@@ -1609,6 +1609,7 @@
                         <span id="urtTradeObserveCount" class="gms-meta-text"></span>
                     </div>
                 </div>
+                <p class="gms-integrated-hint">展示加入观察时的信号快照（收盘/MA20/连阳、支撑/阻力、买点与得分等）；「明细」可查看完整买点逻辑。</p>
                 <div id="urtTradeObserveError" class="error-message" style="display:none;"></div>
                 <div id="urtTradeObserveLoading" class="loading-indicator" style="display:none;">
                     <div class="spinner"></div>
@@ -1623,6 +1624,11 @@
                                     <th class="gms-col-name">股票名称</th>
                                     <th class="gms-col-narrow">信号日</th>
                                     <th class="gms-col-price">收盘</th>
+                                    <th class="gms-col-price">MA20</th>
+                                    <th class="gms-col-narrow">4/5日阳</th>
+                                    <th class="gms-col-price">支撑</th>
+                                    <th class="gms-col-price">阻力</th>
+                                    <th class="gms-col-narrow">买点</th>
                                     <th class="gms-col-narrow">得分</th>
                                     <th class="gms-col-narrow">加入时间</th>
                                     <th class="gms-col-actions gms-col-actions--wide">操作</th>
@@ -1630,7 +1636,7 @@
                             </thead>
                             <tbody id="urtTradeObserveTableBody">
                                 <tr>
-                                    <td colspan="7" class="empty-state">请在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                    <td colspan="12" class="empty-state">请在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
                                 </tr>
                             </tbody>
                         </table>

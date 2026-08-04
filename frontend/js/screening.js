@@ -317,6 +317,17 @@ const ScreeningPage = {
         const observeBody = document.getElementById('urtTradeObserveTableBody');
         if (observeBody) {
             observeBody.addEventListener('click', (e) => {
+                const detailBtn = e.target.closest('.urt-observe-detail-toggle');
+                if (detailBtn) {
+                    e.preventDefault();
+                    const row = detailBtn.getAttribute('data-row');
+                    const detailTr = observeBody.querySelector(`tr.urt-observe-detail-row[data-detail-for="${row}"]`);
+                    if (detailTr) {
+                        const hide = detailTr.style.display === 'none' || !detailTr.style.display;
+                        detailTr.style.display = hide ? '' : 'none';
+                    }
+                    return;
+                }
                 const transfer = e.target.closest('.urt-trade-observe-transfer');
                 if (transfer) {
                     e.preventDefault();
@@ -428,25 +439,68 @@ const ScreeningPage = {
 
     _buildUrtTradeObserveSnapshot(stock) {
         if (!stock || typeof stock !== 'object') return {};
+        const sd = stock.score_detail && typeof stock.score_detail === 'object'
+            ? stock.score_detail
+            : null;
+        const st = sd && sd.structure && typeof sd.structure === 'object' ? sd.structure : {};
+        const supportLevels = Array.isArray(stock.support_levels) && stock.support_levels.length
+            ? stock.support_levels
+            : (Array.isArray(st.support_levels) ? st.support_levels : []);
+        const resistLevels = Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+            ? stock.resistance_levels
+            : (Array.isArray(st.resistance_levels) ? st.resistance_levels : []);
+        const nearestSupport = stock.nearest_support != null
+            ? stock.nearest_support
+            : (st.nearest_support != null
+                ? st.nearest_support
+                : (supportLevels.length ? supportLevels[0] : null));
+        const nearestResist = stock.nearest_resistance != null
+            ? stock.nearest_resistance
+            : (st.nearest_resistance != null
+                ? st.nearest_resistance
+                : (resistLevels.length ? resistLevels[0] : null));
         return {
             code: stock.code,
             name: stock.name,
             signal_date: stock.signal_date,
             close: stock.close,
+            open: stock.open,
             ma20: stock.ma20,
+            ma5: stock.ma5,
+            ma10: stock.ma10,
+            ma20_stack: stock.ma20_stack,
+            above_ma20: stock.above_ma20,
+            ma_bull_ok: stock.ma_bull_ok,
+            ma_bull_periods: stock.ma_bull_periods,
             yang_count_4: stock.yang_count_4,
             yang_count_5: stock.yang_count_5,
             yang_count_10: stock.yang_count_10,
             yang_count_15: stock.yang_count_15,
             yang_count_20: stock.yang_count_20,
-            ma_bull_ok: stock.ma_bull_ok,
-            ma5: stock.ma5,
-            ma10: stock.ma10,
+            yang_medium_ok: stock.yang_medium_ok,
+            yang_medium_detail: stock.yang_medium_detail,
+            rule_a_ok: stock.rule_a_ok,
+            rule_b_ok: stock.rule_b_ok,
             volume_multiple: stock.volume_multiple,
             volume_ratio: stock.volume_ratio,
             turnover_rate: stock.turnover_rate,
             score: stock.score,
-            score_detail: stock.score_detail || null,
+            buy_signal: stock.buy_signal,
+            filter_ok: stock.filter_ok,
+            filter_reason: stock.filter_reason,
+            score_ok: stock.score_ok,
+            buy_logic: stock.buy_logic || null,
+            score_detail: sd,
+            support_levels: supportLevels,
+            resistance_levels: resistLevels,
+            nearest_support: nearestSupport,
+            nearest_resistance: nearestResist,
+            kde_ok: stock.kde_ok != null ? stock.kde_ok : st.kde_ok,
+            kde_reason: stock.kde_reason || st.kde_reason || null,
+            kde_lookback_used: stock.kde_lookback_used != null
+                ? stock.kde_lookback_used
+                : st.kde_lookback_used,
+            price_adjust: stock.price_adjust || null,
         };
     },
 
@@ -493,7 +547,7 @@ const ScreeningPage = {
                 errEl.textContent = e.message || '加载交易观察列表失败';
             }
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12" class="empty-state">加载失败</td></tr>';
             }
         } finally {
             if (loadingEl) loadingEl.style.display = 'none';
@@ -505,36 +559,65 @@ const ScreeningPage = {
         if (!tbody) return;
         this.urtTradeObserveItems = Array.isArray(items) ? items : [];
         if (!this.urtTradeObserveItems.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「观察」加入</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="empty-state">暂无交易观察股票，请在「策略信号」中点击「观察」加入</td></tr>';
             return;
         }
         const esc = (s) => String(s ?? '')
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;');
-        const fmtPrice = (v) => (v != null && !isNaN(v)) ? Number(v).toFixed(2) : '--';
+        const fmtPrice = (v) => (v != null && Number.isFinite(Number(v))) ? Number(v).toFixed(2) : '--';
         const fmtDt = (iso) => {
             if (!iso) return '--';
             const s = String(iso);
             return s.length >= 16 ? s.slice(0, 16).replace('T', ' ') : s.slice(0, 10);
         };
-        tbody.innerHTML = this.urtTradeObserveItems.map((it) => {
+        const levelTitle = (levels, nearest, qfqTag) => {
+            const arr = Array.isArray(levels) ? levels : [];
+            if (arr.length) {
+                return `${qfqTag}${arr.map((x) => Number(x).toFixed(2)).join('、')}`;
+            }
+            return qfqTag.trim() || (nearest != null ? String(nearest) : '');
+        };
+        tbody.innerHTML = this.urtTradeObserveItems.map((it, index) => {
             const snap = it.snapshot || {};
             const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            const traceHref = `stock_urt_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            const qfqTag = snap.price_adjust === 'qfq' ? '前复权 ' : '';
+            const nearSup = snap.nearest_support;
+            const nearRes = snap.nearest_resistance;
+            const supportTitle = levelTitle(snap.support_levels, nearSup, qfqTag);
+            const resistTitle = levelTitle(snap.resistance_levels, nearRes, qfqTag);
+            const buyLabel = snap.buy_signal === true ? '是' : (snap.buy_signal === false ? '否' : '--');
+            const buyClass = snap.buy_signal === true ? 'strength-high' : (snap.buy_signal === false ? 'strength-low' : '');
+            let detailHtml = '<div class="gms-score-detail-inner">信号快照明细未加载</div>';
+            if (window.UrtScoreDetail && typeof window.UrtScoreDetail.buildHtml === 'function') {
+                detailHtml = window.UrtScoreDetail.buildHtml(snap);
+            }
             return `
                 <tr class="urt-trade-observe-row" data-observe-id="${it.id}">
                     <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
                     <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
-                    <td class="gms-col-narrow">${esc(it.signal_date || '--')}</td>
+                    <td class="gms-col-narrow">${esc(it.signal_date || snap.signal_date || '--')}</td>
                     <td class="gms-col-price">${fmtPrice(snap.close)}</td>
+                    <td class="gms-col-price">${fmtPrice(snap.ma20)}</td>
+                    <td class="gms-col-narrow">${snap.yang_count_4 != null ? snap.yang_count_4 : '--'}/${snap.yang_count_5 != null ? snap.yang_count_5 : '--'}</td>
+                    <td class="gms-col-price support" title="${esc(supportTitle)}">${fmtPrice(nearSup)}</td>
+                    <td class="gms-col-price resistance" title="${esc(resistTitle)}">${fmtPrice(nearRes)}</td>
+                    <td class="gms-col-narrow"><span class="${buyClass}">${buyLabel}</span></td>
                     <td class="gms-col-narrow">${snap.score != null ? Number(snap.score).toFixed(1) : '--'}</td>
                     <td class="gms-col-narrow">${fmtDt(it.updated_at || it.created_at)}</td>
                     <td class="gms-col-actions gms-col-actions--wide">
                         <div class="action-links">
+                            <a href="${traceHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer">历史</a>
+                            <button type="button" class="gms-op-btn urt-observe-detail-toggle" data-row="${index}" title="展开/收起信号快照明细">明细</button>
                             <button type="button" class="gms-op-btn gms-op-btn--primary urt-trade-observe-transfer" data-id="${it.id}" data-code="${esc(it.code)}" data-name="${esc(it.name || '')}" title="转入正式交易">转正式交易</button>
                             <button type="button" class="gms-op-btn urt-trade-observe-remove" data-id="${it.id}" title="移出交易观察">移除</button>
                         </div>
                     </td>
+                </tr>
+                <tr class="gms-score-detail-row urt-observe-detail-row" data-detail-for="${index}" style="display:none;">
+                    <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
                 </tr>
             `;
         }).join('');
