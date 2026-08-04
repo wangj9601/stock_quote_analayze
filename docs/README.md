@@ -26,7 +26,7 @@
 | 子目录 | 策略 | 主要入口 |
 |--------|------|----------|
 | [gms/](strategies/gms/) | GMS 均值引力 / 动量 | `GMS_STRATEGY_IMPLEMENTATION_DESIGN.md`、`GMS_STATE_DETECTION_RULES.md`、回测手册 |
-| [urt/](strategies/urt/) | URT 上升趋势 | `URT_STRATEGY_IMPLEMENTATION_DESIGN.md`、与 GMS 对比方案 |
+| [urt/](strategies/urt/) | URT 上升趋势 | 业务简化版、`URT_STRATEGY_IMPLEMENTATION_DESIGN.md`、回测说明、与 GMS 对比方案 |
 | [rpe/](strategies/rpe/) | RPE 比价效应 | 业务简化版、信号计算规则、实现设计 |
 | [sbbr/](strategies/sbbr/) | SBBR 做小做底 | 业务简化版、信号计算规则 |
 | [vsb/](strategies/vsb/) | VSB 3 倍量缩量突破 | 设计与使用手册 |
