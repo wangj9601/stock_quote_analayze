@@ -209,6 +209,22 @@ def _urt_detail_field_order(rows: List[Dict[str, Any]]) -> List[str]:
     return ordered
 
 
+# 与 report_service URT 日报一致：零宽字符前缀使 Excel 按文本显示并保留前导零
+_EXCEL_TEXT_PREFIX = "\u2060"
+
+
+def _normalize_export_stock_code(value: Any) -> str:
+    """导出用股票代码：A 股补零为 6 位；5 位港股码不 zfill(6)；加零宽前缀防 Excel 丢前导零。"""
+    s = str(value or "").replace(_EXCEL_TEXT_PREFIX, "").strip()
+    if not s:
+        return ""
+    if s.isdigit():
+        # 5 位数字是港股码，禁止抬成 6 位 A 股（00981→000981）
+        if len(s) != 5 and 0 < len(s) <= 6:
+            s = s.zfill(6)
+    return _EXCEL_TEXT_PREFIX + s
+
+
 def _format_urt_detail_cell(key: str, value: Any) -> Any:
     if key == "hit_target":
         if value is True or value == 1 or str(value).lower() in ("true", "1", "yes"):
@@ -220,8 +236,7 @@ def _format_urt_detail_cell(key: str, value: Any) -> Any:
         s = str(value or "").strip()
         return _URT_EXIT_REASON_ZH.get(s, s or "")
     if key == "code" and value is not None:
-        # 避免 Excel 把代码当数字丢掉前导零
-        return str(value)
+        return _normalize_export_stock_code(value)
     return value
 
 
@@ -322,18 +337,45 @@ def delete_task(task_id: str) -> bool:
         db.close()
 
 
+def _rewrite_csv_stock_codes_excel_text(raw: bytes) -> bytes:
+    """下载/转 xlsx 前规范化「股票代码」列（兼容历史未补零/无零宽前缀的 CSV）。"""
+    if not raw:
+        return raw
+    text = raw.decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        return raw
+    headers = rows[0]
+    try:
+        code_idx = headers.index("股票代码")
+    except ValueError:
+        return raw
+    out = io.StringIO()
+    w = csv.writer(out, quoting=csv.QUOTE_MINIMAL)
+    w.writerow(headers)
+    for row in rows[1:]:
+        row = list(row)
+        if len(row) > code_idx:
+            row[code_idx] = _normalize_export_stock_code(row[code_idx])
+        w.writerow(row)
+    return out.getvalue().encode("utf-8-sig")
+
+
 def get_details_csv(task_id: str) -> Optional[bytes]:
     tid = normalize_task_id(task_id)
     db = _session()
     try:
         row = db.query(URTBacktestTask).filter(URTBacktestTask.task_id == tid).first()
-        return bytes(row.details_csv_bytes) if row and row.details_csv_bytes else None
+        if not row or not row.details_csv_bytes:
+            return None
+        return _rewrite_csv_stock_codes_excel_text(bytes(row.details_csv_bytes))
     finally:
         db.close()
 
 
 def _csv_bytes_to_xlsx(raw: bytes) -> bytes:
-    """将已存 CSV 明细转为 xlsx（保留中文表头）。"""
+    """将已存 CSV 明细转为 xlsx（保留中文表头；股票代码按文本写入）。"""
     from io import BytesIO
 
     from openpyxl import Workbook
@@ -359,10 +401,19 @@ def _csv_bytes_to_xlsx(raw: bytes) -> bytes:
             code_col = i
             break
     for row in rows[1:]:
+        if code_col and len(row) >= code_col:
+            # 与 URT 日报一致：规范化 + 零宽前缀，并保证写入为文本
+            idx = code_col - 1
+            row = list(row)
+            row[idx] = _normalize_export_stock_code(row[idx])
         ws.append(row)
     if code_col and ws.max_row >= 2:
         for r in range(2, ws.max_row + 1):
-            ws.cell(row=r, column=code_col).number_format = "@"
+            cell = ws.cell(row=r, column=code_col)
+            cell.number_format = "@"
+            # 显式按字符串写入，避免 openpyxl/Excel 把纯数字码当数值
+            if cell.value is not None:
+                cell.value = str(cell.value)
     for col_idx in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = 14
     buf = BytesIO()
