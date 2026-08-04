@@ -4,7 +4,7 @@ Markdown 文档导出工具（Pandoc）
 将 .md 导出为 Word（.docx）或 PDF（.pdf）
 
 示例:
-  python tools/export_docs.py docs/GMS交易回测买卖规则说明.md -f pdf
+  python tools/export_docs.py docs/strategies/gms/GMS交易回测买卖规则说明.md -f pdf
   python tools/export_docs.py a.md b.md -f both -o exported_docs/合并文档
   python tools/export_docs.py --gms-default
 """
@@ -491,7 +491,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python tools/export_docs.py docs/GMS交易回测买卖规则说明.md -f pdf
+  python tools/export_docs.py docs/strategies/gms/GMS交易回测买卖规则说明.md -f pdf
   python tools/export_docs.py docs/a.md docs/b.md -f both -o exported_docs/合并
   python tools/export_docs.py report.md -f docx -o D:/out/report.docx
   python tools/export_docs.py --gms-default

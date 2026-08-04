@@ -2,7 +2,7 @@
 
 > 状态：**已实施**（2026-07-27）  
 > 范围：比价效应（RPE）入场流动性门控  
-> 关联：`docs/RPE_比价效应_信号计算规则.md`、`backend_core/strategies/rpe/filters.py`、`listed_board.py`
+> 关联：`docs/strategies/rpe/RPE_比价效应_信号计算规则.md`、`backend_core/strategies/rpe/filters.py`、`listed_board.py`
 
 ---
 

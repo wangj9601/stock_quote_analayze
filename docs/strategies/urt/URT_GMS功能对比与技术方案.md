@@ -1,7 +1,7 @@
 # URT 与 GMS 功能对比及 URT 技术方案
 
 整理日期：2026-07-23  
-对照基准：`exported_docs/GMS策略功能模块完成列表.xlsx`、`docs/URT_STRATEGY_IMPLEMENTATION_DESIGN.md`
+对照基准：`exported_docs/GMS策略功能模块完成列表.xlsx`、`docs/strategies/urt/URT_STRATEGY_IMPLEMENTATION_DESIGN.md`
 
 ## 1. 策略定位差异
 
@@ -87,7 +87,7 @@ flowchart TD
 - **方案**：
   1. 在 `backtest_runner.py` 任务参数增加 `exit_mode=hit_rate|risk_exit`（默认 `hit_rate` 保持兼容）。
   2. `risk_exit` 模式：持仓期内逐日调用 `evaluate_exit_rules`（价格止损 / 连跌 / 回撤止盈）。
-  3. 同步更新 `docs/URT策略交易回测说明.md`，消除流程图与实现不一致。
+  3. 同步更新 `docs/strategies/urt/URT策略交易回测说明.md`，消除流程图与实现不一致。
 - **参考**：GMS `backtest_runner` 出场分支。
 
 ### 4.2 中优先级

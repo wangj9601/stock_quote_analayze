@@ -335,7 +335,7 @@ backend_core (策略与任务执行)
 
 ## 八、相关参考文档
 
-- `docs/GMS_STRATEGY_IMPLEMENTATION_DESIGN.md`：GMS 策略实现设计
-- `docs/GMS_STATE_DETECTION_RULES.md`：GMS 状态判定规则
+- `docs/strategies/gms/GMS_STRATEGY_IMPLEMENTATION_DESIGN.md`：GMS 策略实现设计
+- `docs/strategies/gms/GMS_STATE_DETECTION_RULES.md`：GMS 状态判定规则
 - `docs/PVFRS量价频共振策略与回测系统说明.md`：PVFRS/PVFARS 管理中心与回测系统参考
 

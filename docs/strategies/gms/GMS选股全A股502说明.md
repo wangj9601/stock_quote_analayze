@@ -17,7 +17,7 @@
 
 ## 运维处理（推荐）
 
-在反向代理上为 **GMS 选股接口单独加长读超时**。仓库示例已写入 **`docs/nginx.conf`**：请使用 **`location ^~ /api/screening/gms-strategy`**（**`^~` 很重要**），否则请求仍会命中通用 **`location /api/`** 里的 **`proxy_read_timeout 30s`**，改「别处」无效。
+在反向代理上为 **GMS 选股接口单独加长读超时**。仓库示例已写入 **`docs/prod/nginx.conf`**（历史副本见 `docs/prod/nginx.legacy.conf`）：请使用 **`location ^~ /api/screening/gms-strategy`**（**`^~` 很重要**），否则请求仍会命中通用 **`location /api/`** 里的 **`proxy_read_timeout 30s`**，改「别处」无效。
 
 ```nginx
 location ^~ /api/screening/gms-strategy {
