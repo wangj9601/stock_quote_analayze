@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""URT 打分：连阳强度 + 量能超额 + 可选换手/量比。"""
+"""URT 打分：连阳强度 + 量能超额 + 中期阳线/多头轻度加分 + 可选换手/量比。"""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
+
+from .indicators import normalize_yang_medium_rules
 
 
 def _yang_score(ya: int, yb: int) -> float:
@@ -23,6 +25,44 @@ def _volume_score(vm: float, need: float) -> float:
     if vm >= need:
         return 30.0 + min(10.0, (vm - need) / need * 10.0)
     return max(0.0, vm / need * 30.0)
+
+
+def _yang_medium_score(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
+    """中期阳线最多约 6 分：按各窗口相对阈值完成度等权平均。"""
+    rules = normalize_yang_medium_rules(cfg)
+    detail = ind.get("yang_medium_detail")
+    by_window: Dict[int, int] = {}
+    if isinstance(detail, list):
+        for d in detail:
+            if isinstance(d, dict) and d.get("window") is not None:
+                try:
+                    by_window[int(d["window"])] = int(d.get("count") or 0)
+                except (TypeError, ValueError):
+                    continue
+    ratios: List[float] = []
+    items: List[Dict[str, Any]] = []
+    for rule in rules:
+        w = int(rule["window"])
+        need = max(1, int(rule["min_up_days"]))
+        cnt = by_window.get(w)
+        if cnt is None:
+            key = f"yang_count_{w}"
+            try:
+                cnt = int(ind.get(key) or 0)
+            except (TypeError, ValueError):
+                cnt = 0
+        ratio = min(1.0, float(cnt) / float(need))
+        ratios.append(ratio)
+        items.append({"window": w, "count": cnt, "min_up_days": need, "ratio": round(ratio, 4)})
+    if not ratios:
+        return 0.0, {"score": 0.0, "max": 6, "items": []}
+    part = round(sum(ratios) / len(ratios) * 6.0, 2)
+    return part, {
+        "score": part,
+        "max": 6,
+        "ok": bool(ind.get("yang_medium_ok")),
+        "items": items,
+    }
 
 
 def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
@@ -46,16 +86,37 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
     }
     score += yang_part
 
+    # 量能主分上限略降为 34，腾出中期阳线/多头空间（总分仍封顶 100）
     vm = float(ind.get("volume_multiple") or 0)
     need = float(cfg.get("volume_multiple") or 2.5)
-    vol_part = _volume_score(vm, need)
+    vol_raw = _volume_score(vm, need)
+    vol_part = round(vol_raw * 34.0 / 40.0, 2)
     parts["volume"] = {
         "volume_multiple": vm,
         "threshold": need,
-        "score": round(vol_part, 2),
-        "max": 40,
+        "score": vol_part,
+        "max": 34,
     }
     score += vol_part
+
+    mid_part, mid_meta = _yang_medium_score(ind, cfg)
+    parts["yang_medium"] = mid_meta
+    score += mid_part
+
+    bull_ok = bool(ind.get("ma_bull_ok"))
+    bull_part = 4.0 if bull_ok else 0.0
+    parts["ma_bull"] = {
+        "ok": bull_ok,
+        "score": bull_part,
+        "max": 4,
+        "periods": ind.get("ma_bull_periods") or [5, 10, 20],
+        "values": ind.get("ma_bull_values"),
+        "ma5": ind.get("ma5"),
+        "ma10": ind.get("ma10"),
+        "ma20_stack": ind.get("ma20_stack"),
+        "hard_filter": bool(cfg.get("require_ma_bull")),
+    }
+    score += bull_part
 
     use_to = bool(cfg.get("use_turnover"))
     use_vr = bool(cfg.get("use_volume_ratio"))
@@ -94,6 +155,11 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
             "close": ind.get("close"),
             "open": ind.get("open"),
             "ma20": ind.get("ma20"),
+            "ma5": ind.get("ma5"),
+            "ma10": ind.get("ma10"),
+            "yang_count_10": ind.get("yang_count_10"),
+            "yang_count_15": ind.get("yang_count_15"),
+            "yang_count_20": ind.get("yang_count_20"),
             "volume": ind.get("volume"),
             "avg_volume_20": ind.get("avg_volume_20"),
             "date": ind.get("date"),

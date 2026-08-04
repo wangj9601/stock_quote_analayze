@@ -117,6 +117,8 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
     min_score = float(cfg.get("min_score") or 70)
     use_turnover = bool(cfg.get("use_turnover"))
     use_volume_ratio = bool(cfg.get("use_volume_ratio"))
+    use_yang_medium = bool(cfg.get("use_yang_medium"))
+    require_ma_bull = bool(cfg.get("require_ma_bull"))
     min_turn = float(cfg.get("min_turnover") or 0) if use_turnover else None
     min_vr = float(cfg.get("min_volume_ratio") or 0) if use_volume_ratio else None
     a_w = int(rule_a.get("window") or 4)
@@ -137,9 +139,18 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         above = False
     ya = int(detail.get("yang_count_4") or 0)
     yb = int(detail.get("yang_count_5") or 0)
+    y10 = detail.get("yang_count_10")
+    y15 = detail.get("yang_count_15")
+    y20 = detail.get("yang_count_20")
     rule_a_ok = bool(detail.get("rule_a_ok")) if detail.get("rule_a_ok") is not None else (ya >= a_n)
     rule_b_ok = bool(detail.get("rule_b_ok")) if detail.get("rule_b_ok") is not None else (yb >= b_n)
     yang_ok = rule_a_ok or rule_b_ok
+    yang_medium_ok = (
+        bool(detail.get("yang_medium_ok"))
+        if detail.get("yang_medium_ok") is not None
+        else True
+    )
+    ma_bull_ok = bool(detail.get("ma_bull_ok")) if detail.get("ma_bull_ok") is not None else False
     vm = detail.get("volume_multiple")
     try:
         vm_f = float(vm) if vm is not None else None
@@ -163,12 +174,29 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
 
     filter_ok = detail.get("filter_ok")
     if filter_ok is None:
-        filter_ok = bool(above and yang_ok and volume_ok and turnover_ok and vr_ok)
+        filter_ok = bool(
+            above
+            and yang_ok
+            and volume_ok
+            and turnover_ok
+            and vr_ok
+            and (yang_medium_ok if use_yang_medium else True)
+            and (ma_bull_ok if require_ma_bull else True)
+        )
     else:
         filter_ok = bool(filter_ok)
     score = float(detail.get("score") or 0)
     score_ok = bool(detail.get("score_ok")) if detail.get("score_ok") is not None else (score >= min_score)
     buy = bool(detail.get("buy_signal")) if detail.get("buy_signal") is not None else (filter_ok and score_ok)
+
+    mid_rules = cfg.get("yang_medium_rules") or []
+    mid_rule_txt = "、".join(
+        f"{int(r.get('window'))}日≥{int(r.get('min_up_days') or 0)}阳"
+        for r in mid_rules
+        if isinstance(r, dict) and r.get("window") is not None
+    ) or "10日≥6阳、15日≥8阳、20日≥10阳"
+    bull_periods = detail.get("ma_bull_periods") or cfg.get("ma_bull_periods") or [5, 10, 20]
+    bull_label = ">".join(f"MA{p}" for p in bull_periods)
 
     steps = [
         {
@@ -198,12 +226,39 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         {
             "id": "volume_multiple",
             "name": "放量确认",
-            "rule": f"当日量 / MA{ma_period}均量 ≥ {vol_need}",
+            "rule": f"当日量 / 过去均量 ≥ {vol_need}",
             "actual": f"量比倍数={vm_f if vm_f is not None else '—'}",
             "pass": volume_ok,
             "required": True,
         },
     ]
+    # 中期阳线：始终展示；仅开关开启时计入硬筛
+    steps.append(
+        {
+            "id": "yang_medium",
+            "name": "中期阳线密度",
+            "rule": mid_rule_txt + ("（硬筛）" if use_yang_medium else "（展示/打分，默认不硬筛）"),
+            "actual": f"10日阳={y10}，15日阳={y15}，20日阳={y20}",
+            "pass": yang_medium_ok if use_yang_medium else True,
+            "required": use_yang_medium,
+            "note": None if use_yang_medium else "未开启硬筛，本步不否决买点",
+        }
+    )
+    steps.append(
+        {
+            "id": "ma_bull",
+            "name": "均线多头排列",
+            "rule": bull_label + ("（硬筛）" if require_ma_bull else "（展示/打分，默认不硬筛）"),
+            "actual": (
+                f"MA5={detail.get('ma5')}，MA10={detail.get('ma10')}，"
+                f"MA20={detail.get('ma20_stack') or ma20} → "
+                f"{'多头' if ma_bull_ok else '非多头'}"
+            ),
+            "pass": ma_bull_ok if require_ma_bull else True,
+            "required": require_ma_bull,
+            "note": None if require_ma_bull else "未开启硬筛，本步不否决买点",
+        }
+    )
     if use_turnover:
         steps.append(
             {
@@ -238,14 +293,18 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         }
     )
 
+    formula_detail = (
+        f"硬筛：站上MA{ma_period} ∧ 连阳({a_w}≥{a_n}∨{b_w}≥{b_n}) ∧ 放量≥{vol_need}"
+        + (f" ∧ 中期阳线({mid_rule_txt})" if use_yang_medium else "")
+        + (f" ∧ 多头({bull_label})" if require_ma_bull else "")
+        + (f" ∧ 换手≥{min_turn}" if use_turnover else "")
+        + (f" ∧ 量比≥{min_vr}" if use_volume_ratio else "")
+        + f"；再要求得分≥{min_score}"
+    )
+
     return {
         "formula": "买点 = 硬筛全部通过 AND 得分≥最低得分",
-        "formula_detail": (
-            f"硬筛：站上MA{ma_period} ∧ 连阳({a_w}≥{a_n}∨{b_w}≥{b_n}) ∧ 放量≥{vol_need}"
-            + (f" ∧ 换手≥{min_turn}" if use_turnover else "")
-            + (f" ∧ 量比≥{min_vr}" if use_volume_ratio else "")
-            + f"；再要求得分≥{min_score}"
-        ),
+        "formula_detail": formula_detail,
         "min_score": min_score,
         "score": score,
         "filter_ok": filter_ok,
@@ -308,8 +367,19 @@ def evaluate_buy_signal(
         "open": ind.get("open"),
         "ma20": ind.get("ma20"),
         "above_ma20": ind.get("above_ma20"),
+        "ma5": ind.get("ma5"),
+        "ma10": ind.get("ma10"),
+        "ma20_stack": ind.get("ma20_stack"),
+        "ma_bull_ok": ind.get("ma_bull_ok"),
+        "ma_bull_periods": ind.get("ma_bull_periods"),
+        "ma_bull_values": ind.get("ma_bull_values"),
         "yang_count_4": ind.get("yang_count_4"),
         "yang_count_5": ind.get("yang_count_5"),
+        "yang_count_10": ind.get("yang_count_10"),
+        "yang_count_15": ind.get("yang_count_15"),
+        "yang_count_20": ind.get("yang_count_20"),
+        "yang_medium_ok": ind.get("yang_medium_ok"),
+        "yang_medium_detail": ind.get("yang_medium_detail"),
         "yang_rule": yang_rule,
         "rule_a_ok": ind.get("rule_a_ok"),
         "rule_b_ok": ind.get("rule_b_ok"),

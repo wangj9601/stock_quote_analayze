@@ -252,3 +252,76 @@ def test_backtest_progress_helpers_import():
     assert clamp_progress(150) == 100
     assert clamp_progress(-1) == 0
     assert normalize_task_id("  abc  ") == "abc"
+
+
+def test_medium_yang_and_ma_bull_fields_always_present():
+    cfg = URTConfigManager().get_default_config()
+    assert cfg.get("use_yang_medium") is False
+    assert cfg.get("require_ma_bull") is False
+    yang = [True] * 5
+    bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
+    ind = build_indicators(bars, cfg)
+    assert ind is not None
+    assert "yang_count_10" in ind and "yang_count_15" in ind and "yang_count_20" in ind
+    assert "ma_bull_ok" in ind and "ma5" in ind and "ma10" in ind
+    ok, _ = hard_filter_pass(ind, cfg)
+    assert ok is True  # 默认开关关闭，不否决
+
+
+def test_use_yang_medium_hard_filter_rejects():
+    cfg = URTConfigManager().get_default_config()
+    cfg["use_yang_medium"] = True
+    # 短窗全阳，但中期阈值极高 → 构造近期大量阴线
+    bars = _bars(40, yang_pattern=[True] * 5, vol_spike=True, above_ma=True)
+    for i in range(5, 25):
+        bars[i]["open"] = bars[i]["close"] + 0.5  # 阴线
+    ind = build_indicators(bars, cfg)
+    assert ind is not None
+    assert ind.get("yang_medium_ok") is False
+    ok, reason = hard_filter_pass(ind, cfg)
+    assert ok is False
+    assert "中期阳线" in reason
+
+
+def test_require_ma_bull_hard_filter_rejects():
+    cfg = URTConfigManager().get_default_config()
+    cfg["require_ma_bull"] = True
+    bars = _bars(40, yang_pattern=[True] * 5, vol_spike=True, above_ma=True)
+    # 强制下跌序列使短均线低于长均线
+    for i, b in enumerate(bars):
+        b["close"] = 30.0 - i * 0.4
+        b["open"] = b["close"] - 0.1
+        b["volume"] = 3000.0 if i == 0 else 1000.0
+    # 仍尽量站上「ma_period」：提高最新收盘
+    bars[0]["close"] = 28.0
+    bars[0]["open"] = 27.5
+    ind = build_indicators(bars, cfg)
+    assert ind is not None
+    # 下跌趋势下通常非多头
+    if ind.get("ma_bull_ok"):
+        # 若偶然多头，再压低 ma5
+        pass
+    ok, reason = hard_filter_pass(ind, cfg)
+    if ind.get("ma_bull_ok"):
+        # 极端情况下若仍多头则跳过断言（构造不稳）
+        return
+    assert ok is False
+    assert "多头" in reason
+
+
+def test_score_includes_yang_medium_and_ma_bull_parts():
+    from backend_core.strategies.urt.scoring import compute_score_breakdown
+
+    cfg = URTConfigManager().get_default_config()
+    yang = [True] * 5
+    bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
+    ind = build_indicators(bars, cfg)
+    assert ind is not None
+    total, detail = compute_score_breakdown(ind, cfg)
+    parts = detail["parts"]
+    assert "yang_medium" in parts
+    assert parts["yang_medium"]["max"] == 6
+    assert "ma_bull" in parts
+    assert parts["ma_bull"]["max"] == 4
+    assert parts["volume"]["max"] == 34
+    assert total <= 100

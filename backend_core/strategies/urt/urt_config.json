@@ -2,6 +2,14 @@
   "ma_period": 20,
   "yang_rule_a": {"window": 4, "min_up_days": 3},
   "yang_rule_b": {"window": 5, "min_up_days": 4},
+  "yang_medium_rules": [
+    {"window": 10, "min_up_days": 6},
+    {"window": 15, "min_up_days": 8},
+    {"window": 20, "min_up_days": 10}
+  ],
+  "use_yang_medium": false,
+  "require_ma_bull": false,
+  "ma_bull_periods": [5, 10, 20],
   "volume_lookback": 20,
   "volume_multiple": 2.5,
   "min_score": 70,

@@ -85,6 +85,47 @@
               </el-col>
             </el-row>
 
+            <el-divider content-position="left">中期阳线（默认不硬筛，参与展示/打分）</el-divider>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="mb-3"
+              title="开启「中期阳线硬筛」后，须同时满足 10/15/20 日最低阳线数，买点会明显变少。"
+            />
+            <el-form-item label="中期阳线硬筛">
+              <el-switch v-model="form.use_yang_medium" active-text="开启" inactive-text="关闭" />
+            </el-form-item>
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-form-item label="10日最少阳线">
+                  <el-input-number v-model="form.yang_medium_rules[0].min_up_days" :min="1" :max="10" class="w-full" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="15日最少阳线">
+                  <el-input-number v-model="form.yang_medium_rules[1].min_up_days" :min="1" :max="15" class="w-full" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="20日最少阳线">
+                  <el-input-number v-model="form.yang_medium_rules[2].min_up_days" :min="1" :max="20" class="w-full" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-divider content-position="left">均线多头（默认不硬筛，参与展示/打分）</el-divider>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="mb-3"
+              title="多头排列默认 MA5>MA10>MA20。开启硬筛后，回调再起形态更容易被过滤。"
+            />
+            <el-form-item label="多头排列硬筛">
+              <el-switch v-model="form.require_ma_bull" active-text="开启" inactive-text="关闭" />
+            </el-form-item>
+
             <el-divider content-position="left">精细化（可选）</el-divider>
             <el-row :gutter="12">
               <el-col :span="8">
@@ -181,6 +222,14 @@ const form = reactive<any>({
   min_score: 70,
   yang_rule_a: { window: 4, min_up_days: 3 },
   yang_rule_b: { window: 5, min_up_days: 4 },
+  yang_medium_rules: [
+    { window: 10, min_up_days: 6 },
+    { window: 15, min_up_days: 8 },
+    { window: 20, min_up_days: 10 },
+  ],
+  use_yang_medium: false,
+  require_ma_bull: false,
+  ma_bull_periods: [5, 10, 20],
   use_turnover: false,
   use_volume_ratio: false,
   min_turnover: 0,
@@ -203,6 +252,24 @@ function applyParams(params: Record<string, any> = {}) {
   form.min_score = params.min_score ?? 70
   form.yang_rule_a = { window: 4, min_up_days: 3, ...(params.yang_rule_a || {}) }
   form.yang_rule_b = { window: 5, min_up_days: 4, ...(params.yang_rule_b || {}) }
+  const midDefault = [
+    { window: 10, min_up_days: 6 },
+    { window: 15, min_up_days: 8 },
+    { window: 20, min_up_days: 10 },
+  ]
+  const midRaw = Array.isArray(params.yang_medium_rules) ? params.yang_medium_rules : []
+  form.yang_medium_rules = midDefault.map((d, i) => {
+    const hit = midRaw.find((r: any) => Number(r?.window) === d.window) || midRaw[i] || {}
+    return {
+      window: d.window,
+      min_up_days: Number(hit.min_up_days ?? d.min_up_days),
+    }
+  })
+  form.use_yang_medium = !!params.use_yang_medium
+  form.require_ma_bull = !!params.require_ma_bull
+  form.ma_bull_periods = Array.isArray(params.ma_bull_periods) && params.ma_bull_periods.length >= 2
+    ? params.ma_bull_periods.map((x: any) => Number(x))
+    : [5, 10, 20]
   form.use_turnover = !!params.use_turnover
   form.use_volume_ratio = !!params.use_volume_ratio
   form.min_turnover = params.min_turnover ?? 0

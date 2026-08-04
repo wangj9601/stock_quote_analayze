@@ -436,6 +436,12 @@ const ScreeningPage = {
             ma20: stock.ma20,
             yang_count_4: stock.yang_count_4,
             yang_count_5: stock.yang_count_5,
+            yang_count_10: stock.yang_count_10,
+            yang_count_15: stock.yang_count_15,
+            yang_count_20: stock.yang_count_20,
+            ma_bull_ok: stock.ma_bull_ok,
+            ma5: stock.ma5,
+            ma10: stock.ma10,
             volume_multiple: stock.volume_multiple,
             volume_ratio: stock.volume_ratio,
             turnover_rate: stock.turnover_rate,
@@ -5202,6 +5208,10 @@ const ScreeningPage = {
                         <td class="gms-col-price">${stock.ma20 != null ? Number(stock.ma20).toFixed(2) : '--'}</td>
                         <td class="gms-col-narrow">${stock.yang_count_4 != null ? stock.yang_count_4 : '--'}</td>
                         <td class="gms-col-narrow">${stock.yang_count_5 != null ? stock.yang_count_5 : '--'}</td>
+                        <td class="gms-col-narrow">${stock.yang_count_10 != null ? stock.yang_count_10 : '--'}</td>
+                        <td class="gms-col-narrow">${stock.yang_count_15 != null ? stock.yang_count_15 : '--'}</td>
+                        <td class="gms-col-narrow">${stock.yang_count_20 != null ? stock.yang_count_20 : '--'}</td>
+                        <td class="gms-col-narrow">${stock.ma_bull_ok === true ? '是' : (stock.ma_bull_ok === false ? '否' : '--')}</td>
                         <td class="gms-col-narrow">${stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '--'}</td>
                         <td class="gms-col-narrow">${stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '--'}</td>
                         <td class="gms-col-narrow">${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
@@ -5217,7 +5227,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row urt-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="14" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
+                        <td colspan="18" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
                     </tr>
                 `;
             } else if (strategy === 'one-yang-three-lines') {
@@ -5806,6 +5816,7 @@ const ScreeningPage = {
         } else if (strategy === 'urt') {
             headers = [
                 '股票代码', '股票名称', '信号日', '收盘', 'MA20', '4日阳', '5日阳',
+                '10日阳', '15日阳', '20日阳', '多头',
                 '量能倍数', '量比', '换手%', '支撑', '阻力', '得分',
             ];
             rows = data.map((stock) => {
@@ -5829,6 +5840,10 @@ const ScreeningPage = {
                 stock.ma20 != null ? Number(stock.ma20).toFixed(2) : '',
                 stock.yang_count_4 != null ? stock.yang_count_4 : '',
                 stock.yang_count_5 != null ? stock.yang_count_5 : '',
+                stock.yang_count_10 != null ? stock.yang_count_10 : '',
+                stock.yang_count_15 != null ? stock.yang_count_15 : '',
+                stock.yang_count_20 != null ? stock.yang_count_20 : '',
+                stock.ma_bull_ok === true ? '是' : (stock.ma_bull_ok === false ? '否' : ''),
                 stock.volume_multiple != null ? Number(stock.volume_multiple).toFixed(2) : '',
                 stock.volume_ratio != null ? Number(stock.volume_ratio).toFixed(2) : '',
                 stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '',

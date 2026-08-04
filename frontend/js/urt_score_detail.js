@@ -49,12 +49,20 @@ const UrtScoreDetail = {
         const ma20 = fields.ma20 != null ? fields.ma20 : (src.ma20 != null ? src.ma20 : inputs.ma20);
         const yang4 = fields.yang_count_4 != null ? fields.yang_count_4 : src.yang_count_4;
         const yang5 = fields.yang_count_5 != null ? fields.yang_count_5 : src.yang_count_5;
+        const yang10 = fields.yang_count_10 != null ? fields.yang_count_10 : (src.yang_count_10 != null ? src.yang_count_10 : inputs.yang_count_10);
+        const yang15 = fields.yang_count_15 != null ? fields.yang_count_15 : (src.yang_count_15 != null ? src.yang_count_15 : inputs.yang_count_15);
+        const yang20 = fields.yang_count_20 != null ? fields.yang_count_20 : (src.yang_count_20 != null ? src.yang_count_20 : inputs.yang_count_20);
+        const ma5 = fields.ma5 != null ? fields.ma5 : (src.ma5 != null ? src.ma5 : inputs.ma5);
+        const ma10 = fields.ma10 != null ? fields.ma10 : (src.ma10 != null ? src.ma10 : inputs.ma10);
+        const maBullOk = fields.ma_bull_ok != null ? fields.ma_bull_ok : src.ma_bull_ok;
         const vm = fields.volume_multiple != null ? fields.volume_multiple : src.volume_multiple;
         const vr = fields.volume_ratio != null ? fields.volume_ratio : src.volume_ratio;
         const to = fields.turnover_rate != null ? fields.turnover_rate : src.turnover_rate;
 
         const ma = parts.above_ma20 || {};
         const yang = parts.yang || {};
+        const yangMed = parts.yang_medium || {};
+        const maBull = parts.ma_bull || {};
         const vol = parts.volume || {};
         const turnover = parts.turnover || {};
         const vRatio = parts.volume_ratio || {};
@@ -126,9 +134,21 @@ const UrtScoreDetail = {
                 note: `4日阳 ${yang.yang_count_4 != null ? yang.yang_count_4 : (yang4 != null ? yang4 : '--')} · 5日阳 ${yang.yang_count_5 != null ? yang.yang_count_5 : (yang5 != null ? yang5 : '--')}`,
             },
             {
+                name: '中期阳线',
+                score: yangMed.score,
+                max: yangMed.max != null ? yangMed.max : 6,
+                note: `10日 ${yang10 != null ? yang10 : '--'} · 15日 ${yang15 != null ? yang15 : '--'} · 20日 ${yang20 != null ? yang20 : '--'}${yangMed.ok === true ? '（达标）' : (yangMed.ok === false ? '（未达标）' : '')}`,
+            },
+            {
+                name: '均线多头',
+                score: maBull.score,
+                max: maBull.max != null ? maBull.max : 4,
+                note: `MA5 ${this._fmt(maBull.ma5 != null ? maBull.ma5 : ma5, 2)} · MA10 ${this._fmt(maBull.ma10 != null ? maBull.ma10 : ma10, 2)} · ${(maBull.ok === true || maBullOk === true) ? '多头' : ((maBull.ok === false || maBullOk === false) ? '非多头' : '--')}`,
+            },
+            {
                 name: '量能倍数',
                 score: vol.score,
-                max: vol.max != null ? vol.max : 40,
+                max: vol.max != null ? vol.max : 34,
                 note: `倍数 ${this._fmt(vol.volume_multiple != null ? vol.volume_multiple : vm, 2)} / 阈值 ${this._fmt(vol.threshold, 2)}`,
             },
             {
@@ -153,7 +173,10 @@ const UrtScoreDetail = {
         html += '<div class="gms-version-meta-line">';
         html += `<span>开 ${this._fmt(open, 2)}</span>`;
         html += `<span>收 ${this._fmt(close, 2)}</span>`;
+        html += `<span>MA5 ${this._fmt(ma5, 2)}</span>`;
+        html += `<span>MA10 ${this._fmt(ma10, 2)}</span>`;
         html += `<span>MA20 ${this._fmt(ma20, 2)}</span>`;
+        html += `<span>10/15/20阳 ${yang10 != null ? yang10 : '--'}/${yang15 != null ? yang15 : '--'}/${yang20 != null ? yang20 : '--'}</span>`;
         html += `<span>量能倍数 ${this._fmt(vm, 2)}</span>`;
         html += `<span>量比 ${this._fmt(vr, 2)}</span>`;
         html += `<span>换手 ${this._fmt(to, 2)}%</span>`;

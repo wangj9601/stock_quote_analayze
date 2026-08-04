@@ -37,6 +37,16 @@ class URTConfigManager:
             "ma_period": 20,
             "yang_rule_a": {"window": 4, "min_up_days": 3},
             "yang_rule_b": {"window": 5, "min_up_days": 4},
+            # 中期阳线：默认仅展示/打分；use_yang_medium=true 时参与硬筛（须全部满足）
+            "yang_medium_rules": [
+                {"window": 10, "min_up_days": 6},
+                {"window": 15, "min_up_days": 8},
+                {"window": 20, "min_up_days": 10},
+            ],
+            "use_yang_medium": False,
+            # 均线多头：默认仅展示/打分；require_ma_bull=true 时硬筛
+            "require_ma_bull": False,
+            "ma_bull_periods": [5, 10, 20],
             "volume_lookback": 20,
             "volume_multiple": 2.5,
             "min_score": 70,
@@ -124,6 +134,10 @@ class URTConfigManager:
             "min_turnover",
             "min_volume_ratio",
             "history_calendar_days",
+            "use_yang_medium",
+            "require_ma_bull",
+            "ma_bull_periods",
+            "yang_medium_rules",
         ):
             if key in overrides and overrides[key] is not None:
                 cfg[key] = overrides[key]

@@ -35,8 +35,12 @@ def test_build_buy_logic_pass():
     assert logic["score_ok"] is True
     assert logic["formula"].startswith("买点")
     ids = [s["id"] for s in logic["steps"]]
-    assert ids == ["above_ma", "yang", "volume_multiple", "min_score"]
+    assert ids == ["above_ma", "yang", "volume_multiple", "yang_medium", "ma_bull", "min_score"]
     assert all(s["pass"] for s in logic["steps"])
+    mid = next(s for s in logic["steps"] if s["id"] == "yang_medium")
+    assert mid["required"] is False
+    bull = next(s for s in logic["steps"] if s["id"] == "ma_bull")
+    assert bull["required"] is False
 
 
 def test_build_buy_logic_fail_volume():
@@ -65,3 +69,48 @@ def test_build_buy_logic_fail_volume():
     assert logic["buy_signal"] is False
     vol_step = next(s for s in logic["steps"] if s["id"] == "volume_multiple")
     assert vol_step["pass"] is False
+
+
+def test_build_buy_logic_medium_yang_and_ma_bull_hard():
+    cfg = {
+        "ma_period": 20,
+        "volume_multiple": 2.5,
+        "min_score": 70,
+        "yang_rule_a": {"window": 4, "min_up_days": 3},
+        "yang_rule_b": {"window": 5, "min_up_days": 4},
+        "use_yang_medium": True,
+        "require_ma_bull": True,
+        "yang_medium_rules": [
+            {"window": 10, "min_up_days": 6},
+            {"window": 15, "min_up_days": 8},
+            {"window": 20, "min_up_days": 10},
+        ],
+        "ma_bull_periods": [5, 10, 20],
+    }
+    detail = {
+        "close": 10.5,
+        "ma20": 10.0,
+        "above_ma20": True,
+        "yang_count_4": 3,
+        "yang_count_5": 4,
+        "yang_count_10": 5,
+        "yang_count_15": 8,
+        "yang_count_20": 10,
+        "yang_medium_ok": False,
+        "ma_bull_ok": False,
+        "ma5": 10.0,
+        "ma10": 10.1,
+        "ma20_stack": 10.2,
+        "rule_a_ok": True,
+        "rule_b_ok": True,
+        "volume_multiple": 2.8,
+        "score": 86,
+    }
+    logic = build_buy_logic(detail, cfg)
+    assert logic["filter_ok"] is False
+    mid = next(s for s in logic["steps"] if s["id"] == "yang_medium")
+    assert mid["required"] is True and mid["pass"] is False
+    bull = next(s for s in logic["steps"] if s["id"] == "ma_bull")
+    assert bull["required"] is True and bull["pass"] is False
+    assert "中期阳线" in logic["formula_detail"]
+    assert "多头" in logic["formula_detail"]
