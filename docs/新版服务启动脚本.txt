@@ -1,0 +1,101 @@
+
+
+
+
+  python -m pip install --upgrade pip
+python -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+python -m pip config list
+
+python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+python -m pip config list
+
+
+
+
+
+  powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\scripts\deploy\release.ps1" `
+  -PackagePath "C:\work\stock_quote_analayze\tmp\stock_quote_release_20260518_092657.zip" `
+  -DeployRoot "C:\work\stock_quote_analayze" `
+  -NginxHome "C:\work\stock_quote_analayze\tools\nginx-1.28.0" `
+  -SkipHealthCheck
+
+
+只需要执行一次。
+//  -DeployRoot "C:\work\stock_quote_analayze" `
+//  -NssmExe "C:\work\stock_quote_analayze\tools\nssm.exe" `
+//  -StartAfterInstall
+
+
+powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\scripts\deploy\install_services.ps1" `
+  -DeployRoot "C:\work\stock_quote_analayze" `
+  -PythonExe "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\python.exe" `
+  -NssmExe "C:\work\stock_quote_analayze\tools\nssm.exe" `
+  -StartAfterInstall
+
+
+
+powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\scripts\deploy\install_services.ps1" `
+  -DeployRoot "C:\work\stock_quote_analayze" `
+  -PythonExe "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\python.exe" `
+  -NssmExe "C:\work\stock_quote_analayze\tools\nssm.exe" `
+  -PreparePython `
+  -StartAfterInstall
+
+
+  powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\scripts\deploy\release.ps1" `
+  -PackagePath "C:\work\stock_quote_analayze\tmp\stock_quote_release_20260510_162055.zip" `
+  -DeployRoot "C:\work\stock_quote_analayze" `
+  -NginxHome "C:\work\stock_quote_analayze\tools\nginx-1.28.0" `
+  -SkipHealthCheck `
+  -AllowScriptPathMismatch
+
+
+
+
+powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\current\scripts\deploy\release.ps1" `
+    -PackagePath "C:\work\stock_quote_analayze\tmp\stock_quote_release_20260518_092657.zip" `
+    -DeployRoot "C:\work\stock_quote_analayze" `
+    -NginxHome "C:\work\stock_quote_analayze\tools\nginx-1.28.0"
+
+
+
+
+
+
+  powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\scripts\deploy\release.ps1" `
+  -PackagePath "C:\work\stock_quote_analayze\tmp\stock_quote_release_20260803_111430.zip" `
+  -DeployRoot "C:\work\stock_quote_analayze" `
+  -PythonExe "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\python.exe" `
+  -NginxHome "C:\work\stock_quote_analayze\tools\nginx-1.28.0" `
+  -ManualProcessDeploy `
+  -SkipPip `
+  -SkipHealthCheck `
+  -AllowScriptPathMismatch
+
+
+
+  powershell -ExecutionPolicy Bypass -File "C:\work\stock_quote_analayze\scripts\deploy\release.ps1" `
+  -PackagePath "C:\work\stock_quote_analayze\tmp\stock_quote_release_20260803_111430.zip" `
+  -DeployRoot "C:\work\stock_quote_analayze" `
+  -PythonExe "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\python.exe" `
+  -NginxHome "C:\work\stock_quote_analayze\tools\nginx-1.28.0" `
+  -ManualProcessDeploy `
+  -SkipHealthCheck `
+  -AllowScriptPathMismatch
+
+
+
+  Select-Object ProcessId, CommandLine# 先看会杀谁（推荐先跑）
+PS C:\work\stock_quote_analayze\scripts\deploy>
+
+.\Kill-StockQuotePython.ps1 -DeployRoot 'c:\work\stock_quote_analayze' -WhatIf
+
+# 默认 DeployRoot
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\deploy\Kill-StockQuotePython.ps1" -DeployRoot 'c:\work\stock_quote_analayze'
+
+# 指定部署根目录 + 与 release 相同的 Python
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\deploy\Kill-StockQuotePython.ps1" `
+  -DeployRoot "c:\work\stock_quote_analayze" `
+  -PythonExe "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\python.exe"
+
+  替换为 PowerShell 5.1 兼容的写法
