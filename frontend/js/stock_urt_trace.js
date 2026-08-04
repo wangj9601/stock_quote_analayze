@@ -288,6 +288,20 @@
                 return;
             }
             tbody.innerHTML = pageData.map((r, index) => {
+                const st = (r.score_detail && r.score_detail.structure) || {};
+                const nearSup = r.nearest_support != null ? r.nearest_support : st.nearest_support;
+                const nearRes = r.nearest_resistance != null ? r.nearest_resistance : st.nearest_resistance;
+                const supports = Array.isArray(r.support_levels) && r.support_levels.length
+                    ? r.support_levels
+                    : (Array.isArray(st.support_levels) ? st.support_levels : []);
+                const resists = Array.isArray(r.resistance_levels) && r.resistance_levels.length
+                    ? r.resistance_levels
+                    : (Array.isArray(st.resistance_levels) ? st.resistance_levels : []);
+                const fmtPx = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--');
+                const titleLevels = (arr, nearest) => {
+                    if (arr && arr.length) return arr.map((x) => Number(x).toFixed(2)).join('、');
+                    return nearest != null ? String(nearest) : '';
+                };
                 let detailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
                 if (window.UrtScoreDetail) {
                     detailHtml = window.UrtScoreDetail.buildHtml({
@@ -299,6 +313,13 @@
                         filter_ok: r.filter_ok,
                         score_ok: r.score_ok,
                         filter_reason: r.filter_reason,
+                        nearest_support: nearSup,
+                        nearest_resistance: nearRes,
+                        support_levels: supports,
+                        resistance_levels: resists,
+                        kde_ok: r.kde_ok != null ? r.kde_ok : st.kde_ok,
+                        kde_reason: r.kde_reason || st.kde_reason,
+                        kde_lookback_used: r.kde_lookback_used != null ? r.kde_lookback_used : st.kde_lookback_used,
                         fields: {
                             close: r.close,
                             open: r.open,
@@ -312,6 +333,8 @@
                             filter_ok: r.filter_ok,
                             score_ok: r.score_ok,
                             filter_reason: r.filter_reason,
+                            nearest_support: nearSup,
+                            nearest_resistance: nearRes,
                         },
                     });
                 }
@@ -331,17 +354,19 @@
                     <td>${r.date || '--'}</td>
                     <td class="${r.buy_signal ? 'buy-yes' : ''}">${r.buy_signal ? '是' : '否'}</td>
                     <td><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
-                    <td>${r.close != null ? Number(r.close).toFixed(2) : '--'}</td>
-                    <td>${r.ma20 != null ? Number(r.ma20).toFixed(2) : '--'}</td>
+                    <td>${fmtPx(r.close)}</td>
+                    <td>${fmtPx(r.ma20)}</td>
                     <td>${r.yang_count_4 ?? '--'}</td>
                     <td>${r.yang_count_5 ?? '--'}</td>
                     <td>${r.volume_multiple != null ? Number(r.volume_multiple).toFixed(2) : '--'}</td>
                     <td>${r.volume_ratio != null ? Number(r.volume_ratio).toFixed(2) : '--'}</td>
                     <td>${r.turnover_rate != null ? Number(r.turnover_rate).toFixed(2) : '--'}</td>
+                    <td class="support" title="${titleLevels(supports, nearSup)}">${fmtPx(nearSup)}</td>
+                    <td class="resistance" title="${titleLevels(resists, nearRes)}">${fmtPx(nearRes)}</td>
                     <td><button type="button" class="gms-op-btn urt-score-detail-toggle" data-row="${index}">明细</button></td>
                 </tr>
                 <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                    <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
+                    <td colspan="13" class="gms-score-detail-cell">${detailHtml}</td>
                 </tr>`;
             }).join('');
         }

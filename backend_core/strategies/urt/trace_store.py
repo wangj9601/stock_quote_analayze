@@ -140,6 +140,25 @@ def recompute_trace_for_stock(
             detail = evaluate_buy_signal(hist[i:], config, require_pass=False)
             if not detail:
                 continue
+            # 确保当日 KDE 支撑/阻力写入 score_detail.structure（记录表 JSON）
+            sd = detail.get("score_detail")
+            if not isinstance(sd, dict):
+                sd = {}
+                detail["score_detail"] = sd
+            st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+            if not st.get("method"):
+                st = {
+                    "support_levels": detail.get("support_levels") or [],
+                    "resistance_levels": detail.get("resistance_levels") or [],
+                    "nearest_support": detail.get("nearest_support"),
+                    "nearest_resistance": detail.get("nearest_resistance"),
+                    "kde_ok": detail.get("kde_ok"),
+                    "kde_reason": detail.get("kde_reason"),
+                    "kde_lookback_used": detail.get("kde_lookback_used"),
+                    "kde_lookback_expanded": detail.get("kde_lookback_expanded"),
+                    "method": "kde_volume_weighted",
+                }
+                sd["structure"] = st
             rows.append({"code": code_n, "name": name, **detail})
         except Exception as e:
             logger.debug("URT 单股重算跳过 %s day=%s: %s", code_n, date_i, e)
@@ -440,27 +459,38 @@ def query_trace_by_code(
     if end_date:
         q = q.filter(URTSignalTrace.date <= str(end_date)[:10])
     rows = q.order_by(URTSignalTrace.date.desc()).limit(int(limit)).all()
-    return [
-        {
-            "code": r.code,
-            "name": r.name,
-            "date": r.date,
-            "config_id": r.config_id,
-            "buy_signal": r.buy_signal,
-            "score": r.score,
-            "close": r.close,
-            "open": r.open,
-            "ma20": r.ma20,
-            "above_ma20": r.above_ma20,
-            "yang_count_4": r.yang_count_4,
-            "yang_count_5": r.yang_count_5,
-            "yang_rule": r.yang_rule,
-            "volume": r.volume,
-            "avg_volume_20": r.avg_volume_20,
-            "volume_multiple": r.volume_multiple,
-            "volume_ratio": r.volume_ratio,
-            "turnover_rate": r.turnover_rate,
-            "score_detail": r.score_detail,
-        }
-        for r in rows
-    ]
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        sd = r.score_detail if isinstance(r.score_detail, dict) else {}
+        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+        out.append(
+            {
+                "code": r.code,
+                "name": r.name,
+                "date": r.date,
+                "config_id": r.config_id,
+                "buy_signal": r.buy_signal,
+                "score": r.score,
+                "close": r.close,
+                "open": r.open,
+                "ma20": r.ma20,
+                "above_ma20": r.above_ma20,
+                "yang_count_4": r.yang_count_4,
+                "yang_count_5": r.yang_count_5,
+                "yang_rule": r.yang_rule,
+                "volume": r.volume,
+                "avg_volume_20": r.avg_volume_20,
+                "volume_multiple": r.volume_multiple,
+                "volume_ratio": r.volume_ratio,
+                "turnover_rate": r.turnover_rate,
+                "score_detail": r.score_detail,
+                "support_levels": st.get("support_levels") or [],
+                "resistance_levels": st.get("resistance_levels") or [],
+                "nearest_support": st.get("nearest_support"),
+                "nearest_resistance": st.get("nearest_resistance"),
+                "kde_ok": st.get("kde_ok"),
+                "kde_reason": st.get("kde_reason"),
+                "kde_lookback_used": st.get("kde_lookback_used"),
+            }
+        )
+    return out
