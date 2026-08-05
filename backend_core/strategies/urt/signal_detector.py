@@ -345,6 +345,12 @@ def evaluate_buy_signal(
         yang_rule = "none"
 
     structure = _compute_structure_levels(bars_desc, cfg, price=ind.get("close"))
+    from .risk_tags import enrich_structure_with_rr
+
+    enriched = enrich_structure_with_rr(structure, price=ind.get("close"), cfg=cfg)
+    structure = enriched["structure"]
+    risk_tags = enriched["risk_tags"]
+
     # 持久化进 score_detail，预计算重读无需改表
     if isinstance(score_detail, dict):
         score_detail = dict(score_detail)
@@ -359,7 +365,10 @@ def evaluate_buy_signal(
             "kde_lookback_used": structure["kde_lookback_used"],
             "kde_lookback_expanded": structure["kde_lookback_expanded"],
             "method": "kde_volume_weighted",
+            "rr": structure.get("rr"),
+            "rr_reason": structure.get("rr_reason"),
         }
+        score_detail["risk_tags"] = risk_tags
 
     payload = {
         "signal_date": ind.get("date"),
@@ -403,6 +412,9 @@ def evaluate_buy_signal(
         "kde_reason": structure["kde_reason"],
         "kde_lookback_used": structure["kde_lookback_used"],
         "kde_lookback_expanded": structure["kde_lookback_expanded"],
+        "structure_rr": structure.get("rr"),
+        "structure_rr_reason": structure.get("rr_reason"),
+        "risk_tags": risk_tags,
     }
     payload["buy_logic"] = build_buy_logic(payload, cfg)
     return payload

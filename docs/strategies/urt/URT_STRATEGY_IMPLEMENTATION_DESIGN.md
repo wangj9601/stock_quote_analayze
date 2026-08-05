@@ -206,6 +206,7 @@ admin/  # /urt-management 参数配置页
 |----|------|
 | 表 | `urt_signal_trace`（PK: `code`+`date`+`config_id`），含得分、硬筛字段、`score_detail` JSON（含 `structure`：KDE 支撑/阻力） |
 | 结构位 | 信号计算时用成交量加权 KDE（`extract_kde_levels_expand_support`，与 RPE/个股关键价位同口径）；写入结果顶层 `support_levels`/`resistance_levels`/`nearest_*` 及 `score_detail.structure`；**不参与硬筛** |
+| 结构盈亏比提示 | `structure.rr` / `rr_reason` + `risk_tags`（id=`poor_structure_rr`）：RR=(阻力−收盘)/(收盘−支撑)；偏低或破位时打 warn/danger 标签；配置 `structure_rr_warn_enabled`（默认 true）、`structure_rr_min_rr`（默认 1.5）；**不改得分、不硬筛** |
 | 配置 | `urt_strategy_configs.precompute_enabled`；默认版本或开关开启才算 |
 | 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 **16:45**（港股 17:20），`ENABLE_URT_PRECOMPUTE`；`urt_daily` 推送建议 **17:30**（须晚于预计算） |
 | 选股 | `URTFrontendInterface.screen` 无 Query 覆盖时优先读 `urt_signal_trace` |
@@ -271,13 +272,23 @@ admin/  # /urt-management 参数配置页
 
 最少 K 线根数约：`max(ma_period, volume_lookback+1, yang 短窗, 中期最大窗, 多头最大周期)`。
 
-### 6.3 数据窗口
+### 6.3 KDE 结构位与盈亏比风险提示
+
+| 参数 | 含义 | 默认 | 说明 |
+|------|------|------|------|
+| `kde_lookback_days` 等 | KDE 回看 | 250/250/750 | 与 RPE 同口径 |
+| `structure_rr_warn_enabled` | 是否打盈亏比风险标签 | `true` | 软提示；关闭后不生成 `risk_tags` |
+| `structure_rr_min_rr` | 最低可接受 RR | `1.5` | RR=(阻力−收盘)/(收盘−支撑)；破位/贴阻力为 danger，偏低为 warn |
+
+实现：`signal_detector.evaluate_buy_signal` → `urt/risk_tags.enrich_structure_with_rr`（复用 GMS `compute_structure_rr`）。旧 trace 读路径由 `trace_store._enrich_trace_structure_fields` 只读补算。
+
+### 6.4 数据窗口
 
 | 参数 | 含义 | 默认 | 值域 | 说明 |
 |------|------|------|------|------|
 | `history_calendar_days` | 拉取行情的自然日窗口 | 120 | 建议 ≥60；代码下限按窗口至少约 30 日 | 从基准日向前取日历天数，再截到有效交易日；须覆盖 MA/量能/连阳/中期窗所需最少 K 线根数 |
 
-### 6.4 交易纪律 `risk`（回测扩展，选股不强制）
+### 6.5 交易纪律 `risk`（回测扩展，选股不强制）
 
 实现：`signal_detector.evaluate_exit_rules`。管理端表单暴露部分字段；其余可在 JSON 中改。  
 回测入场/观察期/出场优先级与任务参数见：[URT策略交易回测说明.md](./URT策略交易回测说明.md) §3–§4。
@@ -299,7 +310,7 @@ admin/  # /urt-management 参数配置页
 | `horizon_days` | 观察期交易日数 | **20** |
 | `use_trace` | 是否优先读 `urt_signal_trace` | true |
 
-### 6.5 选股 API 运行时参数（Query，不写配置表）
+### 6.6 选股 API 运行时参数（Query，不写配置表）
 
 `GET /api/screening/urt-strategy`：
 

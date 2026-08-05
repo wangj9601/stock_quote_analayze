@@ -197,10 +197,17 @@ const UrtScoreDetail = {
         const kdeOk = src.kde_ok != null ? src.kde_ok : st.kde_ok;
         const kdeReason = src.kde_reason || st.kde_reason || '';
         const lookbackUsed = src.kde_lookback_used != null ? src.kde_lookback_used : st.kde_lookback_used;
+        const structureRr = src.structure_rr != null ? src.structure_rr
+            : (st.rr != null ? st.rr : null);
+        const structureRrReason = src.structure_rr_reason || st.rr_reason || '';
         html += '<div class="gms-score-detail-section"><strong>【支撑 / 阻力】</strong>';
         html += '<div class="gms-version-meta-line">';
         html += `<span>最近支撑 <strong>${this._fmt(nearSup, 2)}</strong></span>`;
         html += `<span>最近阻力 <strong>${this._fmt(nearRes, 2)}</strong></span>`;
+        html += `<span>盈亏比 RR <strong>${structureRr != null && Number.isFinite(Number(structureRr)) ? Number(structureRr).toFixed(2) : '--'}</strong></span>`;
+        if (structureRrReason && structureRrReason !== 'ok') {
+            html += `<span>${structureRrReason}</span>`;
+        }
         if (kdeOk != null) html += `<span>KDE ${kdeOk ? '成功' : '未识别'}</span>`;
         if (lookbackUsed != null) html += `<span>回看 ${lookbackUsed} 日</span>`;
         if (kdeReason) html += `<span>${kdeReason}</span>`;
@@ -209,6 +216,19 @@ const UrtScoreDetail = {
         html += `<tr><td>阻力</td><td>${resists.length ? resists.map((x) => this._fmt(x, 2)).join('、') : '--'}</td></tr>`;
         html += `<tr><td>支撑</td><td>${supports.length ? supports.map((x) => this._fmt(x, 2)).join('、') : '--'}</td></tr>`;
         html += '</tbody></table></div>';
+
+        const riskTags = Array.isArray(src.risk_tags) && src.risk_tags.length
+            ? src.risk_tags
+            : (Array.isArray(sd.risk_tags) ? sd.risk_tags : []);
+        if (riskTags.length) {
+            html += '<div class="gms-score-detail-section"><strong>【风险提示】</strong>';
+            html += `<div class="gms-risk-tags">${riskTags.map((t) => {
+                const level = (t && t.level) || 'info';
+                const label = (t && (t.label || t.id)) || '风险';
+                const reason = String((t && t.reason) || '').replace(/"/g, '&quot;');
+                return `<span class="gms-risk-tag gms-risk-${level}" title="${reason}">${label}</span>`;
+            }).join('')}</div></div>`;
+        }
 
         html += '</div>';
         return html;

@@ -61,6 +61,9 @@ class URTConfigManager:
             "kde_lookback_max": 750,
             "kde_base_factor": 1.0,
             "kde_grid_points": 200,
+            # 结构盈亏比风险提示（软标签，不硬筛、不减分）
+            "structure_rr_warn_enabled": True,
+            "structure_rr_min_rr": 1.5,
             "risk": {
                 "stop_loss_pct_min": 5,
                 "stop_loss_pct_max": 10,

@@ -18,6 +18,60 @@ logger = logging.getLogger(__name__)
 URT_TRACE_SCANNED_MARKER = "__URT_SCANNED__"
 
 
+def _enrich_trace_structure_fields(
+    item: Dict[str, Any],
+    *,
+    score_detail: Any,
+    close: Any = None,
+    cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    从 score_detail.structure 展平支撑/阻力；旧数据缺 rr/risk_tags 时只读补算（不改买点分）。
+    """
+    sd = score_detail if isinstance(score_detail, dict) else {}
+    st = dict(sd.get("structure")) if isinstance(sd.get("structure"), dict) else {}
+    px = close
+    if px is None:
+        px = item.get("close")
+
+    risk_tags = sd.get("risk_tags") if isinstance(sd.get("risk_tags"), list) else None
+    need_rr = st and (st.get("rr") is None and st.get("rr_reason") is None)
+    need_tags = risk_tags is None and bool(st)
+
+    if need_rr or need_tags:
+        try:
+            from backend_core.strategies.urt.risk_tags import enrich_structure_with_rr
+            from backend_core.strategies.urt.config import URTConfigManager
+
+            use_cfg = cfg
+            if use_cfg is None:
+                use_cfg = URTConfigManager().get_default_config()
+            enriched = enrich_structure_with_rr(st, price=px, cfg=use_cfg)
+            st = enriched["structure"]
+            if need_tags or not risk_tags:
+                risk_tags = enriched["risk_tags"]
+            # 仅内存合并，不回写 DB
+            sd = dict(sd)
+            sd["structure"] = st
+            sd["risk_tags"] = risk_tags or []
+            item["score_detail"] = sd
+        except Exception as e:
+            logger.debug("URT trace structure RR 补算跳过: %s", e)
+            risk_tags = risk_tags or []
+
+    item["support_levels"] = st.get("support_levels") or []
+    item["resistance_levels"] = st.get("resistance_levels") or []
+    item["nearest_support"] = st.get("nearest_support")
+    item["nearest_resistance"] = st.get("nearest_resistance")
+    item["kde_ok"] = st.get("kde_ok")
+    item["kde_reason"] = st.get("kde_reason")
+    item["kde_lookback_used"] = st.get("kde_lookback_used")
+    item["structure_rr"] = st.get("rr")
+    item["structure_rr_reason"] = st.get("rr_reason")
+    item["risk_tags"] = risk_tags if isinstance(risk_tags, list) else (sd.get("risk_tags") or [])
+    return item
+
+
 def _normalize_a_share_code(code: str) -> str:
     s = str(code or "").strip()
     if s.isdigit() and len(s) <= 6:
@@ -407,36 +461,30 @@ def query_buy_signals_for_date(
         q = q.limit(int(limit))
     out: List[Dict[str, Any]] = []
     for row in q.all():
-        sd = row.score_detail if isinstance(row.score_detail, dict) else {}
-        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
-        out.append(
-            {
-                "code": row.code,
-                "name": row.name or "",
-                "signal_date": row.date,
-                "close": row.close,
-                "open": row.open,
-                "ma20": row.ma20,
-                "above_ma20": row.above_ma20,
-                "yang_count_4": row.yang_count_4,
-                "yang_count_5": row.yang_count_5,
-                "yang_rule": row.yang_rule,
-                "avg_volume_20": row.avg_volume_20,
-                "volume": row.volume,
-                "volume_multiple": row.volume_multiple,
-                "volume_ratio": row.volume_ratio,
-                "turnover_rate": row.turnover_rate,
-                "score": row.score,
-                "signal_strength": row.signal_strength,
-                "score_detail": row.score_detail,
-                "buy_signal": True,
-                "from_cache": True,
-                "support_levels": st.get("support_levels") or [],
-                "resistance_levels": st.get("resistance_levels") or [],
-                "nearest_support": st.get("nearest_support"),
-                "nearest_resistance": st.get("nearest_resistance"),
-            }
-        )
+        item = {
+            "code": row.code,
+            "name": row.name or "",
+            "signal_date": row.date,
+            "close": row.close,
+            "open": row.open,
+            "ma20": row.ma20,
+            "above_ma20": row.above_ma20,
+            "yang_count_4": row.yang_count_4,
+            "yang_count_5": row.yang_count_5,
+            "yang_rule": row.yang_rule,
+            "avg_volume_20": row.avg_volume_20,
+            "volume": row.volume,
+            "volume_multiple": row.volume_multiple,
+            "volume_ratio": row.volume_ratio,
+            "turnover_rate": row.turnover_rate,
+            "score": row.score,
+            "signal_strength": row.signal_strength,
+            "score_detail": row.score_detail,
+            "buy_signal": True,
+            "from_cache": True,
+        }
+        _enrich_trace_structure_fields(item, score_detail=row.score_detail, close=row.close)
+        out.append(item)
     return out
 
 
@@ -461,36 +509,27 @@ def query_trace_by_code(
     rows = q.order_by(URTSignalTrace.date.desc()).limit(int(limit)).all()
     out: List[Dict[str, Any]] = []
     for r in rows:
-        sd = r.score_detail if isinstance(r.score_detail, dict) else {}
-        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
-        out.append(
-            {
-                "code": r.code,
-                "name": r.name,
-                "date": r.date,
-                "config_id": r.config_id,
-                "buy_signal": r.buy_signal,
-                "score": r.score,
-                "close": r.close,
-                "open": r.open,
-                "ma20": r.ma20,
-                "above_ma20": r.above_ma20,
-                "yang_count_4": r.yang_count_4,
-                "yang_count_5": r.yang_count_5,
-                "yang_rule": r.yang_rule,
-                "volume": r.volume,
-                "avg_volume_20": r.avg_volume_20,
-                "volume_multiple": r.volume_multiple,
-                "volume_ratio": r.volume_ratio,
-                "turnover_rate": r.turnover_rate,
-                "score_detail": r.score_detail,
-                "support_levels": st.get("support_levels") or [],
-                "resistance_levels": st.get("resistance_levels") or [],
-                "nearest_support": st.get("nearest_support"),
-                "nearest_resistance": st.get("nearest_resistance"),
-                "kde_ok": st.get("kde_ok"),
-                "kde_reason": st.get("kde_reason"),
-                "kde_lookback_used": st.get("kde_lookback_used"),
-            }
-        )
+        item = {
+            "code": r.code,
+            "name": r.name,
+            "date": r.date,
+            "config_id": r.config_id,
+            "buy_signal": r.buy_signal,
+            "score": r.score,
+            "close": r.close,
+            "open": r.open,
+            "ma20": r.ma20,
+            "above_ma20": r.above_ma20,
+            "yang_count_4": r.yang_count_4,
+            "yang_count_5": r.yang_count_5,
+            "yang_rule": r.yang_rule,
+            "volume": r.volume,
+            "avg_volume_20": r.avg_volume_20,
+            "volume_multiple": r.volume_multiple,
+            "volume_ratio": r.volume_ratio,
+            "turnover_rate": r.turnover_rate,
+            "score_detail": r.score_detail,
+        }
+        _enrich_trace_structure_fields(item, score_detail=r.score_detail, close=r.close)
+        out.append(item)
     return out

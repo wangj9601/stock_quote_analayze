@@ -500,6 +500,11 @@ const ScreeningPage = {
             kde_lookback_used: stock.kde_lookback_used != null
                 ? stock.kde_lookback_used
                 : st.kde_lookback_used,
+            structure_rr: stock.structure_rr != null ? stock.structure_rr : st.rr,
+            structure_rr_reason: stock.structure_rr_reason || st.rr_reason || null,
+            risk_tags: Array.isArray(stock.risk_tags) && stock.risk_tags.length
+                ? stock.risk_tags
+                : (Array.isArray(sd && sd.risk_tags) ? sd.risk_tags : []),
             price_adjust: stock.price_adjust || null,
         };
     },
@@ -5282,6 +5287,12 @@ const ScreeningPage = {
                     : (Array.isArray(urtSt.resistance_levels) && urtSt.resistance_levels.length
                         ? `${urtQfqTag}${urtSt.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')}`
                         : urtQfqTag.trim());
+                const urtRiskTags = Array.isArray(stock.risk_tags) && stock.risk_tags.length
+                    ? stock.risk_tags
+                    : (Array.isArray(urtSd.risk_tags) ? urtSd.risk_tags : []);
+                const urtRiskHtml = urtRiskTags.length
+                    ? urtRiskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
+                    : '—';
                 html += `
                     <tr data-urt-row="${index}">
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${urtCode}</a></td>
@@ -5300,6 +5311,7 @@ const ScreeningPage = {
                         <td class="gms-col-narrow">${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
                         <td class="gms-col-price support" title="${urtSupportTitle || ''}">${urtSupport != null && Number.isFinite(Number(urtSupport)) ? Number(urtSupport).toFixed(2) : '--'}</td>
                         <td class="gms-col-price resistance" title="${urtResistTitle || ''}">${urtResist != null && Number.isFinite(Number(urtResist)) ? Number(urtResist).toFixed(2) : '--'}</td>
+                        <td class="gms-col-narrow gms-col-risk"><span class="gms-risk-tags-inline">${urtRiskHtml}</span></td>
                         <td class="gms-col-narrow"><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-actions">
                             <div class="action-links">
@@ -5310,7 +5322,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row urt-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="18" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
+                        <td colspan="19" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
                     </tr>
                 `;
             } else if (strategy === 'one-yang-three-lines') {
