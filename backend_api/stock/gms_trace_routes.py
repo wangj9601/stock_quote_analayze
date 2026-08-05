@@ -365,6 +365,14 @@ def _attach_trace_score_detail(
     date_str = str(out.get("date", ""))[:10]
     market_type = out.get("market_type", "CN")
 
+    # 保留库内 score_detail.structure（重建明细时不得冲掉）
+    existing_sd = out.get("score_detail") if isinstance(out.get("score_detail"), dict) else {}
+    stored_structure = (
+        existing_sd.get("structure")
+        if isinstance(existing_sd.get("structure"), dict)
+        else None
+    )
+
     need_fallback = (
         out.get("ma60_d") is None
         or out.get("ratio_d") is None
@@ -373,11 +381,20 @@ def _attach_trace_score_detail(
         or (mechanism == "tiered_dual_penalty" and out.get("score_penalty_deduction") is None)
     )
     score_detail = _row_dict_to_score_detail(out, calc_meta, config)
+    # 合并库内已有明细字段（含 penalties 等），再以列级重建补空
+    if existing_sd:
+        merged = dict(existing_sd)
+        for k, v in score_detail.items():
+            if merged.get(k) in (None, "") and v is not None:
+                merged[k] = v
+        score_detail = merged
     if need_fallback and code and date_str:
         fb = _fill_gms_score_fallback(db, code, date_str, market_type, config)
         if fb and isinstance(fb.get("score_detail"), dict):
             fb_sd = fb["score_detail"]
             for k, v in fb_sd.items():
+                if k == "structure":
+                    continue  # structure 仅信任库内/强制重算写入
                 if score_detail.get(k) in (None, "") and v is not None:
                     score_detail[k] = v
             if score_detail.get("score_penalty_deduction") is None:
@@ -387,8 +404,17 @@ def _attach_trace_score_detail(
             if score_detail.get("score_base_total") is None and fb_sd.get("score_base_total") is not None:
                 score_detail["score_base_total"] = fb_sd["score_base_total"]
 
+    if stored_structure:
+        score_detail["structure"] = stored_structure
+
     score_detail = _inject_gms_score_detail_meta(score_detail, gms_config_meta)
     out["score_detail"] = score_detail
+
+    st = score_detail.get("structure") if isinstance(score_detail.get("structure"), dict) else {}
+    if st:
+        from backend_core.strategies.gms.structure_levels import flatten_structure_to_result
+
+        flatten_structure_to_result(out, st)
     return out
 
 try:
@@ -629,9 +655,13 @@ def _compute_gms_trace_for_stock(
     对单只股票从 mean_frequency_resonance_indicators 的首日到最新日执行 GMS 追溯计算，
     并写入 gms_signal_trace 表（指定 config_id）。
     返回写入条数。
+
+    通过 engine.screen 构建完整 score_detail（含 structure），再入库。
     """
     if not GMS_AVAILABLE:
         raise RuntimeError("GMS 策略模块不可用")
+
+    from backend_core.strategies.gms.json_safe import sanitize_for_pg_json
 
     # 查询该股票所有日期（升序）
     rows = (
@@ -650,7 +680,6 @@ def _compute_gms_trace_for_stock(
     total_dates = len(dates)
     loader = GMSDataLoader(db)
     engine = GMSStrategyEngine(loader, config)
-    stable_days = int(config.get("scoring", {}).get("instant_deviation_stable_days", 3))
     codes = [code]
     saved = 0
 
@@ -658,79 +687,61 @@ def _compute_gms_trace_for_stock(
         if progress_cb:
             progress_cb(i + 1, total_dates, f"正在计算 {target_date}（{i + 1}/{total_dates}）")
         try:
-            # 加载当日指标（精确日期，不用 use_latest）
-            rows_data = loader.load_indicators(
+            # 精确日期 + 完整 score_detail（含 KDE structure）
+            results = engine.screen(
                 codes,
                 target_date,
                 market_type,
+                config=config,
+                min_score=0,
                 use_latest_per_stock=False,
-                gms_config=config,
             )
-            if not rows_data:
+            if not results:
                 continue
-
-            # 加载多日序列（用于站稳3日）
-            dev_series_by_code = {}
-            if stable_days > 1:
-                multi_rows = loader.load_indicators_multi_day(codes, target_date, market_type, days=stable_days)
-                by_code = defaultdict(list)
-                for r in multi_rows:
-                    by_code[r["code"]].append(r)
-                for c, code_rows in by_code.items():
-                    code_rows.sort(key=lambda x: x["date"])
-                    recent = code_rows[-stable_days:]
-                    dev_series_by_code[c] = [float(r.get("instant_deviation", 0) or 0) for r in recent]
-
-            row = rows_data[0]
-            dev_series = dev_series_by_code.get(code)
-            ind = engine.calculator.calculate(row, instant_deviation_series=dev_series)
-            if ind is None:
-                continue
-
-            left = engine.detector.detect_left_buy(ind)
-            right = engine.detector.detect_right_buy(ind)
-            sell = engine.detector.detect_sell(ind)
-            buy_type = "左侧" if left else ("右侧" if right else "")
-            signal_strength = (ind.score_total / 100.0) if ind.score_total and ind.score_total > 0 else 0.0
-
+            r = results[0]
+            sd = sanitize_for_pg_json(r.get("score_detail") or {})
+            risk_tags = sanitize_for_pg_json(r.get("risk_tags"))
             rec = GMSSignalTrace(
                 code=code,
                 date=target_date,
                 market_type=market_type,
                 config_id=int(config_id),
-                score_total=ind.score_total,
-                score_accumulation=ind.score_accumulation,
-                score_momentum=ind.score_momentum,
-                signal_strength=signal_strength,
-                buy_type=buy_type or None,
-                left_buy_signal=left,
-                right_buy_signal=right,
-                sell_signal=sell,
-                accumulation_grade=getattr(ind, "accumulation_grade", "") or None,
-                momentum_grade=getattr(ind, "momentum_grade", "") or None,
-                delta=ind.delta,
-                d=ind.d,
-                ratio_d20=ind.ratio_d20,
-                ratio_d1=ind.ratio_d1,
-                fz_ratio=ind.fz_ratio,
-                volume_ratio=ind.volume_ratio,
-                instant_deviation=ind.instant_deviation,
-                rising_days=ind.rising_days,
-                falling_days=ind.falling_days,
-                score_acc_fz=getattr(ind, "score_acc_fz", None),
-                score_acc_balance=getattr(ind, "score_acc_balance", None),
-                score_acc_volume=getattr(ind, "score_acc_volume", None),
-                score_mom_ratio_d1=getattr(ind, "score_mom_ratio_d1", None),
-                score_mom_deviation=getattr(ind, "score_mom_deviation", None),
-                score_mom_volume=getattr(ind, "score_mom_volume", None),
-                acc_fz_judge=getattr(ind, "acc_fz_judge", None) or None,
-                acc_balance_judge=getattr(ind, "acc_balance_judge", None) or None,
-                acc_volume_judge=getattr(ind, "acc_volume_judge", None) or None,
-                mom_ratio_d1_judge=getattr(ind, "mom_ratio_d1_judge", None) or None,
-                mom_deviation_judge=getattr(ind, "mom_deviation_judge", None) or None,
-                mom_volume_judge=getattr(ind, "mom_volume_judge", None) or None,
+                score_total=r.get("score_total"),
+                score_accumulation=r.get("score_accumulation"),
+                score_momentum=r.get("score_momentum"),
+                signal_strength=r.get("signal_strength"),
+                buy_type=r.get("buy_type") or None,
+                left_buy_signal=r.get("left_buy_signal"),
+                right_buy_signal=r.get("right_buy_signal"),
+                sell_signal=r.get("sell_signal"),
+                accumulation_grade=r.get("accumulation_grade") or None,
+                momentum_grade=r.get("momentum_grade") or None,
+                delta=r.get("delta"),
+                d=r.get("d"),
+                ratio_d20=r.get("ratio_d20"),
+                ratio_d1=r.get("ratio_d1"),
+                fz_ratio=r.get("fz_ratio"),
+                volume_ratio=r.get("volume_ratio"),
+                instant_deviation=r.get("instant_deviation"),
+                rising_days=r.get("rising_days"),
+                falling_days=r.get("falling_days"),
+                score_acc_fz=sd.get("score_acc_fz"),
+                score_acc_balance=sd.get("score_acc_balance"),
+                score_acc_volume=sd.get("score_acc_volume"),
+                score_mom_ratio_d1=sd.get("score_mom_ratio_d1"),
+                score_mom_deviation=sd.get("score_mom_deviation"),
+                score_mom_volume=sd.get("score_mom_volume"),
+                acc_fz_judge=sd.get("acc_fz_judge") or None,
+                acc_balance_judge=sd.get("acc_balance_judge") or None,
+                acc_volume_judge=sd.get("acc_volume_judge") or None,
+                mom_ratio_d1_judge=sd.get("mom_ratio_d1_judge") or None,
+                mom_deviation_judge=sd.get("mom_deviation_judge") or None,
+                mom_volume_judge=sd.get("mom_volume_judge") or None,
+                risk_tags=risk_tags,
+                score_detail=sd,
             )
-            db.merge(rec)
+            with db.begin_nested():
+                db.merge(rec)
             saved += 1
         except Exception as e:
             logger.warning(f"GMS 追溯 {code} {target_date} 失败: {e}")
@@ -922,7 +933,8 @@ async def get_gms_signal_trace(
         rows = q.all()
 
         def to_dict(r):
-            return {
+            sd = getattr(r, "score_detail", None)
+            item = {
                 "code": r.code,
                 "date": r.date,
                 "market_type": r.market_type,
@@ -958,7 +970,16 @@ async def get_gms_signal_trace(
                 "mom_ratio_d1_judge": getattr(r, "mom_ratio_d1_judge", None) or "",
                 "mom_deviation_judge": getattr(r, "mom_deviation_judge", None) or "",
                 "mom_volume_judge": getattr(r, "mom_volume_judge", None) or "",
+                "score_detail": sd if isinstance(sd, dict) else {},
+                "risk_tags": getattr(r, "risk_tags", None) or [],
             }
+            st = (item["score_detail"].get("structure")
+                  if isinstance(item["score_detail"].get("structure"), dict) else {})
+            if st:
+                from backend_core.strategies.gms.structure_levels import flatten_structure_to_result
+
+                flatten_structure_to_result(item, st)
+            return item
 
         from backend_api.stock.stock_screening_routes import _gms_strategy_config_meta
 

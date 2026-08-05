@@ -2044,6 +2044,8 @@ async def get_gms_strategy(
             left_signal = bool(r.get("left_buy_signal", False))
             right_signal = bool(r.get("right_buy_signal", False))
             buy_type_text = _normalize_buy_type(r.get("buy_type"), left_signal, right_signal)
+            _sd = r.get("score_detail") if isinstance(r.get("score_detail"), dict) else {}
+            _st = _sd.get("structure") if isinstance(_sd.get("structure"), dict) else {}
             results_data.append({
                 "symbol": code,
                 "code": code,
@@ -2074,6 +2076,11 @@ async def get_gms_strategy(
                 "right_buy_signal": right_signal,
                 "sell_signal": r.get("sell_signal", False),
                 "risk_tags": r.get("risk_tags") or [],
+                # KDE 支撑/阻力（与 URT 同口径；优先顶层，其次 score_detail.structure）
+                "nearest_support": r.get("nearest_support", _st.get("nearest_support")),
+                "nearest_resistance": r.get("nearest_resistance", _st.get("nearest_resistance")),
+                "support_levels": r.get("support_levels") or _st.get("support_levels") or [],
+                "resistance_levels": r.get("resistance_levels") or _st.get("resistance_levels") or [],
             })
 
         # 兜底补全：避免前端出现“有信号但 Δ/F/Z/d 全空白 / 得分明细为空”
@@ -2144,11 +2151,21 @@ async def get_gms_strategy(
             if _do_score_fallback:
                 score_fallback = _fill_gms_score_fallback(db, item.get("symbol"), target_date, mt, config)
                 if score_fallback:
+                    # 兜底重算得分时保留已有 KDE structure（兜底函数本身不写 structure）
+                    _prev_sd = item.get("score_detail") if isinstance(item.get("score_detail"), dict) else {}
+                    _prev_st = (
+                        _prev_sd.get("structure")
+                        if isinstance(_prev_sd.get("structure"), dict)
+                        else None
+                    )
                     for k, v in score_fallback.items():
                         if k == "score_detail":
-                            item["score_detail"] = v
+                            new_sd = dict(v) if isinstance(v, dict) else {}
+                            if _prev_st and not isinstance(new_sd.get("structure"), dict):
+                                new_sd["structure"] = _prev_st
+                            item["score_detail"] = new_sd
                             # 同步综合总分与信号强度，确保与 score_detail 一致（避免 trace 中 score_total=0 导致信号强度为 0）
-                            sd_total = v.get("score_total") if isinstance(v, dict) else None
+                            sd_total = new_sd.get("score_total")
                             if sd_total is not None:
                                 item["score_total"] = sd_total
                                 item["signal_strength"] = float(sd_total) / 100.0 if float(sd_total) > 0 else 0.0
@@ -2169,6 +2186,18 @@ async def get_gms_strategy(
                     )
 
             item["score_detail"] = _inject_gms_score_detail_meta(item.get("score_detail"), gms_config_meta)
+            # 兜底/注入后再次展平 structure，保证列表列有值
+            _sd_final = item.get("score_detail") if isinstance(item.get("score_detail"), dict) else {}
+            _st_final = _sd_final.get("structure") if isinstance(_sd_final.get("structure"), dict) else {}
+            if _st_final:
+                if item.get("nearest_support") is None:
+                    item["nearest_support"] = _st_final.get("nearest_support")
+                if item.get("nearest_resistance") is None:
+                    item["nearest_resistance"] = _st_final.get("nearest_resistance")
+                if not item.get("support_levels"):
+                    item["support_levels"] = list(_st_final.get("support_levels") or [])
+                if not item.get("resistance_levels"):
+                    item["resistance_levels"] = list(_st_final.get("resistance_levels") or [])
 
         from backend_api.gms_trade_observe_routes import (
             _normalize_code as _gms_industry_norm_code,
@@ -2258,6 +2287,25 @@ async def get_gms_strategy(
         else:
             total_pages = 1 if total_all > 0 else 0
             page_eff = 1
+
+        # 分页/截取后：对仍缺 structure 的行补算 KDE（覆盖 snapshot 快路径与旧 trace）
+        try:
+            from backend_core.strategies.gms.frontend_interface import enrich_results_with_structure
+
+            _st_cap = None
+            if not code and not use_pagination and len(results_data) > 300:
+                _st_cap = int(os.getenv("GMS_STRUCTURE_ENRICH_MAX", "300"))
+            enrich_results_with_structure(
+                db,
+                results_data,
+                config,
+                date=target_date,
+                config_id=resolved_config_id,
+                persist=True,
+                max_items=_st_cap,
+            )
+        except Exception as _st_e:
+            logger.warning("GMS 选股结果 structure 补算跳过: %s", _st_e)
 
         resp = {
             "success": True,

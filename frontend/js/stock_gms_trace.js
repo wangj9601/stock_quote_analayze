@@ -152,7 +152,7 @@ class StockGMSTracePage {
             if (!json.success) {
                 this.allData = [];
                 document.getElementById('traceTable').querySelector('tbody').innerHTML =
-                    '<tr><td colspan="13">加载失败: ' + (json.message || '未知错误') + '</td></tr>';
+                    '<tr><td colspan="15">加载失败: ' + (json.message || '未知错误') + '</td></tr>';
                 return;
             }
             this.traceConfigOptions = Array.isArray(json.configs) ? json.configs : [];
@@ -185,7 +185,7 @@ class StockGMSTracePage {
         } catch (e) {
             loading.style.display = 'none';
             document.getElementById('traceTable').querySelector('tbody').innerHTML =
-                '<tr><td colspan="13">请求失败: ' + e.message + '</td></tr>';
+                '<tr><td colspan="15">请求失败: ' + e.message + '</td></tr>';
         }
     }
 
@@ -452,7 +452,7 @@ class StockGMSTracePage {
         const tbody = document.getElementById('traceTable').querySelector('tbody');
 
         if (pageData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="13">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="15">暂无数据</td></tr>';
             return;
         }
 
@@ -468,6 +468,21 @@ class StockGMSTracePage {
             else if (ss != null && ss >= 0.6) strengthClass = 'strength-mid';
 
             const scoreDetailHtml = this.buildScoreDetailHtml(r);
+            const sd = (r.score_detail && typeof r.score_detail === 'object') ? r.score_detail : {};
+            const st = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
+            const nearSup = r.nearest_support != null ? r.nearest_support : st.nearest_support;
+            const nearRes = r.nearest_resistance != null ? r.nearest_resistance : st.nearest_resistance;
+            const supportTitle = Array.isArray(r.support_levels) && r.support_levels.length
+                ? r.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                : (Array.isArray(st.support_levels) && st.support_levels.length
+                    ? st.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    : '');
+            const resistTitle = Array.isArray(r.resistance_levels) && r.resistance_levels.length
+                ? r.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                : (Array.isArray(st.resistance_levels) && st.resistance_levels.length
+                    ? st.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    : '');
+            const fmtLvl = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--');
             const rowStrengthClass = (ss != null && ss >= 0.6) ? strengthClass : '';
             html += `
             <tr data-gms-row="${index}"${rowStrengthClass ? ` class="row-${strengthClass}"` : ''}>
@@ -475,6 +490,8 @@ class StockGMSTracePage {
                 <td>${r.score_total != null ? r.score_total.toFixed(1) : '--'}</td>
                 <td class="${strengthClass}">${ss != null ? this.fmtPct(ss) : '--'}</td>
                 <td class="${buyClass}">${r.buy_type || '--'}</td>
+                <td class="support" title="${supportTitle}">${fmtLvl(nearSup)}</td>
+                <td class="resistance" title="${resistTitle}">${fmtLvl(nearRes)}</td>
                 <td>${this.fmtScoreDetail(r.score_accumulation, r.accumulation_grade)}</td>
                 <td>${this.fmtScoreDetail(r.score_momentum, r.momentum_grade)}</td>
                 <td>${this.fmtNum(r.delta)}</td>
@@ -488,7 +505,7 @@ class StockGMSTracePage {
                 </td>
             </tr>
             <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                <td colspan="13" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                <td colspan="15" class="gms-score-detail-cell">${scoreDetailHtml}</td>
             </tr>`;
         });
         tbody.innerHTML = html;

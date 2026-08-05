@@ -61,6 +61,13 @@ class GMSConfigManager:
                 "trend_break_days": 3,
                 "overbought_ratio": 0.15,
             },
+            # 成交量加权 KDE 支撑/阻力（与 URT/RPE 同口径；亦可写在 structure/kde 子节）
+            "kde_lookback_days": 250,
+            "kde_lookback_initial": 250,
+            "kde_lookback_step": 250,
+            "kde_lookback_max": 750,
+            "kde_base_factor": 1.0,
+            "kde_grid_points": 200,
         }
 
     def _load_from_json_file(self) -> Optional[Dict]:

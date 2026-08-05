@@ -17,6 +17,12 @@ from .scoring._helpers import resolve_mechanism_id
 from .json_safe import sanitize_for_pg_json
 
 from .risk_tags import build_risk_tags, detect_trend_break
+from .structure_levels import (
+    compute_structure_levels,
+    empty_structure,
+    flatten_structure_to_result,
+    kde_bars_limit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +52,7 @@ class GMSStrategyEngine:
         config: Optional[Dict] = None,
         min_score: float = 0,
         max_results: Optional[int] = None,
+        use_latest_per_stock: bool = True,
     ) -> List[Dict]:
         """
         选股：返回符合条件的股票列表
@@ -57,6 +64,7 @@ class GMSStrategyEngine:
             config: 覆盖配置
             min_score: 最低总分（默认 0，即 watch_threshold 以下也返回时设为 0）
             max_results: 最大返回数量
+            use_latest_per_stock: 无目标日数据时是否用最近可用日（追溯重算应传 False）
 
         Returns:
             选股结果列表，每项包含 symbol, score_total, buy_type, signal_strength 等
@@ -88,7 +96,11 @@ class GMSStrategyEngine:
             # 无目标日行情时使用该股票最近可用日数据作为筛选条件
             active_cfg = config if config is not None else self.config
             rows = self.data_loader.load_indicators(
-                codes_sub, date, mt, use_latest_per_stock=True, gms_config=active_cfg
+                codes_sub,
+                date,
+                mt,
+                use_latest_per_stock=use_latest_per_stock,
+                gms_config=active_cfg,
             )
             dev_series_by_code: Dict[str, List[float]] = {}
             trend_series_by_code: Dict[str, Dict[str, List[float]]] = {}
@@ -149,6 +161,37 @@ class GMSStrategyEngine:
 
                 st = ind.score_total
                 signal_strength = st / 100.0 if st is not None and st > 0 else 0.0
+
+                d20_price = None
+                try:
+                    if ind.d is not None and ind.instant_deviation is not None:
+                        d20_price = float(ind.d) + float(ind.instant_deviation)
+                except (TypeError, ValueError):
+                    d20_price = None
+
+                # KDE 支撑/阻力：失败不影响整票结果
+                structure = empty_structure()
+                try:
+                    bars_desc = self.data_loader.load_bars(
+                        code,
+                        mt,
+                        end_date=ind.date or date,
+                        limit=kde_bars_limit(active_cfg),
+                    )
+                    px = None
+                    if bars_desc:
+                        try:
+                            c0 = float(bars_desc[0].get("close") or 0)
+                            if c0 > 0:
+                                px = c0
+                        except (TypeError, ValueError):
+                            px = None
+                    if px is None:
+                        px = d20_price
+                    structure = compute_structure_levels(bars_desc, active_cfg, price=px)
+                except Exception as e:
+                    logger.warning("GMS structure levels %s failed: %s", code, e)
+                    structure = empty_structure()
 
                 score_detail = sanitize_for_pg_json({
                     "score_accumulation": ind.score_accumulation,
@@ -221,9 +264,10 @@ class GMSStrategyEngine:
                     "score_penalty_deduction": getattr(ind, "score_penalty_deduction", 0.0),
                     "penalties": getattr(ind, "penalty_details", []) or [],
                     "risk_tags": risk_tags,
+                    "structure": structure,
                 })
 
-                results.append({
+                item = {
                     "symbol": ind.code,
                     "code": ind.code,
                     "date": ind.date,
@@ -251,7 +295,9 @@ class GMSStrategyEngine:
                     "falling_days": ind.falling_days,
                     "score_detail": score_detail,
                     "risk_tags": risk_tags,
-                })
+                }
+                flatten_structure_to_result(item, structure)
+                results.append(item)
 
         results.sort(key=lambda x: x["score_total"], reverse=True)
         if max_results is not None and max_results > 0:

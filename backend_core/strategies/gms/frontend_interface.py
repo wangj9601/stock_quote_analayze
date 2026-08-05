@@ -206,7 +206,166 @@ def _trace_row_to_result(row) -> dict:
         "score_detail": score_detail,
         "risk_tags": risk_tags or [],
     }
+    # 从 score_detail.structure 展平 KDE 支撑/阻力（与 URT 口径一致）
+    st = score_detail.get("structure") if isinstance(score_detail.get("structure"), dict) else {}
+    if st:
+        from .structure_levels import flatten_structure_to_result
+
+        flatten_structure_to_result(out, st)
     return out
+
+
+def result_needs_structure(result: Optional[dict]) -> bool:
+    """旧版 trace/快照无 structure，或未写入 method 时需补算 KDE 支撑/阻力。"""
+    if not isinstance(result, dict):
+        return False
+    sd = result.get("score_detail") if isinstance(result.get("score_detail"), dict) else {}
+    st = sd.get("structure") if isinstance(sd.get("structure"), dict) else None
+    if not st:
+        return True
+    # 已跑过 compute_structure_levels / empty_structure（含失败空结果）则不再重算
+    return st.get("method") != "kde_volume_weighted"
+
+
+def _persist_structure_to_trace(
+    db,
+    *,
+    code: str,
+    date: str,
+    market_type: str,
+    config_id: int,
+    structure: dict,
+) -> None:
+    """仅回填 score_detail.structure，不改动得分与信号字段。"""
+    if not code or not date or structure is None:
+        return
+    try:
+        from sqlalchemy.orm.attributes import flag_modified
+        from backend_api.models import GMSSignalTrace
+
+        row = (
+            db.query(GMSSignalTrace)
+            .filter(
+                GMSSignalTrace.code == str(code).strip(),
+                GMSSignalTrace.date == str(date).strip()[:10],
+                GMSSignalTrace.market_type == str(market_type or "").strip(),
+                GMSSignalTrace.config_id == int(config_id),
+            )
+            .first()
+        )
+        if not row:
+            return
+        sd = dict(row.score_detail) if isinstance(row.score_detail, dict) else {}
+        sd["structure"] = structure
+        row.score_detail = sanitize_for_pg_json(sd)
+        flag_modified(row, "score_detail")
+        with db.begin_nested():
+            db.flush()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning("回填 gms_signal_trace.structure 失败 %s: %s", code, e)
+
+
+def enrich_results_with_structure(
+    db,
+    results: List[dict],
+    config: Optional[dict],
+    *,
+    date: Optional[str] = None,
+    config_id: Optional[int] = None,
+    persist: bool = True,
+    max_items: Optional[int] = None,
+) -> int:
+    """
+    对缺 structure 的选股结果增量计算成交量加权 KDE 支撑/阻力，展平到展示字段；
+    可选回填 gms_signal_trace.score_detail.structure。
+    返回实际补算条数。
+    """
+    if not results:
+        return 0
+    from .structure_levels import (
+        compute_structure_levels,
+        empty_structure,
+        flatten_structure_to_result,
+        kde_bars_limit,
+    )
+
+    need_idx = [i for i, r in enumerate(results) if result_needs_structure(r)]
+    if not need_idx:
+        return 0
+    if max_items is not None and max_items >= 0:
+        need_idx = need_idx[: int(max_items)]
+    if not need_idx:
+        return 0
+
+    loader = GMSDataLoader(db)
+    limit = kde_bars_limit(config)
+    enriched = 0
+    for i in need_idx:
+        r = results[i]
+        code = str(r.get("code") or r.get("symbol") or "").strip()
+        if not code:
+            continue
+        mt = str(r.get("market_type") or _infer_market_type(code)).strip().upper() or "CN"
+        end_d = str(r.get("date") or date or "").strip()[:10] or None
+        try:
+            bars = loader.load_bars(code, mt, end_date=end_d, limit=limit)
+            px = None
+            if bars:
+                try:
+                    c0 = float(bars[0].get("close") or 0)
+                    if c0 > 0:
+                        px = c0
+                except (TypeError, ValueError):
+                    px = None
+            if px is None:
+                try:
+                    d_val = r.get("d")
+                    if d_val is not None:
+                        px = float(d_val)
+                except (TypeError, ValueError):
+                    px = None
+            structure = compute_structure_levels(bars, config, price=px)
+        except Exception as e:
+            logger.warning("GMS structure 补算失败 %s: %s", code, e)
+            structure = empty_structure()
+
+        sd = dict(r.get("score_detail")) if isinstance(r.get("score_detail"), dict) else {}
+        sd["structure"] = structure
+        r["score_detail"] = sd
+        flatten_structure_to_result(r, structure)
+        enriched += 1
+        if persist and config_id is not None and end_d:
+            _persist_structure_to_trace(
+                db,
+                code=code,
+                date=end_d,
+                market_type=mt,
+                config_id=int(config_id),
+                structure=structure,
+            )
+
+    if enriched and persist and config_id is not None:
+        try:
+            db.commit()
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            logger.warning("GMS structure 回填 commit 失败 date=%s config_id=%s", date, config_id)
+    if enriched:
+        logger.info(
+            "GMS structure 补算完成 enriched=%s/%s date=%s config_id=%s",
+            enriched,
+            len(need_idx),
+            date,
+            config_id,
+        )
+    return enriched
 
 
 def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
@@ -462,6 +621,19 @@ class GMSFrontendInterface:
                     precompute_ok,
                     trace_only,
                 )
+                # 旧 trace 无 structure：增量补算（全市场有上限，避免拖垮超时；单股/小池在调用方再兜底）
+                _max_st = None
+                if len(combined) > 300:
+                    _max_st = int(os.getenv("GMS_STRUCTURE_ENRICH_MAX", "300"))
+                enrich_results_with_structure(
+                    self.db,
+                    combined,
+                    self.config,
+                    date=date,
+                    config_id=self.config_id,
+                    persist=bool(self.use_trace),
+                    max_items=_max_st,
+                )
                 return (combined, meta) if return_meta else combined
 
         if stock_pool is None:
@@ -617,6 +789,20 @@ class GMSFrontendInterface:
             combined = [r for r in combined if (r.get("score_total") or 0) >= self.min_score]
         if self.max_results and len(combined) > self.max_results:
             combined = sorted(combined, key=lambda x: -(x.get("score_total") or 0))[: self.max_results]
+
+        # 4) 旧 trace 缺 structure 时补算 KDE（显式股票池不设上限；全市场有上限）
+        _max_st = None
+        if len(uniq_requested) > 300 and len(combined) > 300:
+            _max_st = int(os.getenv("GMS_STRUCTURE_ENRICH_MAX", "300"))
+        enrich_results_with_structure(
+            self.db,
+            combined,
+            self.config,
+            date=date,
+            config_id=self.config_id,
+            persist=bool(self.use_trace),
+            max_items=_max_st,
+        )
 
         meta: Dict[str, Any] = enrich_trace_meta(
             {

@@ -121,6 +121,31 @@ const GmsScoreDetail = {
                     </p>
                 </div>`;
         }
+        // 【支撑 / 阻力】成交量加权 KDE（与 URT / RPE 同口径）
+        const st = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
+        const nearSup = sd.nearest_support != null ? sd.nearest_support : st.nearest_support;
+        const nearRes = sd.nearest_resistance != null ? sd.nearest_resistance : st.nearest_resistance;
+        const supports = Array.isArray(sd.support_levels) && sd.support_levels.length
+            ? sd.support_levels
+            : (Array.isArray(st.support_levels) ? st.support_levels : []);
+        const resists = Array.isArray(sd.resistance_levels) && sd.resistance_levels.length
+            ? sd.resistance_levels
+            : (Array.isArray(st.resistance_levels) ? st.resistance_levels : []);
+        const kdeOk = sd.kde_ok != null ? sd.kde_ok : st.kde_ok;
+        const kdeReason = sd.kde_reason || st.kde_reason || '';
+        const lookbackUsed = sd.kde_lookback_used != null ? sd.kde_lookback_used : st.kde_lookback_used;
+        let structureSectionHtml = '<div class="gms-score-detail-section"><strong>【支撑 / 阻力】</strong>';
+        structureSectionHtml += '<div class="gms-version-meta-line">';
+        structureSectionHtml += `<span>最近支撑 <strong>${gmsFmt(nearSup, 'price')}</strong></span>`;
+        structureSectionHtml += `<span>最近阻力 <strong>${gmsFmt(nearRes, 'price')}</strong></span>`;
+        if (kdeOk != null) structureSectionHtml += `<span>KDE ${kdeOk ? '成功' : '未识别'}</span>`;
+        if (lookbackUsed != null) structureSectionHtml += `<span>回看 ${lookbackUsed} 日</span>`;
+        if (kdeReason) structureSectionHtml += `<span>${kdeReason}</span>`;
+        structureSectionHtml += '</div>';
+        structureSectionHtml += '<table class="gms-weight-table"><thead><tr><th>类型</th><th>价位（近→远）</th></tr></thead><tbody>';
+        structureSectionHtml += `<tr><td>阻力</td><td>${resists.length ? resists.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>`;
+        structureSectionHtml += `<tr><td>支撑</td><td>${supports.length ? supports.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>`;
+        structureSectionHtml += '</tbody></table></div>';
         return `
             <div class="gms-score-detail-inner">
                 ${versionMetaHtml}
@@ -158,6 +183,7 @@ const GmsScoreDetail = {
                     </p>
                 </div>
                 ${penaltySectionHtml}
+                ${structureSectionHtml}
                 <div class="gms-score-detail-section gms-indicators-section">
                     <strong>计算指标细项</strong>
                     <table class="gms-weight-table gms-indicators-table">

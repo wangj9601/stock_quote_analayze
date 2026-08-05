@@ -5538,6 +5538,27 @@ const ScreeningPage = {
                     .replace(/'/g, '&#39;')
                     .replace(/</g, '&lt;');
                 const gmsDetailHref = `stock.html?code=${encodeURIComponent(gmsCode)}&name=${encodeURIComponent(stock.name || '')}`;
+                const gmsSt = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
+                const gmsSupport = stock.nearest_support != null
+                    ? stock.nearest_support
+                    : (Array.isArray(stock.support_levels) && stock.support_levels.length
+                        ? stock.support_levels[0]
+                        : gmsSt.nearest_support);
+                const gmsResist = stock.nearest_resistance != null
+                    ? stock.nearest_resistance
+                    : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                        ? stock.resistance_levels[0]
+                        : gmsSt.nearest_resistance);
+                const gmsSupportTitle = Array.isArray(stock.support_levels) && stock.support_levels.length
+                    ? stock.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    : (Array.isArray(gmsSt.support_levels) && gmsSt.support_levels.length
+                        ? gmsSt.support_levels.map((x) => Number(x).toFixed(2)).join('、')
+                        : '');
+                const gmsResistTitle = Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                    ? stock.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                    : (Array.isArray(gmsSt.resistance_levels) && gmsSt.resistance_levels.length
+                        ? gmsSt.resistance_levels.map((x) => Number(x).toFixed(2)).join('、')
+                        : '');
                 html += `
                     <tr data-gms-row="${index}">
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${gmsDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${gmsCode}</a></td>
@@ -5548,6 +5569,8 @@ const ScreeningPage = {
                         <td class="gms-col-narrow"><span class="${buyTypeClass}">${buyType}</span></td>
                         <td class="gms-col-narrow gms-col-risk"><span class="gms-risk-tags-inline">${riskHtml}</span></td>
                         <td class="gms-col-price">${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
+                        <td class="gms-col-price support" title="${gmsSupportTitle || ''}">${gmsSupport != null && Number.isFinite(Number(gmsSupport)) ? Number(gmsSupport).toFixed(2) : '--'}</td>
+                        <td class="gms-col-price resistance" title="${gmsResistTitle || ''}">${gmsResist != null && Number.isFinite(Number(gmsResist)) ? Number(gmsResist).toFixed(2) : '--'}</td>
                         <td class="gms-col-num">${stock.delta != null ? stock.delta.toFixed(4) : '--'}</td>
                         <td class="gms-col-num">${stock.falling_days != null ? stock.falling_days : '--'}</td>
                         <td class="gms-col-num">${stock.rising_days != null ? stock.rising_days : '--'}</td>
@@ -5567,7 +5590,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="17" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                        <td colspan="19" class="gms-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
@@ -5759,7 +5782,7 @@ const ScreeningPage = {
             filename = `PVFARS量价频幅度共振筛选结果_${new Date().toISOString().split('T')[0]}.csv`;
         } else if (strategy === 'gms') {
             headers = [
-                '股票代码', '股票名称', '所属行业', '信号强度', '买点类型', '当前价格',
+                '股票代码', '股票名称', '所属行业', '信号强度', '买点类型', '当前价格', '支撑', '阻力',
                 'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
                 'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
             ];
@@ -5780,6 +5803,17 @@ const ScreeningPage = {
                     volume_ratio: stock.volume_ratio,
                     ...(stock.score_detail || {})
                 };
+                const st = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
+                const support = stock.nearest_support != null
+                    ? stock.nearest_support
+                    : (Array.isArray(stock.support_levels) && stock.support_levels.length
+                        ? stock.support_levels[0]
+                        : st.nearest_support);
+                const resist = stock.nearest_resistance != null
+                    ? stock.nearest_resistance
+                    : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                        ? stock.resistance_levels[0]
+                        : st.nearest_resistance);
                 if (sig === 0 && sd.score_total != null && sd.score_total > 0) sig = sd.score_total / 100;
                 const fmt = (v) => (v != null && typeof v === 'number' && !isNaN(v)) ? v.toFixed(1) : '--';
                 const accPart = sd.score_accumulation != null
@@ -5796,6 +5830,8 @@ const ScreeningPage = {
                     (sig * 100).toFixed(1) + '%',
                     stock.buy_type || '',
                     stock.current_price != null ? stock.current_price.toFixed(2) : '',
+                    support != null && Number.isFinite(Number(support)) ? Number(support).toFixed(2) : '',
+                    resist != null && Number.isFinite(Number(resist)) ? Number(resist).toFixed(2) : '',
                     stock.delta != null ? stock.delta.toFixed(4) : '',
                     stock.falling_days != null ? stock.falling_days : '',
                     stock.rising_days != null ? stock.rising_days : '',
@@ -6132,7 +6168,7 @@ const ScreeningPage = {
             return;
         }
         const headers = [
-            '股票代码', '股票名称', '所属行业', '信号强度', '买点类型', '当前价格',
+            '股票代码', '股票名称', '所属行业', '信号强度', '买点类型', '当前价格', '支撑', '阻力',
             'Δ (20日位移)', 'F (下跌天)', 'Z (上涨天)', 'd (20日均价)', 'Δ/d (位移/均价)',
             'Δ/d₂₀', 'Δ/d₁', 'F/Z', '当前涨跌幅', '得分明细'
         ];
@@ -6154,6 +6190,17 @@ const ScreeningPage = {
                 volume_ratio: stock.volume_ratio,
                 ...(stock.score_detail || {})
             };
+            const st = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
+            const support = stock.nearest_support != null
+                ? stock.nearest_support
+                : (Array.isArray(stock.support_levels) && stock.support_levels.length
+                    ? stock.support_levels[0]
+                    : st.nearest_support);
+            const resist = stock.nearest_resistance != null
+                ? stock.nearest_resistance
+                : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
+                    ? stock.resistance_levels[0]
+                    : st.nearest_resistance);
             if (sig === 0 && sd.score_total != null && sd.score_total > 0) sig = sd.score_total / 100;
             aoa.push([
                 '\u2060' + (stock.symbol || stock.code),
@@ -6162,6 +6209,8 @@ const ScreeningPage = {
                 (sig * 100).toFixed(1) + '%',
                 stock.buy_type || '',
                 stock.current_price != null ? stock.current_price.toFixed(2) : '',
+                support != null && Number.isFinite(Number(support)) ? Number(support).toFixed(2) : '',
+                resist != null && Number.isFinite(Number(resist)) ? Number(resist).toFixed(2) : '',
                 stock.delta != null ? stock.delta.toFixed(4) : '',
                 stock.falling_days != null ? stock.falling_days : '',
                 stock.rising_days != null ? stock.rising_days : '',
@@ -6186,7 +6235,7 @@ const ScreeningPage = {
             const detailRowIdx = 2 + i * 2;
             ws['!rows'][dataRowIdx] = { level: 0 };
             ws['!rows'][detailRowIdx] = { level: 1, hidden: true };
-            merges.push({ s: { r: detailRowIdx, c: 0 }, e: { r: detailRowIdx, c: 14 } });
+            merges.push({ s: { r: detailRowIdx, c: 0 }, e: { r: detailRowIdx, c: headers.length - 1 } });
         });
         ws['!merges'] = merges;
         const wb = XLSX.utils.book_new();

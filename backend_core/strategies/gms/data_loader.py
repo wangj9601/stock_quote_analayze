@@ -293,3 +293,93 @@ class GMSDataLoader:
 
         period = resolve_observation_period_days(gms_config or {})
         enrich_rows_observation_range(self.db, rows, period_days=period)
+
+    def load_bars(
+        self,
+        code: str,
+        market_type: str = "CN",
+        end_date: Optional[str] = None,
+        limit: int = 800,
+    ) -> List[Dict[str, Any]]:
+        """
+        加载日 K（日期 DESC，最新在前），供 KDE 支撑/阻力计算。
+
+        CN → historical_quotes；HK → historical_quotes_hk；ETF → fund_historical_quotes。
+        """
+        code_n = str(code or "").strip()
+        if not code_n:
+            return []
+        mt = str(market_type or "CN").strip().upper()
+        lim = int(limit) if limit and int(limit) > 0 else 800
+        end_str = str(end_date).strip()[:10] if end_date else None
+
+        try:
+            from sqlalchemy import cast, String
+            from backend_api.models import (
+                HistoricalQuotes,
+                HistoricalQuotesHK,
+                FundHistoricalQuotes,
+            )
+
+            if mt == "HK":
+                q = self.db.query(
+                    HistoricalQuotesHK.date,
+                    HistoricalQuotesHK.open,
+                    HistoricalQuotesHK.high,
+                    HistoricalQuotesHK.low,
+                    HistoricalQuotesHK.close,
+                    HistoricalQuotesHK.volume,
+                ).filter(HistoricalQuotesHK.code == code_n)
+                if end_str:
+                    q = q.filter(HistoricalQuotesHK.date <= end_str)
+                rows = q.order_by(HistoricalQuotesHK.date.desc()).limit(lim).all()
+            elif mt == "ETF":
+                q = self.db.query(
+                    FundHistoricalQuotes.date,
+                    FundHistoricalQuotes.open,
+                    FundHistoricalQuotes.high,
+                    FundHistoricalQuotes.low,
+                    FundHistoricalQuotes.close,
+                    FundHistoricalQuotes.volume,
+                ).filter(FundHistoricalQuotes.code == code_n)
+                if end_str:
+                    q = q.filter(FundHistoricalQuotes.date <= end_str)
+                rows = q.order_by(FundHistoricalQuotes.date.desc()).limit(lim).all()
+            else:
+                q = self.db.query(
+                    HistoricalQuotes.date,
+                    HistoricalQuotes.open,
+                    HistoricalQuotes.high,
+                    HistoricalQuotes.low,
+                    HistoricalQuotes.close,
+                    HistoricalQuotes.volume,
+                ).filter(HistoricalQuotes.code == code_n)
+                if end_str:
+                    # date 列历史上可能为 TEXT，与回测取数口径一致
+                    q = q.filter(cast(HistoricalQuotes.date, String) <= end_str)
+                rows = q.order_by(HistoricalQuotes.date.desc()).limit(lim).all()
+
+            bars: List[Dict[str, Any]] = []
+            for r in rows:
+                d = r[0]
+                ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d).strip()[:10]
+                if not ds:
+                    continue
+                bars.append(
+                    {
+                        "date": ds,
+                        "open": float(r[1] or 0),
+                        "high": float(r[2] or 0),
+                        "low": float(r[3] or 0),
+                        "close": float(r[4] or 0),
+                        "volume": float(r[5] or 0),
+                    }
+                )
+            return bars
+        except Exception as e:
+            logger.warning("GMS load_bars %s (%s) failed: %s", code_n, mt, e)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            return []
