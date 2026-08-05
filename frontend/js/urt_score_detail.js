@@ -200,11 +200,16 @@ const UrtScoreDetail = {
         const structureRr = src.structure_rr != null ? src.structure_rr
             : (st.rr != null ? st.rr : null);
         const structureRrReason = src.structure_rr_reason || st.rr_reason || '';
+        const structureRrFloored = !!(src.structure_rr_downside_floored
+            || st.rr_downside_floored);
         html += '<div class="gms-score-detail-section"><strong>【支撑 / 阻力】</strong>';
         html += '<div class="gms-version-meta-line">';
         html += `<span>最近支撑 <strong>${this._fmt(nearSup, 2)}</strong></span>`;
         html += `<span>最近阻力 <strong>${this._fmt(nearRes, 2)}</strong></span>`;
         html += `<span>盈亏比 RR <strong>${structureRr != null && Number.isFinite(Number(structureRr)) ? Number(structureRr).toFixed(2) : '--'}</strong></span>`;
+        if (structureRrFloored) {
+            html += '<span title="贴支撑时分母已按现价比例下限计算">已用分母下限</span>';
+        }
         if (structureRrReason && structureRrReason !== 'ok') {
             html += `<span>${structureRrReason}</span>`;
         }

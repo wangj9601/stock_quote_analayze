@@ -15,10 +15,44 @@ def test_build_tags_rr_low_warn():
     enriched = enrich_structure_with_rr(st, price=15.84, cfg=cfg)
     assert enriched["structure"]["rr"] is not None
     assert enriched["structure"]["rr"] < 1.5
+    assert "rr_downside_floored" in enriched["structure"]
     tags = enriched["risk_tags"]
     assert len(tags) == 1
     assert tags[0]["id"] == "poor_structure_rr"
     assert tags[0]["level"] == "warn"
+
+
+def test_enrich_near_support_applies_downside_floor():
+    cfg = {
+        "structure_rr_warn_enabled": True,
+        "structure_rr_min_rr": 1.5,
+        "structure_rr_min_downside_pct": 0.015,
+    }
+    enriched = enrich_structure_with_rr(
+        {"nearest_support": 7.87, "nearest_resistance": 10.07},
+        price=7.91,
+        cfg=cfg,
+    )
+    st = enriched["structure"]
+    assert st["rr_downside_floored"] is True
+    assert abs(st["rr"] - 18.2048) < 0.01
+    # RR 经下限后仍远高于 1.5 → 无偏低标签
+    assert enriched["risk_tags"] == []
+
+    cfg_hi = dict(cfg)
+    cfg_hi["structure_rr_min_rr"] = 20
+    tags = build_structure_rr_risk_tags(
+        {"nearest_support": 7.87, "nearest_resistance": 10.07},
+        cfg_hi,
+        price=7.91,
+    )
+    assert len(tags) == 1
+    assert "已用分母下限" in tags[0]["reason"]
+
+
+def test_default_config_has_min_downside_pct():
+    cfg = URTConfigManager().get_default_config()
+    assert abs(float(cfg.get("structure_rr_min_downside_pct")) - 0.015) < 1e-9
 
 
 def test_build_tags_below_support_danger():

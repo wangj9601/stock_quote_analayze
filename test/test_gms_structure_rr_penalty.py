@@ -2,12 +2,16 @@
 """GMS 结构盈亏比减分 poor_structure_rr。"""
 
 from backend_core.strategies.gms.scoring.penalties import PenaltyEngine, PENALTY_RULE_TYPES
-from backend_core.strategies.gms.structure_levels import compute_structure_rr
+from backend_core.strategies.gms.structure_levels import (
+    compute_structure_rr,
+    resolve_structure_rr_min_downside_pct,
+)
 
 
 def test_penalty_rule_type_registered():
     assert "poor_structure_rr" in PENALTY_RULE_TYPES
     assert PENALTY_RULE_TYPES["poor_structure_rr"]["default_min_rr"] == 1.5
+    assert PENALTY_RULE_TYPES["poor_structure_rr"]["default_min_downside_pct"] == 0.015
 
 
 def test_compute_structure_rr_ok_and_low():
@@ -15,10 +19,38 @@ def test_compute_structure_rr_ok_and_low():
     assert info["reason"] == "ok"
     assert abs(info["rr"] - 2.0) < 1e-6
     assert info["should_penalize"] is None
+    assert info["downside_floored"] is False
 
     low = compute_structure_rr(10.0, 8.0, 11.0)
     assert low["reason"] == "ok"
     assert abs(low["rr"] - 0.5) < 1e-6
+
+
+def test_compute_structure_rr_min_downside_floor_near_support():
+    """贴支撑：默认 1.5% 分母下限后 RR≈18，关闭下限仍≈54。"""
+    floored = compute_structure_rr(7.91, 7.87, 10.07)
+    assert floored["reason"] == "ok"
+    assert floored["downside_floored"] is True
+    assert abs(floored["min_downside_pct"] - 0.015) < 1e-9
+    # upside=2.16, floor=7.91*0.015=0.11865 → RR≈18.2048
+    assert abs(floored["rr"] - 18.2048) < 0.01
+    assert abs(floored["downside"] - 7.91 * 0.015) < 1e-6
+    assert abs(floored["downside_raw"] - 0.04) < 1e-6
+
+    raw = compute_structure_rr(7.91, 7.87, 10.07, min_downside_pct=0)
+    assert raw["downside_floored"] is False
+    assert abs(raw["rr"] - 54.0) < 0.01
+    assert abs(raw["downside"] - 0.04) < 1e-6
+
+
+def test_resolve_structure_rr_min_downside_pct():
+    assert resolve_structure_rr_min_downside_pct(None) == 0.015
+    assert resolve_structure_rr_min_downside_pct({}) == 0.015
+    assert resolve_structure_rr_min_downside_pct({"structure_rr_min_downside_pct": 0}) == 0.0
+    assert abs(resolve_structure_rr_min_downside_pct({"structure_rr_min_downside_pct": 0.02}) - 0.02) < 1e-9
+    assert abs(
+        resolve_structure_rr_min_downside_pct({"scoring": {"structure_rr_min_downside_pct": 0.01}}) - 0.01
+    ) < 1e-9
 
 
 def test_compute_structure_rr_edge_cases():
@@ -32,20 +64,22 @@ def test_compute_structure_rr_edge_cases():
     assert at_res["rr"] == 0.0
 
 
-def _penalty_cfg(min_rr=1.5, points=10):
+def _penalty_cfg(min_rr=1.5, points=10, min_downside_pct=None):
+    rule = {
+        "id": "poor_structure_rr",
+        "enabled": True,
+        "points": points,
+        "label": "结构盈亏比偏低",
+        "min_rr": min_rr,
+    }
+    if min_downside_pct is not None:
+        rule["min_downside_pct"] = min_downside_pct
     return {
         "scoring": {
             "mechanism": "tiered_dual_penalty",
-            "penalty_rules": [
-                {
-                    "id": "poor_structure_rr",
-                    "enabled": True,
-                    "points": points,
-                    "label": "结构盈亏比偏低",
-                    "min_rr": min_rr,
-                }
-            ],
-        }
+            "penalty_rules": [rule],
+        },
+        "structure_rr_min_downside_pct": 0.015,
     }
 
 
@@ -63,6 +97,29 @@ def test_penalty_engine_deducts_when_rr_low():
     assert details[0]["rr"] is not None
     assert details[0]["rr"] < 1.5
     assert details[0]["min_rr"] == 1.5
+    assert "downside_floored" in details[0]
+    assert "min_downside_pct" in details[0]
+
+
+def test_penalty_engine_near_support_uses_floor():
+    """贴支撑虚高 RR：默认下限后约 18 不扣；关闭下限约 54 也不扣（仍>1.5）。"""
+    engine = PenaltyEngine(_penalty_cfg(min_rr=1.5, points=10))
+    row = {"d20": 7.91, "nearest_support": 7.87, "nearest_resistance": 10.07}
+    total, details = engine.apply(row)
+    assert total == 0
+    assert details == []
+
+    # 若阈值提高到 20，默认下限 RR≈18 应扣分，且 extra 标记 floored
+    engine_hi = PenaltyEngine(_penalty_cfg(min_rr=20, points=8))
+    total_hi, details_hi = engine_hi.apply(row)
+    assert total_hi == 8
+    assert details_hi[0]["downside_floored"] is True
+    assert abs(details_hi[0]["rr"] - 18.2048) < 0.01
+
+    # 规则覆盖关闭下限：RR≈54 ≥ 20 → 不扣
+    engine_off = PenaltyEngine(_penalty_cfg(min_rr=20, points=8, min_downside_pct=0))
+    total_off, _ = engine_off.apply(row)
+    assert total_off == 0
 
 
 def test_penalty_engine_no_deduct_when_rr_ok():

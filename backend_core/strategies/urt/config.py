@@ -64,6 +64,7 @@ class URTConfigManager:
             # 结构盈亏比风险提示（软标签，不硬筛、不减分）
             "structure_rr_warn_enabled": True,
             "structure_rr_min_rr": 1.5,
+            "structure_rr_min_downside_pct": 0.015,
             "risk": {
                 "stop_loss_pct_min": 5,
                 "stop_loss_pct_max": 10,

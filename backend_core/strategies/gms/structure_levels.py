@@ -20,6 +20,10 @@ def empty_structure() -> Dict[str, Any]:
         "method": "kde_volume_weighted",
         "rr": None,
         "rr_reason": "insufficient_samples",
+        "rr_downside_floored": False,
+        "rr_min_downside_pct": 0.015,
+        "rr_downside_raw": None,
+        "rr_downside": None,
     }
 
 
@@ -27,53 +31,119 @@ def compute_structure_rr(
     price: Optional[float],
     nearest_support: Optional[float],
     nearest_resistance: Optional[float],
+    *,
+    min_downside_pct: float = 0.015,
 ) -> Dict[str, Any]:
     """
-    结构盈亏比（与 RPE structure_filter 同口径）。
+    结构盈亏比（与 RPE structure_filter 同口径，并对分母做下限）。
 
-    RR = (阻力 - 价) / (价 - 支撑)
+    RR = upside / max(价−支撑, 现价×min_downside_pct)
+
+    贴支撑时原始 downside 极小会导致 RR 虚高；默认至少按现价 1.5% 作为风险分母
+    （覆盖滑点/假破缓冲）。min_downside_pct<=0 时关闭下限。
 
     返回:
-      rr: Optional[float]
-      reason: str
-      should_penalize: Optional[bool]
-        True=必扣分；False=不扣；None=由调用方用 min_rr 与 rr 比较
+      rr / reason / should_penalize
+      downside_raw / downside / downside_floored / min_downside_pct
     """
+    empty_extra = {
+        "downside_raw": None,
+        "downside": None,
+        "downside_floored": False,
+        "min_downside_pct": float(min_downside_pct or 0),
+    }
     if price is None:
-        return {"rr": None, "reason": "no_price", "should_penalize": False}
+        return {"rr": None, "reason": "no_price", "should_penalize": False, **empty_extra}
     try:
         px = float(price)
     except (TypeError, ValueError):
-        return {"rr": None, "reason": "no_price", "should_penalize": False}
+        return {"rr": None, "reason": "no_price", "should_penalize": False, **empty_extra}
     if px <= 0:
-        return {"rr": None, "reason": "no_price", "should_penalize": False}
+        return {"rr": None, "reason": "no_price", "should_penalize": False, **empty_extra}
 
     if nearest_support is None:
-        return {"rr": None, "reason": "no_support", "should_penalize": False}
+        return {"rr": None, "reason": "no_support", "should_penalize": False, **empty_extra}
     try:
         ns = float(nearest_support)
     except (TypeError, ValueError):
-        return {"rr": None, "reason": "no_support", "should_penalize": False}
+        return {"rr": None, "reason": "no_support", "should_penalize": False, **empty_extra}
 
     if px <= ns:
-        return {"rr": None, "reason": "below_or_no_support", "should_penalize": True}
-    downside = px - ns
-    if downside <= 0:
-        return {"rr": None, "reason": "zero_downside", "should_penalize": True}
+        return {"rr": None, "reason": "below_or_no_support", "should_penalize": True, **empty_extra}
+    downside_raw = px - ns
+    if downside_raw <= 0:
+        return {"rr": None, "reason": "zero_downside", "should_penalize": True, **empty_extra}
+
+    try:
+        floor_pct = float(min_downside_pct or 0)
+    except (TypeError, ValueError):
+        floor_pct = 0.015
+    if floor_pct < 0:
+        floor_pct = 0.0
+    floor = px * floor_pct if floor_pct > 0 else 0.0
+    downside = max(downside_raw, floor) if floor > 0 else downside_raw
+    floored = bool(floor > 0 and downside_raw < floor)
 
     if nearest_resistance is None:
-        return {"rr": None, "reason": "no_resistance", "should_penalize": False}
+        return {
+            "rr": None,
+            "reason": "no_resistance",
+            "should_penalize": False,
+            "downside_raw": round(downside_raw, 6),
+            "downside": round(downside, 6),
+            "downside_floored": floored,
+            "min_downside_pct": floor_pct,
+        }
     try:
         nr = float(nearest_resistance)
     except (TypeError, ValueError):
-        return {"rr": None, "reason": "no_resistance", "should_penalize": False}
+        return {
+            "rr": None,
+            "reason": "no_resistance",
+            "should_penalize": False,
+            "downside_raw": round(downside_raw, 6),
+            "downside": round(downside, 6),
+            "downside_floored": floored,
+            "min_downside_pct": floor_pct,
+        }
 
     upside = nr - px
     if upside <= 0:
-        return {"rr": 0.0, "reason": "at_resistance", "should_penalize": True}
+        return {
+            "rr": 0.0,
+            "reason": "at_resistance",
+            "should_penalize": True,
+            "downside_raw": round(downside_raw, 6),
+            "downside": round(downside, 6),
+            "downside_floored": floored,
+            "min_downside_pct": floor_pct,
+        }
 
     rr = round(upside / downside, 4)
-    return {"rr": rr, "reason": "ok", "should_penalize": None}
+    return {
+        "rr": rr,
+        "reason": "ok",
+        "should_penalize": None,
+        "downside_raw": round(downside_raw, 6),
+        "downside": round(downside, 6),
+        "downside_floored": floored,
+        "min_downside_pct": floor_pct,
+    }
+
+
+def resolve_structure_rr_min_downside_pct(cfg: Optional[Dict[str, Any]] = None) -> float:
+    """配置键 structure_rr_min_downside_pct，默认 0.015（现价 1.5%）。"""
+    root = cfg if isinstance(cfg, dict) else {}
+    raw = root.get("structure_rr_min_downside_pct")
+    if raw is None and isinstance(root.get("structure"), dict):
+        raw = root["structure"].get("structure_rr_min_downside_pct")
+    if raw is None and isinstance(root.get("scoring"), dict):
+        raw = root["scoring"].get("structure_rr_min_downside_pct")
+    try:
+        v = float(raw) if raw is not None else 0.015
+    except (TypeError, ValueError):
+        v = 0.015
+    return max(0.0, v)
 
 
 def resolve_kde_config(cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -171,7 +241,8 @@ def compute_structure_levels(
     nr = near.get("nearest_resistance")
     ns_v = round(float(ns), 2) if ns is not None else None
     nr_v = round(float(nr), 2) if nr is not None else None
-    rr_info = compute_structure_rr(px, ns_v, nr_v)
+    floor_pct = resolve_structure_rr_min_downside_pct(cfg)
+    rr_info = compute_structure_rr(px, ns_v, nr_v, min_downside_pct=floor_pct)
     return {
         "support_levels": supports,
         "resistance_levels": resists,
@@ -185,6 +256,10 @@ def compute_structure_levels(
         "method": "kde_volume_weighted",
         "rr": rr_info.get("rr"),
         "rr_reason": rr_info.get("reason"),
+        "rr_downside_floored": bool(rr_info.get("downside_floored")),
+        "rr_min_downside_pct": rr_info.get("min_downside_pct"),
+        "rr_downside_raw": rr_info.get("downside_raw"),
+        "rr_downside": rr_info.get("downside"),
     }
 
 
@@ -201,3 +276,7 @@ def flatten_structure_to_result(result: Dict[str, Any], structure: Dict[str, Any
     result["kde_lookback_expanded"] = st.get("kde_lookback_expanded")
     result["structure_rr"] = st.get("rr")
     result["structure_rr_reason"] = st.get("rr_reason")
+    result["structure_rr_downside_floored"] = st.get("rr_downside_floored")
+    result["structure_rr_min_downside_pct"] = st.get("rr_min_downside_pct")
+    result["structure_rr_downside_raw"] = st.get("rr_downside_raw")
+    result["structure_rr_downside"] = st.get("rr_downside")

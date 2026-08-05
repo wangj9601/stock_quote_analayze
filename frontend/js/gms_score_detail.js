@@ -149,11 +149,16 @@ const GmsScoreDetail = {
         const structureRr = sd.structure_rr != null ? sd.structure_rr
             : (st.rr != null ? st.rr : null);
         const structureRrReason = sd.structure_rr_reason || st.rr_reason || '';
+        const structureRrFloored = !!(sd.structure_rr_downside_floored
+            || st.rr_downside_floored);
         let structureSectionHtml = '<div class="gms-score-detail-section"><strong>【支撑 / 阻力】</strong>';
         structureSectionHtml += '<div class="gms-version-meta-line">';
         structureSectionHtml += `<span>最近支撑 <strong>${gmsFmt(nearSup, 'price')}</strong></span>`;
         structureSectionHtml += `<span>最近阻力 <strong>${gmsFmt(nearRes, 'price')}</strong></span>`;
         structureSectionHtml += `<span>盈亏比 RR <strong>${structureRr != null ? Number(structureRr).toFixed(2) : '--'}</strong></span>`;
+        if (structureRrFloored) {
+            structureSectionHtml += '<span title="贴支撑时分母已按现价比例下限计算">已用分母下限</span>';
+        }
         if (structureRrReason && structureRrReason !== 'ok') {
             structureSectionHtml += `<span>${structureRrReason}</span>`;
         }

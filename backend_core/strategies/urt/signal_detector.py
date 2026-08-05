@@ -367,6 +367,10 @@ def evaluate_buy_signal(
             "method": "kde_volume_weighted",
             "rr": structure.get("rr"),
             "rr_reason": structure.get("rr_reason"),
+            "rr_downside_floored": structure.get("rr_downside_floored"),
+            "rr_min_downside_pct": structure.get("rr_min_downside_pct"),
+            "rr_downside_raw": structure.get("rr_downside_raw"),
+            "rr_downside": structure.get("rr_downside"),
         }
         score_detail["risk_tags"] = risk_tags
 
@@ -414,6 +418,8 @@ def evaluate_buy_signal(
         "kde_lookback_expanded": structure["kde_lookback_expanded"],
         "structure_rr": structure.get("rr"),
         "structure_rr_reason": structure.get("rr_reason"),
+        "structure_rr_downside_floored": structure.get("rr_downside_floored"),
+        "structure_rr_min_downside_pct": structure.get("rr_min_downside_pct"),
         "risk_tags": risk_tags,
     }
     payload["buy_logic"] = build_buy_logic(payload, cfg)

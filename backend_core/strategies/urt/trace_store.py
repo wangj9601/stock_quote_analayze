@@ -68,6 +68,8 @@ def _enrich_trace_structure_fields(
     item["kde_lookback_used"] = st.get("kde_lookback_used")
     item["structure_rr"] = st.get("rr")
     item["structure_rr_reason"] = st.get("rr_reason")
+    item["structure_rr_downside_floored"] = st.get("rr_downside_floored")
+    item["structure_rr_min_downside_pct"] = st.get("rr_min_downside_pct")
     item["risk_tags"] = risk_tags if isinstance(risk_tags, list) else (sd.get("risk_tags") or [])
     return item
 

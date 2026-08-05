@@ -576,8 +576,10 @@ observation_range_amplitude_pct = (period_high − period_low) / period_high
 
 ```
 P = 当日收盘（优先行情 close；减分判定与 close_below_ma60 一致，可用 d₂₀）
-RR = (nearest_resistance − P) / (P − nearest_support)
+RR = (nearest_resistance − P) / max(P − nearest_support, P × structure_rr_min_downside_pct)
 ```
+
+贴支撑时原始 downside 极小会导致 RR 虚高；默认分母至少按现价 **1.5%**（`structure_rr_min_downside_pct`，规则级可用 `min_downside_pct` 覆盖；设 `0` 关闭）。命中下限时结果带 `rr_downside_floored=true`。
 
 | 情形 | 是否扣分 |
 |------|----------|
@@ -590,6 +592,7 @@ RR = (nearest_resistance − P) / (P − nearest_support)
 |------|------|--------|------|
 | `points` | 规则级 | 10 | 命中后扣分 |
 | `min_rr` | 规则级 | 1.5 | 最低可接受盈亏比（对齐 RPE） |
+| `min_downside_pct` | 规则级 / 配置根 | 0.015 | RR 分母下限（现价比例；0 关闭） |
 
 **数据依赖**：`strategy_engine.screen` 在 `calculator.calculate` **之前**调用 `structure_levels.compute_structure_levels`，将 `nearest_support` / `nearest_resistance` 注入打分行；`score_detail.structure` 含 `rr` / `rr_reason`。
 

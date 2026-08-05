@@ -12,16 +12,35 @@ def enrich_structure_with_rr(
     price: Optional[float],
     cfg: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """为 structure 补写 rr / rr_reason，并生成 risk_tags。"""
+    """为 structure 补写 rr / rr_reason / 分母下限字段，并生成 risk_tags。"""
     cfg = cfg or {}
     st = dict(structure or {})
-    from backend_core.strategies.gms.structure_levels import compute_structure_rr
+    from backend_core.strategies.gms.structure_levels import (
+        compute_structure_rr,
+        resolve_structure_rr_min_downside_pct,
+    )
 
-    info = compute_structure_rr(price, st.get("nearest_support"), st.get("nearest_resistance"))
+    floor_pct = resolve_structure_rr_min_downside_pct(cfg)
+    info = compute_structure_rr(
+        price,
+        st.get("nearest_support"),
+        st.get("nearest_resistance"),
+        min_downside_pct=floor_pct,
+    )
     st["rr"] = info.get("rr")
     st["rr_reason"] = info.get("reason")
+    st["rr_downside_floored"] = bool(info.get("downside_floored"))
+    st["rr_min_downside_pct"] = info.get("min_downside_pct")
+    st["rr_downside_raw"] = info.get("downside_raw")
+    st["rr_downside"] = info.get("downside")
     tags = build_structure_rr_risk_tags(st, cfg, price=price, rr_info=info)
     return {"structure": st, "risk_tags": tags}
+
+
+def _floor_hint(rr_info: Optional[Dict[str, Any]]) -> str:
+    if rr_info and rr_info.get("downside_floored"):
+        return "；已用分母下限"
+    return ""
 
 
 def build_structure_rr_risk_tags(
@@ -41,14 +60,24 @@ def build_structure_rr_risk_tags(
 
     st = structure if isinstance(structure, dict) else {}
     if rr_info is None:
-        from backend_core.strategies.gms.structure_levels import compute_structure_rr
+        from backend_core.strategies.gms.structure_levels import (
+            compute_structure_rr,
+            resolve_structure_rr_min_downside_pct,
+        )
 
         px = price
-        rr_info = compute_structure_rr(px, st.get("nearest_support"), st.get("nearest_resistance"))
+        floor_pct = resolve_structure_rr_min_downside_pct(cfg)
+        rr_info = compute_structure_rr(
+            px,
+            st.get("nearest_support"),
+            st.get("nearest_resistance"),
+            min_downside_pct=floor_pct,
+        )
 
     rr = rr_info.get("rr") if rr_info else st.get("rr")
     reason = (rr_info.get("reason") if rr_info else None) or st.get("rr_reason") or ""
     should = rr_info.get("should_penalize") if rr_info else None
+    hint = _floor_hint(rr_info)
 
     try:
         min_rr = float(cfg.get("structure_rr_min_rr") or 1.5)
@@ -63,7 +92,7 @@ def build_structure_rr_risk_tags(
                     "id": "poor_structure_rr",
                     "label": "破位支撑",
                     "level": "danger",
-                    "reason": f"现价不高于最近支撑（结构盈亏比要求 ≥{min_rr:g}）",
+                    "reason": f"现价不高于最近支撑（结构盈亏比要求 ≥{min_rr:g}）{hint}",
                 }
             )
         elif reason == "at_resistance":
@@ -72,7 +101,7 @@ def build_structure_rr_risk_tags(
                     "id": "poor_structure_rr",
                     "label": "贴/超阻力",
                     "level": "danger",
-                    "reason": f"上行空间不足 RR={rr if rr is not None else 0}（要求 ≥{min_rr:g}）",
+                    "reason": f"上行空间不足 RR={rr if rr is not None else 0}（要求 ≥{min_rr:g}）{hint}",
                 }
             )
         else:
@@ -81,7 +110,7 @@ def build_structure_rr_risk_tags(
                     "id": "poor_structure_rr",
                     "label": "结构盈亏比偏低",
                     "level": "warn",
-                    "reason": f"结构盈亏比异常（{reason}）",
+                    "reason": f"结构盈亏比异常（{reason}）{hint}",
                 }
             )
         return tags
@@ -101,7 +130,7 @@ def build_structure_rr_risk_tags(
                 "id": "poor_structure_rr",
                 "label": "结构盈亏比偏低",
                 "level": "warn",
-                "reason": f"结构盈亏比 RR={rr_f:.2f} < {min_rr:g}",
+                "reason": f"结构盈亏比 RR={rr_f:.2f} < {min_rr:g}{hint}",
             }
         )
     return tags

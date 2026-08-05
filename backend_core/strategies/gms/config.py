@@ -68,6 +68,8 @@ class GMSConfigManager:
             "kde_lookback_max": 750,
             "kde_base_factor": 1.0,
             "kde_grid_points": 200,
+            # 结构盈亏比分母下限（现价比例；0 关闭；贴支撑时避免 RR 虚高）
+            "structure_rr_min_downside_pct": 0.015,
         }
 
     def _load_from_json_file(self) -> Optional[Dict]:

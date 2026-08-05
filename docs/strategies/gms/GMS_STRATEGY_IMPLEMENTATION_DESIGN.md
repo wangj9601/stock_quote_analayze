@@ -393,7 +393,7 @@ def screen(self, codes, date, market, min_score=0, max_results=None):
 |---------|----------|
 | `close_below_ma60` | d₂₀ &lt; ma60_d；MA60 走平时扣分减半 |
 | `observation_range_amplitude` | 观察周期内 (高−低)/高 &gt; 阈值（默认 30%，扣 10 分） |
-| `poor_structure_rr` | KDE 结构盈亏比 RR=(阻力−价)/(价−支撑)；破位/贴阻力或 RR&lt;min_rr（默认 1.5）扣分；无阻力不扣 |
+| `poor_structure_rr` | KDE 结构盈亏比 RR=(阻力−价)/max(价−支撑, 价×分母下限)；默认分母下限 1.5%；破位/贴阻力或 RR&lt;min_rr（默认 1.5）扣分；无阻力不扣 |
 
 等级（S/A/全速/分批）仍按**减分前**基础分判定。`risk_tags.py` 对每条命中的减分规则生成 `penalty_{id}` 风险提示。
 

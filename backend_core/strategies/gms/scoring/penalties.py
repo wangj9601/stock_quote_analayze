@@ -44,12 +44,14 @@ PENALTY_RULE_TYPES = {
         "id": "poor_structure_rr",
         "label": "结构盈亏比偏低",
         "description": (
-            "基于 KDE 最近支撑/阻力：盈亏比 RR=(阻力−现价)/(现价−支撑)。"
-            "现价破位支撑、贴阻力或 RR 低于阈值（默认 1.5）时扣分；"
+            "基于 KDE 最近支撑/阻力：盈亏比 RR=(阻力−现价)/max(现价−支撑, 现价×分母下限)。"
+            "默认分母下限为现价 1.5%（可配置 structure_rr_min_downside_pct / 规则 min_downside_pct；设 0 关闭），"
+            "避免贴支撑时 RR 虚高。现价破位支撑、贴阻力或 RR 低于阈值（默认 1.5）时扣分；"
             "无阻力或缺少支撑/KDE 失败时不扣分。与 RPE 结构盈亏比同口径，本项为软减分非硬筛。"
         ),
         "default_points": 10,
         "default_min_rr": 1.5,
+        "default_min_downside_pct": 0.015,
     },
 }
 
@@ -116,12 +118,20 @@ def _eval_rule(
         return safe_float(amp, -1.0) > threshold
 
     if rule_id == "poor_structure_rr":
-        from ..structure_levels import compute_structure_rr
+        from ..structure_levels import (
+            compute_structure_rr,
+            resolve_structure_rr_min_downside_pct,
+        )
 
+        floor_pct = safe_float(
+            (rule or {}).get("min_downside_pct"),
+            resolve_structure_rr_min_downside_pct(config),
+        )
         info = compute_structure_rr(
             _close_price(row),
             row.get("nearest_support"),
             row.get("nearest_resistance"),
+            min_downside_pct=floor_pct,
         )
         if info.get("should_penalize") is True:
             return True
@@ -169,20 +179,32 @@ def _effective_penalty_points(
             extra["observation_range_period_days"] = row.get("observation_range_period_days")
         return base_points, extra
     if rule_id == "poor_structure_rr":
-        from ..structure_levels import compute_structure_rr
+        from ..structure_levels import (
+            compute_structure_rr,
+            resolve_structure_rr_min_downside_pct,
+        )
 
         meta = PENALTY_RULE_TYPES["poor_structure_rr"]
         min_rr = safe_float(rule.get("min_rr"), safe_float(meta.get("default_min_rr"), 1.5))
+        floor_pct = safe_float(
+            rule.get("min_downside_pct"),
+            resolve_structure_rr_min_downside_pct(config),
+        )
         info = compute_structure_rr(
             _close_price(row),
             row.get("nearest_support"),
             row.get("nearest_resistance"),
+            min_downside_pct=floor_pct,
         )
         extra["min_rr"] = min_rr
         extra["rr"] = info.get("rr")
         extra["rr_reason"] = info.get("reason")
         extra["nearest_support"] = row.get("nearest_support")
         extra["nearest_resistance"] = row.get("nearest_resistance")
+        extra["downside_floored"] = bool(info.get("downside_floored"))
+        extra["min_downside_pct"] = info.get("min_downside_pct")
+        extra["downside_raw"] = info.get("downside_raw")
+        extra["downside"] = info.get("downside")
         return base_points, extra
     if rule_id != "close_below_ma60":
         return base_points, extra

@@ -502,6 +502,8 @@ const ScreeningPage = {
                 : st.kde_lookback_used,
             structure_rr: stock.structure_rr != null ? stock.structure_rr : st.rr,
             structure_rr_reason: stock.structure_rr_reason || st.rr_reason || null,
+            structure_rr_downside_floored: !!(stock.structure_rr_downside_floored
+                || st.rr_downside_floored),
             risk_tags: Array.isArray(stock.risk_tags) && stock.risk_tags.length
                 ? stock.risk_tags
                 : (Array.isArray(sd && sd.risk_tags) ? sd.risk_tags : []),
