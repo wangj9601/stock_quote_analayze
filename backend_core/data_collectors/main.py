@@ -41,6 +41,10 @@ from backend_core.data_collectors.akshare.semiannual_collector import SemiAnnual
 from backend_core.data_collectors.akshare.hk_semiannual_collector import HKSemiAnnualDataGenerator
 from backend_core.data_collectors.akshare.annual_collector import AnnualDataGenerator
 from backend_core.data_collectors.akshare.hk_annual_collector import HKAnnualDataGenerator
+from backend_core.data_collectors.akshare.period_agg import (
+    calendar_period_end,
+    is_last_session_day_of_period,
+)
 import time
 import pandas as pd
 from backend_api.database import SessionLocal as ApiSessionLocal
@@ -113,6 +117,53 @@ def _hk_session_closed_today() -> bool:
         return False
     finally:
         session.close()
+
+
+def _is_period_end_trading_day(market: str, period: str, d=None) -> bool:
+    """今日是否为季末/半年末/年末对应的最后一个交易日（自然期末遇休市则提前到前一交易日）。"""
+    day = d or datetime.now().date()
+    session = ApiSessionLocal()
+    try:
+        def _closed(x):
+            try:
+                return is_market_session_closed(session, market, x)
+            except Exception as e:
+                logging.warning(
+                    "%s 休市判定异常 date=%s，按交易日处理: %s",
+                    market,
+                    x,
+                    e,
+                )
+                return False
+
+        return is_last_session_day_of_period(day, period, is_session_closed=_closed)
+    except Exception as e:
+        logging.warning(
+            "%s 周期末日判定异常 period=%s，跳过生成以防误跑: %s",
+            market,
+            period,
+            e,
+        )
+        return False
+    finally:
+        session.close()
+
+
+def _skip_unless_period_end(market: str, period: str, label: str) -> bool:
+    """非周期末日则打日志并返回 True（调用方应直接 return）。"""
+    today = datetime.now().date()
+    if _is_period_end_trading_day(market, period, today):
+        return False
+    end = calendar_period_end(today, period)
+    logging.info(
+        "[定时任务] %s 今日 %s 非%s末日（本周期自然期末 %s），跳过生成。",
+        label,
+        today.isoformat(),
+        {"quarterly": "季", "semiannual": "半年", "annual": "年"}.get(period, period),
+        end.isoformat(),
+    )
+    return True
+
 
 def collect_akshare_realtime():
     try:
@@ -411,6 +462,8 @@ def generate_quarterly_data():
         if _cn_session_closed_today():
             logging.info("[定时任务] A股休市日，跳过季线数据生成。")
             return
+        if _skip_unless_period_end("CN", "quarterly", "A股"):
+            return
         logging.info("[定时任务] A股当前季线数据生成开始...")
         result = quarterly_generator.generate_current_quarter_data()
         logging.info(f"[定时任务] A股当前季线数据生成完成: {result}")
@@ -421,6 +474,8 @@ def generate_hk_quarterly_data():
     try:
         if _hk_session_closed_today():
             logging.info("[定时任务] 港股休市日，跳过季线数据生成。")
+            return
+        if _skip_unless_period_end("HK", "quarterly", "港股"):
             return
         logging.info("[定时任务] 港股当前季线数据生成开始...")
         result = hk_quarterly_generator.generate_current_quarter_data()
@@ -433,6 +488,8 @@ def generate_semiannual_data():
         if _cn_session_closed_today():
             logging.info("[定时任务] A股休市日，跳过半年线数据生成。")
             return
+        if _skip_unless_period_end("CN", "semiannual", "A股"):
+            return
         logging.info("[定时任务] A股当前半年线数据生成开始...")
         result = semiannual_generator.generate_current_semiannual_data()
         logging.info(f"[定时任务] A股当前半年线数据生成完成: {result}")
@@ -443,6 +500,8 @@ def generate_hk_semiannual_data():
     try:
         if _hk_session_closed_today():
             logging.info("[定时任务] 港股休市日，跳过半年线数据生成。")
+            return
+        if _skip_unless_period_end("HK", "semiannual", "港股"):
             return
         logging.info("[定时任务] 港股当前半年线数据生成开始...")
         result = hk_semiannual_generator.generate_current_semiannual_data()
@@ -455,6 +514,8 @@ def generate_annual_data():
         if _cn_session_closed_today():
             logging.info("[定时任务] A股休市日，跳过年线数据生成。")
             return
+        if _skip_unless_period_end("CN", "annual", "A股"):
+            return
         logging.info("[定时任务] A股当前年线数据生成开始...")
         result = annual_generator.generate_current_annual_data()
         logging.info(f"[定时任务] A股当前年线数据生成完成: {result}")
@@ -465,6 +526,8 @@ def generate_hk_annual_data():
     try:
         if _hk_session_closed_today():
             logging.info("[定时任务] 港股休市日，跳过年线数据生成。")
+            return
+        if _skip_unless_period_end("HK", "annual", "港股"):
             return
         logging.info("[定时任务] 港股当前年线数据生成开始...")
         result = hk_annual_generator.generate_current_annual_data()
@@ -1006,6 +1069,8 @@ scheduler.add_job(generate_hk_monthly_data, 'cron',
     id='generate_hk_monthly')
 
 # 季线 / 半年线 / 年线：可由 ENABLE_*_COLLECTION 关闭（A股+港股同一开关）
+# 开启后任务仍按日 cron 触发，但仅在对应周期最后一个交易日真正生成
+# （自然期末 03-31/06-30/09-30/12-31；若期末休市则提前到期末前最后一个交易日）
 if _env_bool('ENABLE_QUARTERLY_COLLECTION', True):
     scheduler.add_job(generate_quarterly_data, 'cron',
         day_of_week=_cron('SCHED_QUARTERLY_DOW', 'mon-fri'),

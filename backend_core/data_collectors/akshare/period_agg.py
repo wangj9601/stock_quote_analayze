@@ -11,9 +11,12 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Optional
+from datetime import date, timedelta
+from typing import Callable, Dict, Iterable, Optional, Union
 
 import pandas as pd
+
+DateLike = Union[date, str, pd.Timestamp]
 
 OHLCV_AGG: Dict[str, str] = {
     "open": "first",
@@ -56,6 +59,42 @@ def _period_end_fn(period: str):
     if p in ("annual", "year", "y", "a"):
         return to_calendar_year_end
     raise ValueError(f"不支持的周期: {period}（仅 quarterly/semiannual/annual）")
+
+
+def calendar_period_end(ts: DateLike, period: str) -> date:
+    """任意日期 → 所在季/半年/年的自然日历期末日。"""
+    return _period_end_fn(period)(ts).date()
+
+
+def is_last_session_day_of_period(
+    d: DateLike,
+    period: str,
+    *,
+    is_session_closed: Callable[[date], bool],
+) -> bool:
+    """判断 ``d`` 是否为该周期（季末 / 半年末 / 年末）内最后一个交易日。
+
+    规则（与 bar 日期自然期末一致）：
+    - ``d`` 当日必须为交易日；
+    - ``d`` 不得超过所在周期的自然期末日；
+    - ``(d, period_end]`` 区间内再无交易日（期末落在周末/节假日时，取期末前最后一个交易日）。
+
+    Parameters
+    ----------
+    is_session_closed : 给定日期是否休市（周末或交易日历节假日）
+    """
+    day = pd.Timestamp(d).date()
+    if is_session_closed(day):
+        return False
+    end = calendar_period_end(day, period)
+    if day > end:
+        return False
+    cur = day + timedelta(days=1)
+    while cur <= end:
+        if not is_session_closed(cur):
+            return False
+        cur += timedelta(days=1)
+    return True
 
 
 def resample_ohlcv_to_period_ends(
