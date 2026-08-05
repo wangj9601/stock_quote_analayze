@@ -12,6 +12,7 @@ sys.path.insert(0, str(project_root))
 
 import pandas as pd
 from backend_core.database.db import SessionLocal
+from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 from sqlalchemy import text
 
 from backend_core.logging_utils import should_log_to_file, resolve_log_file
@@ -64,7 +65,7 @@ class HKAnnualDataGenerator:
         try:
             query = text("""
                 SELECT date, open, high, low, close, volume, amount, name
-                FROM historical_quotes_hk
+                FROM hk_semiannual_quotes
                 WHERE code = :code AND date >= :start_date AND date <= :end_date
                 ORDER BY date ASC
             """)
@@ -88,12 +89,8 @@ class HKAnnualDataGenerator:
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             
-            # 年线聚合 (YE 表示年末)，name 取第一条
-            annual_df = df.resample('YE').agg({
-                'open': 'first', 'high': 'max', 'low': 'min',
-                'close': 'last', 'volume': 'sum', 'amount': 'sum',
-                'name': 'first'
-            })
+            # 年线：按自然年最后一天（12-31）聚合（由半年线累加）
+            annual_df = resample_ohlcv_to_period_ends(df, "annual")
             
             annual_df.dropna(subset=['open', 'close'], inplace=True)
             if annual_df.empty:

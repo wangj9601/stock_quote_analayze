@@ -28,7 +28,6 @@ from backend_core.data_collectors.akshare.hk_realtime import HKRealtimeQuoteColl
 from backend_core.data_collectors.akshare.hk_historical import HKHistoricalQuoteCollector
 from backend_core.data_collectors.akshare.hk_index_realtime import HKIndexRealtimeCollector
 from backend_core.data_collectors.akshare.hk_index_historical_collector import HKIndexHistoricalCollector
-from apscheduler.schedulers.background import BackgroundScheduler
 from backend_core.data_collectors.akshare.watchlist_history_collector import collect_watchlist_history
 from backend_core.data_collectors.news_collector import NewsCollector
 from backend_core.data_collectors.akshare.weekly_collector import WeeklyDataGenerator
@@ -138,7 +137,8 @@ def collect_akshare_index_realtime():
             return
         logging.info("[定时任务] AKShare 指数实时行情采集开始...")
         df = index_collector.collect_quotes()
-        logging.info(f"[定时任务] AKShare 指数实时行情采集完成，采集到 {len(df)} 条数据")
+        row_count = 0 if df is None else len(df)
+        logging.info(f"[定时任务] AKShare 指数实时行情采集完成，采集到 {row_count} 条数据")
     except Exception as e:
         logging.error(f"[定时任务] 实时行情采集异常: {e}")
 
@@ -702,18 +702,18 @@ def _register_stock_shares_job():
     mode = _env("SCHED_STOCK_SHARES_MODE", "weekly").lower()
     hour = _cron("SCHED_STOCK_SHARES_HOUR", "10")
     minute = _cron("SCHED_STOCK_SHARES_MINUTE", "0")
-    job_kwargs = {
-        "hour": hour,
-        "minute": minute,
-        "id": "stock_shares_update",
-    }
 
     if mode == "monthly":
         # 每月第 N 天（默认 1 号）
-        day = _cron_int("SCHED_STOCK_SHARES_DAY", 1)
-        day = min(31, max(1, day))
-        job_kwargs["day"] = day
-        scheduler.add_job(update_stock_shares, "cron", **job_kwargs)
+        day = min(31, max(1, _cron_int("SCHED_STOCK_SHARES_DAY", 1)))
+        scheduler.add_job(
+            update_stock_shares,
+            "cron",
+            day=day,
+            hour=hour,
+            minute=minute,
+            id="stock_shares_update",
+        )
         logging.info(
             "已注册股本同步任务：mode=monthly, day=%s, hour=%s, minute=%s",
             day, hour, minute
@@ -723,11 +723,16 @@ def _register_stock_shares_job():
     if mode == "quarterly":
         # 季度月份默认 1,4,7,10；支持自定义逗号表达式
         quarter_months = _cron("SCHED_STOCK_SHARES_QUARTER_MONTHS", "1,4,7,10")
-        day = _cron_int("SCHED_STOCK_SHARES_DAY", 1)
-        day = min(31, max(1, day))
-        job_kwargs["month"] = quarter_months
-        job_kwargs["day"] = day
-        scheduler.add_job(update_stock_shares, "cron", **job_kwargs)
+        day = min(31, max(1, _cron_int("SCHED_STOCK_SHARES_DAY", 1)))
+        scheduler.add_job(
+            update_stock_shares,
+            "cron",
+            month=quarter_months,
+            day=day,
+            hour=hour,
+            minute=minute,
+            id="stock_shares_update",
+        )
         logging.info(
             "已注册股本同步任务：mode=quarterly, months=%s, day=%s, hour=%s, minute=%s",
             quarter_months, day, hour, minute
@@ -741,8 +746,14 @@ def _register_stock_shares_job():
             mode
         )
     dow = _cron("SCHED_STOCK_SHARES_DOW", "sat")
-    job_kwargs["day_of_week"] = dow
-    scheduler.add_job(update_stock_shares, "cron", **job_kwargs)
+    scheduler.add_job(
+        update_stock_shares,
+        "cron",
+        day_of_week=dow,
+        hour=hour,
+        minute=minute,
+        id="stock_shares_update",
+    )
     logging.info(
         "已注册股本同步任务：mode=weekly, dow=%s, hour=%s, minute=%s",
         dow, hour, minute
@@ -993,36 +1004,53 @@ scheduler.add_job(generate_hk_monthly_data, 'cron',
     hour=_cron_int('SCHED_HK_MONTHLY_HOUR', 17),
     minute=_cron_int('SCHED_HK_MONTHLY_MINUTE', 5),
     id='generate_hk_monthly')
-scheduler.add_job(generate_quarterly_data, 'cron',
-    day_of_week=_cron('SCHED_QUARTERLY_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_QUARTERLY_HOUR', 16),
-    minute=_cron_int('SCHED_QUARTERLY_MINUTE', 35),
-    id='generate_quarterly')
-scheduler.add_job(generate_hk_quarterly_data, 'cron',
-    day_of_week=_cron('SCHED_HK_QUARTERLY_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_QUARTERLY_HOUR', 17),
-    minute=_cron_int('SCHED_HK_QUARTERLY_MINUTE', 9),
-    id='generate_hk_quarterly')
-#scheduler.add_job(generate_semiannual_data, 'cron',
-#    day_of_week=_cron('SCHED_SEMIANNUAL_DOW', 'mon-fri'),
-#    hour=_cron_int('SCHED_SEMIANNUAL_HOUR', 16),
-#    minute=_cron_int('SCHED_SEMIANNUAL_MINUTE', 42),
-#    id='generate_semiannual')
-#scheduler.add_job(generate_hk_semiannual_data, 'cron',
-#    day_of_week=_cron('SCHED_HK_SEMIANNUAL_DOW', 'mon-fri'),
-#    hour=_cron_int('SCHED_HK_SEMIANNUAL_HOUR', 17),
-#    minute=_cron_int('SCHED_HK_SEMIANNUAL_MINUTE', 13),
-#    id='generate_hk_semiannual')
-scheduler.add_job(generate_annual_data, 'cron',
-    day_of_week=_cron('SCHED_ANNUAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_ANNUAL_HOUR', 16),
-    minute=_cron_int('SCHED_ANNUAL_MINUTE', 47),
-    id='generate_annual')
-scheduler.add_job(generate_hk_annual_data, 'cron',
-    day_of_week=_cron('SCHED_HK_ANNUAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_ANNUAL_HOUR', 17),
-    minute=_cron_int('SCHED_HK_ANNUAL_MINUTE', 16),
-    id='generate_hk_annual')
+
+# 季线 / 半年线 / 年线：可由 ENABLE_*_COLLECTION 关闭（A股+港股同一开关）
+if _env_bool('ENABLE_QUARTERLY_COLLECTION', True):
+    scheduler.add_job(generate_quarterly_data, 'cron',
+        day_of_week=_cron('SCHED_QUARTERLY_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_QUARTERLY_HOUR', 16),
+        minute=_cron_int('SCHED_QUARTERLY_MINUTE', 35),
+        id='generate_quarterly')
+    scheduler.add_job(generate_hk_quarterly_data, 'cron',
+        day_of_week=_cron('SCHED_HK_QUARTERLY_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_QUARTERLY_HOUR', 17),
+        minute=_cron_int('SCHED_HK_QUARTERLY_MINUTE', 9),
+        id='generate_hk_quarterly')
+    logging.info("已注册季线生成任务（ENABLE_QUARTERLY_COLLECTION=true）")
+else:
+    logging.info("季线生成已禁用（ENABLE_QUARTERLY_COLLECTION=false）")
+
+if _env_bool('ENABLE_SEMIANNUAL_COLLECTION', True):
+    scheduler.add_job(generate_semiannual_data, 'cron',
+        day_of_week=_cron('SCHED_SEMIANNUAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_SEMIANNUAL_HOUR', 16),
+        minute=_cron_int('SCHED_SEMIANNUAL_MINUTE', 42),
+        id='generate_semiannual')
+    scheduler.add_job(generate_hk_semiannual_data, 'cron',
+        day_of_week=_cron('SCHED_HK_SEMIANNUAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_SEMIANNUAL_HOUR', 17),
+        minute=_cron_int('SCHED_HK_SEMIANNUAL_MINUTE', 13),
+        id='generate_hk_semiannual')
+    logging.info("已注册半年线生成任务（ENABLE_SEMIANNUAL_COLLECTION=true）")
+else:
+    logging.info("半年线生成已禁用（ENABLE_SEMIANNUAL_COLLECTION=false）")
+
+if _env_bool('ENABLE_ANNUAL_COLLECTION', True):
+    scheduler.add_job(generate_annual_data, 'cron',
+        day_of_week=_cron('SCHED_ANNUAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_ANNUAL_HOUR', 16),
+        minute=_cron_int('SCHED_ANNUAL_MINUTE', 47),
+        id='generate_annual')
+    scheduler.add_job(generate_hk_annual_data, 'cron',
+        day_of_week=_cron('SCHED_HK_ANNUAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_ANNUAL_HOUR', 17),
+        minute=_cron_int('SCHED_HK_ANNUAL_MINUTE', 16),
+        id='generate_hk_annual')
+    logging.info("已注册年线生成任务（ENABLE_ANNUAL_COLLECTION=true）")
+else:
+    logging.info("年线生成已禁用（ENABLE_ANNUAL_COLLECTION=false）")
+
 scheduler.add_job(collect_hk_index_realtime, 'cron',
     day_of_week=_cron('SCHED_HK_INDEX_REALTIME_DOW', 'mon-fri'),
     hour=_cron('SCHED_HK_INDEX_REALTIME_HOUR', '12,16'),

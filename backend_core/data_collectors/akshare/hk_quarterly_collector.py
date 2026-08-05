@@ -18,6 +18,7 @@ sys.path.insert(0, str(project_root))
 
 import pandas as pd
 from backend_core.database.db import SessionLocal
+from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 from sqlalchemy import text
 
 logging.basicConfig(
@@ -109,18 +110,10 @@ class HKQuarterlyDataGenerator:
             df = df.dropna(subset=['date'])  # 删除无法解析的日期行
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
-            
-            # 季线聚合 (QE 表示季度末)，name 取第一条
-            quarterly_df = df.resample('QE').agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum',
-                'amount': 'sum',
-                'name': 'first'
-            })
-            
+
+            # 季线：按自然季度最后一天（03-31/06-30/09-30/12-31）聚合
+            quarterly_df = resample_ohlcv_to_period_ends(df, "quarterly")
+
             quarterly_df.dropna(subset=['open', 'close'], inplace=True)
             if quarterly_df.empty:
                 return True

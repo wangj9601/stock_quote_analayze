@@ -566,58 +566,75 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
     """
     将 engine.screen 单条结果完整写入 gms_signal_trace，便于后续优先读表。
     回测与选股均依赖此表：优先读 trace，缺失时增量计算并回填。
+    使用 PostgreSQL ON CONFLICT UPSERT，避免并发预计算/选股回填时 UniqueViolation。
     单条失败用 SAVEPOINT 回滚，避免污染整批事务（PostgreSQL InFailedSqlTransaction）。
     """
     code = result.get("code") or result.get("symbol") or ""
     try:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
         from backend_api.models import GMSSignalTrace
+
         market_type = result.get("market_type") or _infer_market_type(code)
         if not code:
             return
+        code = str(code).strip()
+        date = str(date).strip()[:10]
+        market_type = str(market_type or "").strip()
         # PG JSON 不接受 NaN/Inf（常见于缺失 ma60_d 等浮点字段）
         sd = sanitize_for_pg_json(result.get("score_detail") or {})
         risk_tags = sanitize_for_pg_json(result.get("risk_tags"))
-        rec = GMSSignalTrace(
-            code=code,
-            date=date,
-            market_type=market_type,
-            config_id=int(config_id),
-            score_total=result.get("score_total"),
-            score_accumulation=result.get("score_accumulation"),
-            score_momentum=result.get("score_momentum"),
-            signal_strength=result.get("signal_strength"),
-            buy_type=result.get("buy_type") or None,
-            left_buy_signal=result.get("left_buy_signal"),
-            right_buy_signal=result.get("right_buy_signal"),
-            sell_signal=result.get("sell_signal"),
-            accumulation_grade=result.get("accumulation_grade") or None,
-            momentum_grade=result.get("momentum_grade") or None,
-            delta=result.get("delta"),
-            d=result.get("d"),
-            ratio_d20=result.get("ratio_d20"),
-            ratio_d1=result.get("ratio_d1"),
-            fz_ratio=result.get("fz_ratio"),
-            volume_ratio=result.get("volume_ratio"),
-            instant_deviation=result.get("instant_deviation"),
-            rising_days=result.get("rising_days"),
-            falling_days=result.get("falling_days"),
-            score_acc_fz=sd.get("score_acc_fz"),
-            score_acc_balance=sd.get("score_acc_balance"),
-            score_acc_volume=sd.get("score_acc_volume"),
-            score_mom_ratio_d1=sd.get("score_mom_ratio_d1"),
-            score_mom_deviation=sd.get("score_mom_deviation"),
-            score_mom_volume=sd.get("score_mom_volume"),
-            acc_fz_judge=sd.get("acc_fz_judge") or None,
-            acc_balance_judge=sd.get("acc_balance_judge") or None,
-            acc_volume_judge=sd.get("acc_volume_judge") or None,
-            mom_ratio_d1_judge=sd.get("mom_ratio_d1_judge") or None,
-            mom_deviation_judge=sd.get("mom_deviation_judge") or None,
-            mom_volume_judge=sd.get("mom_volume_judge") or None,
-            risk_tags=risk_tags,
-            score_detail=sd,
+        values = {
+            "code": code,
+            "date": date,
+            "market_type": market_type,
+            "config_id": int(config_id),
+            "score_total": result.get("score_total"),
+            "score_accumulation": result.get("score_accumulation"),
+            "score_momentum": result.get("score_momentum"),
+            "signal_strength": result.get("signal_strength"),
+            "buy_type": result.get("buy_type") or None,
+            "left_buy_signal": result.get("left_buy_signal"),
+            "right_buy_signal": result.get("right_buy_signal"),
+            "sell_signal": result.get("sell_signal"),
+            "accumulation_grade": result.get("accumulation_grade") or None,
+            "momentum_grade": result.get("momentum_grade") or None,
+            "delta": result.get("delta"),
+            "d": result.get("d"),
+            "ratio_d20": result.get("ratio_d20"),
+            "ratio_d1": result.get("ratio_d1"),
+            "fz_ratio": result.get("fz_ratio"),
+            "volume_ratio": result.get("volume_ratio"),
+            "instant_deviation": result.get("instant_deviation"),
+            "rising_days": result.get("rising_days"),
+            "falling_days": result.get("falling_days"),
+            "score_acc_fz": sd.get("score_acc_fz"),
+            "score_acc_balance": sd.get("score_acc_balance"),
+            "score_acc_volume": sd.get("score_acc_volume"),
+            "score_mom_ratio_d1": sd.get("score_mom_ratio_d1"),
+            "score_mom_deviation": sd.get("score_mom_deviation"),
+            "score_mom_volume": sd.get("score_mom_volume"),
+            "acc_fz_judge": sd.get("acc_fz_judge") or None,
+            "acc_balance_judge": sd.get("acc_balance_judge") or None,
+            "acc_volume_judge": sd.get("acc_volume_judge") or None,
+            "mom_ratio_d1_judge": sd.get("mom_ratio_d1_judge") or None,
+            "mom_deviation_judge": sd.get("mom_deviation_judge") or None,
+            "mom_volume_judge": sd.get("mom_volume_judge") or None,
+            "created_at": datetime.now(),
+            "risk_tags": risk_tags,
+            "score_detail": sd,
+        }
+        stmt = pg_insert(GMSSignalTrace).values(**values)
+        update_cols = {
+            k: getattr(stmt.excluded, k)
+            for k in values
+            if k not in ("code", "date", "market_type", "config_id", "created_at")
+        }
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["code", "date", "market_type", "config_id"],
+            set_=update_cols,
         )
         with db.begin_nested():
-            db.merge(rec)
+            db.execute(stmt)
             db.flush()
     except Exception as e:
         # begin_nested 失败或外层已 aborted：整事务回滚，保证后续股票可继续写

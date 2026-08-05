@@ -13,6 +13,7 @@ import datetime
 import pandas as pd
 import math
 from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
+from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 
 # ma_indicators 表 market_type：新数据为 CN/HK，历史数据可能为 A股/港股
 MA_MARKET_TYPES_CN = ('CN', 'A股')
@@ -1184,34 +1185,11 @@ async def get_kline_hist(
                     'volume': 'sum',
                     'amount': 'sum'
                 })
-            elif period == 'quarterly':
-                resampled = df.resample('Q').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'amount': 'sum'
-                })
-            elif period == 'semiannual':
-                # 半年线：每年6月30日和12月31日
-                resampled = df.resample('6M', label='right', closed='right').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'amount': 'sum'
-                })
-            elif period == 'annual':
-                resampled = df.resample('A').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'amount': 'sum'
-                })
+            elif period in ('quarterly', 'semiannual', 'annual'):
+                # 季/半年/年：日历期末日（03-31/06-30/09-30/12-31；半年 06-30/12-31；年 12-31）
+                resampled = resample_ohlcv_to_period_ends(
+                    df, period, columns=('open', 'high', 'low', 'close', 'volume', 'amount')
+                )
             else:
                 return JSONResponse({"success": False, "message": f"不支持的周期类型: {period}"}, status_code=400)
             

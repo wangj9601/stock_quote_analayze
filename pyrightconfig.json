@@ -1,8 +1,8 @@
 {
-  "venvPath": ".",
-  "venv": ".venv",
+  "pythonPath": ".venv/Scripts/python.exe",
   "extraPaths": [
-    "."
+    ".",
+    ".venv/Lib/site-packages"
   ],
   "pythonVersion": "3.13",
   "pythonPlatform": "Windows"

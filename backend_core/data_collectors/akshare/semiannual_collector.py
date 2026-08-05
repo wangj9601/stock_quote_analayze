@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 import pandas as pd
 from backend_core.database.db import SessionLocal
+from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
@@ -90,12 +91,8 @@ class SemiAnnualDataGenerator:
             df.set_index('date', inplace=True)
             stock_name = df['name'].iloc[0] if not df['name'].empty else ''
             
-            # 半年线聚合 (6ME 表示6个月月末)，name 取第一条
-            semiannual_df = df.resample('6ME').agg({
-                'open': 'first', 'high': 'max', 'low': 'min',
-                'close': 'last', 'volume': 'sum', 'amount': 'sum',
-                'name': 'first'
-            })
+            # 半年线：按自然半年最后一天（06-30 / 12-31）聚合，避免 6ME 锚点漂移
+            semiannual_df = resample_ohlcv_to_period_ends(df, "semiannual")
             
             semiannual_df.dropna(subset=['open', 'close'], inplace=True)
             if semiannual_df.empty:

@@ -14,6 +14,7 @@ import akshare as ak
 from sqlalchemy import text, create_engine, func
 from backend_api.models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 from backend_api.stock.stock_manage import MA_MARKET_TYPES_HK, _normalize_indicator_date
+from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口
@@ -897,34 +898,10 @@ async def get_hk_kline_hist(
                     'volume': 'sum',
                     'amount': 'sum'
                 })
-            elif period == 'quarterly':
-                resampled = df.resample('Q').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'amount': 'sum'
-                })
-            elif period == 'semiannual':
-                # 半年线：每年6月30日和12月31日
-                resampled = df.resample('6M', label='right', closed='right').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'amount': 'sum'
-                })
-            elif period == 'annual':
-                resampled = df.resample('A').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum',
-                    'amount': 'sum'
-                })
+            elif period in ('quarterly', 'semiannual', 'annual'):
+                resampled = resample_ohlcv_to_period_ends(
+                    df, period, columns=('open', 'high', 'low', 'close', 'volume', 'amount')
+                )
             else:
                 return JSONResponse({"success": False, "message": f"不支持的周期类型: {period}"}, status_code=400)
             

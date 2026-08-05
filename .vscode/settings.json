@@ -11,11 +11,11 @@
     ],
     "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
     "python.analysis.extraPaths": [
-        "${workspaceFolder}"
+        "${workspaceFolder}",
+        "${workspaceFolder}\\.venv\\Lib\\site-packages"
     ],
-    "python.analysis.venvPath": "${workspaceFolder}",
-    "python.analysis.venv": ".venv",
     "basedpyright.analysis.extraPaths": [
-        "${workspaceFolder}"
+        "${workspaceFolder}",
+        "${workspaceFolder}\\.venv\\Lib\\site-packages"
     ]
 }
