@@ -591,7 +591,9 @@ RR = (nearest_resistance − P) / (P − nearest_support)
 | `points` | 规则级 | 10 | 命中后扣分 |
 | `min_rr` | 规则级 | 1.5 | 最低可接受盈亏比（对齐 RPE） |
 
-**数据依赖**：`strategy_engine.screen` 在 `calculator.calculate` **之前**调用 `structure_levels.compute_structure_levels`，将 `nearest_support` / `nearest_resistance` 注入打分行；`score_detail.structure` 含 `rr` / `rr_reason`。仅补展示 structure 的旧 trace 快路径**不重算总分**；分数生效需完整重算/预计算。
+**数据依赖**：`strategy_engine.screen` 在 `calculator.calculate` **之前**调用 `structure_levels.compute_structure_levels`，将 `nearest_support` / `nearest_resistance` 注入打分行；`score_detail.structure` 含 `rr` / `rr_reason`。
+
+**旧 trace 同步**：选股读库后若仅补了 structure 展示、打分时未带支撑/阻力，`enrich_results_with_structure` 末尾会调用 `sync_penalties_with_structure`，按已有 structure 重跑 `PenaltyEngine` 并回写总分/减分明细（避免出现「RR=0.34 但未触发减分」）。
 
 **得分明细**：【支撑/阻力】展示 RR；减分条件列显示「结构盈亏比 RR=x &lt; min_rr」或破位/贴阻力说明。
 

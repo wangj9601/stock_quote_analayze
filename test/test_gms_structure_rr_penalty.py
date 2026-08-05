@@ -122,3 +122,44 @@ def test_validate_scoring_accepts_min_rr():
         }
     )
     assert any("min_rr" in e for e in bad)
+
+
+def test_sync_penalties_with_structure_fixes_display_only_rr():
+    """旧结果：已有 structure/RR 展示但减分为 0 → 同步后应扣分。"""
+    from backend_core.strategies.gms.frontend_interface import sync_penalties_with_structure
+
+    cfg = _penalty_cfg(min_rr=1.5, points=10)
+    results = [
+        {
+            "code": "601138",
+            "date": "2026-08-04",
+            "market_type": "CN",
+            "score_total": 90.0,
+            "signal_strength": 0.9,
+            "nearest_support": 14.0,
+            "nearest_resistance": 16.47,
+            "score_detail": {
+                "score_total": 90.0,
+                "score_base_total": 90.0,
+                "score_penalty_deduction": 0.0,
+                "penalties": [],
+                "d20": 15.84,
+                "d": 15.0,
+                "instant_deviation": 0.84,
+                "structure": {
+                    "method": "kde_volume_weighted",
+                    "nearest_support": 14.0,
+                    "nearest_resistance": 16.47,
+                    "rr": 0.34,
+                    "rr_reason": "ok",
+                },
+            },
+        }
+    ]
+    n = sync_penalties_with_structure(None, results, cfg, persist=False)
+    assert n == 1
+    assert results[0]["score_total"] == 80.0
+    assert results[0]["score_penalty_deduction"] == 10.0
+    pens = results[0]["score_detail"]["penalties"]
+    assert len(pens) == 1
+    assert pens[0]["id"] == "poor_structure_rr"

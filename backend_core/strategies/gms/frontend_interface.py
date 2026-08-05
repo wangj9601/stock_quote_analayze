@@ -236,7 +236,7 @@ def _persist_structure_to_trace(
     config_id: int,
     structure: dict,
 ) -> None:
-    """仅回填 score_detail.structure，不改动得分与信号字段。"""
+    """回填 score_detail.structure（可与减分同步一并调用）。"""
     if not code or not date or structure is None:
         return
     try:
@@ -269,6 +269,193 @@ def _persist_structure_to_trace(
         logger.warning("回填 gms_signal_trace.structure 失败 %s: %s", code, e)
 
 
+def _persist_penalty_score_to_trace(
+    db,
+    *,
+    code: str,
+    date: str,
+    market_type: str,
+    config_id: int,
+    score_detail: dict,
+    score_total: float,
+    signal_strength: Optional[float] = None,
+) -> None:
+    """回填减分同步后的总分与 score_detail。"""
+    if not code or not date:
+        return
+    try:
+        from sqlalchemy.orm.attributes import flag_modified
+        from backend_api.models import GMSSignalTrace
+
+        row = (
+            db.query(GMSSignalTrace)
+            .filter(
+                GMSSignalTrace.code == str(code).strip(),
+                GMSSignalTrace.date == str(date).strip()[:10],
+                GMSSignalTrace.market_type == str(market_type or "").strip(),
+                GMSSignalTrace.config_id == int(config_id),
+            )
+            .first()
+        )
+        if not row:
+            return
+        row.score_detail = sanitize_for_pg_json(score_detail)
+        flag_modified(row, "score_detail")
+        row.score_total = float(score_total)
+        if signal_strength is not None:
+            row.signal_strength = float(signal_strength)
+        with db.begin_nested():
+            db.flush()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning("回填 gms_signal_trace 减分得分失败 %s: %s", code, e)
+
+
+def sync_penalties_with_structure(
+    db,
+    results: List[dict],
+    config: Optional[dict],
+    *,
+    date: Optional[str] = None,
+    config_id: Optional[int] = None,
+    persist: bool = True,
+) -> int:
+    """
+    减分版在已有 KDE structure 时重跑 PenaltyEngine，修正「仅展示 RR、未扣分」的旧 trace。
+    以 score_base_total（或 总分+旧减分）为基准重算最终分。
+    """
+    if not results:
+        return 0
+    scoring = (config or {}).get("scoring") or {}
+    if (scoring.get("mechanism") or "").strip() != "tiered_dual_penalty":
+        return 0
+    rules = scoring.get("penalty_rules") or []
+    if not any(
+        isinstance(r, dict) and r.get("id") == "poor_structure_rr" and r.get("enabled", True)
+        for r in rules
+    ):
+        return 0
+
+    from .scoring.penalties import PenaltyEngine
+
+    engine = PenaltyEngine(config or {})
+    updated = 0
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        sd = dict(r.get("score_detail")) if isinstance(r.get("score_detail"), dict) else {}
+        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+        ns = r.get("nearest_support")
+        if ns is None:
+            ns = st.get("nearest_support")
+        nr = r.get("nearest_resistance")
+        if nr is None:
+            nr = st.get("nearest_resistance")
+        if ns is None and nr is None and not st:
+            continue
+
+        row = dict(sd)
+        row["nearest_support"] = ns
+        row["nearest_resistance"] = nr
+        if row.get("d20") is None:
+            try:
+                d_val = row.get("d")
+                inst = row.get("instant_deviation")
+                if d_val is not None and inst is not None:
+                    row["d20"] = float(d_val) + float(inst)
+            except (TypeError, ValueError):
+                pass
+
+        deduction, details = engine.apply(row)
+        base = sd.get("score_base_total")
+        if base is None:
+            try:
+                old_total = r.get("score_total")
+                if old_total is None:
+                    old_total = sd.get("score_total")
+                old_ded = sd.get("score_penalty_deduction") or 0
+                if old_total is None:
+                    continue
+                base = float(old_total) + float(old_ded)
+            except (TypeError, ValueError):
+                continue
+        try:
+            base_f = float(base)
+            ded_f = float(deduction)
+        except (TypeError, ValueError):
+            continue
+        final = max(0.0, min(100.0, base_f - ded_f))
+
+        old_ded = sd.get("score_penalty_deduction")
+        try:
+            old_ded_f = float(old_ded) if old_ded is not None else 0.0
+        except (TypeError, ValueError):
+            old_ded_f = 0.0
+        old_pen = sd.get("penalties") if isinstance(sd.get("penalties"), list) else []
+        old_keys = {
+            (p.get("id"), round(float(p.get("points") or 0), 4))
+            for p in old_pen
+            if isinstance(p, dict) and p.get("applied", True)
+        }
+        new_keys = {
+            (p.get("id"), round(float(p.get("points") or 0), 4))
+            for p in details
+            if isinstance(p, dict)
+        }
+        if abs(old_ded_f - ded_f) < 1e-9 and old_keys == new_keys:
+            continue
+
+        sd["score_base_total"] = base_f
+        sd["score_penalty_deduction"] = ded_f
+        sd["penalties"] = details
+        sd["score_total"] = final
+        if st:
+            sd["structure"] = st
+        r["score_detail"] = sd
+        r["score_total"] = final
+        r["score_penalty_deduction"] = ded_f
+        strength = (final / 100.0) if final > 0 else 0.0
+        r["signal_strength"] = strength
+        updated += 1
+
+        if persist and config_id is not None:
+            code = str(r.get("code") or r.get("symbol") or "").strip()
+            end_d = str(r.get("date") or date or "").strip()[:10]
+            mt = str(r.get("market_type") or _infer_market_type(code)).strip().upper() or "CN"
+            if code and end_d:
+                _persist_penalty_score_to_trace(
+                    db,
+                    code=code,
+                    date=end_d,
+                    market_type=mt,
+                    config_id=int(config_id),
+                    score_detail=sd,
+                    score_total=final,
+                    signal_strength=strength,
+                )
+
+    if updated and persist and config_id is not None:
+        try:
+            db.commit()
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            logger.warning("GMS 减分同步 commit 失败 date=%s config_id=%s", date, config_id)
+    if updated:
+        logger.info(
+            "GMS 结构盈亏比减分同步 updated=%s date=%s config_id=%s",
+            updated,
+            date,
+            config_id,
+        )
+    return updated
+
+
 def enrich_results_with_structure(
     db,
     results: List[dict],
@@ -294,77 +481,84 @@ def enrich_results_with_structure(
     )
 
     need_idx = [i for i, r in enumerate(results) if result_needs_structure(r)]
-    if not need_idx:
-        return 0
-    if max_items is not None and max_items >= 0:
+    if max_items is not None and max_items >= 0 and need_idx:
         need_idx = need_idx[: int(max_items)]
-    if not need_idx:
-        return 0
 
-    loader = GMSDataLoader(db)
-    limit = kde_bars_limit(config)
     enriched = 0
-    for i in need_idx:
-        r = results[i]
-        code = str(r.get("code") or r.get("symbol") or "").strip()
-        if not code:
-            continue
-        mt = str(r.get("market_type") or _infer_market_type(code)).strip().upper() or "CN"
-        end_d = str(r.get("date") or date or "").strip()[:10] or None
-        try:
-            bars = loader.load_bars(code, mt, end_date=end_d, limit=limit)
-            px = None
-            if bars:
-                try:
-                    c0 = float(bars[0].get("close") or 0)
-                    if c0 > 0:
-                        px = c0
-                except (TypeError, ValueError):
-                    px = None
-            if px is None:
-                try:
-                    d_val = r.get("d")
-                    if d_val is not None:
-                        px = float(d_val)
-                except (TypeError, ValueError):
-                    px = None
-            structure = compute_structure_levels(bars, config, price=px)
-        except Exception as e:
-            logger.warning("GMS structure 补算失败 %s: %s", code, e)
-            structure = empty_structure()
+    if need_idx:
+        loader = GMSDataLoader(db)
+        limit = kde_bars_limit(config)
+        for i in need_idx:
+            r = results[i]
+            code = str(r.get("code") or r.get("symbol") or "").strip()
+            if not code:
+                continue
+            mt = str(r.get("market_type") or _infer_market_type(code)).strip().upper() or "CN"
+            end_d = str(r.get("date") or date or "").strip()[:10] or None
+            try:
+                bars = loader.load_bars(code, mt, end_date=end_d, limit=limit)
+                px = None
+                if bars:
+                    try:
+                        c0 = float(bars[0].get("close") or 0)
+                        if c0 > 0:
+                            px = c0
+                    except (TypeError, ValueError):
+                        px = None
+                if px is None:
+                    try:
+                        d_val = r.get("d")
+                        if d_val is not None:
+                            px = float(d_val)
+                    except (TypeError, ValueError):
+                        px = None
+                structure = compute_structure_levels(bars, config, price=px)
+            except Exception as e:
+                logger.warning("GMS structure 补算失败 %s: %s", code, e)
+                structure = empty_structure()
 
-        sd = dict(r.get("score_detail")) if isinstance(r.get("score_detail"), dict) else {}
-        sd["structure"] = structure
-        r["score_detail"] = sd
-        flatten_structure_to_result(r, structure)
-        enriched += 1
-        if persist and config_id is not None and end_d:
-            _persist_structure_to_trace(
-                db,
-                code=code,
-                date=end_d,
-                market_type=mt,
-                config_id=int(config_id),
-                structure=structure,
+            sd = dict(r.get("score_detail")) if isinstance(r.get("score_detail"), dict) else {}
+            sd["structure"] = structure
+            r["score_detail"] = sd
+            flatten_structure_to_result(r, structure)
+            enriched += 1
+            if persist and config_id is not None and end_d:
+                _persist_structure_to_trace(
+                    db,
+                    code=code,
+                    date=end_d,
+                    market_type=mt,
+                    config_id=int(config_id),
+                    structure=structure,
+                )
+
+        if enriched and persist and config_id is not None:
+            try:
+                db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                logger.warning("GMS structure 回填 commit 失败 date=%s config_id=%s", date, config_id)
+        if enriched:
+            logger.info(
+                "GMS structure 补算完成 enriched=%s/%s date=%s config_id=%s",
+                enriched,
+                len(need_idx),
+                date,
+                config_id,
             )
 
-    if enriched and persist and config_id is not None:
-        try:
-            db.commit()
-        except Exception:
-            try:
-                db.rollback()
-            except Exception:
-                pass
-            logger.warning("GMS structure 回填 commit 失败 date=%s config_id=%s", date, config_id)
-    if enriched:
-        logger.info(
-            "GMS structure 补算完成 enriched=%s/%s date=%s config_id=%s",
-            enriched,
-            len(need_idx),
-            date,
-            config_id,
-        )
+    # 旧 trace：structure 已展示但打分时未注入支撑/阻力 → 同步减分（含 poor_structure_rr）
+    sync_penalties_with_structure(
+        db,
+        results,
+        config,
+        date=date,
+        config_id=config_id,
+        persist=persist,
+    )
     return enriched
 
 
