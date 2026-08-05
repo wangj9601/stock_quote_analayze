@@ -275,6 +275,7 @@ class GMSConfigManager:
             penalty_id = int(penalty_row.id)
             if not penalty_row.is_active:
                 self.update_config(penalty_id, {}, is_active=True, change_note="reactivate_canonical_penalty")
+            self._ensure_poor_structure_rr_penalty_rule(penalty_id)
             return {GMS_CANONICAL_STANDARD_NAME: default_id, GMS_CANONICAL_PENALTY_NAME: penalty_id}
 
         legacy = self.get_config_row_by_name("auto_gms_v901")
@@ -304,7 +305,12 @@ class GMSConfigManager:
                     "label": "观察周期振幅过大",
                     "amplitude_threshold_pct": 0.30,
                 },
+                dict(self._default_poor_structure_rr_rule()),
             ]
+        else:
+            scoring["penalty_rules"] = self._merge_poor_structure_rr_into_rules(
+                list(scoring.get("penalty_rules") or [])
+            )
         params["scoring"] = scoring
         penalty_id = self.create_config(
             name=GMS_CANONICAL_PENALTY_NAME,
@@ -315,6 +321,47 @@ class GMSConfigManager:
             created_by="system",
         )
         return {GMS_CANONICAL_STANDARD_NAME: default_id, GMS_CANONICAL_PENALTY_NAME: penalty_id}
+
+    @staticmethod
+    def _default_poor_structure_rr_rule() -> Dict:
+        return {
+            "id": "poor_structure_rr",
+            "enabled": True,
+            "points": 10,
+            "label": "结构盈亏比偏低",
+            "min_rr": 1.5,
+        }
+
+    @classmethod
+    def _merge_poor_structure_rr_into_rules(cls, rules: List) -> List:
+        """缺省追加 poor_structure_rr，不覆盖已有同 id 规则。"""
+        out = [r for r in (rules or []) if isinstance(r, dict)]
+        if any(r.get("id") == "poor_structure_rr" for r in out):
+            return out
+        out.append(dict(cls._default_poor_structure_rr_rule()))
+        return out
+
+    def _ensure_poor_structure_rr_penalty_rule(self, penalty_id: int) -> None:
+        """已有 gms_penalty 配置缺少结构盈亏比规则时合并写入（不改其它规则）。"""
+        try:
+            params = self.get_config(penalty_id)
+            scoring = dict(params.get("scoring") or {})
+            if (scoring.get("mechanism") or "").strip() != "tiered_dual_penalty":
+                return
+            rules = list(scoring.get("penalty_rules") or [])
+            merged = self._merge_poor_structure_rr_into_rules(rules)
+            if len(merged) == len(rules) and any(
+                isinstance(r, dict) and r.get("id") == "poor_structure_rr" for r in rules
+            ):
+                return
+            scoring["penalty_rules"] = merged
+            self.update_config(
+                penalty_id,
+                {"scoring": scoring},
+                change_note="add_poor_structure_rr_penalty",
+            )
+        except Exception as e:
+            logger.warning("合并 poor_structure_rr 减分规则失败 config_id=%s: %s", penalty_id, e)
 
     def list_canonical_configs(self, active_only: bool = True) -> List[Dict[str, Any]]:
         """仅返回选股/管理端使用的两个共享参数版本。"""

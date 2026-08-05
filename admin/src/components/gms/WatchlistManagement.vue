@@ -170,6 +170,22 @@
                           />
                           <span class="penalty-field-suffix">（0.30 = 30%）</span>
                         </div>
+                        <div
+                          v-else-if="rule.id === 'poor_structure_rr'"
+                          class="penalty-field penalty-field-threshold"
+                        >
+                          <span class="penalty-field-label">最低盈亏比</span>
+                          <el-input-number
+                            v-model="rule.min_rr"
+                            :min="0.1"
+                            :max="10"
+                            :step="0.1"
+                            :precision="2"
+                            controls-position="right"
+                            class="penalty-input-num penalty-input-threshold"
+                          />
+                          <span class="penalty-field-suffix">（默认 1.5）</span>
+                        </div>
                       </div>
                     </div>
                     <p v-if="penaltyRuleHint(rule.id)" class="penalty-rule-desc">
@@ -431,6 +447,9 @@ function normalizePenaltyRuleFields(rule: GMSPenaltyRule, meta?: GMSPenaltyRuleT
       rule.amplitude_threshold_pct ?? m?.default_amplitude_threshold_pct
     )
   }
+  if (rule.id === 'poor_structure_rr') {
+    out.min_rr = toMinRr(rule.min_rr ?? (m as any)?.default_min_rr)
+  }
   if (rule.id === 'close_below_ma60') {
     out.half_when_ma60_flat = rule.half_when_ma60_flat !== false
   }
@@ -447,6 +466,11 @@ function toAmplitudeThreshold(value: unknown, fallback = 0.3): number {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
+function toMinRr(value: unknown, fallback = 1.5): number {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
 /** 与 StrategyConfiguration 一致：按规则类型补全 points / amplitude_threshold_pct，避免 el-input-number 绑定 undefined */
 function syncPenaltyRulesFromConfig(existing: GMSPenaltyRule[] = []): GMSPenaltyRule[] {
   const byId = Object.fromEntries(existing.map((r) => [r.id, r]))
@@ -459,6 +483,7 @@ function syncPenaltyRulesFromConfig(existing: GMSPenaltyRule[] = []): GMSPenalty
         enabled: cur != null ? cur.enabled !== false : false,
         points: cur?.points,
         amplitude_threshold_pct: cur?.amplitude_threshold_pct,
+        min_rr: cur?.min_rr,
         half_when_ma60_flat: cur?.half_when_ma60_flat,
       },
       meta
@@ -482,6 +507,9 @@ function serializePenaltyRulesForSave(rules: GMSPenaltyRule[]): GMSPenaltyRule[]
     }
     if (r.id === 'observation_range_amplitude') {
       item.amplitude_threshold_pct = r.amplitude_threshold_pct
+    }
+    if (r.id === 'poor_structure_rr') {
+      item.min_rr = r.min_rr
     }
     if (r.id === 'close_below_ma60') {
       item.half_when_ma60_flat = r.half_when_ma60_flat
@@ -509,6 +537,8 @@ function penaltyRuleHint(ruleId?: string): string {
       'Δ/d₂₀ 超过乖离过大阈值时扣分（默认 15%，可在策略参数「退出·乖离过大阈值」overbought_ratio 中配置）。',
     observation_range_amplitude:
       '观察周期内 (高−低)/高 超过振幅阈值时扣分；观察周期（observation_period）默认 20 个交易日。',
+    poor_structure_rr:
+      'KDE 结构盈亏比 RR=(阻力−现价)/(现价−支撑)；破位支撑、贴阻力或 RR 低于阈值（默认 1.5）时扣分；无阻力不扣。',
   }
   return fallbacks[ruleId] || ''
 }
@@ -546,6 +576,9 @@ function addPenaltyRule() {
       points: toPenaltyPoints(next.default_points),
       ...(next.id === 'observation_range_amplitude'
         ? { amplitude_threshold_pct: toAmplitudeThreshold(next.default_amplitude_threshold_pct) }
+        : {}),
+      ...(next.id === 'poor_structure_rr'
+        ? { min_rr: toMinRr((next as any).default_min_rr) }
         : {}),
     },
   ])

@@ -18,7 +18,62 @@ def empty_structure() -> Dict[str, Any]:
         "kde_lookback_used": 0,
         "kde_lookback_expanded": False,
         "method": "kde_volume_weighted",
+        "rr": None,
+        "rr_reason": "insufficient_samples",
     }
+
+
+def compute_structure_rr(
+    price: Optional[float],
+    nearest_support: Optional[float],
+    nearest_resistance: Optional[float],
+) -> Dict[str, Any]:
+    """
+    结构盈亏比（与 RPE structure_filter 同口径）。
+
+    RR = (阻力 - 价) / (价 - 支撑)
+
+    返回:
+      rr: Optional[float]
+      reason: str
+      should_penalize: Optional[bool]
+        True=必扣分；False=不扣；None=由调用方用 min_rr 与 rr 比较
+    """
+    if price is None:
+        return {"rr": None, "reason": "no_price", "should_penalize": False}
+    try:
+        px = float(price)
+    except (TypeError, ValueError):
+        return {"rr": None, "reason": "no_price", "should_penalize": False}
+    if px <= 0:
+        return {"rr": None, "reason": "no_price", "should_penalize": False}
+
+    if nearest_support is None:
+        return {"rr": None, "reason": "no_support", "should_penalize": False}
+    try:
+        ns = float(nearest_support)
+    except (TypeError, ValueError):
+        return {"rr": None, "reason": "no_support", "should_penalize": False}
+
+    if px <= ns:
+        return {"rr": None, "reason": "below_or_no_support", "should_penalize": True}
+    downside = px - ns
+    if downside <= 0:
+        return {"rr": None, "reason": "zero_downside", "should_penalize": True}
+
+    if nearest_resistance is None:
+        return {"rr": None, "reason": "no_resistance", "should_penalize": False}
+    try:
+        nr = float(nearest_resistance)
+    except (TypeError, ValueError):
+        return {"rr": None, "reason": "no_resistance", "should_penalize": False}
+
+    upside = nr - px
+    if upside <= 0:
+        return {"rr": 0.0, "reason": "at_resistance", "should_penalize": True}
+
+    rr = round(upside / downside, 4)
+    return {"rr": rr, "reason": "ok", "should_penalize": None}
 
 
 def resolve_kde_config(cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -114,17 +169,22 @@ def compute_structure_levels(
     near = nearest_levels(px, supports, resists)
     ns = near.get("nearest_support")
     nr = near.get("nearest_resistance")
+    ns_v = round(float(ns), 2) if ns is not None else None
+    nr_v = round(float(nr), 2) if nr is not None else None
+    rr_info = compute_structure_rr(px, ns_v, nr_v)
     return {
         "support_levels": supports,
         "resistance_levels": resists,
-        "nearest_support": round(float(ns), 2) if ns is not None else None,
-        "nearest_resistance": round(float(nr), 2) if nr is not None else None,
+        "nearest_support": ns_v,
+        "nearest_resistance": nr_v,
         "kde_ok": bool(kde.get("ok")),
         "kde_reason": kde.get("reason") or ("ok" if kde.get("ok") else "no_peaks"),
         "kde_bw": kde.get("bw"),
         "kde_lookback_used": int(kde.get("lookback_used") or 0),
         "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
         "method": "kde_volume_weighted",
+        "rr": rr_info.get("rr"),
+        "rr_reason": rr_info.get("reason"),
     }
 
 
@@ -139,3 +199,5 @@ def flatten_structure_to_result(result: Dict[str, Any], structure: Dict[str, Any
     result["kde_reason"] = st.get("kde_reason")
     result["kde_lookback_used"] = st.get("kde_lookback_used")
     result["kde_lookback_expanded"] = st.get("kde_lookback_expanded")
+    result["structure_rr"] = st.get("rr")
+    result["structure_rr_reason"] = st.get("rr_reason")

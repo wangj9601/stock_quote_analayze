@@ -393,8 +393,11 @@ def screen(self, codes, date, market, min_score=0, max_results=None):
 |---------|----------|
 | `close_below_ma60` | d₂₀ &lt; ma60_d；MA60 走平时扣分减半 |
 | `observation_range_amplitude` | 观察周期内 (高−低)/高 &gt; 阈值（默认 30%，扣 10 分） |
+| `poor_structure_rr` | KDE 结构盈亏比 RR=(阻力−价)/(价−支撑)；破位/贴阻力或 RR&lt;min_rr（默认 1.5）扣分；无阻力不扣 |
 
 等级（S/A/全速/分批）仍按**减分前**基础分判定。`risk_tags.py` 对每条命中的减分规则生成 `penalty_{id}` 风险提示。
+
+**结构盈亏比数据时机**：`strategy_engine.screen` 须在 `calculator.calculate` 之前完成 `structure_levels.compute_structure_levels`，并把 `nearest_support` / `nearest_resistance` 写入打分行；`score_detail.structure.rr` 供明细展示。业务细则见 [GMS_STATE_DETECTION_RULES.md §5.4.4](./GMS_STATE_DETECTION_RULES.md#544-减分规则-poor_structure_rr结构盈亏比偏低)。单测：`test/test_gms_structure_rr_penalty.py`。
 
 ### 4.7 观察周期振幅 enrich
 

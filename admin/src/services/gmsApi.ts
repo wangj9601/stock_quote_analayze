@@ -35,6 +35,7 @@ export interface GMSPenaltyRuleType {
   description?: string
   default_points?: number
   default_amplitude_threshold_pct?: number
+  default_min_rr?: number
 }
 
 export interface GMSPenaltyRule {
@@ -43,6 +44,7 @@ export interface GMSPenaltyRule {
   points: number
   label?: string
   amplitude_threshold_pct?: number
+  min_rr?: number
   half_when_ma60_flat?: boolean
 }
 

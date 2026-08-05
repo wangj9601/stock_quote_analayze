@@ -128,7 +128,48 @@ class GMSStrategyEngine:
             for row in rows:
                 code = row.get("code", "")
                 dev_series = dev_series_by_code.get(code) if dev_series_by_code else None
-                ind = self.calculator.calculate(row, instant_deviation_series=dev_series)
+
+                # 打分前先算 KDE 支撑/阻力，供减分规则 poor_structure_rr 使用
+                end_d = str(row.get("date") or date)[:10]
+                d20_price = None
+                try:
+                    d_raw = row.get("d")
+                    if d_raw is None:
+                        d_raw = row.get("ma20_d")
+                    inst_raw = row.get("instant_deviation")
+                    if d_raw is not None and inst_raw is not None:
+                        d20_price = float(d_raw) + float(inst_raw)
+                except (TypeError, ValueError):
+                    d20_price = None
+
+                structure = empty_structure()
+                try:
+                    bars_desc = self.data_loader.load_bars(
+                        code,
+                        mt,
+                        end_date=end_d,
+                        limit=kde_bars_limit(active_cfg),
+                    )
+                    px = None
+                    if bars_desc:
+                        try:
+                            c0 = float(bars_desc[0].get("close") or 0)
+                            if c0 > 0:
+                                px = c0
+                        except (TypeError, ValueError):
+                            px = None
+                    if px is None:
+                        px = d20_price
+                    structure = compute_structure_levels(bars_desc, active_cfg, price=px)
+                except Exception as e:
+                    logger.warning("GMS structure levels %s failed: %s", code, e)
+                    structure = empty_structure()
+
+                row_for_score = dict(row)
+                row_for_score["nearest_support"] = structure.get("nearest_support")
+                row_for_score["nearest_resistance"] = structure.get("nearest_resistance")
+
+                ind = self.calculator.calculate(row_for_score, instant_deviation_series=dev_series)
                 if ind is None:
                     continue
                 if ind.score_total < min_score:
@@ -161,37 +202,6 @@ class GMSStrategyEngine:
 
                 st = ind.score_total
                 signal_strength = st / 100.0 if st is not None and st > 0 else 0.0
-
-                d20_price = None
-                try:
-                    if ind.d is not None and ind.instant_deviation is not None:
-                        d20_price = float(ind.d) + float(ind.instant_deviation)
-                except (TypeError, ValueError):
-                    d20_price = None
-
-                # KDE 支撑/阻力：失败不影响整票结果
-                structure = empty_structure()
-                try:
-                    bars_desc = self.data_loader.load_bars(
-                        code,
-                        mt,
-                        end_date=ind.date or date,
-                        limit=kde_bars_limit(active_cfg),
-                    )
-                    px = None
-                    if bars_desc:
-                        try:
-                            c0 = float(bars_desc[0].get("close") or 0)
-                            if c0 > 0:
-                                px = c0
-                        except (TypeError, ValueError):
-                            px = None
-                    if px is None:
-                        px = d20_price
-                    structure = compute_structure_levels(bars_desc, active_cfg, price=px)
-                except Exception as e:
-                    logger.warning("GMS structure levels %s failed: %s", code, e)
-                    structure = empty_structure()
 
                 score_detail = sanitize_for_pg_json({
                     "score_accumulation": ind.score_accumulation,

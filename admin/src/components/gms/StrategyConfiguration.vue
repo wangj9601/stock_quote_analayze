@@ -174,6 +174,20 @@
                       />
                       <span class="text-xs text-gray-400">（0.30=30%）</span>
                     </div>
+                    <div v-else-if="row.id === 'poor_structure_rr'" class="flex items-center gap-2 flex-wrap">
+                      <span class="text-xs text-gray-500 whitespace-nowrap">最低盈亏比</span>
+                      <el-input-number
+                        v-model="row.min_rr"
+                        :min="0.1"
+                        :max="10"
+                        :step="0.1"
+                        :precision="2"
+                        size="small"
+                        controls-position="right"
+                        style="width: 132px"
+                      />
+                      <span class="text-xs text-gray-400">（默认 1.5）</span>
+                    </div>
                     <span v-else class="text-xs text-gray-400">—</span>
                   </template>
                 </el-table-column>
@@ -290,6 +304,12 @@ function syncPenaltyRulesFromForm(params: Record<string, any>) {
           ? Number(cur.amplitude_threshold_pct)
           : Number(meta.default_amplitude_threshold_pct ?? 0.3)
     }
+    if (meta.id === 'poor_structure_rr') {
+      row.min_rr =
+        cur.min_rr != null && !Number.isNaN(Number(cur.min_rr))
+          ? Number(cur.min_rr)
+          : Number(meta.default_min_rr ?? 1.5)
+    }
     return row
   })
 }
@@ -307,6 +327,9 @@ function mergePenaltyRulesIntoForm(partial: Record<string, unknown>) {
     }
     if (r.id === 'observation_range_amplitude' && r.amplitude_threshold_pct != null) {
       item.amplitude_threshold_pct = r.amplitude_threshold_pct
+    }
+    if (r.id === 'poor_structure_rr' && r.min_rr != null) {
+      item.min_rr = r.min_rr
     }
     return item
   })

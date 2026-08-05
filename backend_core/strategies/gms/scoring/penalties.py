@@ -40,6 +40,17 @@ PENALTY_RULE_TYPES = {
         "default_points": 10,
         "default_amplitude_threshold_pct": 0.30,
     },
+    "poor_structure_rr": {
+        "id": "poor_structure_rr",
+        "label": "结构盈亏比偏低",
+        "description": (
+            "基于 KDE 最近支撑/阻力：盈亏比 RR=(阻力−现价)/(现价−支撑)。"
+            "现价破位支撑、贴阻力或 RR 低于阈值（默认 1.5）时扣分；"
+            "无阻力或缺少支撑/KDE 失败时不扣分。与 RPE 结构盈亏比同口径，本项为软减分非硬筛。"
+        ),
+        "default_points": 10,
+        "default_min_rr": 1.5,
+    },
 }
 
 
@@ -104,6 +115,28 @@ def _eval_rule(
         threshold = resolve_amplitude_threshold_pct(rule=rule or {}, config=config)
         return safe_float(amp, -1.0) > threshold
 
+    if rule_id == "poor_structure_rr":
+        from ..structure_levels import compute_structure_rr
+
+        info = compute_structure_rr(
+            _close_price(row),
+            row.get("nearest_support"),
+            row.get("nearest_resistance"),
+        )
+        if info.get("should_penalize") is True:
+            return True
+        if info.get("should_penalize") is False:
+            return False
+        rr = info.get("rr")
+        if rr is None:
+            return False
+        meta = PENALTY_RULE_TYPES["poor_structure_rr"]
+        min_rr = safe_float(
+            (rule or {}).get("min_rr"),
+            safe_float(meta.get("default_min_rr"), 1.5),
+        )
+        return float(rr) < min_rr
+
     return False
 
 
@@ -134,6 +167,22 @@ def _effective_penalty_points(
         extra["observation_period_low"] = row.get("observation_period_low")
         if row.get("observation_range_period_days") is not None:
             extra["observation_range_period_days"] = row.get("observation_range_period_days")
+        return base_points, extra
+    if rule_id == "poor_structure_rr":
+        from ..structure_levels import compute_structure_rr
+
+        meta = PENALTY_RULE_TYPES["poor_structure_rr"]
+        min_rr = safe_float(rule.get("min_rr"), safe_float(meta.get("default_min_rr"), 1.5))
+        info = compute_structure_rr(
+            _close_price(row),
+            row.get("nearest_support"),
+            row.get("nearest_resistance"),
+        )
+        extra["min_rr"] = min_rr
+        extra["rr"] = info.get("rr")
+        extra["rr_reason"] = info.get("reason")
+        extra["nearest_support"] = row.get("nearest_support")
+        extra["nearest_resistance"] = row.get("nearest_resistance")
         return base_points, extra
     if rule_id != "close_below_ma60":
         return base_points, extra

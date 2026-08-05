@@ -488,6 +488,13 @@ def detect_sell(self, indicators):
         "points": 10,
         "label": "观察周期振幅过大",
         "amplitude_threshold_pct": 0.30
+      },
+      {
+        "id": "poor_structure_rr",
+        "enabled": true,
+        "points": 10,
+        "label": "结构盈亏比偏低",
+        "min_rr": 1.5
       }
     ],
     "ma60_flat_lookback_days": 20,
@@ -496,7 +503,7 @@ def detect_sell(self, indicators):
 }
 ```
 
-新建 `gms_penalty` 共享配置时，系统默认启用上述两条减分规则；**已有库内配置不会自动追加**，需在管理端「添加规则」手动启用 `observation_range_amplitude`。
+新建 `gms_penalty` 共享配置时，系统默认启用上述三条减分规则（含结构盈亏比）。已有库内 `gms_penalty` 若缺少 `poor_structure_rr`，在 `ensure_canonical_configs` 时会**按 id 合并追加**（不覆盖已有规则的 `points`/`enabled`）。
 
 #### 5.4.2 减分规则 `close_below_ma60`
 
@@ -563,7 +570,34 @@ observation_range_amplitude_pct = (period_high − period_low) / period_high
 
 **得分明细展示**（前端 `gms_score_detail.js`）：减分项表格条件列显示「观察周期振幅 X% &gt; 阈值 Y%」；指标细项区展示周期高低点与振幅。
 
-#### 5.4.4 其他已注册减分规则（可选启用）
+#### 5.4.4 减分规则 `poor_structure_rr`（结构盈亏比偏低）
+
+基于成交量加权 KDE 的最近支撑/阻力，计算结构盈亏比（与 RPE `structure_filter` 同口径），**软减分**（不否决买点）：
+
+```
+P = 当日收盘（优先行情 close；减分判定与 close_below_ma60 一致，可用 d₂₀）
+RR = (nearest_resistance − P) / (P − nearest_support)
+```
+
+| 情形 | 是否扣分 |
+|------|----------|
+| 有支撑、P&gt;支撑、有阻力、upside&gt;0 且 `RR < min_rr` | 扣 `points` |
+| P≤支撑 / downside≤0 或贴/超阻力（upside≤0） | 扣 `points` |
+| 无阻力 | **不扣**（上方空间视为充足） |
+| 无支撑 / KDE 失败 | **不扣**（缺数据不惩罚） |
+
+| 参数 | 位置 | 默认值 | 说明 |
+|------|------|--------|------|
+| `points` | 规则级 | 10 | 命中后扣分 |
+| `min_rr` | 规则级 | 1.5 | 最低可接受盈亏比（对齐 RPE） |
+
+**数据依赖**：`strategy_engine.screen` 在 `calculator.calculate` **之前**调用 `structure_levels.compute_structure_levels`，将 `nearest_support` / `nearest_resistance` 注入打分行；`score_detail.structure` 含 `rr` / `rr_reason`。仅补展示 structure 的旧 trace 快路径**不重算总分**；分数生效需完整重算/预计算。
+
+**得分明细**：【支撑/阻力】展示 RR；减分条件列显示「结构盈亏比 RR=x &lt; min_rr」或破位/贴阻力说明。
+
+单测：`test/test_gms_structure_rr_penalty.py`。
+
+#### 5.4.5 其他已注册减分规则（可选启用）
 
 | 规则 ID | 说明 | 默认扣分 |
 |---------|------|----------|
@@ -573,14 +607,16 @@ observation_range_amplitude_pct = (period_high − period_low) / period_high
 
 规则注册表：`backend_core/strategies/gms/scoring/penalties.py` → `PENALTY_RULE_TYPES`；校验：`validate_scoring_config`（`registry.py`）。
 
-#### 5.4.5 增强版计算流程（概要）
+#### 5.4.6 增强版计算流程（概要）
 
 ```
-TieredDualMaxScorer → 基础分 base_total
+load_bars → KDE structure（nearest_support / resistance / rr）
+        ↓
+注入 row → TieredDualMaxScorer → 基础分 base_total
         ↓
 enrich（ma60_d / ma60_flat / observation_range）
         ↓
-PenaltyEngine.apply(row) → 减分合计 + penalty_details
+PenaltyEngine.apply(row) → 减分合计 + penalty_details（含 poor_structure_rr）
         ↓
 score_total = clamp(base_total − 减分合计, 0, 100)
         ↓
@@ -761,7 +797,7 @@ GMS策略的状态判定系统通过**双模块阶梯式评分**实现了对股�
 2.  **等级优先机制**：S/A级和全速切入/分批买入等级可跳过前置条件
 3.  **阶梯式评分**：每个维度采用多级阈值，评分更精细
 4.  **灵活配置**：所有阈值和权重均可配置
-5.  **增强减分版**（`gms_penalty`）：在基础分上按规则扣分（如低于 MA60、观察周期振幅过大），并输出风险提示标签
+5.  **增强减分版**（`gms_penalty`）：在基础分上按规则扣分（如低于 MA60、观察周期振幅过大、结构盈亏比偏低），并输出风险提示标签
 
 ### 判定逻辑
 

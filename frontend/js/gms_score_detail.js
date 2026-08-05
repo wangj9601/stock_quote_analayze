@@ -89,6 +89,18 @@ const GmsScoreDetail = {
                         : '--');
                 return `观察周期振幅 ${amp} &gt; ${th}`;
             }
+            if (p.id === 'poor_structure_rr') {
+                const minRr = p.min_rr != null ? Number(p.min_rr).toFixed(2) : '1.50';
+                const rr = p.rr != null ? Number(p.rr).toFixed(2) : '--';
+                const reason = p.rr_reason || '';
+                if (reason === 'below_or_no_support' || reason === 'zero_downside') {
+                    return `现价破位支撑（要求 RR≥${minRr}）`;
+                }
+                if (reason === 'at_resistance') {
+                    return `现价贴/超阻力 RR=${rr}（要求 ≥${minRr}）`;
+                }
+                return `结构盈亏比 RR=${rr} &lt; ${minRr}`;
+            }
             return '—';
         };
         const versionMetaHtml = `
@@ -134,10 +146,17 @@ const GmsScoreDetail = {
         const kdeOk = sd.kde_ok != null ? sd.kde_ok : st.kde_ok;
         const kdeReason = sd.kde_reason || st.kde_reason || '';
         const lookbackUsed = sd.kde_lookback_used != null ? sd.kde_lookback_used : st.kde_lookback_used;
+        const structureRr = sd.structure_rr != null ? sd.structure_rr
+            : (st.rr != null ? st.rr : null);
+        const structureRrReason = sd.structure_rr_reason || st.rr_reason || '';
         let structureSectionHtml = '<div class="gms-score-detail-section"><strong>【支撑 / 阻力】</strong>';
         structureSectionHtml += '<div class="gms-version-meta-line">';
         structureSectionHtml += `<span>最近支撑 <strong>${gmsFmt(nearSup, 'price')}</strong></span>`;
         structureSectionHtml += `<span>最近阻力 <strong>${gmsFmt(nearRes, 'price')}</strong></span>`;
+        structureSectionHtml += `<span>盈亏比 RR <strong>${structureRr != null ? Number(structureRr).toFixed(2) : '--'}</strong></span>`;
+        if (structureRrReason && structureRrReason !== 'ok') {
+            structureSectionHtml += `<span>${structureRrReason}</span>`;
+        }
         if (kdeOk != null) structureSectionHtml += `<span>KDE ${kdeOk ? '成功' : '未识别'}</span>`;
         if (lookbackUsed != null) structureSectionHtml += `<span>回看 ${lookbackUsed} 日</span>`;
         if (kdeReason) structureSectionHtml += `<span>${kdeReason}</span>`;

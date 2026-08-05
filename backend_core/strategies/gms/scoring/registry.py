@@ -104,6 +104,17 @@ def validate_scoring_config(scoring: Dict[str, Any]) -> List[str]:
                                 )
                         except (TypeError, ValueError):
                             errors.append(f"减分规则 {rid} 的 amplitude_threshold_pct 无效")
+                if rid == "poor_structure_rr":
+                    mr = r.get("min_rr")
+                    if mr is not None:
+                        try:
+                            m = float(mr)
+                            if m <= 0 or m > 10:
+                                errors.append(
+                                    f"减分规则 {rid} 的 min_rr 须在 (0, 10] 范围内"
+                                )
+                        except (TypeError, ValueError):
+                            errors.append(f"减分规则 {rid} 的 min_rr 无效")
         lookback = scoring.get("ma60_flat_lookback_days")
         if lookback is not None:
             try:
