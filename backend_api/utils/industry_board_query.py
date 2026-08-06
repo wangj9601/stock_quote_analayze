@@ -9,10 +9,161 @@ from sqlalchemy.orm import Session
 from backend_api.models import IndustryBoardConstituent
 from backend_api.utils.bk_board_code import is_valid_bk_board_code
 from backend_api.utils.board_code_source import (
+    DEFAULT_BOARD_CODE_SOURCE,
     LEGACY_DEFAULT_BOARD_CODE_SOURCE,
     board_code_source_label,
     resolve_board_code_source,
 )
+
+
+def resolve_board_for_roles(
+    db: Session,
+    board_type: str,
+    board_code: str,
+    board_code_source: Optional[str] = None,
+    board_name: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    校验 basic_info 中的 (board_code, board_code_source)，供龙头/中军取成分。
+
+    默认来源为同花顺。精确匹配失败且目标为同花顺时，可按板块名称映射到同花顺板码；
+    不静默回退到东财成分。
+    """
+    btype = str(board_type or "").strip().lower()
+    if btype not in ("industry", "concept"):
+        return None
+    code = str(board_code or "").strip()
+    if not code:
+        return None
+    source = resolve_board_code_source(
+        board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+    )
+    table = (
+        "industry_board_basic_info"
+        if btype == "industry"
+        else "concept_board_basic_info"
+    )
+
+    def _row_to_meta(row: Any) -> Dict[str, Any]:
+        src = resolve_board_code_source(
+            row[2], fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+        )
+        return {
+            "board_type": btype,
+            "board_code": str(row[0]).strip(),
+            "board_name": str(row[1] or row[0]).strip(),
+            "board_code_source": src,
+            "board_code_source_label": board_code_source_label(src),
+        }
+
+    row = db.execute(
+        text(
+            f"""
+            SELECT board_code, board_name, board_code_source
+            FROM {table}
+            WHERE TRIM(board_code) = :code
+              AND COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :source
+            LIMIT 1
+            """
+        ),
+        {
+            "code": code,
+            "source": source,
+            "legacy": LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+        },
+    ).fetchone()
+    if row:
+        return _row_to_meta(row)
+
+    # 默认同花顺：用名称（或东财同码行的名称）映射到同花顺板
+    if source != DEFAULT_BOARD_CODE_SOURCE:
+        return None
+
+    name = str(board_name or "").strip()
+    if not name:
+        name_row = db.execute(
+            text(
+                f"""
+                SELECT board_name
+                FROM {table}
+                WHERE TRIM(board_code) = :code
+                ORDER BY CASE
+                    WHEN COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :em
+                    THEN 0 ELSE 1 END
+                LIMIT 1
+                """
+            ),
+            {
+                "code": code,
+                "legacy": LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+                "em": "eastmoney",
+            },
+        ).fetchone()
+        name = str(name_row[0] or "").strip() if name_row else ""
+
+    if not name:
+        return None
+
+    mapped = db.execute(
+        text(
+            f"""
+            SELECT board_code, board_name, board_code_source
+            FROM {table}
+            WHERE TRIM(board_name) = :name
+              AND COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :source
+            ORDER BY board_code
+            LIMIT 1
+            """
+        ),
+        {
+            "name": name,
+            "source": DEFAULT_BOARD_CODE_SOURCE,
+            "legacy": LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+        },
+    ).fetchone()
+    return _row_to_meta(mapped) if mapped else None
+
+
+def list_board_constituent_codes(
+    db: Session, board_type: str, board_code: str
+) -> List[Dict[str, str]]:
+    """按板码取成分股（行业/概念），不含来源混用。"""
+    btype = str(board_type or "").strip().lower()
+    code = str(board_code or "").strip()
+    if not code or btype not in ("industry", "concept"):
+        return []
+    if btype == "industry":
+        rows = (
+            db.query(IndustryBoardConstituent)
+            .filter(IndustryBoardConstituent.board_code == code)
+            .all()
+        )
+        return [
+            {
+                "code": _normalize_code(c.stock_code),
+                "name": str(c.stock_name or "").strip(),
+            }
+            for c in rows
+            if c.stock_code
+        ]
+    rows = db.execute(
+        text(
+            """
+            SELECT stock_code, stock_name
+            FROM concept_board_constituents
+            WHERE board_code = :board_code
+            """
+        ),
+        {"board_code": code},
+    ).fetchall()
+    return [
+        {
+            "code": _normalize_code(r[0]),
+            "name": str(r[1] or "").strip(),
+        }
+        for r in rows
+        if r[0]
+    ]
 
 
 def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -1266,6 +1266,10 @@ async def get_gms_strategy(
         None,
         description="scope=concept_board 时必填：概念板块代码，可传多个（如 BK0428）",
     ),
+    board_code_source: Optional[str] = Query(
+        None,
+        description="行业/概念板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
+    ),
     exclude_st: bool = Query(
         False,
         description="为 true 时剔除 A 股 ST 类股票（名称含 ST，适用于各数据来源）",
@@ -2076,12 +2080,44 @@ async def get_gms_strategy(
                 "right_buy_signal": right_signal,
                 "sell_signal": r.get("sell_signal", False),
                 "risk_tags": r.get("risk_tags") or [],
+                "role_tags": [],
                 # KDE 支撑/阻力（与 URT 同口径；优先顶层，其次 score_detail.structure）
                 "nearest_support": r.get("nearest_support", _st.get("nearest_support")),
                 "nearest_resistance": r.get("nearest_resistance", _st.get("nearest_resistance")),
                 "support_levels": r.get("support_levels") or _st.get("support_levels") or [],
                 "resistance_levels": r.get("resistance_levels") or _st.get("resistance_levels") or [],
             })
+
+        if scope in ("industry_board", "concept_board"):
+            try:
+                from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+                from backend_core.board_roles.service import (
+                    enrich_screening_results_with_role_tags,
+                )
+
+                _role_src = board_code_source or DEFAULT_BOARD_CODE_SOURCE
+                if scope == "industry_board":
+                    _role_codes = resolved_industry_board_codes or _normalize_gms_board_codes(
+                        industry_board_code
+                    )
+                    enrich_screening_results_with_role_tags(
+                        db,
+                        results_data,
+                        board_type="industry",
+                        board_codes=_role_codes or [],
+                        board_code_source=_role_src,
+                    )
+                else:
+                    _role_codes = _normalize_gms_board_codes(concept_board_code)
+                    enrich_screening_results_with_role_tags(
+                        db,
+                        results_data,
+                        board_type="concept",
+                        board_codes=_role_codes or [],
+                        board_code_source=_role_src,
+                    )
+            except Exception as _role_ex:
+                logger.warning("GMS 挂载板块 role_tags 失败: %s", _role_ex)
 
         # 兜底补全：避免前端出现“有信号但 Δ/F/Z/d 全空白 / 得分明细为空”
         # 仅对缺失关键字段的条目补全，且尽量不增加全市场的额外负担
@@ -2878,6 +2914,10 @@ async def get_urt_strategy(
         None,
         description="scope=concept_board 时：概念板块代码，可多选",
     ),
+    board_code_source: Optional[str] = Query(
+        None,
+        description="行业/概念板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
+    ),
     stock_code: Optional[str] = Query(None, description="scope=single 时：股票代码或名称"),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
@@ -3113,6 +3153,34 @@ async def get_urt_strategy(
             if len(data) > int(limit):
                 payload["data"] = data[: int(limit)]
                 payload["total"] = len(payload["data"])
+        if scope_raw in ("industry_board", "concept_board") and isinstance(
+            payload.get("data"), list
+        ):
+            try:
+                from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+                from backend_core.board_roles.service import (
+                    enrich_screening_results_with_role_tags,
+                )
+
+                _role_src = board_code_source or DEFAULT_BOARD_CODE_SOURCE
+                if scope_raw == "industry_board":
+                    enrich_screening_results_with_role_tags(
+                        db,
+                        payload["data"],
+                        board_type="industry",
+                        board_codes=extra_meta.get("industry_board_codes") or [],
+                        board_code_source=_role_src,
+                    )
+                else:
+                    enrich_screening_results_with_role_tags(
+                        db,
+                        payload["data"],
+                        board_type="concept",
+                        board_codes=extra_meta.get("concept_board_codes") or [],
+                        board_code_source=_role_src,
+                    )
+            except Exception as _role_ex:
+                logger.warning("URT 挂载板块 role_tags 失败: %s", _role_ex)
     return JSONResponse(payload)
 
 

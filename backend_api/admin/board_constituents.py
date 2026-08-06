@@ -1390,10 +1390,14 @@ async def list_board_constituents(
     keyword: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
+    board_code_source: Optional[str] = Query(
+        None,
+        description="板块代码来源，默认 tonghuashun；用于龙头/中军判定",
+    ),
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """某板块成分股分页列表。"""
+    """某板块成分股分页列表（含短线龙头/中军标记）。"""
     _ = current_user
     bcode = _normalize_board_code_for_type(board_type, board_code)
     if not bcode:
@@ -1412,21 +1416,77 @@ async def list_board_constituents(
         .limit(page_size)
         .all()
     )
-    return {
-        "success": True,
-        "data": [
+
+    role_map: dict[str, dict[str, Any]] = {}
+    roles_meta: dict[str, Any] = {}
+    try:
+        from backend_core.board_roles.service import fetch_board_roles_payload
+
+        src = resolve_board_code_source(
+            board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+        )
+        payload = fetch_board_roles_payload(
+            db,
+            board_type=board_type,
+            board_code=bcode,
+            board_code_source=src,
+            limit=None,
+        )
+        if payload:
+            roles_meta = {
+                "board_code_source": payload.get("board_code_source"),
+                "board_code_source_label": payload.get("board_code_source_label"),
+                "board_change_percent_est": payload.get("board_change_percent_est"),
+                "roles_board_code": payload.get("board_code"),
+            }
+            for s in payload.get("stocks") or []:
+                code = str(s.get("code") or "").strip()
+                if not code:
+                    continue
+                if len(code) < 6 and code.isdigit():
+                    code = code.zfill(6)
+                role_map[code] = {
+                    "board_role": s.get("board_role"),
+                    "board_role_label": s.get("board_role_label"),
+                    "board_role_score": s.get("board_role_score"),
+                    "role_reason": s.get("role_reason"),
+                    "change_percent": s.get("change_percent"),
+                }
+    except Exception as ex:
+        logger.warning("成分股列表挂载龙头/中军失败 board=%s: %s", bcode, ex)
+
+    def _norm_code(raw: Any) -> str:
+        s = str(raw or "").strip()
+        if s.isdigit() and len(s) < 6:
+            return s.zfill(6)
+        return s
+
+    data = []
+    for i in items:
+        sc = _norm_code(i.stock_code)
+        role = role_map.get(sc) or {}
+        data.append(
             {
                 "board_code": i.board_code,
                 "stock_code": i.stock_code,
                 "stock_name": i.stock_name,
                 "updated_at": i.updated_at.isoformat() if i.updated_at else None,
+                "board_role": role.get("board_role"),
+                "board_role_label": role.get("board_role_label"),
+                "board_role_score": role.get("board_role_score"),
+                "role_reason": role.get("role_reason"),
+                "change_percent": role.get("change_percent"),
             }
-            for i in items
-        ],
+        )
+
+    return {
+        "success": True,
+        "data": data,
         "total": total,
         "page": page,
         "page_size": page_size,
         "board_code": bcode,
+        **roles_meta,
     }
 
 

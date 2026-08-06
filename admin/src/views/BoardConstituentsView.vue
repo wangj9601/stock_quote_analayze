@@ -198,11 +198,40 @@
                 v-loading="stocksLoading"
                 size="small"
                 height="100%"
+                :row-class-name="constituentRowClassName"
                 @selection-change="(rows: BoardConstituentRow[]) => (selectedRows = rows)"
               >
               <el-table-column type="selection" width="42" />
               <el-table-column prop="stock_code" label="代码" width="100" />
-              <el-table-column prop="stock_name" label="名称" min-width="120" show-overflow-tooltip />
+              <el-table-column prop="stock_name" label="名称" min-width="140" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span>{{ row.stock_name || '—' }}</span>
+                  <el-tag
+                    v-if="row.board_role === 'leader'"
+                    size="small"
+                    type="danger"
+                    effect="dark"
+                    class="ml-2 board-role-tag"
+                    :title="row.role_reason || '短线龙头'"
+                  >龙头</el-tag>
+                  <el-tag
+                    v-else-if="row.board_role === 'mid'"
+                    size="small"
+                    type="warning"
+                    effect="plain"
+                    class="ml-2 board-role-tag"
+                    :title="row.role_reason || '短线中军'"
+                  >中军</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="涨幅%" width="80" align="right">
+                <template #default="{ row }">
+                  <span v-if="row.change_percent != null" :class="changeClass(row.change_percent)">
+                    {{ formatPct(row.change_percent) }}
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="updated_at" label="更新时间" width="170" />
             </el-table>
             </div>
@@ -643,6 +672,26 @@ function onSelectBoard(row: BoardSummary | null) {
   void loadConstituents()
 }
 
+function constituentRowClassName({ row }: { row: BoardConstituentRow }) {
+  if (row.board_role === 'leader') return 'row-board-leader'
+  if (row.board_role === 'mid') return 'row-board-mid'
+  return ''
+}
+
+function formatPct(v: number | null | undefined) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const n = Number(v)
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toFixed(2)}%`
+}
+
+function changeClass(v: number | null | undefined) {
+  if (v == null || Number.isNaN(Number(v))) return 'text-gray-400'
+  if (Number(v) > 0) return 'text-red-600'
+  if (Number(v) < 0) return 'text-green-600'
+  return 'text-gray-500'
+}
+
 async function loadConstituents() {
   if (!selectedBoard.value) return
   stocksLoading.value = true
@@ -653,6 +702,7 @@ async function loadConstituents() {
       keyword: stockKeyword.value.trim() || undefined,
       page: stockPage.value,
       pageSize: stockPageSize.value,
+      boardCodeSource: selectedBoard.value.board_code_source || 'tonghuashun',
     })
     constituents.value = res.data || []
     stockTotal.value = res.total || 0
@@ -1227,5 +1277,17 @@ onMounted(() => {
 
 .board-panel-footer {
   flex-shrink: 0;
+}
+
+.board-role-tag {
+  vertical-align: middle;
+}
+
+:deep(.el-table .row-board-leader) {
+  background-color: #fef2f2 !important;
+}
+
+:deep(.el-table .row-board-mid) {
+  background-color: #fffbeb !important;
 }
 </style>

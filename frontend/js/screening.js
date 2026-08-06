@@ -2836,7 +2836,7 @@ const ScreeningPage = {
     _gmsBoardSourceValue(board) {
         const raw = String(board?.board_code_source || '').trim().toLowerCase();
         if (raw) return raw;
-        return 'eastmoney';
+        return 'tonghuashun';
     },
 
     _gmsBoardSourceLabel(board) {
@@ -2849,7 +2849,27 @@ const ScreeningPage = {
             manual: '手动维护',
             other: '其他',
         };
-        return map[this._gmsBoardSourceValue(board)] || '东方财富';
+        return map[this._gmsBoardSourceValue(board)] || '同花顺';
+    },
+
+    /** 已选板块中优先的代码来源（同花顺优先），供 role_tags 口径 */
+    _gmsPreferredBoardCodeSource(kind, selectedCodes) {
+        const codes = Array.isArray(selectedCodes)
+            ? selectedCodes
+            : (kind === 'industry'
+                ? this.getGmsSelectedIndustryBoardCodes()
+                : this.getGmsSelectedConceptBoardCodes());
+        const catalog = this._gmsBoardCatalogByKind(kind) || [];
+        const byCode = new Map(catalog.map((b) => [String(b.board_code || '').trim(), b]));
+        let hasThs = false;
+        let fallback = 'tonghuashun';
+        for (const code of codes) {
+            const b = byCode.get(String(code || '').trim());
+            const src = this._gmsBoardSourceValue(b || {});
+            if (src === 'tonghuashun') hasThs = true;
+            else if (src) fallback = src;
+        }
+        return hasThs ? 'tonghuashun' : fallback;
     },
 
     _gmsBoardLabel(board) {
@@ -2928,10 +2948,15 @@ const ScreeningPage = {
                 buckets.set(key, { ...prev, trade_observe_flag: observeFlag });
             }
         });
-        return Array.from(buckets.values()).sort((a, b) => String(a.board_name || a.board_code).localeCompare(
-            String(b.board_name || b.board_code),
-            'zh-CN',
-        ));
+        return Array.from(buckets.values()).sort((a, b) => {
+            const nameCmp = String(a.board_name || a.board_code).localeCompare(
+                String(b.board_name || b.board_code),
+                'zh-CN',
+            );
+            if (nameCmp !== 0) return nameCmp;
+            const rank = (s) => (String(s || '') === 'tonghuashun' ? 0 : 1);
+            return rank(a.board_code_source) - rank(b.board_code_source);
+        });
     },
 
     /** 概念板块同名同来源去重：优先保留成分股更多的编码（避免同花顺空壳板盖住有成分板） */
@@ -2972,10 +2997,15 @@ const ScreeningPage = {
                 });
             }
         });
-        return Array.from(buckets.values()).sort((a, b) => String(a.board_name || a.board_code).localeCompare(
-            String(b.board_name || b.board_code),
-            'zh-CN',
-        ));
+        return Array.from(buckets.values()).sort((a, b) => {
+            const nameCmp = String(a.board_name || a.board_code).localeCompare(
+                String(b.board_name || b.board_code),
+                'zh-CN',
+            );
+            if (nameCmp !== 0) return nameCmp;
+            const rank = (s) => (String(s || '') === 'tonghuashun' ? 0 : 1);
+            return rank(a.board_code_source) - rank(b.board_code_source);
+        });
     },
 
     _syncGmsBoardPickerSourceFilterUi() {
@@ -3920,9 +3950,11 @@ const ScreeningPage = {
         }
         if (scope === 'industry_board') {
             this.getGmsSelectedIndustryBoardCodes().forEach((code) => q.append('industry_board_code', code));
+            q.set('board_code_source', this._gmsPreferredBoardCodeSource('industry'));
         }
         if (scope === 'concept_board') {
             this.getGmsSelectedConceptBoardCodes().forEach((code) => q.append('concept_board_code', code));
+            q.set('board_code_source', this._gmsPreferredBoardCodeSource('concept'));
         }
         const configEl = document.getElementById('gms-config_id');
         const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
@@ -4037,14 +4069,18 @@ const ScreeningPage = {
             });
         }
         if (scope === 'industry_board') {
-            this.getUrtSelectedIndustryBoardCodes().forEach((code) => {
+            const ibCodes = this.getUrtSelectedIndustryBoardCodes();
+            ibCodes.forEach((code) => {
                 params.append('industry_board_code', code);
             });
+            params.set('board_code_source', this._gmsPreferredBoardCodeSource('industry', ibCodes));
         }
         if (scope === 'concept_board') {
-            this.getUrtSelectedConceptBoardCodes().forEach((code) => {
+            const cbCodes = this.getUrtSelectedConceptBoardCodes();
+            cbCodes.forEach((code) => {
                 params.append('concept_board_code', code);
             });
+            params.set('board_code_source', this._gmsPreferredBoardCodeSource('concept', cbCodes));
         }
         if (scope === 'single') {
             const inputEl = document.getElementById('urtSingleStockInput');
@@ -5292,9 +5328,16 @@ const ScreeningPage = {
                 const urtRiskTags = Array.isArray(stock.risk_tags) && stock.risk_tags.length
                     ? stock.risk_tags
                     : (Array.isArray(urtSd.risk_tags) ? urtSd.risk_tags : []);
-                const urtRiskHtml = urtRiskTags.length
-                    ? urtRiskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
-                    : '—';
+                const urtRoleTags = Array.isArray(stock.role_tags) ? stock.role_tags : [];
+                const urtRoleHtml = urtRoleTags.length
+                    ? urtRoleTags.map((t) => `<span class="gms-role-tag" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
+                    : '';
+                const urtRiskHtml = [
+                    urtRoleHtml,
+                    urtRiskTags.length
+                        ? urtRiskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
+                        : '',
+                ].filter(Boolean).join('') || '—';
                 html += `
                     <tr data-urt-row="${index}">
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${urtCode}</a></td>
@@ -5522,9 +5565,16 @@ const ScreeningPage = {
                 const buyType = stock.buy_type || '—';
                 const buyTypeClass = stock.left_buy_signal ? 'gms-left' : (stock.right_buy_signal ? 'gms-right' : '');
                 const riskTags = Array.isArray(stock.risk_tags) ? stock.risk_tags : [];
-                const riskHtml = riskTags.length
-                    ? riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
-                    : '—';
+                const roleTags = Array.isArray(stock.role_tags) ? stock.role_tags : [];
+                const roleHtml = roleTags.length
+                    ? roleTags.map((t) => `<span class="gms-role-tag" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
+                    : '';
+                const riskHtml = [
+                    roleHtml,
+                    riskTags.length
+                        ? riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
+                        : '',
+                ].filter(Boolean).join('') || '—';
                 // 信号强度：优先用后端值；若为 0 但 score_detail 有总分则用总分/100（避免 trace 中 score_total=0 导致显示 0）
                 let signalStrength = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
                 if (signalStrength === 0 && sd && sd.score_total != null && sd.score_total > 0) {

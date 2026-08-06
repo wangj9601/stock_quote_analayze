@@ -23,6 +23,11 @@ export interface BoardConstituentRow {
   stock_code: string
   stock_name: string | null
   updated_at: string | null
+  board_role?: 'leader' | 'mid' | string | null
+  board_role_label?: string | null
+  board_role_score?: number | null
+  role_reason?: string | null
+  change_percent?: number | null
 }
 
 class BoardConstituentsService {
@@ -73,11 +78,13 @@ class BoardConstituentsService {
     keyword?: string
     page?: number
     pageSize?: number
+    boardCodeSource?: string
   }) {
     const q = new URLSearchParams()
     q.set('board_type', params.boardType)
     q.set('board_code', params.boardCode)
     if (params.keyword) q.set('keyword', params.keyword)
+    if (params.boardCodeSource) q.set('board_code_source', params.boardCodeSource)
     q.set('page', String(params.page ?? 1))
     q.set('page_size', String(params.pageSize ?? 50))
     return apiService.get<{
@@ -87,6 +94,9 @@ class BoardConstituentsService {
       page: number
       page_size: number
       board_code: string
+      board_code_source?: string
+      board_code_source_label?: string
+      board_change_percent_est?: number | null
     }>(`/board-constituents/list?${q}`)
   }
 

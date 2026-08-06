@@ -790,14 +790,26 @@ const MarketsPage = {
             try {
                 // 传递板块代码和名称，支持智能匹配
                 const params = new URLSearchParams({
-                    board_code: sector.board_code,
-                    board_name: sector.board_name || ''
+                    board_name: sector.board_name || '',
+                    board_code_source: 'tonghuashun',
+                    limit: '10',
                 });
-                params.set('limit', '10');
-                const response = await fetch(`${this.API_BASE_URL}/api/market/industry_board/${sector.board_code}/top_stocks?${params}`);
-                const result = await response.json();
+                // 默认同花顺口径；用东财实时板名映射同花顺成分。失败再显式东财。
+                let response = await fetch(
+                    `${this.API_BASE_URL}/api/market/industry_board/${encodeURIComponent(sector.board_code)}/top_stocks?${params}`
+                );
+                let result = await response.json();
+                if ((!result.success || !(result.data && result.data.top_stocks && result.data.top_stocks.length))
+                    && sector.board_code) {
+                    params.set('board_code_source', 'eastmoney');
+                    response = await fetch(
+                        `${this.API_BASE_URL}/api/market/industry_board/${encodeURIComponent(sector.board_code)}/top_stocks?${params}`
+                    );
+                    result = await response.json();
+                }
                 if (result.success && result.data.top_stocks) {
                     topStocks = result.data.top_stocks;
+                    sector._board_code_source_label = result.data.board_code_source_label || '';
                 }
             } catch (error) {
                 console.error(`获取板块 ${sector.board_name} 龙头股失败:`, error);
@@ -812,10 +824,13 @@ const MarketsPage = {
                 const stockDisplay = stock.code ?
                     `<span class="stock-name clickable" onclick="goToStock('${stock.code}')" title="点击查看股票详情">${stock.name}</span>` :
                     `<span class="stock-name">${stock.name}</span>`;
+                const roleLabel = stock.board_role_label
+                    ? `<span class="board-role-chip" title="${String(stock.role_reason || '').replace(/"/g, '&quot;')}">${stock.board_role_label}</span>`
+                    : '';
 
                 leadersHTML += `
                     <div class="leader-stock">
-                        ${stockDisplay}
+                        ${stockDisplay}${roleLabel}
                         <span class="stock-change ${this.getChangeClass(stock.change_percent)}">${this.formatPercent(stock.change_percent)}</span>
                     </div>
                 `;
@@ -844,9 +859,13 @@ const MarketsPage = {
             `;
         }
 
+        const sourceLabel = sector._board_code_source_label
+            ? `<span class="board-source-chip" title="成分角色口径">${sector._board_code_source_label}</span>`
+            : `<span class="board-source-chip board-source-em" title="板涨幅来自东财实时">东财行情</span>`;
+
         card.innerHTML = `
             <div class="sector-header">
-                <h3>${sector.board_name || '未知板块'}</h3>
+                <h3>${sector.board_name || '未知板块'}${sourceLabel}</h3>
                 <span class="sector-change ${isPositive ? 'positive' : 'negative'}">${this.formatPercent(changePercent)}</span>
             </div>
             <div class="sector-stats">
