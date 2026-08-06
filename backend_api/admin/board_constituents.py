@@ -1419,6 +1419,8 @@ async def list_board_constituents(
 
     role_map: dict[str, dict[str, Any]] = {}
     roles_meta: dict[str, Any] = {}
+    role_leaders: List[dict] = []
+    role_mids: List[dict] = []
     try:
         from backend_core.board_roles.service import fetch_board_roles_payload
 
@@ -1452,6 +1454,30 @@ async def list_board_constituents(
                     "role_reason": s.get("role_reason"),
                     "change_percent": s.get("change_percent"),
                 }
+                summary = {
+                    "stock_code": code,
+                    "stock_name": s.get("name"),
+                    "change_percent": s.get("change_percent"),
+                    "board_role_score": s.get("board_role_score"),
+                    "role_reason": s.get("role_reason"),
+                }
+                if s.get("board_role") == "leader":
+                    role_leaders.append(summary)
+                elif s.get("board_role") == "mid":
+                    role_mids.append(summary)
+            logger.info(
+                "成分股角色已计算 board=%s source=%s leaders=%s mids=%s",
+                bcode,
+                src,
+                len(role_leaders),
+                len(role_mids),
+            )
+        else:
+            logger.info(
+                "成分股角色未计算（板块来源未解析到）board=%s source=%s",
+                bcode,
+                src,
+            )
     except Exception as ex:
         logger.warning("成分股列表挂载龙头/中军失败 board=%s: %s", bcode, ex)
 
@@ -1479,6 +1505,15 @@ async def list_board_constituents(
             }
         )
 
+    # 当前页内：龙头/中军排前，便于管理端一眼看到
+    _role_rank = {"leader": 0, "mid": 1}
+    data.sort(
+        key=lambda x: (
+            _role_rank.get(str(x.get("board_role") or ""), 9),
+            str(x.get("stock_code") or ""),
+        )
+    )
+
     return {
         "success": True,
         "data": data,
@@ -1486,6 +1521,9 @@ async def list_board_constituents(
         "page": page,
         "page_size": page_size,
         "board_code": bcode,
+        "roles_computed": bool(role_map),
+        "role_leaders": role_leaders,
+        "role_mids": role_mids,
         **roles_meta,
     }
 

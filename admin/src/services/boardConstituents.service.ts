@@ -97,6 +97,9 @@ class BoardConstituentsService {
       board_code_source?: string
       board_code_source_label?: string
       board_change_percent_est?: number | null
+      roles_computed?: boolean
+      role_leaders?: BoardConstituentRow[]
+      role_mids?: BoardConstituentRow[]
     }>(`/board-constituents/list?${q}`)
   }
 

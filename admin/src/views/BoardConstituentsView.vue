@@ -192,6 +192,32 @@
               @keyup.enter="loadConstituents"
             />
             <el-button size="small" :loading="stocksLoading" @click="loadConstituents">查询</el-button>
+            <div
+              v-if="roleLeaders.length || roleMids.length"
+              class="mb-2 mt-2 text-sm flex flex-wrap gap-2 items-center"
+            >
+              <span class="text-gray-500">短线角色：</span>
+              <template v-for="r in roleLeaders" :key="'L'+r.stock_code">
+                <el-tag size="small" type="danger" effect="dark" :title="r.role_reason || ''">
+                  龙头 {{ r.stock_name || r.stock_code }}
+                  <span v-if="r.change_percent != null">({{ formatPct(r.change_percent) }})</span>
+                </el-tag>
+              </template>
+              <template v-for="r in roleMids" :key="'M'+r.stock_code">
+                <el-tag size="small" type="warning" :title="r.role_reason || ''">
+                  中军 {{ r.stock_name || r.stock_code }}
+                  <span v-if="r.change_percent != null">({{ formatPct(r.change_percent) }})</span>
+                </el-tag>
+              </template>
+            </div>
+            <el-alert
+              v-else-if="rolesComputed === false && !stocksLoading && constituents.length"
+              type="info"
+              :closable="false"
+              show-icon
+              class="mb-2 mt-2"
+              title="暂无龙头/中军标记（需最新实时行情；请确认后端已加载最新代码后点「查询」重试）"
+            />
             <div class="board-panel-main mt-3">
               <el-table
                 :data="constituents"
@@ -515,6 +541,9 @@ const stockTotal = ref(0)
 const constituents = ref<BoardConstituentRow[]>([])
 const stocksLoading = ref(false)
 const selectedRows = ref<BoardConstituentRow[]>([])
+const roleLeaders = ref<BoardConstituentRow[]>([])
+const roleMids = ref<BoardConstituentRow[]>([])
+const rolesComputed = ref<boolean | null>(null)
 
 const syncingBoards = ref(false)
 const syncingBoard = ref(false)
@@ -706,6 +735,25 @@ async function loadConstituents() {
     })
     constituents.value = res.data || []
     stockTotal.value = res.total || 0
+    roleLeaders.value = (res.role_leaders || []).map((r) => ({
+      board_code: selectedBoard.value!.board_code,
+      stock_code: r.stock_code,
+      stock_name: r.stock_name ?? null,
+      updated_at: null,
+      board_role: 'leader',
+      change_percent: r.change_percent,
+      role_reason: r.role_reason,
+    }))
+    roleMids.value = (res.role_mids || []).map((r) => ({
+      board_code: selectedBoard.value!.board_code,
+      stock_code: r.stock_code,
+      stock_name: r.stock_name ?? null,
+      updated_at: null,
+      board_role: 'mid',
+      change_percent: r.change_percent,
+      role_reason: r.role_reason,
+    }))
+    rolesComputed.value = res.roles_computed ?? null
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载成分股失败')
   } finally {
