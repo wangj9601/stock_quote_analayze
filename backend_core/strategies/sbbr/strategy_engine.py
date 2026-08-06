@@ -106,6 +106,30 @@ class SBBRStrategyEngine:
         box_resistance = bottom.get("resistance")
 
         trade_date = date or bars[-1]["date"]
+        detail = {
+            "bottom": bottom.get("detail"),
+            "entry": {
+                k: entry.get(k)
+                for k in (
+                    "reason",
+                    "cross_up",
+                    "shrink_ok",
+                    "expand_ok",
+                    "market_ok",
+                    "volume_ratio",
+                )
+            },
+            "support": box_support,
+            "resistance": box_resistance,
+            "circ_shares_yi": size.get("circ_shares_yi"),
+            "structure": {
+                "nearest_support": structure.get("nearest_support"),
+                "nearest_resistance": structure.get("nearest_resistance"),
+                "kde_ok": structure.get("kde_ok"),
+                "kde_reason": structure.get("kde_reason"),
+                "kde_lookback_used": structure.get("kde_lookback_used"),
+            },
+        }
         return {
             "code": code_n,
             "symbol": code_n,
@@ -115,6 +139,7 @@ class SBBRStrategyEngine:
             "close": close,
             "total_mv": size.get("total_mv"),
             "circ_mv": size.get("circ_mv"),
+            "circ_shares_yi": size.get("circ_shares_yi"),
             "size_ok": size.get("size_ok"),
             "size_reason": size.get("size_reason"),
             "bottom_mode": bottom.get("mode"),
@@ -135,29 +160,7 @@ class SBBRStrategyEngine:
             "kde_lookback_used": structure.get("kde_lookback_used"),
             "position_advice": pos,
             "exit_flags": {},
-            "detail": {
-                "bottom": bottom.get("detail"),
-                "entry": {
-                    k: entry.get(k)
-                    for k in (
-                        "reason",
-                        "cross_up",
-                        "shrink_ok",
-                        "expand_ok",
-                        "market_ok",
-                        "volume_ratio",
-                    )
-                },
-                "support": box_support,
-                "resistance": box_resistance,
-                "structure": {
-                    "nearest_support": structure.get("nearest_support"),
-                    "nearest_resistance": structure.get("nearest_resistance"),
-                    "kde_ok": structure.get("kde_ok"),
-                    "kde_reason": structure.get("kde_reason"),
-                    "kde_lookback_used": structure.get("kde_lookback_used"),
-                },
-            },
+            "detail": detail,
         }
 
     def evaluate_position(

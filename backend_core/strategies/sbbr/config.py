@@ -14,10 +14,12 @@ _CACHE: Dict[int, Dict] = {}
 def get_default_sbbr_config() -> Dict[str, Any]:
     return {
         "size": {
+            # 总市值（亿元）
             "total_mv_min_yi": 20.0,
             "total_mv_max_yi": 200.0,
-            "circ_mv_min_yi": 20.0,
-            "circ_mv_max_yi": 200.0,
+            # 流通股本（亿股，不是流通市值亿元）
+            "circ_shares_min_yi": 5.0,
+            "circ_shares_max_yi": 10.0,
             "require_shares": True,
             "exclude_unknown_size": True,
         },
@@ -114,17 +116,65 @@ class SBBRConfigManager:
         return result
 
     def _migrate_legacy_size_circ_defaults(self, params: Dict) -> Tuple[Dict, bool]:
-        """旧默认流通市值 5~10 亿 → 新默认 20~200 亿（仅当仍为旧默认时改写）。"""
+        """纠正误用「流通市值」过滤的库内配置 → 总市值 20~200 亿 + 流通股 5~10 亿股。
+
+        识别两类历史错误默认并改写：
+        - circ_mv 5~10（把「流通股 5~10 亿股」误写成流通市值）
+        - circ_mv 20~200（曾错误地把流通市值与总市值对齐）
+        自定义非上述区间的 circ_mv_* 不自动改写。
+        """
         out = copy.deepcopy(params or {})
         size = dict(out.get("size") or {})
+        changed = False
+
         try:
-            c_min = float(size.get("circ_mv_min_yi", 20))
-            c_max = float(size.get("circ_mv_max_yi", 200))
+            t_min = float(size["total_mv_min_yi"]) if "total_mv_min_yi" in size else None
+            t_max = float(size["total_mv_max_yi"]) if "total_mv_max_yi" in size else None
         except (TypeError, ValueError):
-            return out, False
-        if abs(c_min - 5.0) < 1e-9 and abs(c_max - 10.0) < 1e-9:
-            size["circ_mv_min_yi"] = 20.0
-            size["circ_mv_max_yi"] = 200.0
+            t_min, t_max = None, None
+        if t_min is None or t_max is None:
+            size["total_mv_min_yi"] = 20.0
+            size["total_mv_max_yi"] = 200.0
+            changed = True
+
+        has_legacy_circ_mv = "circ_mv_min_yi" in size or "circ_mv_max_yi" in size
+        if has_legacy_circ_mv:
+            try:
+                c_min = float(size.get("circ_mv_min_yi", 20))
+                c_max = float(size.get("circ_mv_max_yi", 200))
+            except (TypeError, ValueError):
+                c_min = c_max = None
+            is_old_5_10 = (
+                c_min is not None
+                and c_max is not None
+                and abs(c_min - 5.0) < 1e-9
+                and abs(c_max - 10.0) < 1e-9
+            )
+            is_wrong_20_200 = (
+                c_min is not None
+                and c_max is not None
+                and abs(c_min - 20.0) < 1e-9
+                and abs(c_max - 200.0) < 1e-9
+            )
+            if is_old_5_10 or is_wrong_20_200:
+                if "circ_shares_min_yi" not in size:
+                    size["circ_shares_min_yi"] = 5.0
+                    changed = True
+                if "circ_shares_max_yi" not in size:
+                    size["circ_shares_max_yi"] = 10.0
+                    changed = True
+                size.pop("circ_mv_min_yi", None)
+                size.pop("circ_mv_max_yi", None)
+                changed = True
+
+        if "circ_shares_min_yi" not in size:
+            size["circ_shares_min_yi"] = 5.0
+            changed = True
+        if "circ_shares_max_yi" not in size:
+            size["circ_shares_max_yi"] = 10.0
+            changed = True
+
+        if changed:
             out["size"] = size
             return out, True
         return out, False
@@ -189,12 +239,12 @@ class SBBRConfigManager:
                 try:
                     db.commit()
                     logger.info(
-                        "SBBR config_id=%s 流通市值默认已从 5~10 迁移为 20~200 亿",
+                        "SBBR config_id=%s 做小口径已迁移为总市值20~200亿 + 流通股5~10亿股",
                         row.id,
                     )
                 except Exception as e:
                     db.rollback()
-                    logger.warning("SBBR 流通市值默认迁移落库失败: %s", e)
+                    logger.warning("SBBR 做小口径迁移落库失败: %s", e)
             merged = self._deep_merge(self.get_default_config(), stored)
             _CACHE[int(row.id)] = copy.deepcopy(merged)
             merged["_config_id"] = int(row.id)

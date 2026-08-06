@@ -181,7 +181,7 @@ class SBBRDataLoader:
         trade_date: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """全市场做小粗筛：有股本的股票按最新收盘估算市值。"""
+        """全市场做小粗筛：总市值 + 流通股本区间（见 size_filter.evaluate_size）。"""
         from .size_filter import evaluate_size
 
         shares = self.load_share_map(as_of_date=trade_date)

@@ -78,9 +78,12 @@
       return;
     }
     body.innerHTML = lastSignalRows
-      .map((r) => {
+      .map((r, index) => {
         const snap = encodeURIComponent(JSON.stringify(r));
         const ops = [];
+        ops.push(
+          `<button type="button" class="gms-op-btn sbbr-score-detail-toggle" data-row="${index}" title="展开/收起策略明细">明细</button>`
+        );
         if (canPerm('channel.screening.tab.sbbr.btn.add_observe')) {
           ops.push(
             `<button type="button" class="gms-btn-outline sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>`
@@ -91,11 +94,15 @@
             `<button type="button" class="gms-btn-outline sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}">储备</button>`
           );
         }
-        return `<tr>
+        let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
+        if (window.SbbrScoreDetail && typeof window.SbbrScoreDetail.buildHtml === 'function') {
+          detailHtml = window.SbbrScoreDetail.buildHtml(r);
+        }
+        return `<tr data-sbbr-row="${index}">
             <td>${r.code || ''}</td>
             <td>${r.name || ''}</td>
             <td>${fmt(r.total_mv)}</td>
-            <td>${fmt(r.circ_mv)}</td>
+            <td>${fmt(r.circ_shares_yi)}</td>
             <td>${r.bottom_mode || '-'}</td>
             <td>${r.entry_signal ? '是' : '否'}</td>
             <td>${fmt(r.close)}</td>
@@ -105,10 +112,52 @@
             <td>${fmt(r.nearest_resistance)}</td>
             <td>${fmt(r.defense_low)}</td>
             <td>${fmt(r.volume_ratio)}</td>
-            <td>${ops.join(' ') || '-'}</td>
+            <td><div class="action-links">${ops.join(' ')}</div></td>
+          </tr>
+          <tr class="gms-score-detail-row sbbr-score-detail-row" data-detail-for="${index}" style="display:none;">
+            <td colspan="14" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
       })
       .join('');
+  }
+
+  function getScreeningApp() {
+    if (typeof ScreeningPage !== 'undefined') return ScreeningPage;
+    if (typeof window !== 'undefined') return window.ScreeningPage || null;
+    return null;
+  }
+
+  function syncScopeUI() {
+    const scope = document.getElementById('sbbrScope')?.value || 'market';
+    const indWrap = document.getElementById('sbbrIndustryBoardWrap');
+    const conWrap = document.getElementById('sbbrConceptBoardWrap');
+    if (indWrap) indWrap.style.display = scope === 'industry_board' ? 'flex' : 'none';
+    if (conWrap) conWrap.style.display = scope === 'concept_board' ? 'flex' : 'none';
+  }
+
+  function selectedIndustryCodes() {
+    const app = getScreeningApp();
+    if (app && typeof app.getSbbrSelectedIndustryBoardCodes === 'function') {
+      return app.getSbbrSelectedIndustryBoardCodes();
+    }
+    return Array.isArray(app?.sbbrSelectedIndustryBoardCodes)
+      ? app.sbbrSelectedIndustryBoardCodes.filter(Boolean)
+      : [];
+  }
+
+  function selectedConceptCodes() {
+    const app = getScreeningApp();
+    if (app && typeof app.getSbbrSelectedConceptBoardCodes === 'function') {
+      return app.getSbbrSelectedConceptBoardCodes();
+    }
+    return Array.isArray(app?.sbbrSelectedConceptBoardCodes)
+      ? app.sbbrSelectedConceptBoardCodes.filter(Boolean)
+      : [];
+  }
+
+  function selectedBoardSegment() {
+    const el = document.querySelector('input[name="sbbrCnBoardSegment"]:checked');
+    return el ? String(el.value || 'ALL').trim().toUpperCase() : 'ALL';
   }
 
   async function refreshSignals() {
@@ -121,15 +170,29 @@
       const date = document.getElementById('sbbrDate').value || '';
       const entryOnly = document.getElementById('sbbrEntryOnly').checked;
       const traceOnly = document.getElementById('sbbrTraceOnly').checked;
+      const industryCodes = selectedIndustryCodes();
+      const conceptCodes = selectedConceptCodes();
+      const boardSeg = selectedBoardSegment();
+
+      if (scope === 'industry_board' && !industryCodes.length) {
+        throw new Error('请先选择行业板块（与 GMS/RPE 相同的选择面板）');
+      }
+      if (scope === 'concept_board' && !conceptCodes.length) {
+        throw new Error('请先选择概念板块（与 GMS/RPE 相同的选择面板）');
+      }
+
       const q = new URLSearchParams({
         scope,
         entry_only: String(entryOnly),
         require_bottom: 'true',
         require_size: 'true',
-        max_results: '200',
+        max_results: scope === 'industry_board' || scope === 'concept_board' ? '2000' : '200',
       });
       if (date) q.set('date', date);
       if (traceOnly && scope === 'market') q.set('trace_only', 'true');
+      if (boardSeg && boardSeg !== 'ALL') q.set('cn_board_segment', boardSeg);
+      industryCodes.forEach((c) => q.append('industry_board_code', c));
+      conceptCodes.forEach((c) => q.append('concept_board_code', c));
 
       let data = await api(`/api/screening/sbbr-strategy?${q}`);
       if (traceOnly && scope === 'market' && (!data.data || !data.data.length)) {
@@ -137,8 +200,22 @@
         data = await api(`/api/screening/sbbr-strategy?${q}`);
       }
       const rows = data.data || [];
-      document.getElementById('sbbrSearchMeta').textContent =
-        `日期 ${data.search_date || '-'} · 来源 ${data.source || 'live'} · config ${data.config_id || ''}`;
+      const metaParts = [
+        `日期 ${data.search_date || '-'}`,
+        `来源 ${data.source || 'live'}`,
+        `config ${data.config_id || ''}`,
+      ];
+      if (data.cn_board_segment) metaParts.push(`板型 ${data.cn_board_segment}`);
+      if (data.industry_board_codes && data.industry_board_codes.length) {
+        metaParts.push(`行业 ${data.industry_board_codes.join(',')}`);
+      }
+      if (data.concept_board_codes && data.concept_board_codes.length) {
+        metaParts.push(`概念 ${data.concept_board_codes.join(',')}`);
+      }
+      if (data.message) {
+        showErr(data.message);
+      }
+      document.getElementById('sbbrSearchMeta').textContent = metaParts.join(' · ');
       renderSignalRows(rows);
     } catch (e) {
       showErr(e.message || String(e));
@@ -331,6 +408,9 @@
     const root = document.getElementById('sbbr-content');
     if (!root) return;
 
+    syncScopeUI();
+    document.getElementById('sbbrScope')?.addEventListener('change', () => syncScopeUI());
+
     root.querySelectorAll('[data-sbbr-sub]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sub = btn.getAttribute('data-sbbr-sub');
@@ -362,6 +442,19 @@
     });
 
     document.getElementById('sbbrResultsBody')?.addEventListener('click', async (e) => {
+      const detailBtn = e.target.closest('.sbbr-score-detail-toggle');
+      if (detailBtn) {
+        e.preventDefault();
+        const rowIndex = detailBtn.getAttribute('data-row');
+        const tbody = document.getElementById('sbbrResultsBody');
+        const detailRow = tbody?.querySelector(`tr.sbbr-score-detail-row[data-detail-for="${rowIndex}"]`);
+        if (detailRow) {
+          const show = detailRow.style.display === 'none' || !detailRow.style.display;
+          detailRow.style.display = show ? 'table-row' : 'none';
+          detailBtn.classList.toggle('active', show);
+        }
+        return;
+      }
       const obs = e.target.closest('.sbbr-add-observe');
       if (obs) {
         let snap = null;

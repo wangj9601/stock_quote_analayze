@@ -62,12 +62,15 @@ const ScreeningPage = {
     /** RPE 已选行业/概念板块 */
     rpeSelectedIndustryBoardCodes: [],
     rpeSelectedConceptBoardCodes: [],
+    /** SBBR 已选行业/概念板块 */
+    sbbrSelectedIndustryBoardCodes: [],
+    sbbrSelectedConceptBoardCodes: [],
     /** 板块选择弹窗：industry | concept */
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
     /** 板块选择弹窗代码来源筛选：all | eastmoney | tonghuashun */
     _gmsBoardPickerSourceFilter: 'all',
-    /** 板块选择弹窗归属：gms | urt | rpe */
+    /** 板块选择弹窗归属：gms | urt | rpe | sbbr */
     _gmsBoardPickerOwner: 'gms',
     /** 板块选择弹窗正在刷新选项 */
     _gmsBoardPickerRefreshing: false,
@@ -1100,6 +1103,14 @@ const ScreeningPage = {
         const rpeConceptBtn = document.getElementById('rpeConceptBoardPickBtn');
         if (rpeConceptBtn) {
             rpeConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'rpe'));
+        }
+        const sbbrIndustryBtn = document.getElementById('sbbrIndustryBoardPickBtn');
+        if (sbbrIndustryBtn) {
+            sbbrIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'sbbr'));
+        }
+        const sbbrConceptBtn = document.getElementById('sbbrConceptBoardPickBtn');
+        if (sbbrConceptBtn) {
+            sbbrConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'sbbr'));
         }
 
         const confirmBtn = document.getElementById('gmsBoardPickerConfirm');
@@ -3060,6 +3071,7 @@ const ScreeningPage = {
         this._gmsBoardPickerKind = kind;
         if (owner === 'urt') this._gmsBoardPickerOwner = 'urt';
         else if (owner === 'rpe') this._gmsBoardPickerOwner = 'rpe';
+        else if (owner === 'sbbr') this._gmsBoardPickerOwner = 'sbbr';
         else this._gmsBoardPickerOwner = 'gms';
 
         let selected;
@@ -3072,6 +3084,11 @@ const ScreeningPage = {
             selected = kind === 'industry'
                 ? this.getRpeSelectedIndustryBoardCodes()
                 : this.getRpeSelectedConceptBoardCodes();
+            this._gmsBoardPickerDraft = new Set(selected);
+        } else if (this._gmsBoardPickerOwner === 'sbbr') {
+            selected = kind === 'industry'
+                ? this.getSbbrSelectedIndustryBoardCodes()
+                : this.getSbbrSelectedConceptBoardCodes();
             this._gmsBoardPickerDraft = new Set(selected);
         } else {
             selected = kind === 'industry'
@@ -3242,6 +3259,14 @@ const ScreeningPage = {
                 this.rpeSelectedConceptBoardCodes = codes;
                 this.updateRpeConceptBoardSummary();
             }
+        } else if (owner === 'sbbr') {
+            if (kind === 'industry') {
+                this.sbbrSelectedIndustryBoardCodes = codes;
+                this.updateSbbrIndustryBoardSummary();
+            } else if (kind === 'concept') {
+                this.sbbrSelectedConceptBoardCodes = codes;
+                this.updateSbbrConceptBoardSummary();
+            }
         } else if (kind === 'industry') {
             this.gmsSelectedIndustryBoardCodes = codes;
             this.updateGmsIndustryBoardSummary();
@@ -3285,6 +3310,52 @@ const ScreeningPage = {
         const el = document.getElementById('rpeConceptBoardSummary');
         if (!el) return;
         const codes = this.getRpeSelectedConceptBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardLabel(b) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    getSbbrSelectedIndustryBoardCodes() {
+        return Array.isArray(this.sbbrSelectedIndustryBoardCodes)
+            ? this.sbbrSelectedIndustryBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    getSbbrSelectedConceptBoardCodes() {
+        return Array.isArray(this.sbbrSelectedConceptBoardCodes)
+            ? this.sbbrSelectedConceptBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    updateSbbrIndustryBoardSummary() {
+        const el = document.getElementById('sbbrIndustryBoardSummary');
+        if (!el) return;
+        const codes = this.getSbbrSelectedIndustryBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardLabel(b) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    updateSbbrConceptBoardSummary() {
+        const el = document.getElementById('sbbrConceptBoardSummary');
+        if (!el) return;
+        const codes = this.getSbbrSelectedConceptBoardCodes();
         if (!codes.length) {
             el.textContent = '未选择板块，点击「选择板块」';
             return;

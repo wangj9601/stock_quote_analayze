@@ -3492,28 +3492,78 @@ async def get_one_yang_three_lines_strategy(
 
 @router.get("/sbbr-strategy")
 async def get_sbbr_strategy(
-    scope: str = Query("market", description="market|watchlist|reserve"),
+    scope: str = Query(
+        "market",
+        description="market|watchlist|reserve|industry_board|concept_board",
+    ),
     date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     config_id: Optional[int] = Query(None),
     entry_only: bool = Query(False, description="仅返回入场信号"),
     require_bottom: bool = Query(True),
     require_size: bool = Query(True),
-    trace_only: bool = Query(False, description="仅读 sbbr_signal_trace"),
+    trace_only: bool = Query(False, description="仅读 sbbr_signal_trace（仅 scope=market）"),
+    cn_board_segment: Optional[str] = Query(
+        None,
+        description="可选 A 股板型: ALL/MAIN/CYB/SZ_SME/KCB/BJ；与范围组合收窄股票池",
+    ),
+    industry_board_code: Optional[List[str]] = Query(
+        None, description="scope=industry_board 时：行业板块 BK 编码，可多选"
+    ),
+    concept_board_code: Optional[List[str]] = Query(
+        None, description="scope=concept_board 时：概念板块代码，可多选"
+    ),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
-    """做小做底（SBBR）全市场/自选/储备箱选股。"""
+    """做小做底（SBBR）全市场/自选/储备箱/行业·概念板块选股；板型为额外过滤，不改变做小市值口径。"""
     try:
         from backend_core.strategies.sbbr.config import SBBRConfigManager
         from backend_core.strategies.sbbr.signal_storage import load_traces
         from backend_core.strategies.sbbr.strategy_engine import SBBRStrategyEngine
         from backend_api.models import SBBRReserveBox, User, Watchlist
+        from backend_api.utils.cn_listed_board_filter import (
+            filter_stock_codes_by_board_segment,
+            normalize_list_board_segment,
+        )
     except Exception as e:
         return JSONResponse(
             status_code=503,
             content={"success": False, "message": f"SBBR 模块不可用: {e}", "data": []},
         )
+
+    scope_raw = (scope or "market").strip().lower()
+    if scope_raw == "cn":
+        scope_raw = "market"
+    allowed_scopes = ("market", "watchlist", "reserve", "industry_board", "concept_board")
+    if scope_raw not in allowed_scopes:
+        raise HTTPException(
+            status_code=400,
+            detail="scope 仅支持 market|watchlist|reserve|industry_board|concept_board",
+        )
+
+    seg_raw = (cn_board_segment or "").strip().upper()
+    if seg_raw and seg_raw != "ALL":
+        if not normalize_list_board_segment(cn_board_segment):
+            raise HTTPException(
+                status_code=400,
+                detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
+            )
+    else:
+        seg_raw = ""
+
+    def _apply_board_segment(codes: List[str]) -> List[str]:
+        if not seg_raw:
+            return codes
+        return filter_stock_codes_by_board_segment(codes, seg_raw)
+
+    def _norm_pool_codes(raw_codes: List[str]) -> List[str]:
+        out: List[str] = []
+        for c in raw_codes:
+            n = _normalize_stock_code_for_gms_pool(str(c or "").strip())
+            if n and n.isdigit() and len(n) == 6 and n not in out:
+                out.append(n)
+        return out
 
     cm = SBBRConfigManager()
     cid = int(config_id) if config_id is not None else cm.get_default_config_id()
@@ -3522,8 +3572,11 @@ async def get_sbbr_strategy(
     trade_date = date or engine.loader.resolve_trade_date()
 
     stock_codes = None
+    extra_meta: Dict[str, Any] = {}
     user = None
-    if scope in ("watchlist", "reserve"):
+    effective_max = max_results or 200
+
+    if scope_raw in ("watchlist", "reserve"):
         if not token:
             raise HTTPException(status_code=401, detail="该 scope 需要登录")
         try:
@@ -3534,13 +3587,18 @@ async def get_sbbr_strategy(
                 raise HTTPException(status_code=401, detail="用户不存在")
         except JWTError:
             raise HTTPException(status_code=401, detail="无效的认证凭据")
-        if scope == "watchlist":
-            stock_codes = [str(i.stock_code).strip() for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()]
+        if scope_raw == "watchlist":
+            stock_codes = [
+                str(i.stock_code).strip()
+                for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+            ]
         else:
             stock_codes = [
                 str(i.stock_code).strip()
                 for i in db.query(SBBRReserveBox).filter(SBBRReserveBox.user_id == user.id).all()
             ]
+        stock_codes = _norm_pool_codes(stock_codes)
+        stock_codes = _apply_board_segment(stock_codes)
         if not stock_codes:
             return JSONResponse(
                 {
@@ -3549,24 +3607,150 @@ async def get_sbbr_strategy(
                     "total": 0,
                     "search_date": trade_date,
                     "strategy_name": "做小做底",
-                    "scope": scope,
+                    "scope": scope_raw,
                     "config_id": cid,
-                    "message": "列表为空",
+                    "cn_board_segment": seg_raw or None,
+                    "message": "列表为空" + ("（板型过滤后无匹配）" if seg_raw else ""),
+                }
+            )
+    elif scope_raw == "industry_board":
+        from backend_api.models import IndustryBoardConstituent
+        from backend_api.utils.bk_board_code import resolve_industry_board_codes
+
+        bcodes = resolve_industry_board_codes(
+            db, _normalize_gms_board_codes(industry_board_code)
+        )
+        if not bcodes:
+            raw = _normalize_gms_board_codes(industry_board_code)
+            raise HTTPException(
+                status_code=400,
+                detail=f"未找到行业板块：{('、'.join(raw) if raw else '请传 industry_board_code')}",
+            )
+        rows_ib = (
+            db.query(IndustryBoardConstituent)
+            .filter(IndustryBoardConstituent.board_code.in_(bcodes))
+            .all()
+        )
+        stock_codes = _norm_pool_codes(
+            [str(getattr(r, "stock_code", "") or "").strip() for r in rows_ib]
+        )
+        stock_codes = _apply_board_segment(stock_codes)
+        extra_meta["industry_board_codes"] = bcodes
+        if effective_max < 2000:
+            effective_max = 2000
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "search_date": trade_date,
+                    "strategy_name": "做小做底",
+                    "scope": scope_raw,
+                    "config_id": cid,
+                    "industry_board_codes": bcodes,
+                    "cn_board_segment": seg_raw or None,
+                    "message": f"行业板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
+                }
+            )
+    elif scope_raw == "concept_board":
+        from backend_api.models import ConceptBoardConstituent
+        from backend_api.utils.bk_board_code import resolve_concept_board_codes
+
+        bcodes = _normalize_gms_board_codes(concept_board_code, upper=True)
+        if not bcodes:
+            raise HTTPException(status_code=400, detail="scope=concept_board 时需传 concept_board_code")
+        try:
+            resolved = resolve_concept_board_codes(db, bcodes)
+            if resolved:
+                bcodes = resolved
+        except Exception:
+            pass
+        rows_cb = (
+            db.query(ConceptBoardConstituent)
+            .filter(ConceptBoardConstituent.board_code.in_(bcodes))
+            .all()
+        )
+        stock_codes = _norm_pool_codes(
+            [str(getattr(r, "stock_code", "") or "").strip() for r in rows_cb]
+        )
+        stock_codes = _apply_board_segment(stock_codes)
+        extra_meta["concept_board_codes"] = bcodes
+        if effective_max < 2000:
+            effective_max = 2000
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "search_date": trade_date,
+                    "strategy_name": "做小做底",
+                    "scope": scope_raw,
+                    "config_id": cid,
+                    "concept_board_codes": bcodes,
+                    "cn_board_segment": seg_raw or None,
+                    "message": f"概念板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
+                }
+            )
+    elif scope_raw == "market" and seg_raw:
+        # 全市场 + 板型：先做小宇宙再按代码段收窄，再跑策略（仍走 require_size）
+        universe = engine.loader.build_size_universe(cfg, trade_date=trade_date)
+        stock_codes = _apply_board_segment([str(u.get("code") or "") for u in universe])
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "search_date": trade_date,
+                    "strategy_name": "做小做底",
+                    "scope": scope_raw,
+                    "config_id": cid,
+                    "cn_board_segment": seg_raw,
+                    "message": "做小宇宙在所选板型下无匹配股票",
                 }
             )
 
-    if trace_only and scope == "market":
+    if trace_only and scope_raw == "market":
+        # 板型过滤时多取一些再截断，避免 limit 截在过滤前导致结果偏少
+        trace_limit = effective_max
+        if seg_raw:
+            trace_limit = min(2000, max(effective_max * 5, effective_max))
         rows = load_traces(
             db,
             trade_date=trade_date,
             config_id=cid,
             entry_only=entry_only,
-            limit=max_results or 200,
+            limit=trace_limit,
         )
+        if seg_raw:
+            allow = {
+                _normalize_stock_code_for_gms_pool(c)
+                for c in (stock_codes or [])
+                if _normalize_stock_code_for_gms_pool(c)
+            }
+            if allow:
+                rows = [
+                    r
+                    for r in rows
+                    if _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) in allow
+                ]
+            else:
+                row_codes = [
+                    _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) for r in rows
+                ]
+                keep = set(filter_stock_codes_by_board_segment(row_codes, seg_raw))
+                rows = [
+                    r
+                    for r in rows
+                    if _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) in keep
+                ]
         if require_bottom:
             rows = [r for r in rows if r.get("bottom_matched")]
         if require_size:
             rows = [r for r in rows if r.get("size_ok")]
+        rows = rows[:effective_max]
         return JSONResponse(
             {
                 "success": True,
@@ -3574,23 +3758,26 @@ async def get_sbbr_strategy(
                 "total": len(rows),
                 "search_date": trade_date,
                 "strategy_name": "做小做底",
-                "scope": scope,
+                "scope": scope_raw,
                 "config_id": cid,
+                "cn_board_segment": seg_raw or None,
                 "source": "trace",
+                **extra_meta,
             }
         )
 
     loop = asyncio.get_event_loop()
+    codes_arg = stock_codes
 
     def _run():
         return engine.screen(
-            codes=stock_codes,
+            codes=codes_arg,
             date=trade_date,
             config=cfg,
             require_entry=entry_only,
             require_size=require_size,
             require_bottom=require_bottom,
-            max_results=max_results,
+            max_results=effective_max,
         )
 
     rows = await loop.run_in_executor(None, _run)
@@ -3601,9 +3788,11 @@ async def get_sbbr_strategy(
             "total": len(rows),
             "search_date": trade_date,
             "strategy_name": "做小做底",
-            "scope": scope,
+            "scope": scope_raw,
             "config_id": cid,
+            "cn_board_segment": seg_raw or None,
             "source": "live",
+            **extra_meta,
         }
     )
 

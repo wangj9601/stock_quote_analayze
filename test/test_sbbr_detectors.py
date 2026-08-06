@@ -24,22 +24,39 @@ def _bar(date, o, h, l, c, v, tr=None, amount=None):
 
 def test_size_filter_ok():
     cfg = get_default_sbbr_config()
-    # 总股本 1e8 股 * 50 元 = 50 亿；流通 0.8e8 * 50 = 40 亿
+    # 总股本 1e9 股 * 10 元 = 100 亿市值；流通股本 6e8 股 = 6 亿股
     r = evaluate_size(
-        total_shares=1e8,
-        free_float_shares=0.8e8,
-        close=50,
+        total_shares=1e9,
+        free_float_shares=6e8,
+        close=10,
         config=cfg,
     )
     assert r["size_ok"] is True
     assert 20 <= r["total_mv"] <= 200
-    assert 20 <= r["circ_mv"] <= 200
+    assert 5 <= r["circ_shares_yi"] <= 10
 
 
 def test_size_filter_out_of_range():
     cfg = get_default_sbbr_config()
-    r = evaluate_size(total_shares=1e10, free_float_shares=1e10, close=100, config=cfg)
+    # 总市值过大
+    r = evaluate_size(total_shares=1e10, free_float_shares=6e8, close=100, config=cfg)
     assert r["size_ok"] is False
+
+
+def test_size_filter_circ_shares_out_of_range():
+    cfg = get_default_sbbr_config()
+    # 总市值合格，流通股本 20 亿股超上限
+    r = evaluate_size(total_shares=1e9, free_float_shares=20e8, close=10, config=cfg)
+    assert r["size_ok"] is False
+    assert r["circ_shares_yi"] == 20.0
+
+
+def test_size_filter_circ_shares_too_small():
+    cfg = get_default_sbbr_config()
+    # 流通股本 0.8 亿股低于下限
+    r = evaluate_size(total_shares=1e9, free_float_shares=0.8e8, close=10, config=cfg)
+    assert r["size_ok"] is False
+    assert r["circ_shares_yi"] == 0.8
 
 
 def test_range_bottom_touches():

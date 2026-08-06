@@ -56,7 +56,14 @@ def upsert_signal_traces(
             volume_ratio=r.get("volume_ratio"),
             exit_flags=r.get("exit_flags") or {},
             position_advice=r.get("position_advice") or {},
-            detail=r.get("detail") or {},
+            detail={
+                **(r.get("detail") or {}),
+                **(
+                    {"circ_shares_yi": r.get("circ_shares_yi")}
+                    if r.get("circ_shares_yi") is not None
+                    else {}
+                ),
+            },
             updated_at=datetime.now(),
         )
         if existing:
@@ -113,6 +120,7 @@ def load_traces(
                 "market_type": r.market_type,
                 "total_mv": r.total_mv,
                 "circ_mv": r.circ_mv,
+                "circ_shares_yi": detail.get("circ_shares_yi"),
                 "size_ok": r.size_ok,
                 "bottom_mode": r.bottom_mode,
                 "bottom_matched": r.bottom_matched,

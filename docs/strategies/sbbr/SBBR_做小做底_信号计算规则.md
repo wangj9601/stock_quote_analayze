@@ -6,7 +6,7 @@
 
 SBBR 按以下顺序计算信号：
 
-1. 做小过滤（市值）
+1. 做小过滤（总市值 + 流通股本）
 2. 筑底识别（横盘收集 / 打压恐慌）
 3. 共振弱转强入场
 4. 弹性防守线计算与破位检测
@@ -17,19 +17,20 @@ SBBR 按以下顺序计算信号：
 
 ## 2. 做小过滤规则（size_filter）
 
-### 2.1 市值计算
+### 2.1 指标计算
 
-- 总市值（亿）：`total_mv = total_shares * close / 1e8`
-- 流通市值（亿）：`circ_mv = free_float_shares * close / 1e8`
+- 总市值（亿元）：`total_mv = total_shares * close / 1e8`
+- 流通股本（亿股）：`circ_shares_yi = free_float_shares / 1e8`（单位是**亿股**，不是亿元）
+- 流通市值（亿元）：`circ_mv = free_float_shares * close / 1e8`（仅展示，**不参与**默认过滤）
 
 ### 2.2 默认阈值
 
-- 总市值区间：20 ~ 200 亿
-- 流通市值区间：20 ~ 200 亿
+- 总市值区间：20 ~ 200 亿（元口径的市值）
+- 流通股本区间：5 ~ 10 亿股
 - 缺省行为：
-  - 若总/流通都缺失，默认判为不通过（`exclude_unknown_size=true` 且 `require_shares=true`）
-  - 若仅一侧缺失，则按有值那一侧判断（`total_only` 或 `circ_only`）
-
+  - 若总市值与流通股本都缺失，默认判为不通过（`exclude_unknown_size=true` 且 `require_shares=true`）
+  - 若仅一侧缺失，则按有值那一侧判断（`total_only` 或 `circ_shares_only`）
+- 库内若仍残留错误的 `circ_mv_min/max_yi` 默认（5~10 或 20~200），读取配置时会迁移为：`total_mv` 20~200 + `circ_shares` 5~10 亿股，并移除上述 `circ_mv_*` 默认约束
 ## 3. 筑底识别规则（bottom_detector）
 
 SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
@@ -164,22 +165,23 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 
 选股日 `evaluate_code` 的仓位建议固定为试探阶段，不会因 `bottom_matched` 误触发「可加仓」。
 
-## 7.2 支撑/阻力数据字段
+### 7.2 支撑/阻力数据字段
 
 选股与持仓评估顶层输出：
 
 - `box_support` / `box_resistance`：筑底箱体位（黄金坑通常仅有支撑）
 - `nearest_support` / `nearest_resistance`：KDE 最近结构位
 - `kde_ok` / `kde_reason` / `kde_lookback_used`
+- `support_confirm`：持仓评估时的上方支撑确认明细（`confirmed` / `reason` 等）
 
-前端选股表展示上述四列；「按前复权计算」仅重算列表中的 KDE 列（调用 `/api/analysis/levels/batch`），不改写策略信号与箱体位。
+前端选股表展示箱体与 KDE 四列；正式交易表展示「支撑确认」列。「按前复权计算」仅重算列表中的 KDE 列（调用 `/api/analysis/levels/batch`），不改写策略信号与箱体位。
 
 ## 8. 关键默认参数清单（可配置）
 
 来自 `sbbr_strategy_configs` 默认版本：
 
-- `size.total_mv_min_yi=20`, `size.total_mv_max_yi=200`
-- `size.circ_mv_min_yi=20`, `size.circ_mv_max_yi=200`
+- `size.total_mv_min_yi=20`, `size.total_mv_max_yi=200`（总市值，亿元）
+- `size.circ_shares_min_yi=5`, `size.circ_shares_max_yi=10`（流通股本，亿股）
 - `bottom.lookback_days=60`, `bottom.max_range_pct=0.60`, `bottom.min_touches=3`, `bottom.max_touches=4`
 - `entry.ma_period=20`, `entry.shrink_volume_ratio_max=0.7`, `entry.expand_volume_ratio_min=1.05`, `entry.expand_volume_ratio_max=1.8`
 - `entry.market_lookback_days=5`, `entry.market_drop_pct=-0.01`

@@ -1703,7 +1703,7 @@
                     <button type="button" class="gms-sub-tab" data-sbbr-sub="formal">正式交易</button>
                     <button type="button" class="gms-sub-tab" data-sbbr-sub="reserve">储备箱</button>
                 </div>
-                <p class="gms-integrated-hint">做小做底：全市场市值过滤 → 筑底识别 → 共振弱转强入场；列表展示箱体支撑/阻力与 KDE 结构位；可加入观察并转正式交易（五·三·二分仓，加仓需上方支撑确认）。</p>
+                <p class="gms-integrated-hint">做小做底：总市值 20~200 亿 + 流通股 5~10 亿股过滤 → 筑底识别 → 共振弱转强入场；列表展示箱体支撑/阻力与 KDE 结构位；可加入观察并转正式交易（五·三·二分仓，加仓需上方支撑确认）。</p>
             </div>
 
             <div id="sbbr-sub-signals" class="sbbr-sub-panel" style="display:block;">
@@ -1714,6 +1714,8 @@
                             <option value="market">全市场（做小宇宙）</option>
                             <option value="watchlist">自选股</option>
                             <option value="reserve">储备箱</option>
+                            <option value="industry_board">行业板块</option>
+                            <option value="concept_board">概念板块</option>
                         </select>
                     </div>
                     <div class="param-group">
@@ -1732,6 +1734,30 @@
                     </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                 </div>
+                <div id="sbbrIndustryBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">行业板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="sbbrIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="sbbrIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="sbbrConceptBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">概念板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="sbbrConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="sbbrConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="sbbrCnBoardWrap" style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:8px 0 4px 0;">
+                    <span style="color:#666; font-size:13px;">A股板型：</span>
+                    <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="ALL" checked style="margin-right:5px;">全部</label>
+                    <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="MAIN" style="margin-right:5px;">主板</label>
+                    <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="CYB" style="margin-right:5px;">创业板</label>
+                    <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="SZ_SME" style="margin-right:5px;">中小板</label>
+                    <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="KCB" style="margin-right:5px;">科创板</label>
+                    <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="BJ" style="margin-right:5px;">北证</label>
+                    <span style="color:#888; font-size:12px;">与范围组合：全市场/行业/概念/自选/储备均可再按代码段收窄（做小市值口径不变）</span>
+                </div>
                 <div id="sbbrLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
                 <div id="sbbrError" class="error-message" style="display:none;"></div>
                 <div class="results-container">
@@ -1740,7 +1766,7 @@
                         <table class="results-table">
                             <thead>
                                 <tr>
-                                    <th>代码</th><th>名称</th><th>总市值(亿)</th><th>流通(亿)</th>
+                                    <th>代码</th><th>名称</th><th>总市值(亿)</th><th>流通股(亿股)</th>
                                     <th>筑底模式</th><th>入场</th><th>收盘</th>
                                     <th class="gms-col-price">箱体支撑</th><th class="gms-col-price">箱体阻力</th>
                                     <th class="gms-col-price">KDE支撑</th><th class="gms-col-price">KDE阻力</th>
@@ -2088,6 +2114,7 @@
     <script src="js/gms_score_detail.js"></script>
     <script src="js/urt_score_detail.js"></script>
     <script src="js/rpe_score_detail.js"></script>
+    <script src="js/sbbr_score_detail.js"></script>
     <script src="js/screening.js"></script>
     <script src="js/sbbr_screening.js"></script>
     <script src="js/rpe_screening.js"></script>

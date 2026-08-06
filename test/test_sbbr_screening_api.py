@@ -25,3 +25,31 @@ def test_import_engine():
 
     eng = SBBRStrategyEngine(config=__import__("backend_core.strategies.sbbr.config", fromlist=["get_default_sbbr_config"]).get_default_sbbr_config())
     assert eng is not None
+
+
+def test_sbbr_strategy_route_accepts_board_params():
+    """选股路由签名含行业/概念/板型参数，与 GMS/RPE 对齐。"""
+    import inspect
+    from backend_api.stock import stock_screening_routes as routes
+
+    sig = inspect.signature(routes.get_sbbr_strategy)
+    params = set(sig.parameters)
+    assert "cn_board_segment" in params
+    assert "industry_board_code" in params
+    assert "concept_board_code" in params
+    assert "scope" in params
+
+
+def test_board_segment_filter_reuse():
+    from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+
+    codes = ["600000", "000001", "300001", "688001", "002001"]
+    main = filter_stock_codes_by_board_segment(codes, "MAIN")
+    assert "600000" in main and "000001" in main
+    assert "300001" not in main and "688001" not in main
+    cyb = filter_stock_codes_by_board_segment(codes, "CYB")
+    assert cyb == ["300001"]
+    kcb = filter_stock_codes_by_board_segment(codes, "KCB")
+    assert kcb == ["688001"]
+    sme = filter_stock_codes_by_board_segment(codes, "SZ_SME")
+    assert sme == ["002001"]
