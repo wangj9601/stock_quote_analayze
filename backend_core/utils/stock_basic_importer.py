@@ -2,19 +2,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from io import BytesIO
+from io import BytesIO, StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from sqlalchemy import text
 
+# 真 OLE Excel (.xls) 文件头；东财 Table.xls 等伪 xls 无此 magic，实为制表符文本
+_OLE_XLS_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 _COLUMN_ALIASES = {
     "code": ["code", "代码", "股票代码", "证券代码"],
     "name": ["name", "名称", "股票名称", "证券简称", "简称"],
     "market": ["market", "市场", "市场类型"],
-    "total_shares": ["total_shares", "总股本", "总股本(股)"],
-    "free_float_shares": ["free_float_shares", "流通股", "流通股本", "流通股(股)", "流通股本(股)"],
+    "total_shares": ["total_shares", "总股本", "总股本(股)", "总股数", "总股数(股)"],
+    "free_float_shares": [
+        "free_float_shares",
+        "流通股",
+        "流通股本",
+        "流通股(股)",
+        "流通股本(股)",
+        "流通股数",
+        "流通股数(股)",
+    ],
     "listing_date": ["listing_date", "上市日期", "上市时间"],
     "industry": ["industry", "行业", "所属行业"],
     "asof_date": ["asof_date", "数据日期", "基准日期", "生效日期"],
@@ -71,7 +81,7 @@ def _to_float(v: Any) -> Optional[float]:
     if v is None:
         return None
     s = str(v).strip().replace(",", "")
-    if not s or s in ("-", "nan", "None"):
+    if not s or s in ("-", "--", "nan", "None"):
         return None
     try:
         f = float(s)
@@ -100,17 +110,65 @@ def _to_optional_text(v: Any) -> Optional[str]:
     return s
 
 
+def _normalize_text_line_endings(text: str) -> str:
+    """东财 Table.xls 等导出常用 \\r 换行，pandas 需规范为 \\n。"""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _read_text_table(content: bytes) -> Optional[pd.DataFrame]:
+    for enc in ("utf-8-sig", "gbk", "cp936", "gb18030"):
+        try:
+            text = content.decode(enc)
+        except UnicodeDecodeError:
+            continue
+        if not text.strip():
+            continue
+        text = _normalize_text_line_endings(text)
+        first_line = text.splitlines()[0] if text else ""
+        sep = "\t" if first_line.count("\t") >= max(first_line.count(","), 1) else ","
+        try:
+            df = pd.read_csv(StringIO(text), sep=sep, dtype=str, engine="python")
+        except Exception:
+            continue
+        if df is not None and not df.empty:
+            return df
+    return None
+
+
 def _read_df_from_bytes(filename: str, content: bytes) -> pd.DataFrame:
-    name = filename.lower()
-    if name.endswith(".xlsx") or name.endswith(".xls"):
-        return pd.read_excel(BytesIO(content))
+    """读取表格：真 xlsx/xls 或东财等导出的伪 xls（GBK/UTF-8 制表符/逗号文本）。"""
+    name = (filename or "").lower()
+
+    if name.endswith(".xlsx"):
+        return pd.read_excel(BytesIO(content), dtype=str, engine="openpyxl")
+
+    if name.endswith(".xls"):
+        if content[:8] == _OLE_XLS_MAGIC:
+            try:
+                return pd.read_excel(BytesIO(content), dtype=str, engine="xlrd")
+            except Exception:
+                pass
+        df = _read_text_table(content)
+        if df is not None:
+            return df
+        try:
+            return pd.read_excel(BytesIO(content), dtype=str, engine="xlrd")
+        except Exception as e:
+            raise ValueError(
+                "无法解析 .xls，请确认是 Excel 或东财 Table.xls（制表符文本）"
+            ) from e
+
     if name.endswith(".csv"):
+        df = _read_text_table(content)
+        if df is not None:
+            return df
         for enc in ("utf-8-sig", "utf-8", "gbk"):
             try:
                 return pd.read_csv(BytesIO(content), encoding=enc)
             except Exception:
                 continue
-    raise ValueError("仅支持 CSV/XLSX 文件")
+
+    raise ValueError("仅支持 CSV/XLS/XLSX（含东财 Table.xls 文本格式）")
 
 
 def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any]], List[ImportIssue]]:

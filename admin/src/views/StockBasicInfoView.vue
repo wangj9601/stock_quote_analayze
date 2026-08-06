@@ -113,7 +113,7 @@
           </div>
 
           <el-alert class="mb-4" type="info" :closable="false" show-icon
-            :title="`当前为【${mainTab === 'CN' ? 'A股' : '港股'}】导入：仅处理文件中市场为 ${mainTab} 的行；策略为仅补空值。`"
+            :title="`当前为【${mainTab === 'CN' ? 'A股' : '港股'}】导入：仅处理文件中市场为 ${mainTab} 的行；策略为仅补空值。支持 CSV/XLS/XLSX（含东财 Table.xls 文本格式）。`"
           />
 
           <el-upload
@@ -121,7 +121,7 @@
             :show-file-list="true"
             :on-change="onFileChange"
             :limit="1"
-            accept=".csv,.xlsx"
+            accept=".csv,.xlsx,.xls"
           >
             <template #trigger>
               <el-button type="primary">选择导入文件</el-button>
