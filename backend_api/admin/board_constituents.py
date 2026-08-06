@@ -149,7 +149,7 @@ def _board_list_src_sql(board_type: BoardType, t: dict[str, str]) -> str:
 
 
 def _board_list_filtered_cte(board_src_sql: str, kw_filter: str) -> str:
-    """板块列表公共 CTE：聚合后按关键字过滤。"""
+    """板块列表公共 CTE：聚合后按关键字/代码来源等条件过滤。"""
     return f"""
         WITH src AS (
             SELECT
@@ -167,6 +167,62 @@ def _board_list_filtered_cte(board_src_sql: str, kw_filter: str) -> str:
             SELECT * FROM src WHERE 1=1 {kw_filter}
         )
     """
+
+
+# 板块列表可排序字段（与前端表头 / 查询参数 sort_by 对应）
+BOARD_LIST_SORT_FIELDS = frozenset(
+    {"create_date", "board_code", "board_name", "board_code_source"}
+)
+# 代码来源排序优先级：同花顺优先，其余按常用程度
+_BOARD_CODE_SOURCE_SORT_CASE = """
+    CASE COALESCE(NULLIF(TRIM({alias}.board_code_source), ''), '{legacy}')
+        WHEN 'tonghuashun' THEN 0
+        WHEN 'eastmoney' THEN 1
+        WHEN 'huatai' THEN 2
+        WHEN 'manual' THEN 3
+        WHEN 'other' THEN 4
+        ELSE 9
+    END
+""".format(alias="{alias}", legacy=LEGACY_DEFAULT_BOARD_CODE_SOURCE)
+
+
+def _board_list_order_clause(
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = None,
+    *,
+    alias: str = "filtered",
+) -> str:
+    """构建板块列表 ORDER BY。
+
+    默认：create_date DESC NULLS LAST, board_code（与历史行为一致）。
+    sort_by=board_code_source 时按「同花顺优先」的固定优先级排序，
+    sort_order=asc 为同花顺在前，desc 为同花顺在后。
+    """
+    field = (sort_by or "create_date").strip().lower()
+    if field not in BOARD_LIST_SORT_FIELDS:
+        field = "create_date"
+    order = (sort_order or "desc").strip().lower()
+    if order not in ("asc", "desc"):
+        order = "desc"
+
+    if field == "board_code_source":
+        src_expr = _BOARD_CODE_SOURCE_SORT_CASE.format(alias=alias)
+        # asc：同花顺优先；desc：反转优先级
+        direction = "ASC" if order == "asc" else "DESC"
+        return f"{src_expr} {direction}, {alias}.board_code ASC"
+
+    if field == "board_name":
+        direction = "ASC" if order == "asc" else "DESC"
+        return f"{alias}.board_name {direction} NULLS LAST, {alias}.board_code ASC"
+
+    if field == "board_code":
+        direction = "ASC" if order == "asc" else "DESC"
+        return f"{alias}.board_code {direction}"
+
+    # create_date（默认）
+    direction = "ASC" if order == "asc" else "DESC"
+    nulls = "NULLS FIRST" if order == "asc" else "NULLS LAST"
+    return f"{alias}.create_date {direction} {nulls}, {alias}.board_code ASC"
 
 
 def _normalize_stock_code(raw: Any) -> str:
@@ -1261,21 +1317,70 @@ async def delete_boards_batch(
 async def list_boards_with_summary(
     board_type: BoardType = Query(..., description="industry 或 concept"),
     keyword: Optional[str] = None,
+    board_code_source: Optional[str] = Query(
+        None,
+        description="代码来源精确过滤：eastmoney/tonghuashun/huatai/manual/other；"
+        "空或 all 表示不过滤。空值存量按东方财富(legacy)匹配。",
+    ),
+    sort_by: Optional[str] = Query(
+        None,
+        description="排序字段：create_date（默认）/ board_code / board_name / board_code_source；"
+        "board_code_source 按同花顺优先的固定优先级排序。",
+    ),
+    sort_order: Optional[str] = Query(
+        None,
+        description="排序方向：asc / desc；默认 desc（create_date 时与历史一致；"
+        "board_code_source 时 asc=同花顺优先）。",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """板块列表及成分股数量统计。"""
+    """板块列表及成分股数量统计。
+
+    支持按代码来源过滤与多字段排序（均在服务端分页前生效）。
+    默认排序：create_date DESC NULLS LAST, board_code。
+    """
     _ = current_user
     ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
     kw = (keyword or "").strip()
-    kw_filter = ""
+    extra_filters: list[str] = []
     params: dict[str, Any] = {"limit": page_size, "offset": (page - 1) * page_size}
     if kw:
-        kw_filter = "AND (src.board_code ILIKE :kw OR src.board_name ILIKE :kw)"
+        extra_filters.append("AND (src.board_code ILIKE :kw OR src.board_name ILIKE :kw)")
         params["kw"] = f"%{kw}%"
+
+    src_raw = (board_code_source or "").strip().lower()
+    src_filter: Optional[str] = None
+    if src_raw and src_raw != "all":
+        src_norm = normalize_board_code_source(src_raw)
+        if not src_norm:
+            raise HTTPException(status_code=400, detail="板块代码来源无效")
+        src_filter = src_norm
+        # 空值存量与列表展示一致，按 LEGACY（东方财富）匹配
+        extra_filters.append(
+            "AND COALESCE(NULLIF(TRIM(src.board_code_source), ''), :legacy_source) = :board_code_source"
+        )
+        params["board_code_source"] = src_norm
+        params["legacy_source"] = LEGACY_DEFAULT_BOARD_CODE_SOURCE
+
+    kw_filter = " ".join(extra_filters)
+    resolved_sort_by = (sort_by or "create_date").strip().lower()
+    if resolved_sort_by not in BOARD_LIST_SORT_FIELDS:
+        resolved_sort_by = "create_date"
+    resolved_sort_order = (sort_order or "desc").strip().lower()
+    if resolved_sort_order not in ("asc", "desc"):
+        resolved_sort_order = "desc"
+
+    order_filtered = _board_list_order_clause(
+        resolved_sort_by, resolved_sort_order, alias="filtered"
+    )
+    # 内层已按 filtered.* 排序；外层用 page 别名保持同序（避免 LATERAL 打乱）
+    order_page = _board_list_order_clause(
+        resolved_sort_by, resolved_sort_order, alias="page"
+    )
 
     board_src_sql = _board_list_src_sql(board_type, t)
     filtered_cte = _board_list_filtered_cte(board_src_sql, kw_filter)
@@ -1298,7 +1403,7 @@ async def list_boards_with_summary(
             page.board_code_source
         FROM (
             SELECT * FROM filtered
-            ORDER BY create_date DESC NULLS LAST, board_code
+            ORDER BY {order_filtered}
             LIMIT :limit OFFSET :offset
         ) page
         LEFT JOIN LATERAL (
@@ -1306,7 +1411,7 @@ async def list_boards_with_summary(
             FROM {t['constituents']} c
             WHERE c.board_code = page.board_code
         ) cnt ON TRUE
-        ORDER BY page.create_date DESC NULLS LAST, page.board_code
+        ORDER BY {order_page}
         """
     )
     rows = db.execute(list_sql, params).fetchall()
@@ -1324,8 +1429,16 @@ async def list_boards_with_summary(
         }
         for r in rows
     ]
-    return {"success": True, "data": data, "total": total, "page": page, "page_size": page_size}
-
+    return {
+        "success": True,
+        "data": data,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "sort_by": resolved_sort_by,
+        "sort_order": resolved_sort_order,
+        "board_code_source": src_filter,
+    }
 
 @router.get("/boards/by-stock")
 async def list_boards_by_stock(

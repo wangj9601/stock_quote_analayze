@@ -34,12 +34,20 @@ class BoardConstituentsService {
   async listBoards(params: {
     boardType: BoardType
     keyword?: string
+    boardCodeSource?: string
+    sortBy?: string
+    sortOrder?: 'asc' | 'desc'
     page?: number
     pageSize?: number
   }) {
     const q = new URLSearchParams()
     q.set('board_type', params.boardType)
     if (params.keyword) q.set('keyword', params.keyword)
+    if (params.boardCodeSource && params.boardCodeSource !== 'all') {
+      q.set('board_code_source', params.boardCodeSource)
+    }
+    if (params.sortBy) q.set('sort_by', params.sortBy)
+    if (params.sortOrder) q.set('sort_order', params.sortOrder)
     q.set('page', String(params.page ?? 1))
     q.set('page_size', String(params.pageSize ?? 30))
     return apiService.get<{
@@ -48,6 +56,9 @@ class BoardConstituentsService {
       total: number
       page: number
       page_size: number
+      sort_by?: string
+      sort_order?: string
+      board_code_source?: string | null
     }>(`/board-constituents/boards?${q}`)
   }
 

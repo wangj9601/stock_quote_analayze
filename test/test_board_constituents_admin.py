@@ -14,10 +14,12 @@ from backend_api.admin.board_constituents import (
     SetBoardTradeObserveBody,
     SetBoardFrontendVisibleBody,
     EXPORT_ALL_COLUMNS,
+    BOARD_LIST_SORT_FIELDS,
     _clear_all_concept_boards,
     _clear_all_industry_boards,
     _assert_board_name_source_unique,
     _assert_concept_board_name_unique,
+    _board_list_order_clause,
     _export_all_board_src_sql,
     _format_export_board_code_source,
     _generate_next_concept_board_code,
@@ -94,6 +96,38 @@ class TestBoardConstituentsHelpers:
         assert "WITH src AS" in cte
         assert "filtered AS" in cte
         assert "GROUP BY board_code" in cte
+
+    def test_board_list_filtered_cte_accepts_source_filter(self):
+        src = _board_list_src_sql("concept", _tables("concept"))
+        flt = (
+            "AND COALESCE(NULLIF(TRIM(src.board_code_source), ''), :legacy_source)"
+            " = :board_code_source"
+        )
+        cte = _board_list_filtered_cte(src, flt)
+        assert "board_code_source" in cte
+        assert ":board_code_source" in cte
+
+    def test_board_list_order_clause_defaults_and_source_priority(self):
+        assert "create_date" in BOARD_LIST_SORT_FIELDS
+        assert "board_code_source" in BOARD_LIST_SORT_FIELDS
+        default = _board_list_order_clause()
+        assert "create_date DESC NULLS LAST" in default
+        assert "board_code ASC" in default
+
+        src_asc = _board_list_order_clause("board_code_source", "asc", alias="page")
+        assert "tonghuashun" in src_asc
+        assert "page.board_code_source" in src_asc
+        assert "ASC" in src_asc
+
+        src_desc = _board_list_order_clause("board_code_source", "desc")
+        assert "DESC" in src_desc
+
+        by_name = _board_list_order_clause("board_name", "asc")
+        assert "board_name ASC" in by_name
+
+        # 非法字段回退 create_date
+        fallback = _board_list_order_clause("unknown_field", "asc")
+        assert "create_date ASC" in fallback
 
     def test_board_list_src_sql_concept_basic_only(self):
         sql = _board_list_src_sql("concept", _tables("concept"))

@@ -83,14 +83,33 @@
               </div>
             </div>
           </template>
-          <el-input
-            v-model="boardKeyword"
-            placeholder="板块代码/名称（BK 或中文/英文）"
-            clearable
-            class="mb-3"
-            @keyup.enter="loadBoards"
-          />
-          <el-button type="primary" size="small" :loading="boardsLoading" @click="loadBoards">查询</el-button>
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <el-input
+              v-model="boardKeyword"
+              placeholder="板块代码/名称（BK 或中文/英文）"
+              clearable
+              class="board-keyword-input"
+              @keyup.enter="onBoardSearch"
+            />
+            <el-select
+              v-model="boardCodeSourceFilter"
+              placeholder="代码来源"
+              clearable
+              class="board-source-select"
+              @change="onBoardSearch"
+            >
+              <el-option label="全部来源" value="all" />
+              <el-option
+                v-for="opt in boardCodeSourceOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
+            <el-button type="primary" size="small" :loading="boardsLoading" @click="onBoardSearch">
+              查询
+            </el-button>
+          </div>
           <div class="board-panel-main mt-3">
             <el-table
               ref="boardTableRef"
@@ -103,12 +122,23 @@
               @current-change="onSelectBoard"
               @selection-change="onBoardSelectionChange"
               @select-all="onBoardSelectAll"
+              @sort-change="onBoardSortChange"
             >
             <!-- 不使用 reserve-selection：表头全选/取消仅作用于当前页，避免跨页累加误选 -->
             <el-table-column type="selection" width="42" />
-            <el-table-column prop="board_code" label="代码" min-width="100" show-overflow-tooltip />
-            <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip />
-            <el-table-column prop="board_code_source_label" label="代码来源" width="88" show-overflow-tooltip />
+            <el-table-column prop="board_code" label="代码" min-width="100" show-overflow-tooltip sortable="custom" />
+            <el-table-column prop="board_name" label="名称" min-width="100" show-overflow-tooltip sortable="custom" />
+            <el-table-column
+              prop="board_code_source"
+              label="代码来源"
+              width="100"
+              show-overflow-tooltip
+              sortable="custom"
+            >
+              <template #default="{ row }">
+                {{ row.board_code_source_label || '—' }}
+              </template>
+            </el-table-column>
             <el-table-column prop="constituent_count" label="成分数" width="72" align="right" />
             <el-table-column label="交易观察" width="88" align="center">
               <template #default="{ row }">
@@ -518,6 +548,11 @@ function formatApiError(e: unknown, fallback: string): string {
 
 const boardType = ref<BoardType>('industry')
 const boardKeyword = ref('')
+/** 代码来源过滤：all 表示不过滤 */
+const boardCodeSourceFilter = ref<string>('all')
+/** 服务端排序：默认 create_date desc（与历史一致） */
+const boardSortBy = ref<string>('create_date')
+const boardSortOrder = ref<'asc' | 'desc'>('desc')
 const boardPage = ref(1)
 const boardPageSize = ref(30)
 const boardTotal = ref(0)
@@ -604,9 +639,29 @@ function onBoardTypeChange() {
   selectedBoardRows.value = []
   constituents.value = []
   boardPage.value = 1
+  // 切换行业/概念时保留代码来源过滤与排序，仅重置页码
   stockLookupBoards.value = []
   stockLookupHint.value = ''
   stockLookupSearched.value = false
+  void loadBoards()
+}
+
+function onBoardSearch() {
+  boardPage.value = 1
+  void loadBoards()
+}
+
+function onBoardSortChange(payload: { prop: string; order: string | null }) {
+  const prop = payload.prop || ''
+  const allowed = new Set(['board_code', 'board_name', 'board_code_source', 'create_date'])
+  if (!payload.order || !allowed.has(prop)) {
+    boardSortBy.value = 'create_date'
+    boardSortOrder.value = 'desc'
+  } else {
+    boardSortBy.value = prop
+    boardSortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  }
+  boardPage.value = 1
   void loadBoards()
 }
 
@@ -625,6 +680,12 @@ async function loadBoards() {
     const res = await boardConstituentsService.listBoards({
       boardType: boardType.value,
       keyword: boardKeyword.value.trim() || undefined,
+      boardCodeSource:
+        boardCodeSourceFilter.value && boardCodeSourceFilter.value !== 'all'
+          ? boardCodeSourceFilter.value
+          : undefined,
+      sortBy: boardSortBy.value,
+      sortOrder: boardSortOrder.value,
       page: boardPage.value,
       pageSize: boardPageSize.value,
     })
@@ -1324,6 +1385,17 @@ onMounted(() => {
 }
 
 .board-panel-footer {
+  flex-shrink: 0;
+}
+
+.board-keyword-input {
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 260px;
+}
+
+.board-source-select {
+  width: 130px;
   flex-shrink: 0;
 }
 
