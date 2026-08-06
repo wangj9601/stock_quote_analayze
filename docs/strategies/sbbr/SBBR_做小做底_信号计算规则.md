@@ -25,7 +25,7 @@ SBBR 按以下顺序计算信号：
 ### 2.2 默认阈值
 
 - 总市值区间：20 ~ 200 亿
-- 流通市值区间：5 ~ 10 亿
+- 流通市值区间：20 ~ 200 亿
 - 缺省行为：
   - 若总/流通都缺失，默认判为不通过（`exclude_unknown_size=true` 且 `require_shares=true`）
   - 若仅一侧缺失，则按有值那一侧判断（`total_only` 或 `circ_only`）
@@ -115,11 +115,14 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
    - 当前涨幅 `gain_pct = (last_close - entry_price) / entry_price`
    - 达到任一阈值即命中，默认阈值：50%、70%、100%
 2. 高位盘整（consolidate）
+   - **自入场日起**的子序列计算历史高点（无 `entry_idx`/`entry_date` 时退回全部已加载 K 线）
    - 近 15 日窗口
-   - 当前价接近历史高位（>= 85% 高点）
+   - 当前价接近该段高位（>= 85% 高点）
    - 且窗口振幅 <= 15%
 3. 高换手（turnover）
    - 最近 5 日累计换手率 >= 100%
+   - 优先用 `turnover_rate`；缺失时用 `amount / (free_float_shares * close) * 100` 估算
+   - 近窗仍无任何可用换手数据时：`turnover_ok=false`，`turnover_reason=missing_data`（避免静默当 0）
 
 信号输出：
 
@@ -127,6 +130,7 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - `any_ok`：任一命中（建议分批锁定）
 - `all_ok`：三项全中（建议全额退出）
 - `suggest_partial_exit` / `suggest_full_exit`
+- `turnover_sum` / `turnover_reason`
 
 ## 7. 五三二仓位建议（position_advisor）
 
@@ -143,23 +147,47 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
   - 未超持仓上限 -> 建议 `probe`（50%）
   - 超上限 -> `blocked`
 - 试探阶段（`probe`）：
-  - 若上方支撑确认且不突破最大可分配仓位（80%）-> 建议 `add`（30%）
+  - 若**上方支撑确认**且不突破最大可分配仓位（80%）-> 建议 `add`（30%）
   - 否则 `hold_probe`
 - 加仓阶段（`add`）：
   - 建议 `hold_reserve`（保留 20% 现金，不满仓）
+
+### 7.1 上方支撑确认（support_confirm）
+
+加仓门闩 `has_new_support` **不再**等同于「未破防守」或「筑底成立」，需同时满足：
+
+1. 防守未破位（`close >= defense_low`）
+2. KDE 有效且 `close > nearest_support`（与 URT/GMS 同口径成交量加权 KDE）
+3. 箱体确认：
+   - 有 `box_resistance`（横盘底）：`close >= box_resistance * (1 - tol)`，默认 tol=1%（阻力转支撑）
+   - 无箱体阻力（如黄金坑）：`close >= MA20`
+
+选股日 `evaluate_code` 的仓位建议固定为试探阶段，不会因 `bottom_matched` 误触发「可加仓」。
+
+## 7.2 支撑/阻力数据字段
+
+选股与持仓评估顶层输出：
+
+- `box_support` / `box_resistance`：筑底箱体位（黄金坑通常仅有支撑）
+- `nearest_support` / `nearest_resistance`：KDE 最近结构位
+- `kde_ok` / `kde_reason` / `kde_lookback_used`
+
+前端选股表展示上述四列；「按前复权计算」仅重算列表中的 KDE 列（调用 `/api/analysis/levels/batch`），不改写策略信号与箱体位。
 
 ## 8. 关键默认参数清单（可配置）
 
 来自 `sbbr_strategy_configs` 默认版本：
 
 - `size.total_mv_min_yi=20`, `size.total_mv_max_yi=200`
-- `size.circ_mv_min_yi=5`, `size.circ_mv_max_yi=10`
+- `size.circ_mv_min_yi=20`, `size.circ_mv_max_yi=200`
 - `bottom.lookback_days=60`, `bottom.max_range_pct=0.60`, `bottom.min_touches=3`, `bottom.max_touches=4`
 - `entry.ma_period=20`, `entry.shrink_volume_ratio_max=0.7`, `entry.expand_volume_ratio_min=1.05`, `entry.expand_volume_ratio_max=1.8`
 - `entry.market_lookback_days=5`, `entry.market_drop_pct=-0.01`
 - `defense.default_buffer_pct=0.03`
+- `support_confirm.box_resistance_tol_pct=0.01`, `support_confirm.ma_period=20`
 - `exit.space_pcts=[0.50,0.70,1.00]`, `exit.high_consolidate_days=15`, `exit.turnover_sum_days=5`, `exit.turnover_sum_pct=100`
 - `position.probe_pct=50`, `position.add_pct=30`, `position.reserve_cash_pct=20`, `position.max_open_positions=3`
+- KDE：`kde_lookback_initial/days=250`, `kde_lookback_step=250`, `kde_lookback_max=750`
 
 ## 9. 实战解读（为什么会出现 0 条入场）
 
@@ -172,4 +200,3 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - 大盘共振下跌（默认）
 
 该组合较严格，某些交易日出现 0 条是正常现象。可先查看“筑底池”（关闭仅入场）再等待弱转强触发。
-

@@ -66,6 +66,51 @@
     return !(window.Permission && typeof window.Permission.has === 'function') || window.Permission.has(code);
   }
 
+  let lastSignalRows = [];
+
+  function renderSignalRows(rows) {
+    const body = document.getElementById('sbbrResultsBody');
+    if (!body) return;
+    lastSignalRows = rows || [];
+    document.getElementById('sbbrResultsCount').textContent = `共 ${lastSignalRows.length} 只`;
+    if (!lastSignalRows.length) {
+      body.innerHTML = '<tr><td colspan="14" class="empty-state">无符合条件的结果</td></tr>';
+      return;
+    }
+    body.innerHTML = lastSignalRows
+      .map((r) => {
+        const snap = encodeURIComponent(JSON.stringify(r));
+        const ops = [];
+        if (canPerm('channel.screening.tab.sbbr.btn.add_observe')) {
+          ops.push(
+            `<button type="button" class="gms-btn-outline sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>`
+          );
+        }
+        if (canPerm('channel.screening.tab.sbbr.btn.add_reserve')) {
+          ops.push(
+            `<button type="button" class="gms-btn-outline sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}">储备</button>`
+          );
+        }
+        return `<tr>
+            <td>${r.code || ''}</td>
+            <td>${r.name || ''}</td>
+            <td>${fmt(r.total_mv)}</td>
+            <td>${fmt(r.circ_mv)}</td>
+            <td>${r.bottom_mode || '-'}</td>
+            <td>${r.entry_signal ? '是' : '否'}</td>
+            <td>${fmt(r.close)}</td>
+            <td>${fmt(r.box_support)}</td>
+            <td>${fmt(r.box_resistance)}</td>
+            <td>${fmt(r.nearest_support)}</td>
+            <td>${fmt(r.nearest_resistance)}</td>
+            <td>${fmt(r.defense_low)}</td>
+            <td>${fmt(r.volume_ratio)}</td>
+            <td>${ops.join(' ') || '-'}</td>
+          </tr>`;
+      })
+      .join('');
+  }
+
   async function refreshSignals() {
     const loading = document.getElementById('sbbrLoading');
     const body = document.getElementById('sbbrResultsBody');
@@ -92,46 +137,105 @@
         data = await api(`/api/screening/sbbr-strategy?${q}`);
       }
       const rows = data.data || [];
-      document.getElementById('sbbrResultsCount').textContent = `共 ${rows.length} 只`;
       document.getElementById('sbbrSearchMeta').textContent =
         `日期 ${data.search_date || '-'} · 来源 ${data.source || 'live'} · config ${data.config_id || ''}`;
-      if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="10" class="empty-state">无符合条件的结果</td></tr>';
-        return;
-      }
-      body.innerHTML = rows
-        .map((r) => {
-          const snap = encodeURIComponent(JSON.stringify(r));
-          const ops = [];
-          if (canPerm('channel.screening.tab.sbbr.btn.add_observe')) {
-            ops.push(
-              `<button type="button" class="gms-btn-outline sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>`
-            );
-          }
-          if (canPerm('channel.screening.tab.sbbr.btn.add_reserve')) {
-            ops.push(
-              `<button type="button" class="gms-btn-outline sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}">储备</button>`
-            );
-          }
-          return `<tr>
-            <td>${r.code || ''}</td>
-            <td>${r.name || ''}</td>
-            <td>${fmt(r.total_mv)}</td>
-            <td>${fmt(r.circ_mv)}</td>
-            <td>${r.bottom_mode || '-'}</td>
-            <td>${r.entry_signal ? '是' : '否'}</td>
-            <td>${fmt(r.close)}</td>
-            <td>${fmt(r.defense_low)}</td>
-            <td>${fmt(r.volume_ratio)}</td>
-            <td>${ops.join(' ') || '-'}</td>
-          </tr>`;
-        })
-        .join('');
+      renderSignalRows(rows);
     } catch (e) {
       showErr(e.message || String(e));
-      body.innerHTML = '<tr><td colspan="10" class="empty-state">加载失败</td></tr>';
+      lastSignalRows = [];
+      body.innerHTML = '<tr><td colspan="14" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
+    }
+  }
+
+  async function refreshQfqLevels() {
+    if (!lastSignalRows.length) {
+      showErr('请先刷新筛选，再按前复权重算 KDE 支撑/阻力');
+      return;
+    }
+    const btn = document.getElementById('sbbrQfqLevelsBtn');
+    const loading = document.getElementById('sbbrLoading');
+    const prevText = btn ? btn.textContent : '';
+    const CHUNK = 8;
+    showErr('');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '前复权重算中…';
+    }
+    if (loading) {
+      loading.style.display = 'flex';
+      const span = loading.querySelector('span');
+      if (span) span.textContent = '前复权支撑/阻力重算中…';
+    }
+    const codes = [
+      ...new Set(
+        lastSignalRows
+          .map((r) => String(r.code || '').trim().replace(/^(SH|SZ)/i, ''))
+          .filter(Boolean)
+      ),
+    ];
+    const byCode = new Map();
+    let okCount = 0;
+    let failCount = 0;
+    try {
+      for (let i = 0; i < codes.length; i += CHUNK) {
+        const chunk = codes.slice(i, i + CHUNK);
+        if (loading) {
+          const span = loading.querySelector('span');
+          if (span) {
+            span.textContent = `前复权支撑/阻力 ${Math.min(i + chunk.length, codes.length)}/${codes.length}…`;
+          }
+        }
+        if (btn) {
+          btn.textContent = `前复权 ${Math.min(i + chunk.length, codes.length)}/${codes.length}`;
+        }
+        const data = await api('/api/analysis/levels/batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            codes: chunk,
+            adjust: 'qfq',
+            max_levels: 8,
+            refresh_factor: false,
+            factor_source: 'auto',
+          }),
+        });
+        (data.items || []).forEach((it) => {
+          const c = String(it.code || '').trim();
+          if (!c) return;
+          byCode.set(c, it);
+          if (it.success) okCount += 1;
+          else failCount += 1;
+        });
+      }
+      lastSignalRows.forEach((row) => {
+        const c = String(row.code || '').trim().replace(/^(SH|SZ)/i, '');
+        const it = byCode.get(c);
+        if (!it || !it.success) return;
+        row.nearest_support = it.nearest_support;
+        row.nearest_resistance = it.nearest_resistance;
+        row.support_levels = Array.isArray(it.support_levels) ? it.support_levels : [];
+        row.resistance_levels = Array.isArray(it.resistance_levels) ? it.resistance_levels : [];
+        row.price_adjust = it.price_adjust || 'qfq';
+        row.kde_ok = true;
+      });
+      renderSignalRows(lastSignalRows);
+      const meta = document.getElementById('sbbrSearchMeta');
+      if (meta) {
+        meta.textContent = `${meta.textContent || ''} · 前复权KDE 成功${okCount}/失败${failCount}`;
+      }
+    } catch (e) {
+      showErr(e.message || String(e));
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevText || '按前复权计算';
+      }
+      if (loading) {
+        loading.style.display = 'none';
+        const span = loading.querySelector('span');
+        if (span) span.textContent = '筛选中...';
+      }
     }
   }
 
@@ -166,7 +270,7 @@
       const data = await api('/api/sbbr/formal-trades/list');
       const rows = data.items || [];
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="9" class="empty-state">暂无正式交易</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="empty-state">暂无正式交易</td></tr>';
         return;
       }
       body.innerHTML = rows
@@ -175,10 +279,15 @@
           const breach = live.defense_breach && live.defense_breach.breached ? '破位' : '';
           const flags = (live.exit_flags && live.exit_flags.flags) || [];
           const evalTxt = [breach, flags.join(',')].filter(Boolean).join(' / ') || '-';
+          const sc = live.support_confirm || {};
+          let confirmTxt = '-';
+          if (sc && typeof sc === 'object' && ('confirmed' in sc || sc.reason)) {
+            confirmTxt = sc.confirmed ? '是' : `否(${sc.reason || '-'})`;
+          }
           return `<tr>
             <td>${r.code}</td><td>${r.name || ''}</td><td>${r.status}</td><td>${r.stage || ''}</td>
             <td>${fmt(r.entry_price)}</td><td>${fmt(r.allocated_pct, 0)}</td>
-            <td>${fmt(r.defense_anchor_low)}</td><td>${evalTxt}</td>
+            <td>${fmt(r.defense_anchor_low)}</td><td>${confirmTxt}</td><td>${evalTxt}</td>
             <td>
               ${
                 r.status === 'open'
@@ -192,7 +301,7 @@
         })
         .join('');
     } catch (e) {
-      body.innerHTML = `<tr><td colspan="9" class="empty-state">${e.message}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="10" class="empty-state">${e.message}</td></tr>`;
     }
   }
 
@@ -233,6 +342,7 @@
     });
 
     document.getElementById('sbbrRefreshBtn')?.addEventListener('click', () => refreshSignals());
+    document.getElementById('sbbrQfqLevelsBtn')?.addEventListener('click', () => refreshQfqLevels());
     document.getElementById('sbbrObserveRefreshBtn')?.addEventListener('click', () => refreshObserve());
     document.getElementById('sbbrFormalRefreshBtn')?.addEventListener('click', () => refreshFormal());
     document.getElementById('sbbrReserveRefreshBtn')?.addEventListener('click', () => refreshReserve());

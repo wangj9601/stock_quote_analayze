@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +16,8 @@ def get_default_sbbr_config() -> Dict[str, Any]:
         "size": {
             "total_mv_min_yi": 20.0,
             "total_mv_max_yi": 200.0,
-            "circ_mv_min_yi": 5.0,
-            "circ_mv_max_yi": 10.0,
+            "circ_mv_min_yi": 20.0,
+            "circ_mv_max_yi": 200.0,
             "require_shares": True,
             "exclude_unknown_size": True,
         },
@@ -46,6 +46,11 @@ def get_default_sbbr_config() -> Dict[str, Any]:
             "buffer_max_pct": 0.05,
             "default_buffer_pct": 0.03,
         },
+        "support_confirm": {
+            # 站上箱体阻力容差（阻力转支撑）
+            "box_resistance_tol_pct": 0.01,
+            "ma_period": 20,
+        },
         "exit": {
             "space_pcts": [0.50, 0.70, 1.00],
             "high_consolidate_days": 15,
@@ -60,6 +65,19 @@ def get_default_sbbr_config() -> Dict[str, Any]:
             "max_open_positions": 3,
             "small_capital_max_positions": 2,
             "small_capital_threshold": 1_000_000.0,
+        },
+        # 与 GMS/URT/RPE 同口径 KDE（亦可写在 structure/kde 子节）
+        "kde_lookback_days": 250,
+        "kde_lookback_initial": 250,
+        "kde_lookback_step": 250,
+        "kde_lookback_max": 750,
+        "kde_base_factor": 1.0,
+        "kde_grid_points": 200,
+        "structure": {
+            "kde_lookback_days": 250,
+            "kde_lookback_initial": 250,
+            "kde_lookback_step": 250,
+            "kde_lookback_max": 750,
         },
         "scan": {
             "batch_size": 200,
@@ -94,6 +112,22 @@ class SBBRConfigManager:
             else:
                 result[k] = v
         return result
+
+    def _migrate_legacy_size_circ_defaults(self, params: Dict) -> Tuple[Dict, bool]:
+        """旧默认流通市值 5~10 亿 → 新默认 20~200 亿（仅当仍为旧默认时改写）。"""
+        out = copy.deepcopy(params or {})
+        size = dict(out.get("size") or {})
+        try:
+            c_min = float(size.get("circ_mv_min_yi", 20))
+            c_max = float(size.get("circ_mv_max_yi", 200))
+        except (TypeError, ValueError):
+            return out, False
+        if abs(c_min - 5.0) < 1e-9 and abs(c_max - 10.0) < 1e-9:
+            size["circ_mv_min_yi"] = 20.0
+            size["circ_mv_max_yi"] = 200.0
+            out["size"] = size
+            return out, True
+        return out, False
 
     def _session(self):
         from backend_api.database import SessionLocal
@@ -149,7 +183,19 @@ class SBBRConfigManager:
                 )
             if not row:
                 return self.get_default_config()
-            merged = self._deep_merge(self.get_default_config(), dict(row.config_params or {}))
+            stored, changed = self._migrate_legacy_size_circ_defaults(dict(row.config_params or {}))
+            if changed:
+                row.config_params = stored
+                try:
+                    db.commit()
+                    logger.info(
+                        "SBBR config_id=%s 流通市值默认已从 5~10 迁移为 20~200 亿",
+                        row.id,
+                    )
+                except Exception as e:
+                    db.rollback()
+                    logger.warning("SBBR 流通市值默认迁移落库失败: %s", e)
+            merged = self._deep_merge(self.get_default_config(), stored)
             _CACHE[int(row.id)] = copy.deepcopy(merged)
             merged["_config_id"] = int(row.id)
             return merged

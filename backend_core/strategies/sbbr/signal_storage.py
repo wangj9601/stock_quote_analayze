@@ -102,6 +102,8 @@ def load_traces(
     rows = q.order_by(SBBRSignalTrace.entry_signal.desc(), SBBRSignalTrace.code.asc()).limit(limit).all()
     out = []
     for r in rows:
+        detail = r.detail or {}
+        structure = detail.get("structure") if isinstance(detail.get("structure"), dict) else {}
         out.append(
             {
                 "code": r.code,
@@ -122,9 +124,16 @@ def load_traces(
                 "close": r.close_price,
                 "ma20": r.ma20,
                 "volume_ratio": r.volume_ratio,
+                "box_support": detail.get("support"),
+                "box_resistance": detail.get("resistance"),
+                "nearest_support": structure.get("nearest_support"),
+                "nearest_resistance": structure.get("nearest_resistance"),
+                "kde_ok": structure.get("kde_ok"),
+                "kde_reason": structure.get("kde_reason"),
+                "kde_lookback_used": structure.get("kde_lookback_used"),
                 "exit_flags": r.exit_flags or {},
                 "position_advice": r.position_advice or {},
-                "detail": r.detail or {},
+                "detail": detail,
                 "config_id": r.config_id,
             }
         )

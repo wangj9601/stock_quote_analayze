@@ -44,8 +44,8 @@ def evaluate_size(
 
     t_min = float(size_cfg.get("total_mv_min_yi", 20))
     t_max = float(size_cfg.get("total_mv_max_yi", 200))
-    c_min = float(size_cfg.get("circ_mv_min_yi", 5))
-    c_max = float(size_cfg.get("circ_mv_max_yi", 10))
+    c_min = float(size_cfg.get("circ_mv_min_yi", 20))
+    c_max = float(size_cfg.get("circ_mv_max_yi", 200))
 
     total_ok = total_mv is not None and t_min <= total_mv <= t_max
     circ_ok = circ_mv is not None and c_min <= circ_mv <= c_max

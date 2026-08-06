@@ -1703,7 +1703,7 @@
                     <button type="button" class="gms-sub-tab" data-sbbr-sub="formal">正式交易</button>
                     <button type="button" class="gms-sub-tab" data-sbbr-sub="reserve">储备箱</button>
                 </div>
-                <p class="gms-integrated-hint">做小做底：全市场市值过滤 → 筑底识别 → 共振弱转强入场；可加入观察并转正式交易（五·三·二分仓）。</p>
+                <p class="gms-integrated-hint">做小做底：全市场市值过滤 → 筑底识别 → 共振弱转强入场；列表展示箱体支撑/阻力与 KDE 结构位；可加入观察并转正式交易（五·三·二分仓，加仓需上方支撑确认）。</p>
             </div>
 
             <div id="sbbr-sub-signals" class="sbbr-sub-panel" style="display:block;">
@@ -1728,6 +1728,7 @@
                     </div>
                     <div class="param-actions">
                         <button type="button" id="sbbrRefreshBtn" class="refresh-btn" data-strategy="sbbr" data-perm="channel.screening.tab.sbbr.btn.refresh">刷新筛选</button>
+                        <button type="button" id="sbbrQfqLevelsBtn" class="gms-btn-outline" title="仅按前复权重算列表中的 KDE 支撑/阻力（优先读 stock_adj_factor，无因子再拉外网并入库；不改写策略信号与箱体位）">按前复权计算</button>
                     </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                 </div>
@@ -1740,11 +1741,14 @@
                             <thead>
                                 <tr>
                                     <th>代码</th><th>名称</th><th>总市值(亿)</th><th>流通(亿)</th>
-                                    <th>筑底模式</th><th>入场</th><th>收盘</th><th>防守下沿</th><th>量比</th><th>操作</th>
+                                    <th>筑底模式</th><th>入场</th><th>收盘</th>
+                                    <th class="gms-col-price">箱体支撑</th><th class="gms-col-price">箱体阻力</th>
+                                    <th class="gms-col-price">KDE支撑</th><th class="gms-col-price">KDE阻力</th>
+                                    <th>防守下沿</th><th>量比</th><th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="sbbrResultsBody">
-                                <tr><td colspan="10" class="empty-state">点击「刷新筛选」开始</td></tr>
+                                <tr><td colspan="14" class="empty-state">点击「刷新筛选」开始</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1768,10 +1772,10 @@
                         <thead>
                             <tr>
                                 <th>代码</th><th>名称</th><th>状态</th><th>阶段</th><th>入场价</th>
-                                <th>仓位%</th><th>防守锚</th><th>最新评估</th><th>操作</th>
+                                <th>仓位%</th><th>防守锚</th><th>支撑确认</th><th>最新评估</th><th>操作</th>
                             </tr>
                         </thead>
-                        <tbody id="sbbrFormalBody"><tr><td colspan="9" class="empty-state">暂无</td></tr></tbody>
+                        <tbody id="sbbrFormalBody"><tr><td colspan="10" class="empty-state">暂无</td></tr></tbody>
                     </table>
                 </div>
             </div>
