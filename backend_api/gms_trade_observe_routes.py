@@ -35,6 +35,7 @@ from backend_api.utils.industry_board_query import (
     clean_industry_display_text,
     normalize_industry_text,
 )
+from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
 
 router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-observe"])
 
@@ -394,8 +395,13 @@ def _batch_resolve_industries(
 def batch_resolve_industries_by_pairs(
     db: Session,
     pairs: List[tuple[str, str]],
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
 ) -> Dict[tuple[str, str], str]:
-    """按 (market, code) 批量解析所属行业：A 股优先行业板块表，其次基础信息表。"""
+    """按 (market, code) 批量解析所属行业：A 股优先行业板块表，其次基础信息表。
+
+    A 股行业板默认仅取同花顺（``tonghuashun``）口径。
+    """
     out: Dict[tuple[str, str], str] = {}
     need_cn: List[str] = []
     need_hk: List[str] = []
@@ -417,7 +423,9 @@ def batch_resolve_industries_by_pairs(
 
     if need_cn:
         uniq = list(dict.fromkeys(need_cn))
-        board_map = batch_industry_board_names_by_stock_codes(db, uniq)
+        board_map = batch_industry_board_names_by_stock_codes(
+            db, uniq, board_code_source=board_code_source
+        )
         for code, industry in board_map.items():
             valid = clean_industry_display_text(industry)
             if valid:

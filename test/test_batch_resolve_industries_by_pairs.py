@@ -29,7 +29,8 @@ def test_batch_resolve_industries_by_pairs_cn_board_first_and_skip_nan():
                 """
                 CREATE TABLE IF NOT EXISTS industry_board_basic_info (
                     board_code TEXT PRIMARY KEY,
-                    board_name TEXT
+                    board_name TEXT,
+                    board_code_source TEXT
                 )
                 """
             )
@@ -39,18 +40,64 @@ def test_batch_resolve_industries_by_pairs_cn_board_first_and_skip_nan():
         db.add(IndustryBoardConstituent(board_code="BK1019", stock_code="000566", stock_name="海南海药"))
         db.execute(
             text(
-                "INSERT INTO industry_board_basic_info (board_code, board_name) VALUES ('BK0479', '化学制药')"
+                "INSERT INTO industry_board_basic_info (board_code, board_name, board_code_source) "
+                "VALUES ('BK0479', '化学制药', 'tonghuashun')"
             )
         )
         db.execute(
             text(
-                "INSERT INTO industry_board_basic_info (board_code, board_name) VALUES ('BK1019', '化学制药')"
+                "INSERT INTO industry_board_basic_info (board_code, board_name, board_code_source) "
+                "VALUES ('BK1019', '化学制药', 'tonghuashun')"
             )
         )
         db.commit()
         out = batch_resolve_industries_by_pairs(db, [("CN", "000566"), ("CN", "999999")])
         assert out[("CN", "000566")] == "化学制药"
         assert ("CN", "999999") not in out
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_batch_resolve_industries_prefers_tonghuashun_source():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS industry_board_basic_info (
+                    board_code TEXT PRIMARY KEY,
+                    board_name TEXT,
+                    board_code_source TEXT
+                )
+                """
+            )
+        )
+        db.add(IndustryBoardConstituent(board_code="BK_EM", stock_code="000001", stock_name="平安银行"))
+        db.add(IndustryBoardConstituent(board_code="881001", stock_code="000001", stock_name="平安银行"))
+        db.execute(
+            text(
+                "INSERT INTO industry_board_basic_info (board_code, board_name, board_code_source) "
+                "VALUES ('BK_EM', '银行-东财', 'eastmoney')"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT INTO industry_board_basic_info (board_code, board_name, board_code_source) "
+                "VALUES ('881001', '银行', 'tonghuashun')"
+            )
+        )
+        db.commit()
+        out = batch_resolve_industries_by_pairs(db, [("CN", "000001")])
+        assert out[("CN", "000001")] == "银行"
+        assert "东财" not in out[("CN", "000001")]
     finally:
         db.close()
         engine.dispose()

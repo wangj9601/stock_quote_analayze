@@ -312,26 +312,46 @@ def get_board_names_by_stock_code(db: Session, stock_code: str) -> List[str]:
     return [b["board_name"] for b in boards if b.get("board_name")]
 
 
-def get_industry_board_name_by_stock_code(db: Session, stock_code: str) -> Optional[str]:
-    """A 股：从行业板块成分股 + 基本信息表取板块名称（不含概念板块）。"""
+def get_industry_board_name_by_stock_code(
+    db: Session,
+    stock_code: str,
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
+) -> Optional[str]:
+    """A 股：从行业板块成分股 + 基本信息表取板块名称（不含概念板块）。
+
+    默认仅取 ``board_code_source=tonghuashun`` 的行业板；传 ``None`` 不过滤来源。
+    """
     code = _normalize_code(stock_code)
     if not code:
         return None
+    source_filter = ""
+    params: Dict[str, Any] = {"stock_code": code}
+    if board_code_source is not None:
+        src = resolve_board_code_source(
+            board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+        )
+        source_filter = (
+            "AND COALESCE(NULLIF(TRIM(b.board_code_source), ''), :legacy) = :source"
+        )
+        params["source"] = src
+        params["legacy"] = LEGACY_DEFAULT_BOARD_CODE_SOURCE
     sql = text(
-        """
+        f"""
         SELECT c.board_code, b.board_name
         FROM industry_board_constituents c
-        LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+        INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
         WHERE c.stock_code = :stock_code
+          {source_filter}
         ORDER BY b.board_name NULLS LAST, c.board_code
         """
     )
     try:
-        rows = db.execute(sql, {"stock_code": code}).fetchall()
+        rows = db.execute(sql, params).fetchall()
     except Exception:
         return None
     names: List[str] = []
-    name_map = _load_industry_board_name_map(db)
+    name_map = _load_industry_board_name_map(db, board_code_source=board_code_source)
     for board_code, board_name in rows:
         display = _resolve_industry_board_display_name(board_code, board_name, name_map)
         if display and display not in names:
@@ -340,28 +360,46 @@ def get_industry_board_name_by_stock_code(db: Session, stock_code: str) -> Optio
 
 
 def batch_industry_board_names_by_stock_codes(
-    db: Session, stock_codes: List[str]
+    db: Session,
+    stock_codes: List[str],
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
 ) -> Dict[str, str]:
-    """批量 A 股行业板块名称（stock_code -> 逗号分隔的可读板块名，不含 BK 编码）。"""
+    """批量 A 股行业板块名称（stock_code -> 逗号分隔的可读板块名，不含 BK 编码）。
+
+    默认仅取同花顺（``tonghuashun``）来源行业板；传 ``None`` 不过滤来源。
+    """
     if not stock_codes:
         return {}
     codes = list(dict.fromkeys(_normalize_code(c) for c in stock_codes if c and str(c).strip()))
     if not codes:
         return {}
+    source_filter = ""
+    params: Dict[str, Any] = {"codes": codes}
+    if board_code_source is not None:
+        src = resolve_board_code_source(
+            board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+        )
+        source_filter = (
+            "AND COALESCE(NULLIF(TRIM(b.board_code_source), ''), :legacy) = :source"
+        )
+        params["source"] = src
+        params["legacy"] = LEGACY_DEFAULT_BOARD_CODE_SOURCE
     stmt = text(
-        """
+        f"""
         SELECT c.stock_code, c.board_code, b.board_name
         FROM industry_board_constituents c
-        LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+        INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
         WHERE c.stock_code IN :codes
+          {source_filter}
         ORDER BY c.stock_code, b.board_name NULLS LAST, c.board_code
         """
     ).bindparams(bindparam("codes", expanding=True))
     try:
-        board_rows = db.execute(stmt, {"codes": codes}).fetchall()
+        board_rows = db.execute(stmt, params).fetchall()
     except Exception:
         return {}
-    name_map = _load_industry_board_name_map(db)
+    name_map = _load_industry_board_name_map(db, board_code_source=board_code_source)
     grouped: Dict[str, List[str]] = {}
     for stock_code, board_code, board_name in board_rows:
         sc = _normalize_code(str(stock_code))
@@ -473,17 +511,34 @@ def is_board_code_display_token(value: Any) -> bool:
     return is_valid_bk_board_code(s)
 
 
-def _load_industry_board_name_map(db: Session) -> Dict[str, str]:
-    """board_code -> 可读板块名称。"""
+def _load_industry_board_name_map(
+    db: Session,
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
+) -> Dict[str, str]:
+    """board_code -> 可读板块名称；默认仅加载同花顺来源。"""
+    source_filter = ""
+    params: Dict[str, Any] = {}
+    if board_code_source is not None:
+        src = resolve_board_code_source(
+            board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+        )
+        source_filter = (
+            "AND COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :source"
+        )
+        params["source"] = src
+        params["legacy"] = LEGACY_DEFAULT_BOARD_CODE_SOURCE
     try:
         rows = db.execute(
             text(
-                """
+                f"""
                 SELECT board_code, board_name
                 FROM industry_board_basic_info
                 WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                  {source_filter}
                 """
-            )
+            ),
+            params,
         ).fetchall()
     except Exception:
         return {}
