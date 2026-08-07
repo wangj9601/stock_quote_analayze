@@ -220,3 +220,16 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - 大盘共振下跌（默认）
 
 该组合较严格，某些交易日出现 0 条是正常现象。可先查看“筑底池”（关闭仅入场）再等待弱转强触发。
+
+## 10. 历史回溯（asof 基准日）
+
+选股接口 `GET /api/screening/sbbr-strategy` 支持 Query `date=YYYY-MM-DD`（前端「基准日」）：
+
+1. **对齐交易日**：`resolve_effective_trade_date` 取 `historical_quotes` 中 `MAX(date) WHERE date <= 请求日`；请求日晚于表内最新日或留空时，用表内全局最新交易日。
+2. **K 线截断**：`load_bars(..., end_date=asof)` 仅加载 `date <= asof` 的行情；引擎再以 `truncate_bars_asof` 兜底，保证不用未来数据。
+3. **做小宇宙收盘**：`load_latest_closes` 在有基准日时按 `date <= asof` 取各股最近收盘（非精确日等值匹配），避免非交易日宇宙为空。
+4. **股本/市值**：`load_shares_from_realtime` 同样按 `trade_date <= asof`。
+5. **预计算**：勾选「优先读预计算」时读 `sbbr_signal_trace` 中该 `trade_date` 的行；管理端「手动预计算」可指定基准日写入。无预计算数据时前端会回退 live 现算。
+6. **响应字段**：`search_date` / `asof_date`（实际计算日）、`requested_date`（用户请求日）、`data_max_date`（行情表最新日）、`source`（`live`|`trace`）、`source_label`（实时计算|预计算）、`date_snapped`（是否发生对齐）。
+
+默认行为不变：不传 `date` 时按最新交易日计算。

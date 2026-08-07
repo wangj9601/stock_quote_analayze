@@ -1719,20 +1719,21 @@
                         </select>
                     </div>
                     <div class="param-group">
-                        <label for="sbbrDate">基准日</label>
-                        <input type="date" id="sbbrDate" class="param-input">
+                        <label for="sbbrDate" title="选股用 K 线窗口的「止日」；按该日及之前行情回溯计算。若该日非交易日或尚无行情，则自动对齐到 ≤该日 的最近交易日；留空则用表内最新交易日。">基准日（回溯）</label>
+                        <input type="date" id="sbbrDate" class="param-input" title="留空=最新交易日；填写历史日可回溯查看该日信号（live 现算或勾选优先读预计算）。">
                     </div>
                     <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrEntryOnly"> 仅入场信号</label>
                     </div>
                     <div class="param-group param-group-check">
-                        <label><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
+                        <label title="仅全市场：读取 sbbr_signal_trace 中该基准日预计算结果；无数据时前端会自动回退 live 现算。"><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
                     </div>
                     <div class="param-actions">
                         <button type="button" id="sbbrRefreshBtn" class="refresh-btn" data-strategy="sbbr" data-perm="channel.screening.tab.sbbr.btn.refresh">刷新筛选</button>
                         <button type="button" id="sbbrQfqLevelsBtn" class="gms-btn-outline" title="仅按前复权重算列表中的 KDE 支撑/阻力（优先读 stock_adj_factor，无因子再拉外网并入库；不改写策略信号与箱体位）">按前复权计算</button>
                     </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
+                    <span id="sbbrDataDateHint" class="gms-meta-text" style="margin-left:8px;color:#64748b;"></span>
                 </div>
                 <div id="sbbrIndustryBoardWrap" class="rpe-board-wrap" style="display:none;">
                     <span class="rpe-board-wrap-label">行业板块：</span>

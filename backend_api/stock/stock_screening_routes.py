@@ -3569,7 +3569,30 @@ async def get_sbbr_strategy(
     cid = int(config_id) if config_id is not None else cm.get_default_config_id()
     cfg = cm.get_config(cid)
     engine = SBBRStrategyEngine(db_session=db, config=cfg)
-    trade_date = date or engine.loader.resolve_trade_date()
+    requested_date = (str(date).strip()[:10] if date else None) or None
+    trade_date = engine.loader.resolve_effective_trade_date(requested_date)
+    data_max_date = engine.loader.resolve_trade_date()
+
+    def _sbbr_meta(source: str, message: Optional[str] = None) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {
+            "success": True,
+            "search_date": trade_date,
+            "asof_date": trade_date,
+            "requested_date": requested_date,
+            "data_max_date": data_max_date,
+            "strategy_name": "做小做底",
+            "scope": scope_raw,
+            "config_id": cid,
+            "cn_board_segment": seg_raw or None,
+            "source": source,
+            "source_label": "预计算" if source == "trace" else "实时计算",
+        }
+        if requested_date and requested_date != trade_date:
+            meta["date_snapped"] = True
+        if message:
+            meta["message"] = message
+        meta.update(extra_meta)
+        return meta
 
     stock_codes = None
     extra_meta: Dict[str, Any] = {}
@@ -3602,15 +3625,12 @@ async def get_sbbr_strategy(
         if not stock_codes:
             return JSONResponse(
                 {
-                    "success": True,
+                    **_sbbr_meta(
+                        "live",
+                        "列表为空" + ("（板型过滤后无匹配）" if seg_raw else ""),
+                    ),
                     "data": [],
                     "total": 0,
-                    "search_date": trade_date,
-                    "strategy_name": "做小做底",
-                    "scope": scope_raw,
-                    "config_id": cid,
-                    "cn_board_segment": seg_raw or None,
-                    "message": "列表为空" + ("（板型过滤后无匹配）" if seg_raw else ""),
                 }
             )
     elif scope_raw == "industry_board":
@@ -3641,16 +3661,12 @@ async def get_sbbr_strategy(
         if not stock_codes:
             return JSONResponse(
                 {
-                    "success": True,
+                    **_sbbr_meta(
+                        "live",
+                        f"行业板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
+                    ),
                     "data": [],
                     "total": 0,
-                    "search_date": trade_date,
-                    "strategy_name": "做小做底",
-                    "scope": scope_raw,
-                    "config_id": cid,
-                    "industry_board_codes": bcodes,
-                    "cn_board_segment": seg_raw or None,
-                    "message": f"行业板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
                 }
             )
     elif scope_raw == "concept_board":
@@ -3681,16 +3697,12 @@ async def get_sbbr_strategy(
         if not stock_codes:
             return JSONResponse(
                 {
-                    "success": True,
+                    **_sbbr_meta(
+                        "live",
+                        f"概念板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
+                    ),
                     "data": [],
                     "total": 0,
-                    "search_date": trade_date,
-                    "strategy_name": "做小做底",
-                    "scope": scope_raw,
-                    "config_id": cid,
-                    "concept_board_codes": bcodes,
-                    "cn_board_segment": seg_raw or None,
-                    "message": f"概念板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
                 }
             )
     elif scope_raw == "market" and seg_raw:
@@ -3700,15 +3712,9 @@ async def get_sbbr_strategy(
         if not stock_codes:
             return JSONResponse(
                 {
-                    "success": True,
+                    **_sbbr_meta("live", "做小宇宙在所选板型下无匹配股票"),
                     "data": [],
                     "total": 0,
-                    "search_date": trade_date,
-                    "strategy_name": "做小做底",
-                    "scope": scope_raw,
-                    "config_id": cid,
-                    "cn_board_segment": seg_raw,
-                    "message": "做小宇宙在所选板型下无匹配股票",
                 }
             )
 
@@ -3753,16 +3759,9 @@ async def get_sbbr_strategy(
         rows = rows[:effective_max]
         return JSONResponse(
             {
-                "success": True,
+                **_sbbr_meta("trace"),
                 "data": rows,
                 "total": len(rows),
-                "search_date": trade_date,
-                "strategy_name": "做小做底",
-                "scope": scope_raw,
-                "config_id": cid,
-                "cn_board_segment": seg_raw or None,
-                "source": "trace",
-                **extra_meta,
             }
         )
 
@@ -3783,16 +3782,9 @@ async def get_sbbr_strategy(
     rows = await loop.run_in_executor(None, _run)
     return JSONResponse(
         {
-            "success": True,
+            **_sbbr_meta("live"),
             "data": rows,
             "total": len(rows),
-            "search_date": trade_date,
-            "strategy_name": "做小做底",
-            "scope": scope_raw,
-            "config_id": cid,
-            "cn_board_segment": seg_raw or None,
-            "source": "live",
-            **extra_meta,
         }
     )
 

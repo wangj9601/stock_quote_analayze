@@ -148,12 +148,14 @@ class SBBRDataLoader:
         own = self._db is None
         try:
             codes_n = [_norm_code(c) for c in codes]
-            # 批量取每只最新收盘：用 DISTINCT ON
+            # 批量取每只 asof 收盘：DISTINCT ON；有基准日时用 date <= asof（非精确日匹配）
             if trade_date:
                 sql = text(
                     """
-                    SELECT code, close FROM historical_quotes
-                    WHERE code = ANY(:codes) AND date = :d
+                    SELECT DISTINCT ON (code) code, close
+                    FROM historical_quotes
+                    WHERE code = ANY(:codes) AND date <= :d
+                    ORDER BY code, date DESC
                     """
                 )
                 rows = db.execute(sql, {"codes": codes_n, "d": trade_date}).fetchall()
@@ -289,18 +291,59 @@ class SBBRDataLoader:
         return rets
 
     def resolve_trade_date(self) -> str:
+        """表内全局最新交易日（无数据时退回今天）。"""
+        return self.resolve_effective_trade_date(None)
+
+    def resolve_effective_trade_date(self, requested: Optional[str] = None) -> str:
+        """将用户基准日对齐为可用交易日（asof）。
+
+        - 未指定：historical_quotes 全局 MAX(date)
+        - 指定日：MAX(date) WHERE date <= requested；若该日前无任何行情，回退全局最新日
+        - 晚于表内最新日：回退全局最新日
+        """
         db = self._session()
         own = self._db is None
+        today_s = datetime.now().strftime("%Y-%m-%d")
         try:
             from backend_api.models import HistoricalQuotes
             from sqlalchemy import func
 
+            raw = (requested or "").strip()[:10]
+            target_s: Optional[str] = None
+            if raw:
+                try:
+                    datetime.strptime(raw, "%Y-%m-%d")
+                    target_s = raw
+                except ValueError:
+                    target_s = None
+
             latest = db.query(func.max(HistoricalQuotes.date)).scalar()
-            if latest:
-                return latest.strftime("%Y-%m-%d") if hasattr(latest, "strftime") else str(latest)[:10]
+            if latest is None:
+                return target_s or today_s
+            max_s = latest.strftime("%Y-%m-%d") if hasattr(latest, "strftime") else str(latest)[:10]
+
+            if not target_s:
+                return max_s
+
+            asof = (
+                db.query(func.max(HistoricalQuotes.date))
+                .filter(HistoricalQuotes.date <= target_s)
+                .scalar()
+            )
+            if asof is None:
+                return max_s
+            return asof.strftime("%Y-%m-%d") if hasattr(asof, "strftime") else str(asof)[:10]
         except Exception as e:
-            logger.warning("resolve_trade_date failed: %s", e)
+            logger.warning("resolve_effective_trade_date failed: %s", e)
+            return (requested or "").strip()[:10] or today_s
         finally:
             if own:
                 db.close()
-        return datetime.now().strftime("%Y-%m-%d")
+
+    @staticmethod
+    def truncate_bars_asof(bars: List[Dict[str, Any]], asof: Optional[str]) -> List[Dict[str, Any]]:
+        """纯函数：截断到 asof（含当日），供单测与引擎兜底。"""
+        if not bars or not asof:
+            return list(bars or [])
+        d = str(asof)[:10]
+        return [b for b in bars if str(b.get("date") or "")[:10] <= d]

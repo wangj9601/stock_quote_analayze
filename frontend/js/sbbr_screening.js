@@ -200,11 +200,21 @@
         data = await api(`/api/screening/sbbr-strategy?${q}`);
       }
       const rows = data.data || [];
+      const asof = data.asof_date || data.search_date || '-';
+      const srcLabel =
+        data.source_label ||
+        (data.source === 'trace' ? '预计算' : data.source === 'live' ? '实时计算' : data.source || 'live');
       const metaParts = [
-        `日期 ${data.search_date || '-'}`,
-        `来源 ${data.source || 'live'}`,
+        `回溯基准日 ${asof}`,
+        `数据来源 ${srcLabel}`,
         `config ${data.config_id || ''}`,
       ];
+      if (data.requested_date && data.requested_date !== asof) {
+        metaParts.splice(1, 0, `请求日 ${data.requested_date}→已对齐`);
+      }
+      if (data.data_max_date) {
+        metaParts.push(`行情最新日 ${data.data_max_date}`);
+      }
       if (data.cn_board_segment) metaParts.push(`板型 ${data.cn_board_segment}`);
       if (data.industry_board_codes && data.industry_board_codes.length) {
         metaParts.push(`行业 ${data.industry_board_codes.join(',')}`);
@@ -216,6 +226,18 @@
         showErr(data.message);
       }
       document.getElementById('sbbrSearchMeta').textContent = metaParts.join(' · ');
+      const hint = document.getElementById('sbbrDataDateHint');
+      if (hint) {
+        const isLatest = !data.data_max_date || asof === data.data_max_date;
+        hint.textContent = isLatest
+          ? '（当前为最新行情日）'
+          : `（历史回溯：仅使用 ≤${asof} 的 K 线）`;
+      }
+      // 若服务端对齐了交易日，回写到日期框便于用户确认
+      const dateEl = document.getElementById('sbbrDate');
+      if (dateEl && asof && asof !== '-' && (!date || data.date_snapped)) {
+        dateEl.value = asof;
+      }
       renderSignalRows(rows);
     } catch (e) {
       showErr(e.message || String(e));

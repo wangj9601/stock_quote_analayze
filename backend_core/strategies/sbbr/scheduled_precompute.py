@@ -26,7 +26,7 @@ def run_sbbr_precompute(
     cid = int(config_id) if config_id is not None else cm.get_default_config_id()
     cfg = cm.get_config(cid)
     engine = SBBRStrategyEngine(config=cfg)
-    date_s = trade_date or engine.loader.resolve_trade_date()
+    date_s = engine.loader.resolve_effective_trade_date(trade_date)
 
     logger.info("SBBR precompute start config_id=%s date=%s", cid, date_s)
     rows = engine.screen(

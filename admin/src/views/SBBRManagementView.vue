@@ -10,7 +10,7 @@
         <div class="toolbar">
           <el-button type="primary" @click="loadConfigs">刷新</el-button>
           <el-button @click="showCreate = true">新建版本</el-button>
-          <el-button type="warning" :loading="precomputing" @click="onPrecompute">手动预计算</el-button>
+          <el-button type="warning" :loading="precomputing" @click="openPrecompute">手动预计算</el-button>
         </div>
         <el-table :data="configs" stripe v-loading="loadingConfigs">
           <el-table-column prop="id" label="ID" width="70" />
@@ -100,6 +100,31 @@
     <el-dialog v-model="showDetail" title="回测详情" width="720px">
       <pre class="json-pre">{{ detailText }}</pre>
     </el-dialog>
+
+    <el-dialog v-model="showPrecompute" title="SBBR 信号预计算" width="440px">
+      <el-form label-width="100px">
+        <el-form-item label="基准日">
+          <el-date-picker
+            v-model="precomputeForm.trade_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="留空=最新交易日"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="配置 ID">
+          <el-input-number v-model="precomputeForm.config_id" :min="1" controls-position="right" />
+          <span class="precompute-hint">可选；不填用默认配置</span>
+        </el-form-item>
+        <p class="precompute-hint">
+          按指定交易日（含当日及之前行情）全市场筛选并写入 sbbr_signal_trace；非交易日会自动对齐到 ≤该日 的最近有行情日。
+        </p>
+      </el-form>
+      <template #footer>
+        <el-button @click="showPrecompute = false">取消</el-button>
+        <el-button type="primary" :loading="precomputing" @click="onPrecompute">开始预计算</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -118,11 +143,16 @@ const showCreate = ref(false)
 const showEdit = ref(false)
 const showBt = ref(false)
 const showDetail = ref(false)
+const showPrecompute = ref(false)
 const editId = ref<number | null>(null)
 const editJson = ref('')
 const detailText = ref('')
 
 const createForm = reactive({ name: '', description: '', set_default: false })
+const precomputeForm = reactive<{ trade_date: string; config_id: number | undefined }>({
+  trade_date: '',
+  config_id: undefined,
+})
 const btForm = reactive({
   task_name: 'sbbr-bt',
   start_date: '',
@@ -197,11 +227,24 @@ async function onSetDefault(id: number) {
   await loadConfigs()
 }
 
+function openPrecompute() {
+  if (!precomputeForm.trade_date) {
+    precomputeForm.trade_date = new Date().toISOString().slice(0, 10)
+  }
+  showPrecompute.value = true
+}
+
 async function onPrecompute() {
   precomputing.value = true
   try {
-    const { data } = await sbbrApi.triggerPrecompute()
-    ElMessage.success(`预计算完成 screened=${data.screened ?? '-'} entry=${data.entry_count ?? '-'}`)
+    const params: { config_id?: number; trade_date?: string } = {}
+    if (precomputeForm.config_id) params.config_id = precomputeForm.config_id
+    if (precomputeForm.trade_date) params.trade_date = precomputeForm.trade_date
+    const { data } = await sbbrApi.triggerPrecompute(params)
+    ElMessage.success(
+      `预计算完成 date=${data.trade_date ?? precomputeForm.trade_date ?? '-'} screened=${data.screened ?? '-'} entry=${data.entry_count ?? '-'}`
+    )
+    showPrecompute.value = false
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message)
   } finally {
@@ -239,6 +282,7 @@ onMounted(() => {
 .page-title { margin: 0; font-size: 22px; }
 .page-subtitle { margin: 4px 0 0; color: #666; }
 .toolbar { margin-bottom: 12px; display: flex; gap: 8px; }
+.precompute-hint { margin: 4px 0 0; color: #64748b; font-size: 12px; }
 .json-pre {
   max-height: 480px;
   overflow: auto;

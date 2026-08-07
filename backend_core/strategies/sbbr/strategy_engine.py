@@ -65,13 +65,16 @@ class SBBRStrategyEngine:
         code_n = _norm_code(code)
         hist_n = int(scan_cfg.get("history_bars", 120))
         load_n = max(hist_n, kde_bars_limit(cfg))
-        bars_full = self.loader.load_bars(code_n, end_date=date, limit=load_n)
+        # date 由调用方（screen/API）对齐为有效交易日；此处仅按 asof 截断 K 线
+        asof = (str(date)[:10] if date else None)
+        bars_full = self.loader.load_bars(code_n, end_date=asof, limit=load_n)
+        bars_full = SBBRDataLoader.truncate_bars_asof(bars_full, asof)
         if len(bars_full) < 30:
             return None
         bars = _bars_for_strategy(bars_full, hist_n)
 
         close = bars[-1]["close"]
-        info = share_info or self.loader.load_share_map([code_n], as_of_date=date).get(code_n) or {}
+        info = share_info or self.loader.load_share_map([code_n], as_of_date=asof).get(code_n) or {}
         size = evaluate_size(
             total_shares=info.get("total_shares"),
             free_float_shares=info.get("free_float_shares"),
@@ -81,7 +84,7 @@ class SBBRStrategyEngine:
 
         mrets = market_returns
         if mrets is None:
-            mrets = self.loader.load_market_returns(end_date=date or bars[-1]["date"])
+            mrets = self.loader.load_market_returns(end_date=asof or bars[-1]["date"])
 
         bottom = detect_bottom(bars, mrets, cfg)
         entry = detect_entry(bars, mrets, bottom_matched=bool(bottom.get("matched")), config=cfg)
@@ -105,7 +108,7 @@ class SBBRStrategyEngine:
         box_support = bottom.get("support")
         box_resistance = bottom.get("resistance")
 
-        trade_date = date or bars[-1]["date"]
+        trade_date = asof or bars[-1]["date"]
         detail = {
             "bottom": bottom.get("detail"),
             "entry": {
@@ -129,6 +132,8 @@ class SBBRStrategyEngine:
                 "kde_reason": structure.get("kde_reason"),
                 "kde_lookback_used": structure.get("kde_lookback_used"),
             },
+            "asof_date": trade_date,
+            "bar_end_date": bars[-1]["date"],
         }
         return {
             "code": code_n,
@@ -182,12 +187,16 @@ class SBBRStrategyEngine:
         hist_n = int(scan_cfg.get("history_bars", 120))
         load_n = max(hist_n, kde_bars_limit(cfg))
         code_n = _norm_code(code)
-        bars_full = self.loader.load_bars(code_n, end_date=date, limit=load_n)
+        asof = (str(date)[:10] if date else None)
+        if asof:
+            asof = self.loader.resolve_effective_trade_date(asof)
+        bars_full = self.loader.load_bars(code_n, end_date=asof, limit=load_n)
+        bars_full = SBBRDataLoader.truncate_bars_asof(bars_full, asof)
         if not bars_full:
             return {"ok": False, "reason": "no_bars"}
         bars = _bars_for_strategy(bars_full, hist_n)
 
-        info = self.loader.load_share_map([code_n], as_of_date=date or bars_full[-1]["date"]).get(code_n) or {}
+        info = self.loader.load_share_map([code_n], as_of_date=asof or bars_full[-1]["date"]).get(code_n) or {}
         free_float = info.get("free_float_shares")
 
         if defense_anchor_low:
@@ -212,7 +221,7 @@ class SBBRStrategyEngine:
             config=cfg,
         )
 
-        mrets = self.loader.load_market_returns(end_date=date or bars_full[-1]["date"])
+        mrets = self.loader.load_market_returns(end_date=asof or bars_full[-1]["date"])
         bottom = detect_bottom(bars, mrets, cfg)
         box_support = bottom.get("support")
         box_resistance = bottom.get("resistance")
@@ -243,7 +252,7 @@ class SBBRStrategyEngine:
         return {
             "ok": True,
             "code": code_n,
-            "date": bars_full[-1]["date"],
+            "date": asof or bars_full[-1]["date"],
             "close": close,
             "defense": band,
             "defense_breach": breach,
@@ -274,7 +283,8 @@ class SBBRStrategyEngine:
         scan_cfg = cfg.get("scan") or {}
         max_n = max_results if max_results is not None else int(scan_cfg.get("max_results", 200))
 
-        trade_date = date or self.loader.resolve_trade_date()
+        requested = (str(date)[:10] if date else None)
+        trade_date = self.loader.resolve_effective_trade_date(requested)
         market_returns = self.loader.load_market_returns(end_date=trade_date)
 
         if codes:
