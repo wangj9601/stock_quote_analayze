@@ -127,6 +127,13 @@ except ImportError as e:
     urt_frontend_router = None
 
 try:
+    from .stock.sbbr_frontend_routes import router as sbbr_frontend_router
+    print("sbbr_frontend_router 导入成功")
+except ImportError as e:
+    print(f"sbbr_frontend_router 导入失败: {e}")
+    sbbr_frontend_router = None
+
+try:
     from .stock.urt_public_frontend_routes import router as urt_public_frontend_router
     print("urt_public_frontend_router 导入成功")
 except ImportError as e:
@@ -975,6 +982,10 @@ if gms_frontend_router is not None:
 
 if urt_frontend_router is not None:
     app.include_router(urt_frontend_router)
+
+if sbbr_frontend_router is not None:
+    app.include_router(sbbr_frontend_router)
+    print("SBBR frontend 路由注册成功 (/api/stock/sbbr-signal-*)")
 
 if urt_public_frontend_router is not None:
     app.include_router(urt_public_frontend_router)

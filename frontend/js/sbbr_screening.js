@@ -94,6 +94,10 @@
             `<button type="button" class="gms-btn-outline sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}">储备</button>`
           );
         }
+        const histHref = `stock_sbbr_trace.html?code=${encodeURIComponent(r.code || '')}&name=${encodeURIComponent(r.name || '')}`;
+        ops.push(
+          `<a href="${histHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer" title="该股历史信号按日回溯">历史</a>`
+        );
         let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
         if (window.SbbrScoreDetail && typeof window.SbbrScoreDetail.buildHtml === 'function') {
           detailHtml = window.SbbrScoreDetail.buildHtml(r);

@@ -59,6 +59,7 @@ class SBBRStrategyEngine:
         config: Optional[Dict] = None,
         share_info: Optional[Dict] = None,
         market_returns: Optional[List[float]] = None,
+        bars: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Dict[str, Any]]:
         cfg = config or self.config
         scan_cfg = cfg.get("scan") or {}
@@ -67,13 +68,16 @@ class SBBRStrategyEngine:
         load_n = max(hist_n, kde_bars_limit(cfg))
         # date 由调用方（screen/API）对齐为有效交易日；此处仅按 asof 截断 K 线
         asof = (str(date)[:10] if date else None)
-        bars_full = self.loader.load_bars(code_n, end_date=asof, limit=load_n)
-        bars_full = SBBRDataLoader.truncate_bars_asof(bars_full, asof)
+        if bars is not None:
+            bars_full = SBBRDataLoader.truncate_bars_asof(list(bars), asof)
+        else:
+            bars_full = self.loader.load_bars(code_n, end_date=asof, limit=load_n)
+            bars_full = SBBRDataLoader.truncate_bars_asof(bars_full, asof)
         if len(bars_full) < 30:
             return None
-        bars = _bars_for_strategy(bars_full, hist_n)
+        bars_win = _bars_for_strategy(bars_full, hist_n)
 
-        close = bars[-1]["close"]
+        close = bars_win[-1]["close"]
         info = share_info or self.loader.load_share_map([code_n], as_of_date=asof).get(code_n) or {}
         size = evaluate_size(
             total_shares=info.get("total_shares"),
@@ -84,10 +88,10 @@ class SBBRStrategyEngine:
 
         mrets = market_returns
         if mrets is None:
-            mrets = self.loader.load_market_returns(end_date=asof or bars[-1]["date"])
+            mrets = self.loader.load_market_returns(end_date=asof or bars_win[-1]["date"])
 
-        bottom = detect_bottom(bars, mrets, cfg)
-        entry = detect_entry(bars, mrets, bottom_matched=bool(bottom.get("matched")), config=cfg)
+        bottom = detect_bottom(bars_win, mrets, cfg)
+        entry = detect_entry(bars_win, mrets, bottom_matched=bool(bottom.get("matched")), config=cfg)
 
         defense = None
         if entry.get("entry_signal") and entry.get("entry_low"):
@@ -108,7 +112,7 @@ class SBBRStrategyEngine:
         box_support = bottom.get("support")
         box_resistance = bottom.get("resistance")
 
-        trade_date = asof or bars[-1]["date"]
+        trade_date = asof or bars_win[-1]["date"]
         detail = {
             "bottom": bottom.get("detail"),
             "entry": {
@@ -133,7 +137,7 @@ class SBBRStrategyEngine:
                 "kde_lookback_used": structure.get("kde_lookback_used"),
             },
             "asof_date": trade_date,
-            "bar_end_date": bars[-1]["date"],
+            "bar_end_date": bars_win[-1]["date"],
         }
         return {
             "code": code_n,
@@ -166,6 +170,109 @@ class SBBRStrategyEngine:
             "position_advice": pos,
             "exit_flags": {},
             "detail": detail,
+        }
+
+    @staticmethod
+    def _calendar_days_span(start_s: str, end_s: str) -> int:
+        from datetime import datetime as _dt
+
+        a = _dt.strptime(start_s[:10], "%Y-%m-%d").date()
+        b = _dt.strptime(end_s[:10], "%Y-%m-%d").date()
+        return abs((b - a).days)
+
+    def evaluate_history(
+        self,
+        code: str,
+        *,
+        start_date: str,
+        end_date: str,
+        config: Optional[Dict] = None,
+        entry_only: bool = False,
+        require_bottom: bool = False,
+        require_size: bool = False,
+        max_calendar_days: int = 180,
+        max_trade_days: int = 120,
+    ) -> Dict[str, Any]:
+        """
+        单股按交易日序列做 asof 回溯（仅用 ≤ 当日 K 线）。
+
+        一次拉齐窗口内行情与大盘收益，按日截断计算，控制跨度上限以保护性能。
+        """
+        cfg = config or self.config
+        scan_cfg = cfg.get("scan") or {}
+        code_n = _norm_code(code)
+        start_s = str(start_date)[:10]
+        end_s = str(end_date)[:10]
+        if start_s > end_s:
+            raise ValueError("开始日期不能晚于结束日期")
+        span = self._calendar_days_span(start_s, end_s)
+        if span > int(max_calendar_days):
+            raise ValueError(f"日期跨度不得超过 {int(max_calendar_days)} 个自然日（当前 {span}）")
+
+        hist_n = int(scan_cfg.get("history_bars", 120))
+        load_n = max(hist_n, kde_bars_limit(cfg)) + int(max_trade_days) + 5
+        end_eff = self.loader.resolve_effective_trade_date(end_s)
+        bars_all = self.loader.load_bars(code_n, end_date=end_eff, limit=load_n)
+        bars_all = SBBRDataLoader.truncate_bars_asof(bars_all, end_eff)
+        trade_dates = [b["date"] for b in bars_all if start_s <= b["date"] <= end_eff]
+        if len(trade_dates) > int(max_trade_days):
+            trade_dates = trade_dates[-int(max_trade_days) :]
+
+        # 大盘收益：带日期，按 asof 切片，避免按日重复查库
+        mkt_lookback = max(80, int(((cfg.get("entry") or {}).get("market_lookback_days") or 5)) + 20)
+        idx_bars = self.loader.load_bars(
+            "000001",
+            end_date=end_eff,
+            limit=load_n + mkt_lookback,
+        )
+        idx_bars = SBBRDataLoader.truncate_bars_asof(idx_bars, end_eff)
+        dated_mrets: List[tuple] = []
+        for i in range(1, len(idx_bars)):
+            p0 = float(idx_bars[i - 1].get("close") or 0)
+            p1 = float(idx_bars[i].get("close") or 0)
+            ret = (p1 - p0) / p0 if p0 > 0 else 0.0
+            dated_mrets.append((idx_bars[i]["date"], ret))
+
+        share_info = self.loader.load_share_map([code_n], as_of_date=end_eff).get(code_n) or {}
+
+        rows: List[Dict[str, Any]] = []
+        for d in trade_dates:
+            mrets = [r for dd, r in dated_mrets if dd <= d][-mkt_lookback:]
+            row = self.evaluate_code(
+                code_n,
+                date=d,
+                config=cfg,
+                share_info=share_info,
+                market_returns=mrets,
+                bars=bars_all,
+            )
+            if not row:
+                continue
+            # 结果日期以实际 bar 末日为准（与选股 asof 对齐一致）
+            row["date"] = d
+            if row.get("detail") and isinstance(row["detail"], dict):
+                row["detail"] = dict(row["detail"])
+                row["detail"]["asof_date"] = d
+            if require_size and not row.get("size_ok"):
+                continue
+            if require_bottom and not row.get("bottom_matched"):
+                continue
+            if entry_only and not row.get("entry_signal"):
+                continue
+            rows.append(row)
+
+        rows.sort(key=lambda r: r.get("date") or "", reverse=True)
+        return {
+            "code": code_n,
+            "start_date": start_s,
+            "end_date": end_s,
+            "end_date_effective": end_eff,
+            "trade_days": len(trade_dates),
+            "calendar_span_days": span,
+            "data": rows,
+            "total": len(rows),
+            "source": "live",
+            "source_label": "实时回溯",
         }
 
     def evaluate_position(

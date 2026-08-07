@@ -233,3 +233,9 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 6. **响应字段**：`search_date` / `asof_date`（实际计算日）、`requested_date`（用户请求日）、`data_max_date`（行情表最新日）、`source`（`live`|`trace`）、`source_label`（实时计算|预计算）、`date_snapped`（是否发生对齐）。
 
 默认行为不变：不传 `date` 时按最新交易日计算。
+
+## 11. 单股信号历史
+
+- 选股结果操作列「历史」→ `stock_sbbr_trace.html`（对齐 URT `stock_urt_trace`）。
+- `GET /api/stock/sbbr-signal-history`：按日 asof 现算（`evaluate_history`），跨度上限 180 自然日 / 120 交易日；一次加载 K 线与大盘收益后按日截断。
+- `GET /api/stock/sbbr-signal-trace`：读 `sbbr_signal_trace` 该股预计算序列。
