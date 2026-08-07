@@ -25,7 +25,10 @@ from backend_api.env_sync.config_store import (
 )
 from backend_api.env_sync.bundle import merge_results
 from backend_api.env_sync.services import export_modules, import_modules, normalize_modules
-from backend_api.env_sync.services.market_data import iter_adj_factor_push_chunks
+from backend_api.env_sync.services.market_data import (
+    iter_adj_factor_push_chunks,
+    iter_board_data_push_chunks,
+)
 from backend_api.models import User
 
 router = APIRouter(prefix="/api/admin/env-sync", tags=["admin-env-sync"])
@@ -34,7 +37,7 @@ router = APIRouter(prefix="/api/admin/env-sync", tags=["admin-env-sync"])
 _SYNC_TIMEOUT = 600.0
 # 生产若仍为逐行 ORM 导入，单块过大易 502；默认偏小，失败再自动对半拆
 _DEFAULT_PUSH_ROW_CHUNK = 400
-_MIN_ADJ_PUSH_SPLIT_ROWS = 50
+_MIN_PUSH_SPLIT_ROWS = 50
 _RETRYABLE_PUSH_STATUS = frozenset({502, 503, 504, 413})
 
 
@@ -94,7 +97,7 @@ def _push_adj_rows_adaptive(
             _merge_remote_results(merged_results, part)
         return
 
-    if resp.status_code in _RETRYABLE_PUSH_STATUS and len(rows) > _MIN_ADJ_PUSH_SPLIT_ROWS:
+    if resp.status_code in _RETRYABLE_PUSH_STATUS and len(rows) > _MIN_PUSH_SPLIT_ROWS:
         mid = max(1, len(rows) // 2)
         _push_adj_rows_adaptive(
             url=url,
@@ -122,6 +125,96 @@ def _push_adj_rows_adaptive(
         status_code=400,
         detail=_remote_fail_detail(
             f"生产 import[{label}|{len(rows)}行]",
+            resp.status_code,
+            resp.text,
+        ),
+    )
+
+
+def _largest_list_item_key(items: Dict[str, Any]) -> tuple:
+    best_key = None
+    best_n = 0
+    for k, v in (items or {}).items():
+        if isinstance(v, list) and len(v) > best_n:
+            best_key = k
+            best_n = len(v)
+    return best_key, best_n
+
+
+def _push_bundle_adaptive(
+    *,
+    url: str,
+    headers: Dict[str, str],
+    batch_mods: List[str],
+    bundle_key: str,
+    bundle_data: Dict[str, Any],
+    label: str,
+    merged_results: Dict[str, Any],
+    push_batches: List[str],
+) -> None:
+    """通用 bundle 推送；遇 502/413 等对最大列表项对半拆分重试。"""
+    resp = remote_http.post(
+        url,
+        headers=headers,
+        json_body={
+            "bundles": {bundle_key: bundle_data},
+            "modules": batch_mods or None,
+        },
+        timeout=_SYNC_TIMEOUT,
+    )
+    if resp.status_code == 200:
+        items = (bundle_data.get("items") or {}) if isinstance(bundle_data, dict) else {}
+        _, n = _largest_list_item_key(items)
+        push_batches.append(f"{label}({n}行)" if n else label)
+        remote = resp.json() or {}
+        part = remote.get("results") or {}
+        if isinstance(part, dict):
+            _merge_remote_results(merged_results, part)
+        return
+
+    items = dict((bundle_data or {}).get("items") or {})
+    split_key, split_n = _largest_list_item_key(items)
+    if (
+        resp.status_code in _RETRYABLE_PUSH_STATUS
+        and split_key
+        and split_n > _MIN_PUSH_SPLIT_ROWS
+    ):
+        rows = list(items[split_key])
+        mid = max(1, split_n // 2)
+        base = {k: v for k, v in bundle_data.items() if k != "items"}
+        left = dict(base)
+        left_items = dict(items)
+        left_items[split_key] = rows[:mid]
+        left["items"] = left_items
+        right = dict(base)
+        # 右半只推剩余大表行，避免基础信息重复写入拖慢
+        right["items"] = {split_key: rows[mid:]}
+        _push_bundle_adaptive(
+            url=url,
+            headers=headers,
+            batch_mods=batch_mods,
+            bundle_key=bundle_key,
+            bundle_data=left,
+            label=f"{label}a",
+            merged_results=merged_results,
+            push_batches=push_batches,
+        )
+        _push_bundle_adaptive(
+            url=url,
+            headers=headers,
+            batch_mods=batch_mods,
+            bundle_key=bundle_key,
+            bundle_data=right,
+            label=f"{label}b",
+            merged_results=merged_results,
+            push_batches=push_batches,
+        )
+        return
+
+    raise HTTPException(
+        status_code=400,
+        detail=_remote_fail_detail(
+            f"生产 import[{label}]",
             resp.status_code,
             resp.text,
         ),
@@ -184,9 +277,9 @@ def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
     if status_code == 502:
         return (
             f"{action} 失败 HTTP 502：生产 nginx 上游无响应（常见：导入超时/进程被杀/"
-            f"全库复权因子单包过大）。请确认生产已部署含 adj_factors 的 env_sync；"
-            f"本地 Push 已按行分块并会在 502 时自动对半拆（ENV_SYNC_PUSH_ROW_CHUNK，默认 400）。"
-            f"请重启本地 API 后再试；生产请部署批量 UPSERT 版本并检查 gunicorn timeout / API 日志。"
+            f"单包过大）。board_data/quotes/adj_factors 本地 Push 已分块，并会在 502 时自动对半拆"
+            f"（ENV_SYNC_PUSH_ROW_CHUNK，默认 400）。请重启本地 API 后再试；"
+            f"生产请部署批量 UPSERT 版本，并检查 gunicorn --timeout 与 nginx proxy_read_timeout（建议≥600s）/ API 日志。"
             f" 响应: {text}"
         )
     if status_code == 400 and "未知同步模块" in text:
@@ -376,7 +469,7 @@ def admin_push(
         push_batches: List[str] = []
         row_chunk = _push_row_chunk_size()
         # 大包分批：strategy / observe / basic / board / quotes / adj_factors / permissions；
-        # adj_factors 再按行切开，避免单次 JSON/导入过重触发生产 502。
+        # adj_factors / board_data 再按行切开，遇 502 自动对半拆。
         # modules 仅带本 bundle 细项，避免把其它类 code 交给生产 expand_modules 白名单。
         for bundle_key, bundle_data in bundles.items():
             batch_mods = filter_modules_for_bundle(bundle_key, mods)
@@ -405,30 +498,38 @@ def admin_push(
                     )
                 continue
 
-            label = bundle_key
-            push_batches.append(label)
-            resp = remote_http.post(
-                url,
-                headers=headers,
-                json_body={
-                    "bundles": {bundle_key: bundle_data},
-                    "modules": batch_mods or None,
-                },
-                timeout=_SYNC_TIMEOUT,
-            )
-            if resp.status_code != 200:
-                raise HTTPException(
-                    status_code=400,
-                    detail=_remote_fail_detail(
-                        f"生产 import[{label}]",
-                        resp.status_code,
-                        resp.text,
-                    ),
+            if bundle_key == "board_data":
+                chunk_bundles = iter_board_data_push_chunks(
+                    bundle_data, chunk_rows=row_chunk
                 )
-            remote = resp.json() or {}
-            part = remote.get("results") or {}
-            if isinstance(part, dict):
-                _merge_remote_results(merged_results, part)
+                for ci, chunk_data in enumerate(chunk_bundles):
+                    label = (
+                        f"board_data[{ci + 1}/{len(chunk_bundles)}]"
+                        if len(chunk_bundles) > 1
+                        else "board_data"
+                    )
+                    _push_bundle_adaptive(
+                        url=url,
+                        headers=headers,
+                        batch_mods=batch_mods,
+                        bundle_key=bundle_key,
+                        bundle_data=chunk_data,
+                        label=label,
+                        merged_results=merged_results,
+                        push_batches=push_batches,
+                    )
+                continue
+
+            _push_bundle_adaptive(
+                url=url,
+                headers=headers,
+                batch_mods=batch_mods,
+                bundle_key=bundle_key,
+                bundle_data=bundle_data,
+                label=bundle_key,
+                merged_results=merged_results,
+                push_batches=push_batches,
+            )
 
         write_audit(
             db,

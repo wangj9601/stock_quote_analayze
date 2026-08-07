@@ -209,6 +209,140 @@ def test_iter_adj_factor_push_chunks():
     assert iter_adj_factor_push_chunks(bundle, chunk_rows=100) == [bundle]
 
 
+def test_iter_board_data_push_chunks():
+    from backend_api.env_sync.services.market_data import iter_board_data_push_chunks
+
+    bundle = {
+        "module": "board_data",
+        "items": {
+            "industry_board_basic_info": [
+                {"board_code": "BK0001", "board_name": "银行", "trade_observe_flag": False}
+            ],
+            "industry_board_constituents": [
+                {"board_code": "BK0001", "stock_code": f"{i:06d}", "stock_name": "x"}
+                for i in range(25)
+            ],
+            "concept_board_constituents": [
+                {"board_code": "BK1001", "stock_code": f"{i:06d}", "stock_name": "y"}
+                for i in range(5)
+            ],
+        },
+    }
+    parts = iter_board_data_push_chunks(bundle, chunk_rows=10)
+    assert len(parts) == 4  # industry 3 chunks + concept 1
+    assert "industry_board_basic_info" in parts[0]["items"]
+    assert len(parts[0]["items"]["industry_board_constituents"]) == 10
+    assert "industry_board_basic_info" not in parts[1]["items"]
+    assert parts[-1]["items"]["concept_board_constituents"]
+    assert iter_board_data_push_chunks(bundle, chunk_rows=1000)[0]["items"][
+        "industry_board_basic_info"
+    ]
+
+
+def test_push_board_bundle_adaptive_splits_on_502(monkeypatch):
+    from backend_api.env_sync import admin_routes
+    from backend_api.env_sync.remote_http import RemoteResponse
+
+    calls = {"sizes": []}
+
+    def fake_post(url, *, headers=None, json_body=None, timeout=30.0):
+        items = json_body["bundles"]["board_data"]["items"]
+        n = sum(len(v) for v in items.values() if isinstance(v, list))
+        calls["sizes"].append(n)
+        if n > 80:
+            return RemoteResponse(status_code=502, text="bad gateway")
+        return RemoteResponse(
+            status_code=200,
+            text='{"results":{"board_data":{"created":0,"updated":%d,"skipped":0,"errors":[]}}}'
+            % n,
+        )
+
+    monkeypatch.setattr(admin_routes.remote_http, "post", fake_post)
+    merged: dict = {}
+    batches: list = []
+    rows = [
+        {"board_code": "BK0001", "stock_code": f"{i:06d}", "stock_name": "x"}
+        for i in range(200)
+    ]
+    admin_routes._push_bundle_adaptive(
+        url="https://example.test/api/env-sync/v1/import",
+        headers={},
+        batch_mods=["industry_board_constituents"],
+        bundle_key="board_data",
+        bundle_data={
+            "module": "board_data",
+            "items": {"industry_board_constituents": rows},
+        },
+        label="board_data[1/1]",
+        merged_results=merged,
+        push_batches=batches,
+    )
+    assert merged["board_data"]["updated"] == 200
+    assert len(batches) >= 2
+
+
+def test_import_board_preserves_tonghuashun_source(db):
+    """同步必须写入 board_code_source；空值不得落成 NULL（UI 会显示成东方财富）。"""
+    from sqlalchemy import text
+
+    from backend_api.env_sync.services.market_data import import_board_data
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS concept_board_basic_info (
+                board_code TEXT PRIMARY KEY,
+                board_name TEXT,
+                trade_observe_flag BOOLEAN DEFAULT 0,
+                frontend_visible_flag BOOLEAN DEFAULT 1,
+                board_code_source TEXT
+            )
+            """
+        )
+    )
+    db.commit()
+
+    bundle = {
+        "module": "board_data",
+        "items": {
+            "concept_board_basic_info": [
+                {
+                    "board_code": "886064",
+                    "board_name": "光纤概念",
+                    "trade_observe_flag": False,
+                    "frontend_visible_flag": True,
+                    "board_code_source": "tonghuashun",
+                },
+                {
+                    "board_code": "BK1665",
+                    "board_name": "光纤概念",
+                    "trade_observe_flag": False,
+                    "board_code_source": "eastmoney",
+                },
+                {
+                    "board_code": "886099",
+                    "board_name": "无来源板",
+                    "trade_observe_flag": False,
+                },
+            ]
+        },
+    }
+    result = import_board_data(db, bundle, tables={"concept_board_basic_info"})
+    assert not result.get("errors")
+
+    rows = {
+        r[0]: r[1]
+        for r in db.execute(
+            text(
+                "SELECT board_code, board_code_source FROM concept_board_basic_info"
+            )
+        ).fetchall()
+    }
+    assert rows["886064"] == "tonghuashun"
+    assert rows["BK1665"] == "eastmoney"
+    assert rows["886099"] == "tonghuashun"  # 空值默认同花顺，非东方财富 LEGACY
+
+
 def test_push_adj_rows_adaptive_splits_on_502(monkeypatch):
     from backend_api.env_sync import admin_routes
     from backend_api.env_sync.remote_http import RemoteResponse

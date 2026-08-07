@@ -23,6 +23,10 @@ from backend_api.models import (
     StockBasicInfo,
     StockBasicInfoHK,
 )
+from backend_api.utils.board_code_source import (
+    DEFAULT_BOARD_CODE_SOURCE,
+    normalize_board_code_source,
+)
 
 QUOTE_TABLES = ("historical_quotes", "historical_quotes_hk")
 ADJ_FACTOR_TABLES = ("stock_adj_factor",)
@@ -205,7 +209,7 @@ def import_stock_basic(
     return result
 
 
-def _board_basic_cols(conn) -> List[str]:
+def _board_basic_cols(conn, *, table_name: str = "industry_board_basic_info") -> List[str]:
     # 兼容不同迁移阶段的列
     preferred = [
         "board_code",
@@ -224,13 +228,27 @@ def _board_basic_cols(conn) -> List[str]:
                 WHERE table_schema='public' AND table_name=:t
                 """
             ),
-            {"t": "industry_board_basic_info"},
+            {"t": table_name},
         )
     }
-    # SQLite tests: information_schema may be empty — fall back
+    # SQLite tests: information_schema may be empty — fall back（须含 board_code_source，否则同步丢来源）
     if not existing:
-        return ["board_code", "board_name", "create_date", "trade_observe_flag"]
+        return [
+            "board_code",
+            "board_name",
+            "create_date",
+            "trade_observe_flag",
+            "frontend_visible_flag",
+            "board_code_source",
+        ]
     return [c for c in preferred if c in existing]
+
+
+def _resolve_board_source_for_sync(raw: Any) -> str:
+    """同步写入用：有值则规范化，空值默认同花顺（避免 NULL 被 UI 显示成东方财富 LEGACY）。"""
+    return normalize_board_code_source(
+        (raw or {}).get("board_code_source") if isinstance(raw, dict) else raw
+    ) or DEFAULT_BOARD_CODE_SOURCE
 
 
 def export_board_data(db: Session, *, tables: Optional[Set[str]] = None, env_label: str = "local") -> Dict[str, Any]:
@@ -244,7 +262,7 @@ def export_board_data(db: Session, *, tables: Optional[Set[str]] = None, env_lab
     # board basic via raw SQL (no ORM)
     if "industry_board_basic_info" in want:
         try:
-            cols = _board_basic_cols(db.connection())
+            cols = _board_basic_cols(db.connection(), table_name="industry_board_basic_info")
             col_sql = ", ".join(cols)
             items["industry_board_basic_info"] = fetch_all(
                 f"SELECT {col_sql} FROM industry_board_basic_info ORDER BY board_code"
@@ -256,27 +274,7 @@ def export_board_data(db: Session, *, tables: Optional[Set[str]] = None, env_lab
 
     if "concept_board_basic_info" in want:
         try:
-            # reuse column discovery against concept table
-            preferred = [
-                "board_code",
-                "board_name",
-                "create_date",
-                "trade_observe_flag",
-                "frontend_visible_flag",
-                "board_code_source",
-            ]
-            existing = {
-                r[0]
-                for r in db.execute(
-                    text(
-                        """
-                        SELECT column_name FROM information_schema.columns
-                        WHERE table_schema='public' AND table_name='concept_board_basic_info'
-                        """
-                    )
-                )
-            }
-            cols = [c for c in preferred if c in existing] if existing else preferred[:4]
+            cols = _board_basic_cols(db.connection(), table_name="concept_board_basic_info")
             col_sql = ", ".join(cols)
             items["concept_board_basic_info"] = fetch_all(
                 f"SELECT {col_sql} FROM concept_board_basic_info ORDER BY board_code"
@@ -313,55 +311,94 @@ def import_board_data(
     items = (bundle or {}).get("items") or {}
     want = tables or set(BOARD_TABLES)
 
-    def upsert_basic(table: str, rows: List[Dict]):
+    bind = db.get_bind()
+    dialect = getattr(getattr(bind, "dialect", None), "name", "") or ""
+    use_pg_bulk = dialect == "postgresql"
+
+    def upsert_basic_row(table: str, rows: List[Dict]):
         for raw in rows:
             code = str(raw.get("board_code") or "").strip()
             if not code:
                 result["skipped"] += 1
                 continue
+            name = raw.get("board_name")
+            trade_flag = bool(raw.get("trade_observe_flag") or False)
+            visible = raw.get("frontend_visible_flag")
+            if visible is None:
+                visible = True
+            # 本地有 tonghuashun 必须写入；空值用默认同花顺，避免 NULL→UI 显示「东方财富」
+            source = _resolve_board_source_for_sync(raw)
             try:
                 with db.begin_nested():
-                    name = raw.get("board_name")
-                    trade_flag = bool(raw.get("trade_observe_flag") or False)
-                    visible = raw.get("frontend_visible_flag")
-                    if visible is None:
-                        visible = True
-                    source = raw.get("board_code_source")
-                    # 尽量兼容缺列
-                    db.execute(
-                        text(
-                            f"""
-                            INSERT INTO {table} (board_code, board_name, trade_observe_flag)
-                            VALUES (:board_code, :board_name, :trade_observe_flag)
-                            ON CONFLICT (board_code) DO UPDATE SET
-                              board_name = EXCLUDED.board_name,
-                              trade_observe_flag = EXCLUDED.trade_observe_flag
-                            """
-                        ),
-                        {
-                            "board_code": code,
-                            "board_name": name,
-                            "trade_observe_flag": trade_flag,
-                        },
-                    )
-                    # 可选列尽力更新
                     try:
                         db.execute(
                             text(
                                 f"""
-                                UPDATE {table}
-                                SET frontend_visible_flag = :v,
-                                    board_code_source = COALESCE(:s, board_code_source)
-                                WHERE board_code = :c
+                                INSERT INTO {table} (
+                                    board_code, board_name, trade_observe_flag,
+                                    frontend_visible_flag, board_code_source
+                                )
+                                VALUES (
+                                    :board_code, :board_name, :trade_observe_flag,
+                                    :frontend_visible_flag, :board_code_source
+                                )
+                                ON CONFLICT (board_code) DO UPDATE SET
+                                  board_name = EXCLUDED.board_name,
+                                  trade_observe_flag = EXCLUDED.trade_observe_flag,
+                                  frontend_visible_flag = EXCLUDED.frontend_visible_flag,
+                                  board_code_source = EXCLUDED.board_code_source
                                 """
                             ),
-                            {"v": bool(visible), "s": source, "c": code},
+                            {
+                                "board_code": code,
+                                "board_name": name,
+                                "trade_observe_flag": trade_flag,
+                                "frontend_visible_flag": bool(visible),
+                                "board_code_source": source,
+                            },
                         )
                     except Exception:
-                        pass
+                        # 缺可选列时退回核心字段 + 尽力写 source
+                        db.execute(
+                            text(
+                                f"""
+                                INSERT INTO {table} (board_code, board_name, trade_observe_flag)
+                                VALUES (:board_code, :board_name, :trade_observe_flag)
+                                ON CONFLICT (board_code) DO UPDATE SET
+                                  board_name = EXCLUDED.board_name,
+                                  trade_observe_flag = EXCLUDED.trade_observe_flag
+                                """
+                            ),
+                            {
+                                "board_code": code,
+                                "board_name": name,
+                                "trade_observe_flag": trade_flag,
+                            },
+                        )
+                        try:
+                            db.execute(
+                                text(
+                                    f"""
+                                    UPDATE {table}
+                                    SET frontend_visible_flag = :v,
+                                        board_code_source = :s
+                                    WHERE board_code = :c
+                                    """
+                                ),
+                                {"v": bool(visible), "s": source, "c": code},
+                            )
+                        except Exception:
+                            try:
+                                db.execute(
+                                    text(
+                                        f"UPDATE {table} SET board_code_source = :s WHERE board_code = :c"
+                                    ),
+                                    {"s": source, "c": code},
+                                )
+                            except Exception:
+                                pass
                     result["updated"] += 1
             except Exception as e:
-                # SQLite ON CONFLICT / 缺表
                 try:
                     with db.begin_nested():
                         exists = db.execute(
@@ -369,26 +406,44 @@ def import_board_data(
                             {"c": code},
                         ).first()
                         if exists:
-                            db.execute(
-                                text(
-                                    f"UPDATE {table} SET board_name=:n, trade_observe_flag=:f WHERE board_code=:c"
-                                ),
-                                {"n": name, "f": trade_flag, "c": code},
-                            )
+                            try:
+                                db.execute(
+                                    text(
+                                        f"UPDATE {table} SET board_name=:n, trade_observe_flag=:f, "
+                                        f"board_code_source=:s WHERE board_code=:c"
+                                    ),
+                                    {"n": name, "f": trade_flag, "s": source, "c": code},
+                                )
+                            except Exception:
+                                db.execute(
+                                    text(
+                                        f"UPDATE {table} SET board_name=:n, trade_observe_flag=:f WHERE board_code=:c"
+                                    ),
+                                    {"n": name, "f": trade_flag, "c": code},
+                                )
                             result["updated"] += 1
                         else:
-                            db.execute(
-                                text(
-                                    f"INSERT INTO {table} (board_code, board_name, trade_observe_flag) "
-                                    f"VALUES (:c,:n,:f)"
-                                ),
-                                {"c": code, "n": name, "f": trade_flag},
-                            )
+                            try:
+                                db.execute(
+                                    text(
+                                        f"INSERT INTO {table} (board_code, board_name, trade_observe_flag, board_code_source) "
+                                        f"VALUES (:c,:n,:f,:s)"
+                                    ),
+                                    {"c": code, "n": name, "f": trade_flag, "s": source},
+                                )
+                            except Exception:
+                                db.execute(
+                                    text(
+                                        f"INSERT INTO {table} (board_code, board_name, trade_observe_flag) "
+                                        f"VALUES (:c,:n,:f)"
+                                    ),
+                                    {"c": code, "n": name, "f": trade_flag},
+                                )
                             result["created"] += 1
                 except Exception as e2:
                     result["errors"].append(f"{table}/{code}: {e2 or e}")
 
-    def upsert_const(table: str, rows: List[Dict]):
+    def upsert_const_row(table: str, rows: List[Dict]):
         for raw in rows:
             bc = str(raw.get("board_code") or "").strip()
             sc = str(raw.get("stock_code") or "").strip()
@@ -426,17 +481,227 @@ def import_board_data(
             except Exception as e:
                 result["errors"].append(f"{table}/{bc}/{sc}: {e}")
 
-    if "industry_board_basic_info" in want:
-        upsert_basic("industry_board_basic_info", items.get("industry_board_basic_info") or [])
-    if "concept_board_basic_info" in want:
-        upsert_basic("concept_board_basic_info", items.get("concept_board_basic_info") or [])
-    if "industry_board_constituents" in want:
-        upsert_const("industry_board_constituents", items.get("industry_board_constituents") or [])
-    if "concept_board_constituents" in want:
-        upsert_const("concept_board_constituents", items.get("concept_board_constituents") or [])
+    def upsert_basic_pg_bulk(table: str, rows: List[Dict]):
+        prepared: List[Dict[str, Any]] = []
+        raw_kept: List[Dict] = []
+        for raw in rows:
+            code = str(raw.get("board_code") or "").strip()
+            if not code:
+                result["skipped"] += 1
+                continue
+            visible = raw.get("frontend_visible_flag")
+            if visible is None:
+                visible = True
+            prepared.append(
+                {
+                    "board_code": code,
+                    "board_name": raw.get("board_name"),
+                    "trade_observe_flag": bool(raw.get("trade_observe_flag") or False),
+                    "frontend_visible_flag": bool(visible),
+                    "board_code_source": _resolve_board_source_for_sync(raw),
+                }
+            )
+            raw_kept.append(raw)
+        if not prepared:
+            return
+        sql_full = text(
+            f"""
+            INSERT INTO {table} (
+                board_code, board_name, trade_observe_flag,
+                frontend_visible_flag, board_code_source
+            )
+            VALUES (
+                :board_code, :board_name, :trade_observe_flag,
+                :frontend_visible_flag, :board_code_source
+            )
+            ON CONFLICT (board_code) DO UPDATE SET
+              board_name = EXCLUDED.board_name,
+              trade_observe_flag = EXCLUDED.trade_observe_flag,
+              frontend_visible_flag = EXCLUDED.frontend_visible_flag,
+              board_code_source = EXCLUDED.board_code_source
+            """
+        )
+        sql_core = text(
+            f"""
+            INSERT INTO {table} (board_code, board_name, trade_observe_flag)
+            VALUES (:board_code, :board_name, :trade_observe_flag)
+            ON CONFLICT (board_code) DO UPDATE SET
+              board_name = EXCLUDED.board_name,
+              trade_observe_flag = EXCLUDED.trade_observe_flag
+            """
+        )
+        for i in range(0, len(prepared), UPSERT_CHUNK):
+            chunk = prepared[i : i + UPSERT_CHUNK]
+            try:
+                try:
+                    db.connection().execute(sql_full, chunk)
+                except Exception:
+                    db.rollback()
+                    # 无可选列时：核心字段 + 逐行补 source
+                    core_chunk = [
+                        {
+                            "board_code": r["board_code"],
+                            "board_name": r["board_name"],
+                            "trade_observe_flag": r["trade_observe_flag"],
+                        }
+                        for r in chunk
+                    ]
+                    db.connection().execute(sql_core, core_chunk)
+                    for r in chunk:
+                        try:
+                            db.execute(
+                                text(
+                                    f"UPDATE {table} SET board_code_source = :s WHERE board_code = :c"
+                                ),
+                                {"s": r["board_code_source"], "c": r["board_code"]},
+                            )
+                        except Exception:
+                            pass
+                result["updated"] += len(chunk)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                result["errors"].append(f"{table} bulk@{i}: {e}; fallback row")
+                upsert_basic_row(table, raw_kept[i : i + UPSERT_CHUNK])
+                db.commit()
 
-    db.commit()
+    def upsert_const_pg_bulk_safe(table: str, rows: List[Dict]):
+        prepared: List[Dict[str, Any]] = []
+        raw_kept: List[Dict] = []
+        for raw in rows:
+            bc = str(raw.get("board_code") or "").strip()
+            sc = str(raw.get("stock_code") or "").strip()
+            if not bc or not sc:
+                result["skipped"] += 1
+                continue
+            prepared.append(
+                {
+                    "board_code": bc,
+                    "stock_code": sc,
+                    "stock_name": raw.get("stock_name"),
+                    "updated_at": parse_dt(raw.get("updated_at")) or datetime.now(),
+                }
+            )
+            raw_kept.append(raw)
+        if not prepared:
+            return
+        sql = text(
+            f"""
+            INSERT INTO {table} (board_code, stock_code, stock_name, updated_at)
+            VALUES (:board_code, :stock_code, :stock_name, :updated_at)
+            ON CONFLICT (board_code, stock_code) DO UPDATE SET
+              stock_name = EXCLUDED.stock_name,
+              updated_at = EXCLUDED.updated_at
+            """
+        )
+        for i in range(0, len(prepared), UPSERT_CHUNK):
+            chunk = prepared[i : i + UPSERT_CHUNK]
+            try:
+                db.connection().execute(sql, chunk)
+                result["updated"] += len(chunk)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                result["errors"].append(f"{table} bulk@{i}: {e}; fallback row")
+                upsert_const_row(table, raw_kept[i : i + UPSERT_CHUNK])
+                db.commit()
+
+    if use_pg_bulk:
+        if "industry_board_basic_info" in want:
+            upsert_basic_pg_bulk(
+                "industry_board_basic_info", items.get("industry_board_basic_info") or []
+            )
+        if "concept_board_basic_info" in want:
+            upsert_basic_pg_bulk(
+                "concept_board_basic_info", items.get("concept_board_basic_info") or []
+            )
+        if "industry_board_constituents" in want:
+            upsert_const_pg_bulk_safe(
+                "industry_board_constituents", items.get("industry_board_constituents") or []
+            )
+        if "concept_board_constituents" in want:
+            upsert_const_pg_bulk_safe(
+                "concept_board_constituents", items.get("concept_board_constituents") or []
+            )
+    else:
+        if "industry_board_basic_info" in want:
+            upsert_basic_row(
+                "industry_board_basic_info", items.get("industry_board_basic_info") or []
+            )
+        if "concept_board_basic_info" in want:
+            upsert_basic_row(
+                "concept_board_basic_info", items.get("concept_board_basic_info") or []
+            )
+        if "industry_board_constituents" in want:
+            upsert_const_row(
+                "industry_board_constituents", items.get("industry_board_constituents") or []
+            )
+        if "concept_board_constituents" in want:
+            upsert_const_row(
+                "concept_board_constituents", items.get("concept_board_constituents") or []
+            )
+        db.commit()
     return result
+
+
+BOARD_BASIC_ITEM_KEYS = (
+    "industry_board_basic_info",
+    "concept_board_basic_info",
+)
+BOARD_CONST_ITEM_KEYS = (
+    "industry_board_constituents",
+    "concept_board_constituents",
+)
+
+
+def iter_board_data_push_chunks(
+    bundle: Dict[str, Any],
+    *,
+    chunk_rows: int,
+) -> List[Dict[str, Any]]:
+    """将 board_data 按成分股行数切开；基础信息随首个分块一起推送。"""
+    chunk_rows = max(1, int(chunk_rows))
+    items = (bundle or {}).get("items") or {}
+    base = {k: v for k, v in bundle.items() if k != "items"}
+
+    basic_items = {
+        k: list(items.get(k) or [])
+        for k in BOARD_BASIC_ITEM_KEYS
+        if (items.get(k) or [])
+    }
+
+    const_parts: List[tuple] = []
+    for key in BOARD_CONST_ITEM_KEYS:
+        rows = list(items.get(key) or [])
+        if not rows:
+            continue
+        for i in range(0, len(rows), chunk_rows):
+            const_parts.append((key, rows[i : i + chunk_rows], i, len(rows)))
+
+    if not const_parts:
+        if not basic_items and not any(items.get(k) for k in BOARD_TABLES):
+            return [bundle]
+        part = dict(base)
+        part["items"] = dict(basic_items) if basic_items else dict(items)
+        return [part]
+
+    out: List[Dict[str, Any]] = []
+    for idx, (key, rows, offset, total) in enumerate(const_parts):
+        part = dict(base)
+        part_items: Dict[str, Any] = {key: rows}
+        if idx == 0 and basic_items:
+            part_items = {**basic_items, **part_items}
+        part["items"] = part_items
+        part["chunk"] = {
+            "table": key,
+            "offset": offset,
+            "size": len(rows),
+            "total": total,
+            "part": idx + 1,
+            "parts": len(const_parts),
+        }
+        out.append(part)
+    return out
 
 
 CN_QUOTE_FIELDS = [
