@@ -276,12 +276,12 @@ class PVFRSDataInterface(IDataInterface):
         else:
             # 如果没有数据源，尝试直接从数据库获取
             try:
-                from backend_api.database import get_db
+                from backend_api.database import SessionLocal
                 from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
                 from sqlalchemy import desc, asc, cast, Date as SA_Date
                 from datetime import datetime
                 
-                db = next(get_db())
+                db = SessionLocal()
                 try:
                     # 判断是A股还是港股
                     is_hk = symbol.startswith('0') and len(symbol) == 5 or symbol.startswith('HK') or symbol.startswith('hk')
@@ -325,6 +325,10 @@ class PVFRSDataInterface(IDataInterface):
                     return pd.DataFrame(data)
                     
                 finally:
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
                     db.close()
                     
             except Exception as e:

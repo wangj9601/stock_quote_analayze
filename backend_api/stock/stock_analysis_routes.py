@@ -177,66 +177,67 @@ def _compute_levels_payload(
             ensure_adj_factors,
         )
 
-    analysis_service = StockAnalysisService()
     adjust_n = str(adjust or "none").strip().lower() or "none"
     if adjust_n not in ("none", "qfq"):
         return 400, {"success": False, "message": "adjust 仅支持 none 或 qfq"}
 
-    historical_data = None
-    adj_meta = None
-    if adjust_n == "qfq":
-        if analysis_service._is_hk_stock(code):
-            return 400, {
+    # 复用请求 Session，避免 next(get_db) 泄漏
+    with StockAnalysisService(db) as analysis_service:
+        historical_data = None
+        adj_meta = None
+        if adjust_n == "qfq":
+            if analysis_service._is_hk_stock(code):
+                return 400, {
+                    "success": False,
+                    "message": "前复权计算目前仅支持 A 股，港股暂不支持",
+                }
+            try:
+                from .stock_analysis import KeyLevels
+
+                ensured = ensure_adj_factors(
+                    db,
+                    code,
+                    force_refresh=bool(refresh_factor),
+                    factor_source=factor_source or "auto",
+                    prefer_db=True,
+                )
+                raw_bars = analysis_service._get_historical_data(
+                    code, days=KeyLevels.KDE_LOOKBACK_MAX
+                )
+                historical_data = apply_qfq_to_bars(raw_bars, ensured["factors"])
+                adj_meta = {
+                    "source": ensured.get("source"),
+                    "adj_factor_asof": ensured.get("adj_factor_asof"),
+                    "factor_fetched": ensured.get("factor_fetched"),
+                    "factor_source": ensured.get("factor_source"),
+                }
+            except AdjQuotesError as e:
+                return 400, {"success": False, "message": e.message}
+            except Exception as e:
+                logger.exception("前复权因子处理失败 code=%s", code)
+                return 500, {"success": False, "message": f"前复权处理失败: {e}"}
+
+        result = analysis_service.get_key_levels_only(
+            code,
+            max_levels=max_levels,
+            historical_data=historical_data,
+            price_adjust=adjust_n,
+            adj_meta=adj_meta,
+        )
+
+        if not result.get("success"):
+            if "data" in result:
+                return 200, {
+                    "success": False,
+                    "message": result.get("error") or "无法计算关键价位",
+                    "data": result.get("data") or {},
+                }
+            return 500, {
                 "success": False,
-                "message": "前复权计算目前仅支持 A 股，港股暂不支持",
+                "message": result.get("error") or "获取关键价位失败",
             }
-        try:
-            from .stock_analysis import KeyLevels
 
-            ensured = ensure_adj_factors(
-                db,
-                code,
-                force_refresh=bool(refresh_factor),
-                factor_source=factor_source or "auto",
-                prefer_db=True,
-            )
-            raw_bars = analysis_service._get_historical_data(
-                code, days=KeyLevels.KDE_LOOKBACK_MAX
-            )
-            historical_data = apply_qfq_to_bars(raw_bars, ensured["factors"])
-            adj_meta = {
-                "source": ensured.get("source"),
-                "adj_factor_asof": ensured.get("adj_factor_asof"),
-                "factor_fetched": ensured.get("factor_fetched"),
-                "factor_source": ensured.get("factor_source"),
-            }
-        except AdjQuotesError as e:
-            return 400, {"success": False, "message": e.message}
-        except Exception as e:
-            logger.exception("前复权因子处理失败 code=%s", code)
-            return 500, {"success": False, "message": f"前复权处理失败: {e}"}
-
-    result = analysis_service.get_key_levels_only(
-        code,
-        max_levels=max_levels,
-        historical_data=historical_data,
-        price_adjust=adjust_n,
-        adj_meta=adj_meta,
-    )
-
-    if not result.get("success"):
-        if "data" in result:
-            return 200, {
-                "success": False,
-                "message": result.get("error") or "无法计算关键价位",
-                "data": result.get("data") or {},
-            }
-        return 500, {
-            "success": False,
-            "message": result.get("error") or "获取关键价位失败",
-        }
-
-    return 200, {"success": True, "data": result["data"]}
+        return 200, {"success": True, "data": result["data"]}
 
 
 def _levels_response_for_code(
@@ -298,31 +299,27 @@ async def get_stock_analysis(
                 content={"success": False, "message": "股票代码格式错误（A股6位，港股5位）"}
             )
         
-        # 创建分析服务
-        analysis_service = StockAnalysisService()
-        
-        # 获取分析结果
-        result = analysis_service.get_stock_analysis(stock_code)
-        
-        # 如果返回结果中包含error，但同时也包含data，说明是数据不足的情况，应该返回200但success为False
-        if "error" in result and "data" in result:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "message": result.get("error", "无法获取历史数据"),
-                    "data": result.get("data", {})
-                }
-            )
-        elif "error" in result:
-            # 真正的错误情况，返回500
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": result["error"]}
-            )
-        
-        return JSONResponse(content=result)
-        
+        with StockAnalysisService() as analysis_service:
+            result = analysis_service.get_stock_analysis(stock_code)
+
+            # 如果返回结果中包含error，但同时也包含data，说明是数据不足的情况，应该返回200但success为False
+            if "error" in result and "data" in result:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "message": result.get("error", "无法获取历史数据"),
+                        "data": result.get("data", {})
+                    }
+                )
+            elif "error" in result:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": result["error"]}
+                )
+
+            return JSONResponse(content=result)
+
     except Exception as e:
         logger.error(f"获取股票分析失败: {str(e)}")
         return JSONResponse(
@@ -345,23 +342,22 @@ async def get_technical_indicators(
         技术指标数据（RSI、MACD、KDJ、布林带）
     """
     try:
-        analysis_service = StockAnalysisService()
-        result = analysis_service.get_stock_analysis(stock_code)
-        
-        if "error" in result:
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": result["error"]}
-            )
-        
-        # 只返回技术指标部分
-        technical_data = result["data"]["technical_indicators"]
-        
-        return JSONResponse(content={
-            "success": True,
-            "data": technical_data
-        })
-        
+        with StockAnalysisService() as analysis_service:
+            result = analysis_service.get_stock_analysis(stock_code)
+
+            if "error" in result:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": result["error"]}
+                )
+
+            technical_data = result["data"]["technical_indicators"]
+
+            return JSONResponse(content={
+                "success": True,
+                "data": technical_data
+            })
+
     except Exception as e:
         logger.error(f"获取技术指标失败: {str(e)}")
         return JSONResponse(
@@ -386,23 +382,22 @@ async def get_price_prediction(
         价格预测结果
     """
     try:
-        analysis_service = StockAnalysisService()
-        result = analysis_service.get_stock_analysis(stock_code)
-        
-        if "error" in result:
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": result["error"]}
-            )
-        
-        # 只返回价格预测部分
-        prediction_data = result["data"]["price_prediction"]
-        
-        return JSONResponse(content={
-            "success": True,
-            "data": prediction_data
-        })
-        
+        with StockAnalysisService() as analysis_service:
+            result = analysis_service.get_stock_analysis(stock_code)
+
+            if "error" in result:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": result["error"]}
+                )
+
+            prediction_data = result["data"]["price_prediction"]
+
+            return JSONResponse(content={
+                "success": True,
+                "data": prediction_data
+            })
+
     except Exception as e:
         logger.error(f"获取价格预测失败: {str(e)}")
         return JSONResponse(
@@ -425,23 +420,22 @@ async def get_trading_recommendation(
         交易建议和风险分析
     """
     try:
-        analysis_service = StockAnalysisService()
-        result = analysis_service.get_stock_analysis(stock_code)
-        
-        if "error" in result:
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": result["error"]}
-            )
-        
-        # 只返回交易建议部分
-        recommendation_data = result["data"]["trading_recommendation"]
-        
-        return JSONResponse(content={
-            "success": True,
-            "data": recommendation_data
-        })
-        
+        with StockAnalysisService() as analysis_service:
+            result = analysis_service.get_stock_analysis(stock_code)
+
+            if "error" in result:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": result["error"]}
+                )
+
+            recommendation_data = result["data"]["trading_recommendation"]
+
+            return JSONResponse(content={
+                "success": True,
+                "data": recommendation_data
+            })
+
     except Exception as e:
         logger.error(f"获取交易建议失败: {str(e)}")
         return JSONResponse(
@@ -639,44 +633,43 @@ async def get_analysis_summary(
         分析摘要信息
     """
     try:
-        analysis_service = StockAnalysisService()
-        result = analysis_service.get_stock_analysis(stock_code)
-        
-        if "error" in result:
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "message": result["error"]}
-            )
-        
-        data = result["data"]
-        
-        # 生成摘要
-        summary = {
-            "stock_code": stock_code,
-            "current_price": data["current_price"],
-            "prediction": {
-                "target_price": data["price_prediction"]["target_price"],
-                "change_percent": data["price_prediction"]["change_percent"],
-                "confidence": data["price_prediction"]["confidence"]
-            },
-            "recommendation": {
-                "action": data["trading_recommendation"]["action"],
-                "risk_level": data["trading_recommendation"]["risk_level"],
-                "strength": data["trading_recommendation"]["strength"]
-            },
-            "technical_summary": {
-                "rsi": data["technical_indicators"]["rsi"]["signal"],
-                "macd": data["technical_indicators"]["macd"]["signal"],
-                "kdj": data["technical_indicators"]["kdj"]["signal"]
-            },
-            "analysis_time": data["analysis_time"]
-        }
-        
-        return JSONResponse(content={
-            "success": True,
-            "data": summary
-        })
-        
+        with StockAnalysisService() as analysis_service:
+            result = analysis_service.get_stock_analysis(stock_code)
+
+            if "error" in result:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": result["error"]}
+                )
+
+            data = result["data"]
+
+            summary = {
+                "stock_code": stock_code,
+                "current_price": data["current_price"],
+                "prediction": {
+                    "target_price": data["price_prediction"]["target_price"],
+                    "change_percent": data["price_prediction"]["change_percent"],
+                    "confidence": data["price_prediction"]["confidence"]
+                },
+                "recommendation": {
+                    "action": data["trading_recommendation"]["action"],
+                    "risk_level": data["trading_recommendation"]["risk_level"],
+                    "strength": data["trading_recommendation"]["strength"]
+                },
+                "technical_summary": {
+                    "rsi": data["technical_indicators"]["rsi"]["signal"],
+                    "macd": data["technical_indicators"]["macd"]["signal"],
+                    "kdj": data["technical_indicators"]["kdj"]["signal"]
+                },
+                "analysis_time": data["analysis_time"]
+            }
+
+            return JSONResponse(content={
+                "success": True,
+                "data": summary
+            })
+
     except Exception as e:
         logger.error(f"获取分析摘要失败: {str(e)}")
         return JSONResponse(

@@ -617,128 +617,194 @@ def collect_watchlist_history():
     返回采集成功的股票数量和失败的股票数量。
     支持A股和港股。
     """
-    db = next(get_db())
-    codes = get_watchlist_codes(db)
+    try:
+        from backend_api.database import SessionLocal
+    except ImportError:
+        from database import SessionLocal  # type: ignore
+
+    db = SessionLocal()
     success_count = 0
     fail_count = 0
-    for stock_code in set(codes):
-        # 清理和规范化股票代码格式
-        stock_code = normalize_stock_code(stock_code)
-        
-        if not stock_code:
-            logger.warning(f"[collect_watchlist_history] 股票代码为空，跳过")
-            continue
-            
-        if has_collected(db, stock_code):
-            #logger.info(f"[collect_watchlist_history] 股票 {stock_code} 已采集过，跳过")
-            continue
+    try:
+        codes = get_watchlist_codes(db)
         try:
-            end_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-            
-            # 判断是否为港股
-            logger.info(f"[collect_watchlist_history] 开始判断股票 {stock_code} 是否为港股")
-            is_hk = is_hk_stock(db, stock_code)
-            logger.info(f"[collect_watchlist_history] 股票 {stock_code} 判断结果: {'港股' if is_hk else 'A股'}")
-            
-            if is_hk:
-                # 港股处理逻辑
-                logger.info(f"[collect_watchlist_history] 检测到港股代码: {stock_code}")
-                # 确保港股代码格式正确（5位数字）
-                hk_code = stock_code.zfill(5) if stock_code.isdigit() else stock_code
-                df = ak.stock_hk_hist(symbol=hk_code, period='daily', start_date='19950101', end_date=end_date, adjust='')
-                
-                # 检查返回的DataFrame是否为空
-                if df.empty:
-                    logger.warning(f"港股 {stock_code} 返回空数据，可能该股票已退市或代码无效")
-                    log_collection(db, stock_code, 0, 'fail', '返回空数据，可能该股票已退市或代码无效')
-                    fail_count += 1
-                    continue
-                
-                # 批量插入前，先删除该stock_code在港股历史行情表中的旧数据
-                db.execute(
-                    text("DELETE FROM historical_quotes_hk WHERE code = :code"),
-                    {"code": stock_code}
-                )
-                db.commit()
-                
-                affected_rows = insert_historical_quotes_hk(db, stock_code, df)
-                log_collection(db, stock_code, affected_rows, 'success')
-                success_count += 1
-                try:
-                    start_d, end_d = _get_date_range_from_df(df)
-                    if start_d and end_d:
-                        _calculate_indicators_after_collect(db, stock_code, 'HK', start_d, end_d)
-                except Exception as ind_err:
-                    logger.warning("港股 %s 采集后指标计算失败: %s", stock_code, ind_err)
-            else:
-                # A股处理逻辑
-                logger.info(f"[collect_watchlist_history] 开始采集A股 {stock_code} 的历史数据")
-                # 确保A股代码格式正确（6位数字）
-                a_code = stock_code.zfill(6) if stock_code.isdigit() and len(stock_code) < 6 else stock_code
-                df = None
-                
-                # 先尝试调用 stock_zh_a_hist（东方财富接口）
-                try:
-                    df = ak.stock_zh_a_hist(symbol=a_code, period='daily', start_date='19950101', end_date=end_date, adjust='')
-                    logger.info(f"[collect_watchlist_history] 成功使用 stock_zh_a_hist 接口获取A股 {stock_code} 的历史数据")
-                except Exception as e1:
-                    logger.warning(f"[collect_watchlist_history] 调用 stock_zh_a_hist 失败，尝试使用新浪接口，错误详情: {e1}")
-                    
-                    # 如果 stock_zh_a_hist 失败，尝试调用新浪接口
-                    try:
-                        # 从stock_basic_info表获取market值
-                        market = get_market_from_db(db, stock_code)
-                        if not market:
-                            # 如果表中没有market值，尝试根据股票代码推断
-                            if stock_code.startswith('0') or stock_code.startswith('3'):
-                                market = 'SZ'
-                            else:
-                                market = 'SH'
-                            logger.info(f"[collect_watchlist_history] 未在stock_basic_info表中找到market值，根据代码推断为: {market}")
-                        
-                        # 构建新浪接口需要的symbol参数（格式：sz000001 或 sh600000）
-                        sina_symbol = build_sina_symbol(a_code, market)
-                        if not sina_symbol:
-                            raise ValueError(f"无法构建新浪接口的symbol参数，stock_code: {stock_code}, market: {market}")
-                        
-                        logger.info(f"[collect_watchlist_history] 使用新浪接口，symbol: {sina_symbol}")
-                        # 调用新浪接口
-                        # 注意：新浪接口的symbol参数格式为 "sz000001" 或 "sh600000"（小写市场标识+股票代码）
-                        # stock_zh_a_hist 接口支持这种格式作为备用数据源
-                        df = ak.stock_zh_a_hist(symbol=sina_symbol, period='daily', start_date='19950101', end_date=end_date, adjust='')
-                        logger.info(f"[collect_watchlist_history] 成功使用新浪接口获取A股 {stock_code} 的历史数据")
-                    except Exception as e2:
-                        logger.error(f"[collect_watchlist_history] 调用新浪接口也失败: {e2}")
-                        raise Exception(f"stock_zh_a_hist和新浪接口都失败: stock_zh_a_hist错误={e1}, 新浪接口错误={e2}")
-                
-                # 检查返回的DataFrame是否为空
-                if df is None or df.empty:
-                    logger.warning(f"A股 {stock_code} 返回空数据，可能该股票已退市或代码无效")
-                    log_collection(db, stock_code, 0, 'fail', '返回空数据，可能该股票已退市或代码无效')
-                    fail_count += 1
-                    continue
-                
-                # 批量插入前，先删除该stock_code的历史数据
-                db.query(HistoricalQuotes).filter(HistoricalQuotes.code == stock_code).delete()
-                db.commit()
-                affected_rows = insert_historical_quotes(db, stock_code, df)
-                log_collection(db, stock_code, affected_rows, 'success')
-                success_count += 1
-                try:
-                    start_d, end_d = _get_date_range_from_df(df)
-                    if start_d and end_d:
-                        _calculate_indicators_after_collect(db, stock_code, 'CN', start_d, end_d)
-                except Exception as ind_err:
-                    logger.warning("A股 %s 采集后指标计算失败: %s", stock_code, ind_err)
-        except Exception as e:
+            db.commit()
+        except Exception:
             db.rollback()
-            error_msg = str(e)
-            logger.error(f"[collect_watchlist_history] 采集股票 {stock_code} 失败: {error_msg}", exc_info=True)
+
+        for stock_code in set(codes):
+            stock_code = normalize_stock_code(stock_code)
+
+            if not stock_code:
+                logger.warning("[collect_watchlist_history] 股票代码为空，跳过")
+                continue
+
+            if has_collected(db, stock_code):
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                continue
             try:
-                log_collection(db, stock_code, 0, 'fail', error_msg)
-            except Exception as log_error:
-                logger.error(f"记录采集失败日志时出错: {log_error}")
-            fail_count += 1
-            print(f"[collect_watchlist_history] 采集 {stock_code} 失败: {error_msg}")
-        time.sleep(10)
-    return {"success": success_count, "fail": fail_count}
+                end_date = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+
+                logger.info("[collect_watchlist_history] 开始判断股票 %s 是否为港股", stock_code)
+                is_hk = is_hk_stock(db, stock_code)
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                logger.info(
+                    "[collect_watchlist_history] 股票 %s 判断结果: %s",
+                    stock_code,
+                    "港股" if is_hk else "A股",
+                )
+
+                if is_hk:
+                    logger.info("[collect_watchlist_history] 检测到港股代码: %s", stock_code)
+                    hk_code = stock_code.zfill(5) if stock_code.isdigit() else stock_code
+                    df = ak.stock_hk_hist(
+                        symbol=hk_code,
+                        period="daily",
+                        start_date="19950101",
+                        end_date=end_date,
+                        adjust="",
+                    )
+
+                    if df.empty:
+                        logger.warning("港股 %s 返回空数据，可能该股票已退市或代码无效", stock_code)
+                        log_collection(
+                            db, stock_code, 0, "fail", "返回空数据，可能该股票已退市或代码无效"
+                        )
+                        fail_count += 1
+                        continue
+
+                    db.execute(
+                        text("DELETE FROM historical_quotes_hk WHERE code = :code"),
+                        {"code": stock_code},
+                    )
+                    db.commit()
+
+                    affected_rows = insert_historical_quotes_hk(db, stock_code, df)
+                    log_collection(db, stock_code, affected_rows, "success")
+                    success_count += 1
+                    try:
+                        start_d, end_d = _get_date_range_from_df(df)
+                        if start_d and end_d:
+                            _calculate_indicators_after_collect(db, stock_code, "HK", start_d, end_d)
+                    except Exception as ind_err:
+                        logger.warning("港股 %s 采集后指标计算失败: %s", stock_code, ind_err)
+                else:
+                    logger.info("[collect_watchlist_history] 开始采集A股 %s 的历史数据", stock_code)
+                    a_code = (
+                        stock_code.zfill(6)
+                        if stock_code.isdigit() and len(stock_code) < 6
+                        else stock_code
+                    )
+                    df = None
+
+                    try:
+                        df = ak.stock_zh_a_hist(
+                            symbol=a_code,
+                            period="daily",
+                            start_date="19950101",
+                            end_date=end_date,
+                            adjust="",
+                        )
+                        logger.info(
+                            "[collect_watchlist_history] 成功使用 stock_zh_a_hist 接口获取A股 %s 的历史数据",
+                            stock_code,
+                        )
+                    except Exception as e1:
+                        logger.warning(
+                            "[collect_watchlist_history] 调用 stock_zh_a_hist 失败，尝试使用新浪接口，错误详情: %s",
+                            e1,
+                        )
+
+                        try:
+                            market = get_market_from_db(db, stock_code)
+                            if not market:
+                                if stock_code.startswith("0") or stock_code.startswith("3"):
+                                    market = "SZ"
+                                else:
+                                    market = "SH"
+                                logger.info(
+                                    "[collect_watchlist_history] 未在stock_basic_info表中找到market值，根据代码推断为: %s",
+                                    market,
+                                )
+
+                            sina_symbol = build_sina_symbol(a_code, market)
+                            if not sina_symbol:
+                                raise ValueError(
+                                    f"无法构建新浪接口的symbol参数，stock_code: {stock_code}, market: {market}"
+                                )
+
+                            logger.info(
+                                "[collect_watchlist_history] 使用新浪接口，symbol: %s", sina_symbol
+                            )
+                            df = ak.stock_zh_a_hist(
+                                symbol=sina_symbol,
+                                period="daily",
+                                start_date="19950101",
+                                end_date=end_date,
+                                adjust="",
+                            )
+                            logger.info(
+                                "[collect_watchlist_history] 成功使用新浪接口获取A股 %s 的历史数据",
+                                stock_code,
+                            )
+                        except Exception as e2:
+                            logger.error("[collect_watchlist_history] 调用新浪接口也失败: %s", e2)
+                            raise Exception(
+                                f"stock_zh_a_hist和新浪接口都失败: stock_zh_a_hist错误={e1}, 新浪接口错误={e2}"
+                            )
+
+                    if df is None or df.empty:
+                        logger.warning("A股 %s 返回空数据，可能该股票已退市或代码无效", stock_code)
+                        log_collection(
+                            db, stock_code, 0, "fail", "返回空数据，可能该股票已退市或代码无效"
+                        )
+                        fail_count += 1
+                        continue
+
+                    db.query(HistoricalQuotes).filter(HistoricalQuotes.code == stock_code).delete()
+                    db.commit()
+                    affected_rows = insert_historical_quotes(db, stock_code, df)
+                    log_collection(db, stock_code, affected_rows, "success")
+                    success_count += 1
+                    try:
+                        start_d, end_d = _get_date_range_from_df(df)
+                        if start_d and end_d:
+                            _calculate_indicators_after_collect(db, stock_code, "CN", start_d, end_d)
+                    except Exception as ind_err:
+                        logger.warning("A股 %s 采集后指标计算失败: %s", stock_code, ind_err)
+            except Exception as e:
+                db.rollback()
+                error_msg = str(e)
+                logger.error(
+                    "[collect_watchlist_history] 采集股票 %s 失败: %s",
+                    stock_code,
+                    error_msg,
+                    exc_info=True,
+                )
+                try:
+                    log_collection(db, stock_code, 0, "fail", error_msg)
+                except Exception as log_error:
+                    logger.error("记录采集失败日志时出错: %s", log_error)
+                fail_count += 1
+                print(f"[collect_watchlist_history] 采集 {stock_code} 失败: {error_msg}")
+            try:
+                db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+            time.sleep(10)
+        return {"success": success_count, "fail": fail_count}
+    finally:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        db.close()

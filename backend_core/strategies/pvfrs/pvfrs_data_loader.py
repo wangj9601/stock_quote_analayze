@@ -16,8 +16,6 @@ from sqlalchemy import cast, Date as SA_Date
 from backend_api.models import (
     MeanFrequencyResonanceIndicators, HistoricalQuotes, HistoricalQuotesHK
 )
-from backend_api.database import get_db
-
 logger = logging.getLogger(__name__)
 
 class PVFRSDataLoader:
@@ -350,18 +348,28 @@ class PVFRSDataValidator:
 # 便捷函数
 def load_pvfrs_data(code: str, market_type: str, start_date: str, end_date: str) -> pd.DataFrame:
     """便捷函数：加载PVFRS数据"""
-    db = next(get_db())
+    from backend_api.database import SessionLocal
+    db = SessionLocal()
     try:
         loader = PVFRSDataLoader(db)
         return loader.load_stock_data(code, market_type, start_date, end_date)
     finally:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         db.close()
 
 def get_pvfrs_stocks(market_type: str) -> List[str]:
     """便捷函数：获取有PVFRS数据的股票列表"""
-    db = next(get_db())
+    from backend_api.database import SessionLocal
+    db = SessionLocal()
     try:
         loader = PVFRSDataLoader(db)
         return loader.get_available_stocks(market_type)
     finally:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         db.close()

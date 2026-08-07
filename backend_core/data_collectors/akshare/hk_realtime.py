@@ -125,12 +125,12 @@ class HKRealtimeQuoteCollector(AKShareCollector):
         Returns:
             bool: 是否成功
         """
+        session = None
         try:
             self._init_db()  # 确保表结构存在
-            affected_rows = 0 
-            session = SessionLocal()
+            affected_rows = 0
             # 优先使用 stock_hk_spot_em（东方财富接口），因为它返回的数据更全
-            # 如果失败，再尝试 stock_hk_spot（新浪财经接口）
+            # HTTP 在开 Session 之前
             df = None
             source_name = None
             
@@ -148,16 +148,13 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                     self.logger.info("成功使用 stock_hk_spot 接口获取港股实时行情数据")
                 except Exception as e2:
                     self.logger.error(f"调用 stock_hk_spot 也失败: {e2}")
-                    if 'session' in locals():
-                        session.close()
                     return False
             
             if df is None or (hasattr(df, 'empty') and df.empty):
                 self.logger.error("akshare港股实时行情数据为空或无法获取")
-                if 'session' in locals():
-                    session.close()
                 return False
-            
+
+            session = SessionLocal()
             data_count = len(df)
             self.logger.info("采集到 %d 条港股行情数据（数据源: %s）", data_count, source_name)
             
@@ -364,7 +361,6 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             session.commit()
-            session.close()
             self.logger.info("全部港股行情数据采集并入库完成")
             return True
         except Exception as e:
@@ -372,7 +368,11 @@ class HKRealtimeQuoteCollector(AKShareCollector):
             self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)
             # 记录错误日志
             try:
-                if 'session' in locals():
+                if session is not None:
+                    try:
+                        session.rollback()
+                    except Exception:
+                        pass
                     session.execute(text('''
                         INSERT INTO realtime_collect_operation_logs 
                         (operation_type, operation_desc, affected_rows, status, error_message, collect_source, created_at)
@@ -389,8 +389,15 @@ class HKRealtimeQuoteCollector(AKShareCollector):
                     session.commit()
             except Exception as log_error:
                 self.logger.error("记录错误日志失败: %s", str(log_error))
-            finally:
-                if 'session' in locals():
-                    session.close()
             return False
+        finally:
+            if session is not None:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+                try:
+                    session.close()
+                except Exception:
+                    pass
 

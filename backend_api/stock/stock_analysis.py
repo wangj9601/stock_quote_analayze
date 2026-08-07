@@ -6,11 +6,20 @@ import logging
 import os
 from sqlalchemy.orm import Session
 from sqlalchemy import text, desc
-from database import get_db
-from models import (
-    HistoricalQuotes, StockRealtimeQuote, HistoricalQuotesHK, StockRealtimeQuoteHK, 
-    StockBasicInfoHK, StockBasicInfo, RSIIndicators, MACDIndicators, KDJIndicators, BOLLIndicators
-)
+try:
+    from backend_api.database import SessionLocal
+except ImportError:
+    from database import SessionLocal  # type: ignore
+try:
+    from models import (
+        HistoricalQuotes, StockRealtimeQuote, HistoricalQuotesHK, StockRealtimeQuoteHK,
+        StockBasicInfoHK, StockBasicInfo, RSIIndicators, MACDIndicators, KDJIndicators, BOLLIndicators
+    )
+except ImportError:
+    from backend_api.models import (
+        HistoricalQuotes, StockRealtimeQuote, HistoricalQuotesHK, StockRealtimeQuoteHK,
+        StockBasicInfoHK, StockBasicInfo, RSIIndicators, MACDIndicators, KDJIndicators, BOLLIndicators
+    )
 import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -489,11 +498,35 @@ class KeyLevels:
 
 
 class StockAnalysisService:
-    """股票分析服务类"""
-    
-    def __init__(self):
-        self.db = next(get_db())
-    
+    """股票分析服务类。
+
+    支持 ``with StockAnalysisService() as svc``，或注入外部 Session：
+    ``StockAnalysisService(db)``（不负责关闭）。
+    """
+
+    def __init__(self, db: Optional[Session] = None):
+        self._owns_db = db is None
+        self.db = db if db is not None else SessionLocal()
+
+    def close(self) -> None:
+        if not self._owns_db or self.db is None:
+            return
+        try:
+            self.db.rollback()
+        except Exception:
+            pass
+        try:
+            self.db.close()
+        except Exception:
+            pass
+        self.db = None
+
+    def __enter__(self) -> "StockAnalysisService":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     def _is_hk_stock(self, stock_code: str) -> bool:
         """判断是否为港股"""
         try:

@@ -23,52 +23,44 @@ engine = create_engine(
 
 print("数据库连接URL:", repr(DATABASE_CONFIG["url"]))
 
-# 创建会话工厂
+# 创建会话工厂（autocommit=False：首次 SQL 即开事务，必须 commit/rollback/close）
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 创建基类
 Base = declarative_base()
 
+
 def get_db() -> Generator[Session, None, None]:
-    """获取数据库会话"""
+    """FastAPI 依赖：请求结束时 rollback + close，避免 idle in transaction。"""
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
     finally:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         db.close()
 
-# def init_db():
-#     """初始化数据库"""
-#     from .models import (
-#         Base, User, Admin, Watchlist, WatchlistGroup,
-#         StockBasicInfo, QuoteData, QuoteSyncTask
-#     )
-#     
-#     try:
-#         # 创建所有表
-#         #Base.metadata.create_all(bind=engine)
-#         
-#         # 创建默认管理员账号
-#         db = SessionLocal()
-#         try:
-#             from .auth import get_password_hash
-#             
-#             # 检查是否已存在管理员账号
-#             admin = db.query(Admin).first()
-#             if not admin:
-#                 # 创建默认管理员账号
-#                 admin = Admin(
-#                     username="admin",
-#                     password_hash=get_password_hash("123456"),
-#                     role="admin"
-#                 )
-#                 db.add(admin)
-#                 db.commit()
-#                 print("✅ 已创建默认管理员账号: admin / 123456")
-#         finally:
-#             db.close()
-#         
-#         print("✅ 数据库初始化完成")
-#     except Exception as e:
-#         print(f"❌ 数据库初始化失败: {str(e)}")
-#         raise 
+
+@contextmanager
+def session_scope():
+    """短事务上下文：业务代码优先用此替代 next(get_db())。"""
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        db.close()

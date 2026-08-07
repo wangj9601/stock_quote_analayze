@@ -62,8 +62,11 @@ def get_hk_quote_board_list(
         print(f"📊 获取港股行情排行 (from DB): type={ranking_type}, page={page}, page_size={page_size}, keyword={keyword}")
         
         # 1. 获取最新交易日期的实时行情数据
-        db = next(get_db())
-        
+        try:
+            from backend_api.database import SessionLocal
+        except ImportError:
+            from database import SessionLocal  # type: ignore
+        db = SessionLocal()
         try:
             latest_date_result = pd.read_sql_query("""
                 SELECT MAX(trade_date) as latest_date 
@@ -98,6 +101,10 @@ def get_hk_quote_board_list(
                 
                 df = pd.read_sql_query(sql_query, db.bind)
         finally:
+            try:
+                db.rollback()
+            except Exception:
+                pass
             db.close()
 
         # 2. 排行类型排序

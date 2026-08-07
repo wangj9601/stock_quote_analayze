@@ -447,12 +447,10 @@ class FrontendInterface:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
             sys.path.insert(0, project_root)
             
-            from backend_api.database import get_db
+            from backend_api.database import SessionLocal
             from backend_api.models import StockBasicInfo, StockBasicInfoHK
             
-            # 获取数据库会话
-            db = next(get_db())
-            
+            db = SessionLocal()
             try:
                 symbols_set = set()
                 
@@ -498,6 +496,10 @@ class FrontendInterface:
                 return []
             
             finally:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
                 db.close()
         
         except Exception as e:
@@ -527,12 +529,11 @@ class FrontendInterface:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
             sys.path.insert(0, project_root)
             
-            from backend_api.database import get_db
+            from backend_api.database import SessionLocal
             from backend_api.models import HistoricalQuotes, HistoricalQuotesHK
             from sqlalchemy import desc
             
-            # 获取数据库会话
-            db = next(get_db())
+            db = SessionLocal()
             
             try:
                 # 判断是A股还是港股（A股通常为6位，港股通常为5位或更短）
@@ -603,6 +604,10 @@ class FrontendInterface:
                 return []
             
             finally:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
                 db.close()
         
         except Exception as e:

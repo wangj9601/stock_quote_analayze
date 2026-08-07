@@ -403,6 +403,7 @@ class PushService:
             user_id=user_id,
             push_time=push_time
         )
+        owns_session = False
         try:
             if config_id is not None:
                 config = self.config_service.get_config_by_id(config_id)
@@ -475,10 +476,18 @@ class PushService:
             # 2. 验证用户是否绑定了推送渠道
             # 获取用户信息
             if db_session is None:
-                from backend_core.database.db import get_db
-                db_session = next(get_db())
+                from backend_api.database import SessionLocal
+                db_session = SessionLocal()
+                owns_session = True
             
             user = db_session.query(User).filter(User.id == user_id).first()
+            if user is not None and owns_session:
+                # 读完即结束事务；推送微信/邮件期间不得 idle in transaction
+                try:
+                    db_session.expunge(user)
+                    db_session.rollback()
+                except Exception:
+                    pass
             
             if not user:
                 error_msg = f"用户 {user_id} 不存在"
@@ -738,6 +747,16 @@ class PushService:
                 record_id=None,
                 error_message=error_msg
             )
+        finally:
+            if owns_session and db_session is not None:
+                try:
+                    db_session.rollback()
+                except Exception:
+                    pass
+                try:
+                    db_session.close()
+                except Exception:
+                    pass
     
     def _send_via_wechat(
         self,
@@ -1153,6 +1172,7 @@ class PushService:
             record_id=record_id
         )
         
+        db_session = None
         try:
             # 1. 根据record_id获取推送记录
             record = self.record_repository.get_record_by_id(record_id)
@@ -1225,10 +1245,16 @@ class PushService:
             
             # 5. 重新执行推送流程
             # 获取用户信息
-            from backend_core.database.db import get_db
-            db_session = next(get_db())
+            from backend_api.database import SessionLocal
+            db_session = SessionLocal()
             
             user = db_session.query(User).filter(User.id == user_id).first()
+            if user is not None:
+                try:
+                    db_session.expunge(user)
+                    db_session.rollback()
+                except Exception:
+                    pass
             
             if not user:
                 error_msg = f"用户不存在: user_id={user_id}"
@@ -1475,3 +1501,13 @@ class PushService:
                 record_id=record_id,
                 error_message=error_msg
             )
+        finally:
+            if db_session is not None:
+                try:
+                    db_session.rollback()
+                except Exception:
+                    pass
+                try:
+                    db_session.close()
+                except Exception:
+                    pass

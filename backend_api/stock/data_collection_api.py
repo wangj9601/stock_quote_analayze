@@ -216,9 +216,18 @@ class AkshareDataCollector:
                     'code': str(row[0]).strip(),
                     'name': (row[1] or '').strip() if row[1] else ''
                 })
+            # 读完立刻结束事务，避免后续 HTTP/采集阶段 idle in transaction
+            try:
+                self.session.commit()
+            except Exception:
+                self.session.rollback()
             logger.info(f"从实时行情表获取到 {len(stocks)} 只A股")
             return stocks
         except Exception as e:
+            try:
+                self.session.rollback()
+            except Exception:
+                pass
             logger.error(f"从实时行情表获取股票列表失败: {e}")
             return []
 

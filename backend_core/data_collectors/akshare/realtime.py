@@ -386,10 +386,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
         Returns:
             bool: 是否成功
         """
+        session = None
         try:
-            affected_rows = 0 
-            session = SessionLocal()
+            affected_rows = 0
             data_source = "em"  # 东方财富 stock_zh_a_spot_em：成交量单位为「手」
+            # HTTP 必须在开 Session 之前，避免空会话/异常路径泄漏连接
             try:
                 df = self._retry_on_failure(ak.stock_zh_a_spot_em)
             except Exception as e:
@@ -413,6 +414,7 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 return False
             self.logger.info("采集到 %d 条股票行情数据", len(df))
 
+            session = SessionLocal()
             disabled_codes, free_float_by_code = self._load_collect_policy(session)
             if disabled_codes:
                 self.logger.info(
@@ -485,7 +487,6 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             session.commit()
-            session.close()
             self.logger.info("批量入库完成: %s", desc)
             return True
         except Exception as e:
@@ -493,7 +494,11 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
             self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)
             # 记录错误日志
             try:
-                if 'session' in locals():
+                if session is not None:
+                    try:
+                        session.rollback()
+                    except Exception:
+                        pass
                     session.execute(text('''
                         INSERT INTO realtime_collect_operation_logs 
                         (operation_type, operation_desc, affected_rows, status, error_message, collect_source, created_at)
@@ -510,7 +515,14 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                     session.commit()
             except Exception as log_error:
                 self.logger.error("记录错误日志失败: %s", str(log_error))
-            finally:
-                if 'session' in locals():
+            return False
+        finally:
+            if session is not None:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+                try:
                     session.close()
-            return False 
+                except Exception:
+                    pass

@@ -119,11 +119,11 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
         Returns:
             bool: 是否成功
         """
+        session = None
         try:
-            affected_rows = 0 
-            session = SessionLocal()
+            affected_rows = 0
             try:
-                # 使用增强的回退机制获取数据
+                # HTTP 在开 Session 之前
                 df = self.get_realtime_quotes_with_fallback()
             except Exception as e:
                 self.logger.error(f"所有数据源都失败了: {e}")
@@ -134,6 +134,7 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                 return False
                 
             self.logger.info("采集到 %d 条股票行情数据", len(df))
+            session = SessionLocal()
 
             for _, row in df.iterrows():
                 code = row['代码']
@@ -258,7 +259,6 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             session.commit()
-            session.close()
             self.logger.info("全部股票行情数据采集并入库完成")
             return True
         except Exception as e:
@@ -266,7 +266,11 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
             self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)
             # 记录错误日志
             try:
-                if 'session' in locals():
+                if session is not None:
+                    try:
+                        session.rollback()
+                    except Exception:
+                        pass
                     session.execute(text('''
                         INSERT INTO realtime_collect_operation_logs 
                         (operation_type, operation_desc, affected_rows, status, error_message, created_at)
@@ -282,7 +286,14 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                     session.commit()
             except Exception as log_error:
                 self.logger.error("记录错误日志失败: %s", str(log_error))
-            finally:
-                if 'session' in locals():
-                    session.close()
             return False
+        finally:
+            if session is not None:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+                try:
+                    session.close()
+                except Exception:
+                    pass

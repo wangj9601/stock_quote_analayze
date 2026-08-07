@@ -1,10 +1,9 @@
 
-from database import get_db
-from sqlalchemy import text
+from backend_api.database import SessionLocal
 import pandas as pd
 
 def check_db():
-    db = next(get_db())
+    db = SessionLocal()
     try:
         # Check total count of stocks in stock_realtime_quote for the latest date
         latest_date_result = pd.read_sql_query("""
@@ -53,6 +52,10 @@ def check_db():
             print(f"Stocks in quote but not in watchlist: {len(quote_codes - overlap)}")
 
     finally:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         db.close()
 
 if __name__ == "__main__":

@@ -243,10 +243,11 @@ async def get_stocks_list(request: Request, db: Session = Depends(get_db)):
 @router.get("/quote_board")
 async def get_quote_board(limit: int = Query(10, description="返回前N个涨幅最高的股票")):
     """获取沪深京A股最新行情，返回涨幅最高的前limit个股票（始终从stock_realtime_quote表读取，不联表）"""
+    db = None
     try:
-        # 获取最新交易日期的实时行情数据
-        db = next(get_db())
-        
+        from backend_api.database import SessionLocal
+
+        db = SessionLocal()
         # 首先获取最新的交易日期（使用 session.execute 避免 pd.read_sql_query 与 Engine 不兼容）
         latest_date_row = db.execute(text("""
             SELECT MAX(trade_date) AS latest_date
@@ -255,7 +256,6 @@ async def get_quote_board(limit: int = Query(10, description="返回前N个涨�
         """)).fetchone()
 
         if not latest_date_row or latest_date_row[0] is None:
-            db.close()
             return JSONResponse({'success': False, 'message': '暂无行情数据'}, status_code=404)
 
         latest_trade_date = latest_date_row[0]
@@ -297,13 +297,19 @@ async def get_quote_board(limit: int = Query(10, description="返回前N个涨�
                 'turnover': row[9],
             })
         print(f"✅(DB) 成功获取 {len(data)} 条A股涨幅榜数据（已去重）")
-        db.close()
         return JSONResponse({'success': True, 'data': data})
     except Exception as e:
         print(f"❌ 获取A股涨幅榜数据失败: {str(e)}")
         tb = traceback.format_exc()
         print(tb)
         return JSONResponse({'success': False, 'message': '获取A股涨幅榜数据失败', 'error': str(e), 'traceback': tb}, status_code=500)
+    finally:
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            db.close()
     
 # 获取A股最新行情排行
 @router.get("/quote_board_list")
@@ -321,7 +327,8 @@ def get_quote_board_list(
         print(f"📊 获取A股行情排行 (from DB): type={ranking_type}, market={market}, page={page}, page_size={page_size}, keyword={keyword}")
         
         # 1. 获取最新交易日期的实时行情数据（使用 session.execute 避免 pd.read_sql_query 与 Engine 不兼容）
-        db = next(get_db())
+        from backend_api.database import SessionLocal
+        db = SessionLocal()
         try:
             latest_date_row = db.execute(text("""
                 SELECT MAX(trade_date) AS latest_date
@@ -356,6 +363,10 @@ def get_quote_board_list(
                 rows = result.fetchall()
                 df = pd.DataFrame(rows, columns=result.keys()) if rows else pd.DataFrame()
         finally:
+            try:
+                db.rollback()
+            except Exception:
+                pass
             db.close()
 
         # 3. 市场类型过滤
@@ -468,12 +479,17 @@ def get_quote_board_list(
         if not fallback_used and not df_page.empty and 'code' in df_page.columns:
             code_list = [str(code) for code in df_page['code'].tolist() if code]
             if code_list:
-                db_lookup = next(get_db())
+                from backend_api.database import SessionLocal
+                db_lookup = SessionLocal()
                 try:
                     name_rows = db_lookup.query(StockBasicInfo.code, StockBasicInfo.name).filter(
                         StockBasicInfo.code.in_(code_list)
                     ).all()
                 finally:
+                    try:
+                        db_lookup.rollback()
+                    except Exception:
+                        pass
                     db_lookup.close()
                 name_map = {str(row.code): row.name for row in name_rows if row.name}
                 def resolve_name(row):
@@ -487,7 +503,6 @@ def get_quote_board_list(
         data = clean_nan(data)
         
         print(f"✅ 成功获取 {len(data)} 条A股排行数据 (总数: {total})")
-        db.close()
         return JSONResponse({'success': True, 'data': data, 'total': total, 'page': page, 'page_size': page_size})
         
     except Exception as e:
@@ -516,8 +531,9 @@ def get_volume_aberration_list(
         order = "desc"
 
     from backend_api.services.volume_aberration_service import get_volume_aberration_data
+    from backend_api.database import SessionLocal
 
-    db = next(get_db())
+    db = SessionLocal()
     try:
         result, trade_date = get_volume_aberration_data(db, market=market, date=date, order=order)
         if trade_date is None:
@@ -552,6 +568,10 @@ def get_volume_aberration_list(
         traceback.print_exc()
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
     finally:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         db.close()
 
 
