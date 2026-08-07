@@ -576,9 +576,28 @@ class PushService:
                     record_id=None,
                     error_message=error_msg
                 )
+
+            report_info = report_result.report_info
+            report_path = report_result.file_path
+            if report_info is None or not report_path:
+                error_msg = "报告生成成功但缺少报告信息或文件路径"
+                logger.error(f"用户 {user_id}: {error_msg}")
+                log_push_event(
+                    event_type=PushEventType.REPORT_GENERATION_FAILED,
+                    user_id=user_id,
+                    error_message=error_msg,
+                    details={"report_type": config.report_type}
+                )
+                return PushResult(
+                    user_id=user_id,
+                    success=False,
+                    channel_results=[],
+                    record_id=None,
+                    error_message=error_msg
+                )
             
             # 如果用户没有自选股，返回成功但不推送
-            if not report_result.report_info.has_data:
+            if not report_info.has_data:
                 logger.warning(f"用户 {user_id} 没有自选股数据，跳过推送")
                 # 记录数据缺失事件
                 log_data_missing(
@@ -594,7 +613,7 @@ class PushService:
                     error_message="用户没有自选股数据"
                 )
             
-            logger.info(f"用户 {user_id} 报告生成成功: {report_result.file_path}")
+            logger.info(f"用户 {user_id} 报告生成成功: {report_path}")
             
             # 记录报告生成成功事件
             log_push_event(
@@ -602,16 +621,16 @@ class PushService:
                 user_id=user_id,
                 details={
                     "report_type": config.report_type,
-                    "file_path": report_result.file_path,
-                    "stock_count": report_result.report_info.stock_count
+                    "file_path": report_path,
+                    "stock_count": report_info.stock_count
                 }
             )
             
             # 如果有数据缺失的股票，记录警告
-            if report_result.report_info.missing_data_stocks:
+            if report_info.missing_data_stocks:
                 log_data_missing(
                     user_id=user_id,
-                    missing_stocks=report_result.report_info.missing_data_stocks,
+                    missing_stocks=report_info.missing_data_stocks,
                     context="report_generation"
                 )
             
@@ -627,7 +646,7 @@ class PushService:
                 push_time=push_time,
                 report_type=config.report_type,
                 channel_status=initial_channel_status,
-                report_file_path=report_result.file_path,
+                report_file_path=report_path,
                 max_retries=3
             )
             
@@ -651,16 +670,16 @@ class PushService:
                     if channel == 'wechat':
                         result = self._send_via_wechat(
                             user=user,
-                            report_path=report_result.file_path,
-                            report_info=report_result.report_info,
+                            report_path=report_path,
+                            report_info=report_info,
                             wechat_user_ids=self._wechat_recipient_userids(user, config),
                             push_config=config,
                         )
                     elif channel == 'email':
                         result = self._send_via_email(
                             user=user,
-                            report_path=report_result.file_path,
-                            report_info=report_result.report_info,
+                            report_path=report_path,
+                            report_info=report_info,
                             push_record_id=record.id,
                         )
                     else:
@@ -1376,7 +1395,27 @@ class PushService:
             
             # 获取报告信息
             report_info = self.report_service.get_report_info(record.report_file_path)
-            
+            if report_info is None:
+                error_msg = "无法获取报告信息，无法重试推送"
+                logger.error(f"记录 {record_id}: {error_msg}")
+
+                self.record_repository.update_record_status(
+                    record_id=record_id,
+                    status="failed",
+                    error_messages={"system": error_msg},
+                    completed_at=datetime.now()
+                )
+
+                return PushResult(
+                    user_id=user_id,
+                    success=False,
+                    channel_results=[],
+                    record_id=record_id,
+                    error_message=error_msg
+                )
+
+            report_path = record.report_file_path
+
             # 重试各个失败的渠道
             channel_results = []
             updated_channel_status = dict(record.channel_status)  # 复制现有状态
@@ -1387,7 +1426,7 @@ class PushService:
                     if channel == 'wechat':
                         result = self._send_via_wechat(
                             user=user,
-                            report_path=record.report_file_path,
+                            report_path=report_path,
                             report_info=report_info,
                             wechat_user_ids=self._wechat_recipient_userids(user, config_retry),
                             push_config=config_retry,
@@ -1395,7 +1434,7 @@ class PushService:
                     elif channel == 'email':
                         result = self._send_via_email(
                             user=user,
-                            report_path=record.report_file_path,
+                            report_path=report_path,
                             report_info=report_info
                         )
                     else:

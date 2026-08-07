@@ -131,22 +131,29 @@ def prepare_spot_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     available_cols = [col for col in rename_map.keys() if col in df.columns]
     if not available_cols:
         return pd.DataFrame()
-    df_prepared = df[available_cols].rename(columns=rename_map)
+    # 避免 DataFrame.rename(columns=dict) 与 pandas stubs 重载不匹配的类型检查错误
+    df_prepared = df.loc[:, available_cols].copy()
+    df_prepared.columns = [rename_map[col] for col in available_cols]
     df_prepared['code'] = df_prepared['code'].apply(normalize_code)
     
-    def to_float(series):
+    def to_float(series: pd.Series) -> pd.Series:
         return pd.to_numeric(series, errors='coerce')
+
+    def to_pct_float(series: pd.Series) -> pd.Series:
+        return pd.to_numeric(series.astype(str).str.replace('%', ''), errors='coerce')
     
-    df_prepared['current'] = to_float(df_prepared.get('current'))
-    df_prepared['change'] = to_float(df_prepared.get('change'))
-    df_prepared['change_percent'] = pd.to_numeric(
-        df_prepared.get('change_percent', '').astype(str).str.replace('%', ''), errors='coerce'
-    )
-    df_prepared['volume'] = to_float(df_prepared.get('volume'))
-    df_prepared['turnover'] = to_float(df_prepared.get('turnover'))
-    df_prepared['rate'] = pd.to_numeric(
-        df_prepared.get('rate', '').astype(str).str.replace('%', ''), errors='coerce'
-    )
+    if 'current' in df_prepared.columns:
+        df_prepared['current'] = to_float(df_prepared['current'])
+    if 'change' in df_prepared.columns:
+        df_prepared['change'] = to_float(df_prepared['change'])
+    if 'change_percent' in df_prepared.columns:
+        df_prepared['change_percent'] = to_pct_float(df_prepared['change_percent'])
+    if 'volume' in df_prepared.columns:
+        df_prepared['volume'] = to_float(df_prepared['volume'])
+    if 'turnover' in df_prepared.columns:
+        df_prepared['turnover'] = to_float(df_prepared['turnover'])
+    if 'rate' in df_prepared.columns:
+        df_prepared['rate'] = to_pct_float(df_prepared['rate'])
     return df_prepared
 
 # 获取所有股票的基本信息（代码和名称），用于前端登录后全局缓存
@@ -1417,9 +1424,9 @@ async def get_latest_financial(code: str = Query(..., description="股票代码"
         print(f"[latest_financial] 股票类型: {'港股' if is_hk else 'A股'}")
         
         if is_hk:
-            # 港股：使用 stock_hk_financial_indicator_em 接口
+            # 港股：使用 stock_financial_hk_analysis_indicator_em（东方财富-港股-财务分析-主要指标）
             try:
-                df = ak.stock_hk_financial_indicator_em(symbol=code)
+                df = ak.stock_financial_hk_analysis_indicator_em(symbol=code, indicator="报告期")
             except Exception as e:
                 print(f"[latest_financial] 港股调用akshare接口失败: {e}")
                 import traceback
@@ -1437,28 +1444,33 @@ async def get_latest_financial(code: str = Query(..., description="股票代码"
             
             print(f"[latest_financial] 港股DataFrame columns: {df.columns.tolist()}")
             
-            # 港股数据格式：单行多列，每个指标是一列
-            # 取第一行数据
+            # 按报告期降序，取最新一期
+            if "REPORT_DATE" in df.columns:
+                df = df.sort_values("REPORT_DATE", ascending=False)
             try:
                 row_data = df.iloc[0]
             except (IndexError, KeyError) as e:
                 print(f"[latest_financial] 港股获取行数据失败: {e}")
                 return JSONResponse({"success": False, "message": "未获取到财务数据"}, status_code=404)
             
-            # 港股指标映射（列名 -> 结果key）
+            # 港股英文字段 -> 结果 key（该接口无市盈率/市净率）
             hk_indicator_map = {
-                "pe": ["市盈率"],
-                "pb": ["市净率"],
-                "roe": ["股东权益回报率(%)"],
-                "roa": ["总资产回报率(%)"],
-                "revenue": ["营业总收入"],
-                "profit": ["净利润"],
-                "eps": ["基本每股收益(元)"],
-                "bps": ["每股净资产(元)"]
+                "roe": ["ROE_AVG", "ROE_YEARLY"],
+                "roa": ["ROA"],
+                "revenue": ["OPERATE_INCOME"],
+                "profit": ["HOLDER_PROFIT"],
+                "eps": ["BASIC_EPS"],
+                "bps": ["BPS"],
             }
             
+            report_date = None
+            if "REPORT_DATE" in row_data.index and not pd.isna(row_data["REPORT_DATE"]):
+                report_date = str(row_data["REPORT_DATE"])[:10]
+            
             result = {
-                "report_date": None  # 港股接口不返回报告期
+                "report_date": report_date,
+                "pe": None,
+                "pb": None,
             }
             
             for key, possible_cols in hk_indicator_map.items():
@@ -1467,14 +1479,11 @@ async def get_latest_financial(code: str = Query(..., description="股票代码"
                     try:
                         if col_name not in df.columns:
                             continue
-                        # 使用安全的访问方式
                         val = row_data[col_name] if col_name in row_data.index else None
                         if val is None:
                             continue
-                        # 处理百分比字段（如ROE、ROA），去掉%号并转换为数值
                         if isinstance(val, str) and '%' in val:
                             val = val.replace('%', '').strip()
-                        # 检查是否为NaN或空值
                         if pd.isna(val) or (isinstance(val, str) and val.strip() == ''):
                             continue
                         try:
@@ -1582,10 +1591,16 @@ async def get_financial_indicator_list(
         print(f"[financial_indicator_list] 股票类型: {'港股' if is_hk else 'A股'}")
         
         if is_hk:
-            # 港股：使用 stock_hk_financial_indicator_em 接口
-            # 注意：该接口只返回最新报告期的单行数据，没有历史数据
+            # 港股：使用 stock_financial_hk_analysis_indicator_em（支持年度/报告期多期数据）
+            hk_indicator = "年度"
+            if indicator in ("1", "按报告期"):
+                hk_indicator = "报告期"
+            elif indicator in ("2", "按年度"):
+                hk_indicator = "年度"
+            elif indicator in ("年度", "报告期"):
+                hk_indicator = indicator
             try:
-                df = ak.stock_hk_financial_indicator_em(symbol=symbol)
+                df = ak.stock_financial_hk_analysis_indicator_em(symbol=symbol, indicator=hk_indicator)
             except Exception as e:
                 print(f"[financial_indicator_list] 港股调用akshare接口失败: {e}")
                 import traceback
@@ -1600,59 +1615,50 @@ async def get_financial_indicator_list(
                 print(f"[financial_indicator_list] 港股DataFrame为空")
                 return JSONResponse({"success": False, "message": "未获取到财务数据"}, status_code=404)
             
-            # 港股数据格式：单行多列，需要转换为与A股一致的格式
-            try:
-                row_data = df.iloc[0]
-            except (IndexError, KeyError) as e:
-                print(f"[financial_indicator_list] 港股获取行数据失败: {e}")
-                return JSONResponse({"success": False, "message": "未获取到财务数据"}, status_code=404)
-            
-            # 港股指标映射（列名 -> 结果字段名）
-            hk_indicator_map = {
-                "净资产收益率": "股东权益回报率(%)",
-                "资产收益率": "总资产回报率(%)",
-                "营业总收入": "营业总收入",
-                "净利润": "净利润",
-                "基本每股收益": "基本每股收益(元)",
-                "每股净资产": "每股净资产(元)"
+            # 英文字段 -> 与 A 股前端一致的中文结果字段
+            hk_col_map = {
+                "报告期": "REPORT_DATE",
+                "净资产收益率": "ROE_AVG",
+                "资产收益率": "ROA",
+                "营业总收入": "OPERATE_INCOME",
+                "净利润": "HOLDER_PROFIT",
+                "基本每股收益": "BASIC_EPS",
+                "每股净资产": "BPS",
             }
             
-            # 构建返回数据（港股只有一条记录，没有报告期）
-            result_data = {}
-            for result_key, col_name in hk_indicator_map.items():
-                try:
-                    if col_name not in df.columns:
-                        print(f"[financial_indicator_list] 港股指标 {result_key} 列 {col_name} 不存在")
-                        result_data[result_key] = None
-                        continue
-                    # 使用安全的访问方式
-                    val = row_data[col_name] if col_name in row_data.index else None
-                    if val is None:
-                        result_data[result_key] = None
-                        continue
-                    # 处理百分比字段
-                    if isinstance(val, str) and '%' in val:
-                        val = val.replace('%', '').strip()
-                    # 检查是否为NaN或空值
-                    if pd.isna(val) or (isinstance(val, str) and val.strip() == ''):
-                        result_data[result_key] = None
-                        continue
+            records = []
+            for _, row in df.iterrows():
+                result_data = {}
+                for result_key, col_name in hk_col_map.items():
                     try:
-                        result_data[result_key] = float(val)
-                    except (ValueError, TypeError) as e:
-                        print(f"[financial_indicator_list] 港股指标 {result_key} 列 {col_name} 值转换失败: {val}, 错误: {e}")
+                        if col_name not in df.columns:
+                            result_data[result_key] = None
+                            continue
+                        val = row[col_name]
+                        if result_key == "报告期":
+                            if pd.isna(val):
+                                result_data[result_key] = None
+                            else:
+                                result_data[result_key] = str(val)[:10]
+                            continue
+                        if val is None or pd.isna(val) or (isinstance(val, str) and val.strip() == ''):
+                            result_data[result_key] = None
+                            continue
+                        if isinstance(val, str) and '%' in val:
+                            val = val.replace('%', '').strip()
+                        try:
+                            result_data[result_key] = float(val)
+                        except (ValueError, TypeError) as e:
+                            print(f"[financial_indicator_list] 港股指标 {result_key} 值转换失败: {val}, 错误: {e}")
+                            result_data[result_key] = None
+                    except Exception as e:
+                        print(f"[financial_indicator_list] 港股指标 {result_key} 处理出错: {e}")
                         result_data[result_key] = None
-                except Exception as e:
-                    print(f"[financial_indicator_list] 港股指标 {result_key} 处理列 {col_name} 时出错: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    result_data[result_key] = None
+                records.append(result_data)
             
-            # 港股没有报告期，使用当前日期作为报告期
-            result_data["报告期"] = datetime.datetime.now().strftime("%Y-%m-%d")
-            
-            # 返回单条记录列表（保持与A股接口格式一致）
-            data = [clean_nan(result_data)]
+            # 按报告期升序（与 A 股图表从左到右一致）
+            records.sort(key=lambda x: x.get("报告期") or "")
+            data = clean_nan(records)
             return JSONResponse({"success": True, "data": data})
         else:
             # A股：使用 stock_financial_abstract_ths 接口（原有逻辑）
