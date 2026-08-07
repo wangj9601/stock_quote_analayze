@@ -2263,6 +2263,24 @@ async def get_gms_strategy(
             item["market"] = market
             item["industry"] = _gms_industry_map.get((market, _gms_industry_norm_code(code)))
 
+        # 主行业板共振：斜率/涨跌旁证 + board_weak 软减分（资金流字段预留）
+        try:
+            from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+            from backend_core.strategies.gms.board_resonance import (
+                enrich_results_with_board_resonance,
+            )
+
+            _br_src = board_code_source or DEFAULT_BOARD_CODE_SOURCE
+            enrich_results_with_board_resonance(
+                db,
+                results_data,
+                config=config,
+                end_date=target_date,
+                board_code_source=_br_src,
+            )
+        except Exception as _br_ex:
+            logger.warning("GMS 行业板共振 enrich 失败: %s", _br_ex)
+
         observe_code_keys: set[str] = set()
         formal_trade_code_keys: set[str] = set()
         if token:

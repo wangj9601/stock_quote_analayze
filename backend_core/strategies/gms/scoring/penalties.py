@@ -53,6 +53,16 @@ PENALTY_RULE_TYPES = {
         "default_min_rr": 1.5,
         "default_min_downside_pct": 0.015,
     },
+    "board_weak": {
+        "id": "board_weak",
+        "label": "主行业板走弱",
+        "description": (
+            "个股所属同花顺主行业板环境偏弱时软减分（非硬过滤）。"
+            "默认用成分量权基准近 N 日斜率 < 0 判定；斜率不可用时回退当日板块涨跌幅 < 0。"
+            "板级资金流尚未采集，本项不依赖资金流；二期可与净流入组合。"
+        ),
+        "default_points": 10,
+    },
 }
 
 
@@ -147,6 +157,19 @@ def _eval_rule(
         )
         return float(rr) < min_rr
 
+    if rule_id == "board_weak":
+        # 选股后处理会写入 board_weak；引擎内若无字段则不扣
+        if row.get("board_weak") is True:
+            return True
+        slope = row.get("sector_slope")
+        if slope is not None:
+            try:
+                th = safe_float((rule or {}).get("slope_threshold"), 0.0)
+                return float(slope) < th
+            except (TypeError, ValueError):
+                return False
+        return False
+
     return False
 
 
@@ -205,6 +228,13 @@ def _effective_penalty_points(
         extra["min_downside_pct"] = info.get("min_downside_pct")
         extra["downside_raw"] = info.get("downside_raw")
         extra["downside"] = info.get("downside")
+        return base_points, extra
+    if rule_id == "board_weak":
+        extra["sector_slope"] = row.get("sector_slope")
+        extra["board_change_percent"] = row.get("board_change_percent")
+        extra["board_weak_reason"] = row.get("board_weak_reason")
+        extra["primary_board_code"] = row.get("primary_board_code")
+        extra["primary_board_name"] = row.get("primary_board_name")
         return base_points, extra
     if rule_id != "close_below_ma60":
         return base_points, extra

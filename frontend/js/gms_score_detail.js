@@ -101,6 +101,15 @@ const GmsScoreDetail = {
                 }
                 return `结构盈亏比 RR=${rr} &lt; ${minRr}`;
             }
+            if (p.id === 'board_weak') {
+                const slope = p.sector_slope != null ? Number(p.sector_slope).toFixed(4) : '--';
+                const chg = p.board_change_percent != null
+                    ? (Number(p.board_change_percent).toFixed(2) + '%')
+                    : '--';
+                const board = p.primary_board_name || p.primary_board_code || '';
+                const why = p.board_weak_reason || '';
+                return `主行业板${board ? ' ' + board : ''} 斜率=${slope} 涨跌=${chg}${why ? '（' + why + '）' : ''}`;
+            }
             return '—';
         };
         const versionMetaHtml = `
@@ -170,6 +179,16 @@ const GmsScoreDetail = {
         structureSectionHtml += `<tr><td>阻力</td><td>${resists.length ? resists.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>`;
         structureSectionHtml += `<tr><td>支撑</td><td>${supports.length ? supports.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>`;
         structureSectionHtml += '</tbody></table></div>';
+        const br = (sd.board_resonance && typeof sd.board_resonance === 'object') ? sd.board_resonance : {};
+        let boardSectionHtml = '<div class="gms-score-detail-section"><strong>【行业板共振】</strong>';
+        boardSectionHtml += '<div class="gms-version-meta-line">';
+        boardSectionHtml += `<span>主行业板 <strong>${br.primary_board_name || br.primary_board_code || '--'}</strong></span>`;
+        boardSectionHtml += `<span>斜率 <strong>${br.sector_slope != null ? Number(br.sector_slope).toFixed(4) : '--'}</strong></span>`;
+        boardSectionHtml += `<span>当日涨跌 <strong>${br.board_change_percent != null ? Number(br.board_change_percent).toFixed(2) + '%' : '--'}</strong></span>`;
+        boardSectionHtml += `<span>环境 <strong>${br.board_weak ? '走弱' : '正常/未知'}</strong></span>`;
+        if (br.board_weak_reason) boardSectionHtml += `<span>${br.board_weak_reason}</span>`;
+        boardSectionHtml += `<span>资金流 <strong>${br.enable_board_fund_flow && br.board_main_net_inflow != null ? br.board_main_net_inflow : '暂无（二期）'}</strong></span>`;
+        boardSectionHtml += '</div></div>';
         return `
             <div class="gms-score-detail-inner">
                 ${versionMetaHtml}
@@ -208,6 +227,7 @@ const GmsScoreDetail = {
                 </div>
                 ${penaltySectionHtml}
                 ${structureSectionHtml}
+                ${boardSectionHtml}
                 <div class="gms-score-detail-section gms-indicators-section">
                     <strong>计算指标细项</strong>
                     <table class="gms-weight-table gms-indicators-table">

@@ -5672,6 +5672,18 @@ const ScreeningPage = {
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;')
                     .replace(/</g, '&lt;');
+                const gmsBoardName = stock.primary_board_name || stock.primary_board_code || '--';
+                const gmsBoardAttr = String(gmsBoardName)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;')
+                    .replace(/</g, '&lt;');
+                const gmsSlopeTxt = (stock.sector_slope != null && Number.isFinite(Number(stock.sector_slope)))
+                    ? Number(stock.sector_slope).toFixed(4)
+                    : '--';
+                const gmsBoardEnv = stock.board_weak
+                    ? `<span class="gms-risk-tag" title="${String(stock.board_weak_reason || 'board_weak').replace(/"/g, '&quot;')}">走弱</span>`
+                    : (stock.primary_board_code ? '<span class="gms-muted">正常</span>' : '--');
                 const gmsDetailHref = `stock.html?code=${encodeURIComponent(gmsCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 const gmsSt = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
                 const gmsSupport = stock.nearest_support != null
@@ -5699,6 +5711,9 @@ const ScreeningPage = {
                         <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${gmsDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${gmsCode}</a></td>
                         <td class="gms-col-name"><span class="stock-name" title="${gmsTitleAttr}">${gmsName}</span></td>
                         <td class="gms-col-industry"><span class="stock-industry" title="${gmsIndustryAttr}">${gmsIndustry === '--' ? '--' : gmsIndustryAttr}</span></td>
+                        <td class="gms-col-industry"><span class="stock-industry" title="${gmsBoardAttr}">${gmsBoardAttr}</span></td>
+                        <td class="gms-col-narrow">${gmsSlopeTxt}</td>
+                        <td class="gms-col-narrow">${gmsBoardEnv}</td>
                         <td style="display:none;"><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-narrow"><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td class="gms-col-narrow"><span class="${buyTypeClass}">${buyType}</span></td>
@@ -5725,7 +5740,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="19" class="gms-score-detail-cell">${scoreDetailHtml}</td>
+                        <td colspan="22" class="gms-score-detail-cell">${scoreDetailHtml}</td>
                     </tr>
                 `;
             }
