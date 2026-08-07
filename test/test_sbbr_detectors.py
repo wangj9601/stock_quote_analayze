@@ -61,7 +61,7 @@ def test_size_filter_circ_shares_too_small():
 
 def test_range_bottom_touches():
     bars = []
-    # 构建窄幅箱体，多次触底
+    # 构建窄幅箱体，多次触底（真横盘，不应被趋势过滤误杀）
     for i in range(60):
         if i % 15 == 0:
             c = 9.8
@@ -75,13 +75,85 @@ def test_range_bottom_touches():
     res = detect_range_bottom(
         bars,
         lookback=60,
-        max_range_pct=0.6,
+        max_range_pct=0.35,
         touch_tol_pct=0.03,
         min_touches=3,
         max_touches=20,
         require_up_vol_gt_down=False,
     )
-    assert res["matched"] is True or res["touches"] >= 3
+    assert res["matched"] is True
+    assert res["mode"] == "range_accumulation"
+
+
+def _declining_channel_bars(n: int = 60, start: float = 12.0, end: float = 9.5):
+    """合成下跌通道：高点在前、低点持续下移，振幅可能仍 < 0.60。"""
+    bars = []
+    for i in range(n):
+        t = i / max(n - 1, 1)
+        c = start + (end - start) * t
+        # 小幅日内波动，整体下行
+        h = c * 1.015
+        l = c * 0.985
+        vol = 80 + (i % 7) * 5
+        month = 1 + i // 28
+        day = (i % 28) + 1
+        bars.append(_bar(f"2024-{month:02d}-{day:02d}", c, h, l, c, vol))
+    return bars
+
+
+def test_range_bottom_rejects_declining_channel():
+    """下跌通道即使振幅未超旧阈值，也应被趋势/新低/高前低后等过滤拒绝。"""
+    bars = _declining_channel_bars()
+    # 故意放宽振幅，确保是过滤器而非 range_too_wide 拦住
+    res = detect_range_bottom(
+        bars,
+        lookback=60,
+        max_range_pct=0.60,
+        touch_tol_pct=0.03,
+        min_touches=1,
+        max_touches=60,
+        require_up_vol_gt_down=False,
+    )
+    assert res["matched"] is False
+    assert res["mode"] is None
+    reason = (res.get("detail") or {}).get("reason")
+    assert reason in {
+        "close_drop_too_steep",
+        "close_slope_too_negative",
+        "new_low_sequence",
+        "high_before_low",
+        "ma_env_reject",
+    }
+
+
+def test_range_bottom_true_sideways_passes():
+    """真横盘：窄幅震荡 + 有限次触底，默认过滤下应命中。"""
+    bars = []
+    touch_days = {5, 20, 35, 50}  # 恰好 4 次贴近下沿
+    for i in range(60):
+        if i in touch_days:
+            c, low, high, vol = 9.95, 9.90, 10.05, 55
+        else:
+            # 低点远离支撑容差带（support*1.02），避免误计触底
+            c = 10.22 + (i % 5) * 0.02
+            low, high = 10.12, c + 0.05
+            vol = 120 if (i % 2 == 0) else 100
+        month = 1 + i // 28
+        day = (i % 28) + 1
+        bars.append(_bar(f"2024-{month:02d}-{day:02d}", c, high, low, c, vol))
+    cfg = get_default_sbbr_config()
+    res = detect_bottom(bars, [0.0] * len(bars), cfg)
+    assert res["matched"] is True
+    assert res["mode"] == "range_accumulation"
+    assert 3 <= int(res.get("touches") or 0) <= 4
+
+
+def test_detect_bottom_wrapper_uses_tight_range_default():
+    cfg = get_default_sbbr_config()
+    assert abs(float(cfg["bottom"]["max_range_pct"]) - 0.35) < 1e-9
+    bars = [_bar(f"2024-05-{(i % 28) + 1:02d}", 10, 10.5, 9.8, 10.1, 80) for i in range(70)]
+    r = detect_bottom(bars, [0.0] * 70, cfg)
+    assert "matched" in r
 
 
 def test_entry_requires_bottom():

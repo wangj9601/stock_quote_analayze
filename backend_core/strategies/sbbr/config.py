@@ -25,11 +25,28 @@ def get_default_sbbr_config() -> Dict[str, Any]:
         },
         "bottom": {
             "lookback_days": 60,
-            "max_range_pct": 0.60,
+            # 箱体振幅上限；0.60 易把下跌通道当横盘，默认收紧到 0.35
+            "max_range_pct": 0.35,
             "touch_tol_pct": 0.02,
             "min_touches": 3,
             "max_touches": 4,
             "up_volume_gt_down": True,
+            # 趋势过滤：近窗收盘跌幅 ≤ 该阈值则拒绝 range_accumulation
+            "max_close_drop_pct": -0.12,
+            # 趋势过滤：收盘相对 OLS 日斜率（slope/mean）低于此值拒绝
+            "min_close_slope_norm": -0.002,
+            # 新低序列：后半段最低相对前半再低 ≥ half_low_drop_pct 则拒绝
+            "reject_new_low_seq": True,
+            "half_low_drop_pct": 0.05,
+            # 高低点时间序：最高落在前 high_early_frac、最低落在后 (1-low_late_frac) → 拒绝
+            "reject_high_before_low": True,
+            "high_early_frac": 0.40,
+            "low_late_frac": 0.60,
+            # 均线环境：价相对 MA 不宜深度空头，MA 不宜明显下行（不影响 panic 路径）
+            "require_ma_env": True,
+            "ma_env_period": 60,
+            "ma_env_max_discount_pct": -0.12,
+            "ma_env_min_slope_norm": -0.0015,
             "panic_market_drop_pct": -0.02,
             "panic_stock_drop_pct": -0.05,
             "panic_reclaim_ma20": True,
@@ -179,6 +196,24 @@ class SBBRConfigManager:
             return out, True
         return out, False
 
+    def _migrate_legacy_bottom_range_defaults(self, params: Dict) -> Tuple[Dict, bool]:
+        """将库内旧默认 max_range_pct=0.60 收紧为 0.35（仅精确匹配旧默认时改写）。"""
+        out = copy.deepcopy(params or {})
+        bottom = dict(out.get("bottom") or {})
+        changed = False
+        if "max_range_pct" in bottom:
+            try:
+                old = float(bottom["max_range_pct"])
+            except (TypeError, ValueError):
+                old = None
+            if old is not None and abs(old - 0.60) < 1e-9:
+                bottom["max_range_pct"] = 0.35
+                changed = True
+        if changed:
+            out["bottom"] = bottom
+            return out, True
+        return out, False
+
     def _session(self):
         from backend_api.database import SessionLocal
 
@@ -234,17 +269,20 @@ class SBBRConfigManager:
             if not row:
                 return self.get_default_config()
             stored, changed = self._migrate_legacy_size_circ_defaults(dict(row.config_params or {}))
+            stored2, changed2 = self._migrate_legacy_bottom_range_defaults(stored)
+            stored = stored2
+            changed = changed or changed2
             if changed:
                 row.config_params = stored
                 try:
                     db.commit()
                     logger.info(
-                        "SBBR config_id=%s 做小口径已迁移为总市值20~200亿 + 流通股5~10亿股",
+                        "SBBR config_id=%s 配置已迁移（做小口径/箱体振幅）",
                         row.id,
                     )
                 except Exception as e:
                     db.rollback()
-                    logger.warning("SBBR 做小口径迁移落库失败: %s", e)
+                    logger.warning("SBBR 配置迁移落库失败: %s", e)
             merged = self._deep_merge(self.get_default_config(), stored)
             _CACHE[int(row.id)] = copy.deepcopy(merged)
             merged["_config_id"] = int(row.id)

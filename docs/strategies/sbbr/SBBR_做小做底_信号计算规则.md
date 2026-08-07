@@ -37,16 +37,30 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 
 ### 3.1 横盘收集（range_accumulation）
 
-观察窗口默认 60 日，需同时满足：
+观察窗口默认 60 日，需同时满足基础条件，并通过下跌通道过滤（避免长期阴跌被误判为箱体筑底）：
 
 1. 振幅约束：
    - `range_pct = (window_high - window_low) / ((window_high + window_low)/2)`
-   - 要求 `range_pct <= 0.60`
+   - 要求 `range_pct <= max_range_pct`（默认 **0.35**）
 2. 量价配合：
    - 上涨日平均成交量 > 下跌日平均成交量（默认开启）
 3. 触底次数：
    - 收盘或最低价贴近区间下沿（容差 2%）
    - 触及次数在 3~4 次（参数可调）
+
+下跌通道过滤（任一命中则拒绝 `range_accumulation`，不影响黄金坑路径）：
+
+4. **趋势过滤（P0）**：
+   - 近窗收盘跌幅 `(close_end - close_start) / close_start <= max_close_drop_pct`（默认 **-12%**）→ 拒绝
+   - 或收盘相对 OLS 日斜率 `slope(close)/mean(close) < min_close_slope_norm`（默认 **-0.002**）→ 拒绝
+5. **新低序列（P0）**：
+   - 后半段最低价相对前半段最低再低 ≥ `half_low_drop_pct`（默认 5%）→ 拒绝
+6. **高低点时间序（P1）**：
+   - 窗口最高落在前 `high_early_frac`（默认 40%）、最低落在后段（位置 ≥ `low_late_frac`，默认 60%）→ 拒绝（高前低后）
+7. **均线环境（P2，默认开启）**：
+   - 最新收盘相对 MA60 折价 `< ma_env_max_discount_pct`（默认 -12%）→ 拒绝
+   - 或 MA60 相对斜率 `< ma_env_min_slope_norm`（默认 -0.0015）→ 拒绝
+   - 观察窗不足 MA 周期时跳过本项
 
 命中后输出：
 
@@ -182,7 +196,11 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 
 - `size.total_mv_min_yi=20`, `size.total_mv_max_yi=200`（总市值，亿元）
 - `size.circ_shares_min_yi=5`, `size.circ_shares_max_yi=10`（流通股本，亿股）
-- `bottom.lookback_days=60`, `bottom.max_range_pct=0.60`, `bottom.min_touches=3`, `bottom.max_touches=4`
+- `bottom.lookback_days=60`, `bottom.max_range_pct=0.35`, `bottom.min_touches=3`, `bottom.max_touches=4`
+- `bottom.max_close_drop_pct=-0.12`, `bottom.min_close_slope_norm=-0.002`
+- `bottom.reject_new_low_seq=true`, `bottom.half_low_drop_pct=0.05`
+- `bottom.reject_high_before_low=true`, `bottom.high_early_frac=0.40`, `bottom.low_late_frac=0.60`
+- `bottom.require_ma_env=true`, `bottom.ma_env_period=60`, `bottom.ma_env_max_discount_pct=-0.12`, `bottom.ma_env_min_slope_norm=-0.0015`
 - `entry.ma_period=20`, `entry.shrink_volume_ratio_max=0.7`, `entry.expand_volume_ratio_min=1.05`, `entry.expand_volume_ratio_max=1.8`
 - `entry.market_lookback_days=5`, `entry.market_drop_pct=-0.01`
 - `defense.default_buffer_pct=0.03`
