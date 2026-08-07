@@ -1333,7 +1333,7 @@ async def list_boards_with_summary(
         "board_code_source 时 asc=同花顺优先）。",
     ),
     page: int = Query(1, ge=1),
-    page_size: int = Query(30, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):

@@ -49,7 +49,7 @@ class BoardConstituentsService {
     if (params.sortBy) q.set('sort_by', params.sortBy)
     if (params.sortOrder) q.set('sort_order', params.sortOrder)
     q.set('page', String(params.page ?? 1))
-    q.set('page_size', String(params.pageSize ?? 30))
+    q.set('page_size', String(params.pageSize ?? 50))
     return apiService.get<{
       success: boolean
       data: BoardSummary[]
