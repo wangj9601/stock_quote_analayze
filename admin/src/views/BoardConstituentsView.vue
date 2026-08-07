@@ -3,7 +3,7 @@
     <div class="page-header">
       <h1 class="text-xl font-semibold">板块成分股维护</h1>
       <p class="text-sm text-gray-500 mt-1">
-        维护东财行业板块与概念板块的成分股映射；支持板块信息编辑、东财同步、全量/单板 Excel 导入导出、单个录入与手动增删；可按股票代码/名称反查所属板块。
+        维护行业/概念板块成分股映射（东财、同花顺等代码来源均可同步）；支持板块信息编辑、按来源自动同步、全量/单板 Excel 导入导出、单个录入与手动增删；可按股票代码/名称反查所属板块。
       </p>
     </div>
 
@@ -169,7 +169,9 @@
             <el-table-column label="操作" width="108" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openBoardEditDialog(row)">编辑</el-button>
-                <el-button link type="primary" size="small" @click.stop="syncOneBoard(row.board_code)">同步</el-button>
+                <el-button link type="primary" size="small" @click.stop="syncOneBoard(row.board_code)">
+                  同步
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -204,7 +206,7 @@
                 <el-button size="small" :disabled="!selectedRows.length" @click="removeSelected">删除选中</el-button>
                 <el-button size="small" type="danger" plain @click="clearBoard">清空本板</el-button>
                 <el-button size="small" :loading="syncingBoard" @click="syncOneBoard(selectedBoard.board_code)">
-                  东财同步
+                  同步成分
                 </el-button>
               </div>
             </div>
@@ -364,7 +366,7 @@
             />
           </el-select>
           <p class="text-xs text-gray-500 mt-1">
-            标识板块代码取自哪家数据源；名称允许重复，用代码来源区分不同记录。东财同步一般为「东方财富」，手工/导入新建默认为「手动维护」。
+            标识板块代码取自哪家数据源；名称允许重复，用代码来源区分不同记录。自动同步按来源走对应接口（东财/同花顺）；手工/导入新建默认可选「手动维护」。
           </p>
         </el-form-item>
         <el-form-item label="交易观察">
@@ -1310,8 +1312,8 @@ async function syncOneBoard(boardCode: string) {
 async function syncAllBoards() {
   const tip =
     boardType.value === 'concept'
-      ? '将先从东财同步概念板块列表，再同步全部板块成分股（耗时较长），是否继续？'
-      : '将同步全部行业板块成分股（耗时较长），是否继续？'
+      ? '将先同步概念板块列表（东财+同花顺），再按各板代码来源同步全部成分股（耗时较长），是否继续？'
+      : '将按各板代码来源同步全部行业板块成分股（东财/同花顺走对应接口；手动等来源会明确跳过，耗时较长），是否继续？'
   try {
     await ElMessageBox.confirm(tip, '全量同步', { type: 'info' })
     syncingBoards.value = true

@@ -46,3 +46,26 @@ def board_code_source_label(value: Optional[str]) -> str:
 
 def resolve_board_code_source(raw: Any, *, fallback: str = LEGACY_DEFAULT_BOARD_CODE_SOURCE) -> str:
     return normalize_board_code_source(raw) or fallback
+
+
+def merge_board_code_source_on_sync(
+    existing: Any,
+    incoming: Any = SYNC_BOARD_CODE_SOURCE,
+) -> str:
+    """东财同步写入用：已有非空来源则保留，禁止把 tonghuashun 等静默改成 eastmoney。
+
+    仅当库中无记录或来源为空时，才写入同步侧来源（默认 eastmoney）。
+    """
+    kept = normalize_board_code_source(existing)
+    if kept:
+        return kept
+    return resolve_board_code_source(incoming, fallback=SYNC_BOARD_CODE_SOURCE)
+
+
+def sql_board_code_source_preserve_on_conflict(table_name: str) -> str:
+    """ON CONFLICT DO UPDATE 片段：保留已有非空 board_code_source。"""
+    return (
+        f"board_code_source = COALESCE("
+        f"NULLIF(TRIM({table_name}.board_code_source), ''), "
+        f"EXCLUDED.board_code_source)"
+    )

@@ -1,5 +1,9 @@
 """
-东财概念板块成分股采集：concept_board_basic_info -> stock_board_concept_cons_em -> concept_board_constituents
+概念板块成分股采集：按 board_code_source 路由东财 / 同花顺接口。
+
+- eastmoney（及空值按 LEGACY）：stock_board_concept_cons_em
+- tonghuashun：同花顺 HTML 成分页
+- manual / huatai / other：明确跳过并统计原因
 """
 from __future__ import annotations
 
@@ -7,13 +11,18 @@ import os
 import time
 import traceback
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import akshare as ak
 from sqlalchemy import text
 
+from backend_api.utils.board_code_source import (
+    LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+    resolve_board_code_source,
+)
 from backend_core.data_collectors.akshare.industry_board_constituents_ak import (
     parse_cons_dataframe,
+    resolve_industry_cons_fetcher,
 )
 from backend_core.database.db import SessionLocal
 
@@ -25,6 +34,10 @@ def _env_float(key: str, default: float) -> float:
         return default
 
 
+# 与行业共用路由语义
+resolve_concept_cons_fetcher = resolve_industry_cons_fetcher
+
+
 class ConceptBoardConstituentsCollector:
     log_table = "realtime_collect_operation_logs"
 
@@ -32,13 +45,50 @@ class ConceptBoardConstituentsCollector:
         self.interval_sec = _env_float("CONCEPT_CONS_API_INTERVAL_SEC", 0.3)
         self.max_retries = int(os.getenv("CONCEPT_CONS_MAX_RETRIES", "2"))
 
-    def _load_board_codes(self, session) -> List[Tuple[str, Optional[str]]]:
+    def _load_boards(self, session) -> List[Tuple[str, Optional[str], str]]:
         rows = session.execute(
-            text("SELECT board_code, board_name FROM concept_board_basic_info ORDER BY board_code")
+            text(
+                """
+                SELECT board_code, board_name, board_code_source
+                FROM concept_board_basic_info
+                ORDER BY board_code
+                """
+            )
         ).fetchall()
-        return [(str(r[0]).strip(), r[1]) for r in rows if r[0]]
+        out: List[Tuple[str, Optional[str], str]] = []
+        for r in rows:
+            if not r[0]:
+                continue
+            src = resolve_board_code_source(r[2], fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE)
+            out.append((str(r[0]).strip(), r[1], src))
+        return out
 
-    def fetch_board_constituents(self, board_code: str) -> List[Tuple[str, str]]:
+    def _load_boards_by_codes(
+        self, session, board_codes: List[str]
+    ) -> List[Tuple[str, Optional[str], str]]:
+        boards: List[Tuple[str, Optional[str], str]] = []
+        for c in board_codes:
+            name_row = session.execute(
+                text(
+                    """
+                    SELECT board_name, board_code_source
+                    FROM concept_board_basic_info
+                    WHERE board_code = :code
+                    LIMIT 1
+                    """
+                ),
+                {"code": c},
+            ).fetchone()
+            if name_row:
+                src = resolve_board_code_source(
+                    name_row[1], fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+                )
+                boards.append((c, name_row[0], src))
+            else:
+                boards.append((c, None, LEGACY_DEFAULT_BOARD_CODE_SOURCE))
+        return boards
+
+    def fetch_board_constituents_eastmoney(self, board_code: str) -> List[Tuple[str, str]]:
         last_err: Optional[Exception] = None
         for attempt in range(self.max_retries + 1):
             try:
@@ -49,6 +99,37 @@ class ConceptBoardConstituentsCollector:
                 if attempt < self.max_retries:
                     time.sleep(self.interval_sec * 2)
         raise last_err  # type: ignore[misc]
+
+    def fetch_board_constituents_tonghuashun(
+        self, board_code: str, board_name: Optional[str] = None
+    ) -> List[Tuple[str, str]]:
+        from backend_core.data_collectors.akshare.ths_board_constituents import (
+            fetch_ths_board_constituents,
+        )
+
+        return fetch_ths_board_constituents(
+            board_code,
+            board_name,
+            kind="concept",
+            interval_sec=self.interval_sec,
+            max_retries=self.max_retries,
+        )
+
+    def fetch_board_constituents(
+        self,
+        board_code: str,
+        board_name: Optional[str] = None,
+        board_code_source: Optional[str] = None,
+    ) -> List[Tuple[str, str]]:
+        route = resolve_concept_cons_fetcher(board_code_source)
+        if route == "tonghuashun":
+            return self.fetch_board_constituents_tonghuashun(board_code, board_name)
+        if route == "unsupported":
+            src = resolve_board_code_source(
+                board_code_source, fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+            )
+            raise ValueError(f"来源 {src} 暂无自动成分采集器，请手工维护或导入")
+        return self.fetch_board_constituents_eastmoney(board_code)
 
     def save_board_constituents(
         self, session, board_code: str, constituents: List[Tuple[str, str]], now: datetime
@@ -110,49 +191,111 @@ class ConceptBoardConstituentsCollector:
         finally:
             session.close()
 
-    def run(self, board_codes: Optional[List[str]] = None) -> None:
+    def run(self, board_codes: Optional[List[str]] = None) -> Dict[str, Any]:
         session = SessionLocal()
         now = datetime.now().replace(microsecond=0)
         total_rows = 0
         ok_boards = 0
-        fail_boards: List[str] = []
+        fail_boards: List[Dict[str, str]] = []
+        skip_boards: List[Dict[str, str]] = []
+        by_source: Dict[str, Dict[str, int]] = {}
         try:
             if board_codes:
-                boards = [(c, None) for c in board_codes]
+                boards = self._load_boards_by_codes(session, board_codes)
             else:
-                boards = self._load_board_codes(session)
+                boards = self._load_boards(session)
             if not boards:
                 print("[概念成分股] concept_board_basic_info 为空，请先同步概念板块列表")
                 self.write_log("概念成分股同步", 0, "fail", "无板块列表")
-                return
+                return {
+                    "ok_boards": 0,
+                    "fail_boards": [],
+                    "skip_boards": [],
+                    "total_rows": 0,
+                    "total_boards": 0,
+                    "by_source": {},
+                    "status": "fail",
+                    "message": "无板块列表",
+                }
 
-            print(f"[概念成分股] 开始同步 {len(boards)} 个板块，间隔 {self.interval_sec}s")
-            for i, (board_code, board_name) in enumerate(boards, 1):
+            print(
+                f"[概念成分股] 开始同步 {len(boards)} 个板块（含全部代码来源），间隔 {self.interval_sec}s"
+            )
+            for i, (board_code, board_name, source) in enumerate(boards, 1):
                 label = board_name or board_code
+                route = resolve_concept_cons_fetcher(source)
+                by_source.setdefault(source, {"ok": 0, "fail": 0, "skip": 0})
+                if route == "unsupported":
+                    reason = f"来源 {source} 暂无自动成分采集器"
+                    skip_boards.append(
+                        {"board_code": board_code, "source": source, "reason": reason}
+                    )
+                    by_source[source]["skip"] += 1
+                    print(f"[概念成分股] 跳过 {label} ({board_code}/{source}): {reason}")
+                    continue
                 try:
-                    cons = self.fetch_board_constituents(board_code)
+                    cons = self.fetch_board_constituents(board_code, board_name, source)
                     n = self.save_board_constituents(session, board_code, cons, now)
                     session.commit()
                     total_rows += n
                     ok_boards += 1
+                    by_source[source]["ok"] += 1
                     if i % 20 == 0 or i == len(boards):
-                        print(f"[概念成分股] {i}/{len(boards)} {label} -> {n} 只")
+                        print(f"[概念成分股] {i}/{len(boards)} {label}[{source}] -> {n} 只")
                 except Exception as e:
                     session.rollback()
-                    fail_boards.append(board_code)
-                    print(f"[概念成分股] 失败 {label} ({board_code}): {e}")
+                    fail_boards.append(
+                        {"board_code": board_code, "source": source, "reason": str(e)}
+                    )
+                    by_source[source]["fail"] += 1
+                    print(f"[概念成分股] 失败 {label} ({board_code}/{source}): {e}")
                 time.sleep(self.interval_sec)
 
-            msg = f"成功 {ok_boards}/{len(boards)} 板块，共 {total_rows} 条成分"
+            status = "success"
+            if fail_boards or skip_boards:
+                status = "partial" if ok_boards else ("fail" if fail_boards else "partial")
+            msg = (
+                f"成功 {ok_boards}/{len(boards)} 板块，共 {total_rows} 条成分"
+                f"；失败 {len(fail_boards)}，跳过 {len(skip_boards)}"
+            )
             if fail_boards:
-                msg += f"；失败 {len(fail_boards)} 个: {','.join(fail_boards[:10])}"
+                sample = ",".join(f"{x['board_code']}({x['source']})" for x in fail_boards[:8])
+                msg += f"；失败样例: {sample}"
+            if skip_boards:
+                sample = ",".join(f"{x['board_code']}({x['source']})" for x in skip_boards[:8])
+                msg += f"；跳过样例: {sample}"
             print(f"[概念成分股] {msg}")
-            self.write_log(msg, total_rows, "success" if not fail_boards else "partial", msg if fail_boards else None)
+            self.write_log(
+                msg,
+                total_rows,
+                status,
+                msg if (fail_boards or skip_boards) else None,
+            )
+            return {
+                "ok_boards": ok_boards,
+                "fail_boards": fail_boards,
+                "skip_boards": skip_boards,
+                "total_rows": total_rows,
+                "total_boards": len(boards),
+                "by_source": by_source,
+                "status": status,
+                "message": msg,
+            }
         except Exception as e:
             session.rollback()
             tb = traceback.format_exc()
             print(f"[概念成分股] 异常: {e}\n{tb}")
             self.write_log("概念成分股同步异常", 0, "fail", str(e) + "\n" + tb)
+            return {
+                "ok_boards": ok_boards,
+                "fail_boards": fail_boards,
+                "skip_boards": skip_boards,
+                "total_rows": total_rows,
+                "total_boards": 0,
+                "by_source": by_source,
+                "status": "fail",
+                "message": str(e),
+            }
         finally:
             session.close()
 

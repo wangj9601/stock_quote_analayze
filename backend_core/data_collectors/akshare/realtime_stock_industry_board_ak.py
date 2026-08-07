@@ -16,6 +16,10 @@ from backend_api.utils.bk_board_code import (
     normalize_bk_board_code,
     normalize_industry_board_code,
 )
+from backend_api.utils.board_code_source import (
+    SYNC_BOARD_CODE_SOURCE,
+    sql_board_code_source_preserve_on_conflict,
+)
 
 try:
     from backend_api.utils.industry_board_query import lookup_leading_code_from_constituents
@@ -179,6 +183,8 @@ class RealtimeStockIndustryBoardCollector:
 
             basic_info_count = 0
             em_to_stored: dict[str, str] = {}
+            # 新建板标东财；已有板保留原 board_code_source（禁止把同花顺改成东财）
+            _src_preserve = sql_board_code_source_preserve_on_conflict("industry_board_basic_info")
             for _, row in df.iterrows():
                 if pd.isna(row.get('board_code')) or row.get('board_code') == '':
                     print(f"Skipping row with empty board_code: {row.get('board_name')}")
@@ -190,11 +196,14 @@ class RealtimeStockIndustryBoardCollector:
                 try:
                     existing = None
                     if name_key:
+                        # 仅复用东财/空来源同名板；同花顺等同名板不参与匹配，避免被东财同步改写
                         existing = session.execute(
                             text(
                                 """
                                 SELECT board_code FROM industry_board_basic_info
                                 WHERE TRIM(board_name) = :name
+                                  AND COALESCE(NULLIF(TRIM(board_code_source), ''), 'eastmoney')
+                                      = 'eastmoney'
                                 LIMIT 1
                                 """
                             ),
@@ -210,17 +219,17 @@ class RealtimeStockIndustryBoardCollector:
                         preferred = em_code if is_valid_bk_board_code(em_code) else None
                         stored_code = allocate_bk_board_code(session, preferred=preferred)
                     em_to_stored[em_code] = stored_code
-                    session.execute(text('''
+                    session.execute(text(f'''
                         INSERT INTO industry_board_basic_info (board_code, board_name, create_date, board_code_source)
                         VALUES (:board_code, :board_name, :create_date, :board_code_source)
                         ON CONFLICT (board_code) DO UPDATE SET
                             board_name = EXCLUDED.board_name,
-                            board_code_source = EXCLUDED.board_code_source
+                            {_src_preserve}
                     '''), {
                         'board_code': stored_code,
                         'board_name': board_name,
                         'create_date': now,
-                        'board_code_source': 'eastmoney',
+                        'board_code_source': SYNC_BOARD_CODE_SOURCE,
                     })
                     basic_info_count += 1
                 except Exception as e:

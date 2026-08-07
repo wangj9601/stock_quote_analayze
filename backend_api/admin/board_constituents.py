@@ -1690,15 +1690,17 @@ async def sync_board_constituents(
     body: SyncBoardConstituentsBody,
     current_user: Any = Depends(get_current_admin),
 ):
-    """从东财同步成分股（可选先同步板块列表）。"""
+    """按 board_code_source 同步成分股（东财/同花顺走对应采集器；可选先同步板块列表）。"""
     uname = getattr(current_user, "username", None) or "admin"
     try:
+        list_synced = 0
         if body.sync_board_list and body.board_type == "concept":
             from backend_core.data_collectors.akshare.concept_board_basic_ak import (
                 ConceptBoardBasicCollector,
             )
 
-            ConceptBoardBasicCollector().run()
+            # 东财 + 同花顺列表；upsert 保留已有 board_code_source
+            list_synced = ConceptBoardBasicCollector().run(include_ths=True)
 
         codes = body.board_codes if body.board_codes else None
         if body.board_type == "industry":
@@ -1706,22 +1708,50 @@ async def sync_board_constituents(
                 IndustryBoardConstituentsCollector,
             )
 
-            IndustryBoardConstituentsCollector().run(board_codes=codes)
+            result = IndustryBoardConstituentsCollector().run(board_codes=codes)
         else:
             from backend_core.data_collectors.akshare.concept_board_constituents_ak import (
                 ConceptBoardConstituentsCollector,
             )
 
-            ConceptBoardConstituentsCollector().run(board_codes=codes)
+            result = ConceptBoardConstituentsCollector().run(board_codes=codes)
+
         scope = "全部" if not codes else f"{len(codes)} 个板块"
+        kind = "行业" if body.board_type == "industry" else "概念"
+        detail = (result or {}).get("message") or ""
+        status_flag = (result or {}).get("status") or "success"
+        prefix = f"{kind}成分股同步"
+        if list_synced:
+            prefix = f"概念列表 {list_synced} 条后，" + prefix
+        message = f"{prefix}完成（{scope}，操作人 {uname}）"
+        if detail:
+            message = f"{message}；{detail}"
+        # 全部失败时返回错误，避免前端显示假成功
+        if status_flag == "fail" and not (result or {}).get("ok_boards"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=message,
+            )
         return {
             "success": True,
-            "message": f"{'行业' if body.board_type == 'industry' else '概念'}成分股同步完成（{scope}，操作人 {uname}）",
+            "message": message,
+            "data": {
+                "status": status_flag,
+                "list_synced": list_synced,
+                "ok_boards": (result or {}).get("ok_boards", 0),
+                "fail_boards": (result or {}).get("fail_boards", []),
+                "skip_boards": (result or {}).get("skip_boards", []),
+                "total_rows": (result or {}).get("total_rows", 0),
+                "total_boards": (result or {}).get("total_boards", 0),
+                "by_source": (result or {}).get("by_source", {}),
+                "operator": uname,
+            },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("板块成分股同步失败")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
-
 
 EXPORT_ALL_COLUMNS = [
     "board_code",

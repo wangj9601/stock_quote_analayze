@@ -10,8 +10,10 @@ from backend_api.utils.board_code_source import (
     LEGACY_DEFAULT_BOARD_CODE_SOURCE,
     SYNC_BOARD_CODE_SOURCE,
     board_code_source_label,
+    merge_board_code_source_on_sync,
     normalize_board_code_source,
     resolve_board_code_source,
+    sql_board_code_source_preserve_on_conflict,
 )
 
 
@@ -42,3 +44,18 @@ class TestBoardCodeSource:
         assert board_code_source_label("tonghuashun") == "同花顺"
         assert board_code_source_label("huatai") == "华泰"
         assert board_code_source_label(None) == "东方财富"
+
+    def test_merge_on_sync_preserves_tonghuashun(self):
+        """已有同花顺板同步后不得改成东财。"""
+        assert merge_board_code_source_on_sync("tonghuashun") == "tonghuashun"
+        assert merge_board_code_source_on_sync("同花顺", "eastmoney") == "tonghuashun"
+        assert merge_board_code_source_on_sync("manual") == "manual"
+        assert merge_board_code_source_on_sync(None) == "eastmoney"
+        assert merge_board_code_source_on_sync("") == "eastmoney"
+        assert merge_board_code_source_on_sync(None, "tonghuashun") == "tonghuashun"
+
+    def test_sql_preserve_fragment(self):
+        frag = sql_board_code_source_preserve_on_conflict("concept_board_basic_info")
+        assert "concept_board_basic_info.board_code_source" in frag
+        assert "EXCLUDED.board_code_source" in frag
+        assert "COALESCE" in frag
