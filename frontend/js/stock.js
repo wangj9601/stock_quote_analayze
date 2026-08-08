@@ -1129,26 +1129,85 @@ const StockPage = {
         }
     },
 
+    _renderBoardTags(boards) {
+        const seen = new Set();
+        const tags = [];
+        (boards || []).forEach((b) => {
+            if (!b) return;
+            const code = String(b.board_code || '').trim();
+            const name = String(b.board_name || code || '').trim();
+            if (!name) return;
+            const key = `${code}|${name.toLowerCase()}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            const title = code || name;
+            const safeName = String(name)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const safeTitle = String(title)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            tags.push(
+                `<a href="markets.html" class="industry-board-tag" title="${safeTitle}">${safeName}</a>`
+            );
+        });
+        return tags.join(' ');
+    },
+
     async loadIndustryBoards() {
-        const wrap = document.getElementById('stockIndustryBoards');
-        const listEl = document.getElementById('stockIndustryBoardsList');
-        if (!wrap || !listEl || !this.stockCode) return;
+        const membership = document.getElementById('stockBoardMembership');
+        const industryWrap = document.getElementById('stockIndustryBoards');
+        const conceptWrap = document.getElementById('stockConceptBoards');
+        const industryList = document.getElementById('stockIndustryBoardsList');
+        const conceptList = document.getElementById('stockConceptBoardsList');
+        if (!membership || !this.stockCode) return;
         try {
-            const url = `${API_BASE_URL}/api/market/stock/${encodeURIComponent(this.stockCode)}/industry_boards`;
+            const url =
+                `${API_BASE_URL}/api/market/stock/${encodeURIComponent(this.stockCode)}/industry_boards` +
+                `?board_code_source=tonghuashun`;
             const resp = await fetch(url);
             const data = await resp.json();
-            if (data.success && data.data && data.data.boards && data.data.boards.length > 0) {
-                wrap.style.display = 'block';
-                listEl.innerHTML = data.data.boards.map(b => {
-                    const name = b.board_name || b.board_code;
-                    return `<a href="markets.html" class="industry-board-tag" title="${b.board_code}">${name}</a>`;
-                }).join(' ');
-            } else {
-                wrap.style.display = 'none';
+            const payload = (data && data.success && data.data) ? data.data : null;
+            let industry = (payload && payload.industry_boards) || [];
+            let concept = (payload && payload.concept_boards) || [];
+            // 兼容旧响应：仅有 boards 时按 board_type 拆分，避免概念混入行业
+            if (!industry.length && !concept.length && payload && Array.isArray(payload.boards)) {
+                industry = payload.boards.filter((b) => String(b.board_type || '') === 'industry');
+                concept = payload.boards.filter((b) => String(b.board_type || '') === 'concept');
             }
+            const sourceLabel = (payload && payload.board_code_source_label) || '同花顺';
+            membership.querySelectorAll('.board-source-hint').forEach((el) => {
+                el.textContent = sourceLabel;
+            });
+
+            const hasIndustry = industry.length > 0;
+            const hasConcept = concept.length > 0;
+            if (industryWrap && industryList) {
+                if (hasIndustry) {
+                    industryWrap.style.display = 'flex';
+                    industryList.innerHTML = this._renderBoardTags(industry);
+                } else {
+                    industryWrap.style.display = 'none';
+                    industryList.innerHTML = '';
+                }
+            }
+            if (conceptWrap && conceptList) {
+                if (hasConcept) {
+                    conceptWrap.style.display = 'flex';
+                    conceptList.innerHTML = this._renderBoardTags(concept);
+                } else {
+                    conceptWrap.style.display = 'none';
+                    conceptList.innerHTML = '';
+                }
+            }
+            membership.style.display = (hasIndustry || hasConcept) ? 'block' : 'none';
         } catch (e) {
             console.warn('[loadIndustryBoards]', e);
-            wrap.style.display = 'none';
+            membership.style.display = 'none';
         }
     },
 

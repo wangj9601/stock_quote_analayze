@@ -830,6 +830,7 @@
                     </div>
                     <span style="color: #888; font-size: 12px;">可多选；选定后点击「刷新筛选」，计算所选板块成分股并集</span>
                 </div>
+                <div id="gmsBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
                 <div id="gmsSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
                     <label for="gmsSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
                     <input type="text" id="gmsSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
@@ -1506,6 +1507,7 @@
                         <span id="urtConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
                     </div>
                 </div>
+                <div id="urtBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
                 <div id="urtSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
                     <label for="urtSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
                     <input type="text" id="urtSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
@@ -1752,6 +1754,7 @@
                         <span id="sbbrConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
                     </div>
                 </div>
+                <div id="sbbrBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
                 <div id="sbbrCnBoardWrap" style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:8px 0 4px 0;">
                     <span style="color:#666; font-size:13px;">A股板型：</span>
                     <label style="cursor:pointer;"><input type="radio" name="sbbrCnBoardSegment" value="ALL" checked style="margin-right:5px;">全部</label>
@@ -1897,6 +1900,7 @@
                         <span id="rpeConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
                     </div>
                 </div>
+                <div id="rpeBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
                 <div id="rpeLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
                 <div id="rpeError" class="error-message" style="display:none;"></div>
                 <div class="results-container">
@@ -2119,6 +2123,7 @@
     <script src="js/urt_score_detail.js"></script>
     <script src="js/rpe_score_detail.js"></script>
     <script src="js/sbbr_score_detail.js"></script>
+    <script src="js/board_roles_panel.js"></script>
     <script src="js/screening.js"></script>
     <script src="js/sbbr_screening.js"></script>
     <script src="js/rpe_screening.js"></script>

@@ -3275,6 +3275,80 @@ const ScreeningPage = {
             this.updateGmsConceptBoardSummary();
         }
         this._hideGmsModal(document.getElementById('gmsBoardPickerModal'));
+        this.refreshBoardRolesPanelForOwner(owner);
+    },
+
+    /**
+     * 按策略 owner 刷新行业/概念板龙头·中军摘要面板；非板 scope 或未选板时隐藏。
+     * @param {'gms'|'urt'|'rpe'|'sbbr'} owner
+     */
+    refreshBoardRolesPanelForOwner(owner) {
+        const panelApi = (typeof BoardRolesPanel !== 'undefined' && BoardRolesPanel)
+            || (typeof window !== 'undefined' && window.BoardRolesPanel)
+            || null;
+        if (!panelApi || typeof panelApi.refresh !== 'function') return;
+
+        const panelMap = {
+            gms: 'gmsBoardRolesPanel',
+            urt: 'urtBoardRolesPanel',
+            rpe: 'rpeBoardRolesPanel',
+            sbbr: 'sbbrBoardRolesPanel',
+        };
+        const key = panelMap[owner] ? owner : 'gms';
+        const panelId = panelMap[key];
+
+        let scope = '';
+        if (key === 'urt') {
+            const el = document.querySelector('input[name="urtScope"]:checked');
+            scope = el ? el.value : '';
+        } else if (key === 'rpe') {
+            scope = document.getElementById('rpeScope')?.value || '';
+        } else if (key === 'sbbr') {
+            scope = document.getElementById('sbbrScope')?.value || '';
+        } else {
+            const el = document.querySelector('input[name="gmsScope"]:checked');
+            scope = el ? el.value : '';
+        }
+
+        const isIndustry = scope === 'industry_board';
+        const isConcept = scope === 'concept_board';
+        if (!isIndustry && !isConcept) {
+            void panelApi.refresh({
+                panelId,
+                boardType: 'industry',
+                boardCodes: [],
+                visible: false,
+            });
+            return;
+        }
+
+        const kind = isIndustry ? 'industry' : 'concept';
+        let codes = [];
+        if (key === 'urt') {
+            codes = isIndustry
+                ? this.getUrtSelectedIndustryBoardCodes()
+                : this.getUrtSelectedConceptBoardCodes();
+        } else if (key === 'rpe') {
+            codes = isIndustry
+                ? this.getRpeSelectedIndustryBoardCodes()
+                : this.getRpeSelectedConceptBoardCodes();
+        } else if (key === 'sbbr') {
+            codes = isIndustry
+                ? this.getSbbrSelectedIndustryBoardCodes()
+                : this.getSbbrSelectedConceptBoardCodes();
+        } else {
+            codes = isIndustry
+                ? this.getGmsSelectedIndustryBoardCodes()
+                : this.getGmsSelectedConceptBoardCodes();
+        }
+        const source = this._gmsPreferredBoardCodeSource(kind, codes);
+        void panelApi.refresh({
+            panelId,
+            boardType: kind,
+            boardCodes: codes,
+            boardCodeSource: source,
+            visible: codes.length > 0,
+        });
     },
 
     getRpeSelectedIndustryBoardCodes() {
@@ -3755,12 +3829,15 @@ const ScreeningPage = {
                 if (scopeEl && scopeEl.value === 'industry_board') {
                     void this.loadGmsIndustryBoardOptions().then(() => {
                         this._applyGmsTradeObserveBoardDefaults('industry');
+                        this.refreshBoardRolesPanelForOwner('gms');
                     });
-                }
-                if (scopeEl && scopeEl.value === 'concept_board') {
+                } else if (scopeEl && scopeEl.value === 'concept_board') {
                     void this.loadGmsConceptBoardOptions().then(() => {
                         this._applyGmsTradeObserveBoardDefaults('concept');
+                        this.refreshBoardRolesPanelForOwner('gms');
                     });
+                } else {
+                    this.refreshBoardRolesPanelForOwner('gms');
                 }
             });
         });
@@ -3772,6 +3849,7 @@ const ScreeningPage = {
         this.syncGmsIndustryBoardWrap();
         this.syncGmsConceptBoardWrap();
         this.syncGmsSingleStockWrap();
+        this.refreshBoardRolesPanelForOwner('gms');
         const gmsSingleInput = document.getElementById('gmsSingleStockInput');
         if (gmsSingleInput) {
             gmsSingleInput.addEventListener('keydown', (e) => {
@@ -3795,10 +3873,15 @@ const ScreeningPage = {
                 this.syncUrtFilterParamsForScope();
                 const scopeEl = document.querySelector('input[name="urtScope"]:checked');
                 if (scopeEl && scopeEl.value === 'industry_board') {
-                    void this.loadGmsIndustryBoardOptions();
-                }
-                if (scopeEl && scopeEl.value === 'concept_board') {
-                    void this.loadGmsConceptBoardOptions();
+                    void this.loadGmsIndustryBoardOptions().then(() => {
+                        this.refreshBoardRolesPanelForOwner('urt');
+                    });
+                } else if (scopeEl && scopeEl.value === 'concept_board') {
+                    void this.loadGmsConceptBoardOptions().then(() => {
+                        this.refreshBoardRolesPanelForOwner('urt');
+                    });
+                } else {
+                    this.refreshBoardRolesPanelForOwner('urt');
                 }
             });
         });
@@ -3807,6 +3890,7 @@ const ScreeningPage = {
         this.syncUrtConceptBoardWrap();
         this.syncUrtSingleStockWrap();
         this.syncUrtFilterParamsForScope();
+        this.refreshBoardRolesPanelForOwner('urt');
         const urtSingleInput = document.getElementById('urtSingleStockInput');
         if (urtSingleInput) {
             urtSingleInput.addEventListener('keydown', (e) => {

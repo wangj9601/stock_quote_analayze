@@ -153,6 +153,38 @@
     if (conWrap) conWrap.style.display = scope === 'concept_board' ? 'flex' : 'none';
     if (stockGroup) stockGroup.style.display = scope === 'single' ? 'flex' : 'none';
     if (singleHint) singleHint.style.display = scope === 'single' ? 'block' : 'none';
+    const app = getScreeningApp();
+    if (app && typeof app.refreshBoardRolesPanelForOwner === 'function') {
+      if (scope === 'industry_board' && typeof app.loadGmsIndustryBoardOptions === 'function') {
+        void app.loadGmsIndustryBoardOptions().then(() => app.refreshBoardRolesPanelForOwner('rpe'));
+      } else if (scope === 'concept_board' && typeof app.loadGmsConceptBoardOptions === 'function') {
+        void app.loadGmsConceptBoardOptions().then(() => app.refreshBoardRolesPanelForOwner('rpe'));
+      } else {
+        app.refreshBoardRolesPanelForOwner('rpe');
+      }
+    }
+  }
+
+  function preferredBoardCodeSource(kind, codes) {
+    const app = getScreeningApp();
+    if (app && typeof app._gmsPreferredBoardCodeSource === 'function') {
+      return app._gmsPreferredBoardCodeSource(kind, codes);
+    }
+    return 'tonghuashun';
+  }
+
+  function roleTagsHtml(r) {
+    const tags = Array.isArray(r?.role_tags) ? r.role_tags : [];
+    if (!tags.length) return '';
+    return tags
+      .map((t) => {
+        const label = t.label || t.id || '';
+        const mid = String(t.id || '') === 'board_mid' || label === '中军';
+        const cls = mid ? 'gms-role-tag gms-role-tag--mid' : 'gms-role-tag';
+        const title = String(t.reason || '').replace(/"/g, '&quot;');
+        return `<span class="${cls}" title="${title}">${label}</span>`;
+      })
+      .join('');
   }
 
   function selectedIndustryCodes() {
@@ -227,6 +259,11 @@
     }
     industryCodes.forEach((c) => q.append('industry_board_code', c));
     conceptCodes.forEach((c) => q.append('concept_board_code', c));
+    if (scope === 'industry_board' && industryCodes.length) {
+      q.set('board_code_source', preferredBoardCodeSource('industry', industryCodes));
+    } else if (scope === 'concept_board' && conceptCodes.length) {
+      q.set('board_code_source', preferredBoardCodeSource('concept', conceptCodes));
+    }
     if (Array.isArray(extraCodes)) {
       extraCodes.forEach((c) => {
         const n = normCode(c);
@@ -263,9 +300,10 @@
           detailHtml = window.RpeScoreDetail.buildHtml(r);
         }
         const qfqTitle = r.price_adjust === 'qfq' ? '前复权' : '';
+        const roleHtml = roleTagsHtml(r);
         return `<tr data-rpe-row="${index}" data-code="${r.code || ''}">
             <td>${r.code || ''}</td>
-            <td>${r.name || ''}</td>
+            <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
             <td title="${qfqTitle}">${fmt(r.z_score, 2)}</td>
             <td>${signalLabel(r)}</td>

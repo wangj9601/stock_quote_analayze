@@ -3530,6 +3530,10 @@ async def get_sbbr_strategy(
     concept_board_code: Optional[List[str]] = Query(
         None, description="scope=concept_board 时：概念板块代码，可多选"
     ),
+    board_code_source: Optional[str] = Query(
+        None,
+        description="行业/概念板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
+    ),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
@@ -3775,6 +3779,14 @@ async def get_sbbr_strategy(
         if require_size:
             rows = [r for r in rows if r.get("size_ok")]
         rows = rows[:effective_max]
+        _sbbr_attach_role_tags(
+            db,
+            rows,
+            scope_raw=scope_raw,
+            board_code_source=board_code_source,
+            industry_codes=extra_meta.get("industry_board_codes") or [],
+            concept_codes=extra_meta.get("concept_board_codes") or [],
+        )
         return JSONResponse(
             {
                 **_sbbr_meta("trace"),
@@ -3798,6 +3810,14 @@ async def get_sbbr_strategy(
         )
 
     rows = await loop.run_in_executor(None, _run)
+    _sbbr_attach_role_tags(
+        db,
+        rows,
+        scope_raw=scope_raw,
+        board_code_source=board_code_source,
+        industry_codes=extra_meta.get("industry_board_codes") or [],
+        concept_codes=extra_meta.get("concept_board_codes") or [],
+    )
     return JSONResponse(
         {
             **_sbbr_meta("live"),
@@ -3805,6 +3825,45 @@ async def get_sbbr_strategy(
             "total": len(rows),
         }
     )
+
+
+def _sbbr_attach_role_tags(
+    db: Session,
+    rows: List[Dict[str, Any]],
+    *,
+    scope_raw: str,
+    board_code_source: Optional[str],
+    industry_codes: List[str],
+    concept_codes: List[str],
+) -> None:
+    """industry/concept scope 时为 SBBR 结果挂 role_tags。"""
+    if scope_raw not in ("industry_board", "concept_board") or not rows:
+        return
+    try:
+        from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+        from backend_core.board_roles.service import (
+            enrich_screening_results_with_role_tags,
+        )
+
+        _role_src = board_code_source or DEFAULT_BOARD_CODE_SOURCE
+        if scope_raw == "industry_board":
+            enrich_screening_results_with_role_tags(
+                db,
+                rows,
+                board_type="industry",
+                board_codes=industry_codes or [],
+                board_code_source=_role_src,
+            )
+        else:
+            enrich_screening_results_with_role_tags(
+                db,
+                rows,
+                board_type="concept",
+                board_codes=concept_codes or [],
+                board_code_source=_role_src,
+            )
+    except Exception as _role_ex:
+        logger.warning("SBBR 挂载板块 role_tags 失败: %s", _role_ex)
 
 
 @router.get("/rpe-strategy")
@@ -3820,6 +3879,10 @@ async def get_rpe_strategy(
     ),
     concept_board_code: Optional[List[str]] = Query(
         None, description="scope=concept_board 时：概念板块代码，可多选"
+    ),
+    board_code_source: Optional[str] = Query(
+        None,
+        description="行业/概念板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
     ),
     stock_code: Optional[str] = Query(
         None, description="scope=single 时：股票代码或名称（如 000001 / 平安银行）"
@@ -4056,10 +4119,37 @@ async def get_rpe_strategy(
             detail=f"RPE选股计算超时（超过{RPE_SCREENING_TIMEOUT}秒），请缩小范围或稍后重试",
         )
 
+    data_rows = result.get("data") or []
+    if scope_raw in ("industry_board", "concept_board") and isinstance(data_rows, list) and data_rows:
+        role_db = None
+        try:
+            from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+            from backend_core.board_roles.service import (
+                enrich_screening_results_with_role_tags,
+            )
+
+            role_db = SessionLocal()
+            _role_src = board_code_source or DEFAULT_BOARD_CODE_SOURCE
+            enrich_screening_results_with_role_tags(
+                role_db,
+                data_rows,
+                board_type=board_kind,
+                board_codes=board_codes or [],
+                board_code_source=_role_src,
+            )
+        except Exception as _role_ex:
+            logger.warning("RPE 挂载板块 role_tags 失败: %s", _role_ex)
+        finally:
+            if role_db is not None:
+                try:
+                    role_db.close()
+                except Exception:
+                    pass
+
     return JSONResponse(
         {
             "success": True,
-            "data": result.get("data") or [],
+            "data": data_rows,
             "total": result.get("total") or 0,
             "search_date": result.get("search_date"),
             "strategy_name": "比价效应",

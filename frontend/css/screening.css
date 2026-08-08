@@ -1347,6 +1347,62 @@
     background: #ccfbf1;
     border-radius: 3px;
 }
+.gms-role-tag--mid {
+    color: #1d4ed8;
+    background: #dbeafe;
+}
+
+.gms-board-roles-panel {
+    margin: 8px 0 4px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.gms-board-roles-block + .gms-board-roles-block {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e2e8f0;
+}
+.gms-board-roles-title {
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 4px;
+}
+.gms-board-roles-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+}
+.gms-board-role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: 12px;
+}
+.gms-board-role-chip:hover {
+    border-color: #0f766e;
+    color: #0f766e;
+}
+.gms-board-role-chg {
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+.gms-board-roles-loading,
+.gms-board-roles-panel .gms-muted {
+    color: #94a3b8;
+    font-size: 12px;
+}
 
 .gms-risk-tag {
     display: inline-block;

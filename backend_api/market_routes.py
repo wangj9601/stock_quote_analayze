@@ -19,12 +19,15 @@ from backend_api.models import (
     IndustryBoardConstituent,
     HKIndexRealtimeQuotes,
 )
-from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+from backend_api.utils.board_code_source import (
+    DEFAULT_BOARD_CODE_SOURCE,
+    normalize_board_code_source,
+)
 from backend_api.utils.industry_board_query import (
     fetch_industry_board_catalog,
-    get_boards_by_stock_code,
+    get_stock_membership_boards,
 )
-from backend_core.board_roles.service import fetch_board_roles_payload
+from backend_core.board_roles.service import fetch_board_roles_payload, extract_leader_mid_from_payload
 
 
 
@@ -494,6 +497,84 @@ def _board_top_stocks_response(
     )
 
 
+@router.get("/industry_board/{board_code}/roles")
+def get_industry_board_roles(
+    board_code: str,
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：用于同名映射到同花顺板"),
+    db: Session = Depends(get_db),
+):
+    """行业板龙头/中军摘要（选股页展示用）。"""
+    try:
+        payload = fetch_board_roles_payload(
+            db,
+            board_type="industry",
+            board_code=board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            limit=None,
+        )
+        data = extract_leader_mid_from_payload(payload)
+        if not data.get("board_code"):
+            return JSONResponse(
+                {"success": False, "message": "未找到行业板块或成分", "data": data},
+                status_code=404,
+            )
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业板龙头/中军失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/concept_board/{board_code}/roles")
+def get_concept_board_roles(
+    board_code: str,
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：板名称"),
+    db: Session = Depends(get_db),
+):
+    """概念板龙头/中军摘要（选股页展示用）。"""
+    try:
+        payload = fetch_board_roles_payload(
+            db,
+            board_type="concept",
+            board_code=board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            limit=None,
+        )
+        data = extract_leader_mid_from_payload(payload)
+        if not data.get("board_code"):
+            return JSONResponse(
+                {"success": False, "message": "未找到概念板块或成分", "data": data},
+                status_code=404,
+            )
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取概念板龙头/中军失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
 @router.get("/industry_board/{board_code}/stocks")
 def get_industry_board_stocks(
     board_code: str,
@@ -631,14 +712,24 @@ def get_concept_board_top_stocks(
 
 
 @router.get("/stock/{code}/industry_boards")
-def get_stock_industry_boards(code: str, db: Session = Depends(get_db)):
-    """个股所属东财行业板块列表。"""
+def get_stock_industry_boards(
+    code: str,
+    board_code_source: Optional[str] = Query(
+        DEFAULT_BOARD_CODE_SOURCE,
+        description="板块代码来源，默认 tonghuashun（同花顺）；与选股页一致",
+    ),
+    db: Session = Depends(get_db),
+):
+    """个股所属行业/概念板块列表（默认按同花顺口径，行业与概念分组返回）。"""
     try:
         stock_code = _normalize_stock_code(code)
-        boards = get_boards_by_stock_code(db, stock_code)
+        src = normalize_board_code_source(board_code_source) or DEFAULT_BOARD_CODE_SOURCE
+        data = get_stock_membership_boards(
+            db, stock_code, board_code_source=src
+        )
         return JSONResponse({
             "success": True,
-            "data": {"stock_code": stock_code, "boards": boards},
+            "data": data,
         })
     except Exception as e:
         tb = traceback.format_exc()

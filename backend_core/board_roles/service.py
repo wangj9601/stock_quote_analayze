@@ -16,6 +16,9 @@ from backend_api.utils.industry_board_query import (
     resolve_board_for_roles,
 )
 from backend_core.board_roles.classify import (
+    ROLE_LABELS,
+    ROLE_LEADER,
+    ROLE_MID,
     board_change_percent_est,
     classify_board_roles,
     role_tag_from_row,
@@ -225,3 +228,48 @@ def enrich_screening_results_with_role_tags(
         )
         hit = best.get(code)
         item["role_tags"] = [hit[1]] if hit else []
+
+
+def extract_leader_mid_from_payload(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """从 fetch_board_roles_payload 结果抽出龙头/中军列表（供选股页摘要）。"""
+    empty = {
+        "board_code": None,
+        "board_name": None,
+        "board_code_source": None,
+        "board_change_percent_est": None,
+        "leaders": [],
+        "mids": [],
+    }
+    if not payload:
+        return empty
+    leaders: List[Dict[str, Any]] = []
+    mids: List[Dict[str, Any]] = []
+    for row in payload.get("stocks") or []:
+        role = row.get("board_role")
+        if role not in (ROLE_LEADER, ROLE_MID):
+            continue
+        item = {
+            "code": _normalize_stock_code(str(row.get("code") or "")),
+            "name": row.get("name") or row.get("stock_name") or "",
+            "change_percent": row.get("change_percent"),
+            "board_role": role,
+            "board_role_label": ROLE_LABELS.get(role) or role,
+            "board_role_score": row.get("board_role_score"),
+            "role_reason": row.get("role_reason") or "",
+        }
+        if not item["code"]:
+            continue
+        if role == ROLE_LEADER:
+            leaders.append(item)
+        else:
+            mids.append(item)
+    leaders.sort(key=lambda x: float(x.get("board_role_score") or 0), reverse=True)
+    mids.sort(key=lambda x: float(x.get("board_role_score") or 0), reverse=True)
+    return {
+        "board_code": payload.get("board_code"),
+        "board_name": payload.get("board_name"),
+        "board_code_source": payload.get("board_code_source"),
+        "board_change_percent_est": payload.get("board_change_percent_est"),
+        "leaders": leaders,
+        "mids": mids,
+    }

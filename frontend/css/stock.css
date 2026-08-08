@@ -139,6 +139,65 @@ body {
     color: #16a34a;
 }
 
+.stock-board-membership {
+    padding: 0 0.25rem;
+}
+
+.stock-industry-boards,
+.stock-concept-boards {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.stock-board-label {
+    color: #666;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    line-height: 1.8;
+    margin-right: 0.25rem;
+}
+
+.board-source-hint {
+    color: #94a3b8;
+    font-size: 0.8rem;
+    font-weight: 400;
+}
+
+.stock-board-tags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.industry-board-tag {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    text-decoration: none;
+    line-height: 1.5;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.industry-board-tag:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+
+.stock-concept-boards .industry-board-tag {
+    background: #f8fafc;
+    color: #475569;
+}
+
+
 /* 图表区域样式 */
 .chart-section {
     background: #ffffff;

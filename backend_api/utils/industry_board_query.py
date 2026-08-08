@@ -278,37 +278,159 @@ def get_stock_codes_by_board_codes(
     return {_normalize_code(c) for c in out if c}
 
 
-def get_boards_by_stock_code(db: Session, stock_code: str) -> List[Dict]:
-    """反查股票所属行业/概念板块（含板块名称）。"""
+def _dedupe_membership_boards(rows: List[Dict]) -> List[Dict]:
+    """按 board_type+board_code 去重；同类型同名仅保留首次。"""
+    out: List[Dict] = []
+    seen_code: Set[Tuple[str, str]] = set()
+    seen_name: Set[Tuple[str, str]] = set()
+    for b in rows:
+        btype = str(b.get("board_type") or "industry").strip().lower() or "industry"
+        code = str(b.get("board_code") or "").strip()
+        name = str(b.get("board_name") or code).strip()
+        code_key = (btype, code)
+        name_key = (btype, name.lower())
+        if code and code_key in seen_code:
+            continue
+        if name and name_key in seen_name:
+            continue
+        if code:
+            seen_code.add(code_key)
+        if name:
+            seen_name.add(name_key)
+        out.append(b)
+    return out
+
+
+def get_boards_by_stock_code(
+    db: Session,
+    stock_code: str,
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
+) -> List[Dict]:
+    """反查股票所属行业/概念板块（含板块名称）。
+
+    默认仅返回 ``board_code_source=tonghuashun`` 的板块；传 ``None`` 不过滤来源。
+    """
     code = _normalize_code(stock_code)
+    if not code:
+        return []
+    params: Dict[str, Any] = {"stock_code": code}
+    if board_code_source is not None:
+        src = resolve_board_code_source(
+            board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+        )
+        params["source"] = src
+        params["legacy"] = LEGACY_DEFAULT_BOARD_CODE_SOURCE
+        source_filter = (
+            "AND COALESCE(NULLIF(TRIM(b.board_code_source), ''), :legacy) = :source"
+        )
+        # 按来源过滤时必须能关联到 basic_info
+        ind_join = "INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code"
+        con_join = "INNER JOIN concept_board_basic_info b ON b.board_code = c.board_code"
+        source_select = (
+            "COALESCE(NULLIF(TRIM(b.board_code_source), ''), :legacy) AS board_code_source"
+        )
+    else:
+        source_filter = ""
+        ind_join = "LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code"
+        con_join = "LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code"
+        source_select = "b.board_code_source AS board_code_source"
+
     sql = text(
-        """
-        SELECT c.board_code, COALESCE(b.board_name, c.board_code) AS board_name, c.updated_at, 'industry' AS board_type
+        f"""
+        SELECT c.board_code,
+               COALESCE(b.board_name, c.board_code) AS board_name,
+               c.updated_at,
+               'industry' AS board_type,
+               {source_select}
         FROM industry_board_constituents c
-        LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+        {ind_join}
         WHERE c.stock_code = :stock_code
+          {source_filter}
         UNION ALL
-        SELECT c.board_code, COALESCE(b.board_name, c.board_code) AS board_name, c.updated_at, 'concept' AS board_type
+        SELECT c.board_code,
+               COALESCE(b.board_name, c.board_code) AS board_name,
+               c.updated_at,
+               'concept' AS board_type,
+               {source_select}
         FROM concept_board_constituents c
-        LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
+        {con_join}
         WHERE c.stock_code = :stock_code
-        ORDER BY board_name NULLS LAST, board_code
+          {source_filter}
+        ORDER BY board_type, board_name NULLS LAST, board_code
         """
     )
-    rows = db.execute(sql, {"stock_code": code}).fetchall()
-    return [
-        {
-            "board_code": str(r[0]),
-            "board_name": str(r[1]) if r[1] else str(r[0]),
-            "updated_at": r[2].isoformat() if hasattr(r[2], "isoformat") else str(r[2]) if r[2] else None,
-            "board_type": str(r[3]) if len(r) > 3 else "industry",
-        }
-        for r in rows
-    ]
+    rows = db.execute(sql, params).fetchall()
+    items: List[Dict] = []
+    for r in rows:
+        raw_src = r[4] if len(r) > 4 else None
+        src = (
+            resolve_board_code_source(raw_src, fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE)
+            if raw_src is not None and str(raw_src).strip()
+            else (
+                resolve_board_code_source(
+                    board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+                )
+                if board_code_source is not None
+                else LEGACY_DEFAULT_BOARD_CODE_SOURCE
+            )
+        )
+        items.append(
+            {
+                "board_code": str(r[0]),
+                "board_name": str(r[1]) if r[1] else str(r[0]),
+                "updated_at": (
+                    r[2].isoformat()
+                    if hasattr(r[2], "isoformat")
+                    else str(r[2])
+                    if r[2]
+                    else None
+                ),
+                "board_type": str(r[3]) if len(r) > 3 else "industry",
+                "board_code_source": src,
+                "board_code_source_label": board_code_source_label(src),
+            }
+        )
+    return _dedupe_membership_boards(items)
 
 
-def get_board_names_by_stock_code(db: Session, stock_code: str) -> List[str]:
-    boards = get_boards_by_stock_code(db, stock_code)
+def get_stock_membership_boards(
+    db: Session,
+    stock_code: str,
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
+) -> Dict[str, Any]:
+    """个股所属行业/概念板块分组（默认同花顺口径）。"""
+    code = _normalize_code(stock_code)
+    boards = get_boards_by_stock_code(
+        db, code, board_code_source=board_code_source
+    )
+    industry = [b for b in boards if str(b.get("board_type") or "") == "industry"]
+    concept = [b for b in boards if str(b.get("board_type") or "") == "concept"]
+    src = (
+        resolve_board_code_source(board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE)
+        if board_code_source is not None
+        else None
+    )
+    return {
+        "stock_code": code,
+        "board_code_source": src,
+        "board_code_source_label": board_code_source_label(src) if src else None,
+        "industry_boards": industry,
+        "concept_boards": concept,
+        "boards": boards,
+    }
+
+
+def get_board_names_by_stock_code(
+    db: Session,
+    stock_code: str,
+    *,
+    board_code_source: Optional[str] = DEFAULT_BOARD_CODE_SOURCE,
+) -> List[str]:
+    boards = get_boards_by_stock_code(
+        db, stock_code, board_code_source=board_code_source
+    )
     return [b["board_name"] for b in boards if b.get("board_name")]
 
 

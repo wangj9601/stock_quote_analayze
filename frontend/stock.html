@@ -70,9 +70,15 @@
                     <!-- 市盈率，前端页面展示元素 -->
                     <!-- 不显示 -->
                 </div>
-                <div class="stock-industry-boards" id="stockIndustryBoards" style="margin-top:12px;display:none;">
-                    <span class="label" style="color:#666;margin-right:8px;">所属行业板块</span>
-                    <span id="stockIndustryBoardsList" class="value">--</span>
+                <div class="stock-board-membership" id="stockBoardMembership" style="margin-top:12px;display:none;">
+                    <div class="stock-industry-boards" id="stockIndustryBoards" style="display:none;">
+                        <span class="label stock-board-label">所属行业 <span class="board-source-hint">同花顺</span></span>
+                        <span id="stockIndustryBoardsList" class="value stock-board-tags">--</span>
+                    </div>
+                    <div class="stock-concept-boards" id="stockConceptBoards" style="display:none;">
+                        <span class="label stock-board-label">所属概念板块 <span class="board-source-hint">同花顺</span></span>
+                        <span id="stockConceptBoardsList" class="value stock-board-tags">--</span>
+                    </div>
                 </div>
             </div>
         </section>
