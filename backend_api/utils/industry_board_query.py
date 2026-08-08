@@ -181,8 +181,26 @@ def _catalog_stock_count(raw: Any) -> int:
     return 0
 
 
+def _catalog_dedupe_rank(entry: Dict[str, Any]) -> Tuple[int, str]:
+    """同名同来源去重排序：东财优先 BK；同花顺优先 881 等非 BK（避免误标 BK 挤掉真·同花顺码）。"""
+    code = str(entry.get("board_code") or "")
+    source = resolve_board_code_source(
+        entry.get("board_code_source"),
+        fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+    )
+    is_bk = is_valid_bk_board_code(code)
+    if source == "tonghuashun":
+        # 同花顺行业码多为 881xxx；BK 多为东财码误写入同花顺来源
+        return (1 if is_bk else 0, code)
+    return (0 if is_bk else 1, code)
+
+
 def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """同名同来源只保留一条：优先 BK 编码，合并 trade_observe_flag；不同来源可并存。"""
+    """同名同来源只保留一条；不同来源可并存。
+
+    东财：优先 BK 编码；同花顺：优先非 BK（如 881xxx）。合并 trade_observe_flag，
+    stock_count 取组内最大。
+    """
     buckets: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     for raw in items:
         code = str(raw.get("board_code") or "").strip()
@@ -210,29 +228,31 @@ def dedupe_industry_board_catalog(items: List[Dict[str, Any]]) -> List[Dict[str,
         if len(group) == 1:
             out.append(group[0])
             continue
-        group.sort(
-            key=lambda x: (
-                0 if is_valid_bk_board_code(x["board_code"]) else 1,
-                x["board_code"],
-            )
-        )
+        group.sort(key=_catalog_dedupe_rank)
         chosen = dict(group[0])
         chosen["trade_observe_flag"] = any(bool(x.get("trade_observe_flag")) for x in group)
+        chosen["stock_count"] = max(int(x.get("stock_count") or 0) for x in group)
+        chosen["member_count"] = chosen["stock_count"]
         out.append(chosen)
     out.sort(key=lambda x: (x["board_name"], x["board_code_source"], x["board_code"]))
     return out
 
 
-def fetch_industry_board_catalog(
+def _fetch_board_catalog(
     db: Session,
     *,
+    board_kind: str = "industry",
     frontend_only: bool = True,
     board_code_source: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """GMS 等行业板块选择器：basic_info + 成分股数量；同名不同代码来源可并存。
-
-    board_code_source 非空时仅返回该来源（如 tonghuashun）。
-    """
+    """行业/概念板 catalog：basic_info + 成分股数量；同名不同代码来源可并存。"""
+    kind = (board_kind or "industry").strip().lower()
+    if kind == "concept":
+        basic_table = "concept_board_basic_info"
+        cons_table = "concept_board_constituents"
+    else:
+        basic_table = "industry_board_basic_info"
+        cons_table = "industry_board_constituents"
     visible_filter = (
         "AND COALESCE(b.frontend_visible_flag, TRUE) = TRUE"
         if frontend_only
@@ -256,10 +276,10 @@ def fetch_industry_board_catalog(
                    COALESCE(b.trade_observe_flag, FALSE) AS trade_observe_flag,
                    b.board_code_source,
                    COALESCE(cnt.n, 0) AS stock_count
-            FROM industry_board_basic_info b
+            FROM {basic_table} b
             LEFT JOIN (
                 SELECT board_code, COUNT(*) AS n
-                FROM industry_board_constituents
+                FROM {cons_table}
                 GROUP BY board_code
             ) cnt ON cnt.board_code = b.board_code
             WHERE b.board_code IS NOT NULL AND TRIM(b.board_code) <> ''
@@ -287,6 +307,39 @@ def fetch_industry_board_catalog(
             }
         )
     return dedupe_industry_board_catalog(items)
+
+
+def fetch_industry_board_catalog(
+    db: Session,
+    *,
+    frontend_only: bool = True,
+    board_code_source: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """GMS 等行业板块选择器：basic_info + 成分股数量；同名不同代码来源可并存。
+
+    board_code_source 非空时仅返回该来源（如 tonghuashun）。
+    """
+    return _fetch_board_catalog(
+        db,
+        board_kind="industry",
+        frontend_only=frontend_only,
+        board_code_source=board_code_source,
+    )
+
+
+def fetch_concept_board_catalog(
+    db: Session,
+    *,
+    frontend_only: bool = True,
+    board_code_source: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """概念板块选择器/行情列表 catalog（默认同花顺）。"""
+    return _fetch_board_catalog(
+        db,
+        board_kind="concept",
+        frontend_only=frontend_only,
+        board_code_source=board_code_source,
+    )
 
 
 def _json_safe_value(value: Any) -> Any:
@@ -543,6 +596,7 @@ def fetch_industry_board_list_with_metrics(
         item: Dict[str, Any] = {
             "board_code": code,
             "board_name": name,
+            "board_kind": "industry",
             "board_code_source": source,
             "board_code_source_label": board_code_source_label(source),
             "trade_observe_flag": bool(raw.get("trade_observe_flag")),
@@ -572,6 +626,70 @@ def fetch_industry_board_list_with_metrics(
     return out
 
 
+def fetch_concept_board_list_with_metrics(
+    db: Session,
+    *,
+    board_code_source: str = DEFAULT_BOARD_CODE_SOURCE,
+    frontend_only: bool = True,
+) -> List[Dict[str, Any]]:
+    """行情页概念板列表：同花顺全量 + 成分数 + 批量斜率。
+
+    概念板暂无独立实时行情表，指数/涨跌/成交等字段为空（详情可走角色估算涨跌）。
+    """
+    from backend_core.board_metrics.sector_slope_store import load_board_sector_slopes
+
+    src = resolve_board_code_source(
+        board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
+    )
+    catalog = fetch_concept_board_catalog(
+        db, frontend_only=frontend_only, board_code_source=src
+    )
+    codes = [str(x.get("board_code") or "").strip() for x in catalog if x.get("board_code")]
+    slopes: Dict[str, Dict[str, Any]] = {}
+    if codes:
+        try:
+            slopes = load_board_sector_slopes(db, codes, board_kind="concept") or {}
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            slopes = {}
+
+    out: List[Dict[str, Any]] = []
+    for raw in catalog:
+        code = str(raw.get("board_code") or "").strip()
+        name = str(raw.get("board_name") or "").strip() or code
+        source = resolve_board_code_source(
+            raw.get("board_code_source"), fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+        )
+        item: Dict[str, Any] = {
+            "board_code": code,
+            "board_name": name,
+            "board_kind": "concept",
+            "board_code_source": source,
+            "board_code_source_label": board_code_source_label(source),
+            "trade_observe_flag": bool(raw.get("trade_observe_flag")),
+            "stock_count": int(raw.get("stock_count") or 0),
+            "member_count": int(raw.get("member_count") or raw.get("stock_count") or 0),
+        }
+        _attach_slope_fields(item, slopes.get(code))
+        _attach_board_env_fields(item, item.get("change_percent"))
+        out.append(item)
+
+    def _sort_key(x: Dict[str, Any]) -> Tuple[int, float, str]:
+        slope = x.get("sector_slope")
+        if slope is None:
+            return (1, 0.0, str(x.get("board_name") or ""))
+        try:
+            return (0, -float(slope), str(x.get("board_name") or ""))
+        except (TypeError, ValueError):
+            return (1, 0.0, str(x.get("board_name") or ""))
+
+    out.sort(key=_sort_key)
+    return out
+
+
 def fetch_industry_board_detail(
     db: Session,
     board_code: str,
@@ -581,10 +699,50 @@ def fetch_industry_board_detail(
     include_roles: bool = True,
     compute_slope_if_missing: bool = True,
 ) -> Optional[Dict[str, Any]]:
-    """行业板详情：基本信息、行情、斜率、走弱判断、可选龙头/中军。
+    """行业板详情。"""
+    return fetch_board_detail(
+        db,
+        board_code,
+        board_kind="industry",
+        board_code_source=board_code_source,
+        board_name=board_name,
+        include_roles=include_roles,
+        compute_slope_if_missing=compute_slope_if_missing,
+    )
 
-    同花顺板若库中无斜率且 compute_slope_if_missing=True，则现算全成分并 upsert 后返回。
-    """
+
+def fetch_concept_board_detail(
+    db: Session,
+    board_code: str,
+    *,
+    board_code_source: Optional[str] = None,
+    board_name: Optional[str] = None,
+    include_roles: bool = True,
+    compute_slope_if_missing: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """概念板详情（斜率/龙头中军；无独立实时行情表时指数类字段为空）。"""
+    return fetch_board_detail(
+        db,
+        board_code,
+        board_kind="concept",
+        board_code_source=board_code_source,
+        board_name=board_name,
+        include_roles=include_roles,
+        compute_slope_if_missing=compute_slope_if_missing,
+    )
+
+
+def fetch_board_detail(
+    db: Session,
+    board_code: str,
+    *,
+    board_kind: str = "industry",
+    board_code_source: Optional[str] = None,
+    board_name: Optional[str] = None,
+    include_roles: bool = True,
+    compute_slope_if_missing: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """行业/概念板详情：基本信息、可选行情、斜率、走弱/走强、龙头/中军。"""
     from backend_core.board_metrics.sector_slope_store import (
         ensure_board_sector_slope,
         is_allowed_slope_board_source,
@@ -596,9 +754,16 @@ def fetch_industry_board_detail(
     )
     from backend_core.strategies.gms.board_resonance import evaluate_board_environment
 
+    kind = (board_kind or "industry").strip().lower()
+    if kind not in ("industry", "concept"):
+        kind = "industry"
+    cons_table = (
+        "concept_board_constituents" if kind == "concept" else "industry_board_constituents"
+    )
+
     meta = resolve_board_for_roles(
         db,
-        "industry",
+        kind,
         board_code,
         board_code_source=board_code_source or DEFAULT_BOARD_CODE_SOURCE,
         board_name=board_name,
@@ -610,27 +775,26 @@ def fetch_industry_board_detail(
     name = str(meta.get("board_name") or code).strip()
     source = meta.get("board_code_source") or DEFAULT_BOARD_CODE_SOURCE
 
-    # 成分数
     stock_count = 0
     try:
         cnt_row = db.execute(
-            text(
-                """
-                SELECT COUNT(*) FROM industry_board_constituents
-                WHERE board_code = :code
-                """
-            ),
+            text(f"SELECT COUNT(*) FROM {cons_table} WHERE board_code = :code"),
             {"code": code},
         ).fetchone()
         stock_count = int(cnt_row[0] or 0) if cnt_row else 0
     except Exception:
         stock_count = 0
 
-    by_code, by_name = _load_industry_realtime_quote_indexes(db)
-    quote = _prefer_board_quote(by_code.get(code), by_name.get(name) if name else None)
+    quote: Dict[str, Any] = {}
+    if kind == "industry":
+        by_code, by_name = _load_industry_realtime_quote_indexes(db)
+        quote = _prefer_board_quote(
+            by_code.get(code),
+            by_name.get(name) if name else None,
+        )
 
     try:
-        slopes = load_board_sector_slopes(db, [code], board_kind="industry") or {}
+        slopes = load_board_sector_slopes(db, [code], board_kind=kind) or {}
     except Exception:
         try:
             db.rollback()
@@ -652,7 +816,6 @@ def fetch_industry_board_detail(
     except (TypeError, ValueError):
         sector_slope_f = None
 
-    # 行情列表只读库；详情缺失时对同花顺板现算入库，避免长期全是 --
     if (
         compute_slope_if_missing
         and sector_slope_f is None
@@ -662,7 +825,7 @@ def fetch_industry_board_detail(
             filled = ensure_board_sector_slope(
                 db,
                 code,
-                board_kind="industry",
+                board_kind=kind,
                 board_code_source=source,
                 member_limit=None,
                 commit=True,
@@ -688,6 +851,7 @@ def fetch_industry_board_detail(
     detail: Dict[str, Any] = {
         "board_code": code,
         "board_name": name,
+        "board_kind": kind,
         "board_code_source": source,
         "board_code_source_label": meta.get("board_code_source_label")
         or board_code_source_label(source),
@@ -705,8 +869,6 @@ def fetch_industry_board_detail(
         "slope_transform": judgment.get("slope_transform") or "log",
         "use_realtime_change_fallback": judgment["use_realtime_change_fallback"],
         "slope_filled_on_demand": slope_filled_on_demand,
-        # extract_leader_mid_from_payload 返回 leaders/mids 列表；
-        # leader/mid 为首条兼容字段（旧前端单行展示）。
         "leaders": [],
         "mids": [],
         "leader": None,
@@ -719,14 +881,13 @@ def fetch_industry_board_detail(
         try:
             payload = fetch_board_roles_payload(
                 db,
-                board_type="industry",
+                board_type=kind,
                 board_code=code,
                 board_code_source=source,
                 board_name=name,
                 limit=None,
             )
             roles = extract_leader_mid_from_payload(payload)
-            # 全量透传分类结果，禁止 [:1]；leader/mid 仅作旧前端兼容首条
             leaders = list(roles.get("leaders") or [])
             mids = list(roles.get("mids") or [])
             detail["leaders"] = leaders
@@ -736,6 +897,23 @@ def fetch_industry_board_detail(
             detail["roles"] = roles
             if roles.get("board_change_percent_est") is not None:
                 detail["board_change_percent_est"] = roles.get("board_change_percent_est")
+                # 概念板无实时行情时，用角色估算涨跌作环境旁证展示
+                if detail.get("change_percent") is None:
+                    try:
+                        est = float(roles["board_change_percent_est"])
+                        detail["change_percent"] = est
+                        env2 = evaluate_board_environment(
+                            sector_slope_v=sector_slope_f,
+                            board_change_percent=est,
+                        )
+                        detail["board_weak"] = env2["board_weak"]
+                        detail["board_strong"] = env2["board_strong"]
+                        detail["board_env"] = env2["board_env"]
+                        detail["board_env_label"] = env2["board_env_label"]
+                        detail["board_weak_reason"] = env2["board_weak_reason"]
+                        detail["board_weak_summary"] = env2["board_weak_summary"]
+                    except (TypeError, ValueError):
+                        pass
         except Exception:
             pass
     return detail

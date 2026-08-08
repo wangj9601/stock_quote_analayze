@@ -35,6 +35,12 @@ const MarketsPage = {
     sectorSortKey: 'change_percent',
     sectorSortAsc: false,
 
+    // 概念板块（与行业板块同布局）
+    conceptView: 'list',
+    conceptData: [],
+    conceptSortKey: 'sector_slope',
+    conceptSortAsc: false,
+
     // 全局API前缀
     API_BASE_URL: Config ? Config.getApiBaseUrl() : '',
 
@@ -103,16 +109,21 @@ const MarketsPage = {
             }
         });
 
-        // 行业板块视图切换
+        // 行业/概念板块视图切换
         document.querySelectorAll('[data-sector-view]').forEach(btn => {
             btn.addEventListener('click', () => {
-                this.switchSectorView(btn.dataset.sectorView);
+                const kind = btn.dataset.boardKind || 'industry';
+                this.switchSectorView(btn.dataset.sectorView, kind);
             });
         });
 
         const refreshSlopeBtn = document.getElementById('refreshSectorSlopeBtn');
         if (refreshSlopeBtn) {
-            refreshSlopeBtn.addEventListener('click', () => this.refreshSectorSlopes());
+            refreshSlopeBtn.addEventListener('click', () => this.refreshSectorSlopes('industry'));
+        }
+        const refreshConceptSlopeBtn = document.getElementById('refreshConceptSlopeBtn');
+        if (refreshConceptSlopeBtn) {
+            refreshConceptSlopeBtn.addEventListener('click', () => this.refreshSectorSlopes('concept'));
         }
 
         const closeSectorDetailBtn = document.getElementById('closeSectorDetailBtn');
@@ -193,7 +204,10 @@ const MarketsPage = {
                 this.loadRankingData();
                 break;
             case 'sectors':
-                this.loadSectorData();
+                this.loadSectorData('industry');
+                break;
+            case 'concepts':
+                this.loadSectorData('concept');
                 break;
             case 'hot':
                 this.loadHotData();
@@ -747,35 +761,60 @@ const MarketsPage = {
         }
     },
 
-    // 加载板块数据（同花顺全量列表 + 斜率）
-    async loadSectorData() {
-        const tbody = document.getElementById('sectorsTableBody');
+    _boardKindUi(kind) {
+        const isConcept = kind === 'concept';
+        return {
+            kind: isConcept ? 'concept' : 'industry',
+            label: isConcept ? '概念板块' : '行业板块',
+            dataKey: isConcept ? 'conceptData' : 'sectorData',
+            viewKey: isConcept ? 'conceptView' : 'sectorView',
+            countId: isConcept ? 'conceptCount' : 'sectorCount',
+            gridId: isConcept ? 'conceptsGrid' : 'sectorsGrid',
+            listId: isConcept ? 'conceptsList' : 'sectorsList',
+            tbodyId: isConcept ? 'conceptsTableBody' : 'sectorsTableBody',
+            listApi: isConcept
+                ? '/api/market/concept_board/list'
+                : '/api/market/industry_board/list',
+            detailApiPrefix: isConcept
+                ? '/api/market/concept_board/'
+                : '/api/market/industry_board/',
+            refreshApi: isConcept
+                ? '/api/market/concept_board/refresh_sector_slopes'
+                : '/api/market/industry_board/refresh_sector_slopes',
+            refreshBtnId: isConcept ? 'refreshConceptSlopeBtn' : 'refreshSectorSlopeBtn',
+        };
+    },
+
+    // 加载板块数据（同花顺全量列表 + 斜率）；kind=industry|concept
+    async loadSectorData(kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        const tbody = document.getElementById(ui.tbodyId);
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">加载中...</td></tr>';
         }
         try {
             const response = await fetch(
-                `${this.API_BASE_URL}/api/market/industry_board/list?board_code_source=tonghuashun`
+                `${this.API_BASE_URL}${ui.listApi}?board_code_source=tonghuashun`
             );
             const result = await response.json();
 
             if (result.success && Array.isArray(result.data)) {
-                this.sectorData = result.data;
-                this.renderSectorViews();
+                this[ui.dataKey] = result.data;
+                this.renderSectorViews(ui.kind);
             } else {
                 throw new Error(result.message || 'API返回错误');
             }
         } catch (error) {
-            console.error('行业板块数据加载失败:', error);
-            this.sectorData = [];
+            console.error(`${ui.label}数据加载失败:`, error);
+            this[ui.dataKey] = [];
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#c00;">行业板块加载失败</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#c00;">${ui.label}加载失败</td></tr>`;
             }
-            const grid = document.getElementById('sectorsGrid');
+            const grid = document.getElementById(ui.gridId);
             if (grid) {
-                grid.innerHTML = '<div class="empty-tip" style="text-align:center;padding:2em;color:#c00;">行业板块加载失败</div>';
+                grid.innerHTML = `<div class="empty-tip" style="text-align:center;padding:2em;color:#c00;">${ui.label}加载失败</div>`;
             }
-            CommonUtils.showToast('行业板块加载失败', 'error');
+            CommonUtils.showToast(`${ui.label}加载失败`, 'error');
         }
     },
 
@@ -788,8 +827,9 @@ const MarketsPage = {
      * 触发同花顺行业板全量斜率后台刷新；不在打开列表时同步全算。
      * 启动后轮询列表，直至出现斜率或超时。
      */
-    async refreshSectorSlopes() {
-        const btn = document.getElementById('refreshSectorSlopeBtn');
+    async refreshSectorSlopes(kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        const btn = document.getElementById(ui.refreshBtnId);
         if (btn && btn.disabled) return;
         if (btn) {
             btn.disabled = true;
@@ -797,8 +837,8 @@ const MarketsPage = {
         }
         try {
             const response = await fetch(
-                `${this.API_BASE_URL}/api/market/industry_board/refresh_sector_slopes`
-                + '?board_code_source=tonghuashun&board_kind=industry&sync=false',
+                `${this.API_BASE_URL}${ui.refreshApi}`
+                + `?board_code_source=tonghuashun&board_kind=${ui.kind}&sync=false`,
                 { method: 'POST' }
             );
             const result = await response.json();
@@ -809,15 +849,18 @@ const MarketsPage = {
                 result.message || '已启动后台斜率计算，完成后列表将自动更新',
                 'success'
             );
-            const before = this._countSectorSlopes(this.sectorData);
+            const before = this._countSectorSlopes(this[ui.dataKey]);
             let attempts = 0;
             const maxAttempts = 24; // ~8 分钟（每 20s）
+            const timerKey = ui.kind === 'concept'
+                ? '_conceptSlopePollTimer'
+                : '_sectorSlopePollTimer';
             const poll = async () => {
                 attempts += 1;
                 try {
-                    await this.loadSectorData();
+                    await this.loadSectorData(ui.kind);
                 } catch (_e) { /* loadSectorData 已 toast */ }
-                const after = this._countSectorSlopes(this.sectorData);
+                const after = this._countSectorSlopes(this[ui.dataKey]);
                 if (after > before || (before === 0 && after > 0)) {
                     if (btn) {
                         btn.disabled = false;
@@ -834,12 +877,12 @@ const MarketsPage = {
                     CommonUtils.showToast('斜率仍在计算或未写入，请稍后手动刷新列表', 'info');
                     return;
                 }
-                this._sectorSlopePollTimer = setTimeout(poll, 20000);
+                this[timerKey] = setTimeout(poll, 20000);
             };
-            if (this._sectorSlopePollTimer) {
-                clearTimeout(this._sectorSlopePollTimer);
+            if (this[timerKey]) {
+                clearTimeout(this[timerKey]);
             }
-            this._sectorSlopePollTimer = setTimeout(poll, 15000);
+            this[timerKey] = setTimeout(poll, 15000);
         } catch (error) {
             console.error('刷新板块斜率失败:', error);
             CommonUtils.showToast(error.message || '刷新板块斜率失败', 'error');
@@ -850,32 +893,37 @@ const MarketsPage = {
         }
     },
 
-    switchSectorView(view) {
-        this.sectorView = view === 'grid' ? 'grid' : 'list';
-        document.querySelectorAll('[data-sector-view]').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.sectorView === this.sectorView);
+    switchSectorView(view, kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        this[ui.viewKey] = view === 'grid' ? 'grid' : 'list';
+        document.querySelectorAll(`[data-sector-view][data-board-kind="${ui.kind}"]`).forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.sectorView === this[ui.viewKey]);
         });
-        const grid = document.getElementById('sectorsGrid');
-        const list = document.getElementById('sectorsList');
-        if (grid) grid.style.display = this.sectorView === 'grid' ? 'grid' : 'none';
-        if (list) list.style.display = this.sectorView === 'list' ? 'block' : 'none';
-        this.renderSectorViews();
+        const grid = document.getElementById(ui.gridId);
+        const list = document.getElementById(ui.listId);
+        if (grid) grid.style.display = this[ui.viewKey] === 'grid' ? 'grid' : 'none';
+        if (list) list.style.display = this[ui.viewKey] === 'list' ? 'block' : 'none';
+        this.renderSectorViews(ui.kind);
     },
 
-    renderSectorViews() {
-        const countEl = document.getElementById('sectorCount');
-        if (countEl) countEl.textContent = String(this.sectorData.length || 0);
-        if (this.sectorView === 'list') {
-            this.renderSectorListView(this.sectorData);
+    renderSectorViews(kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        const rows = this[ui.dataKey] || [];
+        const countEl = document.getElementById(ui.countId);
+        if (countEl) countEl.textContent = String(rows.length || 0);
+        if (this[ui.viewKey] === 'list') {
+            this.renderSectorListView(rows, ui.kind);
         } else {
-            this.renderSectorGridView(this.sectorData);
+            this.renderSectorGridView(rows, ui.kind);
         }
     },
 
-    _sortedSectors(sectors) {
+    _sortedSectors(sectors, kind = 'industry') {
         const list = Array.isArray(sectors) ? sectors.slice() : [];
-        const key = this.sectorSortKey || 'change_percent';
-        const asc = !!this.sectorSortAsc;
+        const key = kind === 'concept'
+            ? (this.conceptSortKey || 'sector_slope')
+            : (this.sectorSortKey || 'change_percent');
+        const asc = kind === 'concept' ? !!this.conceptSortAsc : !!this.sectorSortAsc;
         list.sort((a, b) => {
             let va = a[key];
             let vb = b[key];
@@ -947,7 +995,7 @@ const MarketsPage = {
         else if (env === 'weak') cls = 'sector-weak-chip weak';
         else if (env === 'neutral') cls = 'sector-weak-chip ok';
         return `<span class="${cls}" title="${tip}">${this.escapeHtml(label)}</span>`;
-    },,
+    },
 
     escapeHtml(s) {
         return String(s == null ? '' : s)
@@ -958,12 +1006,13 @@ const MarketsPage = {
             .replace(/'/g, '&#39;');
     },
 
-    renderSectorListView(sectors) {
-        const tbody = document.getElementById('sectorsTableBody');
+    renderSectorListView(sectors, kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        const tbody = document.getElementById(ui.tbodyId);
         if (!tbody) return;
-        const rows = this._sortedSectors(sectors);
+        const rows = this._sortedSectors(sectors, ui.kind);
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">暂无同花顺行业板块数据</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#888;">暂无同花顺${ui.label}数据</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(sector => {
@@ -999,19 +1048,21 @@ const MarketsPage = {
                 goToSectorDetail(
                     tr.dataset.boardName || '',
                     tr.dataset.boardCode || '',
-                    tr.dataset.boardSource || 'tonghuashun'
+                    tr.dataset.boardSource || 'tonghuashun',
+                    ui.kind
                 );
             };
             tr.addEventListener('click', openDetail);
         });
     },
 
-    renderSectorGridView(sectors) {
-        const grid = document.getElementById('sectorsGrid');
+    renderSectorGridView(sectors, kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        const grid = document.getElementById(ui.gridId);
         if (!grid) return;
-        const rows = this._sortedSectors(sectors);
+        const rows = this._sortedSectors(sectors, ui.kind);
         if (!rows.length) {
-            grid.innerHTML = '<div class="empty-tip" style="text-align:center;padding:2em;color:#888;">暂无同花顺行业板块数据</div>';
+            grid.innerHTML = `<div class="empty-tip" style="text-align:center;padding:2em;color:#888;">暂无同花顺${ui.label}数据</div>`;
             return;
         }
         grid.innerHTML = rows.map(sector => {
@@ -1069,7 +1120,8 @@ const MarketsPage = {
             const open = () => goToSectorDetail(
                 card.dataset.boardName || '',
                 card.dataset.boardCode || '',
-                card.dataset.boardSource || 'tonghuashun'
+                card.dataset.boardSource || 'tonghuashun',
+                ui.kind
             );
             card.querySelector('.sector-detail-btn')?.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -1118,7 +1170,8 @@ const MarketsPage = {
         </div>`;
     },
 
-    async showSectorDetail(boardName, boardCode, boardSource) {
+    async showSectorDetail(boardName, boardCode, boardSource, boardKind = 'industry') {
+        const ui = this._boardKindUi(boardKind);
         const modal = document.getElementById('sectorDetailModal');
         const title = document.getElementById('sectorDetailTitle');
         const sub = document.getElementById('sectorDetailSub');
@@ -1127,7 +1180,9 @@ const MarketsPage = {
 
         modal.classList.add('show');
         if (title) title.textContent = boardName || boardCode || '板块详情';
-        if (sub) sub.textContent = `${boardCode || '--'} · ${boardSource || 'tonghuashun'}`;
+        if (sub) {
+            sub.textContent = `${ui.label} · ${boardCode || '--'} · ${boardSource || 'tonghuashun'}`;
+        }
         body.innerHTML = '<div class="sector-detail-loading">加载中...</div>';
 
         try {
@@ -1137,7 +1192,7 @@ const MarketsPage = {
             });
             if (boardName) params.set('board_name', boardName);
             const response = await fetch(
-                `${this.API_BASE_URL}/api/market/industry_board/${encodeURIComponent(boardCode)}/detail?${params}`
+                `${this.API_BASE_URL}${ui.detailApiPrefix}${encodeURIComponent(boardCode)}/detail?${params}`
             );
             const result = await response.json();
             if (!result.success || !result.data) {
@@ -1158,7 +1213,8 @@ const MarketsPage = {
 
         if (title) title.textContent = d.board_name || d.board_code || '板块详情';
         if (sub) {
-            sub.innerHTML = `${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${this.boardEnvChipHtml(d)}`;
+            const kindLabel = d.board_kind === 'concept' ? '概念板块' : '行业板块';
+            sub.innerHTML = `${kindLabel} · ${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${this.boardEnvChipHtml(d)}`;
         }
 
         const item = (label, value, cls) => `
@@ -1410,7 +1466,9 @@ const MarketsPage = {
                     this.loadRankingData(this.currentPage);
                 }
             } else if (this.currentTab === 'sectors') {
-                this.loadSectorData(); // 重新加载真实数据
+                this.loadSectorData('industry');
+            } else if (this.currentTab === 'concepts') {
+                this.loadSectorData('concept');
             } else if (this.currentTab === 'hot') {
                 this.updateCapitalFlow();
                 this.updateMarketSentiment();
@@ -1527,12 +1585,12 @@ function goToStock(code, name) {
     window.location.href = `stock.html?code=${code}&name=${encodeURIComponent(name)}`;
 }
 
-function goToSectorDetail(sectorName, boardCode, boardSource) {
+function goToSectorDetail(sectorName, boardCode, boardSource, boardKind) {
     if (!boardCode) {
         CommonUtils.showToast(`缺少板块代码，无法查看${sectorName || ''}详情`, 'warning');
         return;
     }
-    MarketsPage.showSectorDetail(sectorName || '', boardCode, boardSource || 'tonghuashun');
+    MarketsPage.showSectorDetail(sectorName || '', boardCode, boardSource || 'tonghuashun', boardKind || 'industry');
 }
 
 function goToStockHistory(code, name) {

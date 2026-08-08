@@ -464,7 +464,8 @@
     flex-wrap: wrap;
 }
 
-.sectors-toolbar-right #refreshSectorSlopeBtn:disabled {
+.sectors-toolbar-right #refreshSectorSlopeBtn:disabled,
+.sectors-toolbar-right #refreshConceptSlopeBtn:disabled {
     opacity: 0.65;
     cursor: wait;
 }

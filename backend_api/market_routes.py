@@ -26,6 +26,8 @@ from backend_api.utils.board_code_source import (
     normalize_board_code_source,
 )
 from backend_api.utils.industry_board_query import (
+    fetch_concept_board_detail,
+    fetch_concept_board_list_with_metrics,
     fetch_industry_board_catalog,
     fetch_industry_board_detail,
     fetch_industry_board_list_with_metrics,
@@ -515,6 +517,104 @@ def get_industry_board_detail(
             },
             status_code=500,
         )
+
+
+@router.get("/concept_board/list")
+def get_concept_board_list(
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE,
+        description="板块代码来源，默认 tonghuashun（全量列表）",
+    ),
+    db: Session = Depends(get_db),
+):
+    """行情页概念板列表：同花顺全量 + 成分数 + 批量斜率（无独立实时行情表）。"""
+    try:
+        src = normalize_board_code_source(board_code_source) or DEFAULT_BOARD_CODE_SOURCE
+        data = fetch_concept_board_list_with_metrics(db, board_code_source=src)
+        return JSONResponse(
+            {
+                "success": True,
+                "data": data,
+                "total": len(data),
+                "board_code_source": src,
+                "board_kind": "concept",
+            }
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取概念板块列表失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/concept_board/{board_code}/detail")
+def get_concept_board_detail(
+    board_code: str,
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：板名称"),
+    include_roles: bool = Query(True, description="是否附带龙头/中军"),
+    compute_slope_if_missing: bool = Query(
+        True, description="库中无斜率时是否现算全成分并入库"
+    ),
+    db: Session = Depends(get_db),
+):
+    """概念板详情：斜率与强弱、龙头/中军；实时指数类字段可能为空。"""
+    try:
+        data = fetch_concept_board_detail(
+            db,
+            board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            include_roles=include_roles,
+            compute_slope_if_missing=compute_slope_if_missing,
+        )
+        if not data:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": (
+                        f"未找到来源为 "
+                        f"{board_code_source or DEFAULT_BOARD_CODE_SOURCE} "
+                        f"的概念板块 {board_code}"
+                    ),
+                },
+                status_code=404,
+            )
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取概念板块详情失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.post("/concept_board/refresh_sector_slopes")
+def refresh_concept_board_sector_slopes(
+    board_code_source: str = Query(DEFAULT_BOARD_CODE_SOURCE),
+    board_codes: Optional[str] = Query(None),
+    sync: bool = Query(False),
+):
+    """手动刷新同花顺概念板斜率（复用行业板刷新任务，board_kind=concept）。"""
+    return refresh_industry_board_sector_slopes(
+        board_code_source=board_code_source,
+        board_kind="concept",
+        board_codes=board_codes,
+        sync=sync,
+    )
 
 
 # 获取概念板块列表（基本信息表）

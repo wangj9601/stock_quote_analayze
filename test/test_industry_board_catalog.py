@@ -32,6 +32,27 @@ class TestIndustryBoardCatalog:
         assert sources == {"eastmoney", "tonghuashun"}
         assert all(x.get("board_code_source_label") for x in out)
 
+    def test_ths_same_name_prefers_881_over_bk(self):
+        """同花顺来源下误混入的 BK 码不应挤掉真·同花顺 881 码（行情页 92→91 根因）。"""
+        items = [
+            {
+                "board_code": "BK1705",
+                "board_name": "航天装备",
+                "board_code_source": "tonghuashun",
+                "stock_count": 10,
+            },
+            {
+                "board_code": "881166",
+                "board_name": "航天装备",
+                "board_code_source": "tonghuashun",
+                "stock_count": 88,
+            },
+        ]
+        out = dedupe_industry_board_catalog(items)
+        assert len(out) == 1
+        assert out[0]["board_code"] == "881166"
+        assert out[0]["stock_count"] == 88
+
     def test_dedupe_keeps_distinct_names(self):
         items = [
             {"board_code": "白酒", "board_name": "白酒", "board_code_source": "tonghuashun"},
@@ -86,7 +107,7 @@ class TestIndustryBoardCatalog:
                 "stock_count": 128,
             },
             {
-                "board_code": "白色家电",
+                "board_code": "881180",
                 "board_name": "白色家电",
                 "board_code_source": "tonghuashun",
                 "member_count": 3,
@@ -94,7 +115,8 @@ class TestIndustryBoardCatalog:
         ]
         out = dedupe_industry_board_catalog(items)
         assert len(out) == 1
-        assert out[0]["board_code"] == "BK0420"
+        # 同花顺来源优先 881，非 BK；成分数取组内最大
+        assert out[0]["board_code"] == "881180"
         assert out[0]["stock_count"] == 128
         assert out[0]["member_count"] == 128
 

@@ -109,6 +109,7 @@
                 <div class="tab-nav">
                     <button class="content-tab active" data-tab="rankings">涨跌排行</button>
                     <button class="content-tab" data-tab="sectors">行业板块</button>
+                    <button class="content-tab" data-tab="concepts">概念板块</button>
                     <button class="content-tab" data-tab="hot">热门关注</button>
                     <button class="content-tab" data-tab="stats">市场统计</button>
                 </div>
@@ -200,8 +201,8 @@
                             <div class="sectors-toolbar-right">
                                 <button type="button" class="btn btn-secondary" id="refreshSectorSlopeBtn" title="计算并入库同花顺行业板斜率（后台，约数分钟）">刷新斜率</button>
                                 <div class="view-controls sector-view-controls">
-                                    <button type="button" class="view-btn" data-sector-view="grid" title="卡片视图">⊞</button>
-                                    <button type="button" class="view-btn active" data-sector-view="list" title="列表视图">☰</button>
+                                    <button type="button" class="view-btn" data-sector-view="grid" data-board-kind="industry" title="卡片视图">⊞</button>
+                                    <button type="button" class="view-btn active" data-sector-view="list" data-board-kind="industry" title="列表视图">☰</button>
                                 </div>
                             </div>
                         </div>
@@ -221,6 +222,43 @@
                                     </tr>
                                 </thead>
                                 <tbody id="sectorsTableBody">
+                                    <tr><td colspan="8" style="text-align:center;color:#888;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 概念板块（布局/功能与行业板块一致） -->
+                    <div class="tab-panel" id="concepts">
+                        <div class="sectors-toolbar">
+                            <div class="sectors-toolbar-left">
+                                <span class="sector-count">共 <span id="conceptCount">0</span> 个概念板块</span>
+                                <span class="sector-source-hint">默认同花顺全量（暂无板指数实时行情，斜率/龙头中军可用）</span>
+                            </div>
+                            <div class="sectors-toolbar-right">
+                                <button type="button" class="btn btn-secondary" id="refreshConceptSlopeBtn" title="计算并入库同花顺概念板斜率（后台）">刷新斜率</button>
+                                <div class="view-controls sector-view-controls">
+                                    <button type="button" class="view-btn" data-sector-view="grid" data-board-kind="concept" title="卡片视图">⊞</button>
+                                    <button type="button" class="view-btn active" data-sector-view="list" data-board-kind="concept" title="列表视图">☰</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sectors-grid" id="conceptsGrid" style="display: none;"></div>
+                        <div class="sectors-list" id="conceptsList">
+                            <table class="table sectors-table">
+                                <thead>
+                                    <tr>
+                                        <th>板块</th>
+                                        <th title="概念板暂无独立指数行情">指数</th>
+                                        <th>涨跌幅</th>
+                                        <th>成交额(亿)</th>
+                                        <th>成分股</th>
+                                        <th title="近60日 ln(量权基准) 回归斜率">板块斜率</th>
+                                        <th title="走弱 / 正常 / 走强（展示）">板环境</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="conceptsTableBody">
                                     <tr><td colspan="8" style="text-align:center;color:#888;">加载中...</td></tr>
                                 </tbody>
                             </table>
