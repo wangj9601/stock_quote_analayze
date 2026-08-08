@@ -45,6 +45,7 @@ const ProfilePage = {
                 return;
             }
             await CommonUtils.auth.init();
+            this.renderUserHeader();
             this.bindTabs();
             this.bindActions();
             this.initTradingLogs();
@@ -56,6 +57,28 @@ const ProfilePage = {
             } else {
                 alert('初始化个人中心失败，请刷新重试');
             }
+        }
+    },
+
+    /** 顶部卡片与设置页展示当前登录用户名 */
+    renderUserHeader() {
+        const user = CommonUtils.auth.getUserInfo() || {};
+        const name =
+            (user.username && String(user.username).trim()) ||
+            (user.name && String(user.name).trim()) ||
+            '';
+        const display = name || '未登录';
+        const titleEl = document.getElementById('profileUserName');
+        if (titleEl) titleEl.textContent = display;
+        const avatarEl = document.getElementById('profileAvatarInitial');
+        if (avatarEl) {
+            const ch = display && display !== '未登录' ? display.charAt(0).toUpperCase() : 'U';
+            avatarEl.textContent = ch;
+        }
+        const settingsUser = document.getElementById('profileSettingsUsername');
+        if (settingsUser) settingsUser.value = name || '';
+        if (typeof CommonUtils.auth.updateUserDisplay === 'function' && name) {
+            CommonUtils.auth.updateUserDisplay(user);
         }
     },
 
@@ -408,6 +431,12 @@ const ProfilePage = {
         const classic = data.classic_levels || {};
         const fib = classic.fibonacci || null;
         const pivot = classic.pivot || null;
+        const cam = classic.camarilla || null;
+        const atrPiv = classic.atr_pivot || null;
+        const conf =
+            classic.confluence_zones ||
+            data.confluence_zones ||
+            null;
         const classicAdjust = classic.price_adjust || data.price_adjust || 'none';
         const adjustTag = document.getElementById('kdeClassicAdjustTag');
         if (adjustTag) {
@@ -429,6 +458,8 @@ const ProfilePage = {
         const fibLowEl = document.getElementById('kdeFibSwingLow');
         const fibHighDateEl = document.getElementById('kdeFibSwingHighDate');
         const fibLowDateEl = document.getElementById('kdeFibSwingLowDate');
+        const fibAnchorEl = document.getElementById('kdeFibAnchorMethod');
+        const fibDepthEl = document.getElementById('kdeFibDepthPct');
         if (fibHighEl) fibHighEl.textContent = fmt(fib && fib.swing_high);
         if (fibLowEl) fibLowEl.textContent = fmt(fib && fib.swing_low);
         if (fibHighDateEl) {
@@ -440,6 +471,20 @@ const ProfilePage = {
             fibLowDateEl.textContent = fib && fib.swing_low_date
                 ? `（${fib.swing_low_date}）`
                 : '';
+        }
+        if (fibAnchorEl) {
+            fibAnchorEl.textContent =
+                (fib && fib.anchor_method) === 'zigzag_fractal'
+                    ? 'ZigZag+分形'
+                    : fib && fib.anchor_method
+                      ? String(fib.anchor_method)
+                      : '--';
+        }
+        if (fibDepthEl) {
+            fibDepthEl.textContent =
+                fib && fib.depth_pct != null
+                    ? ` · 深度 ${(Number(fib.depth_pct) * 100).toFixed(1)}%`
+                    : '';
         }
         if (fibNearS) fibNearS.textContent = fmt(classic.nearest_fib_support);
         if (fibNearR) fibNearR.textContent = fmt(classic.nearest_fib_resistance);
@@ -473,6 +518,67 @@ const ProfilePage = {
         }
         fillLabeledList(pivList, pivRows);
 
+        const camNearS = document.getElementById('kdeCamNearestSupport');
+        const camNearR = document.getElementById('kdeCamNearestResistance');
+        const camList = document.getElementById('kdeCamList');
+        if (camNearS) {
+            camNearS.textContent = fmt(
+                classic.nearest_cam_support ?? (cam && cam.nearest_support)
+            );
+        }
+        if (camNearR) {
+            camNearR.textContent = fmt(
+                classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance)
+            );
+        }
+        const camRows = [];
+        if (cam) {
+            ['R4', 'R3', 'R2', 'R1', 'S1', 'S2', 'S3', 'S4'].forEach((k) => {
+                if (cam[k] != null) camRows.push({ label: k, price: cam[k] });
+            });
+        }
+        fillLabeledList(camList, camRows);
+        const atrTip = document.getElementById('kdeAtrPivotTip');
+        if (atrTip) {
+            if (atrPiv && atrPiv.atr != null) {
+                atrTip.textContent =
+                    `ATR-Pivot：P=${fmt(atrPiv.P)} ±1ATR R1/S1=${fmt(atrPiv.R1)}/${fmt(atrPiv.S1)}` +
+                    ` ±2ATR R2/S2=${fmt(atrPiv.R2)}/${fmt(atrPiv.S2)}（ATR=${fmt(atrPiv.atr)}）`;
+            } else {
+                atrTip.textContent = '';
+            }
+        }
+
+        const confNearS = document.getElementById('kdeConfNearestSupport');
+        const confNearR = document.getElementById('kdeConfNearestResistance');
+        const confList = document.getElementById('kdeConfList');
+        const nzS = conf && conf.nearest_support_zone;
+        const nzR = conf && conf.nearest_resistance_zone;
+        if (confNearS) {
+            confNearS.textContent = nzS
+                ? `${fmt(nzS.center)} [${fmt(nzS.low)}–${fmt(nzS.high)}]`
+                : '--';
+        }
+        if (confNearR) {
+            confNearR.textContent = nzR
+                ? `${fmt(nzR.center)} [${fmt(nzR.low)}–${fmt(nzR.high)}]`
+                : '--';
+        }
+        const confRows = [];
+        const pushZones = (arr, tag) => {
+            (arr || []).forEach((z, i) => {
+                confRows.push({
+                    label: `${tag}${i + 1}·强度${z.strength != null ? z.strength : '--'}·${(z.sources || []).join('+')}`,
+                    price: z.center,
+                });
+            });
+        };
+        if (conf && conf.ok) {
+            pushZones(conf.supports, '支撑');
+            pushZones(conf.resistances, '压力');
+        }
+        fillLabeledList(confList, confRows);
+
         const used = data.kde_lookback_used;
         const expanded = data.kde_lookback_expanded;
         const initLb = data.kde_lookback_initial || 250;
@@ -485,11 +591,17 @@ const ProfilePage = {
         const adjustLabel = data.price_adjust === 'qfq'
             ? `前复权（因子：${srcText}${data.adj_factor_asof ? `，截至 ${data.adj_factor_asof}` : ''}${data.factor_fetched ? '，本次已拉取' : '，已用缓存'}）`
             : '不复权日K';
-        const classicLb = classic.lookback || 60;
+        const classicLb = classic.lookback || 180;
         const classicBasis = classicAdjust === 'qfq' ? '前复权 OHLC' : '不复权 OHLC';
         const classicNote = classic.ok
-            ? `Fib/Pivot ${classicBasis} · 回看 ${classicLb} 日`
+            ? `ZigZag Fib / Cam / Pivot ${classicBasis} · 回看 ${classicLb} 日`
             : `Fib/Pivot：${classic.reason || '暂无'}`;
+        const confNote =
+            conf && conf.ok
+                ? `共振带 ${ (conf.supports || []).length + (conf.resistances || []).length } 条`
+                : conf
+                  ? `共振带：${conf.reason || '暂无'}`
+                  : null;
         const vpNote = vp.ok
             ? `VP 回看 ${vp.lookback || 60} 日 · POC ${fmt(vp.poc)}`
             : `VP：${vp.reason || '暂无'}`;
@@ -501,6 +613,7 @@ const ProfilePage = {
             `KDE 初始 ${initLb} / 上限 ${maxLb}`,
             vpNote,
             classicNote,
+            confNote,
             data.kde_reason ? `KDE 状态：${data.kde_reason}` : null,
         ].filter(Boolean);
         if (metaEl) metaEl.textContent = parts.join(' · ');

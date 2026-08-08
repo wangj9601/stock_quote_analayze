@@ -278,11 +278,22 @@ const BoardAnalysis = {
         );
         const fibS = this.fmtPrice2(ref.nearest_fib_support);
         const fibR = this.fmtPrice2(ref.nearest_fib_resistance);
-        const pivS = this.fmtPrice2(ref.nearest_pivot_support);
-        const pivR = this.fmtPrice2(ref.nearest_pivot_resistance);
+        const camS = this.fmtPrice2(
+          ref.nearest_cam_support ?? ref.camarilla?.nearest_support
+        );
+        const camR = this.fmtPrice2(
+          ref.nearest_cam_resistance ?? ref.camarilla?.nearest_resistance
+        );
         const vp = ref.volume_profile && typeof ref.volume_profile === 'object' ? ref.volume_profile : {};
         const vpS = this.fmtPrice2(ref.nearest_vp_support ?? vp.nearest_support ?? vp.val);
         const vpR = this.fmtPrice2(ref.nearest_vp_resistance ?? vp.nearest_resistance ?? vp.vah);
+        const conf = ref.confluence_zones && typeof ref.confluence_zones === 'object' ? ref.confluence_zones : {};
+        const confS = this.fmtPrice2(
+          ref.nearest_confluence_support ?? conf.nearest_support_zone?.center
+        );
+        const confR = this.fmtPrice2(
+          ref.nearest_confluence_resistance ?? conf.nearest_resistance_zone?.center
+        );
         const action = advice.action || 'watch';
         const tip = this.refHoverTip(ref, advice.summary);
         return `<tr>
@@ -294,7 +305,7 @@ const BoardAnalysis = {
           <td class="ba-advice">${this.esc(sell)}</td>
           <td class="ba-num">${kdeS}</td>
           <td class="ba-num">${kdeR}</td>
-          <td class="ba-ref" title="${this.escAttr(tip)}">Fib ${fibS}/${fibR}<br/>Pivot ${pivS}/${pivR}<br/>VP ${vpS}/${vpR}</td>
+          <td class="ba-ref" title="${this.escAttr(tip)}">Fib ${fibS}/${fibR}<br/>Cam ${camS}/${camR}<br/>VP ${vpS}/${vpR}<br/>合 ${confS}/${confR}</td>
           <td>
             <button type="button" class="btn btn-secondary btn-sm" data-observe
               data-strategy="${this.escAttr(strategy)}" data-code="${this.escAttr(code)}" data-name="${this.escAttr(name)}"
@@ -307,7 +318,7 @@ const BoardAnalysis = {
     return `<div class="ba-table-wrap"><table class="ba-table">
       <thead><tr>
         <th>股票</th><th>最新收盘</th><th>角色</th><th>命中</th><th>买点建议</th><th>卖点/防守</th>
-        <th>KDE结构支撑</th><th>KDE结构阻力</th><th>参考价 Fib/Pivot/VP</th><th>操作</th>
+        <th>KDE结构支撑</th><th>KDE结构阻力</th><th>参考价 Fib/Cam/VP/合</th><th>操作</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -342,10 +353,14 @@ const BoardAnalysis = {
     if (summary) lines.push(String(summary));
     const fib = ref && ref.fibonacci;
     if (fib) {
+      const method = fib.anchor_method === 'zigzag_fractal' ? 'ZigZag' : fib.anchor_method || '';
       if (fib.swing_high != null || fib.swing_low != null) {
         const hi = `${this.fmtPrice2(fib.swing_high)}${fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}`;
         const lo = `${this.fmtPrice2(fib.swing_low)}${fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}`;
-        lines.push(`Fib锚点: 高点 ${hi} / 低点 ${lo}`);
+        lines.push(`Fib锚点${method ? `(${method})` : ''}: 高点 ${hi} / 低点 ${lo}`);
+      }
+      if (fib.depth_pct != null) {
+        lines.push(`ZigZag深度: ${(Number(fib.depth_pct) * 100).toFixed(1)}%`);
       }
       if (Array.isArray(fib.retracements) && fib.retracements.length) {
         const parts = fib.retracements.map(
@@ -359,10 +374,23 @@ const BoardAnalysis = {
         );
       }
     }
+    const cam = ref && ref.camarilla;
+    if (cam) {
+      lines.push(
+        `Camarilla: R4=${this.fmtPrice2(cam.R4)} R3=${this.fmtPrice2(cam.R3)} R2=${this.fmtPrice2(cam.R2)} R1=${this.fmtPrice2(cam.R1)}` +
+          ` S1=${this.fmtPrice2(cam.S1)} S2=${this.fmtPrice2(cam.S2)} S3=${this.fmtPrice2(cam.S3)} S4=${this.fmtPrice2(cam.S4)}`
+      );
+    }
     const p = ref && ref.pivot;
     if (p && p.P != null) {
       lines.push(
-        `Pivot: P=${this.fmtPrice2(p.P)} R1=${this.fmtPrice2(p.R1)} R2=${this.fmtPrice2(p.R2)} R3=${this.fmtPrice2(p.R3)} S1=${this.fmtPrice2(p.S1)} S2=${this.fmtPrice2(p.S2)} S3=${this.fmtPrice2(p.S3)}`
+        `经典Pivot: P=${this.fmtPrice2(p.P)} R1=${this.fmtPrice2(p.R1)} R2=${this.fmtPrice2(p.R2)} R3=${this.fmtPrice2(p.R3)} S1=${this.fmtPrice2(p.S1)} S2=${this.fmtPrice2(p.S2)} S3=${this.fmtPrice2(p.S3)}`
+      );
+    }
+    const ap = ref && ref.atr_pivot;
+    if (ap && ap.atr != null) {
+      lines.push(
+        `ATR带: ATR=${this.fmtPrice2(ap.atr)} R1=${this.fmtPrice2(ap.R1)} S1=${this.fmtPrice2(ap.S1)} R2=${this.fmtPrice2(ap.R2)} S2=${this.fmtPrice2(ap.S2)}`
       );
     }
     const vp = ref && ref.volume_profile;
@@ -372,6 +400,16 @@ const BoardAnalysis = {
           ` 最近支撑=${this.fmtPrice2(ref.nearest_vp_support ?? vp.nearest_support)}` +
           ` 最近压力=${this.fmtPrice2(ref.nearest_vp_resistance ?? vp.nearest_resistance)}` +
           (vp.lookback != null ? `（回看${vp.lookback}日）` : '')
+      );
+    }
+    const conf = ref && ref.confluence_zones;
+    if (conf && conf.ok) {
+      const fmtZ = (z) =>
+        z
+          ? `${this.fmtPrice2(z.center)}[${this.fmtPrice2(z.low)}–${this.fmtPrice2(z.high)}]·${(z.sources || []).join('+')}`
+          : '--';
+      lines.push(
+        `共振带: 支撑 ${fmtZ(conf.nearest_support_zone)} / 压力 ${fmtZ(conf.nearest_resistance_zone)}`
       );
     }
     return lines.join('\n') || '暂无参考价';

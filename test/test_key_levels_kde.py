@@ -104,8 +104,12 @@ def test_classic_reference_levels_from_bars():
     assert out["pivot"] is not None
     assert out["pivot"]["P"] is not None
     assert out["fibonacci"] is not None
-    assert len(out["fibonacci"]["retracements"]) >= 3
-    assert out.get("lookback") == 60
+    # ZigZag 锚定：单调上升序列也可能确认波段；至少有 pivot/cam
+    assert out.get("camarilla") is not None
+    assert out.get("lookback") == 180
+    if out["fibonacci"].get("ok"):
+        assert len(out["fibonacci"]["retracements"]) >= 3
+    assert out["fibonacci"].get("anchor_method") == "zigzag_fractal"
 
 
 def test_classic_levels_follow_qfq_ohlc():
@@ -139,7 +143,16 @@ def test_classic_levels_follow_qfq_ohlc():
         qfq, qfq[-1]["close"], price_adjust="qfq"
     )
     assert qfq_out["price_adjust"] == "qfq"
-    assert raw_out["fibonacci"]["swing_low"] != qfq_out["fibonacci"]["swing_low"]
     assert raw_out["pivot"]["P"] != qfq_out["pivot"]["P"]
+    # 有 ZigZag 锚点时 Fib 高低随复权变化；否则至少 Camarilla 随 OHLC 变
+    if (
+        raw_out["fibonacci"]
+        and qfq_out["fibonacci"]
+        and raw_out["fibonacci"].get("swing_low") is not None
+        and qfq_out["fibonacci"].get("swing_low") is not None
+    ):
+        assert raw_out["fibonacci"]["swing_low"] != qfq_out["fibonacci"]["swing_low"]
+    else:
+        assert raw_out["camarilla"]["R1"] != qfq_out["camarilla"]["R1"]
     # 前复权锚点强制用序列末收
     assert qfq_out["last_close"] == pytest.approx(qfq[-1]["close"], abs=0.01)

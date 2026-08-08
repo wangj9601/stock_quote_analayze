@@ -21,12 +21,12 @@
                 <div class="profile-header">
                     <div class="avatar-section">
                         <div class="user-avatar">
-                            <span>U</span>
+                            <span id="profileAvatarInitial">U</span>
                         </div>
                         <button class="change-avatar-btn">更换头像</button>
                     </div>
                     <div class="user-details">
-                        <h1>投资达人</h1>
+                        <h1 id="profileUserName" class="current-user-name">--</h1>
                         <p class="user-title">高级用户 • VIP会员</p>
                         <div class="user-stats">
                             <div class="stat-item">
@@ -481,13 +481,15 @@
                                     </p>
                                 </div>
                             </div>
-                            <h4 class="kde-levels-subtitle">黄金分割 / 经典 Pivot（参考）
+                            <h4 class="kde-levels-subtitle">黄金分割（ZigZag）/ Pivot 波动率修正 / 共振带（参考）
                                 <span class="kde-levels-adjust-tag" id="kdeClassicAdjustTag"></span>
                             </h4>
                             <div class="kde-levels-grid kde-levels-grid--classic">
                                 <div class="kde-levels-card fib">
-                                    <h4>黄金分割（Fib）</h4>
+                                    <h4>黄金分割（ZigZag Fib）</h4>
                                     <div class="kde-levels-near">
+                                        <div class="kde-levels-meta-line">锚定：<strong id="kdeFibAnchorMethod">--</strong>
+                                            <span id="kdeFibDepthPct"></span></div>
                                         <div>高点：<strong id="kdeFibSwingHigh">--</strong>
                                             <span class="kde-levels-date" id="kdeFibSwingHighDate"></span></div>
                                         <div>低点：<strong id="kdeFibSwingLow">--</strong>
@@ -505,6 +507,23 @@
                                         <div>最近压力：<strong id="kdePivotNearestResistance">--</strong></div>
                                     </div>
                                     <ul id="kdePivotList"></ul>
+                                </div>
+                                <div class="kde-levels-card pivot cam">
+                                    <h4>Camarilla <span class="kde-levels-badge">波动率修正</span></h4>
+                                    <div class="kde-levels-near">
+                                        <div>最近支撑：<strong id="kdeCamNearestSupport">--</strong></div>
+                                        <div>最近压力：<strong id="kdeCamNearestResistance">--</strong></div>
+                                    </div>
+                                    <ul id="kdeCamList"></ul>
+                                    <p class="kde-levels-atr-tip" id="kdeAtrPivotTip"></p>
+                                </div>
+                                <div class="kde-levels-card confluence">
+                                    <h4>共振带</h4>
+                                    <div class="kde-levels-near">
+                                        <div>最近支撑带：<strong id="kdeConfNearestSupport">--</strong></div>
+                                        <div>最近压力带：<strong id="kdeConfNearestResistance">--</strong></div>
+                                    </div>
+                                    <ul id="kdeConfList"></ul>
                                 </div>
                             </div>
                             <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
@@ -609,7 +628,7 @@
                                 <h3>👤 个人信息</h3>
                                 <div class="form-group">
                                     <label>用户名</label>
-                                    <input type="text" value="投资达人" class="form-input">
+                                    <input type="text" id="profileSettingsUsername" value="" class="form-input" readonly>
                                 </div>
                                 <div class="form-group">
                                     <label>邮箱</label>

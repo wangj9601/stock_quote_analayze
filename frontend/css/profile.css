@@ -1640,6 +1640,34 @@
     border-top: 3px solid #ea580c;
 }
 
+.kde-levels-card.cam {
+    border-top: 3px solid #c2410c;
+}
+
+.kde-levels-card.confluence {
+    border-top: 3px solid #0369a1;
+}
+
+.kde-levels-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #c2410c;
+    margin-left: 0.25rem;
+}
+
+.kde-levels-atr-tip {
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.35;
+}
+
+.kde-levels-meta-line {
+    margin-bottom: 0.25rem;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
 .kde-levels-card.vp {
     border-top: 3px solid #0d9488;
 }

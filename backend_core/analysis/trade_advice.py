@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""策略命中行 → 统一买卖建议（主依据策略+KDE/箱体；Fib/Pivot 仅参考）。"""
+"""策略命中行 → 统一买卖建议（主依据策略+KDE/箱体；Fib/Pivot/共振带仅软参考）。"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+
+ALIGN_TOL_PCT = 0.015
 
 
 def _f(v: Any) -> Optional[float]:
@@ -53,21 +55,35 @@ def _fmt_px(v: Any) -> str:
     return f"{round(float(v), 2):.2f}"
 
 
+def _within_tol(a: Optional[float], b: Optional[float], tol_pct: float = ALIGN_TOL_PCT) -> bool:
+    if a is None or b is None:
+        return False
+    pa, pb = float(a), float(b)
+    if pa <= 0:
+        return False
+    return abs(pb - pa) / pa <= tol_pct
+
+
 def _ref_summary(ref: Optional[Dict[str, Any]]) -> str:
     if not ref:
         return ""
-    # Fib/Pivot 失败时仍可展示 VP
     classic_ok = bool(ref.get("ok"))
     parts: List[str] = []
     if classic_ok:
         fs = ref.get("nearest_fib_support")
         fr = ref.get("nearest_fib_resistance")
+        cs = ref.get("nearest_cam_support")
+        cr = ref.get("nearest_cam_resistance")
         ps = ref.get("nearest_pivot_support")
         pr = ref.get("nearest_pivot_resistance")
         if fs is not None:
             parts.append(f"Fib支撑≈{_fmt_px(fs)}")
         if fr is not None:
             parts.append(f"Fib压力≈{_fmt_px(fr)}")
+        if cs is not None:
+            parts.append(f"Cam支撑≈{_fmt_px(cs)}")
+        if cr is not None:
+            parts.append(f"Cam压力≈{_fmt_px(cr)}")
         if ps is not None:
             parts.append(f"Pivot支撑≈{_fmt_px(ps)}")
         if pr is not None:
@@ -86,6 +102,14 @@ def _ref_summary(ref: Optional[Dict[str, Any]]) -> str:
             parts.append(f"VP支撑≈{_fmt_px(vs)}")
         if vr is not None:
             parts.append(f"VP压力≈{_fmt_px(vr)}")
+    conf = ref.get("confluence_zones") if isinstance(ref.get("confluence_zones"), dict) else {}
+    if conf.get("ok"):
+        nz_s = conf.get("nearest_support_zone") or {}
+        nz_r = conf.get("nearest_resistance_zone") or {}
+        if nz_s.get("center") is not None:
+            parts.append(f"共振支撑≈{_fmt_px(nz_s['center'])}")
+        if nz_r.get("center") is not None:
+            parts.append(f"共振压力≈{_fmt_px(nz_r['center'])}")
     if not parts:
         return ""
     return "参考：" + " / ".join(parts)
@@ -96,7 +120,7 @@ def _resonance_note(
     ref_a: Optional[float],
     ref_b: Optional[float],
     *,
-    tol_pct: float = 0.015,
+    tol_pct: float = ALIGN_TOL_PCT,
 ) -> Optional[str]:
     if primary is None:
         return None
@@ -106,6 +130,63 @@ def _resonance_note(
         if abs(float(r) - float(primary)) / float(primary) <= tol_pct:
             return f"附近另有 Fib/Pivot 共振（≈{_fmt_px(r)}）"
     return None
+
+
+def _soft_align_confluence(
+    *,
+    stop_zone: Optional[Dict[str, Any]],
+    take_profit: Optional[Dict[str, Any]],
+    kde_s: Optional[float],
+    kde_r: Optional[float],
+    ref: Dict[str, Any],
+    summary_bits: List[str],
+    confidence: str,
+) -> tuple:
+    """共振带与 KDE 同向贴近时：标注 + 展示价对齐带中心（basis=kde+confluence）。"""
+    conf = ref.get("confluence_zones") if isinstance(ref.get("confluence_zones"), dict) else {}
+    if not conf.get("ok"):
+        return stop_zone, take_profit, confidence
+
+    nz_s = conf.get("nearest_support_zone") if isinstance(conf.get("nearest_support_zone"), dict) else None
+    nz_r = conf.get("nearest_resistance_zone") if isinstance(conf.get("nearest_resistance_zone"), dict) else None
+    center_s = _f((nz_s or {}).get("center"))
+    center_r = _f((nz_r or {}).get("center"))
+
+    if center_s is not None and kde_s is not None and _within_tol(kde_s, center_s):
+        summary_bits.append(
+            f"共振支撑带≈{_fmt_px(center_s)}"
+            f"（{nz_s.get('low')}–{nz_s.get('high')}，来源{'+'.join(nz_s.get('sources') or [])}）"
+            "与 KDE 同向贴近"
+        )
+        if stop_zone and (stop_zone.get("basis") or "").startswith("kde"):
+            stop_zone = dict(stop_zone)
+            stop_zone["price"] = round(center_s, 4)
+            if nz_s.get("low") is not None:
+                stop_zone["low"] = round(float(nz_s["low"]), 4)
+            if nz_s.get("high") is not None:
+                stop_zone["high"] = round(float(nz_s["high"]), 4)
+            stop_zone["basis"] = "kde+confluence"
+            stop_zone["label"] = (stop_zone.get("label") or "") + "（对齐共振带）"
+            stop_zone["kde_price"] = round(float(kde_s), 4)
+            if confidence == "medium":
+                confidence = "high"
+
+    if center_r is not None and kde_r is not None and _within_tol(kde_r, center_r):
+        summary_bits.append(
+            f"共振压力带≈{_fmt_px(center_r)}"
+            f"（{nz_r.get('low')}–{nz_r.get('high')}，来源{'+'.join(nz_r.get('sources') or [])}）"
+            "与 KDE 同向贴近"
+        )
+        if take_profit and (take_profit.get("basis") or "").startswith("kde"):
+            take_profit = dict(take_profit)
+            take_profit["prices"] = [round(center_r, 4)]
+            take_profit["basis"] = "kde+confluence"
+            take_profit["label"] = (take_profit.get("label") or "") + "（对齐共振带）"
+            take_profit["kde_price"] = round(float(kde_r), 4)
+            if confidence == "medium":
+                confidence = "high"
+
+    return stop_zone, take_profit, confidence
 
 
 def build_trade_advice(
@@ -277,12 +358,24 @@ def build_trade_advice(
         action = "watch"
         confidence = "low"
 
+    # 共振带软融合（不删 KDE 主依据；仅展示价/summary）
+    if ref:
+        stop_zone, take_profit, confidence = _soft_align_confluence(
+            stop_zone=stop_zone,
+            take_profit=take_profit,
+            kde_s=kde_s,
+            kde_r=kde_r,
+            ref=ref,
+            summary_bits=summary_bits,
+            confidence=confidence,
+        )
+
     # Fib/Pivot 共振提示（不覆盖主 stop）
     if ref and ref.get("ok"):
         note = _resonance_note(
             (stop_zone or {}).get("price") or (stop_zone or {}).get("low"),
             ref.get("nearest_fib_support"),
-            ref.get("nearest_pivot_support"),
+            ref.get("nearest_cam_support") or ref.get("nearest_pivot_support"),
         )
         if note:
             summary_bits.append(note)
@@ -291,7 +384,7 @@ def build_trade_advice(
             if take_profit and take_profit.get("prices")
             else None,
             ref.get("nearest_fib_resistance"),
-            ref.get("nearest_pivot_resistance"),
+            ref.get("nearest_cam_resistance") or ref.get("nearest_pivot_resistance"),
         )
         if note2:
             summary_bits.append(note2)

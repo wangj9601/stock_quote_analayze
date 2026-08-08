@@ -573,7 +573,8 @@ async def get_key_levels(
     """
     获取个股 KDE 支撑 / 压力（阻力）位，并附带参考价：
 
-    - classic_levels：近窗黄金分割 + 经典 Pivot
+    - classic_levels：ZigZag 锚定 Fib + 经典/Camarilla/ATR Pivot + confluence_zones
+    - confluence_zones：多源共振带（与 classic_levels 内一致）
     - volume_profile：固定回看日线 Volume Profile（POC/VAH/VAL）
     - vp_vs_kde：VP 与 KDE 最近支撑/压力对比（辅助参考，不改策略硬门槛）
 

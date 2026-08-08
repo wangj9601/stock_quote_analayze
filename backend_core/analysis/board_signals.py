@@ -11,7 +11,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_core.analysis.classic_levels import (
-    DEFAULT_LOOKBACK,
+    OHLC_LOOKBACK,
     attach_reference_levels_batch,
 )
 from backend_core.analysis.trade_advice import build_trade_advice
@@ -51,7 +51,7 @@ def batch_load_ohlc_bars(
     db: Session,
     codes: Sequence[str],
     *,
-    lookback: int = DEFAULT_LOOKBACK,
+    lookback: int = OHLC_LOOKBACK,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """批量取 A 股日线近 lookback 根 high/low/close/volume（按 code 截断）。"""
     codes = [_norm_code(c) for c in codes if _norm_code(c)]
@@ -432,13 +432,39 @@ def collect_board_signals(
         if c:
             hit_codes.append(c)
     hit_codes = sorted(set(hit_codes))
-    bars = batch_load_ohlc_bars(db, hit_codes, lookback=DEFAULT_LOOKBACK)
+    bars = batch_load_ohlc_bars(db, hit_codes, lookback=OHLC_LOOKBACK)
     last_closes = {
         c: float(bars[c][-1]["close"])
         for c in bars
         if bars[c] and bars[c][-1].get("close") is not None
     }
-    ref_by = attach_reference_levels_batch(bars, last_close_by_code=last_closes)
+    kde_by: Dict[str, Dict[str, Any]] = {}
+    for key in ("gms", "urt", "rpe"):
+        for row in raw.get(key) or []:
+            c = _item_code(row)
+            if not c or c in kde_by:
+                continue
+            st = row.get("structure") if isinstance(row.get("structure"), dict) else {}
+            kde_by[c] = {
+                "support": row.get("nearest_support") or st.get("nearest_support"),
+                "resistance": row.get("nearest_resistance") or st.get("nearest_resistance"),
+                "supports": row.get("supports") or st.get("supports"),
+                "resistances": row.get("resistances") or st.get("resistances"),
+            }
+    for row in (raw.get("sbbr_entry") or []) + (raw.get("sbbr_watch") or []):
+        c = _item_code(row)
+        if not c or c in kde_by:
+            continue
+        st = row.get("structure") if isinstance(row.get("structure"), dict) else {}
+        kde_by[c] = {
+            "support": row.get("nearest_support") or st.get("nearest_support"),
+            "resistance": row.get("nearest_resistance") or st.get("nearest_resistance"),
+            "supports": row.get("supports") or st.get("supports"),
+            "resistances": row.get("resistances") or st.get("resistances"),
+        }
+    ref_by = attach_reference_levels_batch(
+        bars, last_close_by_code=last_closes, kde_by_code=kde_by
+    )
 
     enrich_kw = dict(
         names=names,

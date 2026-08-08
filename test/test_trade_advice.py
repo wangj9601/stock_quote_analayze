@@ -34,6 +34,8 @@ def test_reference_levels_appended():
         "nearest_fib_resistance": 11.2,
         "nearest_pivot_support": 9.6,
         "nearest_pivot_resistance": 11.0,
+        "nearest_cam_support": 9.52,
+        "nearest_cam_resistance": 11.1,
     }
     adv = build_trade_advice(
         "urt",
@@ -42,3 +44,41 @@ def test_reference_levels_appended():
     )
     assert "参考" in adv["summary"]
     assert adv["reference_levels"] is ref
+
+
+def test_confluence_soft_aligns_stop_display():
+    ref = {
+        "ok": True,
+        "confluence_zones": {
+            "ok": True,
+            "nearest_support_zone": {
+                "center": 10.05,
+                "low": 10.0,
+                "high": 10.1,
+                "sources": ["kde", "fib"],
+                "strength": 3.4,
+            },
+            "nearest_resistance_zone": {
+                "center": 12.02,
+                "low": 11.9,
+                "high": 12.1,
+                "sources": ["kde", "camarilla"],
+                "strength": 2.8,
+            },
+        },
+    }
+    adv = build_trade_advice(
+        "gms",
+        {
+            "left_buy_signal": True,
+            "buy_type": "左侧",
+            "nearest_support": 10.0,
+            "nearest_resistance": 12.0,
+        },
+        reference_levels=ref,
+    )
+    assert adv["stop_zone"]["basis"] == "kde+confluence"
+    assert adv["stop_zone"]["price"] == 10.05
+    assert adv["stop_zone"].get("kde_price") == 10.0
+    assert adv["take_profit"]["basis"] == "kde+confluence"
+    assert "共振" in adv["summary"]

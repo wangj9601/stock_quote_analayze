@@ -509,11 +509,11 @@ class KeyLevels:
         historical_data 须已是目标价格口径（不复权或已现算前复权 OHLC）。
         """
         from backend_core.analysis.classic_levels import (
-            DEFAULT_LOOKBACK,
+            OHLC_LOOKBACK,
             compute_classic_levels_from_bars,
         )
 
-        lb = int(lookback or DEFAULT_LOOKBACK)
+        lb = int(lookback or OHLC_LOOKBACK)
         adjust = str(price_adjust or "none").strip().lower() or "none"
         bars: List[Dict] = []
         for row in historical_data or []:
@@ -539,7 +539,7 @@ class KeyLevels:
                 pass
         out = compute_classic_levels_from_bars(bars, last_close=price)
         out["lookback"] = lb
-        out["method"] = "fibonacci_swing+classic_pivot"
+        out["method"] = "zigzag_fib+classic_pivot+camarilla+atr"
         out["price_adjust"] = adjust
         return out
 
@@ -808,7 +808,39 @@ class StockAnalysisService:
                 current_price,
                 price_adjust=adjust,
             )
+            from backend_core.analysis.confluence_zones import compute_confluence_from_reference
             from backend_core.analysis.volume_profile import compare_vp_with_kde
+
+            classic["volume_profile"] = {
+                "ok": bool(vp.get("ok")),
+                "reason": vp.get("reason"),
+                "lookback": vp.get("lookback"),
+                "poc": vp.get("poc"),
+                "vah": vp.get("vah"),
+                "val": vp.get("val"),
+                "nearest_support": vp.get("nearest_support"),
+                "nearest_resistance": vp.get("nearest_resistance"),
+            }
+            conf = compute_confluence_from_reference(
+                classic,
+                kde_support=levels.get("nearest_support"),
+                kde_resistance=levels.get("nearest_resistance"),
+                kde_supports=levels.get("support_levels"),
+                kde_resistances=levels.get("resistance_levels"),
+                last_close=current_price,
+                atr=classic.get("atr"),
+            )
+            classic["confluence_zones"] = conf
+            classic["nearest_confluence_support"] = (
+                (conf.get("nearest_support_zone") or {}).get("center")
+                if conf.get("ok")
+                else None
+            )
+            classic["nearest_confluence_resistance"] = (
+                (conf.get("nearest_resistance_zone") or {}).get("center")
+                if conf.get("ok")
+                else None
+            )
 
             vp_vs_kde = compare_vp_with_kde(
                 vp,
@@ -852,6 +884,7 @@ class StockAnalysisService:
                     "stock_name": stock_name,
                     **levels,
                     "classic_levels": classic,
+                    "confluence_zones": conf,
                     "volume_profile": vp,
                     "vp_vs_kde": vp_vs_kde,
                     "current_price_source": price_source,
