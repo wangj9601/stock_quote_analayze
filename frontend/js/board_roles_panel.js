@@ -31,9 +31,21 @@
     return `<a class="gms-board-role-chip" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${code} ${name} <span class="gms-board-role-chg">${chg}</span></a>`;
   }
 
+  /** 优先 leaders/mids 全量数组，兼容旧 leader/mid 单对象；不做条数截断。 */
+  function normalizeRoleList(data, listKey, singularKey) {
+    if (Array.isArray(data[listKey])) return data[listKey];
+    const nested = data.roles && Array.isArray(data.roles[listKey]) ? data.roles[listKey] : null;
+    if (nested) return nested;
+    const one = data[singularKey];
+    if (one && (one.code || one.name)) return [one];
+    const nestedOne = data.roles && data.roles[singularKey];
+    if (nestedOne && (nestedOne.code || nestedOne.name)) return [nestedOne];
+    return [];
+  }
+
   function renderBoardBlock(data) {
-    const leaders = Array.isArray(data.leaders) ? data.leaders : [];
-    const mids = Array.isArray(data.mids) ? data.mids : [];
+    const leaders = normalizeRoleList(data, 'leaders', 'leader');
+    const mids = normalizeRoleList(data, 'mids', 'mid');
     const name = esc(data.board_name || data.board_code || '');
     const est = data.board_change_percent_est != null && Number.isFinite(Number(data.board_change_percent_est))
       ? Number(data.board_change_percent_est).toFixed(2) + '%'

@@ -1066,13 +1066,15 @@ const MarketsPage = {
         if (modal) modal.classList.remove('show');
     },
 
-    /** 详情 API：优先 leaders/mids 列表，兼容旧 leader/mid 单对象与 roles 嵌套。 */
+    /** 详情 API：优先 leaders/mids 全量列表（有几只渲染几只），兼容旧 leader/mid 单对象与 roles 嵌套。 */
     _normalizeSectorRoleList(d, listKey, singularKey) {
-        if (Array.isArray(d[listKey]) && d[listKey].length) return d[listKey];
+        if (Array.isArray(d[listKey])) return d[listKey];
         const nested = d.roles && Array.isArray(d.roles[listKey]) ? d.roles[listKey] : null;
-        if (nested && nested.length) return nested;
+        if (nested) return nested;
         const one = d[singularKey];
         if (one && (one.code || one.name)) return [one];
+        const nestedOne = d.roles && d.roles[singularKey];
+        if (nestedOne && (nestedOne.code || nestedOne.name)) return [nestedOne];
         return [];
     },
 
@@ -1088,6 +1090,7 @@ const MarketsPage = {
     },
 
     _renderSectorRoleBlock(label, stocks) {
+        // 故意不 slice：分类结果有几只就展示几只
         if (!stocks.length) {
             return `<div class="sector-role-row"><span>${label}：--</span></div>`;
         }

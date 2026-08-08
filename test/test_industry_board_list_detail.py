@@ -250,11 +250,32 @@ def test_fetch_industry_board_detail_maps_leaders_mids_from_real_extract(monkeyp
                     "board_role_score": 90,
                 },
                 {
+                    "code": "688012",
+                    "name": "中微公司",
+                    "change_percent": 1.8,
+                    "board_role": ROLE_LEADER,
+                    "board_role_score": 85,
+                },
+                {
                     "code": "603501",
                     "name": "韦尔股份",
                     "change_percent": 1.0,
                     "board_role": ROLE_MID,
                     "board_role_score": 80,
+                },
+                {
+                    "code": "002371",
+                    "name": "北方华创",
+                    "change_percent": 0.9,
+                    "board_role": ROLE_MID,
+                    "board_role_score": 75,
+                },
+                {
+                    "code": "600584",
+                    "name": "长电科技",
+                    "change_percent": 0.8,
+                    "board_role": ROLE_MID,
+                    "board_role_score": 70,
                 },
             ],
         },
@@ -268,8 +289,11 @@ def test_fetch_industry_board_detail_maps_leaders_mids_from_real_extract(monkeyp
     detail = q.fetch_industry_board_detail(
         _DB(), "881101", include_roles=True, compute_slope_if_missing=False
     )
-    assert detail["leaders"][0]["code"] == "688981"
-    assert detail["mids"][0]["code"] == "603501"
+    # 有几只透传几只，不得截成只返回第一只
+    assert [x["code"] for x in detail["leaders"]] == ["688981", "688012"]
+    assert [x["code"] for x in detail["mids"]] == ["603501", "002371", "600584"]
+    assert len(detail["leaders"]) == 2
+    assert len(detail["mids"]) == 3
     assert detail["leader"]["name"] == "中芯国际"
     assert detail["mid"]["name"] == "韦尔股份"
     assert detail["board_change_percent_est"] == 1.2

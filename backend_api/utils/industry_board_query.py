@@ -660,6 +660,7 @@ def fetch_industry_board_detail(
                 limit=None,
             )
             roles = extract_leader_mid_from_payload(payload)
+            # 全量透传分类结果，禁止 [:1]；leader/mid 仅作旧前端兼容首条
             leaders = list(roles.get("leaders") or [])
             mids = list(roles.get("mids") or [])
             detail["leaders"] = leaders
