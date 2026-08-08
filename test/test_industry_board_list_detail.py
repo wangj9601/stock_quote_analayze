@@ -9,17 +9,62 @@ from backend_core.strategies.gms.board_resonance import evaluate_board_weak_judg
 
 
 def test_evaluate_board_weak_judgment_summary():
+    from backend_core.strategies.gms.board_resonance import evaluate_board_environment
+
     weak = evaluate_board_weak_judgment(sector_slope_v=-0.01, board_change_percent=2.0)
     assert weak["board_weak"] is True
+    assert weak["board_strong"] is False
+    assert weak["board_env"] == "weak"
     assert weak["board_weak_reason"] == "sector_slope_negative"
     assert "斜率" in weak["board_weak_summary"]
+
+    strong = evaluate_board_environment(
+        sector_slope_v=0.0015, board_change_percent=-1.0
+    )
+    assert strong["board_strong"] is True
+    assert strong["board_weak"] is False
+    assert strong["board_env"] == "strong"
+    assert strong["board_env_label"] == "走强"
+
+    neutral = evaluate_board_environment(
+        sector_slope_v=0.0003, board_change_percent=1.0
+    )
+    assert neutral["board_env"] == "neutral"
+    assert neutral["board_strong"] is False
 
     fallback = evaluate_board_weak_judgment(
         sector_slope_v=None, board_change_percent=-1.5
     )
     assert fallback["board_weak"] is True
+    assert fallback["board_strong"] is False
     assert fallback["board_weak_reason"] == "realtime_change_negative"
     assert "实时涨跌" in fallback["board_weak_summary"]
+
+
+def test_looks_like_board_index_price():
+    from backend_api.utils import industry_board_query as q
+
+    assert q.looks_like_board_index_price(1628.37, -36.14) is True
+    assert q.looks_like_board_index_price(31.34, None) is False
+    assert q.looks_like_board_index_price(82.81, None) is False
+    # 少数低点位但带涨跌额，仍视为东财指数行
+    assert q.looks_like_board_index_price(88.5, 1.2) is True
+
+
+def test_quote_fields_strip_avg_price_as_index():
+    """均价残留不得作为指数字段返回。"""
+    from backend_api.utils import industry_board_query as q
+
+    fields = q._quote_fields_from_row(
+        {
+            "board_code": "BK0727",
+            "latest_price": 31.34,
+            "change_amount": None,
+            "change_percent": 8.34,
+        }
+    )
+    assert fields.get("latest_price") is None
+    assert fields.get("change_percent") == 8.34
 
 
 def test_prefer_board_quote_picks_index_over_avg_price():
@@ -41,9 +86,10 @@ def test_prefer_board_quote_picks_index_over_avg_price():
     picked = q._prefer_board_quote(avg_like, index_like)
     assert picked["latest_price"] == 1628.37
     assert picked["change_amount"] == -36.14
-    # 仅均价时仍返回均价行（兼容无指数数据）
     only_avg = q._prefer_board_quote(avg_like, None)
-    assert only_avg["latest_price"] == 82.81
+    assert q.looks_like_board_index_price(
+        only_avg.get("latest_price"), only_avg.get("change_amount")
+    ) is False
 
 
 def test_fetch_industry_board_list_with_metrics_merges_quote_and_slope(monkeypatch):
@@ -364,7 +410,9 @@ def test_fetch_industry_board_detail_computes_and_stores_missing_slope(monkeypat
     assert detail["member_count_used"] == 48
     assert detail["slope_filled_on_demand"] is True
     assert detail["board_weak"] is False
-    assert detail["board_weak_reason"] == "sector_slope_ok"
+    assert detail["board_strong"] is True
+    assert detail["board_env"] == "strong"
+    assert detail["board_weak_reason"] == "sector_slope_strong"
     assert detail["leaders"] == []
     assert detail["mids"] == []
     assert detail["leader"] is None

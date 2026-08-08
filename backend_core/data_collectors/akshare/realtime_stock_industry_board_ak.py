@@ -142,9 +142,34 @@ class RealtimeStockIndustryBoardCollector:
             print(f"[采集] 读取 stock_basic_info 失败，跳过领涨股代码补全: {e}")
             return {}
 
+    def _clear_stale_avg_as_index(self, session) -> int:
+        """清除误当作指数入库的同花顺「均价」残留（<100 且无涨跌额）。"""
+        try:
+            res = session.execute(
+                text(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET latest_price = NULL
+                    WHERE latest_price IS NOT NULL
+                      AND latest_price < 100
+                      AND change_amount IS NULL
+                    """
+                )
+            )
+            session.commit()
+            n = int(res.rowcount or 0)
+            if n:
+                print(f"[采集] 已清除均价冒充指数的 latest_price 行数: {n}")
+            return n
+        except Exception as e:
+            print(f"[采集] 清除均价残留失败: {e}")
+            session.rollback()
+            return 0
+
     def save_to_db(self, df):
         session = SessionLocal()
         try:
+            self._clear_stale_avg_as_index(session)
             now = datetime.now().replace(microsecond=0)
             df = industry_board_to_english_df(df)
             if df.empty:
@@ -262,14 +287,21 @@ class RealtimeStockIndustryBoardCollector:
                 value_dict["board_code"] = stored_code
                 placeholders = ','.join([f':{col}' for col in columns])
                 col_names = ','.join([f'"{col}"' for col in columns])
-                # upsert：latest_price 为空时保留旧值（同花顺兜底无指数，不可冲掉东财点位）
+                # upsert：有新指数则写入；无新指数时仅保留「像指数」的旧值，
+                # 绝不继续保留同花顺均价残留（<100 且无涨跌额）。
                 update_parts = []
                 for col in columns:
                     if col in ('board_code', 'update_time'):
                         continue
                     if col == 'latest_price':
                         update_parts.append(
-                            f'"{col}"=COALESCE(EXCLUDED."{col}", {self.table_name}."{col}")'
+                            f'"{col}"=CASE '
+                            f'WHEN EXCLUDED."{col}" IS NOT NULL THEN EXCLUDED."{col}" '
+                            f'WHEN {self.table_name}."{col}" IS NOT NULL AND ('
+                            f'{self.table_name}."{col}" >= 100 OR '
+                            f'{self.table_name}.change_amount IS NOT NULL'
+                            f') THEN {self.table_name}."{col}" '
+                            f'ELSE NULL END'
                         )
                     else:
                         update_parts.append(f'"{col}"=EXCLUDED."{col}"')

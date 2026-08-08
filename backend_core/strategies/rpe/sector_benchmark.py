@@ -49,9 +49,30 @@ def linear_slope(values: Sequence[float]) -> Optional[float]:
     return num / den
 
 
-def sector_slope(benchmark: List[Dict[str, float]], window: int) -> Optional[float]:
+def sector_slope(
+    benchmark: List[Dict[str, float]],
+    window: int,
+    *,
+    transform: str = "none",
+) -> Optional[float]:
+    """近 window 日 I_t 回归斜率。
+
+    transform:
+      - ``none``：对原始 I_t 回归（绝对价位斜率，RPE 历史口径）
+      - ``log``：对 ln(I_t) 回归（近似日对数收益趋势，跨板更可比；GMS/板指标入库用）
+    """
     if not benchmark:
         return None
     w = max(5, int(window))
     vals = [float(b["i_t"]) for b in benchmark[-w:]]
+    mode = (transform or "none").strip().lower()
+    if mode in ("log", "ln", "log_it"):
+        import math
+
+        log_vals: List[float] = []
+        for v in vals:
+            if v is None or float(v) <= 0:
+                return None
+            log_vals.append(math.log(float(v)))
+        vals = log_vals
     return linear_slope(vals)

@@ -125,7 +125,7 @@ const GmsScoreDetail = {
             }
             if (p.id === 'board_weak') {
                 const slope = (p.sector_slope != null && Number.isFinite(Number(p.sector_slope)))
-                    ? Number(p.sector_slope).toFixed(2)
+                    ? Number(p.sector_slope).toFixed(4)
                     : '--';
                 const chg = p.board_change_percent != null
                     ? (Number(p.board_change_percent).toFixed(2) + '%')
@@ -207,9 +207,11 @@ const GmsScoreDetail = {
         let boardSectionHtml = '<div class="gms-score-detail-section"><strong>【行业板共振】</strong>';
         boardSectionHtml += '<div class="gms-version-meta-line">';
         boardSectionHtml += `<span>主行业板 <strong>${br.primary_board_name || br.primary_board_code || '--'}</strong></span>`;
-        boardSectionHtml += `<span>斜率 <strong>${(br.sector_slope != null && Number.isFinite(Number(br.sector_slope))) ? Number(br.sector_slope).toFixed(2) : '--'}</strong></span>`;
+        boardSectionHtml += `<span>斜率(ln) <strong>${(br.sector_slope != null && Number.isFinite(Number(br.sector_slope))) ? Number(br.sector_slope).toFixed(4) : '--'}</strong></span>`;
         boardSectionHtml += `<span>当日涨跌 <strong>${br.board_change_percent != null ? Number(br.board_change_percent).toFixed(2) + '%' : '--'}</strong></span>`;
-        boardSectionHtml += `<span>环境 <strong>${br.board_weak ? '走弱' : '正常/未知'}</strong></span>`;
+        const envLabel = br.board_env_label
+            || (br.board_strong ? '走强' : (br.board_weak ? '走弱' : '正常/未知'));
+        boardSectionHtml += `<span>环境 <strong>${envLabel}</strong></span>`;
         if (br.board_weak_reason) boardSectionHtml += `<span>${br.board_weak_reason}</span>`;
         boardSectionHtml += `<span>资金流 <strong>${br.enable_board_fund_flow && br.board_main_net_inflow != null ? br.board_main_net_inflow : '暂无（二期）'}</strong></span>`;
         boardSectionHtml += '</div></div>';

@@ -751,7 +751,7 @@ const MarketsPage = {
     async loadSectorData() {
         const tbody = document.getElementById('sectorsTableBody');
         if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">加载中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">加载中...</td></tr>';
         }
         try {
             const response = await fetch(
@@ -769,7 +769,7 @@ const MarketsPage = {
             console.error('行业板块数据加载失败:', error);
             this.sectorData = [];
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#c00;">行业板块加载失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#c00;">行业板块加载失败</td></tr>';
             }
             const grid = document.getElementById('sectorsGrid');
             if (grid) {
@@ -932,9 +932,22 @@ const MarketsPage = {
     },
 
     formatSlope(val) {
+        // ln(I_t) 日斜率量级较小，展示四位小数
         if (val == null || val === '' || isNaN(Number(val))) return '--';
-        return Number(val).toFixed(2);
+        return Number(val).toFixed(4);
     },
+
+    boardEnvChipHtml(d) {
+        const env = (d && d.board_env) || (d && d.board_strong ? 'strong' : (d && d.board_weak ? 'weak' : ''));
+        const label = (d && d.board_env_label)
+            || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--');
+        const tip = this.escapeHtml((d && (d.board_weak_summary || d.board_weak_reason)) || '');
+        let cls = 'sector-weak-chip unknown';
+        if (env === 'strong') cls = 'sector-weak-chip strong';
+        else if (env === 'weak') cls = 'sector-weak-chip weak';
+        else if (env === 'neutral') cls = 'sector-weak-chip ok';
+        return `<span class="${cls}" title="${tip}">${this.escapeHtml(label)}</span>`;
+    },,
 
     escapeHtml(s) {
         return String(s == null ? '' : s)
@@ -950,7 +963,7 @@ const MarketsPage = {
         if (!tbody) return;
         const rows = this._sortedSectors(sectors);
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">暂无同花顺行业板块数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">暂无同花顺行业板块数据</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(sector => {
@@ -972,6 +985,7 @@ const MarketsPage = {
                     <td>${this.formatBoardAmountYi(sector.amount)}</td>
                     <td>${memberCount}</td>
                     <td class="${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</td>
+                    <td>${this.boardEnvChipHtml(sector)}</td>
                     <td>
                         <button type="button" class="btn btn-secondary sector-row-detail-btn">详情</button>
                     </td>
@@ -1040,6 +1054,10 @@ const MarketsPage = {
                         <div class="leader-stock">
                             <span class="stock-name">板块斜率</span>
                             <span class="stock-change ${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</span>
+                        </div>
+                        <div class="leader-stock">
+                            <span class="stock-name">板环境</span>
+                            <span class="stock-change">${this.boardEnvChipHtml(sector)}</span>
                         </div>
                     </div>
                     <button type="button" class="sector-detail-btn">查看详情</button>
@@ -1140,12 +1158,7 @@ const MarketsPage = {
 
         if (title) title.textContent = d.board_name || d.board_code || '板块详情';
         if (sub) {
-            const weakChip = d.board_weak
-                ? '<span class="sector-weak-chip weak">走弱</span>'
-                : (d.board_weak_reason === 'insufficient_board_data'
-                    ? '<span class="sector-weak-chip unknown">数据不足</span>'
-                    : '<span class="sector-weak-chip ok">未走弱</span>');
-            sub.innerHTML = `${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${weakChip}`;
+            sub.innerHTML = `${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${this.boardEnvChipHtml(d)}`;
         }
 
         const item = (label, value, cls) => `
@@ -1174,12 +1187,14 @@ const MarketsPage = {
             <div class="sector-detail-section">
                 <h3>板块斜率与强弱</h3>
                 <div class="sector-detail-grid">
-                    ${item('sector_slope', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
+                    ${item('斜率(ln)', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
+                    ${item('板环境', this.boardEnvChipHtml(d))}
                     ${item('slope_asof_date', d.slope_asof_date || '--')}
                     ${item('window', d.sector_slope_window != null ? d.sector_slope_window : '--')}
+                    ${item('走强阈值', d.slope_strong_threshold != null ? Number(d.slope_strong_threshold).toFixed(4) : '0.0010')}
                     ${item('member_count_used', d.member_count_used != null ? d.member_count_used : '--')}
                 </div>
-                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}</div>
+                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（斜率=ln量权基准近窗回归，仅展示走强）</div>
             </div>
             <div class="sector-detail-section">
                 <h3>龙头 / 中军</h3>

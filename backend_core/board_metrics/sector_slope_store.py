@@ -28,6 +28,8 @@ DEFAULT_LOOKBACK = 120
 MIN_MEMBERS = 5
 # 斜率业务仅同花顺；与管理端默认来源一致（非 LEGACY 空值→东财）
 ALLOWED_SLOPE_BOARD_CODE_SOURCE = DEFAULT_BOARD_CODE_SOURCE  # tonghuashun
+# 入库/展示默认对 ln(I_t) 回归（见模块 docstring）
+DEFAULT_SLOPE_TRANSFORM = "log"
 
 TABLE_BY_KIND = {
     "industry": "industry_board_daily_metrics",
@@ -125,6 +127,7 @@ def compute_board_sector_slope_detail(
         "board_kind": board_kind or "industry",
         "sector_slope": None,
         "sector_slope_window": int(window),
+        "slope_transform": DEFAULT_SLOPE_TRANSFORM,
         "slope_asof_date": None,
         "member_count_used": 0,
     }
@@ -144,7 +147,9 @@ def compute_board_sector_slope_detail(
         benchmark = compute_vwap_benchmark(date_members)
         if len(benchmark) < max(10, int(window) // 2):
             return out
-        slope = sector_slope(benchmark, int(window))
+        slope = sector_slope(
+            benchmark, int(window), transform=DEFAULT_SLOPE_TRANSFORM
+        )
         out["sector_slope"] = float(slope) if slope is not None else None
         last_d = benchmark[-1].get("date") if benchmark else None
         asof = _parse_asof(str(last_d) if last_d else None) or _parse_asof(end_date)

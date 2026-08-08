@@ -1684,29 +1684,36 @@ const ScreeningPage = {
     },
 
     _gmsBoardEnvHtml(stock) {
-        if (!stock || !stock.board_weak) {
-            return stock && stock.primary_board_code
-                ? '<span class="gms-muted">正常</span>'
-                : '--';
-        }
-        const reason = String(stock.board_weak_reason || 'board_weak');
+        if (!stock || !stock.primary_board_code) return '--';
+        const env = stock.board_env
+            || (stock.board_strong ? 'strong' : (stock.board_weak ? 'weak' : 'neutral'));
+        const reason = String(stock.board_weak_reason || '');
         const fromRt = reason === 'realtime_change_negative';
-        const label = fromRt ? '走弱(实时)' : '走弱';
-        const tipParts = [reason];
-        if (fromRt) {
-            tipParts.push('斜率暂无，按板实时涨跌判弱');
-        }
+        let label = stock.board_env_label
+            || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : '正常');
+        if (fromRt && env === 'weak') label = '走弱(实时)';
+        const tipParts = [reason || env];
+        if (fromRt) tipParts.push('斜率暂无，按板实时涨跌判弱');
         if (stock.board_change_percent != null && Number.isFinite(Number(stock.board_change_percent))) {
             tipParts.push(`涨跌${Number(stock.board_change_percent).toFixed(2)}%`);
         }
+        if (stock.sector_slope != null && Number.isFinite(Number(stock.sector_slope))) {
+            tipParts.push(`斜率${Number(stock.sector_slope).toFixed(4)}`);
+        }
         const tip = tipParts.join('；').replace(/"/g, '&quot;');
-        return `<span class="gms-risk-tag" title="${tip}">${label}</span>`;
+        const cls = env === 'strong'
+            ? 'gms-risk-tag gms-risk-info'
+            : (env === 'weak' ? 'gms-risk-tag' : 'gms-muted');
+        if (env === 'neutral' || env === 'unknown') {
+            return `<span class="gms-muted" title="${tip}">${label}</span>`;
+        }
+        return `<span class="${cls}" title="${tip}">${label}</span>`;
     },
 
     _gmsSlopeCellHtml(stock) {
         const slopeOk = stock && stock.sector_slope != null && Number.isFinite(Number(stock.sector_slope));
         if (slopeOk) {
-            return Number(stock.sector_slope).toFixed(2);
+            return Number(stock.sector_slope).toFixed(4);
         }
         const reason = stock && stock.board_weak_reason ? String(stock.board_weak_reason) : '';
         if (reason === 'realtime_change_negative') {

@@ -20,6 +20,8 @@ DEFAULT_SECTOR_SLOPE_WINDOW = 60
 # None/0 = 不截断（板内全成分）；正整数为可选上限
 DEFAULT_BOARD_PANEL_LIMIT = None
 DEFAULT_LOOKBACK = 120
+# ln(I_t) 日斜率：约 0.1%/日 量级，作「走强」软阈值（仅展示，不加分）
+DEFAULT_SLOPE_STRONG_THRESHOLD = 0.001
 
 
 def empty_board_resonance() -> Dict[str, Any]:
@@ -28,8 +30,12 @@ def empty_board_resonance() -> Dict[str, Any]:
         "primary_board_name": None,
         "primary_board_kind": None,
         "sector_slope": None,
+        "slope_transform": "log",
         "board_change_percent": None,
         "board_weak": False,
+        "board_strong": False,
+        "board_env": "unknown",
+        "board_env_label": "--",
         "board_weak_reason": None,
         "board_main_net_inflow": None,  # 二期：板级资金流
         "enable_board_fund_flow": False,
@@ -69,6 +75,9 @@ def resolve_board_resonance_config(config: Optional[Dict[str, Any]]) -> Dict[str
         "enabled": bool(_get("board_resonance_enabled", True)),
         "sector_slope_window": int(_get("sector_slope_window", DEFAULT_SECTOR_SLOPE_WINDOW)),
         "slope_weak_threshold": float(_get("board_slope_weak_threshold", 0.0)),
+        "slope_strong_threshold": float(
+            _get("board_slope_strong_threshold", DEFAULT_SLOPE_STRONG_THRESHOLD)
+        ),
         "panel_member_limit": normalize_member_limit(raw_limit),
         "lookback_days": int(_get("board_slope_lookback_days", DEFAULT_LOOKBACK)),
         "enable_board_fund_flow": bool(_get("enable_board_fund_flow", False)),
@@ -272,12 +281,74 @@ def _is_board_weak(
 
 
 BOARD_WEAK_REASON_SUMMARY = {
-    "sector_slope_negative": "板块斜率 < 0，判定走弱（与 GMS board_resonance 一致）",
-    "sector_slope_ok": "板块斜率 ≥ 0，未走弱",
+    "sector_slope_negative": "板块斜率 < 0，判定走弱（ln(I_t) 近窗回归）",
+    "sector_slope_ok": "板块斜率 ≥ 0 且未达走强阈值，环境正常",
+    "sector_slope_strong": "板块斜率 ≥ 走强阈值，判定走强（仅展示）",
     "realtime_change_negative": "无斜率时按实时涨跌回退：涨跌幅 < 0，判定走弱",
-    "realtime_change_ok": "无斜率时按实时涨跌回退：涨跌幅 ≥ 0，未走弱",
+    "realtime_change_ok": "无斜率时按实时涨跌回退：涨跌幅 ≥ 0，未走弱（不作走强）",
     "insufficient_board_data": "斜率与实时涨跌均不足，暂无法判定强弱",
+    "no_primary_board": "无同花顺主行业板，暂无法判定强弱",
 }
+
+BOARD_ENV_LABELS = {
+    "weak": "走弱",
+    "neutral": "正常",
+    "strong": "走强",
+    "unknown": "--",
+}
+
+
+def evaluate_board_environment(
+    *,
+    sector_slope_v: Optional[float],
+    board_change_percent: Optional[float],
+    slope_weak_threshold: float = 0.0,
+    slope_strong_threshold: float = DEFAULT_SLOPE_STRONG_THRESHOLD,
+    use_realtime_fallback: bool = True,
+) -> Dict[str, Any]:
+    """板环境：走弱 / 正常 / 走强（走强仅展示，不加分）。
+
+    斜率口径为入库的 ln(I_t) 近窗回归斜率。
+    """
+    strong_th = float(slope_strong_threshold)
+    weak_th = float(slope_weak_threshold)
+    if strong_th < weak_th:
+        strong_th = weak_th
+
+    board_strong = False
+    if sector_slope_v is not None:
+        sv = float(sector_slope_v)
+        if sv < weak_th:
+            env, reason = "weak", "sector_slope_negative"
+        elif sv >= strong_th:
+            env, reason = "strong", "sector_slope_strong"
+            board_strong = True
+        else:
+            env, reason = "neutral", "sector_slope_ok"
+    elif use_realtime_fallback and board_change_percent is not None:
+        if float(board_change_percent) < 0:
+            env, reason = "weak", "realtime_change_negative"
+        else:
+            # 实时回退只区分走弱/未走弱，不标走强
+            env, reason = "neutral", "realtime_change_ok"
+    else:
+        env, reason = "unknown", "insufficient_board_data"
+
+    weak = env == "weak"
+    return {
+        "board_weak": weak,
+        "board_strong": board_strong,
+        "board_env": env,
+        "board_env_label": BOARD_ENV_LABELS.get(env, "--"),
+        "board_weak_reason": reason,
+        "board_weak_summary": BOARD_WEAK_REASON_SUMMARY.get(
+            reason, BOARD_WEAK_REASON_SUMMARY["insufficient_board_data"]
+        ),
+        "slope_weak_threshold": weak_th,
+        "slope_strong_threshold": strong_th,
+        "slope_transform": "log",
+        "use_realtime_change_fallback": bool(use_realtime_fallback),
+    }
 
 
 def evaluate_board_weak_judgment(
@@ -285,25 +356,17 @@ def evaluate_board_weak_judgment(
     sector_slope_v: Optional[float],
     board_change_percent: Optional[float],
     slope_threshold: float = 0.0,
+    slope_strong_threshold: float = DEFAULT_SLOPE_STRONG_THRESHOLD,
     use_realtime_fallback: bool = True,
 ) -> Dict[str, Any]:
-    """可读的板走弱判断（行情详情等复用 GMS 口径）。"""
-    weak, reason = _is_board_weak(
+    """兼容旧名：返回环境判断（含走强展示字段）。"""
+    return evaluate_board_environment(
         sector_slope_v=sector_slope_v,
         board_change_percent=board_change_percent,
-        slope_threshold=slope_threshold,
+        slope_weak_threshold=slope_threshold,
+        slope_strong_threshold=slope_strong_threshold,
         use_realtime_fallback=use_realtime_fallback,
     )
-    reason_key = reason or "insufficient_board_data"
-    return {
-        "board_weak": bool(weak),
-        "board_weak_reason": reason_key,
-        "board_weak_summary": BOARD_WEAK_REASON_SUMMARY.get(
-            reason_key, BOARD_WEAK_REASON_SUMMARY["insufficient_board_data"]
-        ),
-        "slope_weak_threshold": float(slope_threshold),
-        "use_realtime_change_fallback": bool(use_realtime_fallback),
-    }
 
 
 def apply_board_weak_penalty_to_item(
@@ -533,6 +596,7 @@ def enrich_results_with_board_resonance(
     lookback = int(br_cfg["lookback_days"])
     member_limit = br_cfg["panel_member_limit"]  # Optional[int]
     slope_th = float(br_cfg["slope_weak_threshold"])
+    strong_th = float(br_cfg["slope_strong_threshold"])
     use_rt = bool(br_cfg["use_realtime_change_fallback"])
     enable_ff = bool(br_cfg["enable_board_fund_flow"])
     prefer_db = bool(br_cfg.get("prefer_db_slope", True))
@@ -565,8 +629,12 @@ def enrich_results_with_board_resonance(
                 # 非同花顺：不处理斜率/弱判定（与入库口径一致）
                 payload["sector_slope"] = None
                 payload["board_change_percent"] = None
-                payload["board_weak"] = False
-                payload["board_weak_reason"] = "insufficient_board_data"
+                env = evaluate_board_environment(
+                    sector_slope_v=None,
+                    board_change_percent=None,
+                    use_realtime_fallback=False,
+                )
+                payload.update(env)
             else:
                 slope_v = slope_cache.get(bc)
                 chg = change_map.get(bc)
@@ -574,16 +642,18 @@ def enrich_results_with_board_resonance(
                     round(float(slope_v), 6) if slope_v is not None else None
                 )
                 payload["board_change_percent"] = chg
-                weak, reason = _is_board_weak(
+                env = evaluate_board_environment(
                     sector_slope_v=slope_v,
                     board_change_percent=chg,
-                    slope_threshold=slope_th,
+                    slope_weak_threshold=slope_th,
+                    slope_strong_threshold=strong_th,
                     use_realtime_fallback=use_rt,
                 )
-                payload["board_weak"] = weak
-                payload["board_weak_reason"] = reason
+                payload.update(env)
         else:
             payload["board_weak_reason"] = "no_primary_board"
+            payload["board_env"] = "unknown"
+            payload["board_env_label"] = "--"
 
         item["primary_board_code"] = payload["primary_board_code"]
         item["primary_board_name"] = payload["primary_board_name"]
@@ -591,6 +661,9 @@ def enrich_results_with_board_resonance(
         item["sector_slope"] = payload["sector_slope"]
         item["board_change_percent"] = payload["board_change_percent"]
         item["board_weak"] = payload["board_weak"]
+        item["board_strong"] = payload.get("board_strong", False)
+        item["board_env"] = payload.get("board_env")
+        item["board_env_label"] = payload.get("board_env_label")
         item["board_weak_reason"] = payload["board_weak_reason"]
         item["board_main_net_inflow"] = payload["board_main_net_inflow"]
         item["enable_board_fund_flow"] = payload["enable_board_fund_flow"]

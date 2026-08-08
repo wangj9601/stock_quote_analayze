@@ -1109,6 +1109,11 @@
     background: #d1fae5;
 }
 
+.sector-weak-chip.strong {
+    color: #b45309;
+    background: #ffedd5;
+}
+
 .sector-weak-chip.unknown {
     color: #92400e;
     background: #fef3c7;

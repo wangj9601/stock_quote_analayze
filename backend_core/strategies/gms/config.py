@@ -327,6 +327,8 @@ class GMSConfigManager:
                 "board_panel_member_limit": None,
                 "board_prefer_db_slope": True,
                 "enable_board_fund_flow": False,
+                # ln(I_t) 斜率：≥ 该值展示「走强」（不加分）
+                "board_slope_strong_threshold": 0.001,
             },
         )
         penalty_id = self.create_config(

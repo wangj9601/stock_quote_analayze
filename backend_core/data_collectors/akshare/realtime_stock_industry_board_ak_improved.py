@@ -134,8 +134,24 @@ class ImprovedRealtimeStockIndustryBoardCollector:
                     placeholders = ','.join([f':{col}' for col in columns])
                     col_names = ','.join([f'"{col}"' for col in columns])
                     
-                    # 构造upsert SQL
-                    update_set = ','.join([f'"{col}"=EXCLUDED."{col}"' for col in columns if col not in ('board_code','update_time')])
+                    # upsert：空指数不覆盖真指数；均价残留（<100 且无涨跌额）应清空
+                    update_parts = []
+                    for col in columns:
+                        if col in ("board_code", "update_time"):
+                            continue
+                        if col == "latest_price":
+                            update_parts.append(
+                                f'"{col}"=CASE '
+                                f'WHEN EXCLUDED."{col}" IS NOT NULL THEN EXCLUDED."{col}" '
+                                f'WHEN {self.table_name}."{col}" IS NOT NULL AND ('
+                                f'{self.table_name}."{col}" >= 100 OR '
+                                f'{self.table_name}.change_amount IS NOT NULL'
+                                f') THEN {self.table_name}."{col}" '
+                                f'ELSE NULL END'
+                            )
+                        else:
+                            update_parts.append(f'"{col}"=EXCLUDED."{col}"')
+                    update_set = ",".join(update_parts)
                     sql = f'INSERT INTO {self.table_name} ({col_names}) VALUES ({placeholders}) ON CONFLICT (board_code, update_time) DO UPDATE SET {update_set}'
                     
                     session.execute(text(sql), value_dict)

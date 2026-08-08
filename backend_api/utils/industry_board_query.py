@@ -305,6 +305,34 @@ def _json_safe_value(value: Any) -> Any:
     return value
 
 
+def looks_like_board_index_price(
+    latest_price: Any,
+    change_amount: Any = None,
+    *,
+    min_index_points: float = 100.0,
+) -> bool:
+    """判断 latest_price 是否更像东财行业板指数点位（而非同花顺成分均价）。
+
+    东财「最新价」常见数百~上万且常带涨跌额；同花顺「均价」多为 <100 且涨跌额为空。
+    """
+    if latest_price is None:
+        return False
+    try:
+        px = abs(float(latest_price))
+    except (TypeError, ValueError):
+        return False
+    if px >= float(min_index_points):
+        return True
+    # 少数指数可能暂时 <100，但东财行通常有涨跌额
+    if change_amount is not None:
+        try:
+            float(change_amount)
+            return True
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
 def _quote_fields_from_row(row: Any) -> Dict[str, Any]:
     """将 realtime_quotes 行映射为列表/详情字段（缺列则跳过）。"""
     if row is None:
@@ -336,6 +364,9 @@ def _quote_fields_from_row(row: Any) -> Dict[str, Any]:
     ):
         if key in m:
             out[key] = _json_safe_value(m.get(key))
+    # 均价残留不得作为「指数」展示（如 31.34）
+    if not looks_like_board_index_price(out.get("latest_price"), out.get("change_amount")):
+        out["latest_price"] = None
     quote_code = m.get("board_code")
     if quote_code:
         out["quote_board_code"] = str(quote_code).strip()
@@ -355,8 +386,7 @@ def _quote_index_score(fields: Optional[Dict[str, Any]]) -> Tuple[int, float, fl
         px = abs(float(fields.get("latest_price"))) if fields.get("latest_price") is not None else 0.0
     except (TypeError, ValueError):
         px = 0.0
-    # 指数量级加分（均价通常 <100）
-    index_like = 1 if px >= 100.0 else 0
+    index_like = 1 if looks_like_board_index_price(fields.get("latest_price"), fields.get("change_amount")) else 0
     try:
         cp_abs = abs(float(fields.get("change_percent") or 0))
     except (TypeError, ValueError):
@@ -433,15 +463,45 @@ def _attach_slope_fields(item: Dict[str, Any], slope: Optional[Dict[str, Any]]) 
         item["sector_slope_window"] = None
         item["slope_asof_date"] = None
         item["member_count_used"] = None
+        item["slope_transform"] = "log"
         return
     item["sector_slope"] = slope.get("sector_slope")
     item["sector_slope_window"] = slope.get("sector_slope_window")
+    item["slope_transform"] = slope.get("slope_transform") or "log"
     asof = slope.get("slope_asof_date")
     if hasattr(asof, "isoformat"):
         item["slope_asof_date"] = asof.isoformat()
     else:
         item["slope_asof_date"] = str(asof)[:10] if asof else None
     item["member_count_used"] = slope.get("member_count_used")
+
+
+def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -> None:
+    """列表/详情附加走弱/走强展示字段（ln 斜率口径）。"""
+    from backend_core.strategies.gms.board_resonance import evaluate_board_environment
+
+    try:
+        slope_f = float(item["sector_slope"]) if item.get("sector_slope") is not None else None
+    except (TypeError, ValueError):
+        slope_f = None
+    cp = change_percent if change_percent is not None else item.get("change_percent")
+    try:
+        cp_f = float(cp) if cp is not None else None
+    except (TypeError, ValueError):
+        cp_f = None
+    env = evaluate_board_environment(
+        sector_slope_v=slope_f,
+        board_change_percent=cp_f,
+    )
+    item["board_weak"] = env["board_weak"]
+    item["board_strong"] = env["board_strong"]
+    item["board_env"] = env["board_env"]
+    item["board_env_label"] = env["board_env_label"]
+    item["board_weak_reason"] = env["board_weak_reason"]
+    item["board_weak_summary"] = env["board_weak_summary"]
+    item["slope_weak_threshold"] = env["slope_weak_threshold"]
+    item["slope_strong_threshold"] = env["slope_strong_threshold"]
+    item["slope_transform"] = env.get("slope_transform") or item.get("slope_transform") or "log"
 
 
 def fetch_industry_board_list_with_metrics(
@@ -495,6 +555,7 @@ def fetch_industry_board_list_with_metrics(
         )
         item.update(quote)
         _attach_slope_fields(item, slopes.get(code))
+        _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
 
     # 有涨跌幅的按涨幅降序，其余按名称
@@ -533,7 +594,7 @@ def fetch_industry_board_detail(
         extract_leader_mid_from_payload,
         fetch_board_roles_payload,
     )
-    from backend_core.strategies.gms.board_resonance import evaluate_board_weak_judgment
+    from backend_core.strategies.gms.board_resonance import evaluate_board_environment
 
     meta = resolve_board_for_roles(
         db,
@@ -619,7 +680,7 @@ def fetch_industry_board_detail(
             except Exception:
                 pass
 
-    judgment = evaluate_board_weak_judgment(
+    judgment = evaluate_board_environment(
         sector_slope_v=sector_slope_f,
         board_change_percent=change_percent_f,
     )
@@ -634,9 +695,14 @@ def fetch_industry_board_detail(
         "member_count": stock_count,
         **quote,
         "board_weak": judgment["board_weak"],
+        "board_strong": judgment["board_strong"],
+        "board_env": judgment["board_env"],
+        "board_env_label": judgment["board_env_label"],
         "board_weak_reason": judgment["board_weak_reason"],
         "board_weak_summary": judgment["board_weak_summary"],
         "slope_weak_threshold": judgment["slope_weak_threshold"],
+        "slope_strong_threshold": judgment["slope_strong_threshold"],
+        "slope_transform": judgment.get("slope_transform") or "log",
         "use_realtime_change_fallback": judgment["use_realtime_change_fallback"],
         "slope_filled_on_demand": slope_filled_on_demand,
         # extract_leader_mid_from_payload 返回 leaders/mids 列表；
