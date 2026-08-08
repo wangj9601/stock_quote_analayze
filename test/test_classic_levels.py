@@ -42,5 +42,11 @@ def test_compute_from_bars_nearest():
     out = compute_classic_levels_from_bars(bars, last_close=9.8)
     assert out["ok"] is True
     assert out["pivot"] is not None
+    assert out["pivot"].get("trade_date") == "2026-01-09"
     assert out["fibonacci"] is not None
     assert 0.236 in [x["ratio"] for x in out["fibonacci"]["retracements"]]
+    # 窗口最高在最后一天，最低多日同低取最早一根（min 稳定）
+    assert out["fibonacci"]["swing_high"] == 10.9
+    assert out["fibonacci"]["swing_high_date"] == "2026-01-10"
+    assert out["fibonacci"]["swing_low"] == 9.0
+    assert out["fibonacci"]["swing_low_date"] == "2026-01-01"

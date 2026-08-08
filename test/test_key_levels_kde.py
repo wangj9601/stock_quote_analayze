@@ -78,3 +78,66 @@ def test_key_levels_max_levels_param():
     assert len(out["support_levels"]) <= 8
     assert len(out["resistance_levels"]) <= 8
     assert out["method"] == "kde_volume_weighted"
+
+
+def test_classic_reference_levels_from_bars():
+    """支撑压力接口附带的 Fib / Pivot 参考价。"""
+    from datetime import date, timedelta
+
+    bars = []
+    base = date(2024, 1, 1)
+    for i in range(40):
+        px = 10.0 + (i / 39.0) * 5.0
+        bars.append(
+            {
+                "date": (base + timedelta(days=i)).isoformat(),
+                "high": round(px + 0.3, 2),
+                "low": round(px - 0.3, 2),
+                "close": round(px, 2),
+                "volume": 1_000_000,
+            }
+        )
+    out = KeyLevels.calculate_classic_reference_levels(bars, bars[-1]["close"])
+    assert out["ok"] is True
+    assert out["pivot"] is not None
+    assert out["pivot"]["P"] is not None
+    assert out["fibonacci"] is not None
+    assert len(out["fibonacci"]["retracements"]) >= 3
+    assert out.get("lookback") == 60
+
+
+def test_classic_levels_follow_qfq_ohlc():
+    """前复权 OHLC 下 Fib/Pivot 须按复权价重算（与不复权结果不同）。"""
+    from datetime import date, timedelta
+
+    from backend_api.utils.adj_quotes import apply_qfq_to_bars
+
+    base = date(2024, 1, 1)
+    raw = []
+    for i in range(30):
+        px = 20.0 + i * 0.5
+        raw.append(
+            {
+                "date": (base + timedelta(days=i)).isoformat(),
+                "high": px + 1,
+                "low": px - 1,
+                "close": px,
+                "volume": 1_000_000,
+            }
+        )
+    # 前半段因子 1、后半段因子 2 → 前半段前复权缩半
+    mid = base + timedelta(days=14)
+    end = base + timedelta(days=29)
+    factors = [(base, 1.0), (mid, 1.0), (end, 2.0)]
+    qfq = apply_qfq_to_bars(raw, factors)
+    raw_out = KeyLevels.calculate_classic_reference_levels(
+        raw, raw[-1]["close"], price_adjust="none"
+    )
+    qfq_out = KeyLevels.calculate_classic_reference_levels(
+        qfq, qfq[-1]["close"], price_adjust="qfq"
+    )
+    assert qfq_out["price_adjust"] == "qfq"
+    assert raw_out["fibonacci"]["swing_low"] != qfq_out["fibonacci"]["swing_low"]
+    assert raw_out["pivot"]["P"] != qfq_out["pivot"]["P"]
+    # 前复权锚点强制用序列末收
+    assert qfq_out["last_close"] == pytest.approx(qfq[-1]["close"], abs=0.01)

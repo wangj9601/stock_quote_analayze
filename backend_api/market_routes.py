@@ -458,11 +458,19 @@ def refresh_industry_board_sector_slopes(
         )
 
     threading.Thread(target=_bg, daemon=True, name="industry-board-slope-refresh").start()
+    kind_label = {
+        "industry": "行业板",
+        "concept": "概念板",
+        "both": "行业/概念板",
+    }.get(kind, "板块")
     return JSONResponse(
         {
             "success": True,
             "async": True,
-            "message": "已启动后台斜率刷新（同花顺），完成后重新加载行业板列表即可看到数值",
+            "message": (
+                f"已启动后台斜率刷新（同花顺{kind_label}），"
+                "完成后重新加载列表即可看到数值"
+            ),
             "board_code_source": src,
             "board_kind": kind,
             "board_codes": codes,

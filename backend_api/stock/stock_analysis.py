@@ -496,6 +496,53 @@ class KeyLevels:
             "kde_base_factor": factor,
         }
 
+    @staticmethod
+    def calculate_classic_reference_levels(
+        historical_data: List[Dict],
+        current_price: float,
+        *,
+        lookback: Optional[int] = None,
+        price_adjust: str = "none",
+    ) -> Dict:
+        """黄金分割（摆动 Fib）+ 经典 Pivot，作买卖参考（与板块分析口径一致）。
+
+        historical_data 须已是目标价格口径（不复权或已现算前复权 OHLC）。
+        """
+        from backend_core.analysis.classic_levels import (
+            DEFAULT_LOOKBACK,
+            compute_classic_levels_from_bars,
+        )
+
+        lb = int(lookback or DEFAULT_LOOKBACK)
+        adjust = str(price_adjust or "none").strip().lower() or "none"
+        bars: List[Dict] = []
+        for row in historical_data or []:
+            if not isinstance(row, dict):
+                continue
+            d = dict(row)
+            if d.get("date") is None and d.get("trade_date") is not None:
+                d["date"] = d["trade_date"]
+            bars.append(d)
+        if lb > 0 and len(bars) > lb:
+            bars = bars[-lb:]
+        try:
+            price = float(current_price) if current_price is not None else None
+        except (TypeError, ValueError):
+            price = None
+        # 前复权：锚点优先用传入序列末收，避免误用未复权实时价划分支撑/压力
+        if adjust == "qfq" and bars:
+            try:
+                end_close = float(bars[-1]["close"])
+                if end_close > 0:
+                    price = end_close
+            except (TypeError, ValueError, KeyError):
+                pass
+        out = compute_classic_levels_from_bars(bars, last_close=price)
+        out["lookback"] = lb
+        out["method"] = "fibonacci_swing+classic_pivot"
+        out["price_adjust"] = adjust
+        return out
+
 
 class StockAnalysisService:
     """股票分析服务类。
@@ -623,7 +670,7 @@ class StockAnalysisService:
         price_adjust: str = "none",
         adj_meta: Optional[Dict] = None,
     ) -> Dict:
-        """仅计算 KDE 支撑/压力位（不跑技术指标与预测），供「我的」频道小工具使用。
+        """计算 KDE 支撑/压力，并附带黄金分割与经典 Pivot 参考位（「我的」频道）。
 
         price_adjust:
           - none: 使用库内不复权日K（默认）
@@ -662,23 +709,53 @@ class StockAnalysisService:
                         "kde_lookback_initial": KeyLevels.KDE_LOOKBACK_DAYS,
                         "kde_lookback_max": KeyLevels.KDE_LOOKBACK_MAX,
                         "kde_base_factor": KeyLevels.KDE_BASE_FACTOR,
+                        "classic_levels": {
+                            "ok": False,
+                            "reason": "no_historical_data",
+                            "fibonacci": None,
+                            "pivot": None,
+                        },
                         "description": (
                             "成交量加权 KDE：对日K收盘价按成交量加权估计密度峰，"
                             f"初始回看 {KeyLevels.KDE_LOOKBACK_DAYS} 日，"
-                            f"无支撑时递推至最多约 {KeyLevels.KDE_LOOKBACK_MAX} 日。"
+                            f"无支撑时递推至最多约 {KeyLevels.KDE_LOOKBACK_MAX} 日；"
+                            "另附近窗黄金分割与经典 Pivot 参考价。"
                         ),
                     },
                 }
 
-            current_price, price_source = self._resolve_anchor_price(
+            # 不复权：现价优先实时；前复权：KDE/Fib/Pivot 一律用复权 OHLC + 复权序列末收作锚点
+            realtime_price, realtime_source = self._resolve_anchor_price(
                 code, historical_data
             )
+            if adjust == "qfq":
+                qfq_close = None
+                try:
+                    qfq_close = self._valid_price(historical_data[-1].get("close"))
+                except (TypeError, ValueError, AttributeError, IndexError):
+                    qfq_close = None
+                if qfq_close is not None:
+                    current_price = float(qfq_close)
+                    price_source = "qfq_daily_close"
+                else:
+                    current_price = float(realtime_price)
+                    price_source = realtime_source
+            else:
+                current_price = float(realtime_price)
+                price_source = realtime_source
 
             levels = KeyLevels.calculate_key_levels(
                 historical_data,
                 current_price,
                 max_levels=max(1, int(max_levels or 8)),
             )
+            classic = KeyLevels.calculate_classic_reference_levels(
+                historical_data,
+                current_price,
+                price_adjust=adjust,
+            )
+            classic["anchor_price"] = round(float(current_price), 2) if current_price else None
+            classic["anchor_source"] = price_source
             stock_name = ""
             for row in reversed(historical_data):
                 name = (row.get("name") or "").strip()
@@ -693,7 +770,9 @@ class StockAnalysisService:
                     f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
                     f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
                     f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
-                    "现价下方峰为支撑，上方峰为压力。现价优先实时行情表。"
+                    "现价下方峰为支撑，上方峰为压力。"
+                    f"黄金分割与经典 Pivot 亦基于同一前复权 OHLC（近 {classic.get('lookback') or 60} 日），"
+                    "锚点为前复权序列最近收盘。"
                 )
             else:
                 desc = (
@@ -703,6 +782,7 @@ class StockAnalysisService:
                     f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
                     "现价下方峰为支撑，上方峰为压力（阻力）。"
                     "现价优先实时行情表，无有效价时回退日K收盘。"
+                    f"黄金分割与经典 Pivot 基于不复权 OHLC（近 {classic.get('lookback') or 60} 日）。"
                 )
 
             return {
@@ -711,7 +791,12 @@ class StockAnalysisService:
                     "stock_code": code,
                     "stock_name": stock_name,
                     **levels,
+                    "classic_levels": classic,
                     "current_price_source": price_source,
+                    "realtime_price": round(float(realtime_price), 2)
+                    if realtime_price
+                    else None,
+                    "realtime_price_source": realtime_source,
                     "price_adjust": adjust,
                     "adj_factor_source": meta.get("source"),
                     "adj_factor_asof": meta.get("adj_factor_asof"),

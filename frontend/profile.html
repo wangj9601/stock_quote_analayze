@@ -374,8 +374,9 @@
                         <div class="kde-levels-header">
                             <h3>支撑 / 压力位</h3>
                             <p class="kde-levels-hint">
-                                复用 RPE 成交量加权 KDE：对日K收盘价按成交量加权提取密度峰；
+                                主算法复用 RPE 成交量加权 KDE：对日K收盘价按成交量加权提取密度峰；
                                 默认初始回看 250 日，无支撑时递推至最多约 750 日（约 3 年）。
+                                同时计算近 60 日<strong>黄金分割（Fib 回撤）</strong>与<strong>经典 Pivot</strong>作参考价。
                                 「计算」使用不复权日K；「按前复权计算」按需拉取复权因子现算后再求位（仅 A 股）。
                                 默认自动：归一化新浪优先，失败用 BaoStock。
                             </p>
@@ -417,6 +418,7 @@
                         </div>
                         <div class="kde-levels-result" id="kdeLevelsResult" hidden>
                             <div class="kde-levels-summary" id="kdeLevelsSummary"></div>
+                            <h4 class="kde-levels-subtitle">KDE 结构位</h4>
                             <div class="kde-levels-grid">
                                 <div class="kde-levels-card support">
                                     <h4>支撑位</h4>
@@ -433,6 +435,32 @@
                                 <div class="kde-levels-card resistance">
                                     <h4>压力（阻力）位</h4>
                                     <ul id="kdeResistanceList"></ul>
+                                </div>
+                            </div>
+                            <h4 class="kde-levels-subtitle">黄金分割 / 经典 Pivot（参考）
+                                <span class="kde-levels-adjust-tag" id="kdeClassicAdjustTag"></span>
+                            </h4>
+                            <div class="kde-levels-grid kde-levels-grid--classic">
+                                <div class="kde-levels-card fib">
+                                    <h4>黄金分割（Fib）</h4>
+                                    <div class="kde-levels-near">
+                                        <div>高点：<strong id="kdeFibSwingHigh">--</strong>
+                                            <span class="kde-levels-date" id="kdeFibSwingHighDate"></span></div>
+                                        <div>低点：<strong id="kdeFibSwingLow">--</strong>
+                                            <span class="kde-levels-date" id="kdeFibSwingLowDate"></span></div>
+                                        <div>最近支撑：<strong id="kdeFibNearestSupport">--</strong></div>
+                                        <div>最近压力：<strong id="kdeFibNearestResistance">--</strong></div>
+                                        <div class="kde-levels-dir">方向：<strong id="kdeFibDirection">--</strong></div>
+                                    </div>
+                                    <ul id="kdeFibList"></ul>
+                                </div>
+                                <div class="kde-levels-card pivot">
+                                    <h4>经典 Pivot</h4>
+                                    <div class="kde-levels-near">
+                                        <div>最近支撑：<strong id="kdePivotNearestSupport">--</strong></div>
+                                        <div>最近压力：<strong id="kdePivotNearestResistance">--</strong></div>
+                                    </div>
+                                    <ul id="kdePivotList"></ul>
                                 </div>
                             </div>
                             <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
@@ -684,7 +712,7 @@
     </div>
 
     <script src="js/config.js"></script>
-    <script src="js/common.js"></script>
+    <script src="js/common.js" onerror="console.error('common.js 加载失败，请刷新页面')"></script>
     <script src="js/profile.js"></script>
 
     <!-- ICP备案信息 -->

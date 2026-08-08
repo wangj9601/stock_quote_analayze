@@ -164,6 +164,7 @@ def compute_classic_levels_from_bars(
     # Pivot：上一交易日（倒数第二根相对「最新一根」）
     prev = parsed[-2]
     pivot = classic_pivot_from_hlc(prev[1], prev[2], prev[3])
+    pivot["trade_date"] = prev[0].isoformat()
 
     last_c = _f(last_close)
     if last_c is None:
@@ -174,6 +175,8 @@ def compute_classic_levels_from_bars(
     i_lo = min(range(len(parsed)), key=lambda i: parsed[i][2])
     swing_high = parsed[i_hi][1]
     swing_low = parsed[i_lo][2]
+    swing_high_date = parsed[i_hi][0].isoformat()
+    swing_low_date = parsed[i_lo][0].isoformat()
     direction = "up" if parsed[i_hi][0] >= parsed[i_lo][0] else "down"
 
     fib: Optional[Dict[str, Any]] = None
@@ -181,6 +184,8 @@ def compute_classic_levels_from_bars(
     nearest_fib_r: Optional[float] = None
     if swing_low > 0 and (swing_high - swing_low) / swing_low >= float(min_range_pct):
         fib = fibonacci_from_swing(swing_high, swing_low, direction=direction)
+        fib["swing_high_date"] = swing_high_date
+        fib["swing_low_date"] = swing_low_date
         fib_prices = [x["price"] for x in (fib.get("retracements") or [])]
         # 扩展位只取距现价最近的一个加入候选
         ext = fib.get("extensions") or []
@@ -196,7 +201,17 @@ def compute_classic_levels_from_bars(
             if nearest_fib_r is not None:
                 nearest_fib_r = round(nearest_fib_r, PRICE_DECIMALS)
     else:
-        fib = None
+        # 区间过窄跳过回撤位，仍返回锚点价与日期便于前端展示
+        fib = {
+            "swing_high": round(swing_high, PRICE_DECIMALS),
+            "swing_low": round(swing_low, PRICE_DECIMALS),
+            "swing_high_date": swing_high_date,
+            "swing_low_date": swing_low_date,
+            "range": round(swing_high - swing_low, PRICE_DECIMALS),
+            "direction": direction,
+            "retracements": [],
+            "extensions": [],
+        }
 
     pivot_levels = [
         pivot["S3"],

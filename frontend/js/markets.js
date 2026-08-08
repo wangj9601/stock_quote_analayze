@@ -801,6 +801,8 @@ const MarketsPage = {
             if (result.success && Array.isArray(result.data)) {
                 this[ui.dataKey] = result.data;
                 this.renderSectorViews(ui.kind);
+                // 库空时列表全为 --：自动后台算一次（同花顺），避免概念板从未挂载刷新时长期无斜率
+                this._maybeAutoRefreshSectorSlopes(ui.kind);
             } else {
                 throw new Error(result.message || 'API返回错误');
             }
@@ -824,7 +826,22 @@ const MarketsPage = {
     },
 
     /**
-     * 触发同花顺行业板全量斜率后台刷新；不在打开列表时同步全算。
+     * 列表无任何斜率且有板数据时，自动触发一次后台刷新（每 kind 每会话最多一次）。
+     */
+    _maybeAutoRefreshSectorSlopes(kind = 'industry') {
+        const ui = this._boardKindUi(kind);
+        const rows = this[ui.dataKey] || [];
+        if (!rows.length) return;
+        if (this._countSectorSlopes(rows) > 0) return;
+        const flagKey = `_autoSlopeRefreshTried_${ui.kind}`;
+        if (this[flagKey]) return;
+        this[flagKey] = true;
+        CommonUtils.showToast(`${ui.label}斜率尚未入库，正在后台计算…`, 'info');
+        this.refreshSectorSlopes(ui.kind);
+    },
+
+    /**
+     * 触发同花顺行业/概念板全量斜率后台刷新；不在打开列表时同步全算。
      * 启动后轮询列表，直至出现斜率或超时。
      */
     async refreshSectorSlopes(kind = 'industry') {

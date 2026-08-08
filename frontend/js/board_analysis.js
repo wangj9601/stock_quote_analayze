@@ -338,11 +338,18 @@ const BoardAnalysis = {
     const lines = [];
     if (summary) lines.push(String(summary));
     const fib = ref && ref.fibonacci;
-    if (fib && Array.isArray(fib.retracements)) {
-      const parts = fib.retracements.map(
-        (x) => `${x.ratio}=${this.fmtPrice2(x.price)}`
-      );
-      if (parts.length) lines.push('Fib回撤: ' + parts.join(', '));
+    if (fib) {
+      if (fib.swing_high != null || fib.swing_low != null) {
+        const hi = `${this.fmtPrice2(fib.swing_high)}${fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}`;
+        const lo = `${this.fmtPrice2(fib.swing_low)}${fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}`;
+        lines.push(`Fib锚点: 高点 ${hi} / 低点 ${lo}`);
+      }
+      if (Array.isArray(fib.retracements) && fib.retracements.length) {
+        const parts = fib.retracements.map(
+          (x) => `${x.ratio}=${this.fmtPrice2(x.price)}`
+        );
+        lines.push('Fib回撤: ' + parts.join(', '));
+      }
       if (Array.isArray(fib.extensions) && fib.extensions.length) {
         lines.push(
           'Fib扩展: ' + fib.extensions.map((x) => `${x.ratio}=${this.fmtPrice2(x.price)}`).join(', ')

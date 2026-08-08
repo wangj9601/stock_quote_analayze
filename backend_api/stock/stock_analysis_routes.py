@@ -204,7 +204,12 @@ def _compute_levels_payload(
                 raw_bars = analysis_service._get_historical_data(
                     code, days=KeyLevels.KDE_LOOKBACK_MAX
                 )
-                historical_data = apply_qfq_to_bars(raw_bars, ensured["factors"])
+                # apply_qfq_to_bars 要求按日期升序；防御性再排一次
+                raw_sorted = sorted(
+                    list(raw_bars or []),
+                    key=lambda b: str((b or {}).get("date") or ""),
+                )
+                historical_data = apply_qfq_to_bars(raw_sorted, ensured["factors"])
                 adj_meta = {
                     "source": ensured.get("source"),
                     "adj_factor_asof": ensured.get("adj_factor_asof"),
@@ -566,12 +571,13 @@ async def get_key_levels(
     db: Session = Depends(get_db)
 ):
     """
-    获取个股 KDE 支撑 / 压力（阻力）位。
+    获取个股 KDE 支撑 / 压力（阻力）位，并附带黄金分割与经典 Pivot 参考价。
 
-    轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
+    轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析；
+    classic_levels 使用近窗摆动 Fib + 上一交易日经典 Pivot。
     stock_code 支持 A股/港股代码，或股票名称（精确唯一则直接计算；多候选返回 candidates）。
     adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor（生产默认归一化新浪，备用 BaoStock），
-    再对不复权日K现算后计算 KDE。
+    再对不复权日K现算后计算。
     """
     try:
         resolved = resolve_levels_stock_identifier(db, stock_code)

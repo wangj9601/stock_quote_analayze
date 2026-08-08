@@ -13,6 +13,30 @@ function loadScript(src) {
     });
 }
 
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 瞬时网络抖动（如 ERR_NETWORK_CHANGED）时重试 */
+async function fetchWithRetry(url, { retries = 3, baseDelayMs = 250 } = {}) {
+    let lastErr;
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const resp = await fetch(url, { cache: i === 0 ? 'default' : 'reload' });
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status} ${url}`);
+            }
+            return resp;
+        } catch (err) {
+            lastErr = err;
+            if (i < retries) {
+                await sleep(baseDelayMs * (i + 1));
+            }
+        }
+    }
+    throw lastErr;
+}
+
 async function loadPermissionEngine() {
     try {
         await loadScript('js/permission-registry.js');
@@ -30,45 +54,49 @@ async function loadPermissionEngine() {
 
 async function loadHeader(activePage) {
     console.log('开始加载header，当前页面:', activePage);
-    
-    const headerContainer = document.createElement('div');
-    const resp = await fetch('components/header.html');
-    headerContainer.innerHTML = await resp.text();
-    document.body.prepend(headerContainer);
 
-    console.log('Header HTML已加载到页面');
+    try {
+        const headerContainer = document.createElement('div');
+        const resp = await fetchWithRetry('components/header.html');
+        headerContainer.innerHTML = await resp.text();
+        document.body.prepend(headerContainer);
 
-    // 高亮当前频道
-    if (activePage) {
-        const nav = document.getElementById('nav-' + activePage);
-        if (nav) {
-            nav.classList.add('active');
-            console.log('导航高亮设置完成:', activePage);
+        console.log('Header HTML已加载到页面');
+
+        // 高亮当前频道
+        if (activePage) {
+            const nav = document.getElementById('nav-' + activePage);
+            if (nav) {
+                nav.classList.add('active');
+                console.log('导航高亮设置完成:', activePage);
+            }
         }
-    }
 
-    // 延迟初始化用户菜单，确保DOM完全加载
-    setTimeout(() => {
-        console.log('开始初始化用户菜单...');
-        initUserMenu();
-        initMobileNav();
-    }, 100);
-
-
-    await loadPermissionEngine();
-    
-    // 延迟初始化股票搜索功能
-    setTimeout(() => {
-        console.log('开始初始化股票搜索功能...');
-        initStockSearch();
-    }, 100);
-    
-    // 如果CommonUtils已经加载，让它重新初始化用户显示
-    if (window.CommonUtils && window.CommonUtils.auth) {
+        // 延迟初始化用户菜单，确保DOM完全加载
         setTimeout(() => {
-            console.log('CommonUtils已加载，更新用户显示...');
-            CommonUtils.auth.updateUserDisplay(CommonUtils.auth.getUserInfo());
-        }, 200);
+            console.log('开始初始化用户菜单...');
+            initUserMenu();
+            initMobileNav();
+        }, 100);
+
+        await loadPermissionEngine();
+
+        // 延迟初始化股票搜索功能
+        setTimeout(() => {
+            console.log('开始初始化股票搜索功能...');
+            initStockSearch();
+        }, 100);
+
+        // 如果CommonUtils已经加载，让它重新初始化用户显示
+        if (window.CommonUtils && window.CommonUtils.auth) {
+            setTimeout(() => {
+                console.log('CommonUtils已加载，更新用户显示...');
+                CommonUtils.auth.updateUserDisplay(CommonUtils.auth.getUserInfo());
+            }, 200);
+        }
+    } catch (err) {
+        console.error('加载 header 失败:', err);
+        // 避免 Uncaught (in promise)；顶栏缺失时页面主体仍可继续
     }
 }
 

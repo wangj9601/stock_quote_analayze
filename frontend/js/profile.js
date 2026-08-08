@@ -10,8 +10,40 @@ const ProfilePage = {
         },
     },
 
+    async ensureCommonUtils(timeoutMs = 4000) {
+        if (typeof window.CommonUtils !== 'undefined') return true;
+        // common.js 因网络抖动未加载时尝试补拉一次
+        try {
+            await new Promise((resolve, reject) => {
+                if (document.querySelector('script[src="js/common.js"][data-profile-retry]')) {
+                    reject(new Error('common.js 重试已失败'));
+                    return;
+                }
+                const el = document.createElement('script');
+                el.src = `js/common.js?t=${Date.now()}`;
+                el.setAttribute('data-profile-retry', '1');
+                el.onload = resolve;
+                el.onerror = () => reject(new Error('common.js 加载失败'));
+                document.head.appendChild(el);
+            });
+        } catch (_) {
+            /* fall through to wait/poll */
+        }
+        const start = Date.now();
+        while (typeof window.CommonUtils === 'undefined' && Date.now() - start < timeoutMs) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return typeof window.CommonUtils !== 'undefined';
+    },
+
     async init() {
         try {
+            const ok = await this.ensureCommonUtils();
+            if (!ok) {
+                console.error('个人中心初始化失败: CommonUtils 未加载（请检查网络后刷新）');
+                alert('页面公共脚本加载失败，请刷新重试');
+                return;
+            }
             await CommonUtils.auth.init();
             this.bindTabs();
             this.bindActions();
@@ -19,7 +51,11 @@ const ProfilePage = {
             await this.loadDashboard();
         } catch (error) {
             console.error('个人中心初始化失败:', error);
-            CommonUtils.showToast('初始化个人中心失败', 'error');
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+                CommonUtils.showToast('初始化个人中心失败', 'error');
+            } else {
+                alert('初始化个人中心失败，请刷新重试');
+            }
         }
     },
 
@@ -275,6 +311,20 @@ const ProfilePage = {
             }
             ul.innerHTML = arr.map((x, i) => `<li><span class="idx">${i + 1}</span>${fmt(x)}</li>`).join('');
         };
+        const fillLabeledList = (ul, rows) => {
+            if (!ul) return;
+            const arr = Array.isArray(rows) ? rows : [];
+            if (!arr.length) {
+                ul.innerHTML = '<li class="muted">暂无</li>';
+                return;
+            }
+            ul.innerHTML = arr
+                .map((row) => {
+                    const label = row.label != null ? String(row.label) : '';
+                    return `<li><span class="idx-label">${label}</span>${fmt(row.price)}</li>`;
+                })
+                .join('');
+        };
 
         const code = data.stock_code || '';
         const name = data.stock_name || '';
@@ -290,6 +340,74 @@ const ProfilePage = {
         fillList(supportList, data.support_levels);
         fillList(resistList, data.resistance_levels);
 
+        const classic = data.classic_levels || {};
+        const fib = classic.fibonacci || null;
+        const pivot = classic.pivot || null;
+        const classicAdjust = classic.price_adjust || data.price_adjust || 'none';
+        const adjustTag = document.getElementById('kdeClassicAdjustTag');
+        if (adjustTag) {
+            adjustTag.textContent = classicAdjust === 'qfq' ? '前复权' : '不复权';
+            adjustTag.className =
+                classicAdjust === 'qfq'
+                    ? 'kde-levels-adjust-tag is-qfq'
+                    : 'kde-levels-adjust-tag is-raw';
+        }
+        const fibNearS = document.getElementById('kdeFibNearestSupport');
+        const fibNearR = document.getElementById('kdeFibNearestResistance');
+        const fibDirEl = document.getElementById('kdeFibDirection');
+        const fibList = document.getElementById('kdeFibList');
+        const pivNearS = document.getElementById('kdePivotNearestSupport');
+        const pivNearR = document.getElementById('kdePivotNearestResistance');
+        const pivList = document.getElementById('kdePivotList');
+
+        const fibHighEl = document.getElementById('kdeFibSwingHigh');
+        const fibLowEl = document.getElementById('kdeFibSwingLow');
+        const fibHighDateEl = document.getElementById('kdeFibSwingHighDate');
+        const fibLowDateEl = document.getElementById('kdeFibSwingLowDate');
+        if (fibHighEl) fibHighEl.textContent = fmt(fib && fib.swing_high);
+        if (fibLowEl) fibLowEl.textContent = fmt(fib && fib.swing_low);
+        if (fibHighDateEl) {
+            fibHighDateEl.textContent = fib && fib.swing_high_date
+                ? `（${fib.swing_high_date}）`
+                : '';
+        }
+        if (fibLowDateEl) {
+            fibLowDateEl.textContent = fib && fib.swing_low_date
+                ? `（${fib.swing_low_date}）`
+                : '';
+        }
+        if (fibNearS) fibNearS.textContent = fmt(classic.nearest_fib_support);
+        if (fibNearR) fibNearR.textContent = fmt(classic.nearest_fib_resistance);
+        if (fibDirEl) {
+            const dir = fib && fib.direction;
+            fibDirEl.textContent =
+                dir === 'up' ? '上升段回撤' : dir === 'down' ? '下降段反弹' : '--';
+        }
+        const fibRows = [];
+        if (fib && Array.isArray(fib.retracements)) {
+            fib.retracements.forEach((x) => {
+                fibRows.push({ label: String(x.ratio), price: x.price });
+            });
+        }
+        if (fib && fib.nearest_extension) {
+            const ext = fib.nearest_extension;
+            fibRows.push({
+                label: `扩展${ext.ratio != null ? ext.ratio : ''}`,
+                price: ext.price,
+            });
+        }
+        fillLabeledList(fibList, fibRows);
+
+        if (pivNearS) pivNearS.textContent = fmt(classic.nearest_pivot_support);
+        if (pivNearR) pivNearR.textContent = fmt(classic.nearest_pivot_resistance);
+        const pivRows = [];
+        if (pivot) {
+            ['R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3'].forEach((k) => {
+                if (pivot[k] != null) pivRows.push({ label: k, price: pivot[k] });
+            });
+        }
+        fillLabeledList(pivList, pivRows);
+
         const used = data.kde_lookback_used;
         const expanded = data.kde_lookback_expanded;
         const initLb = data.kde_lookback_initial || 250;
@@ -302,13 +420,19 @@ const ProfilePage = {
         const adjustLabel = data.price_adjust === 'qfq'
             ? `前复权（因子：${srcText}${data.adj_factor_asof ? `，截至 ${data.adj_factor_asof}` : ''}${data.factor_fetched ? '，本次已拉取' : '，已用缓存'}）`
             : '不复权日K';
+        const classicLb = classic.lookback || 60;
+        const classicBasis = classicAdjust === 'qfq' ? '前复权 OHLC' : '不复权 OHLC';
+        const classicNote = classic.ok
+            ? `Fib/Pivot ${classicBasis} · 回看 ${classicLb} 日`
+            : `Fib/Pivot：${classic.reason || '暂无'}`;
         const parts = [
             adjustLabel,
             data.description || '成交量加权 KDE 支撑 / 压力',
-            used != null ? `实际回看 ${used} 日` : null,
+            used != null ? `KDE 实际回看 ${used} 日` : null,
             expanded ? '（已扩窗）' : null,
-            `默认初始 ${initLb} / 上限 ${maxLb}`,
-            data.kde_reason ? `状态：${data.kde_reason}` : null,
+            `KDE 初始 ${initLb} / 上限 ${maxLb}`,
+            classicNote,
+            data.kde_reason ? `KDE 状态：${data.kde_reason}` : null,
         ].filter(Boolean);
         if (metaEl) metaEl.textContent = parts.join(' · ');
 

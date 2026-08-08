@@ -1591,10 +1591,86 @@
     margin-bottom: 1rem;
 }
 
+.kde-levels-subtitle {
+    margin: 1.25rem 0 0.65rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.kde-levels-adjust-tag {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.kde-levels-adjust-tag.is-qfq {
+    color: #9a3412;
+    background: #ffedd5;
+}
+
+.kde-levels-adjust-tag.is-raw {
+    color: #334155;
+    background: #e2e8f0;
+}
+
 .kde-levels-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
+}
+
+.kde-levels-grid--classic {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.kde-levels-card.fib {
+    border-top: 3px solid #7c3aed;
+}
+
+.kde-levels-card.pivot {
+    border-top: 3px solid #ea580c;
+}
+
+.kde-levels-card li .idx-label {
+    display: inline-flex;
+    min-width: 3.2rem;
+    padding: 0 0.35rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background: #f3f4f6;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.kde-levels-dir {
+    margin-top: 0.25rem;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.kde-levels-date {
+    margin-left: 0.35rem;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .kde-levels-grid,
+    .kde-levels-grid--classic {
+        grid-template-columns: 1fr;
+    }
 }
 
 .kde-levels-card {
