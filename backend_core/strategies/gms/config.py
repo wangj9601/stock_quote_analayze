@@ -323,6 +323,9 @@ class GMSConfigManager:
             {
                 "board_resonance_enabled": True,
                 "sector_slope_window": 60,
+                # null/0 = 板内全成分不截断；正整数为可选上限
+                "board_panel_member_limit": None,
+                "board_prefer_db_slope": True,
                 "enable_board_fund_flow": False,
             },
         )
@@ -412,6 +415,8 @@ class GMSConfigManager:
             br = dict(params.get("board_resonance") or {})
             br.setdefault("board_resonance_enabled", True)
             br.setdefault("sector_slope_window", 60)
+            br.setdefault("board_panel_member_limit", None)
+            br.setdefault("board_prefer_db_slope", True)
             br.setdefault("enable_board_fund_flow", False)
             self.update_config(
                 penalty_id,

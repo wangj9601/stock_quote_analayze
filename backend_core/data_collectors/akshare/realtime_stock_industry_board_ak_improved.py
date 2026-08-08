@@ -65,7 +65,7 @@ class ImprovedRealtimeStockIndustryBoardCollector:
         try:
             print(f"[采集] 开始保存 {len(df)} 条数据到数据库...")
             
-            # 字段映射：中文->英文
+            # 字段映射：中文->英文（「最新价」= 东财行业板指数点位；勿用同花顺「均价」冒充）
             col_map = {
                 "板块代码": "board_code",
                 "板块名称": "board_name",
@@ -82,6 +82,11 @@ class ImprovedRealtimeStockIndustryBoardCollector:
                 "领涨股涨跌幅": "leading_stock_change_percent",
                 "领涨股代码": "leading_stock_code"
             }
+            # 若误传入同花顺 summary（含均价、无最新价），拒绝把均价当指数入库
+            if "最新价" not in df.columns and "均价" in df.columns:
+                print("[采集] ⚠️ 检测到同花顺「均价」且无「最新价」，跳过指数写入（均价≠板块指数）")
+                df = df.copy()
+                df["最新价"] = None
             
             # 检查哪些字段在数据中存在
             available_fields = [k for k in col_map.keys() if k in df.columns]
@@ -199,6 +204,14 @@ class ImprovedRealtimeStockIndustryBoardCollector:
                     status="success",
                     error_message=None
                 )
+                # 与主采集器一致：行情成功后挂载同花顺斜率刷新（避免手工跑 improved 漏斜率）
+                try:
+                    from backend_core.data_collectors.akshare.realtime_stock_industry_board_ak import (
+                        RealtimeStockIndustryBoardCollector,
+                    )
+                    RealtimeStockIndustryBoardCollector()._refresh_sector_slopes_after_quotes()
+                except Exception as slope_err:
+                    print(f"[采集] ⚠️ 斜率挂载失败（行情已成功）: {slope_err}")
             else:
                 print(f"[采集] ❌ 数据写入失败: {err}")
                 self.write_log(

@@ -646,6 +646,28 @@ class IndustryBoardRealtimeQuotes(Base):
     leading_stock_change_percent = Column(Float)
     update_time = Column(String)  # 改为String类型匹配数据库
 
+
+class IndustryBoardDailyMetrics(Base):
+    """行业板日度指标（成分量权基准斜率等；无官方板日线指数时由成分日线合成）。"""
+    __tablename__ = "industry_board_daily_metrics"
+    board_code = Column(String(20), primary_key=True)
+    slope_asof_date = Column(Date, primary_key=True)
+    sector_slope = Column(Float)
+    sector_slope_window = Column(Integer, default=60)
+    member_count_used = Column(Integer)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class ConceptBoardDailyMetrics(Base):
+    """概念板日度指标（与行业板对称；同花顺概念板斜率由行业板采集任务后对称刷新）。"""
+    __tablename__ = "concept_board_daily_metrics"
+    board_code = Column(String(20), primary_key=True)
+    slope_asof_date = Column(Date, primary_key=True)
+    sector_slope = Column(Float)
+    sector_slope_window = Column(Integer, default=60)
+    member_count_used = Column(Integer)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
 class HKIndexBasicInfo(Base):
     """港股指数基础信息表"""
     __tablename__ = "hk_index_basic_info"

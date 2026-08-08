@@ -77,6 +77,27 @@ class TestIndustryBoardCatalog:
         assert out[0]["board_code_source"] == "eastmoney"
         assert out[0]["board_code_source_label"] == "东方财富"
 
+    def test_dedupe_preserves_stock_count(self):
+        items = [
+            {
+                "board_code": "BK0420",
+                "board_name": "白色家电",
+                "board_code_source": "tonghuashun",
+                "stock_count": 128,
+            },
+            {
+                "board_code": "白色家电",
+                "board_name": "白色家电",
+                "board_code_source": "tonghuashun",
+                "member_count": 3,
+            },
+        ]
+        out = dedupe_industry_board_catalog(items)
+        assert len(out) == 1
+        assert out[0]["board_code"] == "BK0420"
+        assert out[0]["stock_count"] == 128
+        assert out[0]["member_count"] == 128
+
 
 def test_fetch_industry_board_catalog_filters_hidden():
     from backend_api.utils.industry_board_query import fetch_industry_board_catalog
@@ -85,8 +106,33 @@ def test_fetch_industry_board_catalog_filters_hidden():
         def execute(self, sql, params=None):
             sql_s = str(sql)
             assert "frontend_visible_flag" in sql_s
-            assert "COALESCE(frontend_visible_flag, TRUE) = TRUE" in sql_s
+            assert "COALESCE(b.frontend_visible_flag, TRUE) = TRUE" in sql_s
             assert "board_code_source" in sql_s
+            assert "industry_board_constituents" in sql_s
+            assert "stock_count" in sql_s
             return type("R", (), {"fetchall": lambda self: []})()
 
     assert fetch_industry_board_catalog(_DB()) == []
+
+
+def test_fetch_industry_board_catalog_includes_member_count():
+    from backend_api.utils.industry_board_query import fetch_industry_board_catalog
+
+    class _DB:
+        def execute(self, sql, params=None):
+            return type(
+                "R",
+                (),
+                {
+                    "fetchall": lambda self: [
+                        ("881101", "半导体", True, "tonghuashun", 128),
+                        ("BK0477", "银行", False, "eastmoney", 40),
+                    ]
+                },
+            )()
+
+    out = fetch_industry_board_catalog(_DB())
+    by_code = {x["board_code"]: x for x in out}
+    assert by_code["881101"]["stock_count"] == 128
+    assert by_code["881101"]["member_count"] == 128
+    assert by_code["BK0477"]["stock_count"] == 40

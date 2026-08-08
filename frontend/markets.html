@@ -192,134 +192,37 @@
 
                     <!-- 行业板块 -->
                     <div class="tab-panel" id="sectors">
-                        <div class="sectors-grid">
-                            <div class="sector-card">
-                                <div class="sector-header">
-                                    <h3>新能源汽车</h3>
-                                    <span class="sector-change positive">+3.45%</span>
-                                </div>
-                                <div class="sector-stats">
-                                    <div class="stat-item">
-                                        <span class="label">上涨</span>
-                                        <span class="value positive">45</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">下跌</span>
-                                        <span class="value negative">12</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">平盘</span>
-                                        <span class="value">3</span>
-                                    </div>
-                                </div>
-                                <div class="sector-leaders">
-                                    <div class="leader-stock">
-                                        <span class="stock-name">比亚迪</span>
-                                        <span class="stock-change positive">+5.67%</span>
-                                    </div>
-                                    <div class="leader-stock">
-                                        <span class="stock-name">宁德时代</span>
-                                        <span class="stock-change positive">+4.32%</span>
-                                    </div>
-                                </div>
-                                <button class="sector-detail-btn" onclick="goToSectorDetail('新能源汽车')">查看详情</button>
+                        <div class="sectors-toolbar">
+                            <div class="sectors-toolbar-left">
+                                <span class="sector-count">共 <span id="sectorCount">0</span> 个行业板块</span>
+                                <span class="sector-source-hint">默认同花顺全量</span>
                             </div>
-
-                            <div class="sector-card">
-                                <div class="sector-header">
-                                    <h3>人工智能</h3>
-                                    <span class="sector-change positive">+2.87%</span>
+                            <div class="sectors-toolbar-right">
+                                <button type="button" class="btn btn-secondary" id="refreshSectorSlopeBtn" title="计算并入库同花顺行业板斜率（后台，约数分钟）">刷新斜率</button>
+                                <div class="view-controls sector-view-controls">
+                                    <button type="button" class="view-btn" data-sector-view="grid" title="卡片视图">⊞</button>
+                                    <button type="button" class="view-btn active" data-sector-view="list" title="列表视图">☰</button>
                                 </div>
-                                <div class="sector-stats">
-                                    <div class="stat-item">
-                                        <span class="label">上涨</span>
-                                        <span class="value positive">38</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">下跌</span>
-                                        <span class="value negative">15</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">平盘</span>
-                                        <span class="value">2</span>
-                                    </div>
-                                </div>
-                                <div class="sector-leaders">
-                                    <div class="leader-stock">
-                                        <span class="stock-name">科大讯飞</span>
-                                        <span class="stock-change positive">+6.89%</span>
-                                    </div>
-                                    <div class="leader-stock">
-                                        <span class="stock-name">百度</span>
-                                        <span class="stock-change positive">+4.56%</span>
-                                    </div>
-                                </div>
-                                <button class="sector-detail-btn" onclick="goToSectorDetail('人工智能')">查看详情</button>
                             </div>
-
-                            <div class="sector-card">
-                                <div class="sector-header">
-                                    <h3>生物医药</h3>
-                                    <span class="sector-change negative">-1.23%</span>
-                                </div>
-                                <div class="sector-stats">
-                                    <div class="stat-item">
-                                        <span class="label">上涨</span>
-                                        <span class="value positive">18</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">下跌</span>
-                                        <span class="value negative">35</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">平盘</span>
-                                        <span class="value">4</span>
-                                    </div>
-                                </div>
-                                <div class="sector-leaders">
-                                    <div class="leader-stock">
-                                        <span class="stock-name">药明康德</span>
-                                        <span class="stock-change positive">+2.34%</span>
-                                    </div>
-                                    <div class="leader-stock">
-                                        <span class="stock-name">恒瑞医药</span>
-                                        <span class="stock-change negative">-1.45%</span>
-                                    </div>
-                                </div>
-                                <button class="sector-detail-btn" onclick="goToSectorDetail('生物医药')">查看详情</button>
-                            </div>
-
-                            <div class="sector-card">
-                                <div class="sector-header">
-                                    <h3>半导体</h3>
-                                    <span class="sector-change positive">+4.12%</span>
-                                </div>
-                                <div class="sector-stats">
-                                    <div class="stat-item">
-                                        <span class="label">上涨</span>
-                                        <span class="value positive">52</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">下跌</span>
-                                        <span class="value negative">8</span>
-                                    </div>
-                                    <div class="stat-item">
-                                        <span class="label">平盘</span>
-                                        <span class="value">3</span>
-                                    </div>
-                                </div>
-                                <div class="sector-leaders">
-                                    <div class="leader-stock">
-                                        <span class="stock-name">中芯国际</span>
-                                        <span class="stock-change positive">+7.89%</span>
-                                    </div>
-                                    <div class="leader-stock">
-                                        <span class="stock-name">韦尔股份</span>
-                                        <span class="stock-change positive">+6.23%</span>
-                                    </div>
-                                </div>
-                                <button class="sector-detail-btn" onclick="goToSectorDetail('半导体')">查看详情</button>
-                            </div>
+                        </div>
+                        <div class="sectors-grid" id="sectorsGrid" style="display: none;"></div>
+                        <div class="sectors-list" id="sectorsList">
+                            <table class="table sectors-table">
+                                <thead>
+                                    <tr>
+                                        <th>板块</th>
+                                        <th title="行业板块指数点位">指数</th>
+                                        <th>涨跌幅</th>
+                                        <th>成交额(亿)</th>
+                                        <th>成分股</th>
+                                        <th>板块斜率</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sectorsTableBody">
+                                    <tr><td colspan="7" style="text-align:center;color:#888;">加载中...</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
@@ -645,6 +548,22 @@
                 <button class="close-search">×</button>
             </div>
             <div class="search-results"></div>
+        </div>
+    </div>
+
+    <!-- 行业板块详情弹窗 -->
+    <div class="sector-detail-modal" id="sectorDetailModal">
+        <div class="sector-detail-content">
+            <div class="sector-detail-header">
+                <div>
+                    <h2 id="sectorDetailTitle">板块详情</h2>
+                    <div class="sector-detail-sub" id="sectorDetailSub"></div>
+                </div>
+                <button type="button" class="close-sector-detail" id="closeSectorDetailBtn" aria-label="关闭">×</button>
+            </div>
+            <div class="sector-detail-body" id="sectorDetailBody">
+                <div class="sector-detail-loading">加载中...</div>
+            </div>
         </div>
     </div>
 

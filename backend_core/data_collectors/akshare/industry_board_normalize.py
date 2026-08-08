@@ -48,10 +48,14 @@ def industry_board_to_english_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def normalize_ths_industry_df(df: pd.DataFrame) -> pd.DataFrame:
-    """同花顺 summary 接口列名对齐为东方财富风格，便于统一映射。"""
+    """同花顺 summary 接口列名对齐为东方财富风格，便于统一映射。
+
+    注意：同花顺一览的「均价」是成分股均价，不是板块指数点位；
+    东财 ``最新价`` 才是行业板指数。故不把「均价」映射为「最新价」，
+    避免入库/展示成错误的「最新价」。
+    """
     rename_map = {
         "板块": "板块名称",
-        "均价": "最新价",
         "总成交量": "成交量",
         "总成交额": "成交额",
         "领涨股-涨跌幅": "领涨股涨跌幅",
@@ -60,6 +64,8 @@ def normalize_ths_industry_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
     if "板块代码" not in out.columns and "板块名称" in out.columns:
         out["板块代码"] = out["板块名称"]
+    # summary 无板块指数列：显式置空，禁止误用均价
+    out["最新价"] = None
     for col in ("涨跌额", "总市值", "换手率", "领涨股代码"):
         if col not in out.columns:
             out[col] = None

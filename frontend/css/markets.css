@@ -431,6 +431,130 @@
     color: var(--color-primary);
 }
 
+/* 行业板块工具栏 / 列表（对齐自选股列表形态） */
+.sectors-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.sectors-toolbar-left {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+}
+
+.sector-count {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.sector-source-hint {
+    font-size: 12px;
+    color: var(--color-text-light, #999);
+}
+
+.sectors-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.sectors-toolbar-right #refreshSectorSlopeBtn:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.sector-view-controls {
+    display: flex;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.sector-view-controls .view-btn {
+    background: #ffffff;
+    border: none;
+    padding: 8px 12px;
+    font-size: 16px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.sector-view-controls .view-btn.active,
+.sector-view-controls .view-btn:hover {
+    background: var(--color-primary);
+    color: #ffffff;
+}
+
+.sectors-list {
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: auto;
+    max-height: 70vh;
+}
+
+.sectors-table {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+}
+
+.sectors-table th,
+.sectors-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    text-align: left;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.sectors-table th {
+    background: #fafafa;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.sectors-table tbody tr {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.sectors-table tbody tr:hover {
+    background: #f5f9ff;
+}
+
+.sectors-table .stock-info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sectors-table .stock-info-cell .stock-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.sectors-table .stock-info-cell .stock-code {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    font-family: "Courier New", monospace;
+}
+
+.sectors-table .btn {
+    padding: 4px 10px;
+    font-size: 13px;
+}
+
 /* 板块网格 */
 .sectors-grid {
     display: grid;
@@ -839,6 +963,198 @@
     font-size: 12px;
     font-weight: 600;
     font-family: "Courier New", monospace;
+}
+
+/* 行业板块详情弹窗 */
+.sector-detail-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1100;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 8vh 16px 24px;
+    box-sizing: border-box;
+}
+
+.sector-detail-modal.show {
+    display: flex;
+}
+
+.sector-detail-content {
+    background: #ffffff;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 720px;
+    max-height: 84vh;
+    overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+}
+
+.sector-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.sector-detail-header h2 {
+    margin: 0 0 6px;
+    font-size: 1.25rem;
+}
+
+.sector-detail-sub {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.close-sector-detail {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--color-text-light);
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+}
+
+.close-sector-detail:hover {
+    color: var(--color-text-secondary);
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.sector-detail-body {
+    padding: 16px 20px 22px;
+    overflow-y: auto;
+}
+
+.sector-detail-loading,
+.sector-detail-error {
+    text-align: center;
+    color: #888;
+    padding: 2rem 0;
+}
+
+.sector-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+    margin-bottom: 16px;
+}
+
+.sector-detail-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    background: #fafafa;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.sector-detail-item .label {
+    color: var(--color-text-secondary);
+}
+
+.sector-detail-item .value {
+    font-weight: 600;
+    font-family: "Courier New", monospace;
+    text-align: right;
+}
+
+.sector-detail-section {
+    margin-top: 14px;
+}
+
+.sector-detail-section h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+}
+
+.sector-detail-summary {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--color-text-primary);
+    background: #f8fafc;
+    border-left: 3px solid var(--color-primary);
+    padding: 10px 12px;
+    border-radius: 0 4px 4px 0;
+}
+
+.sector-weak-chip {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 3px;
+}
+
+.sector-weak-chip.weak {
+    color: #b91c1c;
+    background: #fee2e2;
+}
+
+.sector-weak-chip.ok {
+    color: #047857;
+    background: #d1fae5;
+}
+
+.sector-weak-chip.unknown {
+    color: #92400e;
+    background: #fef3c7;
+}
+
+.sector-role-row {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+}
+
+.sector-role-row:last-child {
+    border-bottom: none;
+}
+
+.sector-role-label {
+    flex: 0 0 2.5em;
+    color: #64748b;
+    padding-top: 2px;
+}
+
+.sector-role-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    flex: 1;
+}
+
+.sector-role-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 2px 0;
+}
+
+.sector-role-code {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.sector-role-chg {
+    font-variant-numeric: tabular-nums;
 }
 
 /* 搜索弹窗 */

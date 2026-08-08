@@ -54,7 +54,29 @@ const GmsScoreDetail = {
             ? Number(sd.score_penalty_deduction)
             : 0;
         const penalties = Array.isArray(sd.penalties) ? sd.penalties : [];
-        const riskTags = Array.isArray(sd.risk_tags) ? sd.risk_tags : [];
+        const normalizeRiskTag = (t) => {
+            if (t == null) return null;
+            if (typeof t === 'string') {
+                const id = t.trim();
+                if (!id || id === 'undefined' || id === 'null') return null;
+                const known = { board_weak: '主行业板走弱' };
+                return { id, label: known[id] || id, level: 'warn', reason: id };
+            }
+            if (typeof t !== 'object') return null;
+            const id = (t.id != null && String(t.id).trim()) ? String(t.id).trim() : '';
+            const label = (t.label != null && String(t.label).trim()) ? String(t.label).trim() : '';
+            if (!id && !label) return null;
+            if (id === 'undefined' || label === 'undefined') return null;
+            return {
+                id: id || label,
+                label: label || id,
+                level: t.level || 'info',
+                reason: t.reason != null ? String(t.reason) : '',
+            };
+        };
+        const riskTags = (Array.isArray(sd.risk_tags) ? sd.risk_tags : [])
+            .map(normalizeRiskTag)
+            .filter(Boolean);
         const riskTagsHtml = riskTags.length
             ? `<div class="gms-score-detail-section"><strong>【风险提示】</strong><div class="gms-risk-tags">${riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')}</div></div>`
             : '';
@@ -102,7 +124,9 @@ const GmsScoreDetail = {
                 return `结构盈亏比 RR=${rr} &lt; ${minRr}`;
             }
             if (p.id === 'board_weak') {
-                const slope = p.sector_slope != null ? Number(p.sector_slope).toFixed(4) : '--';
+                const slope = (p.sector_slope != null && Number.isFinite(Number(p.sector_slope)))
+                    ? Number(p.sector_slope).toFixed(2)
+                    : '--';
                 const chg = p.board_change_percent != null
                     ? (Number(p.board_change_percent).toFixed(2) + '%')
                     : '--';
@@ -183,7 +207,7 @@ const GmsScoreDetail = {
         let boardSectionHtml = '<div class="gms-score-detail-section"><strong>【行业板共振】</strong>';
         boardSectionHtml += '<div class="gms-version-meta-line">';
         boardSectionHtml += `<span>主行业板 <strong>${br.primary_board_name || br.primary_board_code || '--'}</strong></span>`;
-        boardSectionHtml += `<span>斜率 <strong>${br.sector_slope != null ? Number(br.sector_slope).toFixed(4) : '--'}</strong></span>`;
+        boardSectionHtml += `<span>斜率 <strong>${(br.sector_slope != null && Number.isFinite(Number(br.sector_slope))) ? Number(br.sector_slope).toFixed(2) : '--'}</strong></span>`;
         boardSectionHtml += `<span>当日涨跌 <strong>${br.board_change_percent != null ? Number(br.board_change_percent).toFixed(2) + '%' : '--'}</strong></span>`;
         boardSectionHtml += `<span>环境 <strong>${br.board_weak ? '走弱' : '正常/未知'}</strong></span>`;
         if (br.board_weak_reason) boardSectionHtml += `<span>${br.board_weak_reason}</span>`;

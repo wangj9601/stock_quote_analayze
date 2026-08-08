@@ -1646,6 +1646,75 @@ const ScreeningPage = {
         return names.join(',');
     },
 
+    /** 规范化风险标签：兼容后端误写的纯字符串，过滤无 label/id 的项，避免渲染出 undefined */
+    _normalizeRiskTag(t) {
+        if (t == null) return null;
+        if (typeof t === 'string') {
+            const id = t.trim();
+            if (!id || id === 'undefined' || id === 'null') return null;
+            const known = { board_weak: '主行业板走弱' };
+            return { id, label: known[id] || id, level: 'warn', reason: id };
+        }
+        if (typeof t !== 'object') return null;
+        const id = (t.id != null && String(t.id).trim()) ? String(t.id).trim() : '';
+        const label = (t.label != null && String(t.label).trim()) ? String(t.label).trim() : '';
+        if (!id && !label) return null;
+        if (id === 'undefined' || label === 'undefined') return null;
+        return {
+            id: id || label,
+            label: label || id,
+            level: t.level || 'info',
+            reason: t.reason != null ? String(t.reason) : '',
+        };
+    },
+
+    _renderRiskTagsHtml(tags) {
+        const list = (Array.isArray(tags) ? tags : [])
+            .map((t) => this._normalizeRiskTag(t))
+            .filter(Boolean);
+        if (!list.length) return '';
+        return list.map((t) => {
+            const title = String(t.reason || '').replace(/"/g, '&quot;');
+            const text = String(t.label || t.id)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            return `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${title}">${text}</span>`;
+        }).join('');
+    },
+
+    _gmsBoardEnvHtml(stock) {
+        if (!stock || !stock.board_weak) {
+            return stock && stock.primary_board_code
+                ? '<span class="gms-muted">正常</span>'
+                : '--';
+        }
+        const reason = String(stock.board_weak_reason || 'board_weak');
+        const fromRt = reason === 'realtime_change_negative';
+        const label = fromRt ? '走弱(实时)' : '走弱';
+        const tipParts = [reason];
+        if (fromRt) {
+            tipParts.push('斜率暂无，按板实时涨跌判弱');
+        }
+        if (stock.board_change_percent != null && Number.isFinite(Number(stock.board_change_percent))) {
+            tipParts.push(`涨跌${Number(stock.board_change_percent).toFixed(2)}%`);
+        }
+        const tip = tipParts.join('；').replace(/"/g, '&quot;');
+        return `<span class="gms-risk-tag" title="${tip}">${label}</span>`;
+    },
+
+    _gmsSlopeCellHtml(stock) {
+        const slopeOk = stock && stock.sector_slope != null && Number.isFinite(Number(stock.sector_slope));
+        if (slopeOk) {
+            return Number(stock.sector_slope).toFixed(2);
+        }
+        const reason = stock && stock.board_weak_reason ? String(stock.board_weak_reason) : '';
+        if (reason === 'realtime_change_negative') {
+            return '<span class="gms-muted" title="斜率未算出，环境由实时涨跌回退判定">--</span>';
+        }
+        return '--';
+    },
+
     _gmsWatchThresholdFromForm() {
         const el = document.getElementById('gms-watch_threshold');
         if (!el || el.value === '') return 60;
@@ -2891,6 +2960,24 @@ const ScreeningPage = {
         return src ? `${base}（${src}）` : base;
     },
 
+    /** 板块成分股数量（接口 stock_count / member_count） */
+    _gmsBoardMemberCount(board) {
+        const n = Number(board?.stock_count ?? board?.member_count);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+    },
+
+    /**
+     * 摘要/列表用板块名：如「半导体 (128)」；withSource 时带代码来源标签。
+     */
+    _gmsBoardNameWithCount(board, { withSource = false } = {}) {
+        const code = String(board?.board_code || '').trim();
+        const base = withSource
+            ? this._gmsBoardLabel(board)
+            : (String(board?.board_name || '').trim() || code);
+        const count = this._gmsBoardMemberCount(board);
+        return count == null ? base : `${base} (${count})`;
+    },
+
     /** 板块目录中已标记交易观察的板块代码 */
     _gmsBoardTradeObserveCodes(kind) {
         return this._gmsBoardCatalogByKind(kind)
@@ -2942,11 +3029,14 @@ const ScreeningPage = {
             const prev = buckets.get(key);
             const isBk = /^BK\d+$/i.test(code);
             const observeFlag = !!(b?.trade_observe_flag || prev?.trade_observe_flag);
+            const stockCount = this._gmsBoardMemberCount(b) ?? 0;
             const normalized = {
                 ...b,
                 board_code_source: source,
                 board_code_source_label: b?.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
                 trade_observe_flag: !!b?.trade_observe_flag,
+                stock_count: stockCount,
+                member_count: stockCount,
             };
             if (!prev) {
                 buckets.set(key, normalized);
@@ -3039,7 +3129,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
-            return b?.board_name || code;
+            return b ? this._gmsBoardNameWithCount(b) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3056,7 +3146,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
-            return b?.board_name || code;
+            return b ? this._gmsBoardNameWithCount(b) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3142,12 +3232,13 @@ const ScreeningPage = {
             const code = String(b.board_code || '').trim();
             const name = String(b.board_name || '').trim() || code;
             const srcLabel = this._gmsBoardSourceLabel(b);
-            const count = Number(b.stock_count);
-            const countTxt = Number.isFinite(count) ? `${count}只` : '';
+            const count = this._gmsBoardMemberCount(b);
+            const countTxt = count == null ? '' : `${count}只`;
+            const nameWithCount = count == null ? name : `${name} (${count})`;
             const title = `${this._gmsBoardLabel(b)}${countTxt ? ` · ${countTxt}` : ''} · ${code}`;
             const checked = draft.has(code) ? ' checked' : '';
             const sourceLine = countTxt ? `${srcLabel} · ${countTxt}` : srcLabel;
-            return `<label class="gms-board-picker-item" title="${esc(title)}"><input type="checkbox" value="${esc(code)}"${checked}><span class="gms-board-picker-item-text"><span class="gms-board-picker-name">${esc(name)}</span><span class="gms-board-picker-source">${esc(sourceLine)}</span></span></label>`;
+            return `<label class="gms-board-picker-item" title="${esc(title)}"><input type="checkbox" value="${esc(code)}"${checked}><span class="gms-board-picker-item-text"><span class="gms-board-picker-name">${esc(nameWithCount)}</span><span class="gms-board-picker-source">${esc(sourceLine)}</span></span></label>`;
         }).join('');
     },
 
@@ -3373,7 +3464,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
-            return b ? this._gmsBoardLabel(b) : code;
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3390,7 +3481,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
-            return b ? this._gmsBoardLabel(b) : code;
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3419,7 +3510,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
-            return b ? this._gmsBoardLabel(b) : code;
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3436,7 +3527,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
-            return b ? this._gmsBoardLabel(b) : code;
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3465,7 +3556,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
-            return b?.board_name || code;
+            return b ? this._gmsBoardNameWithCount(b) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3482,7 +3573,7 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
-            return b?.board_name || code;
+            return b ? this._gmsBoardNameWithCount(b) : code;
         });
         el.textContent = names.length <= 3
             ? `已选 ${codes.length} 个：${names.join('、')}`
@@ -3568,7 +3659,18 @@ const ScreeningPage = {
                 throw new Error(data.message || `HTTP ${res.status}`);
             }
             const boards = Array.isArray(data.data) ? data.data : [];
-            this.gmsIndustryBoardCatalog = this._dedupeGmsIndustryBoardCatalog(boards);
+            const mapped = boards.map((b) => {
+                const source = this._gmsBoardSourceValue(b);
+                const count = this._gmsBoardMemberCount(b) ?? 0;
+                return {
+                    ...b,
+                    board_code_source: source,
+                    board_code_source_label: b.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
+                    stock_count: count,
+                    member_count: count,
+                };
+            });
+            this.gmsIndustryBoardCatalog = this._dedupeGmsIndustryBoardCatalog(mapped);
             this._gmsIndustryBoardsLoaded = true;
             this._applyGmsTradeObserveBoardDefaults('industry');
             return true;
@@ -3598,12 +3700,13 @@ const ScreeningPage = {
             const boards = Array.isArray(data.data) ? data.data : [];
             const mapped = boards.map((b) => {
                 const source = this._gmsBoardSourceValue(b);
-                const count = Number(b?.stock_count);
+                const count = this._gmsBoardMemberCount(b) ?? 0;
                 return {
                     ...b,
                     board_code_source: source,
                     board_code_source_label: b.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
-                    stock_count: Number.isFinite(count) ? count : 0,
+                    stock_count: count,
+                    member_count: count,
                 };
             });
             this.gmsConceptBoardCatalog = this._dedupeGmsConceptBoardCatalog(mapped);
@@ -5489,9 +5592,7 @@ const ScreeningPage = {
                     : '';
                 const urtRiskHtml = [
                     urtRoleHtml,
-                    urtRiskTags.length
-                        ? urtRiskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
-                        : '',
+                    this._renderRiskTagsHtml(urtRiskTags),
                 ].filter(Boolean).join('') || '—';
                 html += `
                     <tr data-urt-row="${index}">
@@ -5726,9 +5827,7 @@ const ScreeningPage = {
                     : '';
                 const riskHtml = [
                     roleHtml,
-                    riskTags.length
-                        ? riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${String(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')
-                        : '',
+                    this._renderRiskTagsHtml(riskTags),
                 ].filter(Boolean).join('') || '—';
                 // 信号强度：优先用后端值；若为 0 但 score_detail 有总分则用总分/100（避免 trace 中 score_total=0 导致显示 0）
                 let signalStrength = stock.signal_strength != null ? stock.signal_strength : (stock.score_total != null ? stock.score_total / 100 : 0);
@@ -5762,12 +5861,8 @@ const ScreeningPage = {
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&#39;')
                     .replace(/</g, '&lt;');
-                const gmsSlopeTxt = (stock.sector_slope != null && Number.isFinite(Number(stock.sector_slope)))
-                    ? Number(stock.sector_slope).toFixed(4)
-                    : '--';
-                const gmsBoardEnv = stock.board_weak
-                    ? `<span class="gms-risk-tag" title="${String(stock.board_weak_reason || 'board_weak').replace(/"/g, '&quot;')}">走弱</span>`
-                    : (stock.primary_board_code ? '<span class="gms-muted">正常</span>' : '--');
+                const gmsSlopeTxt = this._gmsSlopeCellHtml(stock);
+                const gmsBoardEnv = this._gmsBoardEnvHtml(stock);
                 const gmsDetailHref = `stock.html?code=${encodeURIComponent(gmsCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 const gmsSt = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
                 const gmsSupport = stock.nearest_support != null

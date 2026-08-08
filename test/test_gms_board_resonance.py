@@ -67,10 +67,29 @@ def test_apply_board_weak_penalty_post_process():
     apply_board_weak_penalty_to_item(item, config=cfg)
     assert item["score_total"] == 70.0
     assert abs(item["signal_strength"] - 0.7) < 1e-6
-    assert "board_weak" in item["risk_tags"]
+    assert any(
+        isinstance(t, dict) and t.get("id") == "board_weak" and t.get("label")
+        for t in item["risk_tags"]
+    )
     pens = item["score_detail"]["penalties"]
     assert any(p.get("id") == "board_weak" for p in pens)
     assert item["score_detail"]["score_penalty_deduction"] == 10
+
+
+def test_apply_board_weak_risk_tag_is_dict_without_rule():
+    """无减分规则时仍写入可展示的 risk_tags 对象，避免前端渲染 undefined。"""
+    item = {
+        "board_weak": True,
+        "board_weak_reason": "realtime_change_negative",
+        "risk_tags": [{"id": "volume_weak", "label": "量能不足", "level": "warn"}],
+        "score_detail": {},
+    }
+    apply_board_weak_penalty_to_item(item, config={"scoring": {"penalty_rules": []}})
+    bw = [t for t in item["risk_tags"] if isinstance(t, dict) and t.get("id") == "board_weak"]
+    assert len(bw) == 1
+    assert bw[0]["label"] == "主行业板走弱"
+    assert bw[0]["reason"] == "realtime_change_negative"
+    assert "board_weak" not in item["risk_tags"]  # 不得再写裸字符串
 
 
 def test_penalty_engine_board_weak_from_row_flag():
@@ -95,6 +114,8 @@ def test_resolve_board_resonance_config_defaults():
     assert c["enabled"] is True
     assert c["enable_board_fund_flow"] is False
     assert c["sector_slope_window"] == 60
+    assert c["panel_member_limit"] is None  # 全成分不截断
+    assert c["prefer_db_slope"] is True
     empty = empty_board_resonance()
     assert empty["board_main_net_inflow"] is None
     assert empty["enable_board_fund_flow"] is False

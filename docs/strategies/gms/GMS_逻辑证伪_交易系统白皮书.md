@@ -284,6 +284,16 @@ TradeExecutionLog（复盘：是否严格执行、是否情绪化）
 
 选股结果字段：`primary_board_code/name`、`sector_slope`、`board_change_percent`、`board_weak`、`board_main_net_inflow`（预留）。
 
+**斜率口径与数据路径（§6.3 补充）：**
+
+- 基准 \(I_t=\sum(close\cdot volume)/\sum(volume)\)，近 N 日（默认 60）线性回归斜率；**板内全成分**（`board_panel_member_limit` 为 `null`/`0` 表示不截断）。
+- 行业/概念板无官方日线指数：在**行业板实时行情采集成功后**，用成分股日线合成斜率，分别写入 `industry_board_daily_metrics` / `concept_board_daily_metrics`（`sector_slope` / `sector_slope_window` / `slope_asof_date` / `member_count_used`）。**仅同花顺（`board_code_source=tonghuashun`）**行业板与概念板参与计算/入库；东财/华泰等其它来源一律跳过。概念板无独立实时采集，斜率与行业板对称挂载于同一采集任务之后。
+- **行情页列表**只批量读库（不在打开列表时对 ~90 板同步现算）。若库为空（例如采集挂载尚未跑过）：
+  1. 行情页「行业板块」工具栏点 **刷新斜率** → `POST /api/market/industry_board/refresh_sector_slopes?board_kind=industry`（默认后台异步全量）；
+  2. 或打开单板 **详情**：库中无斜率时现算该板全成分并 upsert，再返回；
+  3. 或等下次行业板实时采集成功后的自动 `refresh_board_sector_slopes`。
+- GMS enrich **优先读库**；缺失时对同花顺主行业板现算全成分；非同花顺主板块不现算、不判弱（`insufficient_board_data`）。store API 对概念板 + tonghuashun 过滤同样可用，供其它策略复用。
+
 > 注：环境过滤 **不等同于个股证伪**，而是 **全局或板块级的仓位降级 / 选股降权**。
 
 ---

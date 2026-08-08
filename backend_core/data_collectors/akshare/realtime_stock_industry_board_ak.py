@@ -262,10 +262,67 @@ class RealtimeStockIndustryBoardCollector:
                 value_dict["board_code"] = stored_code
                 placeholders = ','.join([f':{col}' for col in columns])
                 col_names = ','.join([f'"{col}"' for col in columns])
-                # 构造upsert SQL
-                update_set = ','.join([f'"{col}"=EXCLUDED."{col}"' for col in columns if col not in ('board_code','update_time')])
+                # upsert：latest_price 为空时保留旧值（同花顺兜底无指数，不可冲掉东财点位）
+                update_parts = []
+                for col in columns:
+                    if col in ('board_code', 'update_time'):
+                        continue
+                    if col == 'latest_price':
+                        update_parts.append(
+                            f'"{col}"=COALESCE(EXCLUDED."{col}", {self.table_name}."{col}")'
+                        )
+                    else:
+                        update_parts.append(f'"{col}"=EXCLUDED."{col}"')
+                update_set = ','.join(update_parts)
                 sql = f'INSERT INTO {self.table_name} ({col_names}) VALUES ({placeholders}) ON CONFLICT (board_code, update_time) DO UPDATE SET {update_set}'
                 session.execute(text(sql), value_dict)
+            # 东财「最新价」= 板块指数点位。按名称镜像到同花顺板代码，供行情页默认同花顺列表按 code 命中。
+            # 仅当本批写入含有效 latest_price（指数）时镜像，避免同花顺均价兜底污染。
+            try:
+                session.execute(
+                    text(
+                        f"""
+                        INSERT INTO {self.table_name} (
+                            board_code, board_name, latest_price, change_amount,
+                            change_percent, total_market_value, volume, amount,
+                            turnover_rate, up_count, down_count,
+                            leading_stock_name, leading_stock_code,
+                            leading_stock_change_percent, update_time
+                        )
+                        SELECT
+                            t.board_code, t.board_name, q.latest_price, q.change_amount,
+                            q.change_percent, q.total_market_value, q.volume, q.amount,
+                            q.turnover_rate, q.up_count, q.down_count,
+                            q.leading_stock_name, q.leading_stock_code,
+                            q.leading_stock_change_percent, q.update_time
+                        FROM industry_board_basic_info t
+                        INNER JOIN {self.table_name} q
+                          ON TRIM(q.board_name) = TRIM(t.board_name)
+                         AND q.update_time = :now
+                         AND q.latest_price IS NOT NULL
+                        WHERE COALESCE(NULLIF(TRIM(t.board_code_source), ''), 'eastmoney')
+                              = 'tonghuashun'
+                          AND q.board_code <> t.board_code
+                        ON CONFLICT (board_code, update_time) DO UPDATE SET
+                            board_name = EXCLUDED.board_name,
+                            latest_price = EXCLUDED.latest_price,
+                            change_amount = EXCLUDED.change_amount,
+                            change_percent = EXCLUDED.change_percent,
+                            total_market_value = EXCLUDED.total_market_value,
+                            volume = EXCLUDED.volume,
+                            amount = EXCLUDED.amount,
+                            turnover_rate = EXCLUDED.turnover_rate,
+                            up_count = EXCLUDED.up_count,
+                            down_count = EXCLUDED.down_count,
+                            leading_stock_name = EXCLUDED.leading_stock_name,
+                            leading_stock_code = EXCLUDED.leading_stock_code,
+                            leading_stock_change_percent = EXCLUDED.leading_stock_change_percent
+                        """
+                    ),
+                    {"now": now},
+                )
+            except Exception as mirror_err:
+                print(f"[采集] 同花顺板指数镜像跳过: {mirror_err}")
             session.commit()
             return True, None
         except Exception as e:
@@ -286,6 +343,124 @@ class RealtimeStockIndustryBoardCollector:
         finally:
             session.close()
 
+    def _log_slope_refresh_result(
+        self,
+        *,
+        operation_type: str,
+        operation_desc: str,
+        written: int,
+        total: int,
+        error_message: str = None,
+    ):
+        """斜率 refresh 结果写入 realtime_collect_operation_logs（必落库，便于核对）。"""
+        if error_message:
+            status = "fail"
+            err = error_message
+        elif total == 0:
+            status = "success"
+            err = "无同花顺板可算（basic_info 过滤后为空）"
+        elif written <= 0:
+            status = "fail"
+            err = f"尝试 {total} 板均无有效斜率写入"
+        elif written < total:
+            status = "partial"
+            err = f"写入 {written}/{total}"
+        else:
+            status = "success"
+            err = None
+        self.write_log(
+            operation_type=operation_type,
+            operation_desc=operation_desc,
+            affected_rows=written,
+            status=status,
+            error_message=err,
+        )
+
+    def _refresh_sector_slopes_after_quotes(self):
+        """行情入库成功后：同花顺行业板 + 概念板全成分斜率入库；其它来源不扫。失败只记日志。
+
+        调度说明：仓库无概念板实时行情采集器；概念板斜率与行业板共用本任务挂载点
+        （``RealtimeStockIndustryBoardCollector.run`` 行情成功后对称刷新），
+        保证日更节奏一致。成分同步见 ``ConceptBoardConstituentsCollector``（不单独挂斜率）。
+
+        可观测性：开始/成功/失败均写入 ``realtime_collect_operation_logs``
+        （operation_type=industry_board_sector_slope / concept_board_sector_slope）。
+        """
+        from backend_core.board_metrics.sector_slope_store import (
+            ALLOWED_SLOPE_BOARD_CODE_SOURCE,
+            refresh_board_sector_slopes,
+        )
+
+        # 先落 start，避免长耗时中途被杀时完全无痕迹
+        self.write_log(
+            operation_type="industry_board_sector_slope",
+            operation_desc="开始：同花顺行业/概念板斜率入库（行情采集挂载）",
+            affected_rows=0,
+            status="start",
+            error_message=None,
+        )
+
+        session = SessionLocal()
+        try:
+            try:
+                written, total = refresh_board_sector_slopes(
+                    session,
+                    board_kind="industry",
+                    board_code_source=ALLOWED_SLOPE_BOARD_CODE_SOURCE,
+                    member_limit=None,
+                    commit=True,
+                )
+                print(f"[采集] 同花顺行业板斜率入库完成: written={written}/{total}")
+                self._log_slope_refresh_result(
+                    operation_type="industry_board_sector_slope",
+                    operation_desc="同花顺行业板成分量权斜率计算入库",
+                    written=written,
+                    total=total,
+                )
+            except Exception as e:
+                tb = traceback.format_exc()
+                print(f"[采集] 行业板斜率入库失败（不影响行情）: {e}\n{tb}")
+                self._log_slope_refresh_result(
+                    operation_type="industry_board_sector_slope",
+                    operation_desc="同花顺行业板成分量权斜率计算入库",
+                    written=0,
+                    total=0,
+                    error_message=str(e) + "\n" + tb,
+                )
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+
+            # 概念板无 realtime collector：与行业板对称刷新同花顺概念斜率
+            try:
+                c_written, c_total = refresh_board_sector_slopes(
+                    session,
+                    board_kind="concept",
+                    board_code_source=ALLOWED_SLOPE_BOARD_CODE_SOURCE,
+                    member_limit=None,
+                    commit=True,
+                )
+                print(f"[采集] 同花顺概念板斜率入库完成: written={c_written}/{c_total}")
+                self._log_slope_refresh_result(
+                    operation_type="concept_board_sector_slope",
+                    operation_desc="同花顺概念板成分量权斜率计算入库（挂载于行业板实时采集后）",
+                    written=c_written,
+                    total=c_total,
+                )
+            except Exception as e:
+                tb = traceback.format_exc()
+                print(f"[采集] 概念板斜率入库失败（不影响行情）: {e}\n{tb}")
+                self._log_slope_refresh_result(
+                    operation_type="concept_board_sector_slope",
+                    operation_desc="同花顺概念板成分量权斜率计算入库（挂载于行业板实时采集后）",
+                    written=0,
+                    total=0,
+                    error_message=str(e) + "\n" + tb,
+                )
+        finally:
+            session.close()
+
     def run(self):
         try:
             print("[采集] 开始采集行业板块实时行情...")
@@ -301,6 +476,8 @@ class RealtimeStockIndustryBoardCollector:
                     status="success",
                     error_message=None
                 )
+                # 斜率依赖成分日线，与实时涨跌分离；失败不拖垮整次采集
+                self._refresh_sector_slopes_after_quotes()
             else:
                 print(f"[采集] 数据写入失败: {err}")
                 self.write_log(

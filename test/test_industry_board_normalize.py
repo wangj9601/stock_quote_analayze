@@ -60,6 +60,7 @@ def test_normalize_ths():
         {
             "板块": ["半导体"],
             "涨跌幅": [1.0],
+            "均价": [82.81],
             "上涨家数": [8],
             "下跌家数": [2],
             "领涨股": ["中芯国际"],
@@ -70,3 +71,6 @@ def test_normalize_ths():
     out = industry_board_to_english_df(ths)
     assert out.iloc[0]["board_name"] == "半导体"
     assert out.iloc[0]["leading_stock_name"] == "中芯国际"
+    # 均价不得映射为板块指数 latest_price
+    assert out.iloc[0]["latest_price"] is None or pd.isna(out.iloc[0]["latest_price"])
+    assert "均价" not in ths.columns or ths.iloc[0].get("最新价") is None

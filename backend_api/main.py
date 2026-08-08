@@ -18,7 +18,10 @@ import json
 import math
 
 def _sanitize_for_json(obj):
-    """递归将 nan/inf 与 numpy 标量转为 JSON 可序列化值。"""
+    """递归将 nan/inf、datetime/date、Decimal 与 numpy 标量转为 JSON 可序列化值。"""
+    from datetime import date, datetime
+    from decimal import Decimal
+
     # bool 须先于 int（bool 是 int 子类）；已提前返回后无需再排除 bool
     if obj is None or isinstance(obj, (bool, str)):
         return obj
@@ -28,6 +31,15 @@ def _sanitize_for_json(obj):
         if math.isnan(obj) or math.isinf(obj):
             return None
         return obj
+    if isinstance(obj, datetime):
+        return obj.isoformat(sep=" ", timespec="seconds")
+    if isinstance(obj, date):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        try:
+            return float(obj)
+        except (TypeError, ValueError, OverflowError):
+            return None
     item = getattr(obj, "item", None)  # numpy 标量
     if callable(item):
         try:

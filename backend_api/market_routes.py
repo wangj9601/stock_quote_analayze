@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, Query
 import akshare as ak
 from datetime import datetime
 from fastapi.responses import JSONResponse
+import logging
 import random
+import threading
 import traceback
 import pandas as pd
 import numpy as np
@@ -12,7 +14,7 @@ import sqlite3
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, text
-from backend_api.database import get_db
+from backend_api.database import SessionLocal, get_db
 from backend_api.models import (
     IndexRealtimeQuotes,
     IndustryBoardRealtimeQuotes,
@@ -25,6 +27,8 @@ from backend_api.utils.board_code_source import (
 )
 from backend_api.utils.industry_board_query import (
     fetch_industry_board_catalog,
+    fetch_industry_board_detail,
+    fetch_industry_board_list_with_metrics,
     get_stock_membership_boards,
 )
 from backend_core.board_roles.service import fetch_board_roles_payload, extract_leader_mid_from_payload
@@ -32,6 +36,7 @@ from backend_core.board_roles.service import fetch_board_roles_payload, extract_
 
 
 router = APIRouter(prefix="/api/market", tags=["market"])
+logger = logging.getLogger(__name__)
 
 def safe_float(value):
     """安全地将值转换为浮点数，处理 NaN 和无效值"""
@@ -212,10 +217,17 @@ def get_industry_board(db: Session = Depends(get_db)):
 
 # 行业板块目录（仅 basic_info，供 GMS 筛选等下拉使用）
 @router.get("/industry_board/catalog")
-def get_industry_board_catalog(db: Session = Depends(get_db)):
+def get_industry_board_catalog(
+    board_code_source: Optional[str] = Query(
+        None, description="可选：按来源过滤，如 tonghuashun"
+    ),
+    db: Session = Depends(get_db),
+):
     """行业板块代码/名称列表；含代码来源，同名不同来源可并存。"""
     try:
-        data = fetch_industry_board_catalog(db)
+        data = fetch_industry_board_catalog(
+            db, board_code_source=board_code_source
+        )
         return JSONResponse({"success": True, "data": data})
     except Exception as e:
         tb = traceback.format_exc()
@@ -228,6 +240,282 @@ def get_industry_board_catalog(db: Session = Depends(get_db)):
             },
             status_code=500,
         )
+
+
+@router.get("/industry_board/list")
+def get_industry_board_list(
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE,
+        description="板块代码来源，默认 tonghuashun（全量列表）",
+    ),
+    db: Session = Depends(get_db),
+):
+    """行情页行业板列表：同花顺全量 + 实时行情字段 + 成分数 + 批量斜率。"""
+    try:
+        src = normalize_board_code_source(board_code_source) or DEFAULT_BOARD_CODE_SOURCE
+        data = fetch_industry_board_list_with_metrics(db, board_code_source=src)
+        return JSONResponse(
+            {
+                "success": True,
+                "data": data,
+                "total": len(data),
+                "board_code_source": src,
+            }
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业板块列表失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+def _parse_board_codes_csv(raw: Optional[str]) -> Optional[List[str]]:
+    if raw is None or not str(raw).strip():
+        return None
+    codes = [c.strip() for c in str(raw).split(",") if c.strip()]
+    return codes or None
+
+
+def _run_sector_slope_refresh_job(
+    *,
+    board_kind: str,
+    board_code_source: str,
+    board_codes: Optional[List[str]],
+) -> dict:
+    """独立会话执行斜率刷新（供同步接口与后台线程复用）。"""
+    from backend_core.board_metrics.sector_slope_store import (
+        ALLOWED_SLOPE_BOARD_CODE_SOURCE,
+        refresh_board_sector_slopes,
+        write_slope_collect_log,
+    )
+
+    src = normalize_board_code_source(board_code_source) or ALLOWED_SLOPE_BOARD_CODE_SOURCE
+    kind = (board_kind or "industry").strip().lower()
+    kinds = ["industry", "concept"] if kind == "both" else [kind]
+    op_by_kind = {
+        "industry": "industry_board_sector_slope",
+        "concept": "concept_board_sector_slope",
+    }
+    write_slope_collect_log(
+        operation_type="industry_board_sector_slope",
+        operation_desc=f"开始：手动刷新斜率 board_kind={kind}",
+        affected_rows=0,
+        status="start",
+    )
+    session = SessionLocal()
+    results = []
+    try:
+        for k in kinds:
+            op = op_by_kind.get(k, "industry_board_sector_slope")
+            try:
+                written, total = refresh_board_sector_slopes(
+                    session,
+                    board_kind=k,
+                    board_codes=board_codes,
+                    board_code_source=src,
+                    member_limit=None,
+                    commit=True,
+                )
+                results.append(
+                    {"board_kind": k, "written": int(written), "total": int(total)}
+                )
+                if total == 0:
+                    st, err = "success", "无同花顺板可算"
+                elif written <= 0:
+                    st, err = "fail", f"尝试 {total} 板均无有效斜率写入"
+                elif written < total:
+                    st, err = "partial", f"写入 {written}/{total}"
+                else:
+                    st, err = "success", None
+                write_slope_collect_log(
+                    operation_type=op,
+                    operation_desc=f"手动刷新同花顺{k}板斜率入库",
+                    affected_rows=written,
+                    status=st,
+                    error_message=err,
+                )
+            except Exception as kind_err:
+                logger.exception("sector slope refresh kind=%s failed: %s", k, kind_err)
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+                results.append(
+                    {
+                        "board_kind": k,
+                        "written": 0,
+                        "total": 0,
+                        "error": str(kind_err),
+                    }
+                )
+                write_slope_collect_log(
+                    operation_type=op,
+                    operation_desc=f"手动刷新同花顺{k}板斜率入库",
+                    affected_rows=0,
+                    status="fail",
+                    error_message=str(kind_err),
+                )
+        any_fail = any(r.get("error") for r in results) or any(
+            int(r.get("written") or 0) <= 0 and int(r.get("total") or 0) > 0
+            for r in results
+        )
+        return {
+            "success": not any_fail,
+            "board_code_source": src,
+            "results": results,
+            "written": sum(int(r.get("written") or 0) for r in results),
+            "total": sum(int(r.get("total") or 0) for r in results),
+        }
+    except Exception as e:
+        logger.exception("sector slope refresh job failed: %s", e)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        write_slope_collect_log(
+            operation_type="industry_board_sector_slope",
+            operation_desc="手动刷新斜率失败",
+            affected_rows=0,
+            status="fail",
+            error_message=str(e),
+        )
+        return {"success": False, "message": str(e), "results": results}
+    finally:
+        session.close()
+
+
+@router.post("/industry_board/refresh_sector_slopes")
+def refresh_industry_board_sector_slopes(
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE,
+        description="仅 tonghuashun 会计算；其它来源直接跳过",
+    ),
+    board_kind: str = Query(
+        "industry",
+        description="industry / concept / both（默认仅行业板）",
+    ),
+    board_codes: Optional[str] = Query(
+        None,
+        description="逗号分隔板码；空则全量同花顺对应表",
+    ),
+    sync: bool = Query(
+        False,
+        description="True 同步等待结果；False（默认）后台异步，避免全量超时",
+    ),
+):
+    """手动刷新同花顺行业/概念板量权斜率并入库（复用采集后 refresh 逻辑）。
+
+    行情列表只读库；库空时点此按钮或等下次行业板实时采集成功后的挂载刷新。
+    打开详情时若单板缺失会现算入库，不必每次打开列表全量现算。
+    """
+    codes = _parse_board_codes_csv(board_codes)
+    kind = (board_kind or "industry").strip().lower()
+    if kind not in ("industry", "concept", "both"):
+        return JSONResponse(
+            {"success": False, "message": "board_kind 须为 industry / concept / both"},
+            status_code=400,
+        )
+    src = normalize_board_code_source(board_code_source) or DEFAULT_BOARD_CODE_SOURCE
+    if src != DEFAULT_BOARD_CODE_SOURCE:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": f"斜率仅支持 tonghuashun，当前来源={src}",
+                "written": 0,
+                "total": 0,
+            },
+            status_code=400,
+        )
+
+    if sync:
+        out = _run_sector_slope_refresh_job(
+            board_kind=kind,
+            board_code_source=src,
+            board_codes=codes,
+        )
+        status = 200 if out.get("success") else 500
+        return JSONResponse(out, status_code=status)
+
+    def _bg():
+        out = _run_sector_slope_refresh_job(
+            board_kind=kind,
+            board_code_source=src,
+            board_codes=codes,
+        )
+        logger.info(
+            "async refresh_sector_slopes done: success=%s written=%s total=%s",
+            out.get("success"),
+            out.get("written"),
+            out.get("total"),
+        )
+
+    threading.Thread(target=_bg, daemon=True, name="industry-board-slope-refresh").start()
+    return JSONResponse(
+        {
+            "success": True,
+            "async": True,
+            "message": "已启动后台斜率刷新（同花顺），完成后重新加载行业板列表即可看到数值",
+            "board_code_source": src,
+            "board_kind": kind,
+            "board_codes": codes,
+        }
+    )
+
+
+@router.get("/industry_board/{board_code}/detail")
+def get_industry_board_detail(
+    board_code: str,
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：用于同名映射到同花顺板"),
+    include_roles: bool = Query(True, description="是否附带龙头/中军"),
+    compute_slope_if_missing: bool = Query(
+        True, description="库中无斜率时是否现算全成分并入库"
+    ),
+    db: Session = Depends(get_db),
+):
+    """行业板详情：基本信息、实时行情、斜率与走弱判断、可选龙头/中军。"""
+    try:
+        data = fetch_industry_board_detail(
+            db,
+            board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            include_roles=include_roles,
+            compute_slope_if_missing=compute_slope_if_missing,
+        )
+        if not data:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": (
+                        f"未找到来源为 "
+                        f"{board_code_source or DEFAULT_BOARD_CODE_SOURCE} "
+                        f"的行业板块 {board_code}"
+                    ),
+                },
+                status_code=404,
+            )
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业板块详情失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
 
 # 获取概念板块列表（基本信息表）
 @router.get("/concept_board")
@@ -277,6 +565,7 @@ def get_concept_board(db: Session = Depends(get_db)):
                     "board_code_source": source,
                     "board_code_source_label": board_code_source_label(source),
                     "stock_count": stock_count,
+                    "member_count": stock_count,
                 }
             )
         return JSONResponse({"success": True, "data": data})

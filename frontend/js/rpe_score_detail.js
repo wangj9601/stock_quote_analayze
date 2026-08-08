@@ -118,7 +118,7 @@ const RpeScoreDetail = {
       html += `<tr><td>领涨 Z</td><td>Z ≥ ${zLead}</td><td>${this._fmt(z, 3)}</td><td>${this._passLabel(
         z != null && Number(z) >= Number(zLead)
       )}</td></tr>`;
-      html += `<tr><td>趋势否决</td><td>板块斜率≥0</td><td>${this._fmt(src.sector_slope, 6)}</td><td>${this._passLabel(
+      html += `<tr><td>趋势否决</td><td>板块斜率≥0</td><td>${this._fmt(src.sector_slope, 2)}</td><td>${this._passLabel(
         !src.trend_veto
       )}</td></tr>`;
       html += `<tr><td>结构</td><td>支撑上 + RR≥${minRr}</td><td>RR ${this._fmt(
@@ -153,7 +153,7 @@ const RpeScoreDetail = {
       ],
       [
         '板块斜率',
-        this._fmt(src.sector_slope, 6),
+        this._fmt(src.sector_slope, 2),
         `近 ${th.sector_slope_window != null ? th.sector_slope_window : 60} 日 I_t 回归斜率；&lt;0 可趋势否决`,
       ],
       [
