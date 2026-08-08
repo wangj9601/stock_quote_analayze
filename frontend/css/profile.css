@@ -1627,7 +1627,8 @@
     gap: 1rem;
 }
 
-.kde-levels-grid--classic {
+.kde-levels-grid--classic,
+.kde-levels-grid--vp {
     grid-template-columns: repeat(2, 1fr);
 }
 
@@ -1637,6 +1638,55 @@
 
 .kde-levels-card.pivot {
     border-top: 3px solid #ea580c;
+}
+
+.kde-levels-card.vp {
+    border-top: 3px solid #0d9488;
+}
+
+.kde-levels-card.vp-compare {
+    border-top: 3px solid #0891b2;
+}
+
+.kde-vp-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.kde-vp-compare-table th,
+.kde-vp-compare-table td {
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: right;
+}
+
+.kde-vp-compare-table th:first-child,
+.kde-vp-compare-table td:first-child {
+    text-align: left;
+    color: #64748b;
+}
+
+.kde-vp-compare-table th {
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.kde-vp-compare-table .is-aligned {
+    color: #15803d;
+    font-weight: 600;
+}
+
+.kde-vp-compare-table .not-aligned {
+    color: #94a3b8;
+}
+
+.kde-vp-compare-note {
+    margin: 0.65rem 0 0;
+    font-size: 0.8rem;
+    color: #64748b;
+    line-height: 1.4;
 }
 
 .kde-levels-card li .idx-label {
@@ -1668,7 +1718,8 @@
 
 @media (max-width: 900px) {
     .kde-levels-grid,
-    .kde-levels-grid--classic {
+    .kde-levels-grid--classic,
+    .kde-levels-grid--vp {
         grid-template-columns: 1fr;
     }
 }

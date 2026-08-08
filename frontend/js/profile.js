@@ -340,6 +340,71 @@ const ProfilePage = {
         fillList(supportList, data.support_levels);
         fillList(resistList, data.resistance_levels);
 
+        const vp = data.volume_profile || {};
+        const vpCmp = data.vp_vs_kde || {};
+        const vpAdjust = vp.price_adjust || data.price_adjust || 'none';
+        const vpTag = document.getElementById('kdeVpAdjustTag');
+        if (vpTag) {
+            vpTag.textContent = vpAdjust === 'qfq' ? '前复权' : '不复权';
+            vpTag.className =
+                vpAdjust === 'qfq'
+                    ? 'kde-levels-adjust-tag is-qfq'
+                    : 'kde-levels-adjust-tag is-raw';
+        }
+        const setTxt = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = v;
+        };
+        setTxt('kdeVpPoc', fmt(vp.poc));
+        setTxt('kdeVpVal', fmt(vp.val));
+        setTxt('kdeVpVah', fmt(vp.vah));
+        setTxt('kdeVpNearestSupport', fmt(vp.nearest_support));
+        setTxt('kdeVpNearestResistance', fmt(vp.nearest_resistance));
+        setTxt('kdeVpLookback', vp.lookback != null ? String(vp.lookback) : '--');
+        setTxt(
+            'kdeVpVaPct',
+            vp.value_area_pct != null
+                ? `${Math.round(Number(vp.value_area_pct) * 100)}%`
+                : '--'
+        );
+        const fillCmpRow = (prefix, side) => {
+            const row = (side === 'support' ? vpCmp.support : vpCmp.resistance) || {};
+            setTxt(`kdeVpCmp${prefix}Kde`, fmt(row.kde));
+            setTxt(`kdeVpCmp${prefix}Vp`, fmt(row.vp));
+            if (row.diff == null) {
+                setTxt(`kdeVpCmp${prefix}Diff`, '--');
+            } else {
+                const sign = Number(row.diff) > 0 ? '+' : '';
+                const pct =
+                    row.diff_pct != null ? `（${Number(row.diff_pct).toFixed(2)}%）` : '';
+                setTxt(`kdeVpCmp${prefix}Diff`, `${sign}${fmt(row.diff)}${pct}`);
+            }
+            const alignEl = document.getElementById(`kdeVpCmp${prefix}Align`);
+            if (alignEl) {
+                if (row.kde == null || row.vp == null) {
+                    alignEl.textContent = '--';
+                    alignEl.className = '';
+                } else if (row.aligned) {
+                    alignEl.textContent = '是';
+                    alignEl.className = 'is-aligned';
+                } else {
+                    alignEl.textContent = '否';
+                    alignEl.className = 'not-aligned';
+                }
+            }
+        };
+        fillCmpRow('Support', 'support');
+        fillCmpRow('Resist', 'resistance');
+        const cmpNote = document.getElementById('kdeVpCompareNote');
+        if (cmpNote) {
+            const aligned =
+                (vpCmp.support && vpCmp.support.aligned) ||
+                (vpCmp.resistance && vpCmp.resistance.aligned);
+            cmpNote.textContent = aligned
+                ? '存在 KDE↔VP 价位共振（相对偏差 ≤1.5%）；短线仍以 KDE 为主，VP 作辅助确认。'
+                : '相对偏差 ≤1.5% 视为价位共振；短线仍以 KDE 为主，VP 作辅助对照。';
+        }
+
         const classic = data.classic_levels || {};
         const fib = classic.fibonacci || null;
         const pivot = classic.pivot || null;
@@ -425,12 +490,16 @@ const ProfilePage = {
         const classicNote = classic.ok
             ? `Fib/Pivot ${classicBasis} · 回看 ${classicLb} 日`
             : `Fib/Pivot：${classic.reason || '暂无'}`;
+        const vpNote = vp.ok
+            ? `VP 回看 ${vp.lookback || 60} 日 · POC ${fmt(vp.poc)}`
+            : `VP：${vp.reason || '暂无'}`;
         const parts = [
             adjustLabel,
             data.description || '成交量加权 KDE 支撑 / 压力',
             used != null ? `KDE 实际回看 ${used} 日` : null,
             expanded ? '（已扩窗）' : null,
             `KDE 初始 ${initLb} / 上限 ${maxLb}`,
+            vpNote,
             classicNote,
             data.kde_reason ? `KDE 状态：${data.kde_reason}` : null,
         ].filter(Boolean);

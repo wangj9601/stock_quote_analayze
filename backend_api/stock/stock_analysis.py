@@ -543,6 +543,45 @@ class KeyLevels:
         out["price_adjust"] = adjust
         return out
 
+    @staticmethod
+    def calculate_volume_profile(
+        historical_data: List[Dict],
+        current_price: float,
+        *,
+        lookback: Optional[int] = None,
+        price_adjust: str = "none",
+    ) -> Dict:
+        """轻量日线 Volume Profile（POC/VAH/VAL），参考用。"""
+        from backend_core.analysis.volume_profile import (
+            DEFAULT_LOOKBACK,
+            compute_volume_profile_from_bars,
+        )
+
+        lb = int(lookback or DEFAULT_LOOKBACK)
+        adjust = str(price_adjust or "none").strip().lower() or "none"
+        bars: List[Dict] = []
+        for row in historical_data or []:
+            if not isinstance(row, dict):
+                continue
+            d = dict(row)
+            if d.get("date") is None and d.get("trade_date") is not None:
+                d["date"] = d["trade_date"]
+            bars.append(d)
+        try:
+            price = float(current_price) if current_price is not None else None
+        except (TypeError, ValueError):
+            price = None
+        if adjust == "qfq" and bars:
+            try:
+                end_close = float(bars[-1]["close"])
+                if end_close > 0:
+                    price = end_close
+            except (TypeError, ValueError, KeyError):
+                pass
+        out = compute_volume_profile_from_bars(bars, last_close=price, lookback=lb)
+        out["price_adjust"] = adjust
+        return out
+
 
 class StockAnalysisService:
     """股票分析服务类。
@@ -715,11 +754,19 @@ class StockAnalysisService:
                             "fibonacci": None,
                             "pivot": None,
                         },
+                        "volume_profile": {
+                            "ok": False,
+                            "reason": "no_historical_data",
+                            "poc": None,
+                            "vah": None,
+                            "val": None,
+                        },
+                        "vp_vs_kde": {"notes": ["no_historical_data"]},
                         "description": (
                             "成交量加权 KDE：对日K收盘价按成交量加权估计密度峰，"
                             f"初始回看 {KeyLevels.KDE_LOOKBACK_DAYS} 日，"
                             f"无支撑时递推至最多约 {KeyLevels.KDE_LOOKBACK_MAX} 日；"
-                            "另附近窗黄金分割与经典 Pivot 参考价。"
+                            "另附 Volume Profile（POC/VAH/VAL）与 Fib/Pivot 作参考对比。"
                         ),
                     },
                 }
@@ -756,6 +803,19 @@ class StockAnalysisService:
             )
             classic["anchor_price"] = round(float(current_price), 2) if current_price else None
             classic["anchor_source"] = price_source
+            vp = KeyLevels.calculate_volume_profile(
+                historical_data,
+                current_price,
+                price_adjust=adjust,
+            )
+            from backend_core.analysis.volume_profile import compare_vp_with_kde
+
+            vp_vs_kde = compare_vp_with_kde(
+                vp,
+                kde_support=levels.get("nearest_support"),
+                kde_resistance=levels.get("nearest_resistance"),
+                price=current_price,
+            )
             stock_name = ""
             for row in reversed(historical_data):
                 name = (row.get("name") or "").strip()
@@ -763,6 +823,7 @@ class StockAnalysisService:
                     stock_name = name
                     break
 
+            vp_lb = vp.get("lookback") or 60
             if adjust == "qfq":
                 desc = (
                     "成交量加权 KDE（前复权现算）：不复权日K × 归一化复权因子 "
@@ -771,8 +832,7 @@ class StockAnalysisService:
                     f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
                     f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
                     "现价下方峰为支撑，上方峰为压力。"
-                    f"黄金分割与经典 Pivot 亦基于同一前复权 OHLC（近 {classic.get('lookback') or 60} 日），"
-                    "锚点为前复权序列最近收盘。"
+                    f"Volume Profile（近 {vp_lb} 日 POC/VAH/VAL）与 Fib/Pivot 同口径前复权，仅作与 KDE 对比参考，不改策略门槛。"
                 )
             else:
                 desc = (
@@ -782,7 +842,7 @@ class StockAnalysisService:
                     f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
                     "现价下方峰为支撑，上方峰为压力（阻力）。"
                     "现价优先实时行情表，无有效价时回退日K收盘。"
-                    f"黄金分割与经典 Pivot 基于不复权 OHLC（近 {classic.get('lookback') or 60} 日）。"
+                    f"Volume Profile（近 {vp_lb} 日 POC/VAH/VAL）与 Fib/Pivot 并列参考，用于对照 KDE，不改策略门槛。"
                 )
 
             return {
@@ -792,6 +852,8 @@ class StockAnalysisService:
                     "stock_name": stock_name,
                     **levels,
                     "classic_levels": classic,
+                    "volume_profile": vp,
+                    "vp_vs_kde": vp_vs_kde,
                     "current_price_source": price_source,
                     "realtime_price": round(float(realtime_price), 2)
                     if realtime_price
