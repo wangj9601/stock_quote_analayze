@@ -21,14 +21,54 @@
   }
 
   function stockChip(s) {
-    const code = esc(s.code || '');
-    const name = esc(s.name || '');
+    const code = esc(s.code || s.stock_code || '');
+    const name = esc(s.name || s.stock_name || '');
     const chg = s.change_percent != null && Number.isFinite(Number(s.change_percent))
       ? Number(s.change_percent).toFixed(2) + '%'
       : '--';
     const title = esc(s.role_reason || '');
-    const href = `stock.html?code=${encodeURIComponent(s.code || '')}&name=${encodeURIComponent(s.name || '')}`;
+    const rawCode = s.code || s.stock_code || '';
+    const rawName = s.name || s.stock_name || '';
+    const href = `stock.html?code=${encodeURIComponent(rawCode)}&name=${encodeURIComponent(rawName)}`;
     return `<a class="gms-board-role-chip" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${code} ${name} <span class="gms-board-role-chg">${chg}</span></a>`;
+  }
+
+  /** 分析频道等：对齐后台成分页「短线角色」红/橙标签 */
+  function formatPct(v) {
+    if (v == null || !Number.isFinite(Number(v))) return '';
+    const n = Number(v);
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${n.toFixed(2)}%`;
+  }
+
+  function shortlinePill(kind, s) {
+    const rawCode = s.code || s.stock_code || '';
+    const rawName = s.name || s.stock_name || '';
+    const label = kind === 'leader' ? '龙头' : '中军';
+    const cls =
+      kind === 'leader' ? 'ba-role-pill ba-role-pill--leader' : 'ba-role-pill ba-role-pill--mid';
+    const pct = formatPct(s.change_percent);
+    const pctHtml = pct ? ` (${esc(pct)})` : '';
+    const title = esc(s.role_reason || label);
+    const href = `stock.html?code=${encodeURIComponent(rawCode)}&name=${encodeURIComponent(rawName)}`;
+    const show = esc(rawName || rawCode || '--');
+    return `<a class="${cls}" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${label} ${show}${pctHtml}</a>`;
+  }
+
+  function renderShortlineRoles(data) {
+    const leaders = normalizeRoleList(data, 'leaders', 'leader');
+    const mids = normalizeRoleList(data, 'mids', 'mid');
+    const pills = [
+      ...leaders.map((s) => shortlinePill('leader', s)),
+      ...mids.map((s) => shortlinePill('mid', s)),
+    ];
+    const body = pills.length
+      ? pills.join('')
+      : '<span class="ba-muted">暂无</span>';
+    return `<div class="ba-short-roles">
+      <span class="ba-short-roles-label">短线角色：</span>
+      ${body}
+    </div>`;
   }
 
   /** 优先 leaders/mids 全量数组，兼容旧 leader/mid 单对象；不做条数截断。 */
@@ -84,28 +124,41 @@
    * @param {string[]} opts.boardCodes
    * @param {string} [opts.boardCodeSource]
    * @param {boolean} [opts.visible]
+   * @param {'default'|'shortline'} [opts.variant]
+   * @param {object} [opts.data] - 已有 roles 数据时跳过请求（单板）
    */
   async function refreshBoardRolesPanel(opts) {
     const panel = document.getElementById(opts.panelId);
     if (!panel) return;
+    const variant = opts.variant === 'shortline' ? 'shortline' : 'default';
     const codes = (opts.boardCodes || []).map((c) => String(c || '').trim()).filter(Boolean);
-    const visible = opts.visible !== false && codes.length > 0;
+    const visible = opts.visible !== false && (codes.length > 0 || opts.data);
     panel.style.display = visible ? 'block' : 'none';
     if (!visible) {
       panel.innerHTML = '';
       return;
     }
-    panel.innerHTML = '<div class="gms-board-roles-loading">加载龙头/中军…</div>';
+    if (opts.data && typeof opts.data === 'object') {
+      panel.innerHTML =
+        variant === 'shortline' ? renderShortlineRoles(opts.data) : renderBoardBlock(opts.data);
+      return;
+    }
+    panel.innerHTML =
+      variant === 'shortline'
+        ? '<div class="ba-short-roles"><span class="ba-muted">加载短线角色…</span></div>'
+        : '<div class="gms-board-roles-loading">加载龙头/中军…</div>';
     const source = opts.boardCodeSource || 'tonghuashun';
     const parts = [];
     for (const code of codes.slice(0, 8)) {
       try {
         const data = await fetchBoardRoles(opts.boardType, code, source);
-        parts.push(renderBoardBlock(data));
+        parts.push(variant === 'shortline' ? renderShortlineRoles(data) : renderBoardBlock(data));
       } catch (e) {
         parts.push(
-          `<div class="gms-board-roles-block"><div class="gms-board-roles-title">${esc(code)}</div>` +
-            `<div class="gms-muted">${esc(e.message || String(e))}</div></div>`
+          variant === 'shortline'
+            ? `<div class="ba-short-roles"><span class="ba-muted">${esc(e.message || String(e))}</span></div>`
+            : `<div class="gms-board-roles-block"><div class="gms-board-roles-title">${esc(code)}</div>` +
+                `<div class="gms-muted">${esc(e.message || String(e))}</div></div>`
         );
       }
     }
@@ -118,5 +171,6 @@
   global.BoardRolesPanel = {
     refresh: refreshBoardRolesPanel,
     fetchBoardRoles,
+    renderShortlineRoles,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

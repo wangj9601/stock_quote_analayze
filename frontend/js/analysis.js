@@ -1,12 +1,13 @@
 // 分析页面功能模块
 const AnalysisPage = {
-    currentTab: 'market-analysis',
+    currentTab: 'board-analysis',
     currentStockCode: '', // 当前分析的股票代码
 
     // 初始化
     init() {
         this.bindEvents();
-        this.loadMarketAnalysis();
+        if (window.BoardAnalysis) BoardAnalysis.init();
+        this.loadTabData(this.currentTab);
         this.drawFundFlowChart();
         this.startDataUpdate();
 
@@ -28,16 +29,22 @@ const AnalysisPage = {
         });
 
         // 快速分析按钮
-        document.querySelector('.analyze-btn').addEventListener('click', () => {
-            this.performQuickAnalysis();
-        });
+        const analyzeBtn = document.querySelector('.analyze-btn');
+        if (analyzeBtn) {
+            analyzeBtn.addEventListener('click', () => {
+                this.performQuickAnalysis();
+            });
+        }
 
         // 股票输入框回车事件
-        document.querySelector('.stock-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.performQuickAnalysis();
-            }
-        });
+        const stockInput = document.querySelector('.stock-input');
+        if (stockInput) {
+            stockInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.performQuickAnalysis();
+                }
+            });
+        }
 
         // 技术工具按钮
         document.querySelectorAll('.tool-btn').forEach(btn => {
@@ -93,6 +100,10 @@ const AnalysisPage = {
     // 加载标签数据
     loadTabData(tabId) {
         switch (tabId) {
+            case 'board-analysis':
+                break;
+            case 'stock-ai':
+                break;
             case 'market-analysis':
                 this.loadMarketAnalysis();
                 break;

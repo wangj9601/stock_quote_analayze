@@ -1,6 +1,6 @@
-/* 分析页面样式 */
+/* åæé¡µé¢æ ·å¼ */
 
-/* 主标题样式 */
+/* ä¸»æ é¢æ ·å¼ */
 .main-content h1 {
     font-size: 2rem;
     font-weight: 700;
@@ -8,7 +8,7 @@
     margin-bottom: 2rem;
 }
 
-/* 快速分析区域 */
+/* å¿«éåæåºå */
 .quick-analysis {
     background: white;
     border-radius: 8px;
@@ -87,7 +87,7 @@
     margin-bottom: 1rem;
 }
 
-/* 分析标签区域 */
+/* åææ ç­¾åºå */
 .analysis-tabs {
     margin-top: 2rem;
 }
@@ -128,7 +128,7 @@
     display: block;
 }
 
-/* 市场分析样式 */
+/* å¸åºåææ ·å¼ */
 .market-analysis-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -161,7 +161,7 @@
     flex-shrink: 0;
 }
 
-/* 市场温度样式 */
+/* å¸åºæ¸©åº¦æ ·å¼ */
 .temperature-meter {
     margin-bottom: 1rem;
 }
@@ -192,7 +192,7 @@
     line-height: 1.5;
 }
 
-/* 资金流向样式 */
+/* èµéæµåæ ·å¼ */
 .flow-chart {
     height: 200px;
     background: #f8fafc;
@@ -225,7 +225,7 @@
     font-size: 0.9rem;
 }
 
-/* 趋势研判样式 */
+/* è¶å¿ç å¤æ ·å¼ */
 .trend-indicators {
     margin-bottom: 1rem;
 }
@@ -275,7 +275,7 @@
     line-height: 1.5;
 }
 
-/* 风险提示样式 */
+/* é£é©æç¤ºæ ·å¼ */
 .risk-alerts {
     display: flex;
     flex-direction: column;
@@ -341,7 +341,7 @@
     flex: 1;
 }
 
-/* 技术工具样式 */
+/* ææ¯å·¥å·æ ·å¼ */
 .tools-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -411,13 +411,13 @@
 }
 
 .tool-desc li::before {
-    content: "•";
+    content: "â¢";
     color: #2563eb;
     position: absolute;
     left: 0;
 }
 
-/* 投资策略样式 */
+/* æèµç­ç¥æ ·å¼ */
 .strategy-section {
     display: grid;
     grid-template-columns: 2fr 1fr;
@@ -504,7 +504,7 @@
     font-weight: 500;
 }
 
-/* 组合建议样式 */
+/* ç»åå»ºè®®æ ·å¼ */
 .portfolio-card {
     background: white;
     border-radius: 8px;
@@ -559,7 +559,7 @@
     color: #1f2937;
 }
 
-/* 分析报告样式 */
+/* åææ¥åæ ·å¼ */
 .reports-section {
     display: flex;
     flex-direction: column;
@@ -642,7 +642,7 @@
     margin-bottom: 0.5rem;
 }
 
-/* 响应式设计 */
+/* ååºå¼è®¾è®¡ */
 @media (max-width: 768px) {
     .analysis-header {
         flex-direction: column;
@@ -733,7 +733,7 @@
     }
 }
 
-/* 搜索弹窗样式 */
+/* æç´¢å¼¹çªæ ·å¼ */
 .search-modal {
     display: none !important;
     position: fixed;
@@ -809,3 +809,93 @@
     overflow-y: auto;
     padding: 10px;
 } 
+/* °å¿é·ÖÎö¹¤×÷Ì¨ */
+.ba-workbench { background: #fff; border-radius: 8px; padding: 1.25rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.ba-desc { color: #64748b; font-size: .9rem; margin: 0 0 1rem; line-height: 1.5; }
+.ba-toolbar { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; margin-bottom: 1rem; }
+.ba-kind label, .ba-strategies label { margin-right: .75rem; font-size: .9rem; cursor: pointer; }
+.ba-search { min-width: 160px; padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; }
+.ba-select { min-width: 220px; max-width: 360px; padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; }
+.ba-meta-card { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: baseline; padding: .75rem 1rem; background: #f8fafc; border-radius: 6px; margin-bottom: .75rem; font-size: .9rem; }
+.ba-muted { color: #94a3b8; font-size: .85rem; }
+.ba-env { color: #0369a1; font-weight: 600; }
+.ba-roles { margin-bottom: 1rem; }
+
+/* 短线角色：对齐后台成分页 el-tag danger/warning */
+.ba-short-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: .65rem .85rem;
+  margin-bottom: .75rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: .85rem;
+}
+.ba-short-roles-label {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+.ba-role-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ba-role-pill--leader {
+  color: #fff;
+  background: #f56c6c;
+  border: 1px solid #f56c6c;
+}
+.ba-role-pill--leader:hover {
+  color: #fff;
+  background: #f78989;
+  border-color: #f78989;
+}
+.ba-role-pill--mid {
+  color: #e6a23c;
+  background: #fdf6ec;
+  border: 1px solid #f3d19e;
+}
+.ba-role-pill--mid:hover {
+  color: #cf9236;
+  background: #faecd8;
+  border-color: #e6a23c;
+}
+.ba-role-pill--other {
+  color: #606266;
+  background: #f4f4f5;
+  border: 1px solid #e4e7ed;
+}
+.ba-role-pill--sm {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.ba-role-cell {
+  white-space: nowrap;
+}
+.ba-strategy-block { margin-bottom: 1.5rem; }
+.ba-strategy-block h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
+.ba-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+.ba-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.ba-table th, .ba-table td { padding: .5rem .65rem; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
+.ba-table th { background: #f8fafc; color: #475569; font-weight: 600; white-space: nowrap; }
+.ba-advice { max-width: 220px; line-height: 1.35; color: #334155; }
+.ba-ref { font-size: .8rem; color: #64748b; white-space: nowrap; }
+.ba-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ba-empty { color: #94a3b8; padding: 1.5rem; text-align: center; }
+.ba-error { color: #b91c1c; }
+.ba-hit { display: inline-block; padding: .1rem .45rem; border-radius: 4px; background: #e2e8f0; font-size: .8rem; }
+.ba-hit--buy { background: #dcfce7; color: #166534; }
+.ba-hit--watch { background: #e0f2fe; color: #075985; }
+.ba-hit--avoid { background: #fee2e2; color: #991b1b; }
+.ba-watch { margin-top: .75rem; }
+.btn-sm { padding: .25rem .55rem; font-size: .8rem; }

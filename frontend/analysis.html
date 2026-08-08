@@ -19,35 +19,65 @@
         <div class="container">
             <h1>智能分析中心</h1>
 
-            <!-- 快速分析工具 -->
-            <section class="quick-analysis">
-                <div class="analysis-header">
-                    <h2>🔍 快速分析</h2>
-                    <div class="stock-selector">
-                        <input type="text" placeholder="输入股票代码或名称" class="stock-input">
-                        <button class="analyze-btn" data-perm="channel.analyze.tab.technical.btn.analyze">开始分析</button>
-                    </div>
-                </div>
-
-                <div class="analysis-result" id="analysisResult">
-                    <div class="result-placeholder">
-                        <div class="placeholder-icon">📊</div>
-                        <p>请输入股票代码开始智能分析</p>
-                    </div>
-                </div>
-            </section>
-
             <!-- 功能标签 -->
             <section class="analysis-tabs">
                 <div class="tab-nav">
-                    <button class="analysis-tab active" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
+                    <button class="analysis-tab active" data-tab="board-analysis" data-perm="channel.analyze.tab.board">板块分析</button>
+                    <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股AI分析</button>
+                    <button class="analysis-tab" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
                     <button class="analysis-tab" data-tab="technical-tools" data-perm="channel.analyze.tab.technical">技术工具</button>
                     <button class="analysis-tab" data-tab="strategy" data-perm="channel.analyze.tab.strategy">投资策略</button>
                     <button class="analysis-tab" data-tab="reports" data-perm="channel.analyze.tab.report">分析报告</button>
                 </div>
 
+                <!-- 板块分析（行业/概念 × 多策略） -->
+                <div class="tab-panel active" id="board-analysis">
+                    <div class="ba-workbench" data-perm="channel.analyze.tab.board">
+                        <p class="ba-desc">先选行业或概念板块，再按 GMS / URT / SBBR / RPE 筛可观察股票；买卖建议以策略与 KDE/箱体为主，Fibonacci 与经典 Pivot 为参考价。</p>
+                        <div class="ba-toolbar">
+                            <div class="ba-kind">
+                                <label><input type="radio" name="baBoardKind" value="industry" checked> 行业板块</label>
+                                <label><input type="radio" name="baBoardKind" value="concept"> 概念板块</label>
+                            </div>
+                            <input type="search" id="baBoardSearch" class="ba-search" placeholder="搜索板块名称/代码">
+                            <select id="baBoardSelect" class="ba-select"><option value="">请选择板块</option></select>
+                            <div class="ba-strategies">
+                                <label><input type="checkbox" name="baStrategy" value="gms" checked> GMS</label>
+                                <label><input type="checkbox" name="baStrategy" value="urt" checked> URT</label>
+                                <label><input type="checkbox" name="baStrategy" value="sbbr" checked> SBBR</label>
+                                <label><input type="checkbox" name="baStrategy" value="rpe" checked> RPE</label>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="baRunBtn" data-perm="channel.analyze.tab.board.btn.run">开始分析</button>
+                        </div>
+                        <div id="baBoardMeta" class="ba-meta"></div>
+                        <div id="baRolesHost" class="ba-roles"></div>
+                        <div id="baResults" class="ba-results">
+                            <p class="ba-empty">选择板块并勾选策略后点击「开始分析」</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 个股 AI 分析 -->
+                <div class="tab-panel" id="stock-ai">
+                    <section class="quick-analysis">
+                        <div class="analysis-header">
+                            <h2>快速分析</h2>
+                            <div class="stock-selector">
+                                <input type="text" placeholder="输入股票代码或名称" class="stock-input">
+                                <button class="analyze-btn" data-perm="channel.analyze.tab.technical.btn.analyze">开始分析</button>
+                            </div>
+                        </div>
+                        <div class="analysis-result" id="analysisResult">
+                            <div class="result-placeholder">
+                                <div class="placeholder-icon">📊</div>
+                                <p>请输入股票代码开始智能分析</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
                 <!-- 市场分析 -->
-                <div class="tab-panel active" id="market-analysis">
+                <div class="tab-panel" id="market-analysis">
                     <div class="market-analysis-grid">
                         <div class="analysis-card">
                             <h3>🌡️ 市场温度</h3>
@@ -392,6 +422,8 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/board_roles_panel.js"></script>
+    <script src="js/board_analysis.js"></script>
     <script src="js/analysis.js"></script>
 </body>
 
