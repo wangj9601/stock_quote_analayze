@@ -261,6 +261,9 @@ const BoardAnalysis = {
         const ref = advice.reference_levels || {};
         const roles = this.renderRoleTags(row.role_tags);
         const hit = this.hitLabel(strategy, row);
+        const lastClose = this.fmtPrice2(
+          row.last_close ?? row.close ?? ref.last_close ?? row.latest_price
+        );
         const buy = advice.buy_zone?.label || advice.summary?.split('；')[0] || '--';
         const sell =
           advice.stop_zone?.label ||
@@ -281,6 +284,7 @@ const BoardAnalysis = {
         const tip = this.refHoverTip(ref, advice.summary);
         return `<tr>
           <td><a href="stock.html?code=${encodeURIComponent(code)}">${this.esc(code)}</a><div class="ba-muted">${this.esc(name)}</div></td>
+          <td class="ba-num">${lastClose}</td>
           <td class="ba-role-cell">${roles}</td>
           <td><span class="ba-hit ba-hit--${this.escAttr(action)}">${this.esc(hit)}</span></td>
           <td class="ba-advice">${this.esc(buy)}</td>
@@ -299,7 +303,7 @@ const BoardAnalysis = {
       .join('');
     return `<div class="ba-table-wrap"><table class="ba-table">
       <thead><tr>
-        <th>股票</th><th>角色</th><th>命中</th><th>买点建议</th><th>卖点/防守</th>
+        <th>股票</th><th>最新收盘</th><th>角色</th><th>命中</th><th>买点建议</th><th>卖点/防守</th>
         <th>KDE结构支撑</th><th>KDE结构阻力</th><th>参考价 Fib/Pivot</th><th>操作</th>
       </tr></thead>
       <tbody>${rows}</tbody>

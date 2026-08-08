@@ -239,7 +239,9 @@ def _enrich_items(
     names: Dict[str, str],
     ref_by_code: Dict[str, Dict[str, Any]],
     role_by_code: Optional[Dict[str, Any]] = None,
+    last_close_by_code: Optional[Dict[str, float]] = None,
 ) -> List[Dict[str, Any]]:
+    closes = last_close_by_code or {}
     out = []
     for raw in items:
         row = dict(raw)
@@ -249,6 +251,22 @@ def _enrich_items(
         if role_by_code and code in role_by_code:
             row["role_tags"] = role_by_code[code]
         ref = ref_by_code.get(code)
+        lc = closes.get(code)
+        if lc is None and isinstance(ref, dict) and ref.get("last_close") is not None:
+            try:
+                lc = float(ref["last_close"])
+            except (TypeError, ValueError):
+                lc = None
+        if lc is None:
+            for k in ("close", "latest_price", "price", "last_close"):
+                if row.get(k) is not None:
+                    try:
+                        lc = float(row[k])
+                        break
+                    except (TypeError, ValueError):
+                        pass
+        if lc is not None:
+            row["last_close"] = round(float(lc), 2)
         row["trade_advice"] = build_trade_advice(strategy, row, reference_levels=ref)
         out.append(row)
     return out
@@ -416,20 +434,22 @@ def collect_board_signals(
     }
     ref_by = attach_reference_levels_batch(bars, last_close_by_code=last_closes)
 
+    enrich_kw = dict(
+        names=names,
+        ref_by_code=ref_by,
+        role_by_code=role_map,
+        last_close_by_code=last_closes,
+    )
     strategies_out: Dict[str, Any] = {}
     if "gms" in wanted:
-        items = _enrich_items("gms", raw.get("gms") or [], names=names, ref_by_code=ref_by, role_by_code=role_map)
+        items = _enrich_items("gms", raw.get("gms") or [], **enrich_kw)
         strategies_out["gms"] = {"total": len(items), "items": items}
     if "urt" in wanted:
-        items = _enrich_items("urt", raw.get("urt") or [], names=names, ref_by_code=ref_by, role_by_code=role_map)
+        items = _enrich_items("urt", raw.get("urt") or [], **enrich_kw)
         strategies_out["urt"] = {"total": len(items), "items": items}
     if "sbbr" in wanted:
-        entry = _enrich_items(
-            "sbbr", raw.get("sbbr_entry") or [], names=names, ref_by_code=ref_by, role_by_code=role_map
-        )
-        watch = _enrich_items(
-            "sbbr", raw.get("sbbr_watch") or [], names=names, ref_by_code=ref_by, role_by_code=role_map
-        )
+        entry = _enrich_items("sbbr", raw.get("sbbr_entry") or [], **enrich_kw)
+        watch = _enrich_items("sbbr", raw.get("sbbr_watch") or [], **enrich_kw)
         strategies_out["sbbr"] = {
             "total": len(entry),
             "items": entry,
@@ -437,7 +457,7 @@ def collect_board_signals(
             "watch_items": watch,
         }
     if "rpe" in wanted:
-        items = _enrich_items("rpe", raw.get("rpe") or [], names=names, ref_by_code=ref_by, role_by_code=role_map)
+        items = _enrich_items("rpe", raw.get("rpe") or [], **enrich_kw)
         strategies_out["rpe"] = {"total": len(items), "items": items}
 
     return {
