@@ -12,6 +12,9 @@ DEFAULT_MAX_BARS = 180
 MIN_DEPTH_PCT = 0.025
 ATR_DEPTH_MULT = 1.5
 ATR_PERIOD = 14
+# 高低点 index 间距下限（交易日根数）；过短的急跌/急拉跳过，改取上一完整波段
+# 短线 Fib 参考默认 8 根（≈1.5 周）：滤 1～数日异动，又不过于陈旧
+DEFAULT_MIN_SWING_BARS = 8
 
 
 def _f(v: Any) -> Optional[float]:
@@ -197,35 +200,84 @@ def zigzag_from_fractals(
     return zz
 
 
-def latest_confirmed_swing(
+def _swing_from_leg(
+    a: Dict[str, Any],
+    b: Dict[str, Any],
+    *,
+    skipped_short: bool = False,
+    fallback_longest: bool = False,
+) -> Dict[str, Any]:
+    """由 ZigZag 相邻两点构成完整波段（一峰一谷）。"""
+    if a["kind"] == b["kind"]:
+        raise ValueError("zigzag leg must alternate high/low")
+    if a["kind"] == "high":
+        hi, lo = a, b
+    else:
+        hi, lo = b, a
+    # 方向按时间序：后出现的点决定上升段/下降段
+    if int(a["index"]) <= int(b["index"]):
+        direction = "down" if a["kind"] == "high" else "up"
+    else:
+        direction = "up" if a["kind"] == "high" else "down"
+    bar_span = abs(int(a["index"]) - int(b["index"]))
+    return {
+        "swing_high": round(float(hi["price"]), PRICE_DECIMALS),
+        "swing_low": round(float(lo["price"]), PRICE_DECIMALS),
+        "swing_high_date": hi["date"],
+        "swing_low_date": lo["date"],
+        "swing_high_index": hi["index"],
+        "swing_low_index": lo["index"],
+        "direction": direction,
+        "bar_span": bar_span,
+        "confirmed": True,
+        "skipped_short_leg": bool(skipped_short),
+        "fallback_longest": bool(fallback_longest),
+    }
+
+
+def select_swing_from_zigzag(
     zz: Sequence[Dict[str, Any]],
+    *,
+    min_swing_bars: int = DEFAULT_MIN_SWING_BARS,
 ) -> Optional[Dict[str, Any]]:
-    """最近一对已确认的 high+low（至少两点，且种类不同）。"""
+    """优先取最近「完整波段」且高低点至少隔 min_swing_bars 根 K。
+
+    完整波段 = ZigZag 链上相邻两点（交替峰/谷）。
+    若最近一腿过短（如一日暴跌），回退到更早的完整波段；
+    若全部过短，则取跨度最大的一腿（并标记 fallback_longest）。
+    """
     if len(zz) < 2:
         return None
-    # 从末尾找最近的 high 与 low
-    last_high = None
-    last_low = None
-    for p in reversed(zz):
-        if p.get("kind") == "high" and last_high is None:
-            last_high = p
-        if p.get("kind") == "low" and last_low is None:
-            last_low = p
-        if last_high is not None and last_low is not None:
-            break
-    if last_high is None or last_low is None:
+    min_n = max(1, int(min_swing_bars or DEFAULT_MIN_SWING_BARS))
+    legs: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    for i in range(len(zz) - 1):
+        a, b = zz[i], zz[i + 1]
+        if a.get("kind") == b.get("kind"):
+            continue
+        legs.append((a, b))
+    if not legs:
         return None
-    direction = "up" if last_high["index"] >= last_low["index"] else "down"
-    return {
-        "swing_high": round(float(last_high["price"]), PRICE_DECIMALS),
-        "swing_low": round(float(last_low["price"]), PRICE_DECIMALS),
-        "swing_high_date": last_high["date"],
-        "swing_low_date": last_low["date"],
-        "swing_high_index": last_high["index"],
-        "swing_low_index": last_low["index"],
-        "direction": direction,
-        "confirmed": True,
-    }
+
+    # 从最近一腿往前找满足跨度的
+    skipped = False
+    for a, b in reversed(legs):
+        span = abs(int(a["index"]) - int(b["index"]))
+        if span >= min_n:
+            return _swing_from_leg(a, b, skipped_short=skipped)
+        skipped = True
+
+    # 全部过短：取跨度最大者
+    a, b = max(legs, key=lambda ab: abs(int(ab[0]["index"]) - int(ab[1]["index"])))
+    return _swing_from_leg(a, b, skipped_short=True, fallback_longest=True)
+
+
+def latest_confirmed_swing(
+    zz: Sequence[Dict[str, Any]],
+    *,
+    min_swing_bars: int = DEFAULT_MIN_SWING_BARS,
+) -> Optional[Dict[str, Any]]:
+    """兼容入口：等价于 select_swing_from_zigzag。"""
+    return select_swing_from_zigzag(zz, min_swing_bars=min_swing_bars)
 
 
 def extract_zigzag_swing(
@@ -234,12 +286,14 @@ def extract_zigzag_swing(
     max_bars: int = DEFAULT_MAX_BARS,
     fractal_left: int = DEFAULT_FRACTAL,
     fractal_right: int = DEFAULT_FRACTAL,
+    min_swing_bars: int = DEFAULT_MIN_SWING_BARS,
 ) -> Dict[str, Any]:
     """从日线提取 ZigZag 波段锚点。"""
     parsed = _parse_bars(bars)
     mb = max(20, int(max_bars or DEFAULT_MAX_BARS))
     if len(parsed) > mb:
         parsed = parsed[-mb:]
+    min_n = max(1, int(min_swing_bars or DEFAULT_MIN_SWING_BARS))
     empty = {
         "ok": False,
         "reason": "insufficient_bars",
@@ -248,6 +302,7 @@ def extract_zigzag_swing(
         "atr": None,
         "depth_pct": None,
         "depth": None,
+        "min_swing_bars": min_n,
         "zigzag": [],
     }
     if len(parsed) < fractal_left + fractal_right + 3:
@@ -264,7 +319,7 @@ def extract_zigzag_swing(
     # 单调段常缺分形：补窗口绝对高/低作锚点候选（仍经 ZigZag 深度过滤）
     pivots = _augment_with_window_extremes(parsed, pivots)
     zz = zigzag_from_fractals(pivots, depth=depth)
-    swing = latest_confirmed_swing(zz)
+    swing = select_swing_from_zigzag(zz, min_swing_bars=min_n)
     if swing is None:
         return {
             **empty,
@@ -292,6 +347,7 @@ def extract_zigzag_swing(
         "depth_pct": round(depth_pct, 4),
         "fractal_left": fractal_left,
         "fractal_right": fractal_right,
+        "min_swing_bars": min_n,
         "max_bars": mb,
         "zigzag": [
             {

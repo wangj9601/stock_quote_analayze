@@ -194,18 +194,26 @@ def compute_classic_levels_from_bars(
     nearest_fib_r: Optional[float] = None
     fib_reason = "ok"
 
+    def _fib_zz_meta(target: Dict[str, Any], sw: Optional[Dict[str, Any]] = None) -> None:
+        target["depth_pct"] = zz.get("depth_pct")
+        target["depth"] = zz.get("depth")
+        target["atr"] = zz.get("atr") or atr
+        target["min_swing_bars"] = zz.get("min_swing_bars")
+        target["zigzag"] = zz.get("zigzag") or []
+        if sw:
+            target["bar_span"] = sw.get("bar_span")
+            target["skipped_short_leg"] = sw.get("skipped_short_leg")
+            target["fallback_longest"] = sw.get("fallback_longest")
+
     if swing is None:
         fib = {
             "anchor_method": "zigzag_fractal",
             "ok": False,
             "reason": zz.get("reason") or "no_confirmed_swing",
-            "depth_pct": zz.get("depth_pct"),
-            "depth": zz.get("depth"),
-            "atr": zz.get("atr") or atr,
             "retracements": [],
             "extensions": [],
-            "zigzag": zz.get("zigzag") or [],
         }
+        _fib_zz_meta(fib)
         fib_reason = str(fib["reason"])
     else:
         swing_high = float(swing["swing_high"])
@@ -220,10 +228,7 @@ def compute_classic_levels_from_bars(
             fib["reason"] = "ok"
             fib["swing_high_date"] = swing_high_date
             fib["swing_low_date"] = swing_low_date
-            fib["depth_pct"] = zz.get("depth_pct")
-            fib["depth"] = zz.get("depth")
-            fib["atr"] = zz.get("atr") or atr
-            fib["zigzag"] = zz.get("zigzag") or []
+            _fib_zz_meta(fib, swing)
             fib_prices = [x["price"] for x in (fib.get("retracements") or [])]
             ext = fib.get("extensions") or []
             if ext and last_c is not None:
@@ -248,13 +253,10 @@ def compute_classic_levels_from_bars(
                 "swing_low_date": swing_low_date,
                 "range": round(swing_high - swing_low, PRICE_DECIMALS),
                 "direction": direction,
-                "depth_pct": zz.get("depth_pct"),
-                "depth": zz.get("depth"),
-                "atr": zz.get("atr") or atr,
                 "retracements": [],
                 "extensions": [],
-                "zigzag": zz.get("zigzag") or [],
             }
+            _fib_zz_meta(fib, swing)
             fib_reason = "fib_skipped_narrow_range"
 
     pivot_levels = [

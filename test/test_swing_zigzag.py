@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 from datetime import date, timedelta
 
-from backend_core.analysis.swing_zigzag import extract_zigzag_swing, wilder_atr
+from backend_core.analysis.swing_zigzag import (
+    extract_zigzag_swing,
+    select_swing_from_zigzag,
+    wilder_atr,
+)
 
 
 def _v_shape_bars(n=60):
@@ -47,7 +51,25 @@ def test_fractal_and_zigzag_find_swing():
     assert swing is not None
     assert swing["swing_low"] < swing["swing_high"]
     assert swing["direction"] == "up"
+    assert zz["min_swing_bars"] == 8
+    assert swing["bar_span"] >= zz["min_swing_bars"]
     assert zz["depth_pct"] is not None and zz["depth_pct"] >= 0.025
+
+
+def test_skip_one_day_crash_use_previous_leg():
+    """最近一腿仅隔 1 根 K 时，回退到上一完整波段。"""
+    zz_points = [
+        {"index": 10, "kind": "low", "price": 30.0, "date": "2026-06-01"},
+        {"index": 40, "kind": "high", "price": 38.88, "date": "2026-07-28"},
+        {"index": 41, "kind": "low", "price": 34.75, "date": "2026-07-29"},
+    ]
+    swing = select_swing_from_zigzag(zz_points, min_swing_bars=8)
+    assert swing is not None
+    assert swing["skipped_short_leg"] is True
+    assert swing["swing_high"] == 38.88
+    assert swing["swing_low"] == 30.0
+    assert swing["bar_span"] == 30
+    assert swing["direction"] == "up"
 
 
 def test_zigzag_depth_filters_noise():

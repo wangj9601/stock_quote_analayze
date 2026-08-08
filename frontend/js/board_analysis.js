@@ -362,6 +362,13 @@ const BoardAnalysis = {
       if (fib.depth_pct != null) {
         lines.push(`ZigZag深度: ${(Number(fib.depth_pct) * 100).toFixed(1)}%`);
       }
+      if (fib.bar_span != null || fib.min_swing_bars != null) {
+        lines.push(
+          `ZigZag波段跨度: ${fib.bar_span != null ? fib.bar_span : '--'} 根` +
+            (fib.min_swing_bars != null ? `（下限 ${fib.min_swing_bars}）` : '') +
+            (fib.skipped_short_leg ? '；已跳过过短腿' : '')
+        );
+      }
       if (Array.isArray(fib.retracements) && fib.retracements.length) {
         const parts = fib.retracements.map(
           (x) => `${x.ratio}=${this.fmtPrice2(x.price)}`

@@ -481,10 +481,20 @@ const ProfilePage = {
                       : '--';
         }
         if (fibDepthEl) {
-            fibDepthEl.textContent =
-                fib && fib.depth_pct != null
-                    ? ` · 深度 ${(Number(fib.depth_pct) * 100).toFixed(1)}%`
-                    : '';
+            const bits = [];
+            if (fib && fib.depth_pct != null) {
+                bits.push(`深度 ${(Number(fib.depth_pct) * 100).toFixed(1)}%`);
+            }
+            if (fib && fib.bar_span != null) {
+                bits.push(`跨度 ${fib.bar_span} 根`);
+            }
+            if (fib && fib.min_swing_bars != null) {
+                bits.push(`≥${fib.min_swing_bars} 根`);
+            }
+            if (fib && fib.skipped_short_leg) {
+                bits.push('已跳过过短波段');
+            }
+            fibDepthEl.textContent = bits.length ? ` · ${bits.join(' · ')}` : '';
         }
         if (fibNearS) fibNearS.textContent = fmt(classic.nearest_fib_support);
         if (fibNearR) fibNearR.textContent = fmt(classic.nearest_fib_resistance);
