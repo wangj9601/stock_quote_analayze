@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from backend_core.analysis.classic_levels import (
+    attach_reference_levels_batch,
     classic_pivot_from_hlc,
     compute_classic_levels_from_bars,
     fibonacci_from_swing,
@@ -50,3 +51,22 @@ def test_compute_from_bars_nearest():
     assert out["fibonacci"]["swing_high_date"] == "2026-01-10"
     assert out["fibonacci"]["swing_low"] == 9.0
     assert out["fibonacci"]["swing_low_date"] == "2026-01-01"
+
+
+def test_attach_reference_includes_volume_profile():
+    bars = []
+    for i in range(30):
+        bars.append(
+            {
+                "date": f"2026-02-{i+1:02d}" if i < 28 else f"2026-03-{i-27:02d}",
+                "high": 15.5,
+                "low": 14.5,
+                "close": 15.0,
+                "volume": 1_000_000 + i * 1000,
+            }
+        )
+    out = attach_reference_levels_batch({"000001": bars}, last_close_by_code={"000001": 15.0})
+    ref = out["000001"]
+    assert ref.get("volume_profile", {}).get("ok") is True
+    assert ref["volume_profile"]["poc"] is not None
+    assert "nearest_vp_support" in ref or "nearest_vp_resistance" in ref

@@ -53,7 +53,7 @@ def batch_load_ohlc_bars(
     *,
     lookback: int = DEFAULT_LOOKBACK,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """批量取 A 股日线近 lookback 根 high/low/close（按 code 截断）。"""
+    """批量取 A 股日线近 lookback 根 high/low/close/volume（按 code 截断）。"""
     codes = [_norm_code(c) for c in codes if _norm_code(c)]
     if not codes:
         return {}
@@ -62,11 +62,11 @@ def batch_load_ohlc_bars(
     try:
         sql = text(
             """
-            SELECT code, trade_date, high, low, close
+            SELECT code, trade_date, high, low, close, volume
             FROM (
                 SELECT code,
                        date AS trade_date,
-                       high, low, close,
+                       high, low, close, volume,
                        ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
                 FROM historical_quotes
                 WHERE code IN :codes
@@ -94,7 +94,13 @@ def batch_load_ohlc_bars(
         else:
             ds = str(d)[:10]
         by.setdefault(code, []).append(
-            {"date": ds, "high": r[2], "low": r[3], "close": r[4]}
+            {
+                "date": ds,
+                "high": r[2],
+                "low": r[3],
+                "close": r[4],
+                "volume": r[5] if len(r) > 5 else None,
+            }
         )
     # 已按 date ASC；保留末 lookback
     out: Dict[str, List[Dict[str, Any]]] = {}

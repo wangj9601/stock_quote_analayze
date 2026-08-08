@@ -22,6 +22,8 @@
 
 `profile.html` 支撑压力结果区：KDE 下方增加「Volume Profile（参考）」卡片 +「与 KDE 对比」表。
 
+分析频道板块命中表「参考价」列：在 Fib/Pivot 下增加一行 `VP 支撑/压力`（悬停见 POC/VAL/VAH）；数据来自 `trade_advice.reference_levels.volume_profile`。
+
 ## 非目标
 
 - 不做通达信筹码分布 / 分笔 VP

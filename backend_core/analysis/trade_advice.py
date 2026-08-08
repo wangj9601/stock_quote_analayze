@@ -54,21 +54,38 @@ def _fmt_px(v: Any) -> str:
 
 
 def _ref_summary(ref: Optional[Dict[str, Any]]) -> str:
-    if not ref or not ref.get("ok"):
+    if not ref:
         return ""
+    # Fib/Pivot 失败时仍可展示 VP
+    classic_ok = bool(ref.get("ok"))
     parts: List[str] = []
-    fs = ref.get("nearest_fib_support")
-    fr = ref.get("nearest_fib_resistance")
-    ps = ref.get("nearest_pivot_support")
-    pr = ref.get("nearest_pivot_resistance")
-    if fs is not None:
-        parts.append(f"Fib支撑≈{_fmt_px(fs)}")
-    if fr is not None:
-        parts.append(f"Fib压力≈{_fmt_px(fr)}")
-    if ps is not None:
-        parts.append(f"Pivot支撑≈{_fmt_px(ps)}")
-    if pr is not None:
-        parts.append(f"Pivot压力≈{_fmt_px(pr)}")
+    if classic_ok:
+        fs = ref.get("nearest_fib_support")
+        fr = ref.get("nearest_fib_resistance")
+        ps = ref.get("nearest_pivot_support")
+        pr = ref.get("nearest_pivot_resistance")
+        if fs is not None:
+            parts.append(f"Fib支撑≈{_fmt_px(fs)}")
+        if fr is not None:
+            parts.append(f"Fib压力≈{_fmt_px(fr)}")
+        if ps is not None:
+            parts.append(f"Pivot支撑≈{_fmt_px(ps)}")
+        if pr is not None:
+            parts.append(f"Pivot压力≈{_fmt_px(pr)}")
+    vp = ref.get("volume_profile") if isinstance(ref.get("volume_profile"), dict) else {}
+    if vp.get("ok"):
+        if vp.get("poc") is not None:
+            parts.append(f"VP POC≈{_fmt_px(vp['poc'])}")
+        vs = ref.get("nearest_vp_support")
+        if vs is None:
+            vs = vp.get("nearest_support")
+        vr = ref.get("nearest_vp_resistance")
+        if vr is None:
+            vr = vp.get("nearest_resistance")
+        if vs is not None:
+            parts.append(f"VP支撑≈{_fmt_px(vs)}")
+        if vr is not None:
+            parts.append(f"VP压力≈{_fmt_px(vr)}")
     if not parts:
         return ""
     return "参考：" + " / ".join(parts)

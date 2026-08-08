@@ -280,6 +280,9 @@ const BoardAnalysis = {
         const fibR = this.fmtPrice2(ref.nearest_fib_resistance);
         const pivS = this.fmtPrice2(ref.nearest_pivot_support);
         const pivR = this.fmtPrice2(ref.nearest_pivot_resistance);
+        const vp = ref.volume_profile && typeof ref.volume_profile === 'object' ? ref.volume_profile : {};
+        const vpS = this.fmtPrice2(ref.nearest_vp_support ?? vp.nearest_support ?? vp.val);
+        const vpR = this.fmtPrice2(ref.nearest_vp_resistance ?? vp.nearest_resistance ?? vp.vah);
         const action = advice.action || 'watch';
         const tip = this.refHoverTip(ref, advice.summary);
         return `<tr>
@@ -291,7 +294,7 @@ const BoardAnalysis = {
           <td class="ba-advice">${this.esc(sell)}</td>
           <td class="ba-num">${kdeS}</td>
           <td class="ba-num">${kdeR}</td>
-          <td class="ba-ref" title="${this.escAttr(tip)}">Fib ${fibS}/${fibR}<br/>Pivot ${pivS}/${pivR}</td>
+          <td class="ba-ref" title="${this.escAttr(tip)}">Fib ${fibS}/${fibR}<br/>Pivot ${pivS}/${pivR}<br/>VP ${vpS}/${vpR}</td>
           <td>
             <button type="button" class="btn btn-secondary btn-sm" data-observe
               data-strategy="${this.escAttr(strategy)}" data-code="${this.escAttr(code)}" data-name="${this.escAttr(name)}"
@@ -304,7 +307,7 @@ const BoardAnalysis = {
     return `<div class="ba-table-wrap"><table class="ba-table">
       <thead><tr>
         <th>股票</th><th>最新收盘</th><th>角色</th><th>命中</th><th>买点建议</th><th>卖点/防守</th>
-        <th>KDE结构支撑</th><th>KDE结构阻力</th><th>参考价 Fib/Pivot</th><th>操作</th>
+        <th>KDE结构支撑</th><th>KDE结构阻力</th><th>参考价 Fib/Pivot/VP</th><th>操作</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -360,6 +363,15 @@ const BoardAnalysis = {
     if (p && p.P != null) {
       lines.push(
         `Pivot: P=${this.fmtPrice2(p.P)} R1=${this.fmtPrice2(p.R1)} R2=${this.fmtPrice2(p.R2)} R3=${this.fmtPrice2(p.R3)} S1=${this.fmtPrice2(p.S1)} S2=${this.fmtPrice2(p.S2)} S3=${this.fmtPrice2(p.S3)}`
+      );
+    }
+    const vp = ref && ref.volume_profile;
+    if (vp && vp.ok) {
+      lines.push(
+        `VP: POC=${this.fmtPrice2(vp.poc)} VAL=${this.fmtPrice2(vp.val)} VAH=${this.fmtPrice2(vp.vah)}` +
+          ` 最近支撑=${this.fmtPrice2(ref.nearest_vp_support ?? vp.nearest_support)}` +
+          ` 最近压力=${this.fmtPrice2(ref.nearest_vp_resistance ?? vp.nearest_resistance)}` +
+          (vp.lookback != null ? `（回看${vp.lookback}日）` : '')
       );
     }
     return lines.join('\n') || '暂无参考价';

@@ -250,12 +250,30 @@ def attach_reference_levels_batch(
     *,
     last_close_by_code: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    """批量：{code: classic_levels}。"""
+    """批量：{code: Fib/Pivot + volume_profile 参考位}。"""
+    from backend_core.analysis.volume_profile import compute_volume_profile_from_bars
+
     out: Dict[str, Dict[str, Any]] = {}
     closes = last_close_by_code or {}
     for code, bars in (bars_by_code or {}).items():
         c = code.strip() if isinstance(code, str) else str(code)
-        out[c] = compute_classic_levels_from_bars(
-            bars, last_close=closes.get(c)
+        lc = closes.get(c)
+        ref = compute_classic_levels_from_bars(bars, last_close=lc)
+        vp = compute_volume_profile_from_bars(
+            bars, last_close=lc, lookback=DEFAULT_LOOKBACK
         )
+        # 精简写入 reference_levels，避免把完整 bins 塞进每行
+        ref["volume_profile"] = {
+            "ok": bool(vp.get("ok")),
+            "reason": vp.get("reason"),
+            "lookback": vp.get("lookback"),
+            "poc": vp.get("poc"),
+            "vah": vp.get("vah"),
+            "val": vp.get("val"),
+            "nearest_support": vp.get("nearest_support"),
+            "nearest_resistance": vp.get("nearest_resistance"),
+        }
+        ref["nearest_vp_support"] = vp.get("nearest_support")
+        ref["nearest_vp_resistance"] = vp.get("nearest_resistance")
+        out[c] = ref
     return out
