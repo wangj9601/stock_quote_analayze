@@ -7,8 +7,8 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from backend_api.auth import get_current_user
-from backend_api.models import User
+from backend_api.auth import get_current_admin
+from backend_api.models import Admin
 from backend_core.strategies.rpe.backtest_runner import start_backtest_async
 from backend_core.strategies.rpe.backtest_storage import RPEBacktestStorage
 from backend_core.strategies.rpe.config import RPEConfigManager
@@ -18,8 +18,9 @@ from backend_core.strategies.rpe.scheduled_precompute import run_rpe_precompute
 router = APIRouter(prefix="/api/admin/rpe", tags=["admin-rpe"])
 
 
-def _require_user(user: User = Depends(get_current_user)) -> User:
-    return user
+def _require_admin(admin: Admin = Depends(get_current_admin)) -> Admin:
+    """管理后台 JWT（is_admin）鉴权，勿用 get_current_user（查 User 表会 401）。"""
+    return admin
 
 
 class ConfigCreateReq(BaseModel):
@@ -51,12 +52,12 @@ class BacktestCreateReq(BaseModel):
 
 
 @router.get("/strategy-configs")
-def admin_list_configs(_user: User = Depends(_require_user)):
+def admin_list_configs(_user: Admin = Depends(_require_admin)):
     return {"items": RPEConfigManager().list_configs(active_only=False)}
 
 
 @router.post("/strategy-configs")
-def admin_create_config(body: ConfigCreateReq, _user: User = Depends(_require_user)):
+def admin_create_config(body: ConfigCreateReq, _user: Admin = Depends(_require_admin)):
     return RPEConfigManager().create_config(
         name=body.name,
         config_params=body.config_params,
@@ -66,7 +67,7 @@ def admin_create_config(body: ConfigCreateReq, _user: User = Depends(_require_us
 
 
 @router.put("/strategy-configs/{config_id}/update")
-def admin_update_config(config_id: int, body: ConfigUpdateReq, _user: User = Depends(_require_user)):
+def admin_update_config(config_id: int, body: ConfigUpdateReq, _user: Admin = Depends(_require_admin)):
     try:
         return RPEConfigManager().update_config(config_id, body.dict(exclude_unset=True))
     except ValueError as e:
@@ -74,7 +75,7 @@ def admin_update_config(config_id: int, body: ConfigUpdateReq, _user: User = Dep
 
 
 @router.patch("/strategy-configs/{config_id}/default")
-def admin_set_default(config_id: int, _user: User = Depends(_require_user)):
+def admin_set_default(config_id: int, _user: Admin = Depends(_require_admin)):
     try:
         return RPEConfigManager().set_default(config_id)
     except ValueError as e:
@@ -82,7 +83,7 @@ def admin_set_default(config_id: int, _user: User = Depends(_require_user)):
 
 
 @router.post("/backtests")
-def admin_create_backtest(body: BacktestCreateReq, _user: User = Depends(_require_user)):
+def admin_create_backtest(body: BacktestCreateReq, _user: Admin = Depends(_require_admin)):
     storage = RPEBacktestStorage()
     cfg = body.dict()
     task_id = storage.create_task(cfg, name=body.task_name)
@@ -91,12 +92,12 @@ def admin_create_backtest(body: BacktestCreateReq, _user: User = Depends(_requir
 
 
 @router.get("/backtests")
-def admin_list_backtests(limit: int = 50, _user: User = Depends(_require_user)):
+def admin_list_backtests(limit: int = 50, _user: Admin = Depends(_require_admin)):
     return {"items": RPEBacktestStorage().list_tasks(limit=limit)}
 
 
 @router.get("/backtests/{task_id}")
-def admin_get_backtest(task_id: str, _user: User = Depends(_require_user)):
+def admin_get_backtest(task_id: str, _user: Admin = Depends(_require_admin)):
     row = RPEBacktestStorage().get_task(task_id)
     if not row:
         raise HTTPException(404, "task not found")
@@ -108,7 +109,7 @@ def admin_trigger_precompute(
     config_id: Optional[int] = None,
     trade_date: Optional[str] = None,
     max_boards: Optional[int] = 20,
-    _user: User = Depends(_require_user),
+    _user: Admin = Depends(_require_admin),
 ):
     return run_rpe_precompute(config_id=config_id, trade_date=trade_date, max_boards=max_boards)
 
@@ -120,7 +121,7 @@ def admin_selection_results(
     entry_only: bool = False,
     signal_type: Optional[str] = None,
     max_results: int = 200,
-    _user: User = Depends(_require_user),
+    _user: Admin = Depends(_require_admin),
 ):
     return RPEFrontendInterface.get_selection_results(
         date=date,

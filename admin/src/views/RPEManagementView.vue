@@ -146,7 +146,7 @@ const btForm = reactive({
 async function loadConfigs() {
   loadingConfigs.value = true
   try {
-    const { data } = await rpeApi.listConfigs()
+    const data = await rpeApi.listConfigs()
     configs.value = data.items || []
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载配置失败')
@@ -158,7 +158,7 @@ async function loadConfigs() {
 async function loadBacktests() {
   loadingBt.value = true
   try {
-    const { data } = await rpeApi.listBacktests()
+    const data = await rpeApi.listBacktests()
     backtests.value = data.items || []
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载回测失败')
@@ -209,7 +209,7 @@ async function onSetDefault(id: number) {
 async function onPrecompute() {
   precomputing.value = true
   try {
-    const { data } = await rpeApi.triggerPrecompute({ max_boards: 20 })
+    const data: any = await rpeApi.triggerPrecompute({ max_boards: 20 })
     ElMessage.success(`预计算完成 screened=${data.screened ?? '-'} entry=${data.entry_count ?? '-'}`)
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message)
@@ -220,7 +220,7 @@ async function onPrecompute() {
 
 async function onCreateBt() {
   try {
-    const { data } = await rpeApi.createBacktest({ ...btForm })
+    const data = await rpeApi.createBacktest({ ...btForm })
     showBt.value = false
     ElMessage.success(`已创建任务 ${data.task_id}`)
     activeTab.value = 'backtest'
@@ -231,7 +231,7 @@ async function onCreateBt() {
 }
 
 async function viewBt(taskId: string) {
-  const { data } = await rpeApi.getBacktest(taskId)
+  const data = await rpeApi.getBacktest(taskId)
   detailText.value = JSON.stringify(data, null, 2)
   showDetail.value = true
 }

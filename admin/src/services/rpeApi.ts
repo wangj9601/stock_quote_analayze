@@ -1,42 +1,38 @@
 /**
- * RPE 管理端 API
+ * RPE 管理端 API（走 apiService，自动带 admin_token）
  */
-import axios from 'axios'
+import { apiService } from './api'
 
-const PREFIX = '/api/admin/rpe'
-
-function authHeaders() {
-  const token = localStorage.getItem('token') || localStorage.getItem('admin_token') || ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+/** apiService baseURL 已是 /api/admin，此处只需相对路径 */
+const PREFIX = '/rpe'
 
 export const rpeApi = {
   listConfigs() {
-    return axios.get(`${PREFIX}/strategy-configs`, { headers: authHeaders() })
+    return apiService.get<{ items: any[] }>(`${PREFIX}/strategy-configs`)
   },
   createConfig(body: Record<string, unknown>) {
-    return axios.post(`${PREFIX}/strategy-configs`, body, { headers: authHeaders() })
+    return apiService.post(`${PREFIX}/strategy-configs`, body)
   },
   updateConfig(id: number, body: Record<string, unknown>) {
-    return axios.put(`${PREFIX}/strategy-configs/${id}/update`, body, { headers: authHeaders() })
+    return apiService.put(`${PREFIX}/strategy-configs/${id}/update`, body)
   },
   setDefault(id: number) {
-    return axios.patch(`${PREFIX}/strategy-configs/${id}/default`, {}, { headers: authHeaders() })
+    return apiService.patch(`${PREFIX}/strategy-configs/${id}/default`, {})
   },
   listBacktests(limit = 50) {
-    return axios.get(`${PREFIX}/backtests`, { params: { limit }, headers: authHeaders() })
+    return apiService.get<{ items: any[] }>(`${PREFIX}/backtests`, { params: { limit } })
   },
   getBacktest(taskId: string) {
-    return axios.get(`${PREFIX}/backtests/${taskId}`, { headers: authHeaders() })
+    return apiService.get(`${PREFIX}/backtests/${taskId}`)
   },
   createBacktest(body: Record<string, unknown>) {
-    return axios.post(`${PREFIX}/backtests`, body, { headers: authHeaders() })
+    return apiService.post<{ task_id: string; status: string }>(`${PREFIX}/backtests`, body)
   },
   triggerPrecompute(params?: { config_id?: number; trade_date?: string; max_boards?: number }) {
-    return axios.post(`${PREFIX}/precompute/trigger`, null, { params, headers: authHeaders() })
+    return apiService.post(`${PREFIX}/precompute/trigger`, null, { params })
   },
   selectionResults(params?: Record<string, unknown>) {
-    return axios.get(`${PREFIX}/selection-results`, { params, headers: authHeaders() })
+    return apiService.get(`${PREFIX}/selection-results`, { params })
   },
 }
 

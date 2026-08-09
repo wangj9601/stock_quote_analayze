@@ -167,7 +167,7 @@ const btForm = reactive({
 async function loadConfigs() {
   loadingConfigs.value = true
   try {
-    const { data } = await sbbrApi.listConfigs()
+    const data = await sbbrApi.listConfigs()
     configs.value = data.items || []
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载配置失败')
@@ -179,7 +179,7 @@ async function loadConfigs() {
 async function loadBacktests() {
   loadingBt.value = true
   try {
-    const { data } = await sbbrApi.listBacktests()
+    const data = await sbbrApi.listBacktests()
     backtests.value = data.items || []
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载回测失败')
@@ -240,7 +240,7 @@ async function onPrecompute() {
     const params: { config_id?: number; trade_date?: string } = {}
     if (precomputeForm.config_id) params.config_id = precomputeForm.config_id
     if (precomputeForm.trade_date) params.trade_date = precomputeForm.trade_date
-    const { data } = await sbbrApi.triggerPrecompute(params)
+    const data: any = await sbbrApi.triggerPrecompute(params)
     ElMessage.success(
       `预计算完成 date=${data.trade_date ?? precomputeForm.trade_date ?? '-'} screened=${data.screened ?? '-'} entry=${data.entry_count ?? '-'}`
     )
@@ -254,7 +254,7 @@ async function onPrecompute() {
 
 async function onCreateBt() {
   try {
-    const { data } = await sbbrApi.createBacktest({ ...btForm })
+    const data = await sbbrApi.createBacktest({ ...btForm })
     showBt.value = false
     ElMessage.success(`已创建任务 ${data.task_id}`)
     activeTab.value = 'backtest'
@@ -265,7 +265,7 @@ async function onCreateBt() {
 }
 
 async function viewBt(taskId: string) {
-  const { data } = await sbbrApi.getBacktest(taskId)
+  const data = await sbbrApi.getBacktest(taskId)
   detailText.value = JSON.stringify(data, null, 2)
   showDetail.value = true
 }
