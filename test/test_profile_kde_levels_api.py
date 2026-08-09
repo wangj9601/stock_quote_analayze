@@ -469,3 +469,59 @@ def test_levels_route_name_not_found():
     body = resp.json()
     assert body["success"] is False
     assert "未找到" in body["message"]
+
+
+def _fake_bars_with_dates(n=80, seed=7):
+    from datetime import date, timedelta
+    import random
+
+    random.seed(seed)
+    start = date(2025, 1, 2)
+    bars = []
+    for i in range(n):
+        cluster = [13.0, 15.0, 17.0][i % 3]
+        px = cluster + random.uniform(-0.15, 0.15)
+        bars.append(
+            {
+                "code": "600519",
+                "name": "贵州茅台",
+                "date": (start + timedelta(days=i)).isoformat(),
+                "close": round(px, 2),
+                "high": round(px + 0.2, 2),
+                "low": round(px - 0.2, 2),
+                "volume": 1_000_000 + (i % 3) * 500_000,
+            }
+        )
+    return bars
+
+
+def test_vp_lookback_custom_days():
+    bars = _fake_bars_with_dates()
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    with patch.object(svc, "_get_historical_data", return_value=bars), patch.object(
+        svc, "_get_current_price", return_value=15.0
+    ):
+        result = svc.get_key_levels_only("600519", max_levels=8, vp_lookback=40)
+
+    assert result["success"] is True
+    vp = result["data"]["volume_profile"]
+    assert vp["lookback"] == 40
+    assert vp.get("bars_used") == 40
+
+
+def test_vp_lookback_from_date():
+    bars = _fake_bars_with_dates(n=100)
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    from_date = bars[-30]["date"]
+    with patch.object(svc, "_get_historical_data", return_value=bars), patch.object(
+        svc, "_get_current_price", return_value=15.0
+    ):
+        result = svc.get_key_levels_only(
+            "600519", max_levels=8, vp_from_date=from_date
+        )
+
+    assert result["success"] is True
+    vp = result["data"]["volume_profile"]
+    assert vp.get("from_date") == from_date
+    assert vp["lookback"] == 30
+    assert vp.get("window_start") == from_date

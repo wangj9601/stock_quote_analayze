@@ -7,7 +7,20 @@ const AnalysisPage = {
     init() {
         this.bindEvents();
         if (window.BoardAnalysis) BoardAnalysis.init();
-        this.loadTabData(this.currentTab);
+        if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
+        if (window.KdeLevelsTool) KdeLevelsTool.init();
+        const initialTab = this.resolveInitialTab();
+        if (initialTab && initialTab !== this.currentTab) {
+            const tabBtn = document.querySelector(`.analysis-tab[data-tab="${initialTab}"]`);
+            if (tabBtn) {
+                this.switchTab(initialTab);
+                this.updateActiveTab(tabBtn);
+            } else {
+                this.loadTabData(this.currentTab);
+            }
+        } else {
+            this.loadTabData(this.currentTab);
+        }
         this.drawFundFlowChart();
         this.startDataUpdate();
 
@@ -16,6 +29,17 @@ const AnalysisPage = {
         if (searchModal) {
             searchModal.classList.remove('show');
         }
+    },
+
+    resolveInitialTab() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const tab = (params.get('tab') || '').trim();
+            if (tab && document.getElementById(tab)) return tab;
+            const hash = (window.location.hash || '').replace(/^#/, '').trim();
+            if (hash && document.getElementById(hash)) return hash;
+        } catch (e) { /* ignore */ }
+        return null;
     },
 
     // 绑定事件
@@ -27,24 +51,6 @@ const AnalysisPage = {
                 this.updateActiveTab(tab);
             });
         });
-
-        // 快速分析按钮
-        const analyzeBtn = document.querySelector('.analyze-btn');
-        if (analyzeBtn) {
-            analyzeBtn.addEventListener('click', () => {
-                this.performQuickAnalysis();
-            });
-        }
-
-        // 股票输入框回车事件
-        const stockInput = document.querySelector('.stock-input');
-        if (stockInput) {
-            stockInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.performQuickAnalysis();
-                }
-            });
-        }
 
         // 技术工具按钮
         document.querySelectorAll('.tool-btn').forEach(btn => {
@@ -102,7 +108,11 @@ const AnalysisPage = {
         switch (tabId) {
             case 'board-analysis':
                 break;
+            case 'leader-mid':
+                if (window.LeaderMidAnalysis) LeaderMidAnalysis.ensureCatalogs();
+                break;
             case 'stock-ai':
+                if (window.KdeLevelsTool) KdeLevelsTool.loadKdeWatchlistOptions();
                 break;
             case 'market-analysis':
                 this.loadMarketAnalysis();

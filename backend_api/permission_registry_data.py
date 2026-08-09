@@ -47,15 +47,19 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
 
     # ── 二级：分析标签页 ──
     {"code": "channel.analyze.tab.board", "name": "板块分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 5},
+    {"code": "channel.analyze.tab.leader_mid", "name": "龙头中军", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 6},
     {"code": "channel.analyze.tab.market", "name": "市场分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.technical", "name": "技术工具", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 20},
     {"code": "channel.analyze.tab.strategy", "name": "投资策略", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 30},
     {"code": "channel.analyze.tab.report", "name": "分析报告", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 40},
-    {"code": "channel.analyze.tab.stock_ai", "name": "个股AI分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 50},
+    {"code": "channel.analyze.tab.stock_ai", "name": "个股分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 50},
 
     # ── 三级：分析按钮 ──
     {"code": "channel.analyze.tab.board.btn.run", "name": "开始板块分析", "level": 3, "parent_code": "channel.analyze.tab.board", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.board.btn.observe", "name": "加入交易观察", "level": 3, "parent_code": "channel.analyze.tab.board", "channel_code": "analyze", "sort_order": 20},
+    {"code": "channel.analyze.tab.leader_mid.btn.run", "name": "查询龙头中军命中", "level": 3, "parent_code": "channel.analyze.tab.leader_mid", "channel_code": "analyze", "sort_order": 10},
+    {"code": "channel.analyze.tab.stock_ai.btn.calc", "name": "计算支撑压力", "level": 3, "parent_code": "channel.analyze.tab.stock_ai", "channel_code": "analyze", "sort_order": 10},
+    {"code": "channel.analyze.tab.stock_ai.btn.calc_qfq", "name": "按前复权计算支撑压力", "level": 3, "parent_code": "channel.analyze.tab.stock_ai", "channel_code": "analyze", "sort_order": 20},
     {"code": "channel.analyze.tab.technical.btn.analyze", "name": "开始分析", "level": 3, "parent_code": "channel.analyze.tab.technical", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.report.btn.export", "name": "导出报告", "level": 3, "parent_code": "channel.analyze.tab.report", "channel_code": "analyze", "sort_order": 10},
 
@@ -65,12 +69,9 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.profile.tab.transactions", "name": "交易记录", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 30},
     {"code": "channel.profile.tab.trading_logs", "name": "交易日志", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 40},
     {"code": "channel.profile.tab.analysis", "name": "投资分析", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 50},
-    {"code": "channel.profile.tab.kde_levels", "name": "支撑压力", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 55},
     {"code": "channel.profile.tab.settings", "name": "账户设置", "level": 2, "parent_code": "channel.profile", "channel_code": "profile", "sort_order": 60},
 
     # ── 三级：个人中心按钮 ──
-    {"code": "channel.profile.tab.kde_levels.btn.calc", "name": "计算支撑压力", "level": 3, "parent_code": "channel.profile.tab.kde_levels", "channel_code": "profile", "sort_order": 10},
-    {"code": "channel.profile.tab.kde_levels.btn.calc_qfq", "name": "按前复权计算支撑压力", "level": 3, "parent_code": "channel.profile.tab.kde_levels", "channel_code": "profile", "sort_order": 20},
     {"code": "channel.profile.tab.settings.btn.change_password", "name": "修改密码", "level": 3, "parent_code": "channel.profile.tab.settings", "channel_code": "profile", "sort_order": 10},
 
     # ── 二级：自选股标签页 ──

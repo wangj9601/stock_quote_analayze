@@ -162,6 +162,8 @@ def _compute_levels_payload(
     adjust: str = "none",
     refresh_factor: bool = False,
     factor_source: str = "auto",
+    vp_lookback: Optional[int] = None,
+    vp_from_date: Optional[str] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     """计算单股 KDE 关键价位，返回 (http_status, body)。"""
     try:
@@ -228,6 +230,8 @@ def _compute_levels_payload(
             historical_data=historical_data,
             price_adjust=adjust_n,
             adj_meta=adj_meta,
+            vp_lookback=vp_lookback,
+            vp_from_date=vp_from_date,
         )
 
         if not result.get("success"):
@@ -253,6 +257,8 @@ def _levels_response_for_code(
     adjust: str = "none",
     refresh_factor: bool = False,
     factor_source: str = "auto",
+    vp_lookback: Optional[int] = None,
+    vp_from_date: Optional[str] = None,
 ) -> JSONResponse:
     status, content = _compute_levels_payload(
         code,
@@ -261,6 +267,8 @@ def _levels_response_for_code(
         adjust=adjust,
         refresh_factor=refresh_factor,
         factor_source=factor_source,
+        vp_lookback=vp_lookback,
+        vp_from_date=vp_from_date,
     )
     return JSONResponse(status_code=status, content=content)
 
@@ -568,6 +576,16 @@ async def get_key_levels(
         "auto",
         description="因子源：auto=归一化新浪优先BaoStock备用，sina=仅归一化新浪，baostock=仅BaoStock",
     ),
+    vp_lookback: Optional[int] = Query(
+        None,
+        description="Volume Profile 回看交易日数（默认 60，范围 5–750）",
+        ge=5,
+        le=750,
+    ),
+    vp_from_date: Optional[str] = Query(
+        None,
+        description="Volume Profile 回看起始日期 YYYY-MM-DD（优先于 vp_lookback）",
+    ),
     db: Session = Depends(get_db)
 ):
     """
@@ -575,7 +593,7 @@ async def get_key_levels(
 
     - classic_levels：ZigZag 锚定 Fib + 经典/Camarilla/ATR Pivot + confluence_zones
     - confluence_zones：多源共振带（与 classic_levels 内一致）
-    - volume_profile：固定回看日线 Volume Profile（POC/VAH/VAL）
+    - volume_profile：可调回看日线 Volume Profile（POC/VAH/VAL）
     - vp_vs_kde：VP 与 KDE 最近支撑/压力对比（辅助参考，不改策略硬门槛）
 
     轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
@@ -619,6 +637,8 @@ async def get_key_levels(
             adjust=adjust,
             refresh_factor=refresh_factor,
             factor_source=factor_source,
+            vp_lookback=vp_lookback,
+            vp_from_date=vp_from_date,
         )
 
     except Exception as e:

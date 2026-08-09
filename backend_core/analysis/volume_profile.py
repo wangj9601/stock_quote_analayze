@@ -52,11 +52,34 @@ def compute_volume_profile_from_bars(
 
     返回 poc / vah / val、相对现价最近支撑压力，以及 bins 摘要（价位中点与量）。
     """
+    def _bar_date(b: Dict[str, Any]) -> Optional[str]:
+        raw = b.get("date") if b.get("date") is not None else b.get("trade_date")
+        if raw is None:
+            return None
+        s = str(raw).strip()
+        return s[:10] if s else None
+
+    seq = [b for b in (bars or []) if isinstance(b, dict)]
+    lb = max(5, int(lookback or DEFAULT_LOOKBACK))
+    if len(seq) > lb:
+        seq = seq[-lb:]
+
+    window_start = next((d for d in (_bar_date(b) for b in seq) if d), None)
+    window_end = None
+    for b in reversed(seq):
+        d = _bar_date(b)
+        if d:
+            window_end = d
+            break
+
     empty: Dict[str, Any] = {
         "ok": False,
         "reason": "insufficient_bars",
         "method": "daily_volume_profile",
-        "lookback": int(lookback),
+        "lookback": int(lb),
+        "bars_used": len(seq),
+        "window_start": window_start,
+        "window_end": window_end,
         "bin_count": int(bin_count),
         "value_area_pct": float(value_area_pct),
         "poc": None,
@@ -68,10 +91,6 @@ def compute_volume_profile_from_bars(
         "bins": [],
         "total_volume": 0.0,
     }
-    seq = [b for b in (bars or []) if isinstance(b, dict)]
-    lb = max(5, int(lookback or DEFAULT_LOOKBACK))
-    if len(seq) > lb:
-        seq = seq[-lb:]
     parsed: List[Tuple[float, float, float, float]] = []
     for b in seq:
         t = _parse_bar(b)
@@ -163,6 +182,9 @@ def compute_volume_profile_from_bars(
         "reason": "ok",
         "method": "daily_volume_profile",
         "lookback": lb,
+        "bars_used": len(seq),
+        "window_start": window_start,
+        "window_end": window_end,
         "bin_count": n_bins,
         "value_area_pct": float(value_area_pct or DEFAULT_VALUE_AREA_PCT),
         "poc": poc_r,

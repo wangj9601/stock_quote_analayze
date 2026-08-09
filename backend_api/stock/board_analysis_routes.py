@@ -100,6 +100,69 @@ def get_board_signals(
         )
 
 
+@router.get("/leader-mid-signals")
+def get_leader_mid_signals(
+    board_kind: str = Query(..., description="industry | concept"),
+    board_code: Optional[str] = Query(
+        None, description="单板代码；all/全部=该类型下全部板块"
+    ),
+    board_codes: Optional[str] = Query(
+        None, description="多板代码，逗号分隔；优先于 board_code"
+    ),
+    board_code_source: str = Query("tonghuashun"),
+    board_name: Optional[str] = Query(None),
+    strategies: Optional[str] = Query(
+        None, description="逗号分隔：gms,urt,sbbr,rpe；默认全部"
+    ),
+    db: Session = Depends(get_db),
+    _user: Optional[User] = Depends(get_current_user_optional),
+):
+    """板块龙头+中军在 GMS/URT/SBBR/RPE 上的命中矩阵。
+
+    支持 board_codes 多选，或 board_code=all 汇总全部板块。
+    """
+    kind = (board_kind or "").strip().lower()
+    if kind not in ("industry", "concept"):
+        return JSONResponse(
+            {"success": False, "message": "board_kind 须为 industry 或 concept"},
+            status_code=400,
+        )
+    codes_list = [
+        p.strip()
+        for p in str(board_codes or "").split(",")
+        if p and str(p).strip()
+    ]
+    single = (board_code or "").strip()
+    if not codes_list and not single:
+        return JSONResponse(
+            {"success": False, "message": "请提供 board_code 或 board_codes"},
+            status_code=400,
+        )
+    try:
+        from backend_core.analysis.board_signals import collect_leader_mid_strategy_hits
+
+        data = collect_leader_mid_strategy_hits(
+            db,
+            board_kind=kind,
+            board_code="" if codes_list else single,
+            board_codes=codes_list or None,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            strategies=_parse_strategies(strategies),
+        )
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.exception("leader-mid-signals failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return JSONResponse(
+            {"success": False, "message": f"龙头中军分析失败: {e}"},
+            status_code=500,
+        )
+
+
 @router.post("/board-signals/observe")
 def add_board_signal_observe(
     body: BoardObserveRequest = Body(...),

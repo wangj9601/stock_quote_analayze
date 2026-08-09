@@ -700,6 +700,35 @@ class StockAnalysisService:
             logger.error(f"Gemini 分析异常: {str(e)}")
             return f"AI 分析服务暂不可用: {str(e)}"
     
+    @staticmethod
+    def _resolve_vp_lookback(
+        historical_data: Optional[List[Dict]],
+        *,
+        vp_lookback: Optional[int] = None,
+        vp_from_date: Optional[str] = None,
+    ) -> Tuple[int, Optional[str]]:
+        """解析 VP 回看：优先起始日期（按日K根数），否则用天数；默认 60。"""
+        from backend_core.analysis.volume_profile import DEFAULT_LOOKBACK
+
+        bars = [b for b in (historical_data or []) if isinstance(b, dict)]
+        fd = str(vp_from_date or "").strip()[:10]
+        if fd and len(fd) >= 8:
+            n = 0
+            for b in bars:
+                raw = b.get("date") if b.get("date") is not None else b.get("trade_date")
+                ds = str(raw or "").strip()[:10]
+                if ds and ds >= fd:
+                    n += 1
+            if n >= 5:
+                return max(5, min(n, 750)), fd
+        if vp_lookback is not None:
+            try:
+                lb = int(vp_lookback)
+            except (TypeError, ValueError):
+                lb = DEFAULT_LOOKBACK
+            return max(5, min(lb, 750)), None
+        return int(DEFAULT_LOOKBACK), None
+
     def get_key_levels_only(
         self,
         stock_code: str,
@@ -708,12 +737,16 @@ class StockAnalysisService:
         historical_data: Optional[List[Dict]] = None,
         price_adjust: str = "none",
         adj_meta: Optional[Dict] = None,
+        vp_lookback: Optional[int] = None,
+        vp_from_date: Optional[str] = None,
     ) -> Dict:
-        """计算 KDE 支撑/压力，并附带黄金分割与经典 Pivot 参考位（「我的」频道）。
+        """计算 KDE 支撑/压力，并附带黄金分割与经典 Pivot 参考位（分析-个股分析）。
 
         price_adjust:
           - none: 使用库内不复权日K（默认）
           - qfq: 调用方传入已现算前复权的 historical_data
+        vp_lookback / vp_from_date:
+          Volume Profile 回看天数，或起始交易日起算（优先日期）。
         """
         try:
             code = str(stock_code or "").strip()
@@ -803,11 +836,19 @@ class StockAnalysisService:
             )
             classic["anchor_price"] = round(float(current_price), 2) if current_price else None
             classic["anchor_source"] = price_source
+            vp_lb_req, vp_fd = self._resolve_vp_lookback(
+                historical_data,
+                vp_lookback=vp_lookback,
+                vp_from_date=vp_from_date,
+            )
             vp = KeyLevels.calculate_volume_profile(
                 historical_data,
                 current_price,
+                lookback=vp_lb_req,
                 price_adjust=adjust,
             )
+            if vp_fd:
+                vp["from_date"] = vp_fd
             from backend_core.analysis.confluence_zones import compute_confluence_from_reference
             from backend_core.analysis.volume_profile import compare_vp_with_kde
 
@@ -815,6 +856,10 @@ class StockAnalysisService:
                 "ok": bool(vp.get("ok")),
                 "reason": vp.get("reason"),
                 "lookback": vp.get("lookback"),
+                "bars_used": vp.get("bars_used"),
+                "window_start": vp.get("window_start"),
+                "window_end": vp.get("window_end"),
+                "from_date": vp.get("from_date"),
                 "poc": vp.get("poc"),
                 "vah": vp.get("vah"),
                 "val": vp.get("val"),
