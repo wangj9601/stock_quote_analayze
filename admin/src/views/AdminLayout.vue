@@ -105,6 +105,7 @@ const menuItems = [
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/gms-management', name: 'GMS策略回测管理', icon: TrendCharts },
   { path: '/sbbr-management', name: '做小做底SBBR', icon: TrendCharts },
+  { path: '/dblb-management', name: '双底策略DBLB', icon: TrendCharts },
   { path: '/rpe-management', name: '比价效应RPE', icon: TrendCharts },
   { path: '/urt-management', name: 'URT上升趋势策略', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },

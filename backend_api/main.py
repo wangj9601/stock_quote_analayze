@@ -937,6 +937,19 @@ else:
     print("SBBR admin 路由未注册")
 
 try:
+    from backend_api.admin.dblb_admin_routes import router as dblb_admin_router
+    print("dblb_admin_router 导入成功")
+except Exception as e:
+    print(f"dblb_admin_router 导入失败: {e}")
+    dblb_admin_router = None
+
+if dblb_admin_router is not None:
+    app.include_router(dblb_admin_router)
+    print("DBLB admin 路由注册成功 (/api/admin/dblb)")
+else:
+    print("DBLB admin 路由未注册")
+
+try:
     from backend_api.admin.rpe_admin_routes import router as rpe_admin_router
     print("rpe_admin_router 导入成功")
 except Exception as e:
