@@ -4,6 +4,7 @@
 from unittest.mock import MagicMock
 
 from backend_core.strategies.double_bottom.universe import (
+    enrich_items_with_ths_industry,
     normalize_code_list,
     resolve_stock_pool,
 )
@@ -54,3 +55,31 @@ def test_resolve_industry_union(monkeypatch):
     assert out["mode"] == "industry_board"
     assert len(out["codes"]) == 3
     assert out["boards_by_code"]["600001"][0]["board_name"] == "板A"
+
+
+def test_enrich_ths_industry_force(monkeypatch):
+    monkeypatch.setattr(
+        "backend_core.strategies.double_bottom.universe.batch_ths_industry_labels",
+        lambda db, codes: {"000590": "中药", "000989": "中药"},
+    )
+    items = [
+        {"code": "000590", "board_labels": ""},
+        {"code": "000989", "board_labels": "旧标签"},
+    ]
+    enrich_items_with_ths_industry(MagicMock(), items, force=True)
+    assert items[0]["board_labels"] == "中药"
+    assert items[1]["board_labels"] == "中药"
+
+
+def test_enrich_ths_industry_only_empty(monkeypatch):
+    monkeypatch.setattr(
+        "backend_core.strategies.double_bottom.universe.batch_ths_industry_labels",
+        lambda db, codes: {"000590": "中药"},
+    )
+    items = [
+        {"code": "000590", "board_labels": ""},
+        {"code": "000989", "board_labels": "保留"},
+    ]
+    enrich_items_with_ths_industry(MagicMock(), items, force=False)
+    assert items[0]["board_labels"] == "中药"
+    assert items[1]["board_labels"] == "保留"

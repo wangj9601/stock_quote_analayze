@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""DBLB 手动预计算（暂不挂 cron）。"""
+"""DBLB 手动预计算（强制重算并入库；暂不挂 cron）。"""
 
 from __future__ import annotations
 
@@ -20,11 +20,12 @@ def run_dblb_precompute(
     stock_codes: Optional[Sequence[Any]] = None,
     universe_limit: Optional[int] = None,
     max_results: Optional[int] = None,
+    force_recompute: bool = True,
 ) -> Dict[str, Any]:
     from backend_api.database import SessionLocal
 
     from .config import DblbConfigManager
-    from .signal_storage import upsert_signal_traces
+    from .signal_storage import delete_traces_not_in_codes, upsert_signal_traces
     from .strategy_engine import DblbStrategyEngine
 
     cm = DblbConfigManager()
@@ -45,14 +46,25 @@ def run_dblb_precompute(
             stock_codes=stock_codes,
             universe_limit=universe_limit,
             max_results=max_results,
+            force_recompute=force_recompute,
         )
         items: List[Dict[str, Any]] = list(result.get("items") or [])
+        date_s = str(result.get("trade_date") or trade_date or "")
         saved = upsert_signal_traces(
             db,
             items,
             config_id=cid,
-            trade_date=str(result.get("trade_date") or trade_date or ""),
+            trade_date=date_s,
         )
+        deleted = 0
+        if force_recompute:
+            deleted = delete_traces_not_in_codes(
+                db,
+                trade_date=date_s,
+                config_id=cid,
+                scope_codes=list(result.get("scope_codes") or []),
+                keep_codes=[str(r.get("code") or "") for r in items],
+            )
         return {
             "ok": True,
             "trade_date": result.get("trade_date"),
@@ -62,6 +74,10 @@ def run_dblb_precompute(
             "screened": result.get("screened"),
             "hit_count": result.get("hit_count"),
             "saved": saved,
+            "deleted_stale": deleted,
+            "force_recompute": bool(force_recompute),
+            "reused": result.get("reused"),
+            "computed": result.get("computed"),
         }
     except Exception as e:
         logger.exception("DBLB precompute failed: %s", e)

@@ -30,10 +30,9 @@ def get_default_dblb_config() -> Dict[str, Any]:
         },
         "scan": {
             "batch_size": 200,
-            "max_results": 500,
+            "max_results": 0,  # 0=不截断命中列表
             "history_bars": 160,
             "status_filter": "both",  # forming | confirmed | both
-            "default_universe_limit": 800,
         },
     }
 
@@ -88,9 +87,20 @@ class DblbConfigManager:
         db.refresh(row)
         return int(row.id)
 
+    @staticmethod
+    def _strip_hit_cap(cfg: Dict) -> Dict:
+        """取消命中条数上限：历史配置里的 scan.max_results 不再生效。"""
+        out = copy.deepcopy(cfg) if cfg else get_default_dblb_config()
+        scan = out.setdefault("scan", {})
+        if isinstance(scan, dict):
+            scan["max_results"] = 0
+        return out
+
     def get_config(self, config_id: Optional[int] = None) -> Dict:
         if config_id is not None and config_id in _CACHE:
-            return copy.deepcopy(_CACHE[config_id])
+            cached = self._strip_hit_cap(_CACHE[config_id])
+            cached["_config_id"] = int(config_id)
+            return cached
 
         db = self._session()
         try:
@@ -106,14 +116,27 @@ class DblbConfigManager:
                     .first()
                 )
             if not row:
-                return self.get_default_config()
+                return self._strip_hit_cap(self.get_default_config())
             merged = self._deep_merge(self.get_default_config(), dict(row.config_params or {}))
+            merged = self._strip_hit_cap(merged)
+            # 顺带把库内历史 max_results 清掉，避免管理端 JSON 仍显示 500
+            params = dict(row.config_params or {})
+            scan_p = params.get("scan") if isinstance(params.get("scan"), dict) else None
+            if scan_p is not None and int(scan_p.get("max_results") or 0) != 0:
+                scan_p = dict(scan_p)
+                scan_p["max_results"] = 0
+                params["scan"] = scan_p
+                row.config_params = params
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
             _CACHE[int(row.id)] = copy.deepcopy(merged)
             merged["_config_id"] = int(row.id)
             return merged
         except Exception as e:
             logger.warning("读取 DBLB 配置失败，使用默认: %s", e)
-            return self.get_default_config()
+            return self._strip_hit_cap(self.get_default_config())
         finally:
             db.close()
 

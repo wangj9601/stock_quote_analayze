@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""DBLB 选股引擎：解析股票池 → 批量日线 → 双底识别。"""
+"""DBLB 选股引擎：解析股票池 → 利旧/检测 → 双底识别。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .config import DblbConfigManager, get_default_dblb_config
 from .data_loader import batch_load_ohlc_asc, load_names, resolve_effective_trade_date
 from .detector import detect_double_bottom
-from .universe import resolve_stock_pool
+from .universe import enrich_items_with_ths_industry, resolve_stock_pool
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ class DblbStrategyEngine:
         stock_codes: Optional[Sequence[Any]] = None,
         universe_limit: Optional[int] = None,
         max_results: Optional[int] = None,
+        force_recompute: bool = False,
     ) -> Dict[str, Any]:
         cm = DblbConfigManager()
         cid = int(config_id) if config_id is not None else None
@@ -52,19 +53,17 @@ class DblbStrategyEngine:
             sf = "both"
 
         date_s = resolve_effective_trade_date(db, trade_date)
-        limit_default = int(scan.get("default_universe_limit") or 800)
         pool = resolve_stock_pool(
             db,
             stock_pool_mode=stock_pool_mode,
             industry_board_codes=industry_board_codes,
             concept_board_codes=concept_board_codes,
             stock_codes=stock_codes,
-            universe_limit=universe_limit
-            if universe_limit is not None
-            else (limit_default if stock_pool_mode == "market" else None),
+            universe_limit=universe_limit if (universe_limit or 0) > 0 else None,
         )
         codes: List[str] = list(pool["codes"] or [])
         boards_by = pool.get("boards_by_code") or {}
+        mode = str(pool.get("mode") or stock_pool_mode or "").strip().lower()
         if not codes:
             return {
                 "trade_date": date_s,
@@ -74,21 +73,56 @@ class DblbStrategyEngine:
                 "screened": 0,
                 "hit_count": 0,
                 "items": [],
+                "force_recompute": bool(force_recompute),
+                "reused": 0,
+                "computed": 0,
             }
+
+        reused_items: List[Dict[str, Any]] = []
+        codes_to_scan = list(codes)
+        if not force_recompute and cid is not None and date_s:
+            try:
+                from .signal_storage import load_traces_by_codes
+
+                cached = load_traces_by_codes(
+                    db,
+                    trade_date=date_s,
+                    config_id=int(cid),
+                    codes=codes,
+                    status_filter=None,
+                )
+                if cached:
+                    reused_codes = set()
+                    for code, row in cached.items():
+                        st = row.get("status")
+                        if sf != "both" and st != sf:
+                            # 已有记录但不符过滤：仍视为已算过，跳过重算
+                            reused_codes.add(code)
+                            continue
+                        reused_items.append(dict(row))
+                        reused_codes.add(code)
+                    codes_to_scan = [c for c in codes if c not in reused_codes]
+            except Exception as e:
+                logger.warning("DBLB reuse load failed, fallback full scan: %s", e)
+                reused_items = []
+                codes_to_scan = list(codes)
 
         lookback = max(
             int(pattern.get("lookback_days") or 120) + 20,
             int(scan.get("history_bars") or 160),
         )
-        bars_by = batch_load_ohlc_asc(db, codes, lookback=lookback, asof=date_s)
-        names = load_names(db, codes)
+        bars_by = (
+            batch_load_ohlc_asc(db, codes_to_scan, lookback=lookback, asof=date_s)
+            if codes_to_scan
+            else {}
+        )
+        names = load_names(db, codes_to_scan) if codes_to_scan else {}
 
-        items: List[Dict[str, Any]] = []
-        for code in codes:
+        new_items: List[Dict[str, Any]] = []
+        for code in codes_to_scan:
             bars = bars_by.get(code) or []
             if not bars:
                 continue
-            # 截断到 asof
             if date_s:
                 bars = [b for b in bars if str(b.get("date") or "")[:10] <= date_s]
             hit = detect_double_bottom(bars, pattern_cfg=pattern)
@@ -121,19 +155,30 @@ class DblbStrategyEngine:
                     if b
                 ),
                 "detail": hit,
+                "_from_cache": False,
             }
-            items.append(row)
+            new_items.append(row)
 
-        # confirmed 优先，再按突破日/代码
-        def _sort_key(r: Dict[str, Any]):
-            return (
-                0 if r.get("status") == "confirmed" else 1,
-                str(r.get("confirm_date") or r.get("l2_date") or ""),
-                str(r.get("code") or ""),
-            )
+        items: List[Dict[str, Any]] = list(reused_items) + list(new_items)
+        if items:
+            enrich_items_with_ths_industry(db, items, force=(mode == "market"))
 
-        items.sort(key=_sort_key)
-        cap = int(max_results or scan.get("max_results") or 500)
+        items.sort(key=lambda r: str(r.get("code") or ""))
+        items.sort(
+            key=lambda r: str(r.get("confirm_date") or r.get("l2_date") or "")
+            or "0000-00-00",
+            reverse=True,
+        )
+        items.sort(key=lambda r: 0 if r.get("status") == "confirmed" else 1)
+
+        # 命中条数默认不截断；仅当调用方显式传入 max_results>0 时才截断
+        # （忽略配置 JSON 里历史遗留的 scan.max_results=500）
+        cap = 0
+        if max_results is not None:
+            try:
+                cap = int(max_results)
+            except (TypeError, ValueError):
+                cap = 0
         if cap > 0:
             items = items[:cap]
 
@@ -145,4 +190,8 @@ class DblbStrategyEngine:
             "screened": len(codes),
             "hit_count": len(items),
             "items": items,
+            "force_recompute": bool(force_recompute),
+            "reused": len(reused_items),
+            "computed": len(codes_to_scan),
+            "scope_codes": codes,
         }

@@ -120,40 +120,56 @@
             />
           </el-form-item>
 
-          <el-form-item v-if="scopeForm.stock_pool_mode === 'market'" label="宇宙上限">
-            <el-input-number v-model="scopeForm.universe_limit" :min="50" :max="5000" :step="50" />
-            <span class="hint">全市场扫描较慢，建议先用板块/个股试算</span>
+          <el-form-item v-if="scopeForm.stock_pool_mode === 'market'" label="提示">
+            <span class="hint">全市场无上限，扫描较慢，建议先用板块/个股试算</span>
           </el-form-item>
 
           <el-form-item>
-            <el-button type="primary" :loading="trialing" @click="onTrial">试算</el-button>
+            <el-button type="primary" :loading="trialing" @click="onTrial">试算（利旧入库）</el-button>
+            <el-button type="danger" :loading="forcing" @click="onForce">强制计算</el-button>
             <el-button type="warning" :loading="precomputing" @click="onPrecompute">写入预计算</el-button>
+            <span class="hint">试算优先复用已入库信号；强制计算忽略缓存并全量重算入库</span>
           </el-form-item>
         </el-form>
 
         <div v-if="trialMeta" class="meta-line">
           日期 {{ trialMeta.trade_date }} · 扫描 {{ trialMeta.screened }} · 命中 {{ trialMeta.hit_count }}
+          <span v-if="trialMeta.reused != null"> · 利旧 {{ trialMeta.reused }}</span>
+          <span v-if="trialMeta.computed != null"> · 新算 {{ trialMeta.computed }}</span>
+          <span v-if="trialMeta.saved != null"> · 入库 {{ trialMeta.saved }}</span>
+          <span v-if="trialMeta.force"> · 强制</span>
           <span v-if="trialMeta.scope_meta"> · 模式 {{ trialMeta.scope_meta.stock_pool_mode }}</span>
         </div>
-        <el-table :data="trialItems" stripe v-loading="trialing" max-height="480">
-          <el-table-column prop="code" label="代码" width="90" />
-          <el-table-column prop="name" label="名称" width="110" />
-          <el-table-column prop="status" label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.status === 'confirmed' ? 'success' : 'warning'" size="small">
-                {{ row.status }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="board_labels" label="所属板块" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="last_close" label="收盘" width="80" />
-          <el-table-column prop="l1_price" label="底1" width="80" />
-          <el-table-column prop="l2_price" label="底2" width="80" />
-          <el-table-column prop="neckline" label="颈线" width="80" />
-          <el-table-column prop="l1_date" label="底1日" width="110" />
-          <el-table-column prop="l2_date" label="底2日" width="110" />
-          <el-table-column prop="confirm_date" label="确认日" width="110" />
-        </el-table>
+        <div class="dblb-table-wrap">
+          <el-table
+            class="dblb-table"
+            :data="trialItems"
+            stripe
+            border
+            v-loading="trialing"
+            max-height="480"
+            style="width: 100%"
+            table-layout="fixed"
+          >
+            <el-table-column prop="code" label="代码" width="88" />
+            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="104">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'confirmed' ? 'success' : 'warning'" size="small">
+                  {{ row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="board_labels" label="所属板块" width="108" show-overflow-tooltip />
+            <el-table-column prop="last_close" label="收盘" width="80" align="right" />
+            <el-table-column prop="l1_price" label="底1" width="80" align="right" />
+            <el-table-column prop="l2_price" label="底2" width="80" align="right" />
+            <el-table-column prop="neckline" label="颈线" width="80" align="right" />
+            <el-table-column prop="l1_date" label="底1日" width="112" />
+            <el-table-column prop="l2_date" label="底2日" width="112" />
+            <el-table-column prop="confirm_date" label="确认日" min-width="112" />
+          </el-table>
+        </div>
         <div class="toolbar" style="margin-top: 8px">
           <el-button :disabled="!trialItems.length" @click="exportTrialCsv">导出试算 CSV</el-button>
         </div>
@@ -184,17 +200,30 @@
           <el-button :disabled="!signalItems.length" @click="exportSignalsCsv">导出 CSV</el-button>
         </div>
         <div class="meta-line">共 {{ signalTotal }} 条</div>
-        <el-table :data="signalItems" stripe v-loading="loadingSignals" max-height="520">
-          <el-table-column prop="code" label="代码" width="90" />
-          <el-table-column prop="name" label="名称" width="110" />
-          <el-table-column prop="status" label="状态" width="100" />
-          <el-table-column prop="board_labels" label="所属板块" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="last_close" label="收盘" width="80" />
-          <el-table-column prop="l1_price" label="底1" width="80" />
-          <el-table-column prop="l2_price" label="底2" width="80" />
-          <el-table-column prop="neckline" label="颈线" width="80" />
-          <el-table-column prop="confirm_date" label="确认日" width="110" />
-        </el-table>
+        <div class="dblb-table-wrap">
+          <el-table
+            class="dblb-table"
+            :data="signalItems"
+            stripe
+            border
+            v-loading="loadingSignals"
+            max-height="520"
+            style="width: 100%"
+            table-layout="fixed"
+          >
+            <el-table-column prop="code" label="代码" width="88" />
+            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="104" />
+            <el-table-column prop="board_labels" label="所属板块" width="108" show-overflow-tooltip />
+            <el-table-column prop="last_close" label="收盘" width="80" align="right" />
+            <el-table-column prop="l1_price" label="底1" width="80" align="right" />
+            <el-table-column prop="l2_price" label="底2" width="80" align="right" />
+            <el-table-column prop="neckline" label="颈线" width="80" align="right" />
+            <el-table-column prop="l1_date" label="底1日" width="112" />
+            <el-table-column prop="l2_date" label="底2日" width="112" />
+            <el-table-column prop="confirm_date" label="确认日" min-width="112" />
+          </el-table>
+        </div>
       </el-tab-pane>
     </el-tabs>
 
@@ -240,7 +269,6 @@ const scopeForm = reactive({
   config_id: undefined as number | undefined,
   status_filter: 'both',
   stock_pool_mode: 'stocks' as DblbScopeBody['stock_pool_mode'],
-  universe_limit: 800,
 })
 const stockCodesText = ref('')
 const selectedIndustryBoardCodes = ref<string[]>([])
@@ -251,6 +279,7 @@ const industryBoardLoading = ref(false)
 const conceptBoardLoading = ref(false)
 
 const trialing = ref(false)
+const forcing = ref(false)
 const precomputing = ref(false)
 const trialItems = ref<any[]>([])
 const trialMeta = ref<any>(null)
@@ -272,6 +301,19 @@ function parseStockCodes(text: string): string[] {
     .filter(Boolean)
 }
 
+/** confirmed 优先，确认日（无则底2日）倒序 */
+function sortByConfirmDateDesc(rows: any[]): any[] {
+  return [...rows].sort((a, b) => {
+    const sa = a?.status === 'confirmed' ? 0 : 1
+    const sb = b?.status === 'confirmed' ? 0 : 1
+    if (sa !== sb) return sa - sb
+    const da = String(a?.confirm_date || a?.l2_date || '')
+    const db = String(b?.confirm_date || b?.l2_date || '')
+    if (da !== db) return db.localeCompare(da)
+    return String(a?.code || '').localeCompare(String(b?.code || ''))
+  })
+}
+
 function buildScopeBody(): DblbScopeBody {
   const body: DblbScopeBody = {
     stock_pool_mode: scopeForm.stock_pool_mode,
@@ -285,8 +327,6 @@ function buildScopeBody(): DblbScopeBody {
     body.concept_board_codes = [...selectedConceptBoardCodes.value]
   } else if (scopeForm.stock_pool_mode === 'stocks') {
     body.stock_codes = parseStockCodes(stockCodesText.value)
-  } else if (scopeForm.stock_pool_mode === 'market') {
-    body.universe_limit = scopeForm.universe_limit
   }
   return body
 }
@@ -381,24 +421,39 @@ async function onSetDefault(id: number) {
   await loadConfigs()
 }
 
-async function onTrial() {
-  trialing.value = true
+async function runTrial(force: boolean) {
+  const loading = force ? forcing : trialing
+  loading.value = true
   try {
-    const data = await dblbApi.trial(buildScopeBody())
-    trialItems.value = data.items || []
+    const data = await dblbApi.trial({ ...buildScopeBody(), persist: true, force })
+    trialItems.value = sortByConfirmDateDesc(data.items || [])
     trialMeta.value = data
-    ElMessage.success(`试算完成，命中 ${data.hit_count ?? trialItems.value.length}`)
+    const reused = data.reused ?? 0
+    const saved = data.saved ?? 0
+    ElMessage.success(
+      force
+        ? `强制计算完成，命中 ${data.hit_count ?? trialItems.value.length}，入库 ${saved}`
+        : `试算完成，命中 ${data.hit_count ?? trialItems.value.length}（利旧 ${reused}，入库 ${saved}）`
+    )
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || e.message || '试算失败')
+    ElMessage.error(e?.response?.data?.detail || e.message || (force ? '强制计算失败' : '试算失败'))
   } finally {
-    trialing.value = false
+    loading.value = false
   }
+}
+
+async function onTrial() {
+  await runTrial(false)
+}
+
+async function onForce() {
+  await runTrial(true)
 }
 
 async function onPrecompute() {
   precomputing.value = true
   try {
-    const data = await dblbApi.triggerPrecompute(buildScopeBody())
+    const data = await dblbApi.triggerPrecompute({ ...buildScopeBody(), force: true })
     ElMessage.success(
       `预计算完成 date=${data.trade_date ?? '-'} screened=${data.screened ?? '-'} hit=${data.hit_count ?? '-'} saved=${data.saved ?? '-'}`
     )
@@ -426,7 +481,7 @@ async function loadSignals() {
       code: signalQuery.code || undefined,
       limit: 500,
     })
-    signalItems.value = data.items || []
+    signalItems.value = sortByConfirmDateDesc(data.items || [])
     signalTotal.value = data.total ?? signalItems.value.length
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message || '查询失败')
@@ -484,13 +539,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.dblb-management { padding: 16px; }
+.dblb-management { padding: 16px; width: 100%; box-sizing: border-box; }
 .page-header { margin-bottom: 16px; }
 .page-title { margin: 0; font-size: 22px; }
 .page-subtitle { margin: 4px 0 0; color: #666; }
 .toolbar { margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.scope-form { max-width: 920px; margin-bottom: 12px; }
+.scope-form { max-width: 960px; margin-bottom: 12px; }
 .hint { margin-left: 8px; color: #64748b; font-size: 12px; }
 .meta-line { margin: 0 0 8px; color: #64748b; font-size: 13px; }
 .w-full { width: 100%; }
+.dblb-table-wrap { width: 100%; min-width: 0; }
+.dblb-table { width: 100% !important; }
+.dblb-table :deep(.el-table__header),
+.dblb-table :deep(.el-table__body) { width: 100% !important; }
+.dblb-table :deep(.cell) { padding-left: 8px; padding-right: 8px; }
 </style>

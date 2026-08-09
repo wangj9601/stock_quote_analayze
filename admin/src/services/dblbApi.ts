@@ -3,7 +3,8 @@
  */
 import { apiService } from './api'
 
-const PREFIX = '/api/admin/dblb'
+/** apiService baseURL 已是 /api/admin，此处只需相对路径 */
+const PREFIX = '/dblb'
 
 export type DblbScopeBody = {
   trade_date?: string
@@ -15,7 +16,10 @@ export type DblbScopeBody = {
   stock_codes?: string[]
   universe_limit?: number
   max_results?: number
+  /** 默认 true：新命中入库以便利旧 */
   persist?: boolean
+  /** true：忽略利旧，强制重算并覆盖入库 */
+  force?: boolean
 }
 
 export const dblbApi = {

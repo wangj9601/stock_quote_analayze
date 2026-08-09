@@ -165,6 +165,60 @@ def resolve_market_pool(db, *, limit: Optional[int] = None) -> List[str]:
     return [normalize_a_code(r[0]) for r in qry.all() if r[0]]
 
 
+def batch_ths_industry_labels(
+    db, stock_codes: Sequence[Any]
+) -> Dict[str, str]:
+    """批量取同花顺行业板块归属：code -> 顿号拼接的板块名。"""
+    codes = normalize_code_list(stock_codes)
+    if not codes:
+        return {}
+    try:
+        from backend_api.utils.industry_board_query import (
+            batch_industry_board_names_by_stock_codes,
+        )
+
+        raw = batch_industry_board_names_by_stock_codes(
+            db, codes, board_code_source="tonghuashun"
+        ) or {}
+    except Exception:
+        return {}
+    out: Dict[str, str] = {}
+    for code, names in raw.items():
+        c = normalize_a_code(code)
+        label = str(names or "").replace(",", "、").strip()
+        if c and label:
+            out[c] = label
+    return out
+
+
+def enrich_items_with_ths_industry(
+    db,
+    items: List[Dict[str, Any]],
+    *,
+    force: bool = False,
+) -> None:
+    """为结果行填充同花顺行业「所属板块」；force=True 时覆盖已有标签。"""
+    if not items:
+        return
+    need = [
+        r.get("code")
+        for r in items
+        if r.get("code") and (force or not str(r.get("board_labels") or "").strip())
+    ]
+    if not need:
+        return
+    labels = batch_ths_industry_labels(db, need)
+    if not labels:
+        return
+    for r in items:
+        code = normalize_a_code(r.get("code"))
+        label = labels.get(code)
+        if not label:
+            continue
+        if force or not str(r.get("board_labels") or "").strip():
+            r["board_labels"] = label
+
+
 def resolve_stock_pool(
     db,
     *,

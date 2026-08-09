@@ -43,7 +43,7 @@
 | `industry_board` | `industry_board_codes[]` | 行业成分并集 |
 | `concept_board` | `concept_board_codes[]` | 概念成分并集 |
 | `stocks` | `stock_codes[]` | 个股多码 |
-| `market` | `universe_limit` | 全市场（运维兜底，较慢） |
+| `market` | （无上限） | 全市场；可选 `universe_limit` 运维截断，默认不截断（较慢）。命中后「所属板块」按同花顺行业归属填充。命中条数默认不截断（忽略历史 `scan.max_results=500`） |
 
 多板取并集去重；股票池为空时 API 返回 400。
 
@@ -52,14 +52,17 @@
 路径：`/admin/#/dblb-management`
 
 1. **策略配置**：新建 / 编辑 `config_params` JSON / 设默认  
-2. **分析试算 / 预计算**：选择范围后「试算」或「写入预计算」  
+2. **分析试算 / 预计算**：  
+   - **试算（利旧入库）**：对股票池内已有 `(code, trade_date, config_id)` 信号直接复用，仅计算缺失代码；新命中默认写入 `dblb_signal_trace`  
+   - **强制计算**：忽略利旧，全量重算并 upsert；范围内不再命中的旧信号会删除  
+   - **写入预计算**：等同强制计算并入库  
 3. **信号结果**：按交易日查询已落库信号，可导出 CSV  
 
 API 前缀：`/api/admin/dblb`
 
 - `GET/POST /strategy-configs`，`PUT .../update`，`PATCH .../default`
-- `POST /trial`（默认不落库，`persist=true` 可落库）
-- `POST /precompute/trigger`
+- `POST /trial`（`persist` 默认 true；`force=true` 强制重算）
+- `POST /precompute/trigger`（强制重算并入库）
 - `GET /signals`
 
 ## 5. 数据表
