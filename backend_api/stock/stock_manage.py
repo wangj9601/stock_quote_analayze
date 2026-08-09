@@ -12,8 +12,27 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
+from typing import Any, Optional, cast as typing_cast
 from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
+
+
+def _is_na(val: Any) -> bool:
+    """标量缺失判断，避免 pd.isna 在类型检查中被推断为 Series/ndarray。"""
+    if val is None:
+        return True
+    try:
+        result = pd.isna(val)
+        if isinstance(result, (bool, np.bool_)):
+            return bool(result)
+        return False
+    except (ValueError, TypeError):
+        return False
+
+
+def _to_numeric_series(series: Any) -> pd.Series:
+    s = series if isinstance(series, pd.Series) else pd.Series(series)
+    return pd.Series(pd.to_numeric(s, errors='coerce'), index=s.index)
 
 # ma_indicators 表 market_type：新数据为 CN/HK，历史数据可能为 A股/港股
 MA_MARKET_TYPES_CN = ('CN', 'A股')
@@ -115,7 +134,7 @@ def get_cached_spot_df():
         print(f"⚠️ 获取AkShare行情失败: {e}")
     return None
 
-def prepare_spot_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def prepare_spot_dataframe(df: Optional[pd.DataFrame]) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
     rename_map = {
@@ -135,23 +154,20 @@ def prepare_spot_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df_prepared = df.loc[:, available_cols].copy()
     df_prepared.columns = [rename_map[col] for col in available_cols]
     df_prepared['code'] = df_prepared['code'].apply(normalize_code)
-    
-    def to_float(series: pd.Series) -> pd.Series:
-        return pd.to_numeric(series, errors='coerce')
 
     def to_pct_float(series: pd.Series) -> pd.Series:
-        return pd.to_numeric(series.astype(str).str.replace('%', ''), errors='coerce')
+        return _to_numeric_series(series.astype(str).str.replace('%', ''))
     
     if 'current' in df_prepared.columns:
-        df_prepared['current'] = to_float(df_prepared['current'])
+        df_prepared['current'] = _to_numeric_series(df_prepared['current'])
     if 'change' in df_prepared.columns:
-        df_prepared['change'] = to_float(df_prepared['change'])
+        df_prepared['change'] = _to_numeric_series(df_prepared['change'])
     if 'change_percent' in df_prepared.columns:
         df_prepared['change_percent'] = to_pct_float(df_prepared['change_percent'])
     if 'volume' in df_prepared.columns:
-        df_prepared['volume'] = to_float(df_prepared['volume'])
+        df_prepared['volume'] = _to_numeric_series(df_prepared['volume'])
     if 'turnover' in df_prepared.columns:
-        df_prepared['turnover'] = to_float(df_prepared['turnover'])
+        df_prepared['turnover'] = _to_numeric_series(df_prepared['turnover'])
     if 'rate' in df_prepared.columns:
         df_prepared['rate'] = to_pct_float(df_prepared['rate'])
     return df_prepared
@@ -368,7 +384,7 @@ def get_quote_board_list(
                     """), {"trade_date": latest_trade_date})
 
                 rows = result.fetchall()
-                df = pd.DataFrame(rows, columns=result.keys()) if rows else pd.DataFrame()
+                df = pd.DataFrame(rows, columns=pd.Index(list(result.keys()))) if rows else pd.DataFrame()
         finally:
             try:
                 db.rollback()
@@ -376,16 +392,17 @@ def get_quote_board_list(
                 pass
             db.close()
 
-        # 3. 市场类型过滤
-        if market != 'all':
+        # 3. 市场类型过滤（用 loc 保持 DataFrame 类型，避免布尔索引被推断为 Series|DataFrame）
+        if market != 'all' and not df.empty and 'code' in df.columns:
+            code_s = df['code'].astype(str)
             if market == 'sh':
-                df = df[df['code'].str.startswith('6')]
+                df = df.loc[code_s.str.startswith('6')].copy()
             elif market == 'sz':
-                df = df[df['code'].str.startswith('0') | df['code'].str.startswith('3')] # 深市包含主板和创业板
+                df = df.loc[code_s.str.startswith('0') | code_s.str.startswith('3')].copy()  # 深市包含主板和创业板
             elif market == 'cy':
-                df = df[df['code'].str.startswith('3')]
+                df = df.loc[code_s.str.startswith('3')].copy()
             elif market == 'bj':
-                df = df[df['code'].str.startswith('8') | df['code'].str.startswith('4')] # 北交所
+                df = df.loc[code_s.str.startswith('8') | code_s.str.startswith('4')].copy()  # 北交所
         
         # 4. 排行类型排序
         sort_column_map = {
@@ -397,7 +414,8 @@ def get_quote_board_list(
         
         if ranking_type in sort_column_map:
             col, ascending = sort_column_map[ranking_type]
-            df = df.sort_values(by=col, ascending=ascending)
+            if col in df.columns:
+                df = df.sort_values(by=[col], ascending=ascending)
         else:
             return JSONResponse({'success': False, 'message': '无效的排行类型'}, status_code=400)
 
@@ -411,7 +429,7 @@ def get_quote_board_list(
         
         for col in numeric_columns:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = _to_numeric_series(df.loc[:, col])
         
         field_rename_map = {
             'code': 'code',
@@ -431,17 +449,20 @@ def get_quote_board_list(
             'total_market_value': 'market_cap',
             'circulating_market_value': 'circulating_market_cap'
         }
+        renamed_cols = list(field_rename_map.values())
         
         if df.empty:
-            df_selected = pd.DataFrame(columns=field_rename_map.values())
+            df_selected = pd.DataFrame(columns=pd.Index(renamed_cols))
         else:
-            df_selected = df[list(field_rename_map.keys())].rename(columns=field_rename_map)
+            src_cols = [c for c in field_rename_map.keys() if c in df.columns]
+            df_selected = df.loc[:, src_cols].copy()
+            df_selected.columns = pd.Index([field_rename_map[c] for c in src_cols])
 
         # Calculate 'change' if possible
         if not df_selected.empty and 'current' in df_selected.columns and 'pre_close' in df_selected.columns:
             # 确保数据类型为数值型，处理可能的字符串或None值
-            current_numeric = pd.to_numeric(df_selected['current'], errors='coerce')
-            pre_close_numeric = pd.to_numeric(df_selected['pre_close'], errors='coerce')
+            current_numeric = _to_numeric_series(df_selected.loc[:, 'current'])
+            pre_close_numeric = _to_numeric_series(df_selected.loc[:, 'pre_close'])
             df_selected['change'] = (current_numeric - pre_close_numeric).round(2)
         else:
             df_selected['change'] = None
@@ -457,15 +478,16 @@ def get_quote_board_list(
                 fallback_used = True
                 print(f"⚠️ 本地行情数据不足，使用AkShare行情填充，共 {total} 条")
                 
-                if market != 'all':
+                if market != 'all' and 'code' in df_selected.columns:
+                    code_s = df_selected['code'].astype(str)
                     if market == 'sh':
-                        df_selected = df_selected[df_selected['code'].str.startswith('6')]
+                        df_selected = df_selected.loc[code_s.str.startswith('6')].copy()
                     elif market == 'sz':
-                        df_selected = df_selected[df_selected['code'].str.startswith('0') | df_selected['code'].str.startswith('3')]
+                        df_selected = df_selected.loc[code_s.str.startswith('0') | code_s.str.startswith('3')].copy()
                     elif market == 'cy':
-                        df_selected = df_selected[df_selected['code'].str.startswith('3')]
+                        df_selected = df_selected.loc[code_s.str.startswith('3')].copy()
                     elif market == 'bj':
-                        df_selected = df_selected[df_selected['code'].str.startswith('8') | df_selected['code'].str.startswith('4')]
+                        df_selected = df_selected.loc[code_s.str.startswith('8') | code_s.str.startswith('4')].copy()
                 
                 fallback_sort_map = {
                     'rise': ('change_percent', False),
@@ -475,7 +497,7 @@ def get_quote_board_list(
                 }
                 sort_col, ascending = fallback_sort_map.get(ranking_type, ('change_percent', False))
                 if sort_col in df_selected.columns:
-                    df_selected = df_selected.sort_values(by=sort_col, ascending=ascending)
+                    df_selected = df_selected.sort_values(by=[sort_col], ascending=ascending)
                 total = len(df_selected)
 
         start = (page - 1) * page_size
@@ -748,20 +770,23 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
             if df is None or df.empty:
                 print(f"[minute_data_by_code] 未找到股票代码: {code}")
                 return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
-            for _, row in df.iterrows():
-                def fmt(val):
-                    try:
-                        if val is None:
-                            return None
-                        return round(float(val), 2)
-                    except Exception:
+            def fmt(val):
+                try:
+                    if val is None or _is_na(val):
                         return None
+                    return round(float(val), 2)
+                except Exception:
+                    return None
+            for _, row in df.iterrows():
+                hands = fmt(row.get("手数"))
+                price = fmt(row.get("成交价"))
+                amount = fmt(hands * price) if hands is not None and price is not None else None
                 result.append({
                     "time": row.get("时间"),
-                    "price": fmt(row.get("成交价")),
+                    "price": price,
                     "volume": row.get("手数"),
-                    "amount": fmt(fmt(row.get("手数")) * fmt(row.get("成交价")) if fmt(row.get("手数")) is not None and fmt(row.get("成交价")) is not None else None),
-                    "trade_type": row.get("买卖盘性质") if "买卖盘性质" in row else None,
+                    "amount": amount,
+                    "trade_type": row.get("买卖盘性质") if "买卖盘性质" in row.index else None,
                 })
             print(f"[minute_data_by_code] 交易日，返回{len(result)}条分时数据")
         else:
@@ -771,14 +796,24 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
                 print(f"[minute_data_by_code] 非交易日未找到股票代码: {code}")
                 return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
             # 取最近一个交易日
-            for _, row in df.iterrows():
-                def fmt(val):
-                    try:
-                        if val is None:
-                            return None
-                        return round(float(val), 2)
-                    except Exception:
+            def fmt(val):
+                try:
+                    if val is None or _is_na(val):
                         return None
+                    return round(float(val), 2)
+                except Exception:
+                    return None
+            for _, row in df.iterrows():
+                amount_val = row.get("成交额")
+                volume_val = row.get("成交量")
+                avg_price = None
+                if amount_val is not None and volume_val is not None and not _is_na(volume_val):
+                    try:
+                        vol_f = float(volume_val)
+                        if vol_f != 0:
+                            avg_price = fmt(float(amount_val) / (vol_f * 100))
+                    except (TypeError, ValueError):
+                        avg_price = None
                 result.append({
                     "time": row.get("时间"),
                     "price": fmt(row.get("最新价")),
@@ -786,9 +821,9 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
                     "close": fmt(row.get("收盘")),
                     "high": fmt(row.get("最高")),
                     "low": fmt(row.get("最低")),
-                    "avg_price": fmt((row.get("成交额") / (row.get("成交量") * 100)) if row.get("成交量") else None),
-                    "volume": row.get("成交量"),
-                    "amount": fmt(row.get("成交额")),
+                    "avg_price": avg_price,
+                    "volume": volume_val,
+                    "amount": fmt(amount_val),
                 })
             print(f"[minute_data_by_code] 非交易日，返回{len(result)}条分时数据")
         if result:
@@ -1222,7 +1257,8 @@ async def get_kline_hist(
             
             # 转换结果
             for idx, row in resampled.iterrows():
-                date_str = idx.strftime('%Y-%m-%d')
+                date_str = _normalize_indicator_date(idx)
+                vol = row['volume']
                 result.append({
                     "date": date_str,
                     "code": code,
@@ -1230,7 +1266,7 @@ async def get_kline_hist(
                     "close": fmt(row['close']),
                     "high": fmt(row['high']),
                     "low": fmt(row['low']),
-                    "volume": int(row['volume']) if pd.notna(row['volume']) else None,
+                    "volume": int(vol) if not _is_na(vol) else None,
                     "amount": fmt(row['amount']),
                     "amplitude": None,
                     "pct_chg": None,
@@ -1264,9 +1300,9 @@ async def get_kline_min_hist(
         print(f"[kline_min_hist] 缺少参数")
         return JSONResponse({"success": False, "message": "缺少参数"}, status_code=400)
     try:
-        # 日期格式化
-        start_dt_fmt = start_datetime.replace('-', '').replace(':', '').replace(' ', '') if start_datetime else None
-        end_dt_fmt = end_datetime.replace('-', '').replace(':', '').replace(' ', '') if end_datetime else None
+        # 日期格式化（上方已校验非空，此处直接格式化）
+        start_dt_fmt = start_datetime.replace('-', '').replace(':', '').replace(' ', '')
+        end_dt_fmt = end_datetime.replace('-', '').replace(':', '').replace(' ', '')
         # 1分钟线不支持复权，adjust传空
         ak_adjust = '' if period == '1' else adjust
         print(f"[kline_min_hist] 调用ak，symbol={code}, period={period}, start={start_dt_fmt}, end={end_dt_fmt}, adjust={ak_adjust}")
@@ -1277,15 +1313,20 @@ async def get_kline_min_hist(
         result = []
         def fmt(val):
             try:
-                if val is None:
+                if val is None or _is_na(val):
                     return None
                 return round(float(val), 2)
             except Exception:
                 return None
         for _, row in df.iterrows():
             date_val = row.get("时间")
-            if hasattr(date_val, 'strftime'):
-                date_val = date_val.strftime('%Y-%m-%d %H:%M:%S')
+            if date_val is not None and hasattr(date_val, 'strftime'):
+                date_val = date_val.strftime('%Y-%m-%d %H:%M:%S')  # type: ignore[union-attr]
+            vol = row.get("成交量")
+            try:
+                volume = int(vol) if vol is not None and not _is_na(vol) else None
+            except (TypeError, ValueError):
+                volume = None
             result.append({
                 "date": date_val,
                 "code": code,
@@ -1293,7 +1334,7 @@ async def get_kline_min_hist(
                 "close": fmt(row.get("收盘")),
                 "high": fmt(row.get("最高")),
                 "low": fmt(row.get("最低")),
-                "volume": int(row.get("成交量")) if row.get("成交量") is not None else None,
+                "volume": volume,
                 "amount": fmt(row.get("成交额")),
                 "amplitude": fmt(row.get("振幅")),
                 "pct_chg": fmt(row.get("涨跌幅")),
@@ -1555,9 +1596,12 @@ async def get_latest_financial(code: str = Query(..., description="股票代码"
             for key, possible_names in indicator_map.items():
                 value = None
                 for name in possible_names:
-                    row = df[df[row_name_col] == name]
-                    if not row.empty:
-                        value = row[latest_date].values[0] if latest_date in row else row.iloc[0, -1]
+                    matched = df.loc[df[row_name_col] == name]
+                    if not matched.empty:
+                        if latest_date in matched.columns:
+                            value = matched.iloc[0][latest_date]
+                        else:
+                            value = matched.iloc[0, -1]
                         print(f"[latest_financial] A股指标 {key} 匹配到: {name}，值: {value}")
                         break
                 if value is None:
@@ -1636,12 +1680,12 @@ async def get_financial_indicator_list(
                             continue
                         val = row[col_name]
                         if result_key == "报告期":
-                            if pd.isna(val):
+                            if _is_na(val):
                                 result_data[result_key] = None
                             else:
                                 result_data[result_key] = str(val)[:10]
                             continue
-                        if val is None or pd.isna(val) or (isinstance(val, str) and val.strip() == ''):
+                        if _is_na(val) or (isinstance(val, str) and val.strip() == ''):
                             result_data[result_key] = None
                             continue
                         if isinstance(val, str) and '%' in val:
@@ -1686,9 +1730,11 @@ async def get_financial_indicator_list(
                 return JSONResponse({"success": False, "message": "未找到所需指标"}, status_code=404)
 
             # 按报告期升序排列（从旧到新，便于图表从左到右显示）
-            df = df.sort_values("报告期", ascending=True)
-            # 转为dict
-            data = df[cols].to_dict(orient="records")
+            if "报告期" in df.columns:
+                df = df.sort_values(by=["报告期"], ascending=True)
+            # 转为dict（loc 保证子集为 DataFrame，避免 to_dict 重载不匹配）
+            subset = df.loc[:, cols]
+            data = typing_cast(list, subset.to_dict(orient="records"))
             data = clean_nan(data)
             return JSONResponse({"success": True, "data": data})
     except Exception as e:
