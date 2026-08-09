@@ -2,13 +2,16 @@
 """板块分析聚合：过滤与编排冒烟。"""
 
 from backend_core.analysis.board_signals import (
+    _attach_board_membership,
     _enrich_items,
     _filter_gms,
     _filter_rpe,
     _filter_sbbr,
     _filter_urt,
+    _merge_role_tag_maps,
     _slim_reference_levels,
     _strategy_hit_cell,
+    collect_board_signals,
     collect_leader_mid_strategy_hits,
 )
 from backend_core.analysis.trade_advice import build_trade_advice
@@ -277,3 +280,91 @@ def test_collect_leader_mid_all_boards(monkeypatch):
     assert out2["board"]["all_boards"] is False
     assert out2["board"]["board_count"] == 2
     assert out2["role_count"] == 2
+
+
+def test_merge_role_tag_maps_and_board_membership():
+    m = _merge_role_tag_maps(
+        {"600000": [{"id": "leader", "label": "龙头"}]},
+        {"600000": [{"id": "mid", "label": "中军"}], "600001": [{"id": "mid", "label": "中军"}]},
+    )
+    assert len(m["600000"]) == 2
+    assert len(m["600001"]) == 1
+    items = _attach_board_membership(
+        [{"code": "600000"}],
+        {
+            "600000": [
+                {"board_code": "881101", "board_name": "板A"},
+                {"board_code": "881102", "board_name": "板B"},
+            ]
+        },
+    )
+    assert "板A" in items[0]["board_labels"] and "板B" in items[0]["board_labels"]
+
+
+def test_collect_board_signals_multi(monkeypatch):
+    """多板：成分并集跑策略，结果带所属板块。"""
+
+    def fake_members(db, *, board_kind, board_code):
+        if board_code == "881101":
+            return ["600000", "600001"], {"600000": "A", "600001": "B"}
+        return ["600001", "600002"], {"600001": "B", "600002": "C"}
+
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals.load_board_member_codes",
+        fake_members,
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals._list_boards_for_kind",
+        lambda db, board_kind, board_code_source="tonghuashun": [
+            {"board_code": "881101", "board_name": "板A"},
+            {"board_code": "881102", "board_name": "板B"},
+        ],
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals._role_tag_map",
+        lambda db, kind, code: (
+            {"600000": [{"id": "leader", "label": "龙头"}]}
+            if code == "881101"
+            else {"600002": [{"id": "mid", "label": "中军"}]}
+        ),
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals._run_gms",
+        lambda db, codes: [{"code": c, "left_buy_signal": True} for c in codes],
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals._run_urt",
+        lambda db, codes: [],
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals._run_sbbr",
+        lambda db, codes: ([], []),
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals._run_rpe",
+        lambda db, board_kind, board_code=None, board_codes=None: [],
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals.batch_load_ohlc_bars",
+        lambda db, codes, lookback=180: {},
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.board_signals.attach_reference_levels_batch",
+        lambda *a, **k: {},
+    )
+
+    out = collect_board_signals(
+        db=None,
+        board_kind="industry",
+        board_codes=["881101", "881102"],
+        strategies=["gms"],
+    )
+    assert out["board"]["multi_boards"] is True
+    assert out["board"]["board_count"] == 2
+    assert out["member_count"] == 3
+    gms = out["strategies"]["gms"]["items"]
+    by = {x["code"]: x for x in gms}
+    assert set(by) == {"600000", "600001", "600002"}
+    assert "板A" in by["600001"]["board_labels"]
+    assert "板B" in by["600001"]["board_labels"]
+    assert by["600000"]["role_tags"][0]["id"] == "leader"

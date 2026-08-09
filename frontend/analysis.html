@@ -34,14 +34,16 @@
                 <!-- 板块分析（行业/概念 × 多策略） -->
                 <div class="tab-panel active" id="board-analysis">
                     <div class="ba-workbench" data-perm="channel.analyze.tab.board">
-                        <p class="ba-desc">先选行业或概念板块，再按 GMS / URT / SBBR / RPE 筛可观察股票；买卖建议以策略与 KDE/箱体为主，Fibonacci 与经典 Pivot 为参考价。</p>
+                        <p class="ba-desc">先选行业或概念板块（可多选），再按 GMS / URT / SBBR / RPE 筛可观察股票；买卖建议以策略与 KDE/箱体为主，Fibonacci 与经典 Pivot 为参考价。</p>
                         <div class="ba-toolbar">
                             <div class="ba-kind">
                                 <label><input type="radio" name="baBoardKind" value="industry" checked> 行业板块</label>
                                 <label><input type="radio" name="baBoardKind" value="concept"> 概念板块</label>
                             </div>
-                            <input type="search" id="baBoardSearch" class="ba-search" placeholder="搜索板块名称/代码">
-                            <select id="baBoardSelect" class="ba-select"><option value="">请选择板块</option></select>
+                            <div class="lm-board-picker-row">
+                                <button type="button" class="btn btn-secondary" id="baBoardPickBtn">选择板块</button>
+                                <span id="baBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
+                            </div>
                             <div class="ba-strategies">
                                 <label><input type="checkbox" name="baStrategy" value="gms" checked> GMS</label>
                                 <label><input type="checkbox" name="baStrategy" value="urt" checked> URT</label>
@@ -592,6 +594,26 @@
                 <button class="close-search">×</button>
             </div>
             <div class="search-results"></div>
+        </div>
+    </div>
+
+    <!-- 板块分析：板块多选弹窗 -->
+    <div id="baBoardPickerModal" class="lm-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="lm-modal-card" role="dialog" aria-labelledby="baBoardPickerTitle">
+            <div class="lm-modal-header">
+                <h3 id="baBoardPickerTitle">选择板块</h3>
+                <button type="button" class="lm-modal-close" id="baBoardPickerClose" aria-label="关闭">×</button>
+            </div>
+            <div class="lm-board-picker-toolbar">
+                <input type="search" id="baBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
+                <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectAll">全选当前</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerClear">清空当前</button>
+            </div>
+            <div id="baBoardPickerList" class="lm-board-picker-list"></div>
+            <div class="lm-modal-actions">
+                <button type="button" class="btn btn-secondary" id="baBoardPickerCancel">取消</button>
+                <button type="button" class="btn btn-primary" id="baBoardPickerConfirm">确定</button>
+            </div>
         </div>
     </div>
 

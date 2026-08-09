@@ -324,17 +324,76 @@ def _role_tag_map(db: Session, board_kind: str, board_code: str) -> Dict[str, An
         return {}
 
 
+def _merge_role_tag_maps(*maps: Dict[str, Any]) -> Dict[str, Any]:
+    """合并多板角色标签（同码去重）。"""
+    out: Dict[str, Any] = {}
+    for m in maps:
+        for code, tags in (m or {}).items():
+            c = _norm_code(code)
+            if not c:
+                continue
+            prev = list(out.get(c) or [])
+            seen = {
+                (str(t.get("id") or ""), str(t.get("label") or ""))
+                for t in prev
+                if isinstance(t, dict)
+            }
+            for t in tags or []:
+                if not isinstance(t, dict):
+                    continue
+                key = (str(t.get("id") or ""), str(t.get("label") or ""))
+                if key in seen:
+                    continue
+                seen.add(key)
+                prev.append(t)
+            out[c] = prev
+    return out
+
+
+def _attach_board_membership(
+    items: List[Dict[str, Any]],
+    boards_by_code: Dict[str, List[Dict[str, str]]],
+) -> List[Dict[str, Any]]:
+    if not boards_by_code:
+        return items
+    for row in items:
+        c = _item_code(row)
+        boards = list(boards_by_code.get(c) or [])
+        if boards:
+            row["boards"] = boards
+            row["board_labels"] = "、".join(
+                str(b.get("board_name") or b.get("board_code") or "")
+                for b in boards
+                if b
+            )
+    return items
+
+
 def collect_board_signals(
     db: Session,
     *,
     board_kind: str,
-    board_code: str,
+    board_code: str = "",
+    board_codes: Optional[Sequence[str]] = None,
     board_code_source: str = "tonghuashun",
     strategies: Optional[Sequence[str]] = None,
     board_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     kind = "concept" if (board_kind or "").strip().lower() == "concept" else "industry"
-    code = _norm_code(board_code)
+    multi_codes = [
+        _norm_code(c) for c in (board_codes or []) if c and str(c).strip()
+    ]
+    seen_bc: set = set()
+    multi_codes = [c for c in multi_codes if c and not (c in seen_bc or seen_bc.add(c))]
+    if not multi_codes and board_code:
+        multi_codes = [_norm_code(board_code)]
+        multi_codes = [c for c in multi_codes if c]
+    multi_mode = len(multi_codes) > 1
+    code = (
+        ",".join(multi_codes)
+        if multi_mode
+        else (multi_codes[0] if multi_codes else _norm_code(board_code))
+    )
     wanted = [
         s.strip().lower()
         for s in (strategies or STRATEGY_KEYS)
@@ -343,53 +402,106 @@ def collect_board_signals(
     if not wanted:
         wanted = list(STRATEGY_KEYS)
 
-    # 板详情
+    # 板详情（多板：汇总元信息；单板：沿用详情）
+    if multi_mode:
+        display_name = f"已选 {len(multi_codes)} 个板块"
+    elif multi_codes:
+        display_name = board_name or multi_codes[0]
+    else:
+        display_name = board_name or code
     board_meta: Dict[str, Any] = {
         "board_code": code,
-        "board_name": board_name or code,
+        "board_name": display_name,
         "board_kind": kind,
         "board_code_source": board_code_source,
+        "multi_boards": multi_mode,
+        "selected_board_codes": list(multi_codes),
+        "board_count": len(multi_codes),
     }
-    try:
-        from backend_api.utils.industry_board_query import (
-            fetch_concept_board_detail,
-            fetch_industry_board_detail,
-        )
-
-        detail_fn = (
-            fetch_concept_board_detail if kind == "concept" else fetch_industry_board_detail
-        )
-        detail = detail_fn(
-            db,
-            code,
-            board_code_source=board_code_source,
-            board_name=board_name,
-            include_roles=True,
-            compute_slope_if_missing=True,
-        )
-        if detail:
-            board_meta.update(
-                {
-                    "board_name": detail.get("board_name") or board_meta["board_name"],
-                    "sector_slope": detail.get("sector_slope"),
-                    "board_env": detail.get("board_env"),
-                    "board_env_label": detail.get("board_env_label"),
-                    "board_weak": detail.get("board_weak"),
-                    "board_strong": detail.get("board_strong"),
-                    "stock_count": detail.get("stock_count") or detail.get("member_count"),
-                    "leaders": detail.get("leaders") or [],
-                    "mids": detail.get("mids") or [],
-                }
-            )
-    except Exception as e:
-        logger.warning("board detail load failed: %s", e)
+    if not multi_mode and multi_codes:
         try:
-            db.rollback()
-        except Exception:
-            pass
+            from backend_api.utils.industry_board_query import (
+                fetch_concept_board_detail,
+                fetch_industry_board_detail,
+            )
 
-    codes, names = load_board_member_codes(db, board_kind=kind, board_code=code)
-    role_map = _role_tag_map(db, kind, code)
+            detail_fn = (
+                fetch_concept_board_detail
+                if kind == "concept"
+                else fetch_industry_board_detail
+            )
+            detail = detail_fn(
+                db,
+                multi_codes[0],
+                board_code_source=board_code_source,
+                board_name=board_name,
+                include_roles=True,
+                compute_slope_if_missing=True,
+            )
+            if detail:
+                board_meta.update(
+                    {
+                        "board_name": detail.get("board_name") or board_meta["board_name"],
+                        "sector_slope": detail.get("sector_slope"),
+                        "board_env": detail.get("board_env"),
+                        "board_env_label": detail.get("board_env_label"),
+                        "board_weak": detail.get("board_weak"),
+                        "board_strong": detail.get("board_strong"),
+                        "stock_count": detail.get("stock_count")
+                        or detail.get("member_count"),
+                        "leaders": detail.get("leaders") or [],
+                        "mids": detail.get("mids") or [],
+                    }
+                )
+        except Exception as e:
+            logger.warning("board detail load failed: %s", e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    # 成分并集 + 所属板块 + 角色标签
+    codes: List[str] = []
+    names: Dict[str, str] = {}
+    boards_by_code: Dict[str, List[Dict[str, str]]] = {}
+    role_maps: List[Dict[str, Any]] = []
+    catalog_names: Dict[str, str] = {}
+    if multi_mode:
+        try:
+            for b in _list_boards_for_kind(
+                db,
+                board_kind=kind,
+                board_code_source=board_code_source or "tonghuashun",
+            ):
+                bc = _norm_code(b.get("board_code"))
+                if bc:
+                    catalog_names[bc] = str(b.get("board_name") or bc)
+        except Exception as e:
+            logger.debug("board catalog for multi skip: %s", e)
+
+    for bc in multi_codes:
+        bn = catalog_names.get(bc) or (board_name if not multi_mode else None) or bc
+        try:
+            mc, mn = load_board_member_codes(db, board_kind=kind, board_code=bc)
+        except Exception as e:
+            logger.warning("load members %s failed: %s", bc, e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            mc, mn = [], {}
+        for c in mc:
+            if c not in names:
+                codes.append(c)
+            if mn.get(c):
+                names[c] = mn[c]
+            blist = boards_by_code.setdefault(c, [])
+            if not any(x.get("board_code") == bc for x in blist):
+                blist.append({"board_code": bc, "board_name": str(bn)})
+        role_maps.append(_role_tag_map(db, kind, bc))
+    role_map = _merge_role_tag_maps(*role_maps)
+    if multi_mode:
+        board_meta["stock_count"] = len(codes)
 
     errors: Dict[str, str] = {}
     raw: Dict[str, Any] = {}
@@ -400,6 +512,8 @@ def collect_board_signals(
         except Exception as e:
             logger.exception("board signal strategy %s failed", name)
             return name, None, str(e)
+
+    code_set = set(codes)
 
     # 串行更稳（共享 Session）；板内成分通常可接受
     if "gms" in wanted and codes:
@@ -427,12 +541,21 @@ def collect_board_signals(
             raw["sbbr_entry"] = entry
             raw["sbbr_watch"] = watch
     if "rpe" in wanted:
-        n, r, err = _safe("rpe", lambda: _run_rpe(db, board_code=code, board_kind=kind))
+        n, r, err = _safe(
+            "rpe",
+            lambda: _run_rpe(
+                db, board_codes=multi_codes or None, board_kind=kind
+            ),
+        )
         if err:
             errors[n] = err
             raw[n] = []
         else:
-            raw[n] = r or []
+            # 多板时限制在成分并集内
+            rows = list(r or [])
+            if code_set:
+                rows = [x for x in rows if _item_code(x) in code_set]
+            raw[n] = rows
 
     # 命中代码批量 Fib/Pivot
     hit_codes: List[str] = []
@@ -488,14 +611,26 @@ def collect_board_signals(
     )
     strategies_out: Dict[str, Any] = {}
     if "gms" in wanted:
-        items = _enrich_items("gms", raw.get("gms") or [], **enrich_kw)
+        items = _attach_board_membership(
+            _enrich_items("gms", raw.get("gms") or [], **enrich_kw),
+            boards_by_code,
+        )
         strategies_out["gms"] = {"total": len(items), "items": items}
     if "urt" in wanted:
-        items = _enrich_items("urt", raw.get("urt") or [], **enrich_kw)
+        items = _attach_board_membership(
+            _enrich_items("urt", raw.get("urt") or [], **enrich_kw),
+            boards_by_code,
+        )
         strategies_out["urt"] = {"total": len(items), "items": items}
     if "sbbr" in wanted:
-        entry = _enrich_items("sbbr", raw.get("sbbr_entry") or [], **enrich_kw)
-        watch = _enrich_items("sbbr", raw.get("sbbr_watch") or [], **enrich_kw)
+        entry = _attach_board_membership(
+            _enrich_items("sbbr", raw.get("sbbr_entry") or [], **enrich_kw),
+            boards_by_code,
+        )
+        watch = _attach_board_membership(
+            _enrich_items("sbbr", raw.get("sbbr_watch") or [], **enrich_kw),
+            boards_by_code,
+        )
         strategies_out["sbbr"] = {
             "total": len(entry),
             "items": entry,
@@ -503,7 +638,10 @@ def collect_board_signals(
             "watch_items": watch,
         }
     if "rpe" in wanted:
-        items = _enrich_items("rpe", raw.get("rpe") or [], **enrich_kw)
+        items = _attach_board_membership(
+            _enrich_items("rpe", raw.get("rpe") or [], **enrich_kw),
+            boards_by_code,
+        )
         strategies_out["rpe"] = {"total": len(items), "items": items}
 
     return {

@@ -60,7 +60,12 @@ def _norm_code(code: str) -> str:
 @router.get("/board-signals")
 def get_board_signals(
     board_kind: str = Query(..., description="industry | concept"),
-    board_code: str = Query(..., min_length=1),
+    board_code: Optional[str] = Query(
+        None, description="单板代码；与 board_codes 二选一"
+    ),
+    board_codes: Optional[str] = Query(
+        None, description="多板代码，逗号分隔；优先于 board_code"
+    ),
     board_code_source: str = Query("tonghuashun"),
     board_name: Optional[str] = Query(None),
     strategies: Optional[str] = Query(
@@ -69,11 +74,25 @@ def get_board_signals(
     db: Session = Depends(get_db),
     _user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """按行业/概念板聚合四策略命中，并附买卖建议与 Fib/Pivot 参考价。"""
+    """按行业/概念板聚合四策略命中，并附买卖建议与 Fib/Pivot 参考价。
+
+    支持 board_codes 多选（成分并集跑策略）。
+    """
     kind = (board_kind or "").strip().lower()
     if kind not in ("industry", "concept"):
         return JSONResponse(
             {"success": False, "message": "board_kind 须为 industry 或 concept"},
+            status_code=400,
+        )
+    codes_list = [
+        p.strip()
+        for p in str(board_codes or "").split(",")
+        if p and str(p).strip()
+    ]
+    single = (board_code or "").strip()
+    if not codes_list and not single:
+        return JSONResponse(
+            {"success": False, "message": "请提供 board_code 或 board_codes"},
             status_code=400,
         )
     try:
@@ -82,7 +101,8 @@ def get_board_signals(
         data = collect_board_signals(
             db,
             board_kind=kind,
-            board_code=board_code.strip(),
+            board_code="" if codes_list else single,
+            board_codes=codes_list or None,
             board_code_source=board_code_source,
             board_name=board_name,
             strategies=_parse_strategies(strategies),

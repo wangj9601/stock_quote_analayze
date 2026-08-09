@@ -818,6 +818,13 @@
 .ba-select { min-width: 220px; max-width: 360px; padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; }
 .ba-meta-card { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: baseline; padding: .75rem 1rem; background: #f8fafc; border-radius: 6px; margin-bottom: .75rem; font-size: .9rem; }
 .ba-muted { color: #94a3b8; font-size: .85rem; }
+.ba-boards {
+  max-width: 220px;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.35;
+  word-break: break-all;
+}
 .ba-env { color: #0369a1; font-weight: 600; }
 .ba-roles { margin-bottom: 1rem; }
 
