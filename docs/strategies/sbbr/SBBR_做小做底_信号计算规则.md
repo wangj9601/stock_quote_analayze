@@ -239,3 +239,8 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - 选股结果操作列「历史」→ `stock_sbbr_trace.html`（对齐 URT `stock_urt_trace`）。
 - `GET /api/stock/sbbr-signal-history`：按日 asof 现算（`evaluate_history`），跨度上限 180 自然日 / 120 交易日；一次加载 K 线与大盘收益后按日截断。
 - `GET /api/stock/sbbr-signal-trace`：读 `sbbr_signal_trace` 该股预计算序列。
+
+## 12. 选股范围「个股」（scope=single）
+
+- 与 URT/RPE 一致：前端范围选「个股」，传 `stock_code`（代码或名称）；后端解析为 6 位 A 股后对该股 live 现算。
+- **不强制落在做小宇宙**：`require_size`/`require_bottom` 硬筛对个股关闭，结果仍含 `size_ok`/`bottom_matched` 等字段；未过做小会提示并展示明细。`entry_only` 仍生效。

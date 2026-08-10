@@ -86,12 +86,12 @@
         );
         if (canPerm('channel.screening.tab.sbbr.btn.add_observe')) {
           ops.push(
-            `<button type="button" class="gms-btn-outline sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}">观察</button>`
+            `<button type="button" class="gms-op-btn gms-op-btn--primary sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}" title="加入交易观察">观察</button>`
           );
         }
         if (canPerm('channel.screening.tab.sbbr.btn.add_reserve')) {
           ops.push(
-            `<button type="button" class="gms-btn-outline sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}">储备</button>`
+            `<button type="button" class="gms-op-btn sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}" title="加入储备箱">储备</button>`
           );
         }
         const histHref = `stock_sbbr_trace.html?code=${encodeURIComponent(r.code || '')}&name=${encodeURIComponent(r.name || '')}`;
@@ -103,9 +103,13 @@
           detailHtml = window.SbbrScoreDetail.buildHtml(r);
         }
         const roleHtml = roleTagsHtml(r);
+        const sizeTag =
+          r.size_ok === false
+            ? '<span class="gms-role-tag" title="未通过做小（市值/流通股）过滤">未过做小</span>'
+            : '';
         return `<tr data-sbbr-row="${index}">
             <td>${r.code || ''}</td>
-            <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}</td>
+            <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}${sizeTag ? ` ${sizeTag}` : ''}</td>
             <td>${fmt(r.total_mv)}</td>
             <td>${fmt(r.circ_shares_yi)}</td>
             <td>${r.bottom_mode || '-'}</td>
@@ -117,7 +121,7 @@
             <td>${fmt(r.nearest_resistance)}</td>
             <td>${fmt(r.defense_low)}</td>
             <td>${fmt(r.volume_ratio)}</td>
-            <td><div class="action-links">${ops.join(' ')}</div></td>
+            <td class="gms-col-actions"><div class="action-links">${ops.join('')}</div></td>
           </tr>
           <tr class="gms-score-detail-row sbbr-score-detail-row" data-detail-for="${index}" style="display:none;">
             <td colspan="14" class="gms-score-detail-cell">${detailHtml}</td>
@@ -136,8 +140,12 @@
     const scope = document.getElementById('sbbrScope')?.value || 'market';
     const indWrap = document.getElementById('sbbrIndustryBoardWrap');
     const conWrap = document.getElementById('sbbrConceptBoardWrap');
+    const stockGroup = document.getElementById('sbbrStockCodeGroup');
+    const singleHint = document.getElementById('sbbrSingleSkipFilterHint');
     if (indWrap) indWrap.style.display = scope === 'industry_board' ? 'flex' : 'none';
     if (conWrap) conWrap.style.display = scope === 'concept_board' ? 'flex' : 'none';
+    if (stockGroup) stockGroup.style.display = scope === 'single' ? 'flex' : 'none';
+    if (singleHint) singleHint.style.display = scope === 'single' ? 'flex' : 'none';
     const app = getScreeningApp();
     if (app && typeof app.refreshBoardRolesPanelForOwner === 'function') {
       if (scope === 'industry_board' && typeof app.loadGmsIndustryBoardOptions === 'function') {
@@ -207,6 +215,7 @@
       const date = document.getElementById('sbbrDate').value || '';
       const entryOnly = document.getElementById('sbbrEntryOnly').checked;
       const traceOnly = document.getElementById('sbbrTraceOnly').checked;
+      const stockCode = (document.getElementById('sbbrStockCode')?.value || '').trim();
       const industryCodes = selectedIndustryCodes();
       const conceptCodes = selectedConceptCodes();
       const boardSeg = selectedBoardSegment();
@@ -217,17 +226,28 @@
       if (scope === 'concept_board' && !conceptCodes.length) {
         throw new Error('请先选择概念板块（与 GMS/RPE 相同的选择面板）');
       }
+      if (scope === 'single' && !stockCode) {
+        throw new Error('个股范围需要填写股票代码或名称');
+      }
 
+      // 个股：不强制做小/筑底硬筛（后端也会覆盖）；其它范围保持原筛选口径
+      const isSingle = scope === 'single';
       const q = new URLSearchParams({
         scope,
         entry_only: String(entryOnly),
-        require_bottom: 'true',
-        require_size: 'true',
-        max_results: scope === 'industry_board' || scope === 'concept_board' ? '2000' : '200',
+        require_bottom: isSingle ? 'false' : 'true',
+        require_size: isSingle ? 'false' : 'true',
+        max_results:
+          scope === 'industry_board' || scope === 'concept_board'
+            ? '2000'
+            : isSingle
+              ? '10'
+              : '200',
       });
       if (date) q.set('date', date);
+      if (stockCode) q.set('stock_code', stockCode);
       if (traceOnly && scope === 'market') q.set('trace_only', 'true');
-      if (boardSeg && boardSeg !== 'ALL') q.set('cn_board_segment', boardSeg);
+      if (boardSeg && boardSeg !== 'ALL' && !isSingle) q.set('cn_board_segment', boardSeg);
       industryCodes.forEach((c) => q.append('industry_board_code', c));
       conceptCodes.forEach((c) => q.append('concept_board_code', c));
       if (scope === 'industry_board' && industryCodes.length) {
@@ -257,6 +277,7 @@
       if (data.data_max_date) {
         metaParts.push(`行情最新日 ${data.data_max_date}`);
       }
+      if (data.stock_code) metaParts.push(`个股 ${data.stock_code}`);
       if (data.cn_board_segment) metaParts.push(`板型 ${data.cn_board_segment}`);
       if (data.industry_board_codes && data.industry_board_codes.length) {
         metaParts.push(`行业 ${data.industry_board_codes.join(',')}`);
@@ -486,6 +507,13 @@
     });
 
     document.getElementById('sbbrRefreshBtn')?.addEventListener('click', () => refreshSignals());
+    document.getElementById('sbbrStockCode')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const scope = document.getElementById('sbbrScope')?.value || 'market';
+      if (scope !== 'single') return;
+      e.preventDefault();
+      refreshSignals();
+    });
     document.getElementById('sbbrQfqLevelsBtn')?.addEventListener('click', () => refreshQfqLevels());
     document.getElementById('sbbrObserveRefreshBtn')?.addEventListener('click', () => refreshObserve());
     document.getElementById('sbbrFormalRefreshBtn')?.addEventListener('click', () => refreshFormal());
