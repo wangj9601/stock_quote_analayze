@@ -19,6 +19,7 @@ class RPEFrontendInterface:
         board_code: Optional[str] = None,
         board_codes: Optional[List[str]] = None,
         board_kind: str = "industry",
+        board_code_source: Optional[str] = None,
         entry_only: bool = False,
         signal_type: Optional[str] = None,
         trace_only: bool = False,
@@ -41,7 +42,11 @@ class RPEFrontendInterface:
             cm = RPEConfigManager()
             cid = int(config_id) if config_id is not None else cm.get_default_config_id()
             cfg = cm.get_config(cid)
-            engine = RPEStrategyEngine(db_session=session, config=cfg)
+            engine = RPEStrategyEngine(
+                db_session=session,
+                config=cfg,
+                board_code_source=board_code_source,
+            )
             trade_date = date or engine.loader.resolve_trade_date()
             kind = "concept" if board_kind == "concept" else "industry"
             adjust_n = str(adjust or "none").strip().lower() or "none"

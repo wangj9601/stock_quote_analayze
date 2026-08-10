@@ -46,6 +46,12 @@
     el.textContent = msg || '';
   }
 
+  /** 兼容后端 name / stock_name */
+  function displayName(r) {
+    if (!r) return '';
+    return String(r.name || r.stock_name || '').trim();
+  }
+
   function switchSub(name) {
     document.querySelectorAll('#rpe-content [data-rpe-sub]').forEach((b) => {
       b.classList.toggle('active', b.getAttribute('data-rpe-sub') === name);
@@ -127,13 +133,14 @@
     const code = normCode(r.code);
     const oid = observeIdByCode.get(code);
     const snap = encodeURIComponent(JSON.stringify(r));
+    const nm = displayName(r);
     if (oid != null) {
       return `<button type="button" class="gms-op-btn is-added rpe-cancel-observe"
-        data-code="${r.code || ''}" data-name="${r.name || ''}" data-date="${r.date || ''}"
+        data-code="${r.code || ''}" data-name="${nm}" data-date="${r.date || ''}"
         data-id="${oid}" data-snap="${snap}" title="移出交易观察">取消观察</button>`;
     }
     return `<button type="button" class="gms-op-btn rpe-add-observe"
-      data-code="${r.code || ''}" data-name="${r.name || ''}" data-date="${r.date || ''}"
+      data-code="${r.code || ''}" data-name="${nm}" data-date="${r.date || ''}"
       data-snap="${snap}" title="加入交易观察">观察</button>`;
   }
 
@@ -152,7 +159,7 @@
     if (indWrap) indWrap.style.display = scope === 'industry_board' ? 'flex' : 'none';
     if (conWrap) conWrap.style.display = scope === 'concept_board' ? 'flex' : 'none';
     if (stockGroup) stockGroup.style.display = scope === 'single' ? 'flex' : 'none';
-    if (singleHint) singleHint.style.display = scope === 'single' ? 'block' : 'none';
+    if (singleHint) singleHint.style.display = scope === 'single' ? 'flex' : 'none';
     const app = getScreeningApp();
     if (app && typeof app.refreshBoardRolesPanelForOwner === 'function') {
       if (scope === 'industry_board' && typeof app.loadGmsIndustryBoardOptions === 'function') {
@@ -290,7 +297,7 @@
     if (!rows.length) {
       const emptyMsg = data.message ? `无结果：${data.message}` : '无符合条件的结果';
       if (data.message) showErr(data.message);
-      body.innerHTML = `<tr><td colspan="11" class="empty-state">${emptyMsg}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="12" class="empty-state">${emptyMsg}</td></tr>`;
       return;
     }
     body.innerHTML = rows
@@ -303,8 +310,9 @@
         const roleHtml = roleTagsHtml(r);
         return `<tr data-rpe-row="${index}" data-code="${r.code || ''}">
             <td>${r.code || ''}</td>
-            <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}</td>
+            <td>${displayName(r)}${roleHtml ? ` ${roleHtml}` : ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
+            <td title="${qfqTitle}">${fmt(r.close)}</td>
             <td title="${qfqTitle}">${fmt(r.z_score, 2)}</td>
             <td>${signalLabel(r)}</td>
             <td>${yn(r.entry_signal)}</td>
@@ -321,7 +329,7 @@
             </td>
           </tr>
           <tr class="gms-score-detail-row rpe-score-detail-row" data-detail-for="${index}" style="display:none;">
-            <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
+            <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
       })
       .join('');
@@ -344,7 +352,7 @@
       renderSignalRows(data);
     } catch (e) {
       showErr(e.message || String(e));
-      body.innerHTML = '<tr><td colspan="11" class="empty-state">加载失败</td></tr>';
+      body.innerHTML = '<tr><td colspan="12" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
     }
@@ -477,7 +485,7 @@
           };
           return `<tr>
           <td>${r.code || ''}</td>
-          <td>${r.name || snap.name || ''}</td>
+          <td>${displayName(r) || displayName(snap) || ''}</td>
           <td>${r.signal_date || snap.date || '-'}</td>
           <td>${snapField(snap, 'sector_name', snap.sector_id) || '-'}</td>
           <td>${fmt(snapField(snap, 'z_score', null), 2)}</td>
@@ -516,7 +524,7 @@
           const breached = live.structure_break || live.breached ? '结构破位' : '';
           const evalTxt = breached || (live.note || r.last_eval && JSON.stringify(r.last_eval)) || '-';
           return `<tr>
-            <td>${r.code}</td><td>${r.name || ''}</td><td>${r.status}</td>
+            <td>${r.code}</td><td>${displayName(r)}</td><td>${r.status}</td>
             <td>${fmt(r.entry_price)}</td>
             <td>${fmt(r.structure_support)}</td><td>${fmt(r.structure_resistance)}</td>
             <td>${r.exit_reason || '-'}</td><td>${evalTxt}</td>

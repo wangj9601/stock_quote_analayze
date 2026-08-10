@@ -210,6 +210,160 @@ def _batch_resolve_gms_stock_names(
             out[c] = f"股票{c}"
     return out
 
+
+def _enrich_rpe_rows_with_stock_names(
+    db: Session,
+    rows: List[Any],
+    fallback_name_map: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    补全 RPE 选股结果证券简称。
+    引擎名称多来自板块成分表 stock_name，常为空；此处优先已有 name/stock_name，
+    其次 fallback（如自选股表），再批量查 stock_basic_info（与 GMS 一致）。
+    """
+    if not rows:
+        return
+    fb_map = fallback_name_map or {}
+    need_pairs: List[tuple] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        code = str(r.get("code") or r.get("symbol") or "").strip()
+        if not code:
+            continue
+        current = str(r.get("name") or r.get("stock_name") or "").strip()
+        if current and not current.startswith("股票"):
+            r["name"] = current
+            r["stock_name"] = current
+            continue
+        fb = str(fb_map.get(code) or "").strip()
+        if fb:
+            r["name"] = fb
+            r["stock_name"] = fb
+            continue
+        need_pairs.append((code, r.get("market_type") or "CN"))
+    if not need_pairs:
+        return
+    name_map = _batch_resolve_gms_stock_names(db, need_pairs)
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        code = str(r.get("code") or r.get("symbol") or "").strip()
+        current = str(r.get("name") or r.get("stock_name") or "").strip()
+        if current and not current.startswith("股票"):
+            continue
+        filled = name_map.get(code)
+        if filled:
+            r["name"] = filled
+            r["stock_name"] = filled
+
+
+def _enrich_rpe_rows_with_sector_names(
+    db: Session,
+    rows: List[Any],
+    *,
+    board_code_source: Optional[str] = None,
+    prefer_ths_industry: bool = True,
+) -> None:
+    """
+    补全/校正 RPE 列表「板块」列展示口径：
+    1. prefer_ths_industry 时优先同花顺行业成分映射（与 GMS 所属行业一致）
+    2. 否则保留建簇可读板块名（行业/概念选板范围与选板一致）
+    3. 仍无映射时回退 stock_basic_info.industry，并标注「（基础信息）」
+    4. 再无则显示「--」
+    """
+    if not rows:
+        return
+    try:
+        from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+        from backend_api.utils.industry_board_query import (
+            batch_industry_board_names_by_stock_codes,
+        )
+    except Exception:
+        return
+
+    src = board_code_source or DEFAULT_BOARD_CODE_SOURCE
+    codes: List[str] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        code = _normalize_stock_code_for_gms_pool(
+            str(r.get("code") or r.get("symbol") or "").strip()
+        )
+        if code and code.isdigit() and len(code) == 6:
+            codes.append(code)
+    codes = list(dict.fromkeys(codes))
+    if not codes:
+        return
+
+    ths_map = batch_industry_board_names_by_stock_codes(
+        db, codes, board_code_source=src
+    ) or {}
+
+    need_basic: List[str] = []
+    for code in codes:
+        ths = str(ths_map.get(code) or "").strip()
+        if ths:
+            continue
+        need_basic.append(code)
+
+    basic_map: Dict[str, str] = {}
+    if need_basic:
+        try:
+            from backend_api.models import StockBasicInfo
+
+            for row in (
+                db.query(StockBasicInfo.code, StockBasicInfo.industry)
+                .filter(StockBasicInfo.code.in_(need_basic))
+                .all()
+            ):
+                ind = str(row.industry or "").strip()
+                if ind and ind not in ("-", "--", "None", "null"):
+                    basic_map[str(row.code).strip()] = ind
+        except Exception:
+            basic_map = {}
+
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        code = _normalize_stock_code_for_gms_pool(
+            str(r.get("code") or r.get("symbol") or "").strip()
+        )
+        sector_id = str(r.get("sector_id") or "").strip()
+        current = str(r.get("sector_name") or "").strip()
+        ths = str(ths_map.get(code) or "").strip()
+        ths_display = (ths.split(",")[0].strip() if ths else "") or ths
+
+        # 显式选板（行业/概念范围）：保留建簇名，仅在空/纯代码时回填
+        if not prefer_ths_industry:
+            if current and current not in ("-", "--") and current != sector_id:
+                r["sector_name"] = current
+                r.setdefault("sector_name_source", "cluster")
+                continue
+            if ths_display:
+                r["sector_name"] = ths_display
+                r["sector_name_source"] = "tonghuashun"
+                continue
+        else:
+            # 自选/单股/全市场：所属板块展示优先同花顺行业
+            if ths_display:
+                r["sector_name"] = ths_display
+                r["sector_name_source"] = "tonghuashun"
+                continue
+            if current and current not in ("-", "--") and current != sector_id:
+                r["sector_name"] = current
+                r.setdefault("sector_name_source", "cluster")
+                continue
+
+        basic = str(basic_map.get(code) or "").strip()
+        if basic:
+            r["sector_name"] = f"{basic}（基础信息）"
+            r["sector_name_source"] = "stock_basic_info"
+            continue
+        r["sector_name"] = "--"
+        r["sector_name_source"] = "none"
+
+
 def _fallback_gms_indicator_market_type(symbol: str, scope: str, cn_codes: set) -> str:
     """与 strategy_engine 一致：用于指标表兜底查询的 market_type（CN / ETF / HK）。"""
     s = str(symbol or "").strip()
@@ -3512,7 +3666,7 @@ async def get_one_yang_three_lines_strategy(
 async def get_sbbr_strategy(
     scope: str = Query(
         "market",
-        description="market|watchlist|reserve|industry_board|concept_board",
+        description="market|watchlist|reserve|industry_board|concept_board|single",
     ),
     date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     config_id: Optional[int] = Query(None),
@@ -3534,11 +3688,18 @@ async def get_sbbr_strategy(
         None,
         description="行业/概念板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
     ),
+    stock_code: Optional[str] = Query(
+        None, description="scope=single 时：股票代码或名称（仅 A 股）"
+    ),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
-    """做小做底（SBBR）全市场/自选/储备箱/行业·概念板块选股；板型为额外过滤，不改变做小市值口径。"""
+    """做小做底（SBBR）全市场/自选/储备箱/行业·概念板块/个股选股；板型为额外过滤，不改变做小市值口径。
+
+    scope=single 时绕过做小宇宙与筑底硬筛，直接对该股现算策略明细（结果含 size_ok/bottom_matched 标注），
+    对齐 URT/RPE 单股「跳过硬筛、仍展示明细」交互；仍尊重 entry_only。
+    """
     try:
         from backend_core.strategies.sbbr.config import SBBRConfigManager
         from backend_core.strategies.sbbr.signal_storage import load_traces
@@ -3557,11 +3718,20 @@ async def get_sbbr_strategy(
     scope_raw = (scope or "market").strip().lower()
     if scope_raw == "cn":
         scope_raw = "market"
-    allowed_scopes = ("market", "watchlist", "reserve", "industry_board", "concept_board")
+    if scope_raw == "stock":
+        scope_raw = "single"
+    allowed_scopes = (
+        "market",
+        "watchlist",
+        "reserve",
+        "industry_board",
+        "concept_board",
+        "single",
+    )
     if scope_raw not in allowed_scopes:
         raise HTTPException(
             status_code=400,
-            detail="scope 仅支持 market|watchlist|reserve|industry_board|concept_board",
+            detail="scope 仅支持 market|watchlist|reserve|industry_board|concept_board|single",
         )
 
     seg_raw = (cn_board_segment or "").strip().upper()
@@ -3727,6 +3897,17 @@ async def get_sbbr_strategy(
                     "total": 0,
                 }
             )
+    elif scope_raw == "single":
+        resolved = _resolve_gms_stock_code_from_input(db, stock_code or "")
+        if not resolved:
+            raise HTTPException(status_code=400, detail="未找到匹配的股票，请检查代码或名称")
+        if not (str(resolved).isdigit() and len(str(resolved)) == 6):
+            raise HTTPException(status_code=400, detail="做小做底策略暂仅支持 A 股个股")
+        stock_codes = [str(resolved).zfill(6)]
+        extra_meta["stock_code"] = stock_codes[0]
+        # 个股模式：只算这一只，不按板型再过滤
+        if effective_max < 10:
+            effective_max = 10
     elif scope_raw == "market" and seg_raw:
         # 全市场 + 板型：先做小宇宙再按代码段收窄，再跑策略（仍走 require_size）
         universe = engine.loader.build_size_universe(cfg, trade_date=trade_date)
@@ -3739,6 +3920,10 @@ async def get_sbbr_strategy(
                     "total": 0,
                 }
             )
+
+    # 个股：绕过做小/筑底硬筛（仍计算并返回 size_ok、bottom_matched），对齐 URT skip_filters
+    eff_require_size = False if scope_raw == "single" else require_size
+    eff_require_bottom = False if scope_raw == "single" else require_bottom
 
     if trace_only and scope_raw == "market":
         # 板型过滤时多取一些再截断，避免 limit 截在过滤前导致结果偏少
@@ -3774,9 +3959,9 @@ async def get_sbbr_strategy(
                     for r in rows
                     if _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) in keep
                 ]
-        if require_bottom:
+        if eff_require_bottom:
             rows = [r for r in rows if r.get("bottom_matched")]
-        if require_size:
+        if eff_require_size:
             rows = [r for r in rows if r.get("size_ok")]
         rows = rows[:effective_max]
         _sbbr_attach_role_tags(
@@ -3804,8 +3989,8 @@ async def get_sbbr_strategy(
             date=trade_date,
             config=cfg,
             require_entry=entry_only,
-            require_size=require_size,
-            require_bottom=require_bottom,
+            require_size=eff_require_size,
+            require_bottom=eff_require_bottom,
             max_results=effective_max,
         )
 
@@ -3818,9 +4003,18 @@ async def get_sbbr_strategy(
         industry_codes=extra_meta.get("industry_board_codes") or [],
         concept_codes=extra_meta.get("concept_board_codes") or [],
     )
+    live_msg: Optional[str] = None
+    if scope_raw == "single":
+        if not rows:
+            live_msg = (
+                "该股行情不足或无法计算策略明细"
+                + ("（已勾选仅入场且无入场信号）" if entry_only else "")
+            )
+        elif rows and not rows[0].get("size_ok"):
+            live_msg = "该股未通过做小过滤，仍展示策略明细（可展开「明细」查看市值/流通股）"
     return JSONResponse(
         {
-            **_sbbr_meta("live"),
+            **_sbbr_meta("live", live_msg),
             "data": rows,
             "total": len(rows),
         }
@@ -3936,6 +4130,7 @@ async def get_rpe_strategy(
     board_kind = "industry"
     extra_meta: Dict[str, Any] = {}
     include_no_signal = False
+    watchlist_name_map: Dict[str, str] = {}
 
     # 显式 code 列表：全市场前复权重算 / 限定子集
     qfq_codes: List[str] = []
@@ -3970,15 +4165,15 @@ async def get_rpe_strategy(
                     raise HTTPException(status_code=401, detail="用户不存在")
             except JWTError:
                 raise HTTPException(status_code=401, detail="无效的认证凭据")
-            raw_codes = [
-                str(i.stock_code).strip()
-                for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
-            ]
+            wl_rows = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
             codes = []
-            for c in raw_codes:
-                n = _normalize_stock_code_for_gms_pool(c)
+            for i in wl_rows:
+                n = _normalize_stock_code_for_gms_pool(str(i.stock_code).strip())
                 if n and n.isdigit() and len(n) == 6:
                     codes.append(n)
+                    sn = str(getattr(i, "stock_name", None) or "").strip()
+                    if sn:
+                        watchlist_name_map[n] = sn
             codes = list(dict.fromkeys(codes))
             if not codes:
                 return JSONResponse(
@@ -4088,6 +4283,12 @@ async def get_rpe_strategy(
     _adjust = adjust_n
     _factor_source = (factor_source or "auto").strip().lower() or "auto"
     _refresh_factor = bool(refresh_factor)
+    try:
+        from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE as _DEF_SRC
+
+        _board_code_source = board_code_source or _DEF_SRC
+    except Exception:
+        _board_code_source = board_code_source or "tonghuashun"
 
     def _run():
         return RPEFrontendInterface.get_selection_results(
@@ -4097,6 +4298,7 @@ async def get_rpe_strategy(
             codes=_codes,
             board_codes=_board_codes,
             board_kind=_board_kind,
+            board_code_source=_board_code_source,
             entry_only=_entry_only,
             signal_type=_signal_type,
             trace_only=_trace_only,
@@ -4143,6 +4345,32 @@ async def get_rpe_strategy(
             if role_db is not None:
                 try:
                     role_db.close()
+                except Exception:
+                    pass
+
+    # 列表展示兜底：名称 + 板块（同花顺行业优先）
+    if isinstance(data_rows, list) and data_rows:
+        enrich_db = None
+        try:
+            enrich_db = SessionLocal()
+            _enrich_rpe_rows_with_stock_names(
+                enrich_db,
+                data_rows,
+                fallback_name_map=watchlist_name_map or None,
+            )
+            _enrich_rpe_rows_with_sector_names(
+                enrich_db,
+                data_rows,
+                board_code_source=_board_code_source,
+                prefer_ths_industry=scope_raw
+                not in ("industry_board", "concept_board"),
+            )
+        except Exception as _enrich_ex:
+            logger.warning("RPE 选股名称/板块补全失败: %s", _enrich_ex)
+        finally:
+            if enrich_db is not None:
+                try:
+                    enrich_db.close()
                 except Exception:
                     pass
 

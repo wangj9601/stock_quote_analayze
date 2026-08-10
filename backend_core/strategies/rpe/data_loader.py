@@ -10,6 +10,10 @@ from sqlalchemy import bindparam, text
 
 logger = logging.getLogger(__name__)
 
+# 与全站约定一致：空 board_code_source 视为历史东财
+_LEGACY_BOARD_CODE_SOURCE = "eastmoney"
+_DEFAULT_BOARD_CODE_SOURCE = "tonghuashun"
+
 
 def _norm_code(code: str) -> str:
     s = str(code or "").strip()
@@ -18,11 +22,41 @@ def _norm_code(code: str) -> str:
     return s
 
 
+def _resolve_source(raw: Optional[str]) -> str:
+    try:
+        from backend_api.utils.board_code_source import (
+            DEFAULT_BOARD_CODE_SOURCE,
+            resolve_board_code_source,
+        )
+
+        return resolve_board_code_source(
+            raw, fallback=DEFAULT_BOARD_CODE_SOURCE or _DEFAULT_BOARD_CODE_SOURCE
+        )
+    except Exception:
+        s = str(raw or "").strip().lower()
+        return s or _DEFAULT_BOARD_CODE_SOURCE
+
+
 class RPEDataLoader:
-    def __init__(self, db_session=None):
+    def __init__(self, db_session=None, board_code_source: Optional[str] = None):
         self._db = db_session
+        # 行业/概念列表与主板块解析默认仅同花顺，与 GMS「所属行业」一致
+        self.board_code_source = _resolve_source(board_code_source)
         # 同一次选股/重算内缓存 ensure_adj_factors 结果，避免成分股重复读库/拉因子
         self._qfq_factor_cache: Dict[str, Dict[str, Any]] = {}
+
+    def _source_params(self) -> Dict[str, str]:
+        return {
+            "source": self.board_code_source,
+            "legacy": _LEGACY_BOARD_CODE_SOURCE,
+        }
+
+    @staticmethod
+    def _source_sql(alias: str = "b") -> str:
+        """COALESCE 空来源为东财后，与目标来源精确匹配。"""
+        return (
+            f"COALESCE(NULLIF(TRIM({alias}.board_code_source), ''), :legacy) = :source"
+        )
 
     def _session(self):
         if self._db is not None:
@@ -53,13 +87,14 @@ class RPEDataLoader:
         own = self._db is None
         try:
             sql = text(
-                """
+                f"""
                 SELECT board_code, board_name
-                FROM industry_board_basic_info
+                FROM industry_board_basic_info b
+                WHERE {self._source_sql("b")}
                 ORDER BY board_code
                 """
             )
-            rows = db.execute(sql).fetchall()
+            rows = db.execute(sql, self._source_params()).fetchall()
             out = [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
             if limit:
                 out = out[: int(limit)]
@@ -76,14 +111,15 @@ class RPEDataLoader:
         own = self._db is None
         try:
             sql = text(
-                """
+                f"""
                 SELECT board_code, board_name
-                FROM concept_board_basic_info
+                FROM concept_board_basic_info b
                 WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                  AND {self._source_sql("b")}
                 ORDER BY board_code
                 """
             )
-            rows = db.execute(sql).fetchall()
+            rows = db.execute(sql, self._source_params()).fetchall()
             out = [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
             if limit:
                 out = out[: int(limit)]
@@ -95,10 +131,116 @@ class RPEDataLoader:
             if own:
                 db.close()
 
+    def lookup_board_name(self, board_code: str, board_kind: str = "industry") -> Optional[str]:
+        """按 board_code 取板块名：优先当前 board_code_source，否则任意来源。"""
+        bc = str(board_code or "").strip()
+        if not bc:
+            return None
+        table = (
+            "concept_board_basic_info"
+            if board_kind == "concept"
+            else "industry_board_basic_info"
+        )
+        db = self._session()
+        own = self._db is None
+        try:
+            params = {"bc": bc, **self._source_params()}
+            row = db.execute(
+                text(
+                    f"""
+                    SELECT board_name FROM {table} b
+                    WHERE b.board_code = :bc AND {self._source_sql("b")}
+                    LIMIT 1
+                    """
+                ),
+                params,
+            ).fetchone()
+            if row and str(row[0] or "").strip():
+                return str(row[0]).strip()
+            row2 = db.execute(
+                text(
+                    f"""
+                    SELECT board_name FROM {table}
+                    WHERE board_code = :bc
+                    LIMIT 1
+                    """
+                ),
+                {"bc": bc},
+            ).fetchone()
+            if row2 and str(row2[0] or "").strip():
+                return str(row2[0]).strip()
+            return None
+        except Exception as e:
+            logger.warning("lookup_board_name %s failed: %s", bc, e)
+            return None
+        finally:
+            if own:
+                db.close()
+
+    def load_basic_industry_names(self, codes: List[str]) -> Dict[str, str]:
+        """回退：stock_basic_info.industry（展示用，非同花顺成分映射）。"""
+        codes_n = list(dict.fromkeys(_norm_code(c) for c in (codes or []) if c))
+        if not codes_n:
+            return {}
+        db = self._session()
+        own = self._db is None
+        try:
+            sql = text(
+                """
+                SELECT code, industry
+                FROM stock_basic_info
+                WHERE code IN :codes
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+            rows = db.execute(sql, {"codes": codes_n}).fetchall()
+            out: Dict[str, str] = {}
+            for r in rows:
+                code = _norm_code(r[0])
+                ind = str(r[1] or "").strip()
+                if code and ind and ind not in ("-", "--", "None", "null"):
+                    out[code] = ind
+            return out
+        except Exception as e:
+            logger.warning("load_basic_industry_names failed: %s", e)
+            return {}
+        finally:
+            if own:
+                db.close()
+
     def list_boards(self, board_kind: str = "industry", limit: Optional[int] = None) -> List[Dict[str, str]]:
         if board_kind == "concept":
             return self.list_concept_boards(limit=limit)
         return self.list_industry_boards(limit=limit)
+
+    def load_stock_names(self, codes: List[str]) -> Dict[str, str]:
+        """从 stock_basic_info 批量取证券简称（成分表 stock_name 常为空）。"""
+        codes_n = list(dict.fromkeys(_norm_code(c) for c in (codes or []) if c))
+        if not codes_n:
+            return {}
+        db = self._session()
+        own = self._db is None
+        try:
+            sql = text(
+                """
+                SELECT code, name
+                FROM stock_basic_info
+                WHERE code IN :codes
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+            rows = db.execute(sql, {"codes": codes_n}).fetchall()
+            out: Dict[str, str] = {}
+            for r in rows:
+                code = _norm_code(r[0])
+                name = str(r[1] or "").strip()
+                if code and name:
+                    out[code] = name
+            return out
+        except Exception as e:
+            logger.warning("load_stock_names failed: %s", e)
+            return {}
+        finally:
+            if own:
+                db.close()
 
     def load_board_members(self, board_code: str, board_kind: str = "industry") -> List[Dict[str, str]]:
         db = self._session()
@@ -108,6 +250,7 @@ class RPEDataLoader:
             if board_kind == "concept"
             else "industry_board_constituents"
         )
+        members: List[Dict[str, str]] = []
         try:
             sql = text(
                 f"""
@@ -117,8 +260,8 @@ class RPEDataLoader:
                 """
             )
             rows = db.execute(sql, {"bc": board_code}).fetchall()
-            return [
-                {"code": _norm_code(r[0]), "name": str(r[1] or "")}
+            members = [
+                {"code": _norm_code(r[0]), "name": str(r[1] or "").strip()}
                 for r in rows
                 if r[0]
             ]
@@ -128,6 +271,14 @@ class RPEDataLoader:
         finally:
             if own:
                 db.close()
+
+        missing = [m["code"] for m in members if not m.get("name")]
+        if missing:
+            filled = self.load_stock_names(missing)
+            for m in members:
+                if not m.get("name") and filled.get(m["code"]):
+                    m["name"] = filled[m["code"]]
+        return members
 
     def _code_variants(self, code: str) -> List[str]:
         code_n = _norm_code(code)
@@ -140,27 +291,30 @@ class RPEDataLoader:
         own = self._db is None
         try:
             variants = self._code_variants(code)
+            params = {"codes": variants, **self._source_params()}
             if board_kind == "concept":
                 sql = text(
-                    """
+                    f"""
                     SELECT c.board_code, COALESCE(b.board_name, c.board_code)
                     FROM concept_board_constituents c
-                    LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
+                    INNER JOIN concept_board_basic_info b ON b.board_code = c.board_code
                     WHERE c.stock_code IN :codes
+                      AND {self._source_sql("b")}
                     ORDER BY c.board_code
                     """
                 ).bindparams(bindparam("codes", expanding=True))
             else:
                 sql = text(
-                    """
+                    f"""
                     SELECT c.board_code, COALESCE(b.board_name, c.board_code)
                     FROM industry_board_constituents c
-                    LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+                    INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
                     WHERE c.stock_code IN :codes
+                      AND {self._source_sql("b")}
                     ORDER BY c.board_code
                     """
                 ).bindparams(bindparam("codes", expanding=True))
-            rows = db.execute(sql, {"codes": variants}).fetchall()
+            rows = db.execute(sql, params).fetchall()
             return [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
         except Exception as e:
             logger.warning("find_boards_for_code failed: %s", e)
@@ -180,9 +334,10 @@ class RPEDataLoader:
         固定个股主板块（用于选股/追溯，避免同股多板块按日跳变）。
 
         规则：
-        1. 优先指定 kind（默认 industry）；无归属且 allow_fallback 时回退 concept
-        2. 同 kind 多板块时取成分股数量最多者
-        3. 成分数并列时按 board_code 升序，保证稳定可复现
+        1. 优先指定 kind（默认 industry）；行业/概念均仅取 ``board_code_source``（默认同花顺）
+        2. 无同花顺行业归属且 allow_fallback 时回退同花顺概念
+        3. 同 kind 多板块时取成分股数量最多者
+        4. 成分数并列时按 board_code 升序，保证稳定可复现
         """
         kind = "concept" if board_kind == "concept" else "industry"
         picked = self._pick_primary_board_among(code, kind)
@@ -195,43 +350,52 @@ class RPEDataLoader:
         own = self._db is None
         try:
             variants = self._code_variants(code)
+            params = {"codes": variants, **self._source_params()}
+            src_filter = self._source_sql("b")
+            src_filter2 = self._source_sql("b2")
             if board_kind == "concept":
                 sql = text(
-                    """
+                    f"""
                     SELECT c.board_code,
                            COALESCE(b.board_name, c.board_code) AS board_name,
                            cnt.n AS member_count
                     FROM concept_board_constituents c
                     JOIN (
-                        SELECT board_code, COUNT(*) AS n
-                        FROM concept_board_constituents
-                        GROUP BY board_code
+                        SELECT c2.board_code, COUNT(*) AS n
+                        FROM concept_board_constituents c2
+                        INNER JOIN concept_board_basic_info b2 ON b2.board_code = c2.board_code
+                        WHERE {src_filter2}
+                        GROUP BY c2.board_code
                     ) cnt ON cnt.board_code = c.board_code
-                    LEFT JOIN concept_board_basic_info b ON b.board_code = c.board_code
+                    INNER JOIN concept_board_basic_info b ON b.board_code = c.board_code
                     WHERE c.stock_code IN :codes
+                      AND {src_filter}
                     ORDER BY cnt.n DESC, c.board_code ASC
                     LIMIT 1
                     """
                 ).bindparams(bindparam("codes", expanding=True))
             else:
                 sql = text(
-                    """
+                    f"""
                     SELECT c.board_code,
                            COALESCE(b.board_name, c.board_code) AS board_name,
                            cnt.n AS member_count
                     FROM industry_board_constituents c
                     JOIN (
-                        SELECT board_code, COUNT(*) AS n
-                        FROM industry_board_constituents
-                        GROUP BY board_code
+                        SELECT c2.board_code, COUNT(*) AS n
+                        FROM industry_board_constituents c2
+                        INNER JOIN industry_board_basic_info b2 ON b2.board_code = c2.board_code
+                        WHERE {src_filter2}
+                        GROUP BY c2.board_code
                     ) cnt ON cnt.board_code = c.board_code
-                    LEFT JOIN industry_board_basic_info b ON b.board_code = c.board_code
+                    INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
                     WHERE c.stock_code IN :codes
+                      AND {src_filter}
                     ORDER BY cnt.n DESC, c.board_code ASC
                     LIMIT 1
                     """
                 ).bindparams(bindparam("codes", expanding=True))
-            row = db.execute(sql, {"codes": variants}).fetchone()
+            row = db.execute(sql, params).fetchone()
             if not row:
                 return None
             return {
@@ -239,6 +403,7 @@ class RPEDataLoader:
                 "board_name": str(row[1] or row[0]),
                 "board_kind": "concept" if board_kind == "concept" else "industry",
                 "member_count": int(row[2] or 0),
+                "board_code_source": self.board_code_source,
             }
         except Exception as e:
             logger.warning("resolve_primary_board failed: %s", e)

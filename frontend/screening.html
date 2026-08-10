@@ -1721,11 +1721,17 @@
                             <option value="reserve">储备箱</option>
                             <option value="industry_board">行业板块</option>
                             <option value="concept_board">概念板块</option>
+                            <option value="single">个股</option>
                         </select>
                     </div>
                     <div class="param-group">
                         <label for="sbbrDate" title="选股用 K 线窗口的「止日」；按该日及之前行情回溯计算。若该日非交易日或尚无行情，则自动对齐到 ≤该日 的最近交易日；留空则用表内最新交易日。">基准日（回溯）</label>
                         <input type="date" id="sbbrDate" class="param-input" title="留空=最新交易日；填写历史日可回溯查看该日信号（live 现算或勾选优先读预计算）。">
+                    </div>
+                    <div class="param-group param-group-stock" id="sbbrStockCodeGroup" style="display:none;">
+                        <label for="sbbrStockCode">股票代码或名称</label>
+                        <input type="text" id="sbbrStockCode" class="param-input" placeholder="如 000001 或 平安银行"
+                            title="对该股现算做小做底信号；不强制落在做小宇宙，结果中标注是否通过做小">
                     </div>
                     <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrEntryOnly"> 仅入场信号</label>
@@ -1736,6 +1742,10 @@
                     <div class="param-actions">
                         <button type="button" id="sbbrRefreshBtn" class="refresh-btn" data-strategy="sbbr" data-perm="channel.screening.tab.sbbr.btn.refresh">刷新筛选</button>
                         <button type="button" id="sbbrQfqLevelsBtn" class="gms-btn-outline" title="仅按前复权重算列表中的 KDE 支撑/阻力（优先读 stock_adj_factor，无因子再拉外网并入库；不改写策略信号与箱体位）">按前复权计算</button>
+                    </div>
+                    <div id="sbbrSingleSkipFilterHint" class="params-section-hint" style="display:none;">
+                        <span class="param-field-hint">输入后按 Enter 或点「刷新筛选」</span>
+                        <p class="param-hint">个股模式：绕过做小宇宙硬筛，直接计算并展示策略明细（含未过做小/未筑底的情况）；勾选「仅入场」时仍只返回入场信号。</p>
                     </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                     <span id="sbbrDataDateHint" class="gms-meta-text" style="margin-left:8px;color:#64748b;"></span>
@@ -1777,7 +1787,7 @@
                                     <th>筑底模式</th><th>入场</th><th>收盘</th>
                                     <th class="gms-col-price">箱体支撑</th><th class="gms-col-price">箱体阻力</th>
                                     <th class="gms-col-price">KDE支撑</th><th class="gms-col-price">KDE阻力</th>
-                                    <th>防守下沿</th><th>量比</th><th>操作</th>
+                                    <th>防守下沿</th><th>量比</th><th class="gms-col-actions">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="sbbrResultsBody">
@@ -1863,16 +1873,11 @@
                             <option value="lead">领涨 lead</option>
                         </select>
                     </div>
-                    <div class="param-group" id="rpeStockCodeGroup" style="display:none; flex-wrap: wrap; align-items: center; gap: 8px;">
+                    <div class="param-group param-group-stock" id="rpeStockCodeGroup" style="display:none;">
                         <label for="rpeStockCode">股票代码或名称</label>
                         <input type="text" id="rpeStockCode" class="param-input" placeholder="如 000001 或 平安银行"
-                            style="min-width: 220px; max-width: 320px;"
-                            title="按该股所属行业（无则概念）板块计算相对基准的 Z/KDE/信号">
-                        <span style="color: #888; font-size: 12px;">输入后按 Enter 或点「刷新筛选」；相对所属板块基准计算信号</span>
+                            title="按该股所属同花顺行业（无则同花顺概念）板块计算相对基准的 Z/KDE/信号">
                     </div>
-                    <p id="rpeSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">
-                        单股模式：按该股所属行业/概念板块建簇，直接计算并展示策略明细（含未触发买点的 in_band）。
-                    </p>
                     <div class="param-group param-group-check">
                         <label><input type="checkbox" id="rpeEntryOnly"> 仅入场信号</label>
                     </div>
@@ -1883,6 +1888,10 @@
                         <button type="button" id="rpeRefreshBtn" class="refresh-btn" data-strategy="rpe" data-perm="channel.screening.tab.rpe.btn.refresh">刷新筛选</button>
                         <button type="button" id="rpeQfqLevelsBtn" class="gms-btn-outline" title="整策略前复权现算：优先读 stock_adj_factor，无因子再拉外网并入库；重算 Z/信号/支撑/阻力/结构（不写预计算 trace）">按前复权计算</button>
                         <a class="gms-btn-outline" href="stock_rpe_trace.html" target="_blank" rel="noopener">信号追溯</a>
+                    </div>
+                    <div id="rpeSingleSkipFilterHint" class="params-section-hint" style="display:none;">
+                        <span class="param-field-hint">输入后按 Enter 或点「刷新筛选」；相对所属板块基准计算信号</span>
+                        <p class="param-hint">单股模式：按该股所属同花顺行业/概念板块建簇，直接计算并展示策略明细（含未触发买点的 in_band）。</p>
                     </div>
                     <span id="rpeSearchMeta" class="gms-meta-text"></span>
                 </div>
@@ -1909,12 +1918,12 @@
                         <table class="results-table">
                             <thead>
                                 <tr>
-                                    <th>代码</th><th>名称</th><th>板块</th><th>Z</th><th>信号</th>
+                                    <th>代码</th><th>名称</th><th>板块</th><th>收盘</th><th>Z</th><th>信号</th>
                                     <th>入场</th><th>支撑</th><th>阻力</th><th>结构</th><th>流动性</th><th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="rpeResultsBody">
-                                <tr><td colspan="11" class="empty-state">点击「刷新筛选」开始</td></tr>
+                                <tr><td colspan="12" class="empty-state">点击「刷新筛选」开始</td></tr>
                             </tbody>
                         </table>
                     </div>

@@ -30,8 +30,13 @@ def _bars_for_lookback(bars: List[Dict[str, Any]], lookback: int) -> List[Dict[s
 
 
 class RPEStrategyEngine:
-    def __init__(self, db_session=None, config: Optional[Dict] = None):
-        self.loader = RPEDataLoader(db_session)
+    def __init__(
+        self,
+        db_session=None,
+        config: Optional[Dict] = None,
+        board_code_source: Optional[str] = None,
+    ):
+        self.loader = RPEDataLoader(db_session, board_code_source=board_code_source)
         self.config_manager = RPEConfigManager()
         self.config = config or self.config_manager.get_config()
 
@@ -297,7 +302,7 @@ class RPEStrategyEngine:
         if len(members) < min_members:
             return []
         codes = [m["code"] for m in members]
-        name_map = {m["code"]: m.get("name") for m in members}
+        name_map = {m["code"]: (m.get("name") or None) for m in members}
         # 单股/自选目标股若不在成分列表（编码差异等），仍并入面板以便评估
         if codes_filter:
             for c in codes_filter:
@@ -305,6 +310,16 @@ class RPEStrategyEngine:
                 if cn and cn not in name_map:
                     codes.append(cn)
                     name_map[cn] = None
+        # 成分表缺名 / 自选并入时补 stock_basic_info
+        missing_names = [c for c, n in name_map.items() if not (str(n or "").strip())]
+        if missing_names:
+            try:
+                filled = self.loader.load_stock_names(missing_names)
+                for c in missing_names:
+                    if filled.get(c):
+                        name_map[c] = filled[c]
+            except Exception as e:
+                logger.warning("screen_board 补全股票名称失败 board=%s: %s", board_code, e)
         adjust_n = str(price_adjust or "none").strip().lower() or "none"
         # 拉足 KDE 最大回看；Z/斜率仍在 evaluate 内截断到 lookback_days
         panel = self.loader.load_sector_panel(
@@ -434,7 +449,10 @@ class RPEStrategyEngine:
             all_boards = {b["board_code"]: b for b in self.loader.list_boards(kind)}
             board_jobs = []
             for bc in board_codes:
-                b = all_boards.get(bc) or {"board_code": bc, "board_name": bc}
+                b = all_boards.get(bc)
+                if not b:
+                    looked = self.loader.lookup_board_name(bc, board_kind=kind)
+                    b = {"board_code": bc, "board_name": looked or bc}
                 board_jobs.append(
                     {
                         "board_code": b["board_code"],
