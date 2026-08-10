@@ -1120,46 +1120,75 @@
     background: #fef3c7;
 }
 
-.sector-role-row {
-    display: flex;
-    justify-content: flex-start;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 8px 0;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 13px;
+/* 龙头/中军：复用分析频道板块分析 ba-short-roles / ba-role-pill */
+.ba-muted {
+    color: #94a3b8;
+    font-size: 0.85rem;
 }
 
-.sector-role-row:last-child {
-    border-bottom: none;
-}
-
-.sector-role-label {
-    flex: 0 0 2.5em;
-    color: #64748b;
-    padding-top: 2px;
-}
-
-.sector-role-chips {
+.ba-short-roles {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 10px;
-    flex: 1;
+    align-items: center;
+    gap: 8px;
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.25rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 0.85rem;
 }
 
-.sector-role-chip {
+.ba-short-roles-label {
+    color: #6b7280;
+    flex-shrink: 0;
+}
+
+.ba-role-pill {
     display: inline-flex;
-    align-items: baseline;
-    gap: 6px;
-    padding: 2px 0;
-}
-
-.sector-role-code {
-    color: #94a3b8;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 4px;
     font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-decoration: none;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: pointer;
 }
 
-.sector-role-chg {
+.ba-role-pill--leader {
+    color: #fff;
+    background: #f56c6c;
+    border: 1px solid #f56c6c;
+}
+
+.ba-role-pill--leader:hover {
+    color: #fff;
+    background: #f78989;
+    border-color: #f78989;
+}
+
+.ba-role-pill--mid {
+    color: #e6a23c;
+    background: #fdf6ec;
+    border: 1px solid #f3d19e;
+}
+
+.ba-role-pill--mid:hover {
+    color: #cf9236;
+    background: #faecd8;
+    border-color: #e6a23c;
+}
+
+.sector-detail-meta {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    padding: 8px 10px;
+    background: #fafafa;
+    border-radius: 4px;
     font-variant-numeric: tabular-nums;
 }
 

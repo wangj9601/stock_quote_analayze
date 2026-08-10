@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
-from .schema import make_hit
+from .schema import fmt_px, make_hit
 
 
 def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
@@ -71,7 +71,11 @@ def detect_wedges(
             pattern_type=pattern_type,
             status=status,
             confidence=conf,
-            reason=f"{label} 上沿斜率={round(hs,6)} 下沿斜率={round(ls,6)}",
+            reason=(
+                f"{label} {fmt_px('上沿', round(upper, 4), hi[-1].get('date'))} "
+                f"{fmt_px('下沿', round(lower, 4), lo[-1].get('date'))} "
+                f"上沿斜率={round(hs, 6)} 下沿斜率={round(ls, 6)}"
+            ),
             key_levels={
                 "upper": round(upper, 4),
                 "lower": round(lower, 4),
@@ -152,7 +156,11 @@ def detect_flags(
             pattern_type=pattern_type,
             status=status,
             confidence=conf,
-            reason=f"{label}（简化规则）通道上沿={round(upper,4)} 下沿={round(lower,4)}",
+            reason=(
+                f"{label}（简化规则）"
+                f" {fmt_px('通道上沿', round(upper, 4), highs[-1].get('date'))}"
+                f" {fmt_px('下沿', round(lower, 4), lows[-1].get('date'))}"
+            ),
             key_levels={
                 "upper": round(upper, 4),
                 "lower": round(lower, 4),

@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence
-from .schema import make_hit
+from .schema import fmt_px, make_hit
 
 
 def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
@@ -66,7 +66,12 @@ def _detect_hs_top(
             pattern_type="head_shoulders_top",
             status=status,
             confidence=conf,
-            reason=f"头肩顶 左肩={ls['price']} 头={head['price']} 右肩={rs['price']} 颈线≈{round(neck,4)}",
+            reason=(
+                f"头肩顶 {fmt_px('左肩', ls['price'], ls.get('date'))} "
+                f"{fmt_px('头', head['price'], head.get('date'))} "
+                f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
+                f"{fmt_px('颈线', round(neck, 4), approx=True)}"
+            ),
             key_levels={
                 "left_shoulder": ls["price"],
                 "head": head["price"],
@@ -116,7 +121,12 @@ def _detect_hs_bottom(
             pattern_type="head_shoulders_bottom",
             status=status,
             confidence=conf,
-            reason=f"头肩底 左肩={ls['price']} 头={head['price']} 右肩={rs['price']} 颈线≈{round(neck,4)}",
+            reason=(
+                f"头肩底 {fmt_px('左肩', ls['price'], ls.get('date'))} "
+                f"{fmt_px('头', head['price'], head.get('date'))} "
+                f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
+                f"{fmt_px('颈线', round(neck, 4), approx=True)}"
+            ),
             key_levels={
                 "left_shoulder": ls["price"],
                 "head": head["price"],

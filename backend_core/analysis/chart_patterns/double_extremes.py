@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from backend_core.strategies.double_bottom.detector import detect_double_bottom
 
-from .schema import make_hit
+from .schema import fmt_px, make_hit
 
 
 def _f(v: Any) -> Optional[float]:
@@ -53,7 +53,11 @@ def detect_double_bottom_hit(
         pattern_type="double_bottom",
         status=str(raw.get("status") or "forming"),
         confidence=conf,
-        reason=f"W双底 L1={raw.get('l1_price')} L2={raw.get('l2_price')} 颈线={raw.get('neckline')}",
+        reason=(
+            f"W双底 {fmt_px('L1', raw.get('l1_price'), raw.get('l1_date'))} "
+            f"{fmt_px('L2', raw.get('l2_price'), raw.get('l2_date'))} "
+            f"{fmt_px('颈线', raw.get('neckline'), raw.get('neck_date'))}"
+        ),
         key_levels={
             "l1": raw.get("l1_price"),
             "l2": raw.get("l2_price"),
@@ -160,7 +164,11 @@ def detect_double_top_hit(
         pattern_type="double_top",
         status=status,
         confidence=conf,
-        reason=f"M双顶 H1={round(p1,4)} H2={round(p2,4)} 颈线={round(neck,4)}",
+        reason=(
+            f"M双顶 {fmt_px('H1', round(p1, 4), _bar_date(seq[i1]))} "
+            f"{fmt_px('H2', round(p2, 4), _bar_date(seq[i2]))} "
+            f"{fmt_px('颈线', round(neck, 4), _bar_date(seq[neck_rel]))}"
+        ),
         key_levels={
             "h1": round(p1, 4),
             "h2": round(p2, 4),

@@ -1165,25 +1165,44 @@ const MarketsPage = {
         return [];
     },
 
-    _renderSectorRoleStock(s) {
-        const code = s.code || '';
-        const name = s.name || '';
-        const label = name || code || '--';
-        const codeHtml = code
-            ? `<a href="javascript:void(0)" onclick="goToStock('${this.escapeHtml(code)}','${this.escapeHtml(name)}')">${this.escapeHtml(label)}</a> <span class="sector-role-code">${this.escapeHtml(code)}</span>`
-            : this.escapeHtml(label);
-        const chg = s.change_percent == null ? '--' : this.formatPercent(s.change_percent);
-        return `<span class="sector-role-chip" title="${this.escapeHtml(s.role_reason || '')}">${codeHtml}<span class="sector-role-chg ${this.getChangeClass(s.change_percent)}">${chg}</span></span>`;
+    /** 对齐分析频道板块分析短线角色 pill（ba-role-pill），保留 goToStock */
+    _formatSectorRolePct(v) {
+        if (v == null || !Number.isFinite(Number(v))) return '';
+        const n = Number(v);
+        const sign = n > 0 ? '+' : '';
+        return `${sign}${n.toFixed(2)}%`;
     },
 
-    _renderSectorRoleBlock(label, stocks) {
-        // 故意不 slice：分类结果有几只就展示几只
-        if (!stocks.length) {
-            return `<div class="sector-role-row"><span>${label}：--</span></div>`;
+    _renderSectorRolePill(kind, s) {
+        const code = s.code || s.stock_code || '';
+        const name = s.name || s.stock_name || '';
+        const label = kind === 'leader' ? '龙头' : '中军';
+        const cls =
+            kind === 'leader' ? 'ba-role-pill ba-role-pill--leader' : 'ba-role-pill ba-role-pill--mid';
+        const pct = this._formatSectorRolePct(s.change_percent);
+        const pctHtml = pct ? ` (${this.escapeHtml(pct)})` : '';
+        const title = this.escapeHtml(s.role_reason || label);
+        let show;
+        if (code && name) show = `${this.escapeHtml(code)} ${this.escapeHtml(name)}`;
+        else show = this.escapeHtml(name || code || '--');
+        if (!code) {
+            return `<span class="${cls}" title="${title}">${label} ${show}${pctHtml}</span>`;
         }
-        return `<div class="sector-role-row">
-            <span class="sector-role-label">${label}</span>
-            <span class="sector-role-chips">${stocks.map((s) => this._renderSectorRoleStock(s)).join('')}</span>
+        return `<a class="${cls}" href="javascript:void(0)" onclick="goToStock('${this.escapeHtml(code)}','${this.escapeHtml(name)}')" title="${title}">${label} ${show}${pctHtml}</a>`;
+    },
+
+    /** 故意不 slice：分类结果有几只就展示几只；视觉对齐 BoardRolesPanel.renderShortlineRoles */
+    _renderSectorRolesSection(leaders, mids) {
+        const pills = [
+            ...leaders.map((s) => this._renderSectorRolePill('leader', s)),
+            ...mids.map((s) => this._renderSectorRolePill('mid', s)),
+        ];
+        const body = pills.length
+            ? pills.join('')
+            : '<span class="ba-muted">暂无</span>';
+        return `<div class="ba-short-roles">
+            <span class="ba-short-roles-label">短线角色：</span>
+            ${body}
         </div>`;
     },
 
@@ -1243,8 +1262,7 @@ const MarketsPage = {
         const cp = d.change_percent;
         const leaders = this._normalizeSectorRoleList(d, 'leaders', 'leader');
         const mids = this._normalizeSectorRoleList(d, 'mids', 'mid');
-        const leaderHtml = this._renderSectorRoleBlock('龙头', leaders);
-        const midHtml = this._renderSectorRoleBlock('中军', mids);
+        const rolesHtml = this._renderSectorRolesSection(leaders, mids);
 
         body.innerHTML = `
             <div class="sector-detail-grid">
@@ -1271,12 +1289,11 @@ const MarketsPage = {
             </div>
             <div class="sector-detail-section">
                 <h3>龙头 / 中军</h3>
-                ${leaderHtml}
-                ${midHtml}
+                ${rolesHtml}
             </div>
             <div class="sector-detail-section">
                 <h3>更新时间</h3>
-                <div class="sector-detail-summary">${this.escapeHtml(d.update_time || '--')}</div>
+                <div class="sector-detail-meta">${this.escapeHtml(d.update_time || '--')}</div>
             </div>
         `;
     },

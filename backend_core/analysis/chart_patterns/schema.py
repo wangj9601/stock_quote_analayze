@@ -12,6 +12,14 @@ def _norm_date(v: Any) -> str:
     return str(v)[:10]
 
 
+def fmt_px(label: str, price: Any, date: Any = None, *, approx: bool = False) -> str:
+    """价位说明片段：左肩=44.97(2026-03-12)；无日期则不加括号。"""
+    eq = "≈" if approx else "="
+    s = f"{label}{eq}{price}"
+    d = _norm_date(date)
+    return f"{s}({d})" if d else s
+
+
 def _key_dates_from_pivots(pivots: Optional[List[Dict[str, Any]]]) -> List[Dict[str, str]]:
     out: List[Dict[str, str]] = []
     for p in pivots or []:

@@ -12,9 +12,16 @@ from backend_core.analysis.chart_patterns.double_extremes import (
 from backend_core.analysis.chart_patterns.engine import detect_all, normalize_families
 from backend_core.analysis.chart_patterns.head_shoulders import detect_head_shoulders
 from backend_core.analysis.chart_patterns.pivots import extract_pivot_sequence
+from backend_core.analysis.chart_patterns.schema import fmt_px
 from backend_core.analysis.chart_patterns.scanner import HARD_SCAN_CAP, DEFAULT_SCAN_LIMIT
 from backend_core.analysis.chart_patterns.triangles import detect_triangles
 from backend_core.analysis.chart_patterns.wedges_flags import detect_wedges
+
+
+def test_fmt_px_with_and_without_date():
+    assert fmt_px("左肩", 44.97, "2026-03-12") == "左肩=44.97(2026-03-12)"
+    assert fmt_px("颈线", 40.27, approx=True) == "颈线≈40.27"
+    assert fmt_px("L1", 10, None) == "L1=10"
 
 
 def _bars_from_closes(closes, start=None):
@@ -89,6 +96,10 @@ def test_double_bottom_synthetic():
     assert len(str(hit["formed_at"])) >= 8
     assert hit.get("key_dates")
     assert any(kd.get("date") for kd in hit["key_dates"])
+    for p in hit.get("pivots") or []:
+        d = str((p or {}).get("date") or "")[:10]
+        if d and (p or {}).get("role") in ("L1", "L2", "neck"):
+            assert d in (hit.get("reason") or "")
 
 
 def test_double_top_synthetic():
@@ -141,6 +152,11 @@ def test_head_shoulders_from_pivots_path():
     for h in hits:
         assert h["pattern_family"] == "head_shoulders"
         assert h["pattern_type"] in ("head_shoulders_top", "head_shoulders_bottom")
+        reason = h.get("reason") or ""
+        for p in h.get("pivots") or []:
+            d = str((p or {}).get("date") or "")[:10]
+            if d:
+                assert d in reason
 
 
 def test_detect_all_empty_short_bars():

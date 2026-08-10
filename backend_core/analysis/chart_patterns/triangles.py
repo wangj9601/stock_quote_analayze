@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
-from .schema import make_hit
+from .schema import fmt_px, make_hit
 
 
 def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
@@ -94,7 +94,12 @@ def detect_triangles(
             pattern_type=pattern_type,
             status=status,
             confidence=conf,
-            reason=f"{label} 收敛约{round(shrink*100,1)}% 上沿斜率={round(hs,6)} 下沿斜率={round(ls,6)}",
+            reason=(
+                f"{label} 收敛约{round(shrink * 100, 1)}%"
+                f" {fmt_px('上沿', round(last_hi, 4), hi[-1].get('date'))}"
+                f" {fmt_px('下沿', round(last_lo, 4), lo[-1].get('date'))}"
+                f" 上沿斜率={round(hs, 6)} 下沿斜率={round(ls, 6)}"
+            ),
             key_levels={
                 "upper": round(last_hi, 4),
                 "lower": round(last_lo, 4),

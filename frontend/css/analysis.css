@@ -1957,6 +1957,15 @@
     vertical-align: top;
 }
 
+.pattern-result-table .pattern-col-reason,
+.pattern-result-table .pattern-col-levels {
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+    max-width: none;
+}
+
 .pattern-result-table th {
     background: #f1f5f9;
     font-weight: 600;
@@ -1965,4 +1974,57 @@
 .pattern-result-table a {
     color: #2563eb;
     text-decoration: none;
+}
+
+.pattern-expert-analysis {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    color: #334155;
+    line-height: 1.55;
+}
+
+.pattern-expert-title {
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.4rem;
+}
+
+.pattern-expert-body p {
+    margin: 0.35rem 0 0;
+}
+
+.pattern-expert-body p:first-child {
+    margin-top: 0;
+}
+
+.pattern-expert-label {
+    font-weight: 600;
+    color: #475569;
+}
+
+.pattern-expert-risk {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.pattern-expert-trade-levels {
+    margin-top: 0.35rem;
+}
+
+.pattern-expert-trade-levels p {
+    margin: 0.3rem 0 0;
+}
+
+.pattern-expert-trade-levels ul {
+    margin: 0.15rem 0 0.25rem 1.15rem;
+    padding: 0;
+    list-style: disc;
+}
+
+.pattern-expert-trade-levels li {
+    margin: 0.08rem 0;
 }
