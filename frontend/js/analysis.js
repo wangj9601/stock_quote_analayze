@@ -9,6 +9,7 @@ const AnalysisPage = {
         if (window.BoardAnalysis) BoardAnalysis.init();
         if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
         if (window.KdeLevelsTool) KdeLevelsTool.init();
+        if (window.StockMultiStrategy) StockMultiStrategy.init();
         const initialTab = this.resolveInitialTab();
         if (initialTab && initialTab !== this.currentTab) {
             const tabBtn = document.querySelector(`.analysis-tab[data-tab="${initialTab}"]`);
@@ -55,8 +56,13 @@ const AnalysisPage = {
         // 技术工具按钮
         document.querySelectorAll('.tool-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const toolName = e.target.closest('.tool-card').querySelector('h3').textContent;
-                this.useTechnicalTool(toolName);
+                const card = e.target.closest('.tool-card');
+                if (!card) return;
+                const action = btn.getAttribute('data-tool-action')
+                    || card.getAttribute('data-tool')
+                    || '';
+                const toolName = (card.querySelector('h3') || {}).textContent || '';
+                this.useTechnicalTool(toolName, action);
             });
         });
 
@@ -112,7 +118,7 @@ const AnalysisPage = {
                 if (window.LeaderMidAnalysis) LeaderMidAnalysis.ensureCatalogs();
                 break;
             case 'stock-ai':
-                if (window.KdeLevelsTool) KdeLevelsTool.loadKdeWatchlistOptions();
+                if (window.StockMultiStrategy) StockMultiStrategy.loadWatchlistOptions();
                 break;
             case 'market-analysis':
                 this.loadMarketAnalysis();
@@ -386,14 +392,54 @@ const AnalysisPage = {
 
     // 加载技术工具
     loadTechnicalTools() {
-        // 技术工具已在HTML中静态定义
-        console.log('技术工具已加载');
+        if (window.KdeLevelsTool) KdeLevelsTool.loadKdeWatchlistOptions();
+        // URL ?tool=resistance-support / #resistance-support 时自动展开
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const tool = (params.get('tool') || '').trim();
+            const hash = (window.location.hash || '').replace(/^#/, '').trim();
+            if (tool === 'resistance-support' || hash === 'resistance-support' || hash === 'kde-levels') {
+                this.openResistanceSupportTool({ scroll: true });
+            }
+        } catch (e) { /* ignore */ }
+    },
+
+    openResistanceSupportTool(opts = {}) {
+        const panel = document.getElementById('toolLevelsPanel');
+        const btn = document.getElementById('toolLevelsToggleBtn');
+        if (panel) {
+            panel.hidden = false;
+        }
+        if (btn) btn.textContent = '收起工具';
+        if (window.KdeLevelsTool) KdeLevelsTool.loadKdeWatchlistOptions();
+        if (opts.scroll) {
+            const card = document.getElementById('toolResistanceSupport');
+            if (card && typeof card.scrollIntoView === 'function') {
+                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
     },
 
     // 使用技术工具
-    useTechnicalTool(toolName) {
-        CommonUtils.showToast(`启动${toolName}`, 'info');
-        // 实际项目中这里会打开相应的技术分析工具
+    useTechnicalTool(toolName, action) {
+        const key = (action || '').trim() || String(toolName || '');
+        if (key === 'resistance-support' || String(toolName || '').includes('阻力支撑')) {
+            const panel = document.getElementById('toolLevelsPanel');
+            if (panel && !panel.hidden) {
+                panel.hidden = true;
+                const btn = document.getElementById('toolLevelsToggleBtn');
+                if (btn) btn.textContent = '使用工具';
+                return;
+            }
+            this.openResistanceSupportTool({ scroll: true });
+            CommonUtils.showToast('已打开阻力支撑位计算', 'info');
+            return;
+        }
+        if (key === 'screener' || String(toolName || '').includes('选股')) {
+            window.location.href = 'screening.html';
+            return;
+        }
+        CommonUtils.showToast(`${toolName || '该工具'} 即将开放`, 'info');
     },
 
     // 加载投资策略

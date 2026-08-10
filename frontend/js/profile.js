@@ -38,11 +38,11 @@ const ProfilePage = {
 
     async init() {
         try {
-            // 支撑压力已迁移到「分析 → 个股分析」
+            // 支撑压力已迁移到「分析 → 技术工具 → 阻力支撑位」
             const hash = (window.location.hash || '').replace(/^#/, '').trim();
             const params = new URLSearchParams(window.location.search || '');
             if (hash === 'kde-levels' || params.get('tab') === 'kde-levels') {
-                window.location.replace('analysis.html?tab=stock-ai');
+                window.location.replace('analysis.html?tab=technical-tools&tool=resistance-support');
                 return;
             }
             const ok = await this.ensureCommonUtils();

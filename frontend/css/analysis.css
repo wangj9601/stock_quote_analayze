@@ -411,10 +411,25 @@
 }
 
 .tool-desc li::before {
-    content: "â¢";
+    content: "•";
     color: #2563eb;
     position: absolute;
     left: 0;
+}
+
+.tool-card--levels {
+    grid-column: 1 / -1;
+}
+
+.tool-levels-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.tool-levels-panel .kde-levels-section {
+    box-shadow: none;
+    padding: 0;
 }
 
 /* æèµç­ç¥æ ·å¼ */
@@ -845,6 +860,36 @@
   color: #6b7280;
   flex-shrink: 0;
 }
+.ba-short-roles-board {
+  color: #1e293b;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.ba-hit-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.ba-hit-score {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+.ba-strategy-block--gms {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem 0.85rem;
+  background: #f8fbff;
+}
+.ba-strategy-block--gms h3 {
+  color: #1e40af;
+}
+.ba-exporting {
+  opacity: 0.7;
+  pointer-events: none;
+}
 .ba-role-pill {
   display: inline-flex;
   align-items: center;
@@ -1188,7 +1233,179 @@
   line-height: 1.35;
 }
 
-/* 个股分析：支撑/压力位 */
+/* 个股分析：四策略命中 */
+.ssa-section {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+}
+.ssa-header h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.2rem;
+    color: #1f2937;
+}
+.ssa-hint {
+    margin: 0 0 1.25rem;
+    color: #6b7280;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+.ssa-form .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+.ssa-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 160px;
+}
+.ssa-form label {
+    font-size: 0.9rem;
+    color: #374151;
+}
+.ssa-form input,
+.ssa-form select {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    min-width: 160px;
+}
+.ssa-candidates {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+.ssa-candidates-title {
+    font-size: 0.9rem;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+.ssa-candidates ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.ssa-candidate-btn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.ssa-candidate-btn:hover {
+    border-color: #2563eb;
+    color: #2563eb;
+}
+.ssa-meta {
+    margin-top: 1rem;
+}
+.ssa-meta-card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    padding: 0.85rem 1rem;
+    background: #f1f5f9;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #334155;
+}
+.ssa-meta-card strong {
+    font-size: 1.05rem;
+    color: #0f172a;
+}
+.ssa-muted { color: #94a3b8; }
+.ssa-empty {
+    margin-top: 1.25rem;
+    color: #64748b;
+    font-size: 0.95rem;
+}
+.ssa-results {
+    margin-top: 1.25rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+.ssa-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    background: #fff;
+}
+.ssa-card--hit {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+.ssa-card--miss {
+    border-color: #e2e8f0;
+}
+.ssa-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.ssa-card-head h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: #1e293b;
+}
+.ssa-badge {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+}
+.ssa-badge--yes {
+    background: #dcfce7;
+    color: #166534;
+}
+.ssa-badge--no {
+    background: #f1f5f9;
+    color: #64748b;
+}
+.ssa-card-score {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.35rem;
+    font-variant-numeric: tabular-nums;
+}
+.ssa-card-reason {
+    margin: 0 0 0.65rem;
+    font-size: 0.88rem;
+    color: #475569;
+    line-height: 1.45;
+}
+.ssa-card-links {
+    font-size: 0.85rem;
+}
+.ssa-link {
+    color: #2563eb;
+    text-decoration: none;
+}
+.ssa-link:hover { text-decoration: underline; }
+.ssa-error {
+    color: #b91c1c;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+@media (max-width: 640px) {
+    .ssa-form .form-group { min-width: 100%; }
+    .ssa-form input, .ssa-form select { min-width: 0; width: 100%; }
+}
+
+/* 技术工具：支撑/压力位 */
 .kde-levels-section {
     background: white;
     border-radius: 8px;

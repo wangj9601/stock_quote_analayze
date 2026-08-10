@@ -3,6 +3,8 @@
  */
 const BoardAnalysis = {
   API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
+  /** 板块分析「GMS 命中」最低总分（与后端 BOARD_GMS_HIT_MIN_SCORE 对齐） */
+  GMS_HIT_MIN_SCORE: 70,
   boardKind: 'industry',
   industryCatalog: [],
   conceptCatalog: [],
@@ -16,6 +18,37 @@ const BoardAnalysis = {
   init() {
     this.bindEvents();
     this.loadCatalogs();
+  },
+
+  /**
+   * 是否已明确判定为左侧或右侧买点（与后端 _gms_is_left_or_right_buy 对齐）。
+   */
+  isGmsLeftOrRightBuy(row) {
+    if (!row) return false;
+    if (row.left_buy_signal || row.right_buy_signal) return true;
+    const bt = String(row.buy_type || '');
+    return bt === '左侧' || bt === '右侧';
+  },
+
+  /**
+   * 前端兜底：板块分析 GMS 命中须总分 ≥ GMS_HIT_MIN_SCORE 且明确左/右买点，并同步 total。
+   * 不影响 URT/SBBR/RPE。
+   */
+  applyGmsHitScoreFloor(payload) {
+    const strategies = payload && payload.strategies;
+    if (!strategies || !strategies.gms) return payload;
+    const thr = Number(this.GMS_HIT_MIN_SCORE) || 70;
+    const block = strategies.gms;
+    const items = Array.isArray(block.items) ? block.items : [];
+    const kept = items.filter((row) => {
+      if (!this.isGmsLeftOrRightBuy(row)) return false;
+      const sc = this.asFloat(row && row.score_total);
+      const sc2 = sc != null ? sc : this.asFloat(row && row.total_score);
+      return sc2 != null && sc2 >= thr;
+    });
+    block.items = kept;
+    block.total = kept.length;
+    return payload;
   },
 
   bindEvents() {
@@ -34,6 +67,10 @@ const BoardAnalysis = {
     const runBtn = document.getElementById('baRunBtn');
     if (runBtn) {
       runBtn.addEventListener('click', () => this.runAnalysis());
+    }
+    const exportBtn = document.getElementById('baExportPdfBtn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => this.exportPdf());
     }
 
     const overlay = document.getElementById('baBoardPickerModal');
@@ -293,7 +330,7 @@ const BoardAnalysis = {
       if (!res.ok || !data.success) {
         throw new Error(data.message || data.detail || `分析失败 ${res.status}`);
       }
-      this.lastResult = data.data || {};
+      this.lastResult = this.applyGmsHitScoreFloor(data.data || {});
       const board = this.lastResult.board || {};
       this.renderMeta(board);
       const roleCodes =
@@ -354,27 +391,51 @@ const BoardAnalysis = {
       </div>`;
   },
 
+  defaultBoardLabel(payload) {
+    const board = (payload && payload.board) || (this.lastResult && this.lastResult.board) || {};
+    return board.board_name || board.board_code || '';
+  },
+
+  boardLabelForRow(row, fallback) {
+    const fromRow = row && (row.board_labels || row.board_name);
+    if (fromRow) return String(fromRow);
+    if (Array.isArray(row && row.boards) && row.boards.length) {
+      return row.boards
+        .map((b) => b.board_name || b.board_code || '')
+        .filter(Boolean)
+        .join('、');
+    }
+    return fallback || '--';
+  },
+
   renderResults(payload) {
     const host = document.getElementById('baResults');
     if (!host) return;
     const strategies = payload.strategies || {};
     const errors = payload.errors || {};
-    const multi = !!(payload.board && payload.board.multi_boards);
+    const boardFallback = this.defaultBoardLabel(payload);
     const order = ['gms', 'urt', 'sbbr', 'rpe'];
-    const labels = { gms: 'GMS', urt: 'URT', sbbr: 'SBBR', rpe: 'RPE' };
+    const labels = {
+      gms: 'GMS 策略命中',
+      urt: 'URT 策略命中',
+      sbbr: 'SBBR 策略命中',
+      rpe: 'RPE 策略命中',
+    };
     let html = '';
     for (const key of order) {
       if (!strategies[key]) continue;
       const block = strategies[key];
       const err = errors[key];
-      html += `<section class="ba-strategy-block" data-strategy="${key}">
-        <h3>${labels[key]} 命中 <span class="ba-muted">${block.total || 0}</span>
+      const blockCls =
+        key === 'gms' ? 'ba-strategy-block ba-strategy-block--gms' : 'ba-strategy-block';
+      html += `<section class="${blockCls}" data-strategy="${key}">
+        <h3>${labels[key]} <span class="ba-muted">${block.total || 0}</span>
           ${err ? `<span class="ba-error">（${this.esc(err)}）</span>` : ''}
         </h3>
-        ${this.renderTable(key, block.items || [], false, multi)}
+        ${this.renderTable(key, block.items || [], false, boardFallback)}
         ${
           key === 'sbbr' && (block.watch_items || []).length
-            ? `<details class="ba-watch"><summary>筑底关注 ${block.watch_total || 0}</summary>${this.renderTable(key, block.watch_items || [], true, multi)}</details>`
+            ? `<details class="ba-watch"><summary>筑底关注 ${block.watch_total || 0}</summary>${this.renderTable(key, block.watch_items || [], true, boardFallback)}</details>`
             : ''
         }
       </section>`;
@@ -391,11 +452,10 @@ const BoardAnalysis = {
     });
   },
 
-  renderTable(strategy, items, watchOnly, multi) {
+  renderTable(strategy, items, watchOnly, boardFallback) {
     if (!items.length) {
       return '<p class="ba-empty">暂无命中</p>';
     }
-    const boardTh = multi ? '<th>所属板块</th>' : '';
     const rows = items
       .map((row) => {
         const code = row.code || row.stock_code || '';
@@ -404,6 +464,8 @@ const BoardAnalysis = {
         const ref = advice.reference_levels || {};
         const roles = this.renderRoleTags(row.role_tags);
         const hit = this.hitLabel(strategy, row);
+        const scoreDisp = this.scoreDisplay(strategy, row);
+        const scoreTip = this.scoreHoverTip(strategy, row, hit);
         const lastClose = this.fmtPrice2(
           row.last_close ?? row.close ?? ref.last_close ?? row.latest_price
         );
@@ -439,15 +501,22 @@ const BoardAnalysis = {
         );
         const action = advice.action || 'watch';
         const tip = this.refHoverTip(ref, advice.summary);
-        const boardCell = multi
-          ? `<td class="ba-boards" title="${this.escAttr(row.board_labels || '')}">${this.esc(row.board_labels || '--')}</td>`
-          : '';
-        return `<tr>
+        const boardName = this.boardLabelForRow(row, boardFallback);
+        const scoreHint =
+          scoreDisp && scoreDisp !== '--'
+            ? `<span class="ba-hit-score">${this.esc(scoreDisp)}</span>`
+            : '';
+        return `<tr title="${this.escAttr(scoreTip)}">
           <td><a href="stock.html?code=${encodeURIComponent(code)}">${this.esc(code)}</a><div class="ba-muted">${this.esc(name)}</div></td>
-          ${boardCell}
+          <td class="ba-boards" title="${this.escAttr(boardName)}">${this.esc(boardName || '--')}</td>
           <td class="ba-num">${lastClose}</td>
           <td class="ba-role-cell">${roles}</td>
-          <td><span class="ba-hit ba-hit--${this.escAttr(action)}">${this.esc(hit)}</span></td>
+          <td>
+            <span class="ba-hit-wrap" title="${this.escAttr(scoreTip)}">
+              <span class="ba-hit ba-hit--${this.escAttr(action)}">${this.esc(hit)}</span>
+              ${scoreHint}
+            </span>
+          </td>
           <td class="ba-advice">${this.esc(buy)}</td>
           <td class="ba-advice">${this.esc(sell)}</td>
           <td class="ba-num">${kdeS}</td>
@@ -464,7 +533,7 @@ const BoardAnalysis = {
       .join('');
     return `<div class="ba-table-wrap"><table class="ba-table">
       <thead><tr>
-        <th>股票</th>${boardTh}<th>最新收盘</th><th>角色</th><th>命中</th><th>买点建议</th><th>卖点/防守</th>
+        <th>股票</th><th>板块名</th><th>最新收盘</th><th>角色</th><th>命中</th><th>买点建议</th><th>卖点/防守</th>
         <th>KDE结构支撑</th><th>KDE结构阻力</th><th>参考价 Fib/Cam/VP/合</th><th>操作</th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -586,6 +655,334 @@ const BoardAnalysis = {
       return t || 'RPE';
     }
     return strategy;
+  },
+
+  asFloat(v) {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  },
+
+  pickScore(strategy, row) {
+    if (!row) return null;
+    if (strategy === 'gms') return this.asFloat(row.score_total);
+    if (strategy === 'urt') {
+      for (const k of ['score_total', 'total_score', 'score']) {
+        const sc = this.asFloat(row[k]);
+        if (sc != null) return sc;
+      }
+      return null;
+    }
+    if (strategy === 'sbbr') return this.asFloat(row.volume_ratio);
+    if (strategy === 'rpe') {
+      for (const k of ['z_score', 'zscore', 'score', 'relative_z']) {
+        const sc = this.asFloat(row[k]);
+        if (sc != null) return sc;
+      }
+      return null;
+    }
+    return null;
+  },
+
+  scoreDisplay(strategy, row) {
+    const score = this.pickScore(strategy, row);
+    if (strategy === 'gms') return score != null ? `总分 ${score.toFixed(1)}` : '--';
+    if (strategy === 'urt') return score != null ? `得分 ${score.toFixed(1)}` : '--';
+    if (strategy === 'sbbr') {
+      const tags = [];
+      if (row) {
+        if (row.size_ok) tags.push('做小✓');
+        else if (row.size_ok === false) tags.push('做小✗');
+        if (row.bottom_matched) tags.push('筑底✓');
+        if (row.entry_signal) tags.push('入场✓');
+        if (score != null) tags.push(`量比 ${score.toFixed(2)}`);
+      }
+      return tags.length ? tags.join(' · ') : '--';
+    }
+    if (strategy === 'rpe') {
+      if (score != null) return `Z=${score.toFixed(2)}`;
+      if (row && row.signal_type) return String(row.signal_type);
+      return '--';
+    }
+    return score != null ? String(score) : '--';
+  },
+
+  scoreHoverTip(strategy, row, hitLabel) {
+    const lines = [];
+    if (hitLabel) lines.push(`命中：${hitLabel}`);
+    const score = this.pickScore(strategy, row);
+    if (strategy === 'gms') {
+      if (score != null) lines.push(`GMS 总分：${score.toFixed(1)}`);
+      const acc = this.asFloat(row && row.score_accumulation);
+      const mom = this.asFloat(row && row.score_momentum);
+      if (acc != null) lines.push(`蓄势分：${acc.toFixed(1)}`);
+      if (mom != null) lines.push(`动量分：${mom.toFixed(1)}`);
+      const strength = row && row.signal_strength;
+      if (strength != null && strength !== '') lines.push(`信号强度：${strength}`);
+    } else if (strategy === 'urt') {
+      if (score != null) lines.push(`URT 得分：${score.toFixed(1)}`);
+    } else if (strategy === 'sbbr') {
+      lines.push(this.scoreDisplay('sbbr', row));
+    } else if (strategy === 'rpe') {
+      lines.push(this.scoreDisplay('rpe', row));
+    }
+    if (lines.length <= 1 && score == null) lines.push('暂无得分字段');
+    return lines.filter(Boolean).join('\n');
+  },
+
+  pdfFilename() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `板块分析_${y}${m}${day}.pdf`;
+  },
+
+  roleTextForPdf(row) {
+    const tags = Array.isArray(row.role_tags) ? row.role_tags : [];
+    if (!tags.length) return '--';
+    return tags
+      .map((t) => (typeof t === 'string' ? t : t.label || t.id || ''))
+      .filter(Boolean)
+      .join('/');
+  },
+
+  buildPdfStrategyTable(strategy, items, boardFallback) {
+    if (!items.length) return '<p class="ba-pdf-empty">暂无命中</p>';
+    const rows = items
+      .map((row) => {
+        const code = row.code || row.stock_code || '';
+        const name = row.name || row.stock_name || '';
+        const boardName = this.boardLabelForRow(row, boardFallback);
+        const hit = this.hitLabel(strategy, row);
+        const score = this.scoreDisplay(strategy, row);
+        const lastClose = this.fmtPrice2(
+          row.last_close ?? row.close ?? row.trade_advice?.reference_levels?.last_close ?? row.latest_price
+        );
+        const roles = this.roleTextForPdf(row);
+        const advice = row.trade_advice || {};
+        const buy = advice.buy_zone?.label || advice.summary?.split('；')[0] || '--';
+        const sell =
+          advice.stop_zone?.label ||
+          (advice.sell_triggers || []).map((x) => x.label).join('；') ||
+          '--';
+        return `<tr>
+          <td>${this.esc(code)}<br/><span class="m">${this.esc(name)}</span></td>
+          <td>${this.esc(boardName || '--')}</td>
+          <td>${this.esc(hit)}</td>
+          <td>${this.esc(score)}</td>
+          <td>${lastClose}</td>
+          <td>${this.esc(roles)}</td>
+          <td>${this.esc(buy)}</td>
+          <td>${this.esc(sell)}</td>
+        </tr>`;
+      })
+      .join('');
+    return `<table>
+      <thead><tr>
+        <th>股票</th><th>板块名</th><th>命中</th><th>得分</th><th>最新收盘</th><th>角色</th><th>买点建议</th><th>卖点/防守</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  },
+
+  buildPdfHtml() {
+    const payload = this.lastResult || {};
+    const board = payload.board || {};
+    const boardFallback = this.defaultBoardLabel(payload);
+    const kindLabel = this.boardKind === 'concept' ? '概念板块' : '行业板块';
+    const strategies = payload.strategies || {};
+    const errors = payload.errors || {};
+    const order = ['gms', 'urt', 'sbbr', 'rpe'];
+    const labels = { gms: 'GMS', urt: 'URT', sbbr: 'SBBR', rpe: 'RPE' };
+    const metaParts = [];
+    metaParts.push(`类型：${kindLabel}`);
+    if (board.multi_boards) {
+      const n = board.board_count != null ? board.board_count : (board.selected_board_codes || []).length;
+      metaParts.push(`已选板块：${n}`);
+    } else {
+      metaParts.push(`板块：${board.board_name || board.board_code || '--'}`);
+      if (board.board_code) metaParts.push(`代码：${board.board_code}`);
+    }
+    const memberN =
+      board.stock_count != null ? board.stock_count : payload.member_count != null ? payload.member_count : '--';
+    metaParts.push(`成分池：${memberN}`);
+    if (board.board_env_label) metaParts.push(`环境：${board.board_env_label}`);
+    if (payload.asof) metaParts.push(`分析时间：${payload.asof}`);
+
+    const selectedNames = (this.selectedBoardCodes || [])
+      .map((c) => {
+        const b = this.boardByCode(c);
+        return b ? `${b.board_name || c}（${c}）` : c;
+      })
+      .join('、');
+
+    const rolesHost = document.getElementById('baRolesHost');
+    let rolesHtml = '';
+    if (rolesHost && rolesHost.innerHTML.trim()) {
+      // 纯文本友好：去掉链接，保留文字
+      const clone = rolesHost.cloneNode(true);
+      clone.querySelectorAll('a').forEach((a) => {
+        const span = document.createElement('span');
+        span.textContent = a.textContent || '';
+        a.replaceWith(span);
+      });
+      rolesHtml = clone.innerHTML;
+    } else {
+      rolesHtml = '<p class="ba-pdf-empty">暂无短线角色</p>';
+    }
+
+    let strategyHtml = '';
+    for (const key of order) {
+      if (!strategies[key]) continue;
+      const block = strategies[key];
+      const err = errors[key];
+      strategyHtml += `<section class="sec">
+        <h2>${labels[key]} 策略命中（${block.total || 0}）
+          ${err ? `<span class="err">（${this.esc(err)}）</span>` : ''}
+        </h2>
+        ${this.buildPdfStrategyTable(key, block.items || [], boardFallback)}
+        ${
+          key === 'sbbr' && (block.watch_items || []).length
+            ? `<h3>筑底关注（${block.watch_total || 0}）</h3>${this.buildPdfStrategyTable(key, block.watch_items || [], boardFallback)}`
+            : ''
+        }
+      </section>`;
+    }
+    if (!strategyHtml) strategyHtml = '<p class="ba-pdf-empty">无策略结果</p>';
+
+    const title = this.pdfFilename().replace(/\.pdf$/i, '');
+    return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"/>
+<title>${this.esc(title)}</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+    color: #0f172a;
+    font-size: 11px;
+    line-height: 1.45;
+    padding: 12px 16px;
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; color: #1e40af; border-bottom: 1px solid #bfdbfe; padding-bottom: 4px; }
+  h3 { font-size: 12px; margin: 10px 0 6px; color: #475569; }
+  .meta { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; line-height: 1.55; }
+  .meta div { margin: 2px 0; }
+  .roles { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; }
+  .roles .ba-short-roles { margin-bottom: 6px; }
+  .roles .ba-role-pill { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; border: 1px solid #ddd; border-radius: 3px; }
+  .roles .ba-short-roles-board { font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; font-size: 10px; }
+  th, td { border: 1px solid #e2e8f0; padding: 4px 5px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
+  th { background: #f1f5f9; font-weight: 600; }
+  .m { color: #64748b; font-size: 10px; }
+  .err { color: #b91c1c; font-weight: normal; }
+  .ba-pdf-empty { color: #94a3b8; }
+  .sec { page-break-inside: avoid; }
+  .print-hint {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    color: #1e3a8a;
+    font-size: 12px;
+  }
+  @media print {
+    body { padding: 0; }
+    .print-hint { display: none !important; }
+    .sec { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+  }
+</style></head><body>
+  <p class="print-hint">请在打印对话框中选择「另存为 PDF / Microsoft Print to PDF」，纸张建议横向 A4。关闭本页不影响分析结果。</p>
+  <h1>板块分析结果</h1>
+  <div class="meta">
+    ${metaParts.map((p) => `<div>${this.esc(p)}</div>`).join('')}
+    ${selectedNames ? `<div>所选：${this.esc(selectedNames)}</div>` : ''}
+  </div>
+  <h2>各板短线角色</h2>
+  <div class="roles">${rolesHtml}</div>
+  ${strategyHtml}
+</body></html>`;
+  },
+
+  /**
+   * 兜底：新窗口打开完整 HTML，走系统打印 →「另存为 PDF」。
+   * 仅在结构化 jsPDF 导出失败时使用。
+   */
+  exportViaPrint(html, filename) {
+    const w = window.open('', '_blank');
+    if (!w) {
+      if (window.CommonUtils) {
+        CommonUtils.showToast('浏览器拦截了弹窗，请允许后重试，再点「导出 PDF」', 'warning');
+      }
+      return false;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.document.title = filename.replace(/\.pdf$/i, '');
+    // 等样式与字体就绪后再调打印，减少空白首页
+    const triggerPrint = () => {
+      try {
+        w.focus();
+        w.print();
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+    if (w.document.fonts && w.document.fonts.ready) {
+      w.document.fonts.ready.then(() => setTimeout(triggerPrint, 80)).catch(() => setTimeout(triggerPrint, 350));
+    } else {
+      setTimeout(triggerPrint, 350);
+    }
+    return true;
+  },
+
+  async exportPdf() {
+    if (!this.lastResult || !this.lastResult.strategies) {
+      if (window.CommonUtils) CommonUtils.showToast('请先完成板块分析再导出', 'warning');
+      return;
+    }
+    const btn = document.getElementById('baExportPdfBtn');
+    const filename = this.pdfFilename();
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('ba-exporting');
+      btn.textContent = '导出中…';
+    }
+    try {
+      if (!window.BoardAnalysisPdf || typeof BoardAnalysisPdf.exportFromHost !== 'function') {
+        throw new Error('PDF 导出模块未加载');
+      }
+      const saved = await BoardAnalysisPdf.exportFromHost(this);
+      if (window.CommonUtils) CommonUtils.showToast(`已导出 ${saved || filename}`, 'success');
+    } catch (e) {
+      console.warn('结构化 PDF 导出失败，回退打印', e);
+      const html = this.buildPdfHtml();
+      const ok = this.exportViaPrint(html, filename);
+      const reason = (e && e.message) || String(e || '未知错误');
+      if (window.CommonUtils) {
+        if (ok) {
+          CommonUtils.showToast(`结构化导出失败（${reason}），已打开打印预览作兜底`, 'warning');
+        } else {
+          CommonUtils.showToast(`导出失败：${reason}`, 'error');
+        }
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('ba-exporting');
+        btn.textContent = '导出 PDF';
+      }
+    }
   },
 
   async addObserve(strategy, code, name, btn) {

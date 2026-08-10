@@ -1,4 +1,4 @@
-/** 个股分析：支撑/压力位（KDE + VP + Fib/Cam/共振） */
+/** 技术工具 · 阻力支撑位：支撑/压力（KDE + VP + Fib/Cam/共振） */
 const KdeLevelsTool = {
     _pendingAdjust: 'none',
 

@@ -51,6 +51,7 @@
                                 <label><input type="checkbox" name="baStrategy" value="rpe" checked> RPE</label>
                             </div>
                             <button type="button" class="btn btn-primary" id="baRunBtn" data-perm="channel.analyze.tab.board.btn.run">开始分析</button>
+                            <button type="button" class="btn btn-secondary" id="baExportPdfBtn" data-perm="channel.analyze.tab.board.btn.run">导出 PDF</button>
                         </div>
                         <div id="baBoardMeta" class="ba-meta"></div>
                         <div id="baRolesHost" class="ba-roles"></div>
@@ -83,9 +84,199 @@
                     </div>
                 </div>
 
-                <!-- 个股分析：支撑 / 压力位 -->
+                <!-- 个股分析：四策略命中 -->
                 <div class="tab-panel" id="stock-ai">
-                    <div class="kde-levels-section" data-perm="channel.analyze.tab.stock_ai">
+                    <div class="ssa-section" data-perm="channel.analyze.tab.stock_ai">
+                        <div class="ssa-header">
+                            <h3>个股策略分析</h3>
+                            <p class="ssa-hint">
+                                输入股票代码或名称后，判定该股在 <strong>RPE、SBBR、GMS、URT</strong>
+                                四个策略中的命中情况与信号得分（对齐选股页个股评估口径）。
+                                可选手动指定基准日；留空则使用行情表最近交易日。
+                            </p>
+                        </div>
+                        <div class="ssa-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ssaStockCode">股票代码 / 名称</label>
+                                    <input type="text" id="ssaStockCode" placeholder="如 600519、00700 或 贵州茅台" autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ssaWatchlist">从自选选择</label>
+                                    <select id="ssaWatchlist">
+                                        <option value="">-- 可选自选股 --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="ssaTradeDate">基准日（可选）</label>
+                                    <input type="date" id="ssaTradeDate">
+                                </div>
+                                <div class="form-group ssa-actions">
+                                    <label>&nbsp;</label>
+                                    <button type="button" class="btn btn-primary" id="ssaAnalyzeBtn"
+                                        data-perm="channel.analyze.tab.stock_ai.btn.analyze">分析</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ssa-candidates" id="ssaCandidates" hidden>
+                            <div class="ssa-candidates-title">匹配到多只股票，请选择：</div>
+                            <ul id="ssaCandidateList"></ul>
+                        </div>
+                        <div class="ssa-meta" id="ssaMeta" hidden></div>
+                        <div class="ssa-results" id="ssaResults" hidden></div>
+                        <div class="ssa-empty" id="ssaEmpty">
+                            输入股票代码或名称，也可从自选选择后点击「分析」。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 市场分析 -->
+                <div class="tab-panel" id="market-analysis">
+                    <div class="market-analysis-grid">
+                        <div class="analysis-card">
+                            <h3>🌡️ 市场温度</h3>
+                            <div class="market-temperature">
+                                <div class="temperature-meter">
+                                    <div class="meter-bg">
+                                        <div class="meter-fill" style="width: 72%;"></div>
+                                    </div>
+                                    <div class="temperature-value">72°C 偏热</div>
+                                </div>
+                                <div class="temperature-desc">
+                                    <p>当前市场情绪较为乐观，成交活跃度高，建议控制仓位风险</p>
+                                    <div class="temperature-details"
+                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                                        <h4
+                                            style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                            市场特征</h4>
+                                        <ul
+                                            style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
+                                            <li>涨停板数量: 45只</li>
+                                            <li>跌停板数量: 12只</li>
+                                            <li>成交量比昨日: +18%</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-card">
+                            <h3>💰 资金流向</h3>
+                            <div class="fund-flow">
+                                <div class="flow-chart">
+                                    <canvas id="fundFlowChart" width="300" height="200"></canvas>
+                                </div>
+                                <div class="flow-summary">
+                                    <div class="flow-item">
+                                        <span class="label">主力资金</span>
+                                        <span class="value positive">+156.8亿</span>
+                                    </div>
+                                    <div class="flow-item">
+                                        <span class="label">散户资金</span>
+                                        <span class="value negative">-89.2亿</span>
+                                    </div>
+                                    <div class="flow-analysis"
+                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                                        <h4
+                                            style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                            资金分析</h4>
+                                        <p style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0;">
+                                            主力资金持续净流入，表明机构对后市谨慎乐观，建议关注资金持续流入的优质标的。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-card">
+                            <h3>📈 趋势研判</h3>
+                            <div class="trend-analysis">
+                                <div class="trend-indicators">
+                                    <div class="trend-item">
+                                        <span class="trend-label">短期趋势</span>
+                                        <span class="trend-signal bullish">看多</span>
+                                    </div>
+                                    <div class="trend-item">
+                                        <span class="trend-label">中期趋势</span>
+                                        <span class="trend-signal neutral">震荡</span>
+                                    </div>
+                                    <div class="trend-item">
+                                        <span class="trend-label">长期趋势</span>
+                                        <span class="trend-signal bullish">看多</span>
+                                    </div>
+                                </div>
+                                <div class="trend-summary">
+                                    <p>整体趋势向好，建议逢低布局优质标的</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-card">
+                            <h3>⚠️ 风险提示</h3>
+                            <div class="risk-alerts">
+                                <div class="risk-item high">
+                                    <span class="risk-level">高风险</span>
+                                    <span class="risk-desc">创业板估值偏高，注意回调风险</span>
+                                </div>
+                                <div class="risk-item medium">
+                                    <span class="risk-level">中风险</span>
+                                    <span class="risk-desc">外围市场波动，关注政策面变化</span>
+                                </div>
+                                <div class="risk-item low">
+                                    <span class="risk-level">低风险</span>
+                                    <span class="risk-desc">蓝筹股估值合理，适合配置</span>
+                                </div>
+                                <div class="risk-summary"
+                                    style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                                    <h4
+                                        style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                                        风险控制建议</h4>
+                                    <ul
+                                        style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
+                                        <li>合理控制仓位，避免重仓单一标的</li>
+                                        <li>关注市场流动性变化</li>
+                                        <li>设置止损止盈位置</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 技术工具 -->
+                <div class="tab-panel" id="technical-tools">
+                    <div class="tools-grid">
+                        <div class="tool-card" data-tool="indicator-filter">
+                            <div class="tool-header">
+                                <h3>技术指标筛选</h3>
+                                <button type="button" class="tool-btn" data-tool-action="indicator-filter">使用工具</button>
+                            </div>
+                            <div class="tool-desc">
+                                <p>基于多种技术指标筛选符合条件的股票</p>
+                                <ul>
+                                    <li>MA均线系统分析</li>
+                                    <li>MACD金叉死叉</li>
+                                    <li>RSI超买超卖</li>
+                                    <li>布林带突破</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="tool-card tool-card--levels" data-tool="resistance-support" id="toolResistanceSupport">
+                            <div class="tool-header">
+                                <h3>阻力支撑位</h3>
+                                <button type="button" class="tool-btn" id="toolLevelsToggleBtn" data-tool-action="resistance-support">使用工具</button>
+                            </div>
+                            <div class="tool-desc">
+                                <p>智能计算个股关键价位：RPE 量能加权 KDE、Volume Profile、黄金分割与 Pivot</p>
+                                <ul>
+                                    <li>KDE 成交量加权密度峰</li>
+                                    <li>Volume Profile（POC/VAH/VAL）</li>
+                                    <li>黄金分割 / 经典 Pivot / Camarilla</li>
+                                    <li>前复权计算（A股）</li>
+                                </ul>
+                            </div>
+                            <div class="tool-levels-panel" id="toolLevelsPanel" hidden>
+                                <div class="kde-levels-section" data-perm="channel.analyze.tab.technical">
                         <div class="kde-levels-header">
                             <h3>支撑 / 压力位</h3>
                             <p class="kde-levels-hint">
@@ -121,9 +312,9 @@
                                     <label>&nbsp;</label>
                                     <div class="kde-levels-btn-row">
                                         <button type="button" class="btn btn-primary" id="kdeLevelsCalcBtn"
-                                            data-perm="channel.analyze.tab.stock_ai.btn.calc">计算</button>
+                                            data-perm="channel.analyze.tab.technical.btn.calc">计算</button>
                                         <button type="button" class="btn btn-outline" id="kdeLevelsCalcQfqBtn"
-                                            data-perm="channel.analyze.tab.stock_ai.btn.calc_qfq">按前复权计算</button>
+                                            data-perm="channel.analyze.tab.technical.btn.calc_qfq">按前复权计算</button>
                                     </div>
                                 </div>
                             </div>
@@ -260,159 +451,13 @@
                             输入股票代码或名称，也可从自选选择后点击「计算」或「按前复权计算」。
                         </div>
                     </div>
-                </div>
-
-                <!-- 市场分析 -->
-                <div class="tab-panel" id="market-analysis">
-                    <div class="market-analysis-grid">
-                        <div class="analysis-card">
-                            <h3>🌡️ 市场温度</h3>
-                            <div class="market-temperature">
-                                <div class="temperature-meter">
-                                    <div class="meter-bg">
-                                        <div class="meter-fill" style="width: 72%;"></div>
-                                    </div>
-                                    <div class="temperature-value">72°C 偏热</div>
-                                </div>
-                                <div class="temperature-desc">
-                                    <p>当前市场情绪较为乐观，成交活跃度高，建议控制仓位风险</p>
-                                    <div class="temperature-details"
-                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-                                        <h4
-                                            style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                            市场特征</h4>
-                                        <ul
-                                            style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
-                                            <li>涨停板数量: 45只</li>
-                                            <li>跌停板数量: 12只</li>
-                                            <li>成交量比昨日: +18%</li>
-                                        </ul>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
-                        <div class="analysis-card">
-                            <h3>💰 资金流向</h3>
-                            <div class="fund-flow">
-                                <div class="flow-chart">
-                                    <canvas id="fundFlowChart" width="300" height="200"></canvas>
-                                </div>
-                                <div class="flow-summary">
-                                    <div class="flow-item">
-                                        <span class="label">主力资金</span>
-                                        <span class="value positive">+156.8亿</span>
-                                    </div>
-                                    <div class="flow-item">
-                                        <span class="label">散户资金</span>
-                                        <span class="value negative">-89.2亿</span>
-                                    </div>
-                                    <div class="flow-analysis"
-                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-                                        <h4
-                                            style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                            资金分析</h4>
-                                        <p style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0;">
-                                            主力资金持续净流入，表明机构对后市谨慎乐观，建议关注资金持续流入的优质标的。</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="analysis-card">
-                            <h3>📈 趋势研判</h3>
-                            <div class="trend-analysis">
-                                <div class="trend-indicators">
-                                    <div class="trend-item">
-                                        <span class="trend-label">短期趋势</span>
-                                        <span class="trend-signal bullish">看多</span>
-                                    </div>
-                                    <div class="trend-item">
-                                        <span class="trend-label">中期趋势</span>
-                                        <span class="trend-signal neutral">震荡</span>
-                                    </div>
-                                    <div class="trend-item">
-                                        <span class="trend-label">长期趋势</span>
-                                        <span class="trend-signal bullish">看多</span>
-                                    </div>
-                                </div>
-                                <div class="trend-summary">
-                                    <p>整体趋势向好，建议逢低布局优质标的</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="analysis-card">
-                            <h3>⚠️ 风险提示</h3>
-                            <div class="risk-alerts">
-                                <div class="risk-item high">
-                                    <span class="risk-level">高风险</span>
-                                    <span class="risk-desc">创业板估值偏高，注意回调风险</span>
-                                </div>
-                                <div class="risk-item medium">
-                                    <span class="risk-level">中风险</span>
-                                    <span class="risk-desc">外围市场波动，关注政策面变化</span>
-                                </div>
-                                <div class="risk-item low">
-                                    <span class="risk-level">低风险</span>
-                                    <span class="risk-desc">蓝筹股估值合理，适合配置</span>
-                                </div>
-                                <div class="risk-summary"
-                                    style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-                                    <h4
-                                        style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                        风险控制建议</h4>
-                                    <ul
-                                        style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
-                                        <li>合理控制仓位，避免重仓单一标的</li>
-                                        <li>关注市场流动性变化</li>
-                                        <li>设置止损止盈位置</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 技术工具 -->
-                <div class="tab-panel" id="technical-tools">
-                    <div class="tools-grid">
-                        <div class="tool-card">
+                        <div class="tool-card" data-tool="pattern">
                             <div class="tool-header">
-                                <h3>📊 技术指标筛选</h3>
-                                <button class="tool-btn">使用工具</button>
-                            </div>
-                            <div class="tool-desc">
-                                <p>基于多种技术指标筛选符合条件的股票</p>
-                                <ul>
-                                    <li>MA均线系统分析</li>
-                                    <li>MACD金叉死叉</li>
-                                    <li>RSI超买超卖</li>
-                                    <li>布林带突破</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <div class="tool-card">
-                            <div class="tool-header">
-                                <h3>🎯 阻力支撑位</h3>
-                                <button class="tool-btn">使用工具</button>
-                            </div>
-                            <div class="tool-desc">
-                                <p>智能计算个股关键价位信息</p>
-                                <ul>
-                                    <li>斐波那契回调位</li>
-                                    <li>历史高低点</li>
-                                    <li>成交密集区</li>
-                                    <li>整数关口位</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <div class="tool-card">
-                            <div class="tool-header">
-                                <h3>🔄 形态识别</h3>
-                                <button class="tool-btn">使用工具</button>
+                                <h3>形态识别</h3>
+                                <button type="button" class="tool-btn" data-tool-action="pattern">使用工具</button>
                             </div>
                             <div class="tool-desc">
                                 <p>自动识别K线图表技术形态</p>
@@ -425,10 +470,10 @@
                             </div>
                         </div>
 
-                        <div class="tool-card">
+                        <div class="tool-card" data-tool="screener">
                             <div class="tool-header">
-                                <h3>📋 选股器</h3>
-                                <button class="tool-btn">使用工具</button>
+                                <h3>选股器</h3>
+                                <button type="button" class="tool-btn" data-tool-action="screener">使用工具</button>
                             </div>
                             <div class="tool-desc">
                                 <p>多维度条件筛选优质股票</p>
@@ -649,9 +694,11 @@
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/board_roles_panel.js"></script>
+    <script src="js/board_analysis_pdf.js"></script>
     <script src="js/board_analysis.js"></script>
     <script src="js/leader_mid_analysis.js"></script>
     <script src="js/kde_levels_tool.js"></script>
+    <script src="js/stock_multi_strategy.js"></script>
     <script src="js/analysis.js"></script>
 </body>
 

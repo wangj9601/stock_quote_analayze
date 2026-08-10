@@ -56,11 +56,13 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
 
     # ── 三级：分析按钮 ──
     {"code": "channel.analyze.tab.board.btn.run", "name": "开始板块分析", "level": 3, "parent_code": "channel.analyze.tab.board", "channel_code": "analyze", "sort_order": 10},
+    {"code": "channel.analyze.tab.board.btn.export", "name": "导出板块分析PDF", "level": 3, "parent_code": "channel.analyze.tab.board", "channel_code": "analyze", "sort_order": 15},
     {"code": "channel.analyze.tab.board.btn.observe", "name": "加入交易观察", "level": 3, "parent_code": "channel.analyze.tab.board", "channel_code": "analyze", "sort_order": 20},
     {"code": "channel.analyze.tab.leader_mid.btn.run", "name": "查询龙头中军命中", "level": 3, "parent_code": "channel.analyze.tab.leader_mid", "channel_code": "analyze", "sort_order": 10},
-    {"code": "channel.analyze.tab.stock_ai.btn.calc", "name": "计算支撑压力", "level": 3, "parent_code": "channel.analyze.tab.stock_ai", "channel_code": "analyze", "sort_order": 10},
-    {"code": "channel.analyze.tab.stock_ai.btn.calc_qfq", "name": "按前复权计算支撑压力", "level": 3, "parent_code": "channel.analyze.tab.stock_ai", "channel_code": "analyze", "sort_order": 20},
+    {"code": "channel.analyze.tab.stock_ai.btn.analyze", "name": "个股四策略分析", "level": 3, "parent_code": "channel.analyze.tab.stock_ai", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.technical.btn.analyze", "name": "开始分析", "level": 3, "parent_code": "channel.analyze.tab.technical", "channel_code": "analyze", "sort_order": 10},
+    {"code": "channel.analyze.tab.technical.btn.calc", "name": "计算支撑压力", "level": 3, "parent_code": "channel.analyze.tab.technical", "channel_code": "analyze", "sort_order": 20},
+    {"code": "channel.analyze.tab.technical.btn.calc_qfq", "name": "按前复权计算支撑压力", "level": 3, "parent_code": "channel.analyze.tab.technical", "channel_code": "analyze", "sort_order": 30},
     {"code": "channel.analyze.tab.report.btn.export", "name": "导出报告", "level": 3, "parent_code": "channel.analyze.tab.report", "channel_code": "analyze", "sort_order": 10},
 
     # ── 二级：个人中心标签页 ──

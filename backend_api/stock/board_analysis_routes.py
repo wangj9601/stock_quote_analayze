@@ -120,6 +120,70 @@ def get_board_signals(
         )
 
 
+@router.get("/multi-strategy-check")
+def get_multi_strategy_check(
+    code: Optional[str] = Query(None, description="股票代码或名称"),
+    stock_code: Optional[str] = Query(None, description="同 code，兼容别名"),
+    date: Optional[str] = Query(None, description="基准日 YYYY-MM-DD，可选"),
+    strategies: Optional[str] = Query(
+        None, description="逗号分隔：gms,urt,sbbr,rpe；默认全部"
+    ),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """个股四策略命中/得分聚合（对齐选股 scope=single 评估口径）。"""
+    raw = (code or stock_code or "").strip()
+    if not raw:
+        return JSONResponse(
+            {"success": False, "message": "请提供股票代码或名称"},
+            status_code=400,
+        )
+    try:
+        from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
+        from backend_core.analysis.stock_multi_strategy import (
+            collect_stock_multi_strategy_check,
+        )
+
+        resolved = resolve_levels_stock_identifier(db, raw)
+        status = resolved.get("status")
+        if status == "ambiguous":
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "匹配到多只股票，请选择",
+                    "candidates": resolved.get("candidates") or [],
+                },
+                status_code=400,
+            )
+        if status == "not_found" or not resolved.get("code"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "未找到匹配股票",
+                    "candidates": [],
+                },
+                status_code=404,
+            )
+        data = collect_stock_multi_strategy_check(
+            db,
+            code=str(resolved["code"]),
+            name=resolved.get("name") or "",
+            date=date,
+            strategies=_parse_strategies(strategies),
+        )
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.exception("multi-strategy-check failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return JSONResponse(
+            {"success": False, "message": f"个股多策略分析失败: {e}"},
+            status_code=500,
+        )
+
+
 @router.get("/leader-mid-signals")
 def get_leader_mid_signals(
     board_kind: str = Query(..., description="industry | concept"),

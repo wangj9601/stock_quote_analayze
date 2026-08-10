@@ -57,6 +57,11 @@ htmlcov/
 node_modules/
 **/node_modules/
 
+# 本地生成的临时 PDF 样例
+test/_tmp_*.pdf
+test/package-lock.json
+test/package.json
+
 
 /docs/chat_history/
 

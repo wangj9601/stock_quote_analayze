@@ -51,7 +51,10 @@
     const pctHtml = pct ? ` (${esc(pct)})` : '';
     const title = esc(s.role_reason || label);
     const href = `stock.html?code=${encodeURIComponent(rawCode)}&name=${encodeURIComponent(rawName)}`;
-    const show = esc(rawName || rawCode || '--');
+    // 与选股页 stockChip「代码 名称」一致，代码可读优先
+    let show;
+    if (rawCode && rawName) show = `${esc(rawCode)} ${esc(rawName)}`;
+    else show = esc(rawName || rawCode || '--');
     return `<a class="${cls}" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${label} ${show}${pctHtml}</a>`;
   }
 
@@ -65,8 +68,13 @@
     const body = pills.length
       ? pills.join('')
       : '<span class="ba-muted">暂无</span>';
+    const boardName = String(data.board_name || data.board_code || '').trim();
+    const boardLabel = boardName
+      ? `<span class="ba-short-roles-board" title="${esc(data.board_code || '')}">${esc(boardName)}</span>`
+      : '';
     return `<div class="ba-short-roles">
-      <span class="ba-short-roles-label">短线角色：</span>
+      <span class="ba-short-roles-label">短线角色${boardLabel ? '' : '：'}</span>
+      ${boardLabel ? `${boardLabel}<span class="ba-short-roles-label">：</span>` : ''}
       ${body}
     </div>`;
   }
@@ -139,8 +147,10 @@
       return;
     }
     if (opts.data && typeof opts.data === 'object') {
+      const data = Object.assign({}, opts.data);
+      if (!data.board_name && !data.board_code && codes[0]) data.board_code = codes[0];
       panel.innerHTML =
-        variant === 'shortline' ? renderShortlineRoles(opts.data) : renderBoardBlock(opts.data);
+        variant === 'shortline' ? renderShortlineRoles(data) : renderBoardBlock(data);
       return;
     }
     panel.innerHTML =
@@ -152,11 +162,13 @@
     for (const code of codes.slice(0, 8)) {
       try {
         const data = await fetchBoardRoles(opts.boardType, code, source);
+        if (!data.board_code) data.board_code = code;
+        if (!data.board_name) data.board_name = code;
         parts.push(variant === 'shortline' ? renderShortlineRoles(data) : renderBoardBlock(data));
       } catch (e) {
         parts.push(
           variant === 'shortline'
-            ? `<div class="ba-short-roles"><span class="ba-muted">${esc(e.message || String(e))}</span></div>`
+            ? `<div class="ba-short-roles"><span class="ba-short-roles-board">${esc(code)}</span><span class="ba-muted"> ${esc(e.message || String(e))}</span></div>`
             : `<div class="gms-board-roles-block"><div class="gms-board-roles-title">${esc(code)}</div>` +
                 `<div class="gms-muted">${esc(e.message || String(e))}</div></div>`
         );

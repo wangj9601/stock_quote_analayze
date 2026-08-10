@@ -20,9 +20,36 @@ logger = logging.getLogger(__name__)
 
 STRATEGY_KEYS = ("gms", "urt", "sbbr", "rpe")
 
+# 板块分析「GMS 命中」最低总分（默认 70；买点亦须达标，保证表格/计数/PDF 一致）
+BOARD_GMS_HIT_MIN_SCORE = 70.0
+
 
 def _norm_code(c: Any) -> str:
     return str(c or "").strip()
+
+
+def _gms_score_total(row: Optional[Dict[str, Any]]) -> Optional[float]:
+    """读取 GMS 总分：优先 score_total，其次 total_score。"""
+    if not row:
+        return None
+    for k in ("score_total", "total_score"):
+        v = row.get(k)
+        if v is None or v == "":
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _gms_is_left_or_right_buy(row: Optional[Dict[str, Any]]) -> bool:
+    """是否已明确判定为左侧或右侧买点。"""
+    if not row:
+        return False
+    if row.get("left_buy_signal") or row.get("right_buy_signal"):
+        return True
+    return str(row.get("buy_type") or "") in ("左侧", "右侧")
 
 
 def load_board_member_codes(
@@ -113,23 +140,29 @@ def _filter_gms(
     items: List[Dict[str, Any]],
     *,
     min_score: float = 0.0,
+    require_min_score: bool = False,
 ) -> List[Dict[str, Any]]:
-    """左/右买点，或总分 ≥ min_score（与选股「有信号/达标」展示对齐；min_score=0 时仅买点）。"""
+    """GMS 命中过滤。
+
+    - require_min_score=False（默认，兼容选股/个股多策略）：左/右买点，或总分 ≥ min_score
+      （min_score=0 时仅买点）。
+    - require_min_score=True（板块分析）：总分 ≥ min_score **且** 明确左侧或右侧买点。
+    """
     thr = float(min_score or 0.0)
     out = []
     for r in items or []:
-        if r.get("left_buy_signal") or r.get("right_buy_signal"):
-            out.append(r)
+        if require_min_score:
+            if not _gms_is_left_or_right_buy(r):
+                continue
+            sc = _gms_score_total(r)
+            if sc is not None and sc >= thr:
+                out.append(r)
             continue
-        bt = str(r.get("buy_type") or "")
-        if bt in ("左侧", "右侧"):
+        if _gms_is_left_or_right_buy(r):
             out.append(r)
             continue
         if thr > 0:
-            try:
-                sc = float(r.get("score_total"))
-            except (TypeError, ValueError):
-                sc = None
+            sc = _gms_score_total(r)
             if sc is not None and sc >= thr:
                 out.append(r)
     return out
@@ -180,15 +213,18 @@ def _run_gms(db: Session, codes: List[str]) -> List[Dict[str, Any]]:
         enrich_results_with_board_resonance(db, rows, config=iface.config)
     except Exception as e:
         logger.debug("gms board resonance enrich skip: %s", e)
-    # 选股默认常按买点展示；同时保留总分达配置 min_score / 接口 min_score 的标的
-    min_sc = float(getattr(iface, "min_score", 0) or 0)
+    # 板块分析：GMS 命中固定要求总分 ≥ BOARD_GMS_HIT_MIN_SCORE 且明确左/右买点；接口/配置更高则取更大值
+    min_sc = float(BOARD_GMS_HIT_MIN_SCORE)
+    iface_sc = float(getattr(iface, "min_score", 0) or 0)
+    if iface_sc > min_sc:
+        min_sc = iface_sc
     cfg_sc = (iface.config or {}).get("min_score") if isinstance(iface.config, dict) else None
     if cfg_sc is not None:
         try:
             min_sc = max(min_sc, float(cfg_sc))
         except (TypeError, ValueError):
             pass
-    return _filter_gms(rows, min_score=min_sc)
+    return _filter_gms(rows, min_score=min_sc, require_min_score=True)
 
 
 def _run_urt(db: Session, codes: List[str]) -> List[Dict[str, Any]]:

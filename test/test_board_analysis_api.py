@@ -20,7 +20,7 @@ from backend_core.analysis.trade_advice import build_trade_advice
 def test_filters():
     # 默认 min_score=0：仅买点
     assert len(_filter_gms([{"left_buy_signal": True}, {"score_total": 80}])) == 1
-    # 总分达标
+    # 总分达标（兼容模式：买点仍保留，另加总分≥阈值）
     assert (
         len(
             _filter_gms(
@@ -36,6 +36,45 @@ def test_filters():
     )
     assert len(entry) == 1 and len(watch) == 1
     assert len(_filter_rpe([{"watch_only": True}, {"signal_type": "x"}])) == 1
+
+
+def test_filter_gms_board_hit_min_score_70():
+    """板块分析：GMS 命中须 ≥70 且明确左/右买点。
+
+    - 高分无买点 → 剔除
+    - 左侧/右侧 + ≥70 → 保留
+    - 左侧/右侧 + <70 → 剔除
+    """
+    from backend_core.analysis.board_signals import BOARD_GMS_HIT_MIN_SCORE
+
+    assert BOARD_GMS_HIT_MIN_SCORE == 70.0
+    rows = [
+        {"code": "a", "left_buy_signal": True, "score_total": 69},  # 左侧但 <70
+        {"code": "b", "left_buy_signal": True, "score_total": 70},  # 左侧 + 70
+        {"code": "c", "right_buy_signal": True, "score_total": 71},  # 右侧 + 71
+        {"code": "d", "score_total": 80},  # 高分无买点 → 剔除
+        {"code": "e", "left_buy_signal": True},  # 有买点无分数 → 剔除
+        {"code": "f", "total_score": 70.0},  # 仅 total_score、无买点 → 剔除
+        {"code": "g", "buy_type": "左侧", "total_score": 70.0},  # buy_type + total_score
+        {"code": "h", "buy_type": "右侧", "score_total": 69},  # 右侧但 <70
+        {"code": "i", "buy_type": "GMS", "score_total": 90},  # 非左右买点 → 剔除
+    ]
+    kept = _filter_gms(
+        rows,
+        min_score=BOARD_GMS_HIT_MIN_SCORE,
+        require_min_score=True,
+    )
+    codes = [r["code"] for r in kept]
+    assert codes == ["b", "c", "g"]
+    assert all(
+        (r.get("score_total") or r.get("total_score") or 0) >= 70 for r in kept
+    )
+    assert all(
+        r.get("left_buy_signal")
+        or r.get("right_buy_signal")
+        or str(r.get("buy_type") or "") in ("左侧", "右侧")
+        for r in kept
+    )
 
 
 def test_sbbr_advice_defense():
