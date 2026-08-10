@@ -454,19 +454,99 @@
                             </div>
                         </div>
 
-                        <div class="tool-card" data-tool="pattern">
+                        <div class="tool-card tool-card--pattern" data-tool="pattern" id="toolPatternRecognition">
                             <div class="tool-header">
                                 <h3>形态识别</h3>
-                                <button type="button" class="tool-btn" data-tool-action="pattern">使用工具</button>
+                                <button type="button" class="tool-btn" id="toolPatternToggleBtn" data-tool-action="pattern" data-perm="channel.analyze.tab.technical.btn.pattern">使用工具</button>
                             </div>
                             <div class="tool-desc">
-                                <p>自动识别K线图表技术形态</p>
+                                <p>自动识别日线 K 线常见技术形态，支持个股识别与板块/全市场扫描</p>
                                 <ul>
-                                    <li>头肩顶底形态</li>
+                                    <li>头肩顶底</li>
                                     <li>双顶双底</li>
-                                    <li>三角形整理</li>
+                                    <li>三角形</li>
                                     <li>楔形旗形</li>
                                 </ul>
+                            </div>
+                            <div class="tool-panel tool-levels-panel kde-levels-panel" id="toolPatternPanel" hidden>
+                                <div class="kde-levels-form pattern-tool-form">
+                                    <div class="form-row pattern-tool-main-row">
+                                        <div class="form-group pattern-mode-field">
+                                            <label for="patternModeSelect">模式</label>
+                                            <select id="patternModeSelect">
+                                                <option value="single">个股识别</option>
+                                                <option value="scan">全市场/板块扫描</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group" id="patternSingleFields">
+                                            <label for="patternStockCode">股票代码 / 名称</label>
+                                            <input type="text" id="patternStockCode" placeholder="如 600519 或 贵州茅台" autocomplete="off">
+                                        </div>
+                                        <div class="form-group" id="patternWatchField">
+                                            <label for="patternWatchlist">从自选选择</label>
+                                            <select id="patternWatchlist">
+                                                <option value="">-- 可选自选股 --</option>
+                                            </select>
+                                        </div>
+                                        <div id="patternScanFields" class="pattern-scan-inline" style="display:none;">
+                                            <div class="form-group pattern-scan-scope-field">
+                                                <label for="patternScanScope">扫描范围</label>
+                                                <select id="patternScanScope">
+                                                    <option value="market">全市场（限量）</option>
+                                                    <option value="industry">行业板块</option>
+                                                    <option value="concept">概念板块</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group" id="patternBoardPickWrap" style="display:none;">
+                                                <label>板块</label>
+                                                <div class="pattern-board-ctrl">
+                                                    <button type="button" class="btn btn-outline" id="patternBoardPickBtn">选择板块</button>
+                                                    <span class="pattern-board-summary" id="patternBoardSummary">未选</span>
+                                                </div>
+                                            </div>
+                                            <div class="form-group pattern-scan-limit-field">
+                                                <label for="patternScanLimit">扫描上限</label>
+                                                <input type="number" id="patternScanLimit" min="10" max="200" value="80">
+                                            </div>
+                                        </div>
+                                        <div class="form-group pattern-asof-field">
+                                            <label for="patternAsof">基准日</label>
+                                            <input type="date" id="patternAsof">
+                                        </div>
+                                        <div class="form-group kde-levels-actions">
+                                            <label>&nbsp;</label>
+                                            <button type="button" class="btn btn-primary" id="patternRunBtn"
+                                                data-perm="channel.analyze.tab.technical.btn.pattern">识别 / 扫描</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-row pattern-tool-types-row">
+                                        <div class="form-group pattern-types-field">
+                                            <label>形态类型</label>
+                                            <div class="pattern-type-checks" id="patternTypeChecks">
+                                                <label><input type="checkbox" value="double_extremes" checked> 双顶双底</label>
+                                                <label><input type="checkbox" value="head_shoulders" checked> 头肩</label>
+                                                <label><input type="checkbox" value="triangle" checked> 三角形</label>
+                                                <label><input type="checkbox" value="wedge_flag" checked> 楔形旗形</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="kde-levels-hint pattern-tool-hint">日线 OHLC 识别；扫描有数量与超时上限。旗形为简化规则。</p>
+                                </div>
+                                <div class="pattern-meta" id="patternMeta" hidden></div>
+                                <div class="pattern-result-wrap" id="patternResultWrap" hidden>
+                                    <table class="pattern-result-table">
+                                        <thead>
+                                            <tr>
+                                                <th>代码</th><th>名称</th><th>形态</th><th>状态</th>
+                                                <th>形成日</th><th>置信度</th><th>关键价</th><th>说明</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="patternResultBody"></tbody>
+                                    </table>
+                                </div>
+                                <div class="kde-levels-empty" id="patternEmpty">
+                                    选择模式并输入股票或扫描范围后点击「识别 / 扫描」。
+                                </div>
                             </div>
                         </div>
 
@@ -698,6 +778,7 @@
     <script src="js/board_analysis.js"></script>
     <script src="js/leader_mid_analysis.js"></script>
     <script src="js/kde_levels_tool.js"></script>
+    <script src="js/pattern_tool.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/analysis.js"></script>
 </body>

@@ -417,7 +417,8 @@
     left: 0;
 }
 
-.tool-card--levels {
+.tool-card--levels,
+.tool-card--pattern {
     grid-column: 1 / -1;
 }
 
@@ -1445,7 +1446,7 @@
     color: #374151;
 }
 
-.kde-levels-form input,
+.kde-levels-form input:not([type="checkbox"]):not([type="radio"]),
 .kde-levels-form select {
     padding: 0.55rem 0.75rem;
     border: 1px solid #e2e8f0;
@@ -1818,4 +1819,150 @@
     .kde-levels-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* 形态识别工具 */
+.pattern-tool-form .form-row + .form-row {
+    margin-top: 0.75rem;
+}
+
+.pattern-tool-form .form-group {
+    flex: 0 1 auto;
+}
+
+.pattern-tool-form .pattern-mode-field select,
+.pattern-tool-form .pattern-scan-scope-field select {
+    min-width: 150px;
+}
+
+.pattern-tool-form .pattern-scan-limit-field input {
+    min-width: 96px;
+    width: 96px;
+}
+
+.pattern-tool-form .pattern-asof-field input {
+    min-width: 150px;
+}
+
+/* 扫描字段参与主行 flex，隐藏时不占位 */
+.pattern-tool-form .pattern-scan-inline {
+    display: contents;
+}
+
+.pattern-board-ctrl {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.5rem;
+    min-height: 2.35rem;
+}
+
+.pattern-tool-form .pattern-types-field {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+.pattern-type-checks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.85rem;
+    font-size: 0.9rem;
+    padding-top: 0.15rem;
+}
+
+.pattern-type-checks label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin: 0;
+    white-space: nowrap;
+    cursor: pointer;
+    color: #374151;
+}
+
+.pattern-tool-form .pattern-type-checks input[type="checkbox"] {
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    accent-color: #2563eb;
+}
+
+.pattern-board-summary {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.pattern-tool-form .pattern-tool-hint {
+    margin: 0.75rem 0 0;
+}
+
+@media (max-width: 768px) {
+    .pattern-tool-form .form-group {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .pattern-tool-form .form-group input:not([type="checkbox"]),
+    .pattern-tool-form .form-group select {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .pattern-tool-form .pattern-scan-limit-field input {
+        width: 100%;
+    }
+
+    .pattern-tool-form .kde-levels-actions {
+        flex: 1 1 auto;
+    }
+
+    .pattern-tool-form .kde-levels-actions .btn {
+        width: 100%;
+    }
+}
+
+.pattern-meta {
+    margin: 0.75rem 0;
+    padding: 0.5rem 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.pattern-result-wrap {
+    overflow-x: auto;
+    margin-top: 0.5rem;
+}
+
+.pattern-result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.pattern-result-table th,
+.pattern-result-table td {
+    border: 1px solid #e2e8f0;
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.pattern-result-table th {
+    background: #f1f5f9;
+    font-weight: 600;
+}
+
+.pattern-result-table a {
+    color: #2563eb;
+    text-decoration: none;
 }

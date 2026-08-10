@@ -319,6 +319,13 @@ except ImportError as e:
     print(f"board_analysis_router 导入失败: {e}")
     board_analysis_router = None
 
+try:
+    from .stock.pattern_routes import router as pattern_router
+    print("pattern_router 导入成功")
+except ImportError as e:
+    print(f"pattern_router 导入失败: {e}")
+    pattern_router = None
+
 # 尝试导入港股路由
 try:
     from .stock.hk_stock_manage import router_old as hk_stock_router
@@ -655,6 +662,7 @@ _include_router(app, news_router, "新闻")
 _include_router(app, data_collection_router, "数据采集")
 _include_router(app, stock_analysis_router, "股票分析")
 _include_router(app, board_analysis_router, "板块分析")
+_include_router(app, pattern_router, "形态识别")
 _include_router(app, hk_stock_router, "港股")
 _include_router(app, quotes_router, "quotes")
 _include_router(app, multi_period_quotes_router, "multi_period_quotes")

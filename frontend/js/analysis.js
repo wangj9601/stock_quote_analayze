@@ -393,13 +393,17 @@ const AnalysisPage = {
     // 加载技术工具
     loadTechnicalTools() {
         if (window.KdeLevelsTool) KdeLevelsTool.loadKdeWatchlistOptions();
-        // URL ?tool=resistance-support / #resistance-support 时自动展开
+        if (window.PatternTool) PatternTool.loadWatchlist();
+        // URL ?tool=resistance-support|pattern 时自动展开
         try {
             const params = new URLSearchParams(window.location.search || '');
             const tool = (params.get('tool') || '').trim();
             const hash = (window.location.hash || '').replace(/^#/, '').trim();
             if (tool === 'resistance-support' || hash === 'resistance-support' || hash === 'kde-levels') {
                 this.openResistanceSupportTool({ scroll: true });
+            }
+            if (tool === 'pattern' || hash === 'pattern') {
+                this.openPatternTool({ scroll: true });
             }
         } catch (e) { /* ignore */ }
     },
@@ -420,6 +424,33 @@ const AnalysisPage = {
         }
     },
 
+    openPatternTool(opts = {}) {
+        const panel = document.getElementById('toolPatternPanel');
+        const btn = document.getElementById('toolPatternToggleBtn');
+        const card = document.getElementById('toolPatternRecognition');
+        if (panel) panel.hidden = false;
+        if (card) card.classList.add('is-tool-expanded');
+        if (btn) btn.textContent = '收起工具';
+        if (window.PatternTool) {
+            PatternTool.loadWatchlist();
+            PatternTool.syncModeUi();
+        }
+        if (opts.scroll) {
+            if (card && typeof card.scrollIntoView === 'function') {
+                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    },
+
+    closePatternTool() {
+        const panel = document.getElementById('toolPatternPanel');
+        const btn = document.getElementById('toolPatternToggleBtn');
+        const card = document.getElementById('toolPatternRecognition');
+        if (panel) panel.hidden = true;
+        if (card) card.classList.remove('is-tool-expanded');
+        if (btn) btn.textContent = '使用工具';
+    },
+
     // 使用技术工具
     useTechnicalTool(toolName, action) {
         const key = (action || '').trim() || String(toolName || '');
@@ -433,6 +464,16 @@ const AnalysisPage = {
             }
             this.openResistanceSupportTool({ scroll: true });
             CommonUtils.showToast('已打开阻力支撑位计算', 'info');
+            return;
+        }
+        if (key === 'pattern' || String(toolName || '').includes('形态')) {
+            const panel = document.getElementById('toolPatternPanel');
+            if (panel && !panel.hidden) {
+                this.closePatternTool();
+                return;
+            }
+            this.openPatternTool({ scroll: true });
+            CommonUtils.showToast('已打开形态识别', 'info');
             return;
         }
         if (key === 'screener' || String(toolName || '').includes('选股')) {
