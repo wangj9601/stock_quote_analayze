@@ -911,10 +911,16 @@ const PatternTool = {
     }
     try {
       if (mode === 'single') {
-        const code = ((document.getElementById('patternStockCode') || {}).value || '').trim();
+        let code = ((document.getElementById('patternStockCode') || {}).value || '').trim();
         if (!code) {
           CommonUtils.showToast('请输入股票代码或名称', 'warning');
           return;
+        }
+        // 「00700 腾讯」：首段为数字代码时取代码（与 levels 一致）
+        const firstToken = code.split(/\s+/)[0];
+        const firstBody = /^(sh|sz|bj|hk)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
+        if (/^\d{4,6}$/.test(firstBody)) {
+          code = firstToken;
         }
         const q = new URLSearchParams();
         q.set('types', types.join(','));

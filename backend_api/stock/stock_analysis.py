@@ -614,9 +614,20 @@ class StockAnalysisService:
         self.close()
 
     def _is_hk_stock(self, stock_code: str) -> bool:
-        """判断是否为港股"""
+        """判断是否为港股：优先查基础信息表，否则按 5 位纯数字缺省为港股。"""
         try:
-            stock_code = str(stock_code).strip()
+            try:
+                from backend_api.utils.equity_code import (
+                    is_hk_equity_code,
+                    normalize_equity_code,
+                )
+            except ImportError:
+                from utils.equity_code import (  # type: ignore
+                    is_hk_equity_code,
+                    normalize_equity_code,
+                )
+
+            stock_code = normalize_equity_code(stock_code)
             # 先查询港股表
             hk_stock = self.db.query(StockBasicInfoHK).filter(StockBasicInfoHK.code == stock_code).first()
             if hk_stock:
@@ -625,12 +636,15 @@ class StockAnalysisService:
             a_stock = self.db.query(StockBasicInfo).filter(StockBasicInfo.code == stock_code).first()
             if a_stock:
                 return False
-            # 如果两个表都没有，根据代码长度判断（港股5位，A股6位）
-            return len(stock_code) == 5
+            # 两表皆无：纯数字按位数缺省（5=港股，6=A股）
+            return is_hk_equity_code(stock_code)
         except Exception as e:
             logger.warning(f"判断股票类型失败: {str(e)}")
-            # 默认根据代码长度判断
-            return len(stock_code) == 5
+            try:
+                from backend_api.utils.equity_code import is_hk_equity_code
+            except ImportError:
+                from utils.equity_code import is_hk_equity_code  # type: ignore
+            return is_hk_equity_code(stock_code)
 
     def _get_gemini_analysis(self, stock_code: str, historical_data: List[Dict], technical_indicators: Dict) -> str:
         """调用 Gemini 获取 AI 深度分析结果（带超时保护）"""
@@ -1037,6 +1051,12 @@ class StockAnalysisService:
     def _get_historical_data(self, stock_code: str, days: int = 60) -> List[Dict]:
         """获取历史数据（支持A股和港股）"""
         try:
+            try:
+                from backend_api.utils.equity_code import normalize_equity_code
+            except ImportError:
+                from utils.equity_code import normalize_equity_code  # type: ignore
+
+            stock_code = normalize_equity_code(stock_code)
             is_hk = self._is_hk_stock(stock_code)
             
             if is_hk:

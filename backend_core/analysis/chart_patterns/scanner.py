@@ -119,9 +119,16 @@ def apply_qfq_to_code_bars(
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """对单票日 K 现算前复权；返回 (bars_qfq, adj_meta)。失败抛 AdjQuotesError。"""
     try:
-        from backend_api.utils.adj_quotes import apply_qfq_to_bars, ensure_adj_factors
+        from backend_api.utils.adj_quotes import AdjQuotesError, apply_qfq_to_bars, ensure_adj_factors
     except ImportError:
-        from utils.adj_quotes import apply_qfq_to_bars, ensure_adj_factors  # type: ignore
+        from utils.adj_quotes import AdjQuotesError, apply_qfq_to_bars, ensure_adj_factors  # type: ignore
+    try:
+        from backend_api.utils.equity_code import is_hk_equity_code
+    except ImportError:
+        from utils.equity_code import is_hk_equity_code  # type: ignore
+
+    if is_hk_equity_code(code):
+        raise AdjQuotesError("前复权计算目前仅支持 A 股，港股暂不支持（请改用不复权）")
 
     ensured = ensure_adj_factors(
         db,

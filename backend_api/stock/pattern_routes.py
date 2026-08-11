@@ -100,12 +100,23 @@ async def patterns_for_stock(
         load_names,
         resolve_effective_trade_date,
     )
-    from backend_core.strategies.double_bottom.universe import normalize_a_code
 
     try:
         from backend_api.utils.adj_quotes import AdjQuotesError
     except ImportError:
         from utils.adj_quotes import AdjQuotesError  # type: ignore
+    try:
+        from backend_api.utils.equity_code import (
+            infer_market_type,
+            is_hk_equity_code,
+            normalize_equity_code,
+        )
+    except ImportError:
+        from utils.equity_code import (  # type: ignore
+            infer_market_type,
+            is_hk_equity_code,
+            normalize_equity_code,
+        )
 
     try:
         adjust_n = normalize_price_adjust(adjust)
@@ -118,11 +129,20 @@ async def patterns_for_stock(
         raise HTTPException(status_code=400, detail={"message": "代码不唯一", **resolved})
     if status == "not_found":
         raise HTTPException(status_code=404, detail=resolved.get("message") or "未找到股票")
-    stock_code = normalize_a_code(resolved.get("code") or code)
-    if not stock_code:
-        raise HTTPException(status_code=400, detail="无效股票代码")
+    stock_code = normalize_equity_code(resolved.get("code") or code)
+    if not stock_code or (
+        stock_code.isdigit() and len(stock_code) not in (5, 6)
+    ):
+        raise HTTPException(status_code=400, detail="无效股票代码（A股6位，港股5位）")
 
-    asof_s = resolve_effective_trade_date(db, asof)
+    market = infer_market_type(stock_code) or "CN"
+    if adjust_n == "qfq" and is_hk_equity_code(stock_code):
+        raise HTTPException(
+            status_code=400,
+            detail="前复权计算目前仅支持 A 股，港股暂不支持（请改用不复权）",
+        )
+
+    asof_s = resolve_effective_trade_date(db, asof, market=market)
     bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
     bars = bars_map.get(stock_code) or []
     adj_meta: Optional[Dict[str, Any]] = None

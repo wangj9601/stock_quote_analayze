@@ -195,9 +195,9 @@ const KdeLevelsTool = {
             codeInput.focus();
             return;
         }
-        // 「600519 贵州茅台」类输入：首段为数字代码时取代码
+        // 「00700 腾讯」/「600519 贵州茅台」：首段为数字代码时取代码（4–6 位，港股可含前导零）
         const firstToken = query.split(/\s+/)[0];
-        const firstBody = /^(sh|sz|bj)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
+        const firstBody = /^(sh|sz|bj|hk)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
         if (/^\d{4,6}$/.test(firstBody)) {
             query = firstToken;
         }

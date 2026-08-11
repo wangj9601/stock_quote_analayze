@@ -28,19 +28,12 @@ class LevelsBatchRequest(BaseModel):
 
 def _normalize_levels_stock_code(raw: str) -> str:
     """归一化数字代码：港股补齐 5 位，A 股补齐 6 位。"""
-    s = str(raw or "").strip()
-    if not s:
-        return s
-    upper = s.upper()
-    if upper.startswith(("SH", "SZ")) and len(s) > 2:
-        s = s[2:].strip()
-    if not s.isdigit():
-        return s
-    if len(s) == 6 and s[0] in "603":
-        return s.zfill(6)
-    if len(s) <= 5:
-        return s.zfill(5)
-    return s.zfill(6)
+    try:
+        from backend_api.utils.equity_code import normalize_equity_code
+    except ImportError:
+        from utils.equity_code import normalize_equity_code  # type: ignore
+
+    return normalize_equity_code(raw)
 
 
 def resolve_levels_stock_identifier(db: Session, raw: str) -> Dict[str, Any]:
@@ -57,23 +50,20 @@ def resolve_levels_stock_identifier(db: Session, raw: str) -> Dict[str, Any]:
     if not s:
         return {"status": "not_found", "message": "请输入股票代码或名称", "candidates": []}
 
-    # 兼容「600519 贵州茅台」：首段为代码时优先取代码
+    try:
+        from backend_api.utils.equity_code import normalize_equity_code, strip_exchange_prefix
+    except ImportError:
+        from utils.equity_code import normalize_equity_code, strip_exchange_prefix  # type: ignore
+
+    # 兼容「600519 贵州茅台」/「00700 腾讯」：首段为代码时优先取代码
     if " " in s or "\t" in s:
         first = s.split(None, 1)[0].strip()
-        first_norm = first.upper()
-        if first_norm.startswith(("SH", "SZ")) and len(first) > 2:
-            first_body = first[2:].strip()
-        else:
-            first_body = first
-        if first_body.isdigit():
+        if strip_exchange_prefix(first).isdigit():
             s = first
 
-    upper = s.upper()
-    if upper.startswith(("SH", "SZ")) and len(s) > 2:
-        s = s[2:].strip()
-
-    if s.isdigit():
-        code = _normalize_levels_stock_code(s)
+    body = strip_exchange_prefix(s)
+    if body.isdigit():
+        code = normalize_equity_code(s)
         if len(code) not in (5, 6):
             return {
                 "status": "not_found",
@@ -188,10 +178,16 @@ def _compute_levels_payload(
         historical_data = None
         adj_meta = None
         if adjust_n == "qfq":
-            if analysis_service._is_hk_stock(code):
+            try:
+                from backend_api.utils.equity_code import is_hk_equity_code
+            except ImportError:
+                from utils.equity_code import is_hk_equity_code  # type: ignore
+
+            # 5 位码缺省港股；港股无复权因子链路，明确拒绝（勿 silent 走 A 股表）
+            if is_hk_equity_code(code) or analysis_service._is_hk_stock(code):
                 return 400, {
                     "success": False,
-                    "message": "前复权计算目前仅支持 A 股，港股暂不支持",
+                    "message": "前复权计算目前仅支持 A 股，港股暂不支持（请改用不复权）",
                 }
             try:
                 from .stock_analysis import KeyLevels
