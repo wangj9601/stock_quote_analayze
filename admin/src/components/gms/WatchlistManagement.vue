@@ -93,7 +93,7 @@
           v-model:page-size="pageSize"
           :total="total"
           layout="total, prev, pager, next, sizes"
-          :page-sizes="[20, 50, 100]"
+          :page-sizes="[20, 50, 100, 200, 500]"
           @current-change="refresh"
           @size-change="refresh"
         />

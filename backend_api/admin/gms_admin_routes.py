@@ -1633,7 +1633,7 @@ async def list_strategy_version_stocks(
     keyword: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=200),
+    page_size: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
     exists = db.query(GMSStrategyVersion.id).filter(GMSStrategyVersion.id == version_id).first()
