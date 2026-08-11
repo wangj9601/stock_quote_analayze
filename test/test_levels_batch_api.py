@@ -31,8 +31,8 @@ def test_levels_batch_aggregates_success_and_fail():
     db = MagicMock()
 
     def fake_compute(code, max_levels, *, db, adjust, refresh_factor, factor_source):
-        if code == "00700":
-            return 400, {"success": False, "message": "前复权计算目前仅支持 A 股，港股暂不支持"}
+        if code == "99999":
+            return 400, {"success": False, "message": "获取港股复权因子失败"}
         return 200, {
             "success": True,
             "data": {
@@ -45,17 +45,17 @@ def test_levels_batch_aggregates_success_and_fail():
             },
         }
 
-    body = LevelsBatchRequest(codes=["600519", "00700"], adjust="qfq")
+    body = LevelsBatchRequest(codes=["600519", "00700", "99999"], adjust="qfq")
     with patch("stock.stock_analysis_routes._compute_levels_payload", side_effect=fake_compute):
         resp = asyncio.run(get_key_levels_batch(body, db))
 
     assert resp.status_code == 200
     data = json.loads(resp.body)
     assert data["success"] is True
-    assert data["total"] == 2
-    assert data["ok_count"] == 1
+    assert data["total"] == 3
+    assert data["ok_count"] == 2
     assert data["fail_count"] == 1
     by_code = {it["code"]: it for it in data["items"]}
     assert by_code["600519"]["success"] is True
-    assert by_code["600519"]["nearest_support"] == 10.5
-    assert by_code["00700"]["success"] is False
+    assert by_code["00700"]["success"] is True
+    assert by_code["99999"]["success"] is False

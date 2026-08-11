@@ -179,19 +179,9 @@ def _compute_levels_payload(
         adj_meta = None
         if adjust_n == "qfq":
             try:
-                from backend_api.utils.equity_code import is_hk_equity_code
-            except ImportError:
-                from utils.equity_code import is_hk_equity_code  # type: ignore
-
-            # 5 位码缺省港股；港股无复权因子链路，明确拒绝（勿 silent 走 A 股表）
-            if is_hk_equity_code(code) or analysis_service._is_hk_stock(code):
-                return 400, {
-                    "success": False,
-                    "message": "前复权计算目前仅支持 A 股，港股暂不支持（请改用不复权）",
-                }
-            try:
                 from .stock_analysis import KeyLevels
 
+                # A 股 / 港股：ensure_adj_factors 按 6/5 位分流；港股无因子时抛清晰错误
                 ensured = ensure_adj_factors(
                     db,
                     code,
@@ -484,7 +474,7 @@ async def get_key_levels_batch(
     批量计算 KDE 支撑/阻力。
 
     供 URT/RPE 等选股列表「按前复权计算」：只刷新支撑/阻力口径，不改写策略信号与得分。
-    单股失败不影响其它代码；港股在 adjust=qfq 时记为失败项。
+    单股失败不影响其它代码；A 股/港股均可 adjust=qfq（港股因子源 akshare_sina_hk_qfq）。
     """
     codes = _normalize_batch_codes(body.codes)
     if not codes:
@@ -594,7 +584,8 @@ async def get_key_levels(
 
     轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
     stock_code 支持 A股/港股代码，或股票名称（精确唯一则直接计算；多候选返回 candidates）。
-    adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor（生产默认归一化新浪，备用 BaoStock），
+    adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor
+    （A 股：归一化新浪优先、BaoStock 备用；港股：stock_hk_daily qfq-factor，source=akshare_sina_hk_qfq），
     再对不复权日K现算后计算（KDE/VP/Fib/Pivot 同口径）。
     """
     try:

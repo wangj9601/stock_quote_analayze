@@ -742,9 +742,10 @@ class HistoricalQuotes(Base):
 
 
 class StockAdjFactor(Base):
-    """A 股每日复权因子（累计）；查询层现算前复权价，不物化 qfq K 线。
+    """每日复权因子（累计）；查询层现算前复权价，不物化 qfq K 线。
 
-    主键含 source，使新浪 / BaoStock 等来源可并存、互不覆盖。
+    A 股 6 位码 + 港股 5 位码同表；主键含 source，使
+    akshare_sina_qfq / baostock_qfq / akshare_sina_hk_qfq 等来源可并存、互不覆盖。
     """
 
     __tablename__ = "stock_adj_factor"

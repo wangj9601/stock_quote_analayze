@@ -3,6 +3,7 @@
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -15,15 +16,18 @@ sys.path.insert(0, str(ROOT / "backend_api"))
 import utils.adj_quotes as adj_quotes_mod  # noqa: E402
 from utils.adj_quotes import (  # noqa: E402
     AdjQuotesError,
+    SOURCE_AKSHARE_SINA_HK_QFQ,
     SOURCE_AKSHARE_SINA_QFQ,
     SOURCE_BAOSTOCK_QFQ,
     apply_qfq_to_bars,
     ensure_adj_factors,
     fetch_baostock_qfq_factors,
+    fetch_hk_sina_qfq_factors,
     fetch_qfq_factors,
     fetch_sina_qfq_factors,
     is_bse_a_share_code,
     normalize_a_share_code,
+    normalize_hk_code,
     normalize_sina_factor_to_internal,
     throttle_third_party_fetch,
     to_baostock_symbol,
@@ -118,10 +122,188 @@ def test_fetch_sina_qfq_factors_parses_df():
     assert fake_ak.stock_zh_a_daily.call_args.kwargs.get("adjust") == "qfq-factor"
 
 
-def test_ensure_adj_factors_rejects_hk():
+def test_ensure_adj_factors_allows_hk_code():
+    """港股 5 位码允许走 ensure；库空时拉取 hk 源。"""
     db = MagicMock()
-    with pytest.raises(AdjQuotesError, match="A 股"):
-        ensure_adj_factors(db, "00700")
+    today = date.today()
+    state = {"written": False}
+
+    def _execute(sql, params=None):
+        result = MagicMock()
+        if state["written"]:
+            result.fetchall.return_value = [(today, 1.0), (date(2020, 1, 2), 0.5)]
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    def _upsert(db, rows, source=SOURCE_AKSHARE_SINA_HK_QFQ):
+        state["written"] = True
+        return len(rows)
+
+    db.execute.side_effect = _execute
+    rows = [
+        {
+            "code": "00700",
+            "trade_date": date(2020, 1, 2),
+            "adj_factor": 0.5,
+            "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+        },
+        {
+            "code": "00700",
+            "trade_date": today,
+            "adj_factor": 1.0,
+            "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+        },
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_qfq_factors",
+        return_value=(rows, SOURCE_AKSHARE_SINA_HK_QFQ),
+    ) as fetch_mock, patch(
+        "utils.adj_quotes.upsert_adj_factors", side_effect=_upsert
+    ):
+        out = ensure_adj_factors(db, "700", prefer_db=True)
+    fetch_mock.assert_called_once()
+    assert fetch_mock.call_args.args[0] == "00700"
+    assert out["source"] == SOURCE_AKSHARE_SINA_HK_QFQ
+    assert out["factor_fetched"] is True
+    assert len(out["factors"]) == 2
+
+
+def test_ensure_hk_second_call_hits_db_without_fetch():
+    """港股 00700：首次拉取入库；再次 ensure 优先读库，不重复外网。"""
+    db = MagicMock()
+    today = date.today()
+    factor_rows = [(date(2020, 1, 2), 0.5), (today, 1.0)]
+    store: Dict[str, list] = {"rows": []}
+
+    def _execute(sql, params=None):
+        result = MagicMock()
+        # load_adj_factors_from_db / _latest_factor_meta
+        result.fetchall.return_value = list(store["rows"])
+        if store["rows"]:
+            result.fetchone.return_value = (
+                store["rows"][-1][0],
+                None,
+                SOURCE_AKSHARE_SINA_HK_QFQ,
+            )
+        else:
+            result.fetchone.return_value = None
+        return result
+
+    def _upsert(db_sess, rows, source=SOURCE_AKSHARE_SINA_HK_QFQ):
+        assert source == SOURCE_AKSHARE_SINA_HK_QFQ
+        assert all(str(r.get("code")) == "00700" for r in rows)
+        store["rows"] = [(r["trade_date"], float(r["adj_factor"])) for r in rows]
+        store["rows"].sort(key=lambda x: x[0])
+        return len(rows)
+
+    db.execute.side_effect = _execute
+    remote = [
+        {
+            "code": "00700",
+            "trade_date": date(2020, 1, 2),
+            "adj_factor": 0.5,
+            "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+        },
+        {
+            "code": "00700",
+            "trade_date": today,
+            "adj_factor": 1.0,
+            "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+        },
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_qfq_factors",
+        return_value=(remote, SOURCE_AKSHARE_SINA_HK_QFQ),
+    ) as fetch_mock, patch(
+        "utils.adj_quotes.upsert_adj_factors", side_effect=_upsert
+    ) as upsert_mock:
+        first = ensure_adj_factors(db, "00700", prefer_db=True)
+        second = ensure_adj_factors(db, "700", prefer_db=True)
+
+    assert fetch_mock.call_count == 1
+    upsert_mock.assert_called_once()
+    assert first["factor_fetched"] is True
+    assert first["from_db"] is False
+    assert first["source"] == SOURCE_AKSHARE_SINA_HK_QFQ
+    assert len(first["factors"]) == 2
+
+    assert second["factor_fetched"] is False
+    assert second["from_db"] is True
+    assert second["source"] == SOURCE_AKSHARE_SINA_HK_QFQ
+    assert second["factors"] == factor_rows
+
+
+def test_normalize_hk_code_padding():
+    assert normalize_hk_code("700") == "00700"
+    assert normalize_hk_code("0700") == "00700"
+    assert normalize_hk_code("00700") == "00700"
+    assert normalize_hk_code("HK00700") == "00700"
+    with pytest.raises(AdjQuotesError):
+        normalize_hk_code("600519")
+
+
+def test_fetch_hk_sina_qfq_factors_no_reciprocal():
+    """港股新浪因子已是最新≈1、历史更小：入库不取倒数。"""
+    df = pd.DataFrame(
+        {
+            "date": ["2024-06-01", "2020-01-02", "1900-01-01"],
+            "qfq_factor": [1.0, 0.5, 0.4],
+        }
+    )
+    fake_ak = MagicMock()
+    fake_ak.stock_hk_daily.return_value = df
+    with patch.dict(sys.modules, {"akshare": fake_ak}):
+        rows = fetch_hk_sina_qfq_factors("700")
+    assert len(rows) == 2
+    assert rows[0]["code"] == "00700"
+    assert rows[0]["adj_factor"] == pytest.approx(0.5)  # 不取倒数
+    assert rows[1]["adj_factor"] == pytest.approx(1.0)
+    assert all(r["source"] == SOURCE_AKSHARE_SINA_HK_QFQ for r in rows)
+    fake_ak.stock_hk_daily.assert_called()
+    assert fake_ak.stock_hk_daily.call_args.kwargs.get("symbol") == "00700"
+    assert fake_ak.stock_hk_daily.call_args.kwargs.get("adjust") == "qfq-factor"
+
+
+def test_fetch_qfq_factors_routes_hk_and_rejects_baostock():
+    hk_rows = [
+        {
+            "code": "00700",
+            "trade_date": date(2024, 1, 2),
+            "adj_factor": 0.9,
+            "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+        }
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_hk_sina_qfq_factors", return_value=hk_rows
+    ) as hk_mock, patch(
+        "utils.adj_quotes.fetch_sina_qfq_factors"
+    ) as cn_mock, patch(
+        "utils.adj_quotes.fetch_baostock_qfq_factors"
+    ) as bao_mock:
+        rows, src = fetch_qfq_factors("700", factor_source="auto")
+    assert src == SOURCE_AKSHARE_SINA_HK_QFQ
+    assert rows[0]["adj_factor"] == 0.9
+    hk_mock.assert_called_once()
+    cn_mock.assert_not_called()
+    bao_mock.assert_not_called()
+
+    with pytest.raises(AdjQuotesError, match="BaoStock"):
+        fetch_qfq_factors("00700", factor_source="baostock")
+
+
+def test_apply_qfq_hk_style_factors():
+    """港股风格因子（最新=1、历史更小）现算：历史价被缩小。"""
+    bars = [
+        {"date": "2020-01-02", "close": 100.0, "volume": 10},
+        {"date": "2024-06-01", "close": 200.0, "volume": 20},
+    ]
+    factors = [(date(2020, 1, 2), 0.5), (date(2024, 6, 1), 1.0)]
+    out = apply_qfq_to_bars(bars, factors)
+    assert out[0]["close"] == pytest.approx(50.0)
+    assert out[0]["volume"] == 10
+    assert out[1]["close"] == pytest.approx(200.0)
 
 
 def test_ensure_uses_cache_when_fresh():

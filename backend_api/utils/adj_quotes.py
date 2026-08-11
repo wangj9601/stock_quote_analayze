@@ -1,18 +1,21 @@
 """不复权行情 + 复权因子 → 查询/内存层现算前复权。
 
-内部约定（与 BaoStock 一致）：
+内部约定（与 BaoStock / 港股新浪一致）：
   P_qfq = P_raw * f_t / f_T（f_T 为序列最新因子日，约 f_T≈1；历史因子通常 ≤1）。
   volume / amount 不乘因子。因子按日对齐时对缺口做 forward-fill。
 
-因子来源（生产默认：归一化新浪优先，BaoStock 备用）：
-  - 主源：AkShare 新浪 `stock_zh_a_daily(adjust=\"qfq-factor\")`
+因子来源：
+  - A 股主源：AkShare 新浪 `stock_zh_a_daily(adjust=\"qfq-factor\")`
     新浪原始 qfq-factor 为「历史>1、最新≈1」的倒数形态；入库前取倒数归一化
     为内部约定（历史≤1、最新≈1），见 normalize_sina_factor_to_internal。
     符号：沪 sh / 深 sz / 北交所 bj（不可把 92xxxx 误标为 sh）。
-  - 备用：BaoStock `query_adjust_factor` → `foreAdjustFactor`（原样入库，已符合内部约定）。
-    BaoStock 仅支持沪深，北交所不走备用源。
+  - A 股备用：BaoStock `query_adjust_factor` → `foreAdjustFactor`（原样入库，已符合内部约定）。
+    BaoStock 仅支持沪深，北交所不走备用源；港股亦不支持 BaoStock。
+  - 港股：AkShare 新浪 `stock_hk_daily(symbol, adjust=\"qfq-factor\")`
+    实测（如 00700）原始序列已是「最新≈1、历史更小」，与内部约定一致，
+    **入库不取倒数**（切勿照搬 A 股新浪倒数逻辑）。代码统一 5 位补零。
 
-factor_source=auto：归一化新浪 → 失败再用 BaoStock（北交所除外）。
+factor_source=auto：A 股=归一化新浪 → BaoStock（北交所除外）；港股=仅港股新浪源。
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 SOURCE_AKSHARE_SINA_QFQ = "akshare_sina_qfq"
+SOURCE_AKSHARE_SINA_HK_QFQ = "akshare_sina_hk_qfq"
 SOURCE_BAOSTOCK_QFQ = "baostock_qfq"
 DEFAULT_FACTOR_MAX_AGE_DAYS = 5
 # 批量前复权补因子：是否限速 + 间隔秒数（见 ADJ_FACTOR_FETCH_THROTTLE_*）
@@ -66,6 +70,50 @@ def normalize_a_share_code(code: str) -> str:
     if s.startswith(("SH", "SZ", "BJ")) and len(s) > 2:
         s = s[2:]
     return s
+
+
+def normalize_hk_code(code: str) -> str:
+    """港股代码归一化为 5 位（``700`` / ``0700`` / ``HK00700`` → ``00700``）。"""
+    try:
+        from backend_api.utils.equity_code import normalize_equity_code
+    except ImportError:
+        from utils.equity_code import normalize_equity_code  # type: ignore
+
+    c = normalize_equity_code(code)
+    if not c.isdigit() or len(c) != 5:
+        raise AdjQuotesError(f"仅支持港股 5 位代码获取复权因子，当前：{code}")
+    return c
+
+
+def normalize_adj_code(code: str) -> str:
+    """复权因子用代码：港股 5 位 / A 股 6 位（去交易所前缀并补零）。"""
+    try:
+        from backend_api.utils.equity_code import (
+            is_hk_equity_code,
+            normalize_equity_code,
+        )
+    except ImportError:
+        from utils.equity_code import (  # type: ignore
+            is_hk_equity_code,
+            normalize_equity_code,
+        )
+
+    c = normalize_equity_code(code)
+    if not c or not c.isdigit() or len(c) not in (5, 6):
+        raise AdjQuotesError(f"股票代码格式错误（A股6位，港股5位），当前：{code}")
+    if is_hk_equity_code(c):
+        return c
+    return normalize_a_share_code(c)
+
+
+def is_hk_adj_code(code: str) -> bool:
+    """是否港股复权代码（归一化后 5 位纯数字）。"""
+    try:
+        from backend_api.utils.equity_code import is_hk_equity_code
+    except ImportError:
+        from utils.equity_code import is_hk_equity_code  # type: ignore
+
+    return is_hk_equity_code(code)
 
 
 def is_bse_a_share_code(code: str) -> bool:
@@ -165,9 +213,17 @@ def normalize_sina_factor_to_internal(factor: float) -> float:
     return 1.0 / f
 
 
-def _factor_source_tag(factor_source: str) -> Optional[str]:
+def _factor_source_tag(factor_source: str, *, market: str = "CN") -> Optional[str]:
     """UI/参数 factor_source → 库内 source 标签；auto 返回 None。"""
     src = normalize_factor_source(factor_source)
+    if market == "HK":
+        if src == FACTOR_SOURCE_BAOSTOCK:
+            raise AdjQuotesError(
+                "BaoStock 不支持港股复权因子；请使用 auto/sina（akshare stock_hk_daily）"
+            )
+        if src in (FACTOR_SOURCE_SINA, FACTOR_SOURCE_AUTO):
+            return SOURCE_AKSHARE_SINA_HK_QFQ
+        return None
     if src == FACTOR_SOURCE_SINA:
         return SOURCE_AKSHARE_SINA_QFQ
     if src == FACTOR_SOURCE_BAOSTOCK:
@@ -305,6 +361,87 @@ def fetch_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
     raise AdjQuotesError(_friendly_sina_factor_error(symbol, last_err or Exception("未知错误")))
 
 
+def fetch_hk_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
+    """调用 AkShare 港股新浪接口拉取前复权因子（原样入库，不取倒数）。
+
+    ``stock_hk_daily(..., adjust=\"qfq-factor\")`` 实测序列已符合内部约定：
+    最新因子日 ≈1、更早事件日更小（如 00700）。现算仍用
+    ``P_qfq = P_raw × f_t / f_T``（见 apply_qfq_to_bars），故不可对 A 股新浪
+    做「取倒数」照搬。接口要求 5 位补零 symbol（``700`` 会失败）。
+    """
+    import akshare as ak
+
+    code_n = normalize_hk_code(code)
+    throttle_third_party_fetch(label=f"sina_hk:{code_n}")
+    last_err: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            df = ak.stock_hk_daily(symbol=code_n, adjust="qfq-factor")
+            if df is None or getattr(df, "empty", True):
+                raise AdjQuotesError(f"港股新浪未返回复权因子（{code_n}）")
+            rows: List[Dict[str, Any]] = []
+            cols = {str(c).lower(): c for c in df.columns}
+            date_col = cols.get("date") or list(df.columns)[0]
+            factor_col = (
+                cols.get("qfq_factor")
+                or cols.get("adj_factor")
+                or cols.get("factor")
+                or list(df.columns)[1]
+            )
+            for _, r in df.iterrows():
+                td = _parse_trade_date(r.get(date_col))
+                if td is None or not _is_valid_factor_trade_date(td):
+                    continue
+                try:
+                    f = float(r.get(factor_col))
+                except (TypeError, ValueError):
+                    continue
+                if f <= 0:
+                    continue
+                # 港股新浪已是内部约定形态：直接入库，禁止取倒数
+                rows.append(
+                    {
+                        "code": code_n,
+                        "trade_date": td,
+                        "adj_factor": f,
+                        "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+                    }
+                )
+            if not rows:
+                raise AdjQuotesError(f"港股新浪复权因子解析为空（{code_n}）")
+            rows.sort(key=lambda x: x["trade_date"])
+            # 轻量形态校验：最新应接近 1；若明显呈「历史>1」则告警（仍按原样入库）
+            f_latest = float(rows[-1]["adj_factor"])
+            f_oldest = float(rows[0]["adj_factor"])
+            if f_latest > 0 and abs(f_latest - 1.0) > 0.15:
+                logger.warning(
+                    "港股复权因子最新值偏离 1 较多 code=%s latest=%s oldest=%s",
+                    code_n,
+                    f_latest,
+                    f_oldest,
+                )
+            if f_oldest > f_latest * 1.05 and f_oldest > 1.05:
+                logger.warning(
+                    "港股复权因子疑似倒数形态（未取倒数）code=%s oldest=%s latest=%s",
+                    code_n,
+                    f_oldest,
+                    f_latest,
+                )
+            return rows
+        except AdjQuotesError:
+            raise
+        except Exception as e:
+            last_err = e
+            sleep_s = (attempt + 1) * 1.5 + random.uniform(0.2, 0.8)
+            logger.warning(
+                "拉取港股 qfq-factor 失败 %s attempt=%s: %s", code_n, attempt + 1, e
+            )
+            time.sleep(sleep_s)
+    raise AdjQuotesError(
+        _friendly_sina_factor_error(code_n, last_err or Exception("未知错误"))
+    )
+
+
 def fetch_baostock_qfq_factors(
     code: str,
     *,
@@ -385,9 +522,23 @@ def fetch_qfq_factors(
     *,
     factor_source: str = FACTOR_SOURCE_AUTO,
 ) -> Tuple[List[Dict[str, Any]], str]:
-    """按策略拉取因子，返回 (rows, source_tag)。"""
+    """按策略拉取因子，返回 (rows, source_tag)。港股走 stock_hk_daily，无 BaoStock。"""
     src = normalize_factor_source(factor_source)
     errors: List[str] = []
+
+    if is_hk_adj_code(code):
+        code_n = normalize_hk_code(code)
+        if src == FACTOR_SOURCE_BAOSTOCK:
+            raise AdjQuotesError(
+                f"BaoStock 不支持港股（{code_n}）；请使用 auto/sina 拉取港股新浪因子"
+            )
+        try:
+            return fetch_hk_sina_qfq_factors(code_n), SOURCE_AKSHARE_SINA_HK_QFQ
+        except AdjQuotesError as e:
+            raise AdjQuotesError(
+                f"获取港股复权因子失败（{code_n}）：{e.message}。"
+                "若库内无 stock_adj_factor（source=akshare_sina_hk_qfq），请改用不复权计算"
+            ) from e
 
     def _try_sina() -> List[Dict[str, Any]]:
         return fetch_sina_qfq_factors(code)
@@ -453,7 +604,11 @@ def upsert_adj_factors(
         """
     )
     for r in rows:
-        code = normalize_a_share_code(str(r.get("code") or ""))
+        raw_code = str(r.get("code") or "")
+        try:
+            code = normalize_adj_code(raw_code) if raw_code else ""
+        except AdjQuotesError:
+            code = normalize_a_share_code(raw_code)
         td = r.get("trade_date")
         if isinstance(td, str):
             td = _parse_trade_date(td)
@@ -487,7 +642,10 @@ def load_adj_factors_from_db(
     source: str,
 ) -> List[Tuple[date, float]]:
     """按 code + source 加载因子序列（不同来源互不混用）。"""
-    code_n = normalize_a_share_code(code)
+    try:
+        code_n = normalize_adj_code(code)
+    except AdjQuotesError:
+        code_n = normalize_a_share_code(code)
     src = str(source or "").strip()
     if not src:
         raise AdjQuotesError("加载复权因子时必须指定 source")
@@ -527,6 +685,10 @@ def _latest_factor_meta(
     *,
     source: str,
 ) -> Tuple[Optional[date], Optional[datetime], Optional[str]]:
+    try:
+        code_n = normalize_adj_code(code)
+    except AdjQuotesError:
+        code_n = normalize_a_share_code(code)
     row = db.execute(
         text(
             """
@@ -538,7 +700,7 @@ def _latest_factor_meta(
             LIMIT 1
             """
         ),
-        {"code": normalize_a_share_code(code), "source": str(source)},
+        {"code": code_n, "source": str(source)},
     ).fetchone()
     if not row:
         return None, None, None
@@ -563,12 +725,15 @@ def _is_fresh(latest_td: Optional[date], max_age_days: int) -> bool:
     return age <= max(0, int(max_age_days))
 
 
-def _candidate_factor_sources(factor_source: str) -> List[str]:
+def _candidate_factor_sources(factor_source: str, *, market: str = "CN") -> List[str]:
     """按 factor_source 偏好返回要检索的 stock_adj_factor.source 列表。"""
     src_pref = normalize_factor_source(factor_source)
+    if market == "HK":
+        tag = _factor_source_tag(src_pref, market="HK")
+        return [tag] if tag else [SOURCE_AKSHARE_SINA_HK_QFQ]
     if src_pref == FACTOR_SOURCE_AUTO:
         return [SOURCE_AKSHARE_SINA_QFQ, SOURCE_BAOSTOCK_QFQ]
-    tag = _factor_source_tag(src_pref)
+    tag = _factor_source_tag(src_pref, market="CN")
     return [tag] if tag else [SOURCE_AKSHARE_SINA_QFQ]
 
 
@@ -591,15 +756,24 @@ def ensure_adj_factors(
     prefer_db=False：仅当库内因子在 max_age_days 内视为可用，否则走外网刷新。
     force_refresh=True：跳过读库，强制拉取并覆盖写入。
 
-    factor_source: auto | sina | baostock（auto=新浪优先，失败再 BaoStock）
+    factor_source: auto | sina | baostock
+      - A 股 auto=新浪优先，失败再 BaoStock
+      - 港股仅 sina/auto → akshare_sina_hk_qfq（BaoStock 不可用）
     返回：{ factors, factor_fetched, source, adj_factor_asof, factor_source, from_db }
     """
-    code_n = normalize_a_share_code(code)
-    if not code_n.isdigit() or len(code_n) != 6:
-        raise AdjQuotesError("前复权计算目前仅支持 A 股（6 位代码），港股暂不支持")
+    try:
+        code_n = normalize_adj_code(code)
+    except AdjQuotesError as e:
+        raise AdjQuotesError(
+            f"前复权计算仅支持 A 股（6 位）或港股（5 位）代码：{e.message}"
+        ) from e
 
+    market = "HK" if is_hk_adj_code(code_n) else "CN"
     src_pref = normalize_factor_source(factor_source)
-    candidates = _candidate_factor_sources(src_pref)
+    candidates = _candidate_factor_sources(src_pref, market=market)
+    default_source = (
+        SOURCE_AKSHARE_SINA_HK_QFQ if market == "HK" else SOURCE_AKSHARE_SINA_QFQ
+    )
 
     if not force_refresh:
         for cand in candidates:
@@ -638,7 +812,20 @@ def ensure_adj_factors(
                 }
 
     # 库无因子（或 force_refresh / 非 prefer_db 且已过期）才调第三方
-    rows, fetched_source = fetch_qfq_factors(code_n, factor_source=src_pref)
+    try:
+        rows, fetched_source = fetch_qfq_factors(code_n, factor_source=src_pref)
+    except AdjQuotesError:
+        raise
+    except Exception as e:
+        raise AdjQuotesError(
+            f"获取复权因子失败（{code_n}）：{e}。"
+            + (
+                "港股请确认 AkShare stock_hk_daily 可用，或改用不复权"
+                if market == "HK"
+                else "请改用不复权计算"
+            )
+        ) from e
+
     written = upsert_adj_factors(db, rows, source=fetched_source)
     logger.info(
         "复权因子外网拉取并写入 stock_adj_factor code=%s source=%s upsert_rows=%s",
@@ -649,12 +836,15 @@ def ensure_adj_factors(
 
     factors = load_adj_factors_from_db(db, code_n, source=fetched_source)
     if not factors:
-        raise AdjQuotesError("复权因子为空，无法按前复权计算（写入后仍读不到）")
+        raise AdjQuotesError(
+            f"复权因子为空，无法按前复权计算（{code_n}，写入后仍读不到；"
+            f"期望 source={fetched_source or default_source}）"
+        )
     asof = factors[-1][0]
     return {
         "factors": factors,
         "factor_fetched": True,
-        "source": fetched_source or SOURCE_AKSHARE_SINA_QFQ,
+        "source": fetched_source or default_source,
         "adj_factor_asof": _bar_date_str(asof),
         "factor_source": src_pref,
         "from_db": False,
@@ -666,6 +856,10 @@ def apply_qfq_to_bars(
     factors: Sequence[Tuple[date, float]],
 ) -> List[Dict[str, Any]]:
     """将不复权 bars 现算为前复权（OHLC 乘 f_t/f_T；volume/amount 不变）。
+
+    公式：P_qfq = P_raw × f_t / f_T。
+    要求 factors 已按内部约定入库（最新≈1、历史通常≤1）。
+    A 股新浪因子入库前已取倒数；港股新浪因子原样入库（本身已符合约定）。
 
     因子按日期升序，对 bar 日期 forward-fill；
     若某 bar 早于全部因子日，则使用首个因子。

@@ -105,9 +105,13 @@ def test_batch_load_ohlc_asc_five_digit_only_hits_hk():
     assert tables_seen == ["hk"]
 
 
-def test_pattern_route_rejects_hk_qfq():
+def test_pattern_route_allows_hk_qfq():
+    """港股 adjust=qfq 应走 apply_qfq_to_code_bars，不再硬拒绝。"""
     import backend_api.permissions as perm_mod
     import backend_api.stock.stock_analysis_routes as levels_routes
+    import backend_core.analysis.chart_patterns.engine as engine_mod
+    import backend_core.analysis.chart_patterns.scanner as scanner_mod
+    import backend_core.strategies.double_bottom.data_loader as dl
     from backend_api.database import get_db
     from backend_api.stock.pattern_routes import router
     from fastapi import FastAPI
@@ -122,16 +126,49 @@ def test_pattern_route_rejects_hk_qfq():
     app.dependency_overrides[get_db] = _fake_db
     client = TestClient(app)
 
+    bars = [
+        {
+            "date": f"2024-01-{i + 1:02d}",
+            "open": 100,
+            "high": 101,
+            "low": 99,
+            "close": 100,
+            "volume": 1,
+        }
+        for i in range(31)
+    ]
+    qfq_bars = [{**b, "close": 90.0, "price_adjust": "qfq"} for b in bars]
+    adj_meta = {
+        "source": "akshare_sina_hk_qfq",
+        "adj_factor_asof": "2024-01-31",
+        "factor_fetched": False,
+        "factor_source": "auto",
+    }
+
     with patch.object(perm_mod, "user_has_permission", return_value=True), patch.object(
         levels_routes,
         "resolve_levels_stock_identifier",
         return_value={"status": "ok", "code": "00700", "name": "腾讯"},
-    ):
+    ), patch.object(
+        dl, "resolve_effective_trade_date", return_value="2024-01-31"
+    ), patch.object(
+        dl, "batch_load_ohlc_asc", return_value={"00700": bars}
+    ), patch.object(
+        dl, "load_names", return_value={"00700": "腾讯"}
+    ), patch.object(
+        scanner_mod,
+        "apply_qfq_to_code_bars",
+        return_value=(qfq_bars, adj_meta),
+    ) as qfq_mock, patch.object(engine_mod, "detect_all", return_value=[]):
         resp = client.get("/api/analysis/patterns/00700?adjust=qfq")
 
-    assert resp.status_code == 400
-    detail = resp.json().get("detail") or ""
-    assert "港股" in str(detail)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["price_adjust"] == "qfq"
+    assert body["adj_meta"]["source"] == "akshare_sina_hk_qfq"
+    qfq_mock.assert_called_once()
+    assert qfq_mock.call_args.args[1] == "00700"
 
 
 def test_pattern_route_loads_hk_bars_for_five_digit():

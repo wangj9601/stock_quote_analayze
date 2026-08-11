@@ -108,13 +108,11 @@ async def patterns_for_stock(
     try:
         from backend_api.utils.equity_code import (
             infer_market_type,
-            is_hk_equity_code,
             normalize_equity_code,
         )
     except ImportError:
         from utils.equity_code import (  # type: ignore
             infer_market_type,
-            is_hk_equity_code,
             normalize_equity_code,
         )
 
@@ -136,11 +134,6 @@ async def patterns_for_stock(
         raise HTTPException(status_code=400, detail="无效股票代码（A股6位，港股5位）")
 
     market = infer_market_type(stock_code) or "CN"
-    if adjust_n == "qfq" and is_hk_equity_code(stock_code):
-        raise HTTPException(
-            status_code=400,
-            detail="前复权计算目前仅支持 A 股，港股暂不支持（请改用不复权）",
-        )
 
     asof_s = resolve_effective_trade_date(db, asof, market=market)
     bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)

@@ -309,8 +309,8 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
         "items": [
             {
                 "code": "stock_adj_factor",
-                "name": "A股复权因子",
-                "desc": "StockAdjFactor；不填日期=全表；填写则按 trade_date 区间（默认可跨约 11 年）",
+                "name": "复权因子（A股/港股）",
+                "desc": "StockAdjFactor；A股6位/港股5位同表，按 source 隔离；不填日期=全表；填写则按 trade_date 区间（默认可跨约 11 年）",
                 "requires_date_range": False,
                 "date_range_optional": True,
             },
@@ -444,7 +444,7 @@ def catalog_for_api() -> Dict[str, Any]:
             {
                 "code": "adj_factors",
                 "name": "复权因子（全部）",
-                "desc": "stock_adj_factor；日期可选，不填则全库",
+                "desc": "stock_adj_factor（A股/港股同表）；日期可选，不填则全库",
             },
             {
                 "code": "permissions",

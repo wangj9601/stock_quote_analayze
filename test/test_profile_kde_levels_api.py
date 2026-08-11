@@ -368,8 +368,7 @@ def test_levels_route_qfq_applies_factors():
     ), patch(
         "utils.adj_quotes.ensure_adj_factors", return_value=ensured
     ):
-        svc = Cls.return_value
-        svc._is_hk_stock.return_value = False
+        svc = Cls.return_value.__enter__.return_value
         svc._get_historical_data.return_value = bars
         svc.get_key_levels_only.return_value = fake_result
         resp = client.get("/api/analysis/levels/600519?adjust=qfq&max_levels=8")
@@ -384,7 +383,11 @@ def test_levels_route_qfq_applies_factors():
     assert call_kw["adj_meta"]["factor_fetched"] is True
 
 
-def test_levels_route_qfq_rejects_hk():
+def test_levels_route_qfq_allows_hk():
+    """港股 levels adjust=qfq：走 ensure_adj_factors + apply，不再硬拒绝。"""
+    from datetime import date
+
+    import pytest
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from database import get_db
@@ -400,14 +403,48 @@ def test_levels_route_qfq_rejects_hk():
     client = TestClient(app)
 
     resolved = {"status": "ok", "code": "00700", "name": "腾讯", "candidates": []}
-    with patch("stock.stock_analysis_routes.resolve_levels_stock_identifier", return_value=resolved), patch(
+    ensured = {
+        "factors": [(date(2024, 1, 2), 0.5), (date(2024, 1, 3), 1.0)],
+        "factor_fetched": True,
+        "source": "akshare_sina_hk_qfq",
+        "adj_factor_asof": "2024-01-03",
+        "factor_source": "auto",
+        "from_db": False,
+    }
+    raw_bars = [
+        {"date": "2024-01-02", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 1},
+        {"date": "2024-01-03", "open": 20, "high": 21, "low": 19, "close": 20, "volume": 1},
+    ]
+
+    with patch(
+        "stock.stock_analysis_routes.resolve_levels_stock_identifier", return_value=resolved
+    ), patch(
         "stock.stock_analysis_routes.StockAnalysisService"
-    ) as Cls:
-        Cls.return_value._is_hk_stock.return_value = True
+    ) as Cls, patch(
+        "backend_api.utils.adj_quotes.ensure_adj_factors", return_value=ensured
+    ), patch(
+        "utils.adj_quotes.ensure_adj_factors", return_value=ensured
+    ):
+        svc = Cls.return_value.__enter__.return_value
+        svc._get_historical_data.return_value = raw_bars
+        svc.get_key_levels_only.return_value = {
+            "success": True,
+            "data": {
+                "nearest_support": 5.0,
+                "price_adjust": "qfq",
+                "adj_meta": {"source": "akshare_sina_hk_qfq"},
+            },
+        }
         resp = client.get("/api/analysis/levels/00700?adjust=qfq")
 
-    assert resp.status_code == 400
-    assert "港股" in resp.json()["message"]
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    call_kw = svc.get_key_levels_only.call_args.kwargs
+    assert call_kw.get("price_adjust") == "qfq"
+    assert call_kw.get("historical_data") is not None
+    assert call_kw["historical_data"][0]["close"] == pytest.approx(5.0)
+    assert call_kw["adj_meta"]["source"] == "akshare_sina_hk_qfq"
 
 
 def test_levels_route_ambiguous_candidates():

@@ -122,14 +122,8 @@ def apply_qfq_to_code_bars(
         from backend_api.utils.adj_quotes import AdjQuotesError, apply_qfq_to_bars, ensure_adj_factors
     except ImportError:
         from utils.adj_quotes import AdjQuotesError, apply_qfq_to_bars, ensure_adj_factors  # type: ignore
-    try:
-        from backend_api.utils.equity_code import is_hk_equity_code
-    except ImportError:
-        from utils.equity_code import is_hk_equity_code  # type: ignore
 
-    if is_hk_equity_code(code):
-        raise AdjQuotesError("前复权计算目前仅支持 A 股，港股暂不支持（请改用不复权）")
-
+    # A 股 / 港股均走 ensure_adj_factors（港股 source=akshare_sina_hk_qfq）
     ensured = ensure_adj_factors(
         db,
         code,
