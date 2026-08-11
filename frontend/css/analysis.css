@@ -1485,22 +1485,33 @@
     min-width: 96px;
 }
 
-.kde-levels-btn-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+.kde-levels-form .kde-levels-factor-field select {
+    min-width: 168px;
+}
+
+.kde-levels-form .pattern-adjust-field .pattern-adjust-check {
+    display: inline-flex;
     align-items: center;
+    gap: 0.3rem;
+    min-height: 2.35rem;
+    margin: 0;
+    cursor: pointer;
+    color: #374151;
+    font-size: 0.9rem;
+    white-space: nowrap;
 }
 
-.kde-levels-btn-row .btn-outline {
-    background: #fff;
-    border: 1px solid #cbd5e1;
-    color: #334155;
-}
-
-.kde-levels-btn-row .btn-outline:hover {
-    border-color: #94a3b8;
-    background: #f8fafc;
+.kde-levels-form .pattern-adjust-field input[type="checkbox"] {
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    accent-color: #2563eb;
 }
 
 .kde-levels-candidates {

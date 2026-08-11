@@ -56,7 +56,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.analyze.tab.stock_ai.btn.analyze', name: '个股四策略分析', level: 3, parent_code: 'channel.analyze.tab.stock_ai', channel_code: 'analyze', sort_order: 10 },
   { code: 'channel.analyze.tab.technical.btn.analyze', name: '开始分析', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 10 },
   { code: 'channel.analyze.tab.technical.btn.calc', name: '计算支撑压力', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 20 },
-  { code: 'channel.analyze.tab.technical.btn.calc_qfq', name: '按前复权计算支撑压力', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 30 },
+  { code: 'channel.analyze.tab.technical.btn.calc_qfq', name: '前复权计算支撑压力', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 30 },
   { code: 'channel.analyze.tab.technical.btn.pattern', name: '形态识别-个股', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 40 },
   { code: 'channel.analyze.tab.technical.btn.pattern_scan', name: '形态识别-扫描', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 45 },
   { code: 'channel.analyze.tab.report.btn.export', name: '导出报告', level: 3, parent_code: 'channel.analyze.tab.report', channel_code: 'analyze', sort_order: 10 },

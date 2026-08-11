@@ -284,8 +284,8 @@
                                 默认初始回看 250 日，无支撑时递推至最多约 750 日（约 3 年）。
                                 另附近 60 日<strong>Volume Profile（POC/VAH/VAL）</strong>与 KDE 对照，以及
                                 <strong>黄金分割 / 经典 Pivot</strong>作参考；均不改策略硬门槛。
-                                「计算」使用不复权日K；「按前复权计算」按需拉取复权因子现算后再求位（仅 A 股）。
-                                默认自动：归一化新浪优先，失败用 BaoStock。
+                                默认按<strong>前复权</strong>日K计算（可取消勾选用不复权）；勾选前复权时按需拉取复权因子现算（仅 A 股）。
+                                复权因子源默认自动：归一化新浪优先，失败用 BaoStock。
                             </p>
                         </div>
                         <div class="kde-levels-form">
@@ -300,22 +300,26 @@
                                         <option value="">-- 可选自选股 --</option>
                                     </select>
                                 </div>
-                                <div class="form-group">
+                                <div class="form-group pattern-adjust-field"
+                                    data-perm="channel.analyze.tab.technical.btn.calc_qfq">
+                                    <label for="kdeLevelsAdjustQfq">价格口径</label>
+                                    <label class="pattern-adjust-check" title="勾选后按前复权日K计算（仅 A 股；与形态识别「前复权」同口径）">
+                                        <input type="checkbox" id="kdeLevelsAdjustQfq" checked>
+                                        前复权
+                                    </label>
+                                </div>
+                                <div class="form-group kde-levels-factor-field">
                                     <label for="kdeLevelsFactorSource">复权因子源</label>
                                     <select id="kdeLevelsFactorSource">
-                                        <option value="auto" selected>自动（归一化新浪→BaoStock）</option>
+                                        <option value="auto" selected>自动（新浪→BaoStock）</option>
                                         <option value="sina">新浪（已归一化）</option>
                                         <option value="baostock">BaoStock</option>
                                     </select>
                                 </div>
                                 <div class="form-group kde-levels-actions">
                                     <label>&nbsp;</label>
-                                    <div class="kde-levels-btn-row">
-                                        <button type="button" class="btn btn-primary" id="kdeLevelsCalcBtn"
-                                            data-perm="channel.analyze.tab.technical.btn.calc">计算</button>
-                                        <button type="button" class="btn btn-outline" id="kdeLevelsCalcQfqBtn"
-                                            data-perm="channel.analyze.tab.technical.btn.calc_qfq">按前复权计算</button>
-                                    </div>
+                                    <button type="button" class="btn btn-primary" id="kdeLevelsCalcBtn"
+                                        data-perm="channel.analyze.tab.technical.btn.calc">计算</button>
                                 </div>
                             </div>
                         </div>
@@ -448,7 +452,7 @@
                             <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
                         </div>
                         <div class="kde-levels-empty" id="kdeLevelsEmpty">
-                            输入股票代码或名称，也可从自选选择后点击「计算」或「按前复权计算」。
+                            输入股票代码或名称，也可从自选选择；勾选「前复权」后点击「计算」（可取消勾选用不复权）。
                         </div>
                     </div>
                             </div>

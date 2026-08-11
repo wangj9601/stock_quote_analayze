@@ -1,10 +1,25 @@
 /** 技术工具 · 阻力支撑位：支撑/压力（KDE + VP + Fib/Cam/共振） */
 const KdeLevelsTool = {
-    _pendingAdjust: 'none',
+    _pendingAdjust: 'qfq',
+
+    /** 与形态识别一致：勾选「前复权」→ qfq，否则 none；无 calc_qfq 权限时强制不复权 */
+    selectedAdjust() {
+        const el = document.getElementById('kdeLevelsAdjustQfq');
+        if (!el || !el.checked) return 'none';
+        if (window.PermissionEngine
+            && typeof PermissionEngine.has === 'function'
+            && !PermissionEngine.has('channel.analyze.tab.technical.btn.calc_qfq')) {
+            return 'none';
+        }
+        const gate = el.closest('[data-perm="channel.analyze.tab.technical.btn.calc_qfq"]');
+        if (gate && (gate.style.display === 'none' || gate.getAttribute('aria-hidden') === 'true')) {
+            return 'none';
+        }
+        return 'qfq';
+    },
 
     init() {
         const calcBtn = document.getElementById('kdeLevelsCalcBtn');
-        const calcQfqBtn = document.getElementById('kdeLevelsCalcQfqBtn');
         const codeInput = document.getElementById('kdeLevelsStockCode');
         const watchSelect = document.getElementById('kdeLevelsWatchlist');
         const vpApplyBtn = document.getElementById('kdeVpLookbackApplyBtn');
@@ -12,16 +27,13 @@ const KdeLevelsTool = {
         const vpFromInput = document.getElementById('kdeVpFromDateInput');
 
         if (calcBtn) {
-            calcBtn.addEventListener('click', () => this.calculateKdeLevels({ adjust: 'none' }));
-        }
-        if (calcQfqBtn) {
-            calcQfqBtn.addEventListener('click', () => this.calculateKdeLevels({ adjust: 'qfq' }));
+            calcBtn.addEventListener('click', () => this.calculateKdeLevels());
         }
         if (codeInput) {
             codeInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    this.calculateKdeLevels({ adjust: 'none' });
+                    this.calculateKdeLevels();
                 }
             });
         }
@@ -36,7 +48,7 @@ const KdeLevelsTool = {
         if (vpApplyBtn) {
             vpApplyBtn.addEventListener('click', () => {
                 this.calculateKdeLevels({
-                    adjust: this._pendingAdjust || 'none',
+                    adjust: this._pendingAdjust || this.selectedAdjust(),
                     preferVpLookback: true,
                 });
             });
@@ -47,7 +59,7 @@ const KdeLevelsTool = {
                     e.preventDefault();
                     if (vpFromInput) vpFromInput.value = '';
                     this.calculateKdeLevels({
-                        adjust: this._pendingAdjust || 'none',
+                        adjust: this._pendingAdjust || this.selectedAdjust(),
                         preferVpLookback: true,
                     });
                 }
@@ -67,7 +79,7 @@ const KdeLevelsTool = {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     this.calculateKdeLevels({
-                        adjust: this._pendingAdjust || 'none',
+                        adjust: this._pendingAdjust || this.selectedAdjust(),
                         preferVpLookback: true,
                     });
                 }
@@ -152,7 +164,7 @@ const KdeLevelsTool = {
                 const codeInput = document.getElementById('kdeLevelsStockCode');
                 if (codeInput) codeInput.value = code;
                 this.hideKdeLevelsCandidates();
-                this.calculateKdeLevels({ adjust: this._pendingAdjust || 'none' });
+                this.calculateKdeLevels({ adjust: this._pendingAdjust || this.selectedAdjust() });
             });
         });
 
@@ -166,12 +178,13 @@ const KdeLevelsTool = {
     async calculateKdeLevels(options = {}) {
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
 
-        const adjust = (options.adjust === 'qfq') ? 'qfq' : 'none';
+        const adjust = options.adjust != null
+            ? (options.adjust === 'qfq' ? 'qfq' : 'none')
+            : this.selectedAdjust();
         this._pendingAdjust = adjust;
 
         const codeInput = document.getElementById('kdeLevelsStockCode');
         const calcBtn = document.getElementById('kdeLevelsCalcBtn');
-        const calcQfqBtn = document.getElementById('kdeLevelsCalcQfqBtn');
         const resultEl = document.getElementById('kdeLevelsResult');
         const emptyEl = document.getElementById('kdeLevelsEmpty');
         if (!codeInput) return;
@@ -191,18 +204,14 @@ const KdeLevelsTool = {
 
         if (calcBtn) {
             calcBtn.disabled = true;
-            if (adjust === 'none') calcBtn.textContent = '计算中…';
-        }
-        if (calcQfqBtn) {
-            calcQfqBtn.disabled = true;
-            if (adjust === 'qfq') calcQfqBtn.textContent = '获取因子并计算…';
+            calcBtn.textContent = adjust === 'qfq' ? '获取因子并计算…' : '计算中…';
         }
         this.hideKdeLevelsCandidates();
         if (emptyEl) {
             emptyEl.hidden = false;
             emptyEl.textContent = adjust === 'qfq'
                 ? '正在获取复权因子并计算…'
-                : '正在计算…';
+                : '正在计算（不复权）…';
         }
         if (resultEl) resultEl.hidden = true;
 
@@ -253,10 +262,6 @@ const KdeLevelsTool = {
                 calcBtn.disabled = false;
                 calcBtn.textContent = '计算';
             }
-            if (calcQfqBtn) {
-                calcQfqBtn.disabled = false;
-                calcQfqBtn.textContent = '按前复权计算';
-            }
         }
     },
 
@@ -301,10 +306,11 @@ const KdeLevelsTool = {
         const code = data.stock_code || '';
         const name = data.stock_name || '';
         const title = name ? `${code} ${name}` : (code || '结果');
+        const adjustBrief = data.price_adjust === 'qfq' ? '前复权' : '不复权';
         if (summaryEl) {
             summaryEl.textContent = ok
-                ? title
-                : `${title}${message ? `（${message}）` : ''}`;
+                ? `${title} · ${adjustBrief}`
+                : `${title} · ${adjustBrief}${message ? `（${message}）` : ''}`;
         }
         if (priceEl) priceEl.textContent = fmt(data.current_price);
         if (nearS) nearS.textContent = fmt(data.nearest_support);
