@@ -227,19 +227,34 @@ const PatternTool = {
     if (levels.neckline != null && levels.neckline !== '' && !priced.some((p) => p.role === 'neck')) {
       extras.push(`颈线≈${levels.neckline}`);
     }
+    const slopeUnit =
+      levels.slope_unit ||
+      (/(元\/K线索引|元\/交易日|元\/枢轴)/.test(reason) ? '' : '元/K线索引(约交易日)');
+    const slopeSuffix = slopeUnit ? String(slopeUnit) : '';
     if (levels.upper_slope != null && levels.upper_slope !== '') {
-      extras.push(`上沿斜率=${levels.upper_slope}`);
+      extras.push(`上沿斜率=${levels.upper_slope}${slopeSuffix}`);
     } else {
       const m = reason.match(/上沿斜率=[^\s]+/);
       if (m) extras.push(m[0]);
     }
     if (levels.lower_slope != null && levels.lower_slope !== '') {
-      extras.push(`下沿斜率=${levels.lower_slope}`);
+      extras.push(`下沿斜率=${levels.lower_slope}${slopeSuffix}`);
     } else {
       const m = reason.match(/下沿斜率=[^\s]+/);
       if (m) extras.push(m[0]);
     }
     return `${label}${simplified} ${parts.join(' ')}${extras.length ? ` ${extras.join(' ')}` : ''}`.trim();
+  },
+
+  statusLabel(st) {
+    if (st === 'confirmed') return '已确认';
+    if (st === 'invalidated') return '失效';
+    return '形成中';
+  },
+
+  /** 列表/专家解读默认忽略失效项 */
+  _activeHits(items) {
+    return (items || []).filter((h) => h && h.status !== 'invalidated');
   },
 
   renderItems(items, metaHtml, mode, priceAdjust) {
@@ -248,11 +263,12 @@ const PatternTool = {
     const empty = document.getElementById('patternEmpty');
     const meta = document.getElementById('patternMeta');
     const adjust = priceAdjust === 'qfq' ? 'qfq' : 'none';
+    const visible = this._activeHits(items);
     if (meta) {
       meta.hidden = !metaHtml;
       meta.innerHTML = metaHtml || '';
     }
-    if (!items || !items.length) {
+    if (!visible.length) {
       if (wrap) wrap.hidden = true;
       if (empty) {
         empty.hidden = false;
@@ -264,7 +280,7 @@ const PatternTool = {
     if (empty) empty.hidden = true;
     if (wrap) wrap.hidden = false;
     if (!body) return;
-    body.innerHTML = items
+    body.innerHTML = visible
       .map((r) => {
         const code = r.code || '';
         const name = r.name || '';
@@ -278,7 +294,7 @@ const PatternTool = {
           <td>${codeHtml}</td>
           <td>${this.esc(name || '--')}</td>
           <td>${this.esc(this.typeLabel(r.pattern_type))}</td>
-          <td>${this.esc(r.status === 'confirmed' ? '已确认' : '形成中')}</td>
+          <td>${this.esc(this.statusLabel(r.status))}</td>
           <td title="${this.esc(this.formedAtTitle(r))}">${this.esc(formed)}</td>
           <td>${r.confidence != null ? Number(r.confidence).toFixed(2) : '--'}</td>
           <td class="pattern-col-levels">${this.esc(this.keyLevelsText(r.key_levels))}</td>
@@ -286,7 +302,7 @@ const PatternTool = {
         </tr>`;
       })
       .join('');
-    this.renderExpertAnalysis(items, mode || 'single', adjust);
+    this.renderExpertAnalysis(visible, mode || 'single', adjust);
   },
 
   /** 空结果隐藏；个股完整解读；扫描简要提示 */
@@ -310,7 +326,7 @@ const PatternTool = {
         .map((h) => {
           const code = h.code || '';
           const label = this.typeLabel(h.pattern_type);
-          const st = h.status === 'confirmed' ? '已确认' : '形成中';
+          const st = this.statusLabel(h.status);
           const conf = h.confidence != null ? Number(h.confidence).toFixed(2) : '--';
           return `${code} ${label}（${st} ${conf}）`;
         })
@@ -381,12 +397,15 @@ const PatternTool = {
   },
 
   _rankHits(items) {
-    return (items || []).slice().sort((a, b) => {
-      const ac = a.status === 'confirmed' ? 1 : 0;
-      const bc = b.status === 'confirmed' ? 1 : 0;
-      if (bc !== ac) return bc - ac;
-      return (Number(b.confidence) || 0) - (Number(a.confidence) || 0);
-    });
+    return (items || [])
+      .filter((h) => h && h.status !== 'invalidated')
+      .slice()
+      .sort((a, b) => {
+        const rank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
+        const d = rank(b.status) - rank(a.status);
+        if (d) return d;
+        return (Number(b.confidence) || 0) - (Number(a.confidence) || 0);
+      });
   },
 
   _biasOf(type) {
@@ -395,6 +414,41 @@ const PatternTool = {
     if (type === 'rising_wedge' || type === 'bear_flag' || type === 'descending_triangle') return 'bearish_bias';
     if (type === 'falling_wedge' || type === 'bull_flag' || type === 'ascending_triangle') return 'bullish_bias';
     return 'neutral';
+  },
+
+  /** bias 是否冲突：已确认偏多巩固 vs 已确认偏空反转等 */
+  _biasConflicts(a, b) {
+    const bullish = new Set(['bull', 'bullish_bias']);
+    const bearish = new Set(['bear', 'bearish_bias']);
+    return (bullish.has(a) && bearish.has(b)) || (bearish.has(a) && bullish.has(b));
+  },
+
+  /** 已确认巩固形态：按收盘相对上下沿判定上破/下破文案 */
+  _confirmedConsolBreakText(h) {
+    const t = h.pattern_type;
+    const lab = this.typeLabel(t);
+    const conf = h.confidence != null ? Number(h.confidence).toFixed(2) : '--';
+    const b = this._hitBounds(h);
+    const c = this._hitClose(h);
+    const up = b.upper;
+    const lo = b.lower;
+    let dir = '';
+    if (c != null && up != null && c > up * 1.005) dir = 'up';
+    else if (c != null && lo != null && c < lo * 0.995) dir = 'down';
+    else if (t === 'falling_wedge' || t === 'bull_flag' || t === 'ascending_triangle') dir = 'up';
+    else if (t === 'rising_wedge' || t === 'bear_flag' || t === 'descending_triangle') dir = 'down';
+    else dir = 'out';
+    if (dir === 'up') {
+      return `已确认${lab}上破（置信度 ${conf}${
+        up != null ? `，上沿 ${this._fmtPx(up)}` : ''
+      }），短线偏多，突破方向已定。`;
+    }
+    if (dir === 'down') {
+      return `已确认${lab}下破（置信度 ${conf}${
+        lo != null ? `，下沿 ${this._fmtPx(lo)}` : ''
+      }），短线偏空，突破方向已定。`;
+    }
+    return `已确认${lab}（置信度 ${conf}），短线围绕其关键价位波动。`;
   },
 
   _fmtPx(n) {
@@ -719,17 +773,31 @@ const PatternTool = {
 
   /**
    * 前端规则引擎：根据 hits 结构化字段拼装专家口吻分析。
-   * 优先已确认 + 高置信；形成中巩固形态等待突破；冲突时以更高置信确认形态为主。
+   * 必须直接读取 status：已确认巩固突破时禁止再写「等待边界有效突破」；
+   * 已确认偏多巩固 vs 已确认偏空反转写入冲突提示。
    */
   buildExpertAnalysis(items) {
     const ranked = this._rankHits(items);
     const confirmed = ranked.filter((h) => h.status === 'confirmed');
-    const forming = ranked.filter((h) => h.status !== 'confirmed');
+    const forming = ranked.filter((h) => h.status === 'forming');
     const primary = confirmed[0] || ranked[0];
+    if (!primary) {
+      return {
+        shortTerm: '命中形态信息有限，短线建议结合量价与关键支撑压力谨慎观察。',
+        mediumTerm: '暂无有效形态信号。',
+        keyLevelsRef: '',
+        tradeLevelsHtml: '',
+        risk:
+          '风险提示：以上解读由日线形态规则自动生成，非投资建议；形态识别存在滞后与误报，请结合基本面、量能与自身风险承受能力综合判断。',
+        primaryLabel: '--',
+        primaryConf: '--',
+        closeTxt: null,
+        neckTxt: null,
+      };
+    }
     const primaryLabel = this.typeLabel(primary.pattern_type);
     const primaryConf =
       primary.confidence != null ? Number(primary.confidence).toFixed(2) : '--';
-    const formedAt = this.formedAtText(primary);
     const close = this._hitClose(primary);
     const neck = this._hitNeck(primary);
     const closeTxt = close != null ? this._fmtPx(close) : null;
@@ -737,6 +805,9 @@ const PatternTool = {
 
     let shortTerm = '';
     let mediumTerm = '';
+
+    const confirmedConsol = confirmed.filter((h) => this.CONSOLIDATION[h.pattern_type]);
+    const hasConfirmedConsolBreak = confirmedConsol.length > 0;
 
     // —— 短期：形成中 + 最近确认与现价相对关键位 ——
     const shortBits = [];
@@ -779,13 +850,21 @@ const PatternTool = {
         } else {
           shortBits.push(`已确认${lab}，短线关注颈线突破与回踩。`);
         }
+      } else if (this.CONSOLIDATION[t]) {
+        shortBits.push(this._confirmedConsolBreakText(top));
       } else {
         shortBits.push(`主导形态为已确认${lab}（置信度 ${primaryConf}），短线围绕其关键价位波动。`);
+      }
+
+      // 另有已确认巩固但非主导时补一句方向
+      if (confirmedConsol.length && !this.CONSOLIDATION[t]) {
+        shortBits.push(this._confirmedConsolBreakText(confirmedConsol[0]));
       }
     }
 
     const formingConsol = forming.filter((h) => this.CONSOLIDATION[h.pattern_type]);
-    if (formingConsol.length) {
+    // 已有已确认巩固突破时，禁止再写「方向尚未定，宜等待边界有效突破」
+    if (formingConsol.length && !hasConfirmedConsolBreak) {
       const names = formingConsol
         .slice(0, 3)
         .map((h) => this.typeLabel(h.pattern_type))
@@ -799,6 +878,12 @@ const PatternTool = {
       shortBits.push(
         `另有形成中的${names}${boundHint}，方向尚未定，宜等待边界有效突破后再定多空。`
       );
+    } else if (formingConsol.length && hasConfirmedConsolBreak) {
+      const names = formingConsol
+        .slice(0, 2)
+        .map((h) => this.typeLabel(h.pattern_type))
+        .join('、');
+      shortBits.push(`另有形成中的${names}，仅作次要观察，不改写已确认突破方向。`);
     } else if (!confirmed.length && forming.length) {
       const f0 = forming[0];
       shortBits.push(
@@ -834,6 +919,11 @@ const PatternTool = {
         );
       }
       if (lv.head != null) levelParts.push(`头部 ${this._fmtPx(lv.head)}`);
+      if (lv.upper != null || lv.lower != null) {
+        levelParts.push(
+          `边界上沿/下沿≈${this._fmtPx(lv.upper)}/${this._fmtPx(lv.lower)}`
+        );
+      }
       const levelTxt = levelParts.length ? `关键位：${levelParts.join('，')}。` : '';
       const formed = this.formedAtText(lead);
       const formedTxt = formed && formed !== '--' ? `形成/确认参考日 ${formed}。` : '';
@@ -847,17 +937,17 @@ const PatternTool = {
       mediumTerm = `以高置信已确认「${leadLab}」（置信度 ${leadConf}）为主导，${stance}。${levelTxt}${formedTxt}`;
       if (leadClose != null) mediumTerm += `现价/收盘参考 ${this._fmtPx(leadClose)}。`;
 
-      // 冲突：另有反向已确认
+      // 冲突：反向已确认（含偏多巩固 vs 偏空反转）
       const opp = confirmed.find((h) => {
-        const b = this._biasOf(h.pattern_type);
-        if (leadBias === 'bear' && b === 'bull') return true;
-        if (leadBias === 'bull' && b === 'bear') return true;
-        return false;
+        if (h === lead) return false;
+        return this._biasConflicts(leadBias, this._biasOf(h.pattern_type));
       });
       if (opp) {
-        mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」，冲突时以更高置信的「${leadLab}」为主。`;
-      } else if (formingConsol.length) {
+        mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」（偏多巩固与偏空反转等冲突），冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
+      } else if (formingConsol.length && !hasConfirmedConsolBreak) {
         mediumTerm += `形成中的巩固/楔旗形为次要信号，突破前不改变以「${leadLab}」为核心的中线框架。`;
+      } else if (formingConsol.length && hasConfirmedConsolBreak) {
+        mediumTerm += `形成中巩固仅次要；已确认突破方向已写入短期框架。`;
       }
     } else {
       const names = forming
@@ -870,8 +960,8 @@ const PatternTool = {
     const risk =
       '风险提示：以上解读由日线形态规则自动生成，非投资建议；形态识别存在滞后与误报，请结合基本面、量能与自身风险承受能力综合判断。';
 
-    const keyLevelsRef = this.buildKeyLevelsReference(items);
-    const tradeLevelsHtml = this.buildTradeLevelsReference(items);
+    const keyLevelsRef = this.buildKeyLevelsReference(ranked);
+    const tradeLevelsHtml = this.buildTradeLevelsReference(ranked);
 
     return {
       shortTerm,

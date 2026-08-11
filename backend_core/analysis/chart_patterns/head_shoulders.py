@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence
+from .rules import invalidate_bottom, invalidate_top
 from .schema import fmt_px, make_hit
 
 
@@ -19,14 +20,6 @@ def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
         except (TypeError, ValueError):
             continue
     return out
-
-
-def _bar_date(bars: Sequence[Dict[str, Any]], idx: int) -> str:
-    if idx < 0 or idx >= len(bars):
-        return ""
-    b = bars[idx]
-    raw = b.get("date") if b.get("date") is not None else b.get("trade_date")
-    return str(raw or "")[:10]
 
 
 def _detect_hs_top(
@@ -56,22 +49,33 @@ def _detect_hs_top(
             return None
         last = closes[-1]
         confirmed = last < neck
-        status = "confirmed" if confirmed else "forming"
-        conf = 0.7 if confirmed else 0.5
-        # 右肩略低于左肩略加分
-        if rs["price"] <= ls["price"]:
+        if confirmed:
+            status = "confirmed"
+            conf = 0.7
+        elif invalidate_top(last, float(head["price"])):
+            # 形成中却收盘升破头部×1.01 → 失效
+            status = "invalidated"
+            conf = 0.2
+        else:
+            status = "forming"
+            conf = 0.5
+        # 右肩略低于左肩略加分（仅对有效形态）
+        if status != "invalidated" and rs["price"] <= ls["price"]:
             conf = min(1.0, conf + 0.05)
+        reason = (
+            f"头肩顶 {fmt_px('左肩', ls['price'], ls.get('date'))} "
+            f"{fmt_px('头', head['price'], head.get('date'))} "
+            f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
+            f"{fmt_px('颈线', round(neck, 4), approx=True)}"
+        )
+        if status == "invalidated":
+            reason += f" 失效:收盘{round(last, 4)}>头×1.01"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_top",
             status=status,
             confidence=conf,
-            reason=(
-                f"头肩顶 {fmt_px('左肩', ls['price'], ls.get('date'))} "
-                f"{fmt_px('头', head['price'], head.get('date'))} "
-                f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
-                f"{fmt_px('颈线', round(neck, 4), approx=True)}"
-            ),
+            reason=reason,
             key_levels={
                 "left_shoulder": ls["price"],
                 "head": head["price"],
@@ -112,21 +116,32 @@ def _detect_hs_bottom(
             return None
         last = closes[-1]
         confirmed = last > neck
-        status = "confirmed" if confirmed else "forming"
-        conf = 0.7 if confirmed else 0.5
-        if rs["price"] >= ls["price"]:
+        if confirmed:
+            status = "confirmed"
+            conf = 0.7
+        elif invalidate_bottom(last, float(head["price"])):
+            # 形成中却收盘跌破头部×0.99 → 失效
+            status = "invalidated"
+            conf = 0.2
+        else:
+            status = "forming"
+            conf = 0.5
+        if status != "invalidated" and rs["price"] >= ls["price"]:
             conf = min(1.0, conf + 0.05)
+        reason = (
+            f"头肩底 {fmt_px('左肩', ls['price'], ls.get('date'))} "
+            f"{fmt_px('头', head['price'], head.get('date'))} "
+            f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
+            f"{fmt_px('颈线', round(neck, 4), approx=True)}"
+        )
+        if status == "invalidated":
+            reason += f" 失效:收盘{round(last, 4)}<头×0.99"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_bottom",
             status=status,
             confidence=conf,
-            reason=(
-                f"头肩底 {fmt_px('左肩', ls['price'], ls.get('date'))} "
-                f"{fmt_px('头', head['price'], head.get('date'))} "
-                f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
-                f"{fmt_px('颈线', round(neck, 4), approx=True)}"
-            ),
+            reason=reason,
             key_levels={
                 "left_shoulder": ls["price"],
                 "head": head["price"],

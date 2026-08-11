@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from backend_core.strategies.double_bottom.detector import detect_double_bottom
 
+from .rules import invalidate_bottom, invalidate_top
 from .schema import fmt_px, make_hit
 
 
@@ -47,17 +48,34 @@ def detect_double_bottom_hit(
     raw = detect_double_bottom(bars, pattern_cfg=pattern_cfg)
     if not raw:
         return None
-    conf = 0.72 if raw.get("status") == "confirmed" else 0.55
+    status = str(raw.get("status") or "forming")
+    last_close = _f(raw.get("last_close"))
+    l1 = _f(raw.get("l1_price"))
+    l2 = _f(raw.get("l2_price"))
+    low_ref = min(x for x in (l1, l2) if x is not None) if (l1 is not None or l2 is not None) else None
+    # 形成中若收盘跌破双谷低点×0.99 → 失效
+    if status == "forming" and last_close is not None and low_ref is not None:
+        if invalidate_bottom(last_close, low_ref):
+            status = "invalidated"
+    if status == "confirmed":
+        conf = 0.72
+    elif status == "invalidated":
+        conf = 0.2
+    else:
+        conf = 0.55
+    reason = (
+        f"W双底 {fmt_px('L1', raw.get('l1_price'), raw.get('l1_date'))} "
+        f"{fmt_px('L2', raw.get('l2_price'), raw.get('l2_date'))} "
+        f"{fmt_px('颈线', raw.get('neckline'), raw.get('neck_date'))}"
+    )
+    if status == "invalidated" and last_close is not None:
+        reason += f" 失效:收盘{round(last_close, 4)}<低点×0.99"
     return make_hit(
         pattern_family="double_extremes",
         pattern_type="double_bottom",
-        status=str(raw.get("status") or "forming"),
+        status=status,
         confidence=conf,
-        reason=(
-            f"W双底 {fmt_px('L1', raw.get('l1_price'), raw.get('l1_date'))} "
-            f"{fmt_px('L2', raw.get('l2_price'), raw.get('l2_date'))} "
-            f"{fmt_px('颈线', raw.get('neckline'), raw.get('neck_date'))}"
-        ),
+        reason=reason,
         key_levels={
             "l1": raw.get("l1_price"),
             "l2": raw.get("l2_price"),
@@ -157,18 +175,29 @@ def detect_double_top_hit(
             confirm_date = _bar_date(seq[k])
             break
 
-    status = "confirmed" if confirmed else "forming"
-    conf = 0.72 if confirmed else 0.55
+    high_ref = max(p1, p2)
+    if confirmed:
+        status = "confirmed"
+        conf = 0.72
+    elif invalidate_top(last_close, high_ref):
+        status = "invalidated"
+        conf = 0.2
+    else:
+        status = "forming"
+        conf = 0.55
+    reason = (
+        f"M双顶 {fmt_px('H1', round(p1, 4), _bar_date(seq[i1]))} "
+        f"{fmt_px('H2', round(p2, 4), _bar_date(seq[i2]))} "
+        f"{fmt_px('颈线', round(neck, 4), _bar_date(seq[neck_rel]))}"
+    )
+    if status == "invalidated":
+        reason += f" 失效:收盘{round(last_close, 4)}>高点×1.01"
     return make_hit(
         pattern_family="double_extremes",
         pattern_type="double_top",
         status=status,
         confidence=conf,
-        reason=(
-            f"M双顶 {fmt_px('H1', round(p1, 4), _bar_date(seq[i1]))} "
-            f"{fmt_px('H2', round(p2, 4), _bar_date(seq[i2]))} "
-            f"{fmt_px('颈线', round(neck, 4), _bar_date(seq[neck_rel]))}"
-        ),
+        reason=reason,
         key_levels={
             "h1": round(p1, 4),
             "h2": round(p2, 4),

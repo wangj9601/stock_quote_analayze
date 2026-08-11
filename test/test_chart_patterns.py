@@ -9,10 +9,21 @@ from backend_core.analysis.chart_patterns.double_extremes import (
     detect_double_bottom_hit,
     detect_double_top_hit,
 )
-from backend_core.analysis.chart_patterns.engine import detect_all, normalize_families
+from backend_core.analysis.chart_patterns.engine import (
+    detect_all,
+    nms_wedge_flag_overlaps,
+    normalize_families,
+)
 from backend_core.analysis.chart_patterns.head_shoulders import detect_head_shoulders
 from backend_core.analysis.chart_patterns.pivots import extract_pivot_sequence
-from backend_core.analysis.chart_patterns.schema import fmt_px
+from backend_core.analysis.chart_patterns.rules import (
+    BREAKOUT_DOWN_MULT,
+    BREAKOUT_UP_MULT,
+    INVALIDATE_BOTTOM_MULT,
+    SLOPE_UNIT_NOTE,
+    breakout_up,
+)
+from backend_core.analysis.chart_patterns.schema import fmt_px, make_hit
 from backend_core.analysis.chart_patterns.scanner import HARD_SCAN_CAP, DEFAULT_SCAN_LIMIT
 from backend_core.analysis.chart_patterns.triangles import detect_triangles
 from backend_core.analysis.chart_patterns.wedges_flags import detect_wedges
@@ -309,3 +320,155 @@ def test_patterns_route_adjust_qfq_passthrough():
     assert body.get("adj_meta", {}).get("factor_fetched") is True
     call_bars = det.call_args.args[0]
     assert call_bars[0]["close"] == pytest.approx(5.0)
+
+
+def test_hs_bottom_invalidated_when_close_breaks_head():
+    """形成中头肩底：收盘 < 头×0.99 → invalidated；detect_all 默认不展示。"""
+    head = 10.0
+    closes = [15.0] * 40 + [head * 0.98]  # 跌破头×0.99
+    bars = _bars_from_closes(closes)
+    pivots = [
+        {"kind": "low", "price": 12.0, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": 14.0, "index": 10, "date": bars[10]["date"]},
+        {"kind": "low", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "high", "price": 14.2, "index": 20, "date": bars[20]["date"]},
+        {"kind": "low", "price": 12.1, "index": 25, "date": bars[25]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "head_shoulders_bottom"
+    assert hits[0]["status"] == "invalidated"
+    assert hits[0]["key_levels"]["last_close"] < head * INVALIDATE_BOTTOM_MULT
+
+    # 默认过滤失效（真实枢轴未必命中手工场景，至少不抛）
+    assert isinstance(detect_all(bars, types=["hs"], include_invalidated=False), list)
+
+
+def test_hs_top_invalidated_when_close_breaks_head():
+    """形成中头肩顶：收盘 > 头×1.01 → invalidated。"""
+    head = 20.0
+    closes = [15.0] * 40 + [head * 1.02]
+    bars = _bars_from_closes(closes)
+    pivots = [
+        {"kind": "high", "price": 18.0, "index": 5, "date": bars[5]["date"]},
+        {"kind": "low", "price": 16.0, "index": 10, "date": bars[10]["date"]},
+        {"kind": "high", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "low", "price": 15.8, "index": 20, "date": bars[20]["date"]},
+        {"kind": "high", "price": 17.8, "index": 25, "date": bars[25]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "head_shoulders_top"
+    assert hits[0]["status"] == "invalidated"
+
+
+def test_nms_falling_wedge_bear_flag_keeps_one():
+    """下降楔与下降旗上下沿近同（≤1%）只保留更优者（优先已确认）。"""
+    d0 = "2024-03-01"
+    d1 = "2024-03-20"
+    wedge = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="falling_wedge",
+        status="confirmed",
+        confidence=0.62,
+        reason="下降楔形",
+        key_levels={"upper": 20.0, "lower": 18.0, "last_close": 20.2},
+        pivots=[
+            {"role": "high", "date": d0, "price": 20.0},
+            {"role": "low", "date": d1, "price": 18.0},
+        ],
+    )
+    flag = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="bear_flag",
+        status="forming",
+        confidence=0.42,
+        reason="下降旗形",
+        key_levels={"upper": 20.1, "lower": 17.95, "last_close": 19.5},
+        pivots=[
+            {"role": "high", "date": d0, "price": 20.1},
+            {"role": "low", "date": d1, "price": 17.95},
+        ],
+    )
+    out = nms_wedge_flag_overlaps([wedge, flag])
+    assert len(out) == 1
+    assert out[0]["pattern_type"] == "falling_wedge"
+    assert out[0]["status"] == "confirmed"
+
+
+def test_breakout_threshold_documented():
+    assert BREAKOUT_UP_MULT == 1.005
+    assert BREAKOUT_DOWN_MULT == 0.995
+    assert breakout_up(20.2, 20.0) is True
+    assert breakout_up(20.05, 20.0) is False
+    assert "K线" in SLOPE_UNIT_NOTE or "交易日" in SLOPE_UNIT_NOTE
+
+
+def test_expert_analysis_no_wait_breakout_when_confirmed_wedge():
+    """已确认下降楔形时，专家解读不得写「宜等待边界有效突破」。"""
+    import json
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "test" / "_pattern_expert_node_check.mjs"
+    items = [
+        {
+            "pattern_type": "falling_wedge",
+            "status": "confirmed",
+            "confidence": 0.62,
+            "key_levels": {"upper": 20.0, "lower": 18.0, "last_close": 20.2},
+            "pivots": [{"role": "high", "date": "2024-03-01", "price": 20.0}],
+            "formed_at": "2024-03-01",
+        },
+        {
+            "pattern_type": "symmetrical_triangle",
+            "status": "forming",
+            "confidence": 0.45,
+            "key_levels": {"upper": 21.0, "lower": 17.0, "last_close": 20.2},
+            "pivots": [],
+            "formed_at": "2024-03-05",
+        },
+    ]
+    proc = subprocess.run(
+        ["node", str(script), json.dumps(items, ensure_ascii=False)],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0 and (
+        "not found" in (proc.stderr or "").lower()
+        or "不是内部或外部命令" in (proc.stderr or "")
+        or proc.returncode == 127
+    ):
+        import pytest
+
+        pytest.skip(f"node unavailable: {proc.stderr}")
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    short = out.get("shortTerm") or ""
+    assert "宜等待边界有效突破" not in short
+    assert "已确认" in short and ("下降楔" in short or "上破" in short)
+    conflict_items = items[:1] + [
+        {
+            "pattern_type": "head_shoulders_top",
+            "status": "confirmed",
+            "confidence": 0.7,
+            "key_levels": {"neckline": 19.0, "head": 22.0, "last_close": 18.5},
+            "pivots": [],
+            "formed_at": "2024-03-10",
+        }
+    ]
+    proc2 = subprocess.run(
+        ["node", str(script), json.dumps(conflict_items, ensure_ascii=False)],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc2.returncode == 0, proc2.stderr or proc2.stdout
+    out2 = json.loads(proc2.stdout.strip().splitlines()[-1])
+    assert "冲突" in (out2.get("mediumTerm") or "")

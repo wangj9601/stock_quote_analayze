@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
+from .rules import SLOPE_UNIT_NOTE, breakout_down, breakout_up
 from .schema import fmt_px, make_hit
 
 
@@ -74,14 +75,14 @@ def detect_triangles(
     else:
         return []
 
-    # 突破确认：收盘越出最近高低边界
+    # 突破确认：统一缓冲（上破 upper×1.005 / 下破 lower×0.995）
     confirmed = False
-    if pattern_type == "ascending_triangle" and last_c > last_hi:
-        confirmed = True
-    elif pattern_type == "descending_triangle" and last_c < last_lo:
-        confirmed = True
-    elif pattern_type == "symmetrical_triangle" and (last_c > last_hi or last_c < last_lo):
-        confirmed = True
+    if pattern_type == "ascending_triangle":
+        confirmed = breakout_up(last_c, last_hi)
+    elif pattern_type == "descending_triangle":
+        confirmed = breakout_down(last_c, last_lo)
+    elif pattern_type == "symmetrical_triangle":
+        confirmed = breakout_up(last_c, last_hi) or breakout_down(last_c, last_lo)
 
     status = "confirmed" if confirmed else "forming"
     conf = 0.65 if confirmed else 0.48
@@ -98,7 +99,8 @@ def detect_triangles(
                 f"{label} 收敛约{round(shrink * 100, 1)}%"
                 f" {fmt_px('上沿', round(last_hi, 4), hi[-1].get('date'))}"
                 f" {fmt_px('下沿', round(last_lo, 4), lo[-1].get('date'))}"
-                f" 上沿斜率={round(hs, 6)} 下沿斜率={round(ls, 6)}"
+                f" 上沿斜率={round(hs, 6)}{SLOPE_UNIT_NOTE}"
+                f" 下沿斜率={round(ls, 6)}{SLOPE_UNIT_NOTE}"
             ),
             key_levels={
                 "upper": round(last_hi, 4),
@@ -107,6 +109,7 @@ def detect_triangles(
                 "last_close": round(last_c, 4),
                 "upper_slope": round(hs, 8),
                 "lower_slope": round(ls, 8),
+                "slope_unit": SLOPE_UNIT_NOTE,
             },
             pivots=[
                 *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in hi[-3:]],

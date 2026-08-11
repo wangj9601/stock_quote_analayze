@@ -62,10 +62,11 @@ def make_hit(
 ) -> Dict[str, Any]:
     conf = max(0.0, min(1.0, float(confidence)))
     piv = pivots or []
+    allowed = ("forming", "confirmed", "invalidated")
     hit: Dict[str, Any] = {
         "pattern_family": pattern_family,
         "pattern_type": pattern_type,
-        "status": status if status in ("forming", "confirmed") else "forming",
+        "status": status if status in allowed else "forming",
         "confidence": round(conf, 3),
         "reason": reason or "",
         "key_levels": key_levels or {},

@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
+from .rules import SLOPE_UNIT_NOTE, breakout_down, breakout_up
 from .schema import fmt_px, make_hit
 
 
@@ -32,6 +33,7 @@ def detect_wedges(
         return []
 
     hi, lo = highs[-4:], lows[-4:]
+    # 斜率自变量为枢轴的 K 线 index（约等于交易日序），单位见 SLOPE_UNIT_NOTE
     hs = linreg_slope([float(p["index"]) for p in hi], [float(p["price"]) for p in hi])
     ls = linreg_slope([float(p["index"]) for p in lo], [float(p["price"]) for p in lo])
     if hs is None or ls is None:
@@ -57,11 +59,13 @@ def detect_wedges(
     if same_up:
         pattern_type = "rising_wedge"
         label = "上升楔形"
-        confirmed = last_c < lower
+        # 上升楔形偏空：下破确认
+        confirmed = breakout_down(last_c, lower)
     else:
         pattern_type = "falling_wedge"
         label = "下降楔形"
-        confirmed = last_c > upper
+        # 下降楔形偏多：上破确认
+        confirmed = breakout_up(last_c, upper)
 
     status = "confirmed" if confirmed else "forming"
     conf = 0.62 if confirmed else 0.45
@@ -74,12 +78,16 @@ def detect_wedges(
             reason=(
                 f"{label} {fmt_px('上沿', round(upper, 4), hi[-1].get('date'))} "
                 f"{fmt_px('下沿', round(lower, 4), lo[-1].get('date'))} "
-                f"上沿斜率={round(hs, 6)} 下沿斜率={round(ls, 6)}"
+                f"上沿斜率={round(hs, 6)}{SLOPE_UNIT_NOTE} "
+                f"下沿斜率={round(ls, 6)}{SLOPE_UNIT_NOTE}"
             ),
             key_levels={
                 "upper": round(upper, 4),
                 "lower": round(lower, 4),
                 "last_close": round(last_c, 4),
+                "upper_slope": round(hs, 8),
+                "lower_slope": round(ls, 8),
+                "slope_unit": SLOPE_UNIT_NOTE,
             },
             pivots=[
                 *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in hi[-3:]],
@@ -142,11 +150,11 @@ def detect_flags(
     if pole_up:
         pattern_type = "bull_flag"
         label = "上升旗形"
-        confirmed = last_c > upper
+        confirmed = breakout_up(last_c, upper)
     else:
         pattern_type = "bear_flag"
         label = "下降旗形"
-        confirmed = last_c < lower
+        confirmed = breakout_down(last_c, lower)
 
     status = "confirmed" if confirmed else "forming"
     conf = 0.58 if confirmed else 0.42
@@ -160,11 +168,16 @@ def detect_flags(
                 f"{label}（简化规则）"
                 f" {fmt_px('通道上沿', round(upper, 4), highs[-1].get('date'))}"
                 f" {fmt_px('下沿', round(lower, 4), lows[-1].get('date'))}"
+                f" 上沿斜率={round(hs, 6)}{SLOPE_UNIT_NOTE}"
+                f" 下沿斜率={round(ls, 6)}{SLOPE_UNIT_NOTE}"
             ),
             key_levels={
                 "upper": round(upper, 4),
                 "lower": round(lower, 4),
                 "last_close": round(last_c, 4),
+                "upper_slope": round(hs, 8),
+                "lower_slope": round(ls, 8),
+                "slope_unit": SLOPE_UNIT_NOTE,
             },
             pivots=[
                 *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in highs],
