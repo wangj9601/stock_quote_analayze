@@ -10,12 +10,17 @@
     为内部约定（历史≤1、最新≈1），见 normalize_sina_factor_to_internal。
     符号：沪 sh / 深 sz / 北交所 bj（不可把 92xxxx 误标为 sh）。
   - A 股备用：BaoStock `query_adjust_factor` → `foreAdjustFactor`（原样入库，已符合内部约定）。
-    BaoStock 仅支持沪深，北交所不走备用源；港股亦不支持 BaoStock。
-  - 港股：AkShare 新浪 `stock_hk_daily(symbol, adjust=\"qfq-factor\")`
+    BaoStock 仅支持沪深，北交所不走备用源；港股亦不支持 BaoStock（无 hk. 复权因子）。
+  - 港股主源：AkShare 新浪 `stock_hk_daily(symbol, adjust=\"qfq-factor\")`
     实测（如 00700）原始序列已是「最新≈1、历史更小」，与内部约定一致，
     **入库不取倒数**（切勿照搬 A 股新浪倒数逻辑）。代码统一 5 位补零。
+    无除权事件时新浪常只返回 ``1900-01-01`` 占位一行（factor=1）；过滤占位后
+    按单位因子 1.0 合成（与 AkShare 自身 ``len(qfq_factor)==1`` 不复权行为一致）。
+  - 港股备用：东财 `stock_hk_hist` 不复权/前复权收盘比推导因子（``akshare_em_hk_qfq``）。
+    BaoStock 不可用时的次优回退，供形态/levels 现算 qfq。
 
-factor_source=auto：A 股=归一化新浪 → BaoStock（北交所除外）；港股=仅港股新浪源。
+factor_source=auto：A 股=归一化新浪 → BaoStock（北交所除外）；
+  港股=新浪（含占位→单位因子）→ 东财收盘比。
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE_AKSHARE_SINA_QFQ = "akshare_sina_qfq"
 SOURCE_AKSHARE_SINA_HK_QFQ = "akshare_sina_hk_qfq"
+SOURCE_AKSHARE_EM_HK_QFQ = "akshare_em_hk_qfq"
 SOURCE_BAOSTOCK_QFQ = "baostock_qfq"
 DEFAULT_FACTOR_MAX_AGE_DAYS = 5
 # 批量前复权补因子：是否限速 + 间隔秒数（见 ADJ_FACTOR_FETCH_THROTTLE_*）
@@ -219,16 +225,77 @@ def _factor_source_tag(factor_source: str, *, market: str = "CN") -> Optional[st
     if market == "HK":
         if src == FACTOR_SOURCE_BAOSTOCK:
             raise AdjQuotesError(
-                "BaoStock 不支持港股复权因子；请使用 auto/sina（akshare stock_hk_daily）"
+                "BaoStock 不支持港股复权因子；请使用 auto/sina"
+                "（新浪 stock_hk_daily，失败可回退东财 stock_hk_hist）"
             )
-        if src in (FACTOR_SOURCE_SINA, FACTOR_SOURCE_AUTO):
+        if src == FACTOR_SOURCE_SINA:
             return SOURCE_AKSHARE_SINA_HK_QFQ
+        # auto：多源候选，不落单一标签
         return None
     if src == FACTOR_SOURCE_SINA:
         return SOURCE_AKSHARE_SINA_QFQ
     if src == FACTOR_SOURCE_BAOSTOCK:
         return SOURCE_BAOSTOCK_QFQ
     return None
+
+
+def _hk_unitary_factor_rows(
+    code_n: str,
+    *,
+    source: str,
+    note: str = "",
+) -> List[Dict[str, Any]]:
+    """无除权事件时合成单位因子（最新日=1），现算等价于不复权。"""
+    if note:
+        logger.info("港股复权使用单位因子 code=%s source=%s %s", code_n, source, note)
+    return [
+        {
+            "code": code_n,
+            "trade_date": date.today(),
+            "adj_factor": 1.0,
+            "source": source,
+        }
+    ]
+
+
+def _parse_hk_sina_factor_frame(df: Any, code_n: str) -> Tuple[List[Dict[str, Any]], int]:
+    """解析港股新浪 qfq-factor DataFrame。
+
+    返回 (有效行, 占位无效日行数)。有效行已按 trade_date 升序。
+    """
+    rows: List[Dict[str, Any]] = []
+    placeholder_n = 0
+    cols = {str(c).lower(): c for c in df.columns}
+    date_col = cols.get("date") or list(df.columns)[0]
+    factor_col = (
+        cols.get("qfq_factor")
+        or cols.get("adj_factor")
+        or cols.get("factor")
+        or (list(df.columns)[1] if len(df.columns) > 1 else list(df.columns)[0])
+    )
+    for _, r in df.iterrows():
+        td = _parse_trade_date(r.get(date_col))
+        if td is None:
+            continue
+        if not _is_valid_factor_trade_date(td):
+            placeholder_n += 1
+            continue
+        try:
+            f = float(r.get(factor_col))
+        except (TypeError, ValueError):
+            continue
+        if f <= 0:
+            continue
+        rows.append(
+            {
+                "code": code_n,
+                "trade_date": td,
+                "adj_factor": f,
+                "source": SOURCE_AKSHARE_SINA_HK_QFQ,
+            }
+        )
+    rows.sort(key=lambda x: x["trade_date"])
+    return rows, placeholder_n
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -367,7 +434,11 @@ def fetch_hk_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
     ``stock_hk_daily(..., adjust=\"qfq-factor\")`` 实测序列已符合内部约定：
     最新因子日 ≈1、更早事件日更小（如 00700）。现算仍用
     ``P_qfq = P_raw × f_t / f_T``（见 apply_qfq_to_bars），故不可对 A 股新浪
-    做「取倒数」照搬。接口要求 5 位补零 symbol（``700`` 会失败）。
+    做「取倒数」照搬。接口要求 5 位补零 symbol（``700`` / ``100`` 会失败，须 ``00700`` / ``00100``）。
+
+    无除权事件票（如部分新股 ``00100``）新浪常只返回 ``1900-01-01`` 占位一行；
+    过滤占位后为空时合成单位因子 1.0（与 AkShare ``len==1`` 时直接返回不复权行情一致），
+    不再报「解析为空」。
     """
     import akshare as ak
 
@@ -378,38 +449,26 @@ def fetch_hk_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
         try:
             df = ak.stock_hk_daily(symbol=code_n, adjust="qfq-factor")
             if df is None or getattr(df, "empty", True):
-                raise AdjQuotesError(f"港股新浪未返回复权因子（{code_n}）")
-            rows: List[Dict[str, Any]] = []
-            cols = {str(c).lower(): c for c in df.columns}
-            date_col = cols.get("date") or list(df.columns)[0]
-            factor_col = (
-                cols.get("qfq_factor")
-                or cols.get("adj_factor")
-                or cols.get("factor")
-                or list(df.columns)[1]
-            )
-            for _, r in df.iterrows():
-                td = _parse_trade_date(r.get(date_col))
-                if td is None or not _is_valid_factor_trade_date(td):
-                    continue
-                try:
-                    f = float(r.get(factor_col))
-                except (TypeError, ValueError):
-                    continue
-                if f <= 0:
-                    continue
-                # 港股新浪已是内部约定形态：直接入库，禁止取倒数
-                rows.append(
-                    {
-                        "code": code_n,
-                        "trade_date": td,
-                        "adj_factor": f,
-                        "source": SOURCE_AKSHARE_SINA_HK_QFQ,
-                    }
+                raise AdjQuotesError(
+                    f"港股新浪未返回复权因子（{code_n}）。"
+                    "请确认代码为 5 位补零（如 00100），或改用 auto 走东财回退"
                 )
+            rows, placeholder_n = _parse_hk_sina_factor_frame(df, code_n)
             if not rows:
-                raise AdjQuotesError(f"港股新浪复权因子解析为空（{code_n}）")
-            rows.sort(key=lambda x: x["trade_date"])
+                # 仅占位日（1900-01-01）或因子列全无效 → 视为无除权事件
+                if placeholder_n > 0 or len(df) > 0:
+                    return _hk_unitary_factor_rows(
+                        code_n,
+                        source=SOURCE_AKSHARE_SINA_HK_QFQ,
+                        note=(
+                            f"新浪仅占位/无有效因子日（rows={len(df)}, "
+                            f"placeholder={placeholder_n}）"
+                        ),
+                    )
+                raise AdjQuotesError(
+                    f"港股新浪复权因子解析为空（{code_n}）："
+                    f"返回 {len(df)} 行但无有效 date/qfq_factor"
+                )
             # 轻量形态校验：最新应接近 1；若明显呈「历史>1」则告警（仍按原样入库）
             f_latest = float(rows[-1]["adj_factor"])
             f_oldest = float(rows[0]["adj_factor"])
@@ -439,6 +498,140 @@ def fetch_hk_sina_qfq_factors(code: str) -> List[Dict[str, Any]]:
             time.sleep(sleep_s)
     raise AdjQuotesError(
         _friendly_sina_factor_error(code_n, last_err or Exception("未知错误"))
+    )
+
+
+def _em_hk_hist_close_series(df: Any) -> List[Tuple[date, float]]:
+    """从东财 stock_hk_hist DataFrame 提取 (date, close)。兼容中英文列名。"""
+    if df is None or getattr(df, "empty", True):
+        return []
+    cols = {str(c).strip().lower(): c for c in df.columns}
+    date_col = (
+        cols.get("日期")
+        or cols.get("date")
+        or next((c for k, c in cols.items() if "日期" in str(k) or k == "date"), None)
+        or list(df.columns)[0]
+    )
+    # 东财列顺序：日期, 开盘, 收盘, ...
+    close_col = cols.get("收盘") or cols.get("close")
+    if close_col is None:
+        # 按常见位置：第 3 列（index 2）为收盘
+        close_col = list(df.columns)[2] if len(df.columns) > 2 else list(df.columns)[-1]
+    out: List[Tuple[date, float]] = []
+    for _, r in df.iterrows():
+        td = _parse_trade_date(r.get(date_col))
+        if td is None or not _is_valid_factor_trade_date(td):
+            continue
+        try:
+            c = float(r.get(close_col))
+        except (TypeError, ValueError):
+            continue
+        if c > 0:
+            out.append((td, c))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def fetch_hk_em_qfq_factors(
+    code: str,
+    *,
+    start_date: str = "19900101",
+    end_date: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """东财港股备用：用 stock_hk_hist 不复权/前复权收盘比推导前复权因子。
+
+    BaoStock 不支持港股；新浪 qfq-factor 失败或不可用时的次优回退。
+    公式：f_raw(t)=close_qfq(t)/close_raw(t)，再除以最新日使 f_T≈1（内部约定）。
+    仅保留因子变化日 + 首末日，避免按日全量入库。
+    """
+    import akshare as ak
+
+    code_n = normalize_hk_code(code)
+    throttle_third_party_fetch(label=f"em_hk:{code_n}")
+    end = end_date or date.today().strftime("%Y%m%d")
+    start = str(start_date or "19900101").replace("-", "")
+    if len(start) == 8 and start.isdigit():
+        pass
+    else:
+        start = "19900101"
+
+    last_err: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            df_raw = ak.stock_hk_hist(
+                symbol=code_n,
+                period="daily",
+                start_date=start,
+                end_date=end,
+                adjust="",
+            )
+            df_qfq = ak.stock_hk_hist(
+                symbol=code_n,
+                period="daily",
+                start_date=start,
+                end_date=end,
+                adjust="qfq",
+            )
+            raw_s = _em_hk_hist_close_series(df_raw)
+            qfq_s = _em_hk_hist_close_series(df_qfq)
+            if not raw_s or not qfq_s:
+                raise AdjQuotesError(
+                    f"东财港股行情为空，无法推导复权因子（{code_n}）"
+                )
+            qfq_map = {d: c for d, c in qfq_s}
+            ratios: List[Tuple[date, float]] = []
+            for td, raw_c in raw_s:
+                q = qfq_map.get(td)
+                if q is None or raw_c <= 0:
+                    continue
+                ratios.append((td, float(q) / float(raw_c)))
+            if not ratios:
+                raise AdjQuotesError(
+                    f"东财港股复权比为空（{code_n}）：raw/qfq 日期无法对齐"
+                )
+            # 全体 ≈1 → 无除权，单位因子即可
+            if all(abs(r - 1.0) < 1e-6 for _, r in ratios):
+                return _hk_unitary_factor_rows(
+                    code_n,
+                    source=SOURCE_AKSHARE_EM_HK_QFQ,
+                    note="东财 raw/qfq 收盘一致",
+                )
+            f_T = float(ratios[-1][1])
+            if f_T <= 0:
+                raise AdjQuotesError(f"东财港股最新复权比无效（{code_n}）：{f_T}")
+            # 归一化到最新≈1，并只保留变化点
+            normed: List[Tuple[date, float]] = [
+                (td, float(r) / f_T) for td, r in ratios
+            ]
+            kept: List[Tuple[date, float]] = [normed[0]]
+            for i in range(1, len(normed)):
+                prev_f = kept[-1][1]
+                cur_f = normed[i][1]
+                if abs(cur_f - prev_f) > 1e-8:
+                    kept.append(normed[i])
+            if kept[-1][0] != normed[-1][0]:
+                kept.append(normed[-1])
+            return [
+                {
+                    "code": code_n,
+                    "trade_date": td,
+                    "adj_factor": f,
+                    "source": SOURCE_AKSHARE_EM_HK_QFQ,
+                }
+                for td, f in kept
+            ]
+        except AdjQuotesError:
+            raise
+        except Exception as e:
+            last_err = e
+            sleep_s = (attempt + 1) * 1.5 + random.uniform(0.2, 0.8)
+            logger.warning(
+                "拉取东财港股复权比失败 %s attempt=%s: %s", code_n, attempt + 1, e
+            )
+            time.sleep(sleep_s)
+    raise AdjQuotesError(
+        f"获取东财港股复权因子失败（{code_n}）："
+        f"{last_err or '未知错误'}"
     )
 
 
@@ -522,7 +715,10 @@ def fetch_qfq_factors(
     *,
     factor_source: str = FACTOR_SOURCE_AUTO,
 ) -> Tuple[List[Dict[str, Any]], str]:
-    """按策略拉取因子，返回 (rows, source_tag)。港股走 stock_hk_daily，无 BaoStock。"""
+    """按策略拉取因子，返回 (rows, source_tag)。
+
+    港股：新浪 qfq-factor（含占位→单位因子）→ 东财收盘比；BaoStock 不支持港股。
+    """
     src = normalize_factor_source(factor_source)
     errors: List[str] = []
 
@@ -530,14 +726,51 @@ def fetch_qfq_factors(
         code_n = normalize_hk_code(code)
         if src == FACTOR_SOURCE_BAOSTOCK:
             raise AdjQuotesError(
-                f"BaoStock 不支持港股（{code_n}）；请使用 auto/sina 拉取港股新浪因子"
+                f"BaoStock 不支持港股（{code_n}，无 hk. query_adjust_factor）；"
+                "请使用 auto/sina（新浪，失败时 auto 可回退东财）"
             )
+
+        def _try_hk_sina() -> List[Dict[str, Any]]:
+            return fetch_hk_sina_qfq_factors(code_n)
+
+        def _try_hk_em() -> List[Dict[str, Any]]:
+            return fetch_hk_em_qfq_factors(code_n)
+
+        if src == FACTOR_SOURCE_SINA:
+            try:
+                return _try_hk_sina(), SOURCE_AKSHARE_SINA_HK_QFQ
+            except AdjQuotesError as e:
+                raise AdjQuotesError(
+                    f"获取港股复权因子失败（{code_n}）：{e.message}。"
+                    "若库内无 stock_adj_factor（source=akshare_sina_hk_qfq），"
+                    "可改 factor_source=auto 启用东财回退，或不复权计算"
+                ) from e
+
+        # auto：新浪 → 东财
         try:
-            return fetch_hk_sina_qfq_factors(code_n), SOURCE_AKSHARE_SINA_HK_QFQ
+            return _try_hk_sina(), SOURCE_AKSHARE_SINA_HK_QFQ
         except AdjQuotesError as e:
+            errors.append(f"新浪：{e.message}")
+            logger.warning("港股新浪复权因子失败，尝试东财：%s", e.message)
+        except Exception as e:
+            errors.append(f"新浪：{e}")
+            logger.warning("港股新浪复权因子异常，尝试东财：%s", e)
+
+        try:
+            return _try_hk_em(), SOURCE_AKSHARE_EM_HK_QFQ
+        except AdjQuotesError as e:
+            errors.append(f"东财：{e.message}")
             raise AdjQuotesError(
-                f"获取港股复权因子失败（{code_n}）：{e.message}。"
-                "若库内无 stock_adj_factor（source=akshare_sina_hk_qfq），请改用不复权计算"
+                f"获取港股复权因子失败（{code_n}，已尝试新浪与东财）。"
+                + "；".join(errors)
+                + "。BaoStock 不支持港股；若库内无因子请改用不复权计算"
+            ) from e
+        except Exception as e:
+            errors.append(f"东财：{e}")
+            raise AdjQuotesError(
+                f"获取港股复权因子失败（{code_n}，已尝试新浪与东财）。"
+                + "；".join(errors)
+                + "。BaoStock 不支持港股；若库内无因子请改用不复权计算"
             ) from e
 
     def _try_sina() -> List[Dict[str, Any]]:
@@ -729,8 +962,13 @@ def _candidate_factor_sources(factor_source: str, *, market: str = "CN") -> List
     """按 factor_source 偏好返回要检索的 stock_adj_factor.source 列表。"""
     src_pref = normalize_factor_source(factor_source)
     if market == "HK":
-        tag = _factor_source_tag(src_pref, market="HK")
-        return [tag] if tag else [SOURCE_AKSHARE_SINA_HK_QFQ]
+        if src_pref == FACTOR_SOURCE_SINA:
+            return [SOURCE_AKSHARE_SINA_HK_QFQ]
+        if src_pref == FACTOR_SOURCE_BAOSTOCK:
+            # 调用方应已拦截；此处仍返回空候选以外的可读路径由 fetch 抛错
+            return [SOURCE_AKSHARE_SINA_HK_QFQ]
+        # auto：新浪优先，东财备用（库内命中任一即可）
+        return [SOURCE_AKSHARE_SINA_HK_QFQ, SOURCE_AKSHARE_EM_HK_QFQ]
     if src_pref == FACTOR_SOURCE_AUTO:
         return [SOURCE_AKSHARE_SINA_QFQ, SOURCE_BAOSTOCK_QFQ]
     tag = _factor_source_tag(src_pref, market="CN")
@@ -758,7 +996,7 @@ def ensure_adj_factors(
 
     factor_source: auto | sina | baostock
       - A 股 auto=新浪优先，失败再 BaoStock
-      - 港股仅 sina/auto → akshare_sina_hk_qfq（BaoStock 不可用）
+      - 港股 auto=新浪（占位→单位因子）→ 东财收盘比；baostock 不可用
     返回：{ factors, factor_fetched, source, adj_factor_asof, factor_source, from_db }
     """
     try:

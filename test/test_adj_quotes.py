@@ -16,12 +16,14 @@ sys.path.insert(0, str(ROOT / "backend_api"))
 import utils.adj_quotes as adj_quotes_mod  # noqa: E402
 from utils.adj_quotes import (  # noqa: E402
     AdjQuotesError,
+    SOURCE_AKSHARE_EM_HK_QFQ,
     SOURCE_AKSHARE_SINA_HK_QFQ,
     SOURCE_AKSHARE_SINA_QFQ,
     SOURCE_BAOSTOCK_QFQ,
     apply_qfq_to_bars,
     ensure_adj_factors,
     fetch_baostock_qfq_factors,
+    fetch_hk_em_qfq_factors,
     fetch_hk_sina_qfq_factors,
     fetch_qfq_factors,
     fetch_sina_qfq_factors,
@@ -266,6 +268,87 @@ def test_fetch_hk_sina_qfq_factors_no_reciprocal():
     assert fake_ak.stock_hk_daily.call_args.kwargs.get("adjust") == "qfq-factor"
 
 
+def test_fetch_hk_sina_placeholder_only_becomes_unitary():
+    """00100 类：新浪仅返回 1900-01-01 占位 → 合成单位因子，不再「解析为空」。"""
+    df = pd.DataFrame(
+        {
+            "date": [date(1900, 1, 1)],
+            "qfq_factor": ["1"],
+        }
+    )
+    fake_ak = MagicMock()
+    fake_ak.stock_hk_daily.return_value = df
+    with patch.dict(sys.modules, {"akshare": fake_ak}):
+        rows = fetch_hk_sina_qfq_factors("00100")
+    assert len(rows) == 1
+    assert rows[0]["code"] == "00100"
+    assert rows[0]["adj_factor"] == pytest.approx(1.0)
+    assert rows[0]["source"] == SOURCE_AKSHARE_SINA_HK_QFQ
+    assert rows[0]["trade_date"] == date.today()
+    assert fake_ak.stock_hk_daily.call_args.kwargs.get("symbol") == "00100"
+
+
+def test_normalize_hk_code_00100():
+    assert normalize_hk_code("100") == "00100"
+    assert normalize_hk_code("00100") == "00100"
+    assert normalize_hk_code("HK00100") == "00100"
+
+
+def test_fetch_hk_em_qfq_factors_from_close_ratio():
+    """东财备用：用 raw/qfq 收盘比推导因子并归一化最新≈1。"""
+    raw = pd.DataFrame(
+        {
+            "日期": ["2024-01-02", "2024-06-01", "2024-12-01"],
+            "开盘": [10.0, 20.0, 30.0],
+            "收盘": [10.0, 20.0, 30.0],
+            "最高": [10.0, 20.0, 30.0],
+            "最低": [10.0, 20.0, 30.0],
+        }
+    )
+    # 假设中途除权：前半段 qfq 收盘被缩小
+    qfq = pd.DataFrame(
+        {
+            "日期": ["2024-01-02", "2024-06-01", "2024-12-01"],
+            "开盘": [5.0, 20.0, 30.0],
+            "收盘": [5.0, 20.0, 30.0],
+            "最高": [5.0, 20.0, 30.0],
+            "最低": [5.0, 20.0, 30.0],
+        }
+    )
+    fake_ak = MagicMock()
+    fake_ak.stock_hk_hist.side_effect = [raw, qfq]
+    with patch.dict(sys.modules, {"akshare": fake_ak}):
+        rows = fetch_hk_em_qfq_factors("00100")
+    assert rows[0]["code"] == "00100"
+    assert rows[0]["source"] == SOURCE_AKSHARE_EM_HK_QFQ
+    # ratio: 0.5, 1.0, 1.0 → /f_T → 0.5, 1.0, 1.0；变化点保留
+    assert rows[0]["adj_factor"] == pytest.approx(0.5)
+    assert rows[-1]["adj_factor"] == pytest.approx(1.0)
+    assert fake_ak.stock_hk_hist.call_args_list[0].kwargs.get("adjust") == ""
+    assert fake_ak.stock_hk_hist.call_args_list[1].kwargs.get("adjust") == "qfq"
+    assert fake_ak.stock_hk_hist.call_args_list[0].kwargs.get("symbol") == "00100"
+
+
+def test_fetch_hk_em_identical_ohlc_unitary():
+    """东财 raw==qfq → 单位因子。"""
+    df = pd.DataFrame(
+        {
+            "日期": ["2024-01-02", "2024-06-01"],
+            "开盘": [10.0, 12.0],
+            "收盘": [10.0, 12.0],
+            "最高": [10.0, 12.0],
+            "最低": [10.0, 12.0],
+        }
+    )
+    fake_ak = MagicMock()
+    fake_ak.stock_hk_hist.side_effect = [df, df.copy()]
+    with patch.dict(sys.modules, {"akshare": fake_ak}):
+        rows = fetch_hk_em_qfq_factors("100")
+    assert len(rows) == 1
+    assert rows[0]["adj_factor"] == pytest.approx(1.0)
+    assert rows[0]["source"] == SOURCE_AKSHARE_EM_HK_QFQ
+
+
 def test_fetch_qfq_factors_routes_hk_and_rejects_baostock():
     hk_rows = [
         {
@@ -281,16 +364,44 @@ def test_fetch_qfq_factors_routes_hk_and_rejects_baostock():
         "utils.adj_quotes.fetch_sina_qfq_factors"
     ) as cn_mock, patch(
         "utils.adj_quotes.fetch_baostock_qfq_factors"
-    ) as bao_mock:
+    ) as bao_mock, patch(
+        "utils.adj_quotes.fetch_hk_em_qfq_factors"
+    ) as em_mock:
         rows, src = fetch_qfq_factors("700", factor_source="auto")
     assert src == SOURCE_AKSHARE_SINA_HK_QFQ
     assert rows[0]["adj_factor"] == 0.9
     hk_mock.assert_called_once()
     cn_mock.assert_not_called()
     bao_mock.assert_not_called()
+    em_mock.assert_not_called()
 
     with pytest.raises(AdjQuotesError, match="BaoStock"):
         fetch_qfq_factors("00700", factor_source="baostock")
+
+
+def test_fetch_qfq_factors_hk_auto_falls_back_to_em():
+    """港股 auto：新浪失败后回退东财，不走 BaoStock。"""
+    em_rows = [
+        {
+            "code": "00100",
+            "trade_date": date.today(),
+            "adj_factor": 1.0,
+            "source": SOURCE_AKSHARE_EM_HK_QFQ,
+        }
+    ]
+    with patch(
+        "utils.adj_quotes.fetch_hk_sina_qfq_factors",
+        side_effect=AdjQuotesError("新浪限流"),
+    ), patch(
+        "utils.adj_quotes.fetch_hk_em_qfq_factors", return_value=em_rows
+    ) as em_mock, patch(
+        "utils.adj_quotes.fetch_baostock_qfq_factors"
+    ) as bao_mock:
+        rows, src = fetch_qfq_factors("00100", factor_source="auto")
+    assert src == SOURCE_AKSHARE_EM_HK_QFQ
+    assert rows[0]["adj_factor"] == 1.0
+    em_mock.assert_called_once()
+    bao_mock.assert_not_called()
 
 
 def test_apply_qfq_hk_style_factors():
