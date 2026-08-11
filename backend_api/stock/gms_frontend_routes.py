@@ -23,10 +23,22 @@ from backend_api.services.gms_signal_trace_selection import (
     _txt_name_hk,
     query_gms_signal_trace_selection,
 )
+from backend_core.config.config import is_etf_enabled
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/frontend/gms", tags=["GMS前端接口"])
+
+
+@router.get("/ui-config")
+async def get_gms_ui_config():
+    """公开：选股页 UI 开关（由服务端 env 下发，避免前端硬编码）。"""
+    return JSONResponse({
+        "success": True,
+        "data": {
+            "enable_etf": is_etf_enabled(),
+        },
+    })
 
 
 @router.get("/strategy-configs")
@@ -50,7 +62,12 @@ async def list_gms_strategy_configs_public():
             }
             data.append(item)
         default_id = mgr.resolve_canonical_config_id("tiered_dual_max")
-        return JSONResponse({"success": True, "data": data, "default_config_id": default_id})
+        return JSONResponse({
+            "success": True,
+            "data": data,
+            "default_config_id": default_id,
+            "enable_etf": is_etf_enabled(),
+        })
     except Exception as e:
         logger.error("GMS strategy-configs list 失败: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

@@ -245,6 +245,8 @@ const LeaderMidAnalysis = {
         boardCodeSource: 'tonghuashun',
         visible: true,
         variant: 'shortline',
+        showGmsWatchlistActions: true,
+        gmsWatchlistPerm: 'channel.analyze.tab.leader_mid.btn.gms_watchlist',
       });
     }
   },

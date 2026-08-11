@@ -932,6 +932,20 @@
   padding: 1px 6px;
   font-size: 11px;
 }
+.ba-role-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 6px 2px 0;
+}
+.ba-gms-wl-add,
+.ba-gms-wl-add-all {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ba-gms-wl-add-all {
+  margin-left: 4px;
+}
 .ba-role-cell {
   white-space: nowrap;
 }

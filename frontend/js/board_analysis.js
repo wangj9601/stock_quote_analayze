@@ -262,6 +262,8 @@ const BoardAnalysis = {
         boardCodeSource: 'tonghuashun',
         visible: true,
         variant: 'shortline',
+        showGmsWatchlistActions: true,
+        gmsWatchlistPerm: 'channel.analyze.tab.board.btn.gms_watchlist',
       });
     }
   },
@@ -346,6 +348,8 @@ const BoardAnalysis = {
           visible: true,
           variant: 'shortline',
           data: board.multi_boards ? undefined : board,
+          showGmsWatchlistActions: true,
+          gmsWatchlistPerm: 'channel.analyze.tab.board.btn.gms_watchlist',
         });
       }
       this.renderResults(this.lastResult);

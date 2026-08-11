@@ -567,6 +567,9 @@ def collect_hk_index_historical():
 
 def collect_etf_realtime():
     try:
+        if not _env_bool("ENABLE_ETF", True):
+            logging.info("[定时任务] ETF 已禁用（ENABLE_ETF=false），跳过 ETF 实时行情采集。")
+            return
         today_str = datetime.now().strftime('%Y-%m-%d')
         if _cn_session_closed_today():
             logging.info(f"[定时任务] A股(ETF) {today_str} 为休市日，跳过 ETF 实时行情采集。")
@@ -674,6 +677,9 @@ def collect_etf_realtime():
 
 def collect_etf_historical():
     try:
+        if not _env_bool("ENABLE_ETF", True):
+            logging.info("[定时任务] ETF 已禁用（ENABLE_ETF=false），跳过 ETF 历史行情采集。")
+            return
         today = datetime.now()
         today_str_dash = today.strftime('%Y-%m-%d')
         if _cn_session_closed_today():
@@ -1127,17 +1133,20 @@ scheduler.add_job(collect_hk_index_historical, 'cron',
     minute=_cron_int('SCHED_HK_INDEX_HISTORICAL_MINUTE', 18),
     id='hk_index_historical')
 
-scheduler.add_job(collect_etf_realtime, 'cron',
-    day_of_week=_cron('SCHED_ETF_REALTIME_DOW', 'mon-fri'),
-    hour=_cron('SCHED_ETF_REALTIME_HOUR', '15'),
-    minute=_cron_int('SCHED_ETF_REALTIME_MINUTE', 33),
-    id='etf_realtime')
-
-scheduler.add_job(collect_etf_historical, 'cron',
-    day_of_week=_cron('SCHED_ETF_HISTORICAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_ETF_HISTORICAL_HOUR', 16),
-    minute=_cron_int('SCHED_ETF_HISTORICAL_MINUTE', 5),
-    id='etf_historical')
+if _env_bool('ENABLE_ETF', True):
+    scheduler.add_job(collect_etf_realtime, 'cron',
+        day_of_week=_cron('SCHED_ETF_REALTIME_DOW', 'mon-fri'),
+        hour=_cron('SCHED_ETF_REALTIME_HOUR', '15'),
+        minute=_cron_int('SCHED_ETF_REALTIME_MINUTE', 33),
+        id='etf_realtime')
+    scheduler.add_job(collect_etf_historical, 'cron',
+        day_of_week=_cron('SCHED_ETF_HISTORICAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_ETF_HISTORICAL_HOUR', 16),
+        minute=_cron_int('SCHED_ETF_HISTORICAL_MINUTE', 5),
+        id='etf_historical')
+    logging.info("已注册 ETF 实时/历史采集任务（ENABLE_ETF=true）")
+else:
+    logging.info("ETF 采集已禁用（ENABLE_ETF=false），未注册 etf_realtime / etf_historical")
 
 if __name__ == "__main__":
     enable_sched = os.getenv('ENABLE_SCHEDULED_COLLECTION', 'true').lower() in ('true', '1', 'yes')

@@ -1491,6 +1491,28 @@ async def get_gms_strategy(
         )
 
     try:
+        from backend_core.config.config import is_etf_enabled
+        if str(scope or "").strip().lower() == "etf" and not is_etf_enabled():
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "search_date": (str(date).strip()[:10] if date else None),
+                    "strategy_name": "GMS均值引力动量策略",
+                    "scope": "etf",
+                    "message": "ETF 功能已禁用（ENABLE_ETF=false）",
+                    "enable_etf": False,
+                    "paging": {
+                        "enabled": use_pagination,
+                        "page": 1,
+                        "page_size": page_size if use_pagination else 0,
+                        "total": 0,
+                        "total_pages": 0,
+                    },
+                }
+            )
+
         # 未传日期时，从 mean_frequency_resonance_indicators 或历史行情获取最新可用日期
         if date:
             try:

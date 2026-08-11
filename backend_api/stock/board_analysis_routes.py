@@ -32,6 +32,43 @@ class BoardObserveRequest(BaseModel):
     snapshot: Optional[Dict[str, Any]] = None
 
 
+class GmsStrategyWatchlistStockItem(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+    name: Optional[str] = None
+    market: Optional[str] = "CN"
+    role: Optional[str] = Field(None, description="leader|mid，仅备注用")
+
+
+class GmsStrategyWatchlistAddRequest(BaseModel):
+    """分析频道：将板块龙头/中军写入 GMS 策略观察股（gms_strategy_version_stocks）。"""
+
+    stocks: List[GmsStrategyWatchlistStockItem] = Field(
+        ..., min_length=1, max_length=50, description="待加入股票，最多 50 只"
+    )
+    remark: Optional[str] = Field(None, description="写入观察股备注；默认分析频道口径")
+    board_code: Optional[str] = None
+    board_name: Optional[str] = None
+
+
+_GMS_WATCHLIST_PERMS = (
+    "channel.analyze.tab.board.btn.gms_watchlist",
+    "channel.analyze.tab.leader_mid.btn.gms_watchlist",
+    # 兼容已有「加入交易观察」权限（交易观察侧已会同步策略观察股）
+    "channel.analyze.tab.board.btn.observe",
+)
+
+
+def _require_gms_strategy_watchlist_perm(db: Session, user: User) -> None:
+    from backend_api.permissions import get_effective_permission_codes
+
+    codes = set(get_effective_permission_codes(db, user))
+    if not codes.intersection(_GMS_WATCHLIST_PERMS):
+        raise HTTPException(
+            status_code=403,
+            detail="无权限加入 GMS 策略观察股",
+        )
+
+
 def _parse_strategies(raw: Optional[str]) -> List[str]:
     if not raw or not str(raw).strip():
         return ["gms", "urt", "sbbr", "rpe"]
@@ -434,3 +471,58 @@ def _add_rpe(db, user, code, name, market, sig_date, snap):
     db.commit()
     db.refresh(row)
     return {"success": True, "id": row.id, "strategy": "rpe"}
+
+
+@router.post("/gms-strategy-watchlist/add")
+def add_gms_strategy_watchlist_from_analysis(
+    body: GmsStrategyWatchlistAddRequest = Body(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    将股票加入启用中的 GMS 策略观察股池（gms_strategy_version_stocks）。
+    支持单只或多只；已存在则跳过，不另起存储。
+    """
+    _require_gms_strategy_watchlist_perm(db, user)
+    from backend_api.services.gms_strategy_watchlist import (
+        BOARD_ROLE_REMARK,
+        add_gms_strategy_watchlist_stocks_batch,
+    )
+
+    remark = (body.remark or "").strip() or BOARD_ROLE_REMARK
+    board_hint = (body.board_name or body.board_code or "").strip()
+    if board_hint and BOARD_ROLE_REMARK in remark:
+        remark = f"{BOARD_ROLE_REMARK}（{board_hint}）"
+
+    stocks = [
+        {
+            "code": _norm_code(item.code),
+            "name": item.name,
+            "market": (item.market or "CN").strip().upper() or "CN",
+            "role": item.role,
+        }
+        for item in body.stocks
+    ]
+    try:
+        summary = add_gms_strategy_watchlist_stocks_batch(db, stocks, remark=remark)
+        db.commit()
+    except Exception as e:
+        logger.exception("gms strategy watchlist add failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"加入 GMS 策略观察股失败: {e}")
+
+    return {
+        "success": True,
+        "added": summary["added"],
+        "skipped": summary["skipped"],
+        "failed": summary["failed"],
+        "total": summary["total"],
+        "version_id": summary.get("version_id"),
+        "items": summary["items"],
+        "message": (
+            f"新增 {summary['added']}，跳过 {summary['skipped']}，失败 {summary['failed']}"
+        ),
+    }

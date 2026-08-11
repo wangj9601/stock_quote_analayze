@@ -745,7 +745,7 @@
                 <h2>策略说明</h2>
                 <ul class="strategy-conditions">
                     <li><strong>数据来源：</strong>【单只股票】输入代码或名称，仅计算该股的 GMS 策略信号；【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【行业板块】按所选行业板块成分股筛选，可进一步限定主板、创业板、中小板、科创板或北证；【概念板块】按所选概念板块成分股筛选，同样支持上述 A 股板块过滤；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
-                        股当日有行情的股票池，可进一步限定主板、创业板、中小板、科创板或北证；【全部ETF】显示 ETF 基本信息表中全部 ETF 的 GMS 指标列表。</li>
+                        股当日有行情的股票池，可进一步限定主板、创业板、中小板、科创板或北证；<span id="gmsScopeEtfHelpText">【全部ETF】显示 ETF 基本信息表中全部 ETF 的 GMS 指标列表。</span></li>
                     <li><strong>时间范围：</strong>最近 20 个交易日</li>
                     <li><strong>双模块阶梯式评分：</strong></li>
                     <li class="condition-item"><strong>【均值收敛态】</strong>
@@ -774,7 +774,7 @@
                         <input type="radio" id="gmsScopeHK" name="gmsScope" value="hk" style="margin-right: 5px;">
                         <label for="gmsScopeHK" style="cursor: pointer;">全部港股</label>
                     </div>
-                    <div class="param-item" style="display: flex; align-items: center;">
+                    <div class="param-item" id="gmsScopeETFWrap" style="display: flex; align-items: center;">
                         <input type="radio" id="gmsScopeETF" name="gmsScope" value="etf" style="margin-right: 5px;">
                         <label for="gmsScopeETF" style="cursor: pointer;">全部ETF</label>
                     </div>

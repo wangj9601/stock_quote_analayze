@@ -15,10 +15,16 @@ from sqlalchemy import text, func
 
 from backend_api.database import get_db
 from backend_api.models import FundBasicInfo
+from backend_core.config.config import is_etf_enabled
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/etf", tags=["ETF基金管理"])
+
+
+def _ensure_etf_enabled():
+    if not is_etf_enabled():
+        raise HTTPException(status_code=403, detail="ETF 功能已禁用（ENABLE_ETF=false）")
 
 # 全局任务状态
 _etf_task_status = {
@@ -149,6 +155,7 @@ async def get_task_status():
 @router.post("/sync-list")
 async def sync_etf_list():
     """同步ETF基础信息列表"""
+    _ensure_etf_enabled()
     global _etf_task_status
     if _etf_task_status['is_running']:
         raise HTTPException(status_code=400, detail="已有ETF任务正在运行，请等待完成")
@@ -190,6 +197,7 @@ async def sync_etf_list():
 @router.post("/collect")
 async def start_etf_collect(body: ETFCollectBody):
     """触发ETF历史行情采集任务"""
+    _ensure_etf_enabled()
     global _etf_task_status
     if _etf_task_status['is_running']:
         raise HTTPException(status_code=400, detail="已有ETF任务正在运行，请等待完成")

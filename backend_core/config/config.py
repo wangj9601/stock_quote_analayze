@@ -22,6 +22,20 @@ def _env_int(key: str, default: int) -> int:
     except ValueError:
         return default
 
+def _env_bool(key: str, default: bool = True) -> bool:
+    v = (os.getenv(key) or "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "yes", "y", "on")
+
+# ETF 总开关：false 时停止定时/管理端采集，并隐藏选股页「全部ETF」等选项（默认 true，兼容现有行为）
+ENABLE_ETF = _env_bool("ENABLE_ETF", True)
+
+
+def is_etf_enabled() -> bool:
+    """运行时读取 ENABLE_ETF（进程内改 env 时也能生效）。"""
+    return _env_bool("ENABLE_ETF", True)
+
 # 数据库目录 - 使用相对路径
 DB_DIR = ROOT_DIR / 'database'
 DB_DIR.mkdir(parents=True, exist_ok=True)

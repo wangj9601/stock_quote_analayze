@@ -74,6 +74,8 @@ const ScreeningPage = {
     _gmsBoardPickerOwner: 'gms',
     /** 板块选择弹窗正在刷新选项 */
     _gmsBoardPickerRefreshing: false,
+    /** 服务端 ENABLE_ETF：默认 true，与后端兼容 */
+    enableEtf: true,
 
     // 初始化
     async init() {
@@ -91,6 +93,46 @@ const ScreeningPage = {
         this.ensureActiveStrategyVisible();
         this.applyVsbHashOnLoad();
         void this.initUrtStrategyConfig();
+        void this.loadGmsUiConfig();
+    },
+
+    /** 从服务端拉取选股 UI 开关（如 ENABLE_ETF）并同步隐藏 ETF 选项 */
+    async loadGmsUiConfig() {
+        try {
+            const res = await fetch(`${this.API_BASE_URL}/api/frontend/gms/ui-config`);
+            if (!res.ok) return;
+            const json = await res.json();
+            const data = (json && json.data) || {};
+            if (typeof data.enable_etf === 'boolean') {
+                this.enableEtf = data.enable_etf;
+            }
+        } catch (e) {
+            console.warn('loadGmsUiConfig:', e);
+        }
+        this.applyEtfUiVisibility();
+    },
+
+    /** ENABLE_ETF=false 时隐藏 GMS「全部ETF」选项与说明文案 */
+    applyEtfUiVisibility() {
+        const show = this.enableEtf !== false;
+        const wrap = document.getElementById('gmsScopeETFWrap');
+        const help = document.getElementById('gmsScopeEtfHelpText');
+        if (wrap) wrap.style.display = show ? 'flex' : 'none';
+        if (help) help.style.display = show ? '' : 'none';
+        if (!show) {
+            const etfRadio = document.getElementById('gmsScopeETF');
+            if (etfRadio && etfRadio.checked) {
+                const cn = document.getElementById('gmsScopeCN');
+                if (cn) {
+                    cn.checked = true;
+                    etfRadio.checked = false;
+                    this.syncGmsWatchlistMarketWrap();
+                    this.syncGmsCnBoardWrap();
+                    this.syncGmsIndustryBoardWrap();
+                    this.syncGmsSingleStockWrap();
+                }
+            }
+        }
     },
 
     /** 窄屏下策略说明默认折叠，避免占满首屏导致列表/按钮不可见 */
@@ -5006,6 +5048,10 @@ const ScreeningPage = {
             const json = await res.json();
             if (!json.success) {
                 throw new Error(json.detail || json.message || '接口返回失败');
+            }
+            if (typeof json.enable_etf === 'boolean') {
+                this.enableEtf = json.enable_etf;
+                this.applyEtfUiVisibility();
             }
             const list = json.data || [];
             if (!list.length) {
