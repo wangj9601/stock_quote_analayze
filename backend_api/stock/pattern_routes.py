@@ -27,6 +27,12 @@ class PatternScanRequest(BaseModel):
     lookback: int = Field(160, ge=60, le=400)
     limit: int = Field(100, ge=1, le=200)
     timeout_sec: float = Field(45.0, ge=5.0, le=120.0)
+    adjust: str = Field("none", description="价格口径：none=不复权，qfq=前复权现算")
+    refresh_factor: bool = False
+    factor_source: str = Field(
+        "auto",
+        description="因子源：auto / sina / baostock（仅 adjust=qfq 生效）",
+    )
 
 
 def _parse_types(raw: Optional[str], lst: Optional[List[str]] = None) -> List[str]:
@@ -74,17 +80,37 @@ async def patterns_for_stock(
     types: Optional[str] = Query(None, description="逗号分隔形态族"),
     asof: Optional[str] = Query(None),
     lookback: int = Query(160, ge=60, le=400),
+    adjust: str = Query("none", description="价格口径：none=不复权，qfq=前复权现算"),
+    refresh_factor: bool = Query(False, description="强制重新拉取复权因子"),
+    factor_source: str = Query(
+        "auto",
+        description="因子源：auto=归一化新浪优先BaoStock备用，sina=仅归一化新浪，baostock=仅BaoStock",
+    ),
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.analyze.tab.technical.btn.pattern")),
 ):
     from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
     from backend_core.analysis.chart_patterns.engine import detect_all
+    from backend_core.analysis.chart_patterns.scanner import (
+        apply_qfq_to_code_bars,
+        normalize_price_adjust,
+    )
     from backend_core.strategies.double_bottom.data_loader import (
         batch_load_ohlc_asc,
         load_names,
         resolve_effective_trade_date,
     )
     from backend_core.strategies.double_bottom.universe import normalize_a_code
+
+    try:
+        from backend_api.utils.adj_quotes import AdjQuotesError
+    except ImportError:
+        from utils.adj_quotes import AdjQuotesError  # type: ignore
+
+    try:
+        adjust_n = normalize_price_adjust(adjust)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     resolved = resolve_levels_stock_identifier(db, code)
     status = resolved.get("status")
@@ -99,18 +125,38 @@ async def patterns_for_stock(
     asof_s = resolve_effective_trade_date(db, asof)
     bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
     bars = bars_map.get(stock_code) or []
+    adj_meta: Optional[Dict[str, Any]] = None
+    if adjust_n == "qfq":
+        try:
+            bars, adj_meta = apply_qfq_to_code_bars(
+                db,
+                stock_code,
+                bars,
+                refresh_factor=refresh_factor,
+                factor_source=factor_source or "auto",
+            )
+        except AdjQuotesError as e:
+            raise HTTPException(status_code=400, detail=e.message) from e
+        except Exception as e:
+            logger.exception("形态识别前复权失败 code=%s", stock_code)
+            raise HTTPException(status_code=500, detail=f"前复权处理失败: {e}") from e
+
     names = load_names(db, [stock_code])
     type_list = _parse_types(types)
     hits = detect_all(bars, types=type_list or None) if len(bars) >= 30 else []
-    return {
+    payload: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
         "name": names.get(stock_code) or resolved.get("name") or "",
         "asof": asof_s,
+        "price_adjust": adjust_n,
         "bar_count": len(bars),
         "hit_count": len(hits),
         "items": hits,
     }
+    if adj_meta:
+        payload["adj_meta"] = adj_meta
+    return payload
 
 
 @router.post("/scan")
@@ -119,7 +165,15 @@ async def patterns_scan(
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.analyze.tab.technical.btn.pattern_scan")),
 ):
-    from backend_core.analysis.chart_patterns.scanner import scan_patterns
+    from backend_core.analysis.chart_patterns.scanner import (
+        normalize_price_adjust,
+        scan_patterns,
+    )
+
+    try:
+        adjust_n = normalize_price_adjust(body.adjust)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
         result = scan_patterns(
@@ -132,6 +186,9 @@ async def patterns_scan(
             lookback=body.lookback,
             limit=body.limit,
             timeout_sec=body.timeout_sec,
+            adjust=adjust_n,
+            refresh_factor=bool(body.refresh_factor),
+            factor_source=body.factor_source or "auto",
         )
     except Exception as e:
         logger.exception("patterns scan failed")

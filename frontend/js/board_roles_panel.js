@@ -305,8 +305,11 @@
         ? '<div class="ba-short-roles"><span class="ba-muted">加载短线角色…</span></div>'
         : '<div class="gms-board-roles-loading">加载龙头/中军…</div>';
     const source = opts.boardCodeSource || 'tonghuashun';
+    // 与已选对齐展示；超大选中量时截断并提示，避免一次请求过多
+    const MAX_BOARD_ROLES = 200;
+    const displayCodes = codes.slice(0, MAX_BOARD_ROLES);
     const parts = [];
-    for (const code of codes.slice(0, 8)) {
+    for (const code of displayCodes) {
       try {
         const data = await fetchBoardRoles(opts.boardType, code, source);
         if (!data.board_code) data.board_code = code;
@@ -323,10 +326,16 @@
         );
       }
     }
-    if (codes.length > 8) {
-      parts.push(`<div class="gms-muted">仅展示前 8 个已选板块的龙头/中军</div>`);
+    if (codes.length > MAX_BOARD_ROLES) {
+      parts.push(
+        `<div class="gms-muted">已选 ${codes.length} 个板块，仅展示前 ${MAX_BOARD_ROLES} 个的龙头/中军</div>`
+      );
     }
-    panel.innerHTML = parts.join('') || '<div class="gms-muted">暂无龙头/中军数据</div>';
+    const body = parts.join('') || '<div class="gms-muted">暂无龙头/中军数据</div>';
+    panel.innerHTML =
+      displayCodes.length > 8
+        ? `<div class="board-roles-scroll">${body}</div>`
+        : body;
     if (actionOpts.showGmsWatchlistActions) {
       bindGmsWatchlistActions(panel);
       if (typeof PermissionEngine !== 'undefined' && PermissionEngine.applyToPage) {

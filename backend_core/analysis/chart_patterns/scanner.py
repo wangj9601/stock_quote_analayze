@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
@@ -101,6 +101,49 @@ def resolve_scan_codes(
     return out
 
 
+def normalize_price_adjust(adjust: Optional[str]) -> str:
+    """价格口径：none | qfq（与 /api/analysis/levels 一致）。"""
+    adjust_n = str(adjust or "none").strip().lower() or "none"
+    if adjust_n not in ("none", "qfq"):
+        raise ValueError("adjust 仅支持 none 或 qfq")
+    return adjust_n
+
+
+def apply_qfq_to_code_bars(
+    db: Session,
+    code: str,
+    bars: List[Dict[str, Any]],
+    *,
+    refresh_factor: bool = False,
+    factor_source: str = "auto",
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """对单票日 K 现算前复权；返回 (bars_qfq, adj_meta)。失败抛 AdjQuotesError。"""
+    try:
+        from backend_api.utils.adj_quotes import apply_qfq_to_bars, ensure_adj_factors
+    except ImportError:
+        from utils.adj_quotes import apply_qfq_to_bars, ensure_adj_factors  # type: ignore
+
+    ensured = ensure_adj_factors(
+        db,
+        code,
+        force_refresh=bool(refresh_factor),
+        factor_source=factor_source or "auto",
+        prefer_db=True,
+    )
+    raw_sorted = sorted(
+        list(bars or []),
+        key=lambda b: str((b or {}).get("date") or ""),
+    )
+    qfq_bars = apply_qfq_to_bars(raw_sorted, ensured["factors"])
+    adj_meta = {
+        "source": ensured.get("source"),
+        "adj_factor_asof": ensured.get("adj_factor_asof"),
+        "factor_fetched": ensured.get("factor_fetched"),
+        "factor_source": ensured.get("factor_source"),
+    }
+    return qfq_bars, adj_meta
+
+
 def scan_patterns(
     db: Session,
     *,
@@ -112,6 +155,9 @@ def scan_patterns(
     lookback: int = DEFAULT_LOOKBACK,
     limit: int = DEFAULT_SCAN_LIMIT,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    adjust: str = "none",
+    refresh_factor: bool = False,
+    factor_source: str = "auto",
 ) -> Dict[str, Any]:
     """扫描股票池，返回命中列表（含 code/name）。"""
     from backend_core.strategies.double_bottom.data_loader import (
@@ -120,10 +166,16 @@ def scan_patterns(
         resolve_effective_trade_date,
     )
 
+    try:
+        from backend_api.utils.adj_quotes import AdjQuotesError
+    except ImportError:
+        from utils.adj_quotes import AdjQuotesError  # type: ignore
+
     t0 = time.monotonic()
     lim = max(1, min(int(limit or DEFAULT_SCAN_LIMIT), HARD_SCAN_CAP))
     asof_s = resolve_effective_trade_date(db, asof)
     families = sorted(normalize_families(types))
+    adjust_n = normalize_price_adjust(adjust)
     codes = resolve_scan_codes(
         db,
         scope=scope,
@@ -135,6 +187,7 @@ def scan_patterns(
         return {
             "asof": asof_s,
             "scope": scope,
+            "price_adjust": adjust_n,
             "scanned": 0,
             "pool_size": 0,
             "hit_count": 0,
@@ -157,6 +210,21 @@ def scan_patterns(
         scanned += 1
         if len(bars) < 30:
             continue
+        if adjust_n == "qfq":
+            try:
+                bars, _meta = apply_qfq_to_code_bars(
+                    db,
+                    code,
+                    bars,
+                    refresh_factor=refresh_factor,
+                    factor_source=factor_source,
+                )
+            except AdjQuotesError as e:
+                logger.debug("pattern scan qfq skip %s: %s", code, e)
+                continue
+            except Exception as e:
+                logger.debug("pattern scan qfq fail %s: %s", code, e)
+                continue
         try:
             hits = detect_all(bars, types=families)
         except Exception as e:
@@ -178,6 +246,7 @@ def scan_patterns(
     return {
         "asof": asof_s,
         "scope": scope,
+        "price_adjust": adjust_n,
         "scanned": scanned,
         "pool_size": len(codes),
         "hit_count": len(items),

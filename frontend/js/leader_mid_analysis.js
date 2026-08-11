@@ -173,11 +173,21 @@ const LeaderMidAnalysis = {
     }
   },
 
+  updateBoardPickerCount(total, filtered, hasFilter) {
+    const countEl = document.getElementById('lmBoardPickerCount');
+    if (!countEl) return;
+    countEl.textContent = hasFilter
+      ? `当前 ${filtered} / 共 ${total}`
+      : `共 ${total} 个可选`;
+  },
+
   renderBoardPickerList() {
     const listEl = document.getElementById('lmBoardPickerList');
     if (!listEl) return;
     const q = (document.getElementById('lmBoardPickerSearch')?.value || '').trim().toLowerCase();
-    let list = this.catalog().slice();
+    const all = this.catalog().slice();
+    const total = all.length;
+    let list = all;
     if (q) {
       list = list.filter((b) => {
         const name = String(b.board_name || '').toLowerCase();
@@ -185,6 +195,7 @@ const LeaderMidAnalysis = {
         return name.includes(q) || code.includes(q);
       });
     }
+    this.updateBoardPickerCount(total, list.length, !!q);
     list.sort((a, b) =>
       String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh')
     );
@@ -241,7 +252,7 @@ const LeaderMidAnalysis = {
       BoardRolesPanel.refresh({
         panelId: 'lmRolesHost',
         boardType: this.boardKind,
-        boardCodes: this.selectedBoardCodes.slice(0, 8),
+        boardCodes: this.selectedBoardCodes,
         boardCodeSource: 'tonghuashun',
         visible: true,
         variant: 'shortline',

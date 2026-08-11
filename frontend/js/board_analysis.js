@@ -190,11 +190,21 @@ const BoardAnalysis = {
     }
   },
 
+  updateBoardPickerCount(total, filtered, hasFilter) {
+    const countEl = document.getElementById('baBoardPickerCount');
+    if (!countEl) return;
+    countEl.textContent = hasFilter
+      ? `当前 ${filtered} / 共 ${total}`
+      : `共 ${total} 个可选`;
+  },
+
   renderBoardPickerList() {
     const listEl = document.getElementById('baBoardPickerList');
     if (!listEl) return;
     const q = (document.getElementById('baBoardPickerSearch')?.value || '').trim().toLowerCase();
-    let list = this.catalog().slice();
+    const all = this.catalog().slice();
+    const total = all.length;
+    let list = all;
     if (q) {
       list = list.filter((b) => {
         const name = String(b.board_name || '').toLowerCase();
@@ -202,6 +212,7 @@ const BoardAnalysis = {
         return name.includes(q) || code.includes(q);
       });
     }
+    this.updateBoardPickerCount(total, list.length, !!q);
     list.sort((a, b) =>
       String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh')
     );
@@ -258,7 +269,7 @@ const BoardAnalysis = {
       BoardRolesPanel.refresh({
         panelId: 'baRolesHost',
         boardType: this.boardKind,
-        boardCodes: this.selectedBoardCodes.slice(0, 8),
+        boardCodes: this.selectedBoardCodes,
         boardCodeSource: 'tonghuashun',
         visible: true,
         variant: 'shortline',
@@ -343,7 +354,7 @@ const BoardAnalysis = {
         BoardRolesPanel.refresh({
           panelId: 'baRolesHost',
           boardType: this.boardKind,
-          boardCodes: roleCodes.slice(0, 8),
+          boardCodes: roleCodes,
           boardCodeSource: first.board_code_source || 'tonghuashun',
           visible: true,
           variant: 'shortline',

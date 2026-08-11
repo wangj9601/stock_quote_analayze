@@ -105,6 +105,16 @@ const PatternTool = {
     return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map((el) => el.value);
   },
 
+  /** 与 levels 一致：adjust=qfq|none；UI 默认勾选前复权 */
+  selectedAdjust() {
+    const el = document.getElementById('patternAdjustQfq');
+    return el && el.checked ? 'qfq' : 'none';
+  },
+
+  adjustLabel(adjust) {
+    return adjust === 'qfq' ? '前复权 OHLC' : '不复权 OHLC';
+  },
+
   async ensureCatalog() {
     if (this._catalog.industry.length || this._catalog.concept.length) return;
     const fetchFn = window.authFetch || fetch;
@@ -232,11 +242,12 @@ const PatternTool = {
     return `${label}${simplified} ${parts.join(' ')}${extras.length ? ` ${extras.join(' ')}` : ''}`.trim();
   },
 
-  renderItems(items, metaHtml, mode) {
+  renderItems(items, metaHtml, mode, priceAdjust) {
     const body = document.getElementById('patternResultBody');
     const wrap = document.getElementById('patternResultWrap');
     const empty = document.getElementById('patternEmpty');
     const meta = document.getElementById('patternMeta');
+    const adjust = priceAdjust === 'qfq' ? 'qfq' : 'none';
     if (meta) {
       meta.hidden = !metaHtml;
       meta.innerHTML = metaHtml || '';
@@ -247,7 +258,7 @@ const PatternTool = {
         empty.hidden = false;
         empty.textContent = '未识别到选定形态（或扫描无命中）。';
       }
-      this.renderExpertAnalysis([], mode || 'single');
+      this.renderExpertAnalysis([], mode || 'single', adjust);
       return;
     }
     if (empty) empty.hidden = true;
@@ -275,11 +286,11 @@ const PatternTool = {
         </tr>`;
       })
       .join('');
-    this.renderExpertAnalysis(items, mode || 'single');
+    this.renderExpertAnalysis(items, mode || 'single', adjust);
   },
 
   /** 空结果隐藏；个股完整解读；扫描简要提示 */
-  renderExpertAnalysis(items, mode) {
+  renderExpertAnalysis(items, mode, priceAdjust) {
     const box = document.getElementById('patternExpertAnalysis');
     const body = document.getElementById('patternExpertBody');
     if (!box || !body) return;
@@ -289,6 +300,9 @@ const PatternTool = {
       return;
     }
     box.hidden = false;
+    const adjustTag = `<span class="kde-levels-adjust-tag ${
+      priceAdjust === 'qfq' ? 'is-qfq' : 'is-raw'
+    }">${this.esc(this.adjustLabel(priceAdjust))}</span>`;
     if (mode === 'scan') {
       const n = items.length;
       const top = this._rankHits(items).slice(0, 3);
@@ -301,7 +315,7 @@ const PatternTool = {
           return `${code} ${label}（${st} ${conf}）`;
         })
         .join('；');
-      body.innerHTML = `<p>本页命中 ${n} 条${brief ? `，靠前示例：${this.esc(brief)}` : ''}。扫描模式不展开长文解读，请切换至「个股识别」获取完整专家分析。</p>
+      body.innerHTML = `<p>本页命中 ${n} 条${brief ? `，靠前示例：${this.esc(brief)}` : ''}。扫描模式不展开长文解读，请切换至「个股识别」获取完整专家分析。 ${adjustTag}</p>
         <p class="pattern-expert-risk">风险提示：以上为日线规则模板摘要，不构成投资建议。</p>`;
       return;
     }
@@ -311,6 +325,7 @@ const PatternTool = {
       : '';
     const tradeHtml = analysis.tradeLevelsHtml || '';
     body.innerHTML = `
+      <p><span class="pattern-expert-label">价格口径：</span>${adjustTag}</p>
       <p><span class="pattern-expert-label">短期走势：</span>${this.esc(analysis.shortTerm)}</p>
       <p><span class="pattern-expert-label">中线格局：</span>${this.esc(analysis.mediumTerm)}</p>
       ${levelsHtml}
@@ -888,6 +903,7 @@ const PatternTool = {
       return;
     }
     const asof = ((document.getElementById('patternAsof') || {}).value || '').trim();
+    const adjust = this.selectedAdjust();
     const btn = document.getElementById('patternRunBtn');
     if (btn) {
       btn.disabled = true;
@@ -902,6 +918,7 @@ const PatternTool = {
         }
         const q = new URLSearchParams();
         q.set('types', types.join(','));
+        q.set('adjust', adjust);
         if (asof) q.set('asof', asof);
         const resp = await authFetch(
           `${API_BASE_URL}/api/analysis/patterns/${encodeURIComponent(code)}?${q.toString()}`
@@ -911,6 +928,7 @@ const PatternTool = {
           const msg = (data.detail && (data.detail.message || data.detail)) || data.message || '识别失败';
           throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
         }
+        const priceAdjust = data.price_adjust === 'qfq' ? 'qfq' : 'none';
         const items = (data.items || []).map((h) => ({
           ...h,
           code: data.code || code,
@@ -918,8 +936,9 @@ const PatternTool = {
         }));
         this.renderItems(
           items,
-          `个股 ${this.esc(data.code)} ${this.esc(data.name || '')} · 基准日 ${this.esc(data.asof || '--')} · 命中 ${items.length}`,
-          'single'
+          `个股 ${this.esc(data.code)} ${this.esc(data.name || '')} · 基准日 ${this.esc(data.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))} · 命中 ${items.length}`,
+          'single',
+          priceAdjust
         );
       } else {
         const scope = (document.getElementById('patternScanScope') || {}).value || 'market';
@@ -935,6 +954,7 @@ const PatternTool = {
           types,
           asof: asof || null,
           limit: Math.max(10, Math.min(200, limit)),
+          adjust,
         };
         const resp = await authFetch(`${API_BASE_URL}/api/analysis/patterns/scan`, {
           method: 'POST',
@@ -945,13 +965,15 @@ const PatternTool = {
         if (!resp.ok) {
           throw new Error(data.detail || data.message || '扫描失败');
         }
+        const priceAdjust = data.price_adjust === 'qfq' ? 'qfq' : 'none';
         const flags = [];
         if (data.truncated) flags.push('已截断');
         if (data.timed_out) flags.push('已超时');
         this.renderItems(
           data.items || [],
-          `扫描 ${this.esc(data.scope)} · 已扫 ${data.scanned || 0}/${data.pool_size || 0} · 命中 ${data.hit_count || 0} · 基准日 ${this.esc(data.asof || '--')}${flags.length ? ' · ' + flags.join('/') : ''}`,
-          'scan'
+          `扫描 ${this.esc(data.scope)} · 已扫 ${data.scanned || 0}/${data.pool_size || 0} · 命中 ${data.hit_count || 0} · 基准日 ${this.esc(data.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))}${flags.length ? ' · ' + flags.join('/') : ''}`,
+          'scan',
+          priceAdjust
         );
       }
     } catch (e) {

@@ -513,6 +513,13 @@
                                             <label for="patternAsof">基准日</label>
                                             <input type="date" id="patternAsof">
                                         </div>
+                                        <div class="form-group pattern-adjust-field">
+                                            <label for="patternAdjustQfq">价格口径</label>
+                                            <label class="pattern-adjust-check" title="勾选后按前复权 OHLC 识别（仅 A 股；与阻力支撑位「前复权」同口径）">
+                                                <input type="checkbox" id="patternAdjustQfq" checked>
+                                                前复权
+                                            </label>
+                                        </div>
                                         <div class="form-group kde-levels-actions">
                                             <label>&nbsp;</label>
                                             <button type="button" class="btn btn-primary" id="patternRunBtn"
@@ -530,7 +537,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <p class="kde-levels-hint pattern-tool-hint">日线 OHLC 识别；扫描有数量与超时上限。旗形为简化规则。</p>
+                                    <p class="kde-levels-hint pattern-tool-hint">默认按前复权日线 OHLC 识别（可取消勾选用不复权）；扫描有数量与超时上限。旗形为简化规则。</p>
                                 </div>
                                 <div class="pattern-meta" id="patternMeta" hidden></div>
                                 <div class="pattern-result-wrap" id="patternResultWrap" hidden>
@@ -735,6 +742,7 @@
             </div>
             <div class="lm-board-picker-toolbar">
                 <input type="search" id="baBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
+                <span id="baBoardPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectAll">全选当前</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerClear">清空当前</button>
             </div>
@@ -755,6 +763,7 @@
             </div>
             <div class="lm-board-picker-toolbar">
                 <input type="search" id="lmBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
+                <span id="lmBoardPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerSelectAll">全选当前</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerClear">清空当前</button>
             </div>

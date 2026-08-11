@@ -180,3 +180,132 @@ def test_triangle_and_wedge_smoke():
 def test_scan_limits_constants():
     assert DEFAULT_SCAN_LIMIT <= HARD_SCAN_CAP
     assert HARD_SCAN_CAP == 200
+
+
+def test_normalize_price_adjust():
+    from backend_core.analysis.chart_patterns.scanner import normalize_price_adjust
+    import pytest
+
+    assert normalize_price_adjust("qfq") == "qfq"
+    assert normalize_price_adjust("QFQ") == "qfq"
+    assert normalize_price_adjust(None) == "none"
+    assert normalize_price_adjust("") == "none"
+    with pytest.raises(ValueError):
+        normalize_price_adjust("hfq")
+
+
+def test_apply_qfq_to_code_bars_smoke():
+    """前复权路径 smoke：因子现算后 OHLC 变化。"""
+    from datetime import date
+    from unittest.mock import MagicMock, patch
+
+    import pytest
+
+    from backend_core.analysis.chart_patterns.scanner import apply_qfq_to_code_bars
+
+    bars = [
+        {"date": "2024-01-02", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 1},
+        {"date": "2024-01-03", "open": 20, "high": 21, "low": 19, "close": 20, "volume": 1},
+    ]
+    ensured = {
+        "factors": [(date(2024, 1, 2), 1.0), (date(2024, 1, 3), 2.0)],
+        "factor_fetched": False,
+        "source": "akshare_sina_qfq",
+        "adj_factor_asof": "2024-01-03",
+        "factor_source": "auto",
+    }
+    with patch(
+        "backend_api.utils.adj_quotes.ensure_adj_factors", return_value=ensured
+    ):
+        qfq, meta = apply_qfq_to_code_bars(MagicMock(), "600519", bars)
+    assert qfq[0]["close"] == pytest.approx(5.0)
+    assert qfq[1]["close"] == pytest.approx(20.0)
+    assert meta["source"] == "akshare_sina_qfq"
+
+
+def test_patterns_route_adjust_qfq_passthrough():
+    """GET /api/analysis/patterns/{code}?adjust=qfq 透传到检测前的 OHLC。"""
+    import sys
+    from datetime import date
+    from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    import pytest
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root / "backend_api"))
+
+    # 先加载模块，避免 patch 时 backend_api.stock 尚未挂载子模块
+    import backend_api.permissions as perm_mod  # noqa: F401
+    import backend_api.stock.stock_analysis_routes as levels_routes
+    import backend_core.analysis.chart_patterns.engine as engine_mod
+    import backend_core.strategies.double_bottom.data_loader as dl
+    from backend_api.database import get_db
+    from backend_api.stock.pattern_routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+
+    def _fake_db():
+        yield MagicMock()
+
+    app.dependency_overrides[get_db] = _fake_db
+    client = TestClient(app)
+
+    bars = [
+        {"date": "2024-01-02", "open": 10, "high": 11, "low": 9, "close": 10, "volume": 1},
+        {"date": "2024-01-03", "open": 20, "high": 21, "low": 19, "close": 20, "volume": 1},
+    ]
+    # 补足长度以通过 len(bars)>=30 分支（detect 已 mock）
+    for i in range(28):
+        bars.append(
+            {
+                "date": f"2024-02-{i + 1:02d}",
+                "open": 20,
+                "high": 21,
+                "low": 19,
+                "close": 20,
+                "volume": 1,
+            }
+        )
+    ensured = {
+        "factors": [(date(2024, 1, 2), 1.0), (date(2024, 1, 3), 2.0)],
+        "factor_fetched": True,
+        "source": "akshare_sina_qfq",
+        "adj_factor_asof": "2024-01-03",
+        "factor_source": "auto",
+    }
+    fake_hit = {
+        "pattern_type": "double_bottom",
+        "status": "forming",
+        "confidence": 0.5,
+        "key_levels": {"last_close": 5.0},
+    }
+
+    with patch.object(perm_mod, "user_has_permission", return_value=True), patch.object(
+        levels_routes,
+        "resolve_levels_stock_identifier",
+        return_value={"status": "ok", "code": "600519", "name": "贵州茅台"},
+    ), patch.object(dl, "batch_load_ohlc_asc", return_value={"600519": bars}), patch.object(
+        dl, "load_names", return_value={"600519": "贵州茅台"}
+    ), patch.object(
+        dl, "resolve_effective_trade_date", return_value="2024-01-03"
+    ), patch(
+        "backend_api.utils.adj_quotes.ensure_adj_factors", return_value=ensured
+    ), patch.object(
+        engine_mod, "detect_all", return_value=[fake_hit]
+    ) as det:
+        resp = client.get(
+            "/api/analysis/patterns/600519?adjust=qfq&types=double_extremes"
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["price_adjust"] == "qfq"
+    assert body.get("adj_meta", {}).get("factor_fetched") is True
+    call_bars = det.call_args.args[0]
+    assert call_bars[0]["close"] == pytest.approx(5.0)
