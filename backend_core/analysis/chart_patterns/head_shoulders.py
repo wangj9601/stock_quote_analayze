@@ -6,7 +6,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence
-from .rules import invalidate_bottom, invalidate_top
+from .rules import (
+    INVALIDATE_BOTTOM_MULT,
+    INVALIDATE_TOP_MULT,
+    post_pivot_invalidate_bottom,
+    post_pivot_invalidate_top,
+)
 from .schema import fmt_px, make_hit
 
 
@@ -20,6 +25,25 @@ def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
         except (TypeError, ValueError):
             continue
     return out
+
+
+def _pivot_bar_index(bars: Sequence[Dict[str, Any]], pivot: Dict[str, Any]) -> int:
+    """右肩等枢轴对应的 K 线 index；优先 pivot['index']，否则按 date 回查。"""
+    idx = pivot.get("index")
+    try:
+        i = int(idx)
+        if 0 <= i < len(bars):
+            return i
+    except (TypeError, ValueError):
+        pass
+    d = pivot.get("date")
+    if d is None:
+        return -1
+    d_s = str(d)[:10]
+    for i, b in enumerate(bars):
+        if str(b.get("date") or "")[:10] == d_s:
+            return i
+    return -1
 
 
 def _detect_hs_top(
@@ -48,14 +72,15 @@ def _detect_hs_top(
         if not closes:
             return None
         last = closes[-1]
-        confirmed = last < neck
-        if confirmed:
-            status = "confirmed"
-            conf = 0.7
-        elif invalidate_top(last, float(head["price"])):
-            # 形成中却收盘升破头部×1.01 → 失效
+        head_px = float(head["price"])
+        rs_i = _pivot_bar_index(bars, rs)
+        # 右肩完成后：任一高点/收盘 > 头×1.01 → 失效（优先于颈线确认）
+        if post_pivot_invalidate_top(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
+        elif last < neck:
+            status = "confirmed"
+            conf = 0.7
         else:
             status = "forming"
             conf = 0.5
@@ -69,7 +94,8 @@ def _detect_hs_top(
             f"{fmt_px('颈线', round(neck, 4), approx=True)}"
         )
         if status == "invalidated":
-            reason += f" 失效:收盘{round(last, 4)}>头×1.01"
+            thr = round(head_px * INVALIDATE_TOP_MULT, 4)
+            reason += f" 失效:右肩后高点/收盘>头×{INVALIDATE_TOP_MULT}({thr})"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_top",
@@ -115,14 +141,15 @@ def _detect_hs_bottom(
         if not closes:
             return None
         last = closes[-1]
-        confirmed = last > neck
-        if confirmed:
-            status = "confirmed"
-            conf = 0.7
-        elif invalidate_bottom(last, float(head["price"])):
-            # 形成中却收盘跌破头部×0.99 → 失效
+        head_px = float(head["price"])
+        rs_i = _pivot_bar_index(bars, rs)
+        # 右肩完成后：任一低点/收盘 < 头×0.99 → 失效（优先于颈线确认）
+        if post_pivot_invalidate_bottom(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
+        elif last > neck:
+            status = "confirmed"
+            conf = 0.7
         else:
             status = "forming"
             conf = 0.5
@@ -135,7 +162,8 @@ def _detect_hs_bottom(
             f"{fmt_px('颈线', round(neck, 4), approx=True)}"
         )
         if status == "invalidated":
-            reason += f" 失效:收盘{round(last, 4)}<头×0.99"
+            thr = round(head_px * INVALIDATE_BOTTOM_MULT, 4)
+            reason += f" 失效:右肩后低点/收盘<头×{INVALIDATE_BOTTOM_MULT}({thr})"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_bottom",

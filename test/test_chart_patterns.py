@@ -20,6 +20,7 @@ from backend_core.analysis.chart_patterns.rules import (
     BREAKOUT_DOWN_MULT,
     BREAKOUT_UP_MULT,
     INVALIDATE_BOTTOM_MULT,
+    INVALIDATE_TOP_MULT,
     SLOPE_UNIT_NOTE,
     breakout_up,
 )
@@ -323,7 +324,7 @@ def test_patterns_route_adjust_qfq_passthrough():
 
 
 def test_hs_bottom_invalidated_when_close_breaks_head():
-    """形成中头肩底：收盘 < 头×0.99 → invalidated；detect_all 默认不展示。"""
+    """头肩底：右肩后收盘 < 头×0.99 → invalidated；detect_all 默认不展示。"""
     head = 10.0
     closes = [15.0] * 40 + [head * 0.98]  # 跌破头×0.99
     bars = _bars_from_closes(closes)
@@ -345,7 +346,7 @@ def test_hs_bottom_invalidated_when_close_breaks_head():
 
 
 def test_hs_top_invalidated_when_close_breaks_head():
-    """形成中头肩顶：收盘 > 头×1.01 → invalidated。"""
+    """头肩顶：右肩后收盘 > 头×1.01 → invalidated。"""
     head = 20.0
     closes = [15.0] * 40 + [head * 1.02]
     bars = _bars_from_closes(closes)
@@ -359,6 +360,92 @@ def test_hs_top_invalidated_when_close_breaks_head():
     hits = detect_head_shoulders(bars, pivots)
     assert len(hits) == 1
     assert hits[0]["pattern_type"] == "head_shoulders_top"
+    assert hits[0]["status"] == "invalidated"
+
+
+def test_hs_top_invalidated_after_rs_spike_even_if_below_neck():
+    """头肩顶几何成立 + 右肩后冲高破头，再跌回颈线下 → 必须 invalidated，不得 confirmed。"""
+    head = 50.72
+    ls_px, rs_px = 48.0, 47.8
+    n1_px, n2_px = 40.0, 40.2
+    neck = (n1_px + n2_px) / 2.0
+    thr = head * INVALIDATE_TOP_MULT
+    assert thr > head
+
+    n = 45
+    bars = _bars_from_closes([45.0] * n)
+    # 压低 high，避免 _bars_from_closes 的 high=c*1.01 误触发
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.05
+        b["low"] = float(b["close"]) - 0.05
+
+    rs_i = 25
+    spike_i = 30
+    # 右肩后冲高破头（high 与 close 均可；此处用 high）
+    bars[spike_i]["high"] = thr + 0.5
+    bars[spike_i]["close"] = head * 0.99  # 当日收盘未站上阈值亦可失效
+    # 末段跌破颈线：旧规则会 confirmed
+    for i in range(35, n):
+        bars[i]["close"] = neck - 1.0
+        bars[i]["high"] = neck - 0.5
+        bars[i]["low"] = neck - 1.5
+
+    assert bars[-1]["close"] < neck
+    assert bars[spike_i]["high"] > thr
+
+    pivots = [
+        {"kind": "high", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "low", "price": n1_px, "index": 10, "date": bars[10]["date"]},
+        {"kind": "high", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "low", "price": n2_px, "index": 20, "date": bars[20]["date"]},
+        {"kind": "high", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "head_shoulders_top"
+    assert hits[0]["status"] == "invalidated"
+    assert hits[0]["status"] != "confirmed"
+    # detect_all 默认不返回 invalidated
+    shown = detect_all(bars, types=["hs"], include_invalidated=False)
+    assert all(h.get("status") != "invalidated" for h in shown)
+
+
+def test_hs_bottom_invalidated_after_rs_dip_even_if_above_neck():
+    """头肩底：右肩后下探破头×0.99，再回到颈线上 → 失效，不得 confirmed。"""
+    head = 10.0
+    ls_px, rs_px = 12.0, 12.1
+    n1_px, n2_px = 14.0, 14.2
+    neck = (n1_px + n2_px) / 2.0
+    thr = head * INVALIDATE_BOTTOM_MULT
+
+    n = 45
+    bars = _bars_from_closes([13.0] * n)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.05
+        b["low"] = float(b["close"]) - 0.05
+
+    rs_i = 25
+    dip_i = 30
+    bars[dip_i]["low"] = thr - 0.2
+    bars[dip_i]["close"] = head * 1.01
+    for i in range(35, n):
+        bars[i]["close"] = neck + 1.0
+        bars[i]["high"] = neck + 1.5
+        bars[i]["low"] = neck + 0.5
+
+    assert bars[-1]["close"] > neck
+    assert bars[dip_i]["low"] < thr
+
+    pivots = [
+        {"kind": "low", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": n1_px, "index": 10, "date": bars[10]["date"]},
+        {"kind": "low", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "high", "price": n2_px, "index": 20, "date": bars[20]["date"]},
+        {"kind": "low", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "head_shoulders_bottom"
     assert hits[0]["status"] == "invalidated"
 
 
