@@ -154,3 +154,82 @@ def test_build_buy_logic_structure_hard_gate_blocks():
     gate = next(s for s in logic["steps"] if s["id"] == "structure_hard_gate")
     assert gate["required"] is True and gate["pass"] is False
     assert "悬空" in gate["actual"]
+
+
+def test_build_buy_logic_hydrates_from_score_detail_trace_row():
+    """模拟 urt_signal_trace 回放：顶层缺 ma5/中期阳/过热，仅 score_detail 有。"""
+    cfg = {
+        "ma_period": 20,
+        "volume_multiple": 2.5,
+        "min_score": 70,
+        "yang_rule_a": {"window": 4, "min_up_days": 3},
+        "yang_rule_b": {"window": 5, "min_up_days": 4},
+        "use_yang_medium": True,
+        "require_ma_bull": True,
+        "yang_medium_rules": [
+            {"window": 10, "min_up_days": 6},
+            {"window": 15, "min_up_days": 8},
+            {"window": 20, "min_up_days": 10},
+        ],
+        "ma_bull_periods": [5, 10, 20],
+        "structure_rr_hard_gate_enabled": False,
+        "overheat_hard_gate_enabled": True,
+        "overheat_lookback_days": 10,
+        "overheat_hard_pct": 0.25,
+        "overheat_bias_hard_pct": 0.20,
+    }
+    # 表列仅有 ma20 / 短阳 / 量能；扩展字段只在 score_detail
+    detail = {
+        "close": 31.8,
+        "ma20": 31.5935,
+        "above_ma20": True,
+        "yang_count_4": 3,
+        "yang_count_5": 4,
+        "rule_a_ok": True,
+        "rule_b_ok": True,
+        "volume_multiple": 3.2,
+        "score": 82,
+        "buy_signal": False,
+        "score_detail": {
+            "inputs": {
+                "ma5": 32.1,
+                "ma10": 31.9,
+                "yang_count_10": 7,
+                "yang_count_15": 9,
+                "yang_count_20": 11,
+            },
+            "parts": {
+                "yang_medium": {
+                    "ok": True,
+                    "items": [
+                        {"window": 10, "count": 7, "min_up_days": 6},
+                        {"window": 15, "count": 9, "min_up_days": 8},
+                        {"window": 20, "count": 11, "min_up_days": 10},
+                    ],
+                },
+                "ma_bull": {
+                    "ok": False,
+                    "bear_ok": False,
+                    "ma5": 32.1,
+                    "ma10": 31.9,
+                    "ma20_stack": 31.5935,
+                },
+            },
+            "ret_from_low_n": 0.12,
+            "ma20_bias": 0.0065,
+            "overheat_lookback_days": 10,
+            "overheat_hard_gate": {"blocked": False, "reasons": []},
+        },
+    }
+    logic = build_buy_logic(detail, cfg)
+    mid = next(s for s in logic["steps"] if s["id"] == "yang_medium")
+    assert "10日阳=7" in mid["actual"] and "None" not in mid["actual"]
+    assert mid["pass"] is True
+    bull = next(s for s in logic["steps"] if s["id"] == "ma_bull")
+    assert "MA5=32.1" in bull["actual"] and "MA10=31.9" in bull["actual"]
+    assert "None" not in bull["actual"]
+    assert bull["pass"] is False
+    oh = next(s for s in logic["steps"] if s["id"] == "overheat_hard_gate")
+    assert "涨幅=12.0%" in oh["actual"]
+    assert "乖离=0.7%" in oh["actual"]
+    assert "—" not in oh["actual"]

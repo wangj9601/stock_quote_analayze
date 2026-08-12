@@ -105,11 +105,74 @@ def _compute_structure_levels(
     }
 
 
+def hydrate_detail_from_score_detail(detail: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    从 score_detail 回填顶层展示/判定字段。
+
+    urt_signal_trace 表未存 ma5/ma10、中期阳线、多头布尔、过热涨幅等列，
+    这些值写在 score_detail（inputs / parts / 顶层）里；历史回放重建 buy_logic
+    时若只读顶层会得到 None，并误判「中期阳通过 / 多头未通过 / 涨幅=—」。
+    """
+    if not isinstance(detail, dict):
+        return detail
+    sd = detail.get("score_detail")
+    if not isinstance(sd, dict):
+        return detail
+    inputs = sd.get("inputs") if isinstance(sd.get("inputs"), dict) else {}
+    parts = sd.get("parts") if isinstance(sd.get("parts"), dict) else {}
+    ma_bull = parts.get("ma_bull") if isinstance(parts.get("ma_bull"), dict) else {}
+    yang_med = parts.get("yang_medium") if isinstance(parts.get("yang_medium"), dict) else {}
+
+    def _fill(key: str, *candidates: Any) -> None:
+        if detail.get(key) is not None:
+            return
+        for v in candidates:
+            if v is not None:
+                detail[key] = v
+                return
+
+    _fill("ma5", inputs.get("ma5"), ma_bull.get("ma5"))
+    _fill("ma10", inputs.get("ma10"), ma_bull.get("ma10"))
+    _fill("ma20_stack", ma_bull.get("ma20_stack"), inputs.get("ma20"))
+    _fill("yang_count_10", inputs.get("yang_count_10"))
+    _fill("yang_count_15", inputs.get("yang_count_15"))
+    _fill("yang_count_20", inputs.get("yang_count_20"))
+    for item in yang_med.get("items") or []:
+        if not isinstance(item, dict) or item.get("window") is None:
+            continue
+        try:
+            w = int(item["window"])
+        except (TypeError, ValueError):
+            continue
+        _fill(f"yang_count_{w}", item.get("count"))
+    _fill("yang_medium_ok", yang_med.get("ok"))
+    _fill("yang_medium_detail", yang_med.get("items"))
+    _fill("ma_bull_ok", ma_bull.get("ok"))
+    _fill("ma_bear_ok", ma_bull.get("bear_ok"), inputs.get("ma_bear_ok"))
+    _fill("ma_bull_periods", ma_bull.get("periods"))
+    _fill("ma_bull_values", ma_bull.get("values"))
+    _fill("ret_from_low_n", sd.get("ret_from_low_n"))
+    _fill("ma20_bias", sd.get("ma20_bias"))
+    _fill("overheat_lookback_days", sd.get("overheat_lookback_days"))
+    if not detail.get("overheat_hard_gate") and isinstance(sd.get("overheat_hard_gate"), dict):
+        detail["overheat_hard_gate"] = sd["overheat_hard_gate"]
+    if not detail.get("structure_hard_gate") and isinstance(sd.get("structure_hard_gate"), dict):
+        detail["structure_hard_gate"] = sd["structure_hard_gate"]
+    oh = detail.get("overheat_hard_gate") if isinstance(detail.get("overheat_hard_gate"), dict) else {}
+    if detail.get("overheat_gate_ok") is None and oh:
+        detail["overheat_gate_ok"] = not bool(oh.get("blocked"))
+    gate = detail.get("structure_hard_gate") if isinstance(detail.get("structure_hard_gate"), dict) else {}
+    if detail.get("structure_gate_ok") is None and gate:
+        detail["structure_gate_ok"] = not bool(gate.get("blocked"))
+    return detail
+
+
 def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
     结构化买点判断逻辑（供信号明细页展示）。
     买点 = 硬筛全部通过 AND 结构硬闸通过 AND 得分 ≥ min_score。
     """
+    detail = hydrate_detail_from_score_detail(dict(detail) if isinstance(detail, dict) else {})
     rule_a = cfg.get("yang_rule_a") or {}
     rule_b = cfg.get("yang_rule_b") or {}
     ma_period = int(cfg.get("ma_period") or 20)
