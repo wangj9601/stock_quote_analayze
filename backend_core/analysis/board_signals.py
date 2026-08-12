@@ -361,7 +361,7 @@ def _role_tag_map(db: Session, board_kind: str, board_code: str) -> Dict[str, An
 
 
 def _merge_role_tag_maps(*maps: Dict[str, Any]) -> Dict[str, Any]:
-    """合并多板角色标签（同码去重）。"""
+    """合并多板角色标签：同码保留龙头优先，避免中军 tag 盖过龙头。"""
     out: Dict[str, Any] = {}
     for m in maps:
         for code, tags in (m or {}).items():
@@ -369,19 +369,30 @@ def _merge_role_tag_maps(*maps: Dict[str, Any]) -> Dict[str, Any]:
             if not c:
                 continue
             prev = list(out.get(c) or [])
-            seen = {
-                (str(t.get("id") or ""), str(t.get("label") or ""))
-                for t in prev
-                if isinstance(t, dict)
-            }
             for t in tags or []:
                 if not isinstance(t, dict):
                     continue
-                key = (str(t.get("id") or ""), str(t.get("label") or ""))
-                if key in seen:
-                    continue
-                seen.add(key)
-                prev.append(t)
+                tid = str(t.get("id") or "")
+                if tid == "board_leader":
+                    # 龙头替换中军及旧龙头
+                    prev = [x for x in prev if str(x.get("id") or "") != "board_mid"]
+                    prev = [x for x in prev if str(x.get("id") or "") != "board_leader"]
+                    prev.append(t)
+                elif tid == "board_mid":
+                    if any(str(x.get("id") or "") == "board_leader" for x in prev):
+                        continue
+                    if any(str(x.get("id") or "") == "board_mid" for x in prev):
+                        continue
+                    prev.append(t)
+                else:
+                    key = (tid, str(t.get("label") or ""))
+                    seen = {
+                        (str(x.get("id") or ""), str(x.get("label") or ""))
+                        for x in prev
+                        if isinstance(x, dict)
+                    }
+                    if key not in seen:
+                        prev.append(t)
             out[c] = prev
     return out
 
@@ -921,7 +932,7 @@ def _merge_role_row(
     board_code: str,
     board_name: str,
 ) -> None:
-    """跨板合并角色股：龙头优先于中军，并累计所属板块。"""
+    """跨板合并角色股：龙头优先于中军，同角色取更高综合分，并累计所属板块。"""
     c = _norm_code(x.get("code"))
     if not c:
         return
@@ -942,8 +953,20 @@ def _merge_role_row(
     if not any(b.get("board_code") == board_code for b in boards):
         boards.append(board_tag)
     prev["boards"] = boards
-    # 龙头覆盖中军展示角色
-    if prev.get("board_role") != "leader" and x.get("board_role") == "leader":
+
+    def _role_rank(role: Any) -> int:
+        return 0 if role == "leader" else 1 if role == "mid" else 2
+
+    prev_role = prev.get("board_role")
+    new_role = x.get("board_role")
+    take_new = False
+    if _role_rank(new_role) < _role_rank(prev_role):
+        take_new = True
+    elif new_role == prev_role and float(x.get("board_role_score") or 0) > float(
+        prev.get("board_role_score") or 0
+    ):
+        take_new = True
+    if take_new:
         for k in (
             "board_role",
             "board_role_label",
@@ -951,6 +974,7 @@ def _merge_role_row(
             "role_reason",
             "name",
             "change_percent",
+            "is_limit_up",
         ):
             if x.get(k) is not None:
                 prev[k] = x.get(k)

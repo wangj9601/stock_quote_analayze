@@ -1,9 +1,16 @@
-"""板内短线领涨为主、流通市值门槛/弱加权的龙头/中军分类。"""
+"""板内短线领涨为主、流通市值门槛/弱加权的龙头/中军分类。
+
+本轮规则要点（详见 docs/features/板块龙头中军业务规则.md）：
+- 涨停代理加分（无首封时间，二期再接）
+- 绝对流通市值 + 相对分位双门槛；涨幅 ≥0
+- Top-K 收紧；双龙头 gap 收紧
+- 中军取消市值分位上限；ST 剔除；小样本护栏
+"""
 
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 ROLE_LEADER = "leader"
 ROLE_MID = "mid"
@@ -14,18 +21,29 @@ W_CHG = 0.70
 W_AMT = 0.20
 W_MV = 0.10
 
+# 涨停代理加分（百分制封顶 100）；首封时间二期
+LIMIT_UP_BONUS = 12.0
+LIMIT_UP_MAIN_MIN = 9.8  # 主板/北交所等
+LIMIT_UP_GEM_STAR_MIN = 19.8  # 创业板/科创板
+
 # 龙头门槛
 LEADER_MV_PCTILE_MIN = 40.0
 LEADER_CHG_PCTILE_MIN = 80.0
-LEADER_SCORE_GAP = 5.0
+LEADER_SCORE_GAP = 2.5
 LEADER_MAX = 2
+LEADER_ABS_MV_MIN = 3e9  # 30 亿（元）
+LEADER_DUAL_CHG_DIFF_MAX = 1.0  # 双龙头：涨幅差 < 1 个百分点
 
-# 中军门槛
+# 中军门槛（取消 mv 分位上限）
 MID_MV_PCTILE_MIN = 50.0
-MID_MV_PCTILE_MAX = 95.0
 MID_CHG_PCTILE_MIN = 60.0
 MID_MAX = 5
+MID_ABS_MV_MIN = 8e9  # 80 亿（元）
 
+# 涨幅地板与小样本
+MIN_CHANGE_PERCENT = 0.0
+SAMPLE_NO_ROLE_MAX = 2  # N < 3 不标注
+SAMPLE_SMALL_MAX = 7  # N < 8：最多 1 龙头、中军至多 1
 
 def _safe_float(v: Any) -> Optional[float]:
     if v is None:
@@ -37,6 +55,42 @@ def _safe_float(v: Any) -> Optional[float]:
     if math.isnan(f) or math.isinf(f):
         return None
     return f
+
+
+def is_st_name(name: Any) -> bool:
+    """名称以 ST / *ST / S*ST / SST 开头则视为 ST 股。"""
+    s = str(name or "").strip().upper().replace(" ", "")
+    if not s:
+        return False
+    return (
+        s.startswith("ST")
+        or s.startswith("*ST")
+        or s.startswith("S*ST")
+        or s.startswith("SST")
+    )
+
+
+def limit_up_threshold_for_code(code: Any) -> float:
+    """按代码前缀返回涨停幅度阈值（百分比）。"""
+    c = str(code or "").strip().zfill(6)
+    if c.startswith(("300", "301", "688")):
+        return LIMIT_UP_GEM_STAR_MIN
+    return LIMIT_UP_MAIN_MIN
+
+
+def is_limit_up(code: Any, change_percent: Any) -> bool:
+    """日终涨幅代理是否涨停（无首封时间）。"""
+    chg = _safe_float(change_percent)
+    if chg is None:
+        return False
+    return chg >= limit_up_threshold_for_code(code)
+
+
+def leader_top_k(n: int) -> int:
+    """领涨 Top-K：min(10, max(2, ceil(N×0.05)))."""
+    if n <= 0:
+        return 0
+    return min(10, max(2, int(math.ceil(n * 0.05))))
 
 
 def _percentile_ranks(values: Sequence[Optional[float]]) -> List[Optional[float]]:
@@ -64,6 +118,15 @@ def _percentile_ranks(values: Sequence[Optional[float]]) -> List[Optional[float]
     return out
 
 
+def _chg_sort_key(r: Dict[str, Any]) -> Tuple[float, float, float]:
+    """涨幅降序，并列按成交额、流通市值降序。"""
+    return (
+        _safe_float(r.get("change_percent")) or -1e18,
+        _safe_float(r.get("amount")) or -1e18,
+        _safe_float(r.get("circulating_market_value")) or -1e18,
+    )
+
+
 def classify_board_roles(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     为板内成分股标注龙头/中军。
@@ -82,17 +145,20 @@ def classify_board_roles(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         r["chg_pctile"] = None
         r["amt_pctile"] = None
         r["mv_pctile"] = None
+        r["is_limit_up"] = False
 
-    chg_vals = [_safe_float(r.get("change_percent")) for r in rows]
-    amt_vals = [_safe_float(r.get("amount")) for r in rows]
-    mv_vals = [_safe_float(r.get("circulating_market_value")) for r in rows]
+    # ST 不进入有效样本，也不参与分位
+    pool = [r for r in rows if not is_st_name(r.get("name"))]
+    chg_vals = [_safe_float(r.get("change_percent")) for r in pool]
+    amt_vals = [_safe_float(r.get("amount")) for r in pool]
+    mv_vals = [_safe_float(r.get("circulating_market_value")) for r in pool]
 
     chg_pctiles = _percentile_ranks(chg_vals)
     amt_pctiles = _percentile_ranks(amt_vals)
     mv_pctiles = _percentile_ranks(mv_vals)
 
     scored: List[Dict[str, Any]] = []
-    for i, r in enumerate(rows):
+    for i, r in enumerate(pool):
         chg = chg_vals[i]
         mv = mv_vals[i]
         if chg is None or mv is None or mv <= 0:
@@ -100,7 +166,10 @@ def classify_board_roles(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         chg_p = chg_pctiles[i] if chg_pctiles[i] is not None else 0.0
         amt_p = amt_pctiles[i] if amt_pctiles[i] is not None else 0.0
         mv_p = mv_pctiles[i] if mv_pctiles[i] is not None else 0.0
-        score = W_CHG * chg_p + W_AMT * amt_p + W_MV * mv_p
+        base = W_CHG * chg_p + W_AMT * amt_p + W_MV * mv_p
+        lim = is_limit_up(r.get("code"), chg)
+        r["is_limit_up"] = lim
+        score = min(100.0, base + (LIMIT_UP_BONUS if lim else 0.0))
         r["chg_pctile"] = round(chg_p, 2)
         r["amt_pctile"] = round(amt_p, 2)
         r["mv_pctile"] = round(mv_p, 2)
@@ -110,17 +179,21 @@ def classify_board_roles(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     n = len(scored)
     if n == 0:
         return rows
+    if n <= SAMPLE_NO_ROLE_MAX:
+        return rows
 
-    # 涨幅排名（1=最高）
-    by_chg = sorted(
-        scored,
-        key=lambda x: (_safe_float(x.get("change_percent")) or -1e18),
-        reverse=True,
-    )
-    top_k = max(3, int(math.ceil(n * 0.1)))
+    # 涨幅排名（破同分：额 → 市值）
+    by_chg = sorted(scored, key=_chg_sort_key, reverse=True)
+    top_k = leader_top_k(n)
     top_chg_codes = {str(x.get("code")) for x in by_chg[:top_k]}
 
     def _leader_ok(r: Dict[str, Any]) -> bool:
+        chg = _safe_float(r.get("change_percent"))
+        mv = _safe_float(r.get("circulating_market_value"))
+        if chg is None or chg < MIN_CHANGE_PERCENT:
+            return False
+        if mv is None or mv < LEADER_ABS_MV_MIN:
+            return False
         mv_p = float(r.get("mv_pctile") or 0)
         chg_p = float(r.get("chg_pctile") or 0)
         if mv_p < LEADER_MV_PCTILE_MIN:
@@ -129,19 +202,31 @@ def classify_board_roles(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             return True
         return str(r.get("code")) in top_chg_codes
 
+    def _second_leader_ok(first: Dict[str, Any], second: Dict[str, Any]) -> bool:
+        gap = float(first.get("board_role_score") or 0) - float(
+            second.get("board_role_score") or 0
+        )
+        if gap > LEADER_SCORE_GAP:
+            return False
+        if not _leader_ok(second):
+            return False
+        if second.get("is_limit_up"):
+            return True
+        c1 = _safe_float(first.get("change_percent")) or 0.0
+        c2 = _safe_float(second.get("change_percent")) or 0.0
+        return abs(c1 - c2) < LEADER_DUAL_CHG_DIFF_MAX
+
     candidates = [r for r in scored if _leader_ok(r)]
     candidates.sort(key=lambda x: float(x.get("board_role_score") or 0), reverse=True)
 
+    leader_max = 1 if n <= SAMPLE_SMALL_MAX else LEADER_MAX
     leaders: List[Dict[str, Any]] = []
     if candidates:
         leaders.append(candidates[0])
         if (
-            len(candidates) > 1
-            and len(leaders) < LEADER_MAX
-            and float(candidates[0].get("board_role_score") or 0)
-            - float(candidates[1].get("board_role_score") or 0)
-            <= LEADER_SCORE_GAP
-            and _leader_ok(candidates[1])
+            leader_max >= 2
+            and len(candidates) > 1
+            and _second_leader_ok(candidates[0], candidates[1])
         ):
             leaders.append(candidates[1])
 
@@ -149,29 +234,43 @@ def classify_board_roles(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for r in leaders:
         r["board_role"] = ROLE_LEADER
         r["board_role_label"] = ROLE_LABELS[ROLE_LEADER]
+        bonus_note = "，涨停加分" if r.get("is_limit_up") else ""
         r["role_reason"] = (
             f"短线领涨为主：涨幅分位{r.get('chg_pctile')}，"
             f"市值分位{r.get('mv_pctile')}，综合分{r.get('board_role_score')}"
+            f"{bonus_note}"
         )
 
     mid_cap = MID_MAX
     if n < 15:
         mid_cap = max(1, int(round(MID_MAX * n / 15.0)))
+    if n <= SAMPLE_SMALL_MAX:
+        mid_cap = min(mid_cap, 1)
 
-    mid_cands = [
-        r
-        for r in scored
-        if str(r.get("code")) not in leader_codes
-        and MID_MV_PCTILE_MIN <= float(r.get("mv_pctile") or 0) <= MID_MV_PCTILE_MAX
-        and float(r.get("chg_pctile") or 0) >= MID_CHG_PCTILE_MIN
-    ]
+    mid_cands = []
+    for r in scored:
+        if str(r.get("code")) in leader_codes:
+            continue
+        chg = _safe_float(r.get("change_percent"))
+        mv = _safe_float(r.get("circulating_market_value"))
+        if chg is None or chg < MIN_CHANGE_PERCENT:
+            continue
+        if mv is None or mv < MID_ABS_MV_MIN:
+            continue
+        if float(r.get("mv_pctile") or 0) < MID_MV_PCTILE_MIN:
+            continue
+        if float(r.get("chg_pctile") or 0) < MID_CHG_PCTILE_MIN:
+            continue
+        mid_cands.append(r)
     mid_cands.sort(key=lambda x: float(x.get("board_role_score") or 0), reverse=True)
     for r in mid_cands[:mid_cap]:
         r["board_role"] = ROLE_MID
         r["board_role_label"] = ROLE_LABELS[ROLE_MID]
+        bonus_note = "，涨停加分" if r.get("is_limit_up") else ""
         r["role_reason"] = (
             f"中军跟涨：涨幅分位{r.get('chg_pctile')}，"
             f"市值分位{r.get('mv_pctile')}，综合分{r.get('board_role_score')}"
+            f"{bonus_note}"
         )
 
     return rows

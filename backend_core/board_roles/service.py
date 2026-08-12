@@ -211,23 +211,35 @@ def enrich_screening_results_with_role_tags(
             if not tag:
                 continue
             code = _normalize_stock_code(str(row.get("code") or ""))
+            role = row.get("board_role")
+            role_rank = 0 if role == ROLE_LEADER else 1 if role == ROLE_MID else 2
             score = float(row.get("board_role_score") or 0)
             prev = best.get(code)
-            if prev is None or score > prev[0]:
+            # 龙头优先于中军，同角色再比综合分
+            better = False
+            if prev is None:
+                better = True
+            else:
+                prev_rank, prev_score = prev[0], prev[1]
+                if role_rank < prev_rank:
+                    better = True
+                elif role_rank == prev_rank and score > prev_score:
+                    better = True
+            if better:
                 reason = tag.get("reason") or ""
                 label_src = board_code_source_label(payload["board_code_source"])
                 tag = dict(tag)
                 tag["reason"] = (
                     f"[{payload['board_name']}/{label_src}] {reason}".strip()
                 )
-                best[code] = (score, tag)
+                best[code] = (role_rank, score, tag)
 
     for item in results:
         code = _normalize_stock_code(
             str(item.get("code") or item.get("symbol") or "")
         )
         hit = best.get(code)
-        item["role_tags"] = [hit[1]] if hit else []
+        item["role_tags"] = [hit[2]] if hit else []
 
 
 def extract_leader_mid_from_payload(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
