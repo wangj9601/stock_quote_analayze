@@ -516,15 +516,34 @@ const PatternTool = {
   },
 
   _rankHits(items) {
-    return (items || [])
-      .filter((h) => h && h.status !== 'invalidated' && h.status !== 'archived')
-      .slice()
-      .sort((a, b) => {
-        const rank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
-        const d = rank(b.status) - rank(a.status);
-        if (d) return d;
-        return (Number(b.confidence) || 0) - (Number(a.confidence) || 0);
+    const list = (items || []).filter(
+      (h) => h && h.status !== 'invalidated' && h.status !== 'archived'
+    );
+    const boost = (h) => {
+      if (!h || h.status !== 'confirmed' || !this.CONSOLIDATION[h.pattern_type]) return 0;
+      const hb = this._biasOf(h.pattern_type);
+      const hd = String(h.formed_at || h.confirm_date || '').slice(0, 10);
+      const hasOlderOppReversal = list.some((o) => {
+        if (!o || o === h || o.status !== 'confirmed') return false;
+        const isRev =
+          this.BEARISH_REVERSAL[o.pattern_type] || this.BULLISH_REVERSAL[o.pattern_type];
+        if (!isRev) return false;
+        if (!this._biasConflicts(hb, this._biasOf(o.pattern_type))) return false;
+        const od = String(o.formed_at || o.confirm_date || '').slice(0, 10);
+        return !od || !hd || hd >= od;
       });
+      return hasOlderOppReversal ? 1 : 0;
+    };
+    return list.slice().sort((a, b) => {
+      const rank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
+      const d = rank(b.status) - rank(a.status);
+      if (d) return d;
+      const bd = boost(b) - boost(a);
+      if (bd) return bd;
+      const fd = String(b.formed_at || '').localeCompare(String(a.formed_at || ''));
+      if (fd) return fd;
+      return (Number(b.confidence) || 0) - (Number(a.confidence) || 0);
+    });
   },
 
   _biasOf(type) {
@@ -1095,7 +1114,13 @@ const PatternTool = {
         return this._biasConflicts(leadBias, this._biasOf(h.pattern_type));
       });
       if (opp) {
-        mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」（偏多巩固与偏空反转等冲突），冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
+        const oppIsRev =
+          this.BEARISH_REVERSAL[opp.pattern_type] || this.BULLISH_REVERSAL[opp.pattern_type];
+        if (this.CONSOLIDATION[lead.pattern_type] && oppIsRev) {
+          mediumTerm += `同时存在较早已确认「${this.typeLabel(opp.pattern_type)}」（测幅/时效可能已兑现），冲突时以后续突破的「${leadLab}」为主，旧反转降权观察。`;
+        } else {
+          mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」（偏多巩固与偏空反转等冲突），冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
+        }
       } else if (formingConsol.length && !hasConfirmedConsolBreak) {
         mediumTerm += `形成中的巩固/楔旗形为次要信号，突破前不改变以「${leadLab}」为核心的中线框架。`;
       } else if (formingConsol.length && hasConfirmedConsolBreak) {

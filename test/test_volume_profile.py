@@ -108,6 +108,7 @@ def test_compare_vp_does_not_use_vah_below_price_as_resistance():
         "vah": 3.24,
         "nearest_support": 2.90,
         "nearest_resistance": None,
+        "bars_used": 60,
         "last_close": 3.86,
     }
     cmp_ = compare_vp_with_kde(
@@ -115,6 +116,40 @@ def test_compare_vp_does_not_use_vah_below_price_as_resistance():
     )
     assert cmp_["resistance"]["vp"] is None
     assert cmp_["support"]["vp"] == 2.90
+    assert cmp_["resistance"].get("note")
+    assert "VAH" in cmp_["resistance"]["note"]
+    assert "resistance_above_vah" in cmp_["notes"]
+
+
+def test_vp_resistance_note_when_above_vah():
+    """现价站上 VAH 时返回 resistance_note，而非仅空压力。"""
+    bars = []
+    for i in range(30):
+        # 价值区大致在 10～12，末根收盘拉到 20
+        c = 11.0 if i < 29 else 20.0
+        bars.append(
+            {
+                "date": f"2026-06-{(i % 28) + 1:02d}",
+                "high": c + 0.5,
+                "low": c - 0.5,
+                "close": c,
+                "volume": 1000.0,
+            }
+        )
+    # 前 29 根集中在 10-12，末根 20
+    for i in range(29):
+        bars[i]["high"] = 12.0
+        bars[i]["low"] = 10.0
+        bars[i]["close"] = 11.0
+    bars[29]["high"] = 20.5
+    bars[29]["low"] = 19.5
+    bars[29]["close"] = 20.0
+    out = compute_volume_profile_from_bars(bars, last_close=20.0, lookback=30)
+    assert out["ok"] is True
+    assert out["nearest_resistance"] is None
+    assert out.get("resistance_note")
+    assert "VAH" in out["resistance_note"]
+    assert "筹码压制" in out["resistance_note"]
 
 
 def test_vp_insufficient_bars():

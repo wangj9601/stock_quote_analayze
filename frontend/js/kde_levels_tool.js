@@ -134,6 +134,13 @@ const KdeLevelsTool = {
         return v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--';
     },
 
+    /** 空价位时优先展示语义说明（如已突破 VAH） */
+    _fmtPriceOrNote(price, note) {
+        if (price != null && Number.isFinite(Number(price))) return this._fmtPrice(price);
+        const n = note != null ? String(note).trim() : '';
+        return n || '--';
+    },
+
     _listHtml(values) {
         const arr = Array.isArray(values) ? values : [];
         if (!arr.length) return '<li class="muted">暂无</li>';
@@ -194,16 +201,23 @@ const KdeLevelsTool = {
         const cmpCell = (row, field) => {
             const r = row || {};
             if (field === 'diff') {
-                if (r.diff == null) return '--';
+                if (r.diff == null) return r.note ? `<span class="muted" title="${this._esc(r.note)}">--</span>` : '--';
                 const sign = Number(r.diff) > 0 ? '+' : '';
                 const pct = r.diff_pct != null ? `（${Number(r.diff_pct).toFixed(2)}%）` : '';
                 return `${sign}${fmt(r.diff)}${pct}`;
             }
             if (field === 'align') {
-                if (r.kde == null || r.vp == null) return '--';
+                if (r.kde == null || r.vp == null) {
+                    return r.note
+                        ? `<span class="muted" title="${this._esc(r.note)}">语义</span>`
+                        : '--';
+                }
                 return r.aligned
                     ? '<span class="is-aligned">是</span>'
                     : '<span class="not-aligned">否</span>';
+            }
+            if (field === 'vp' && (r.vp == null || r.vp === '') && r.note) {
+                return `<span class="muted kde-vp-note" title="${this._esc(r.note)}">${this._esc(r.note)}</span>`;
             }
             return fmt(r[field]);
         };
@@ -347,8 +361,8 @@ const KdeLevelsTool = {
                             <div>POC：<strong>${fmt(vp.poc)}</strong></div>
                             <div>VAL：<strong>${fmt(vp.val)}</strong></div>
                             <div>VAH：<strong>${fmt(vp.vah)}</strong></div>
-                            <div>最近支撑：<strong>${fmt(vp.nearest_support)}</strong></div>
-                            <div>最近压力：<strong>${fmt(vp.nearest_resistance)}</strong></div>
+                            <div>最近支撑：<strong>${this._fmtPriceOrNote(vp.nearest_support, vp.support_note)}</strong></div>
+                            <div>最近压力：<strong>${this._fmtPriceOrNote(vp.nearest_resistance, vp.resistance_note)}</strong></div>
                             <div class="kde-levels-dir kde-vp-lookback-ctrl">
                                 <span>回看</span>
                                 <input type="number" class="kde-vp-lookback-days ssa-vp-lookback-days"
@@ -402,8 +416,8 @@ const KdeLevelsTool = {
                                 <span class="kde-levels-date">${fib && fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}</span></div>
                             <div>低点：<strong>${fmt(fib && fib.swing_low)}</strong>
                                 <span class="kde-levels-date">${fib && fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}</span></div>
-                            <div>最近支撑：<strong>${fmt(classic.nearest_fib_support)}</strong></div>
-                            <div>最近压力：<strong>${fmt(classic.nearest_fib_resistance)}</strong></div>
+                            <div>最近支撑：<strong>${this._fmtPriceOrNote(classic.nearest_fib_support, classic.fib_support_note || (fib && fib.support_note))}</strong></div>
+                            <div>最近压力：<strong>${this._fmtPriceOrNote(classic.nearest_fib_resistance, classic.fib_resistance_note || (fib && fib.resistance_note))}</strong></div>
                             <div class="kde-levels-dir">方向：<strong>${fibDirTxt}</strong></div>
                         </div>
                         <ul>${this._labeledListHtml(fibRows)}</ul>
@@ -411,16 +425,22 @@ const KdeLevelsTool = {
                     <div class="kde-levels-card pivot">
                         <h4>经典 Pivot</h4>
                         <div class="kde-levels-near">
-                            <div>最近支撑：<strong>${fmt(classic.nearest_pivot_support)}</strong></div>
-                            <div>最近压力：<strong>${fmt(classic.nearest_pivot_resistance)}</strong></div>
+                            <div>最近支撑：<strong>${this._fmtPriceOrNote(classic.nearest_pivot_support, classic.pivot_support_note)}</strong></div>
+                            <div>最近压力：<strong>${this._fmtPriceOrNote(classic.nearest_pivot_resistance, classic.pivot_resistance_note)}</strong></div>
                         </div>
                         <ul>${this._labeledListHtml(pivRows)}</ul>
                     </div>
                     <div class="kde-levels-card cam">
                         <h4>Camarilla <span class="kde-levels-badge">波动率修正</span></h4>
                         <div class="kde-levels-near">
-                            <div>最近支撑：<strong>${fmt(classic.nearest_cam_support ?? (cam && cam.nearest_support))}</strong></div>
-                            <div>最近压力：<strong>${fmt(classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance))}</strong></div>
+                            <div>最近支撑：<strong>${this._fmtPriceOrNote(
+                                classic.nearest_cam_support ?? (cam && cam.nearest_support),
+                                classic.cam_support_note ?? (cam && cam.support_note)
+                            )}</strong></div>
+                            <div>最近压力：<strong>${this._fmtPriceOrNote(
+                                classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance),
+                                classic.cam_resistance_note ?? (cam && cam.resistance_note)
+                            )}</strong></div>
                         </div>
                         <ul>${this._labeledListHtml(camRows)}</ul>
                         <p class="kde-levels-atr-tip">${this._esc(atrTip)}</p>
@@ -796,8 +816,14 @@ const KdeLevelsTool = {
         setTxt('kdeVpPoc', fmt(vp.poc));
         setTxt('kdeVpVal', fmt(vp.val));
         setTxt('kdeVpVah', fmt(vp.vah));
-        setTxt('kdeVpNearestSupport', fmt(vp.nearest_support));
-        setTxt('kdeVpNearestResistance', fmt(vp.nearest_resistance));
+        setTxt(
+            'kdeVpNearestSupport',
+            this._fmtPriceOrNote(vp.nearest_support, vp.support_note)
+        );
+        setTxt(
+            'kdeVpNearestResistance',
+            this._fmtPriceOrNote(vp.nearest_resistance, vp.resistance_note)
+        );
         const usedLb = vp.bars_used != null ? vp.bars_used : vp.lookback;
         setTxt('kdeVpLookback', usedLb != null ? String(usedLb) : '--');
         const daysInput = document.getElementById('kdeVpLookbackInput');
@@ -830,7 +856,10 @@ const KdeLevelsTool = {
         const fillCmpRow = (prefix, side) => {
             const row = (side === 'support' ? vpCmp.support : vpCmp.resistance) || {};
             setTxt(`kdeVpCmp${prefix}Kde`, fmt(row.kde));
-            setTxt(`kdeVpCmp${prefix}Vp`, fmt(row.vp));
+            setTxt(
+                `kdeVpCmp${prefix}Vp`,
+                this._fmtPriceOrNote(row.vp, row.note)
+            );
             if (row.diff == null) {
                 setTxt(`kdeVpCmp${prefix}Diff`, '--');
             } else {
@@ -842,14 +871,17 @@ const KdeLevelsTool = {
             const alignEl = document.getElementById(`kdeVpCmp${prefix}Align`);
             if (alignEl) {
                 if (row.kde == null || row.vp == null) {
-                    alignEl.textContent = '--';
-                    alignEl.className = '';
+                    alignEl.textContent = row.note ? '语义' : '--';
+                    alignEl.className = row.note ? 'muted' : '';
+                    if (row.note) alignEl.title = row.note;
                 } else if (row.aligned) {
                     alignEl.textContent = '是';
                     alignEl.className = 'is-aligned';
+                    alignEl.title = '';
                 } else {
                     alignEl.textContent = '否';
                     alignEl.className = 'not-aligned';
+                    alignEl.title = '';
                 }
             }
         };
@@ -938,8 +970,18 @@ const KdeLevelsTool = {
             }
             fibDepthEl.textContent = bits.length ? ` · ${bits.join(' · ')}` : '';
         }
-        if (fibNearS) fibNearS.textContent = fmt(classic.nearest_fib_support);
-        if (fibNearR) fibNearR.textContent = fmt(classic.nearest_fib_resistance);
+        if (fibNearS) {
+            fibNearS.textContent = this._fmtPriceOrNote(
+                classic.nearest_fib_support,
+                classic.fib_support_note || (fib && fib.support_note)
+            );
+        }
+        if (fibNearR) {
+            fibNearR.textContent = this._fmtPriceOrNote(
+                classic.nearest_fib_resistance,
+                classic.fib_resistance_note || (fib && fib.resistance_note)
+            );
+        }
         if (fibDirEl) {
             const dir = fib && fib.direction;
             fibDirEl.textContent =
@@ -960,8 +1002,18 @@ const KdeLevelsTool = {
         }
         fillLabeledList(fibList, fibRows);
 
-        if (pivNearS) pivNearS.textContent = fmt(classic.nearest_pivot_support);
-        if (pivNearR) pivNearR.textContent = fmt(classic.nearest_pivot_resistance);
+        if (pivNearS) {
+            pivNearS.textContent = this._fmtPriceOrNote(
+                classic.nearest_pivot_support,
+                classic.pivot_support_note
+            );
+        }
+        if (pivNearR) {
+            pivNearR.textContent = this._fmtPriceOrNote(
+                classic.nearest_pivot_resistance,
+                classic.pivot_resistance_note
+            );
+        }
         const pivRows = [];
         if (pivot) {
             ['R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3'].forEach((k) => {
@@ -974,13 +1026,15 @@ const KdeLevelsTool = {
         const camNearR = document.getElementById('kdeCamNearestResistance');
         const camList = document.getElementById('kdeCamList');
         if (camNearS) {
-            camNearS.textContent = fmt(
-                classic.nearest_cam_support ?? (cam && cam.nearest_support)
+            camNearS.textContent = this._fmtPriceOrNote(
+                classic.nearest_cam_support ?? (cam && cam.nearest_support),
+                classic.cam_support_note ?? (cam && cam.support_note)
             );
         }
         if (camNearR) {
-            camNearR.textContent = fmt(
-                classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance)
+            camNearR.textContent = this._fmtPriceOrNote(
+                classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance),
+                classic.cam_resistance_note ?? (cam && cam.resistance_note)
             );
         }
         const camRows = [];

@@ -347,6 +347,40 @@ def compute_classic_levels_from_bars(
     nearest_cam_s = (camarilla or {}).get("nearest_support") if camarilla else None
     nearest_cam_r = (camarilla or {}).get("nearest_resistance") if camarilla else None
 
+    fib_s_note = None
+    fib_r_note = None
+    if last_c is not None and fib and fib.get("ok"):
+        d = PRICE_DECIMALS
+        fib_prices_all = [x["price"] for x in (fib.get("retracements") or [])]
+        for e in fib.get("extensions") or []:
+            try:
+                fib_prices_all.append(float(e["price"]))
+            except (TypeError, ValueError, KeyError):
+                continue
+        if nearest_fib_r is None and fib_prices_all:
+            top = max(fib_prices_all)
+            if last_c > top:
+                fib_r_note = f"已突破Fib最高档({top:.{d}f})，上方暂无同窗压力"
+                fib["resistance_note"] = fib_r_note
+        if nearest_fib_s is None and fib_prices_all:
+            bot = min(fib_prices_all)
+            if last_c < bot:
+                fib_s_note = f"已跌破Fib最低档({bot:.{d}f})，下方暂无同窗支撑"
+                fib["support_note"] = fib_s_note
+
+    piv_s_note = None
+    piv_r_note = None
+    if last_c is not None:
+        d = PRICE_DECIMALS
+        if nearest_piv_r is None:
+            top = max(pivot_levels)
+            if last_c > top:
+                piv_r_note = f"已突破Pivot最高档R3({top:.{d}f})，上方暂无同窗压力"
+        if nearest_piv_s is None:
+            bot = min(pivot_levels)
+            if last_c < bot:
+                piv_s_note = f"已跌破Pivot最低档S3({bot:.{d}f})，下方暂无同窗支撑"
+
     return {
         "fibonacci": fib,
         "pivot": pivot,
@@ -355,10 +389,16 @@ def compute_classic_levels_from_bars(
         "atr": atr,
         "nearest_fib_support": nearest_fib_s,
         "nearest_fib_resistance": nearest_fib_r,
+        "fib_support_note": fib_s_note,
+        "fib_resistance_note": fib_r_note,
         "nearest_pivot_support": nearest_piv_s,
         "nearest_pivot_resistance": nearest_piv_r,
+        "pivot_support_note": piv_s_note,
+        "pivot_resistance_note": piv_r_note,
         "nearest_cam_support": nearest_cam_s,
         "nearest_cam_resistance": nearest_cam_r,
+        "cam_support_note": (camarilla or {}).get("support_note") if camarilla else None,
+        "cam_resistance_note": (camarilla or {}).get("resistance_note") if camarilla else None,
         "last_close": round(last_c, PRICE_DECIMALS) if last_c is not None else None,
         "ok": True,
         "reason": fib_reason,
@@ -389,14 +429,19 @@ def attach_reference_levels_batch(
             "ok": bool(vp.get("ok")),
             "reason": vp.get("reason"),
             "lookback": vp.get("lookback"),
+            "bars_used": vp.get("bars_used"),
             "poc": vp.get("poc"),
             "vah": vp.get("vah"),
             "val": vp.get("val"),
             "nearest_support": vp.get("nearest_support"),
             "nearest_resistance": vp.get("nearest_resistance"),
+            "support_note": vp.get("support_note"),
+            "resistance_note": vp.get("resistance_note"),
         }
         ref["nearest_vp_support"] = vp.get("nearest_support")
         ref["nearest_vp_resistance"] = vp.get("nearest_resistance")
+        ref["vp_support_note"] = vp.get("support_note")
+        ref["vp_resistance_note"] = vp.get("resistance_note")
 
         kde = kde_map.get(c) or {}
         conf = compute_confluence_from_reference(

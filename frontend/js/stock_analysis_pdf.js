@@ -12,6 +12,12 @@
     return v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--';
   }
 
+  function fmtPriceOrNote(price, note) {
+    if (price != null && Number.isFinite(Number(price))) return fmtPrice(price);
+    const n = note != null ? String(note).trim() : '';
+    return n || '--';
+  }
+
   function plainFromEl(el) {
     if (!el) return '';
     return String(el.innerText || el.textContent || '')
@@ -112,8 +118,8 @@
           ['POC', fmtPrice(vp.poc)],
           ['VAL', fmtPrice(vp.val)],
           ['VAH', fmtPrice(vp.vah)],
-          ['最近支撑', fmtPrice(vp.nearest_support)],
-          ['最近压力', fmtPrice(vp.nearest_resistance)],
+          ['最近支撑', fmtPriceOrNote(vp.nearest_support, vp.support_note)],
+          ['最近压力', fmtPriceOrNote(vp.nearest_resistance, vp.resistance_note)],
           [
             '回看',
             vp.bars_used != null || vp.lookback != null
@@ -123,7 +129,9 @@
         ],
       });
       const alignTxt = (row) => {
-        if (!row || row.kde == null || row.vp == null) return '--';
+        if (!row || row.kde == null || row.vp == null) {
+          return row && row.note ? '语义' : '--';
+        }
         return row.aligned ? '是' : '否';
       };
       const diffTxt = (row) => {
@@ -139,14 +147,20 @@
           [
             '支撑',
             fmtPrice(vpCmp.support && vpCmp.support.kde),
-            fmtPrice(vpCmp.support && vpCmp.support.vp),
+            fmtPriceOrNote(
+              vpCmp.support && vpCmp.support.vp,
+              vpCmp.support && vpCmp.support.note
+            ),
             diffTxt(vpCmp.support),
             alignTxt(vpCmp.support),
           ],
           [
             '压力',
             fmtPrice(vpCmp.resistance && vpCmp.resistance.kde),
-            fmtPrice(vpCmp.resistance && vpCmp.resistance.vp),
+            fmtPriceOrNote(
+              vpCmp.resistance && vpCmp.resistance.vp,
+              vpCmp.resistance && vpCmp.resistance.note
+            ),
             diffTxt(vpCmp.resistance),
             alignTxt(vpCmp.resistance),
           ],
@@ -161,8 +175,8 @@
         ['锚定', cell(fib.anchor_method === 'zigzag_fractal' ? 'ZigZag+分形' : fib.anchor_method)],
         ['高点', `${fmtPrice(fib.swing_high)}${fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}`],
         ['低点', `${fmtPrice(fib.swing_low)}${fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}`],
-        ['最近支撑', fmtPrice(fib.nearest_support)],
-        ['最近压力', fmtPrice(fib.nearest_resistance)],
+        ['最近支撑', fmtPriceOrNote(fib.nearest_support ?? classic.nearest_fib_support, classic.fib_support_note || fib.support_note)],
+        ['最近压力', fmtPriceOrNote(fib.nearest_resistance ?? classic.nearest_fib_resistance, classic.fib_resistance_note || fib.resistance_note)],
       ];
       (fib.retracements || []).forEach((x) => {
         fibBody.push([`回撤 ${x.ratio}`, fmtPrice(x.price)]);
@@ -184,14 +198,18 @@
       const camBody = [
         [
           '最近支撑',
-          fmtPrice(classic.nearest_cam_support != null ? classic.nearest_cam_support : cam.nearest_support),
+          fmtPriceOrNote(
+            classic.nearest_cam_support != null ? classic.nearest_cam_support : cam.nearest_support,
+            classic.cam_support_note || cam.support_note
+          ),
         ],
         [
           '最近压力',
-          fmtPrice(
+          fmtPriceOrNote(
             classic.nearest_cam_resistance != null
               ? classic.nearest_cam_resistance
-              : cam.nearest_resistance
+              : cam.nearest_resistance,
+            classic.cam_resistance_note || cam.resistance_note
           ),
         ],
       ];

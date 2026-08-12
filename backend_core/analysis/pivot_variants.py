@@ -59,24 +59,45 @@ def attach_nearest(
     levels: Dict[str, Any],
     last_close: Optional[float],
     keys: Sequence[str],
+    *,
+    label: str = "同窗",
 ) -> Dict[str, Any]:
     out = dict(levels)
+    out["support_note"] = None
+    out["resistance_note"] = None
     if last_close is None:
         out["nearest_support"] = None
         out["nearest_resistance"] = None
         return out
     vals: List[float] = []
+    keyed: List[tuple] = []
     for k in keys:
         try:
             v = out.get(k)
             if v is not None:
-                vals.append(float(v))
+                fv = float(v)
+                vals.append(fv)
+                keyed.append((k, fv))
         except (TypeError, ValueError):
             continue
     ns = _nearest_below(vals, float(last_close))
     nr = _nearest_above(vals, float(last_close))
     out["nearest_support"] = round(ns, PRICE_DECIMALS) if ns is not None else None
     out["nearest_resistance"] = round(nr, PRICE_DECIMALS) if nr is not None else None
+    d = PRICE_DECIMALS
+    px = float(last_close)
+    if nr is None and keyed:
+        top_k, top_v = max(keyed, key=lambda x: x[1])
+        if px > top_v:
+            out["resistance_note"] = (
+                f"已突破{label}最高档{top_k}({top_v:.{d}f})，上方暂无同窗压力"
+            )
+    if ns is None and keyed:
+        bot_k, bot_v = min(keyed, key=lambda x: x[1])
+        if px < bot_v:
+            out["support_note"] = (
+                f"已跌破{label}最低档{bot_k}({bot_v:.{d}f})，下方暂无同窗支撑"
+            )
     return out
 
 
@@ -98,6 +119,7 @@ def compute_vol_pivots_from_parsed(
         cam,
         last_close,
         ("S4", "S3", "S2", "S1", "R1", "R2", "R3", "R4"),
+        label="Camarilla",
     )
 
     atr = wilder_atr(parsed)
@@ -106,7 +128,9 @@ def compute_vol_pivots_from_parsed(
         p = float(classic_p) if classic_p is not None else (h + l + c) / 3.0
         atr_piv = atr_pivot_bands(p, atr)
         atr_piv["trade_date"] = cam["trade_date"]
-        atr_piv = attach_nearest(atr_piv, last_close, ("S2", "S1", "P", "R1", "R2"))
+        atr_piv = attach_nearest(
+            atr_piv, last_close, ("S2", "S1", "P", "R1", "R2"), label="ATR-Pivot"
+        )
 
     return {
         "camarilla": cam,

@@ -87,6 +87,8 @@ def compute_volume_profile_from_bars(
         "val": None,
         "nearest_support": None,
         "nearest_resistance": None,
+        "support_note": None,
+        "resistance_note": None,
         "last_close": None,
         "bins": [],
         "total_volume": 0.0,
@@ -171,6 +173,19 @@ def compute_volume_profile_from_bars(
     nearest_s = max(below) if below else None
     nearest_r = min(above) if above else None
 
+    used_n = len(seq)
+    support_note = None
+    resistance_note = None
+    if last_c is not None:
+        if nearest_r is None and vah_r is not None and last_c > vah_r:
+            resistance_note = (
+                f"已突破{used_n}日VAH({vah_r:.{d}f})，上方无{used_n}日筹码压制"
+            )
+        if nearest_s is None and val_r is not None and last_c < val_r:
+            support_note = (
+                f"已跌破{used_n}日VAL({val_r:.{d}f})，下方无{used_n}日筹码承接"
+            )
+
     bins_out = [
         {"price": round(centers[i], d), "volume": round(volumes[i], 2)}
         for i in range(n_bins)
@@ -182,7 +197,7 @@ def compute_volume_profile_from_bars(
         "reason": "ok",
         "method": "daily_volume_profile",
         "lookback": lb,
-        "bars_used": len(seq),
+        "bars_used": used_n,
         "window_start": window_start,
         "window_end": window_end,
         "bin_count": n_bins,
@@ -192,6 +207,8 @@ def compute_volume_profile_from_bars(
         "val": val_r,
         "nearest_support": nearest_s,
         "nearest_resistance": nearest_r,
+        "support_note": support_note,
+        "resistance_note": resistance_note,
         "last_close": round(last_c, d) if last_c is not None else None,
         "bins": bins_out,
         "total_volume": round(total, 2),
@@ -274,4 +291,21 @@ def compare_vp_with_kde(
     out["poc"] = round(poc, PRICE_DECIMALS) if poc is not None else None
     out["val"] = round(val, PRICE_DECIMALS) if val is not None else None
     out["vah"] = round(vah, PRICE_DECIMALS) if vah is not None else None
+
+    used_n = int(vp.get("bars_used") or vp.get("lookback") or DEFAULT_LOOKBACK)
+    d = PRICE_DECIMALS
+    if out["resistance"] and out["resistance"].get("vp") is None:
+        note = vp.get("resistance_note")
+        if not note and px is not None and vah is not None and px > vah:
+            note = f"已突破{used_n}日VAH({vah:.{d}f})，上方无{used_n}日筹码压制"
+        if note:
+            out["resistance"]["note"] = note
+            out["notes"].append("resistance_above_vah")
+    if out["support"] and out["support"].get("vp") is None:
+        note = vp.get("support_note")
+        if not note and px is not None and val is not None and px < val:
+            note = f"已跌破{used_n}日VAL({val:.{d}f})，下方无{used_n}日筹码承接"
+        if note:
+            out["support"]["note"] = note
+            out["notes"].append("support_below_val")
     return out

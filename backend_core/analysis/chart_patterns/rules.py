@@ -17,9 +17,11 @@ INVALIDATE_BOTTOM_MULT = 0.99  # price < head/low * 0.99 → invalidated
 INVALIDATE_TOP_MULT = 1.01  # price > head/high * 1.01 → invalidated
 
 # 已确认反转形态生命周期：过期归档（不参与主形态竞争）
-LIFECYCLE_MIN_BARS = 45  # 确认后至少经历的交易日
+LIFECYCLE_MIN_BARS = 45  # 确认后至少经历的交易日（回吐归档兜底）
 LIFECYCLE_MIN_EXCURSION_PCT = 0.25  # 有利方向至少走出 25%
 LIFECYCLE_GIVEBACK_RATIO = 0.5  # 相对极值回吐至少一半 → 视为周期走完
+# 测幅目标兑现：触及颈线±形态高度×该比例即归档（不依赖 45 根 / 回吐）
+LIFECYCLE_TARGET_RATIO = 0.9
 
 # 楔形端点方向：末高/末低相对首枢轴的相对容差（抗噪声，非严格逐点单调）
 WEDGE_ENDPOINT_REL_EPS = 0.002
