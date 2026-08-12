@@ -242,15 +242,33 @@ const UrtScoreDetail = {
                 if (z.price != null) return this._fmt(z.price, 2);
                 return '--';
             };
+            const actionCls = action === 'buy'
+                ? 'urt-advice-badge urt-advice-badge--buy'
+                : (action === 'avoid'
+                    ? 'urt-advice-badge urt-advice-badge--avoid'
+                    : 'urt-advice-badge urt-advice-badge--watch');
+            const confCls = advice.confidence === 'high'
+                ? 'urt-advice-badge urt-advice-badge--conf-high'
+                : (advice.confidence === 'low'
+                    ? 'urt-advice-badge urt-advice-badge--conf-low'
+                    : 'urt-advice-badge urt-advice-badge--conf-mid');
+            const kl = advice.key_levels && typeof advice.key_levels === 'object' ? advice.key_levels : {};
             html += '<div class="gms-score-detail-section urt-trade-advice-section"><strong>【买点建议】</strong>';
-            html += '<div class="gms-version-meta-line">';
-            html += `<span>动作 <strong>${actionMap[action] || action}</strong></span>`;
-            html += `<span>信心 ${confMap[advice.confidence] || advice.confidence || '--'}</span>`;
-            if (advice.kde_support != null) {
-                html += `<span>结构支撑 ${this._fmt(advice.kde_support, 2)}</span>`;
+            html += '<div class="urt-advice-badges">';
+            html += `<span class="${actionCls}">${actionMap[action] || action}</span>`;
+            html += `<span class="${confCls}">信心 ${confMap[advice.confidence] || advice.confidence || '--'}</span>`;
+            if (advice.structure_rr != null && Number.isFinite(Number(advice.structure_rr))) {
+                html += `<span class="urt-advice-badge urt-advice-badge--rr">结构盈亏比 RR≈${Number(advice.structure_rr).toFixed(2)}</span>`;
             }
-            if (advice.kde_resistance != null) {
-                html += `<span>结构阻力 ${this._fmt(advice.kde_resistance, 2)}</span>`;
+            if (kl.support != null || kl.close != null || kl.resistance != null) {
+                html += `<span class="urt-advice-badge urt-advice-badge--levels">关键位 支撑${this._fmt(kl.support, 2)} / 现价${this._fmt(kl.close, 2)} / 阻力${this._fmt(kl.resistance, 2)}</span>`;
+            } else {
+                if (advice.kde_support != null) {
+                    html += `<span class="urt-advice-badge urt-advice-badge--levels">结构支撑 ${this._fmt(advice.kde_support, 2)}</span>`;
+                }
+                if (advice.kde_resistance != null) {
+                    html += `<span class="urt-advice-badge urt-advice-badge--levels">结构阻力 ${this._fmt(advice.kde_resistance, 2)}</span>`;
+                }
             }
             html += '</div>';
             html += '<table class="gms-weight-table"><thead><tr><th>项目</th><th>价位/区间</th><th>说明</th></tr></thead><tbody>';

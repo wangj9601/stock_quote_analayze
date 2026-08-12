@@ -68,10 +68,40 @@ def test_urt_buy_pullback_when_extended_and_overheat_soft():
     assert "pullback" in (adv["buy_zone"].get("basis") or "")
     assert adv["buy_zone"].get("low") == 9.51
     assert adv["buy_zone"].get("high") == 10.75
-    assert adv["stop_zone"]["price"] == 10.75
+    # 止损含 2% 缓冲，不与承接区下限重合
+    assert abs(float(adv["stop_zone"]["price"]) - 10.75 * 0.98) < 1e-6
+    assert adv["stop_zone"].get("buffer_pct") == 0.02
+    assert "缓冲" in (adv["stop_zone"].get("label") or "")
     assert adv["take_profit"]["prices"][0] == 12.44
     assert "回踩" in adv["summary"]
-    assert "RR" in adv["summary"] or "2.76" in adv["summary"]
+    assert adv.get("structure_rr") == 2.76
+    assert adv["key_levels"]["support"] == 10.75
+    assert adv["key_levels"]["close"] == 11.2
+    assert adv["key_levels"]["resistance"] == 12.44
+
+
+def test_urt_entry_band_widens_when_ma20_near_support():
+    """MA20 贴近支撑时，承接区上沿至少抬到约支撑×1.03，避免不可执行窄带。"""
+    adv = build_trade_advice(
+        "urt",
+        {
+            "buy_signal": True,
+            "close": 8.50,
+            "ma20": 7.74,
+            "nearest_support": 7.71,
+            "nearest_resistance": 9.20,
+            "structure_rr": 5.52,
+            "risk_tags": [
+                {"id": "recent_overheat", "level": "warn", "label": "近期涨幅偏大"},
+            ],
+        },
+    )
+    lo = float(adv["buy_zone"]["low"])
+    hi = float(adv["buy_zone"]["high"])
+    assert lo == 7.71
+    assert hi >= 7.71 * 1.03 - 1e-6
+    assert hi <= 8.50 + 1e-9
+    assert (hi - lo) / lo >= 0.025
 
 
 def test_confluence_soft_aligns_stop_display():

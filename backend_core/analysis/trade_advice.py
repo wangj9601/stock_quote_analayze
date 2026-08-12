@@ -6,6 +6,9 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 ALIGN_TOL_PCT = 0.015
+# URT 买点建议：承接区最小相对宽度；止损相对支撑缓冲
+URT_ENTRY_MIN_WIDTH_PCT = 0.03  # 至少约 3%，避免 7.71–7.74 这类不可执行窄带
+URT_STOP_BUFFER_PCT = 0.02  # 止损参考 = 支撑 × (1 - 2%)，含噪声缓冲
 
 
 def _f(v: Any) -> Optional[float]:
@@ -189,6 +192,73 @@ def _soft_align_confluence(
     return stop_zone, take_profit, confidence
 
 
+def _urt_widen_entry_band(
+    *,
+    low: Optional[float],
+    high: Optional[float],
+    close: Optional[float],
+    support: Optional[float],
+    ma20: Optional[float],
+    min_width_pct: float = URT_ENTRY_MIN_WIDTH_PCT,
+) -> tuple[Optional[float], Optional[float]]:
+    """拓宽回踩承接区：优先支撑～MA20；仅当过窄时上沿抬到 max(MA20, 支撑×(1+min_width))，且 ≤ 现价。"""
+    if low is None:
+        return None, None
+    lo = float(low)
+    hi = float(high) if high is not None else lo
+    if hi < lo:
+        lo, hi = hi, lo
+    if close is not None:
+        hi = min(hi, float(close))
+        if hi < lo:
+            hi = lo
+    # 已有足够带宽（如支撑与 MA20 间距够大）则不再抬上沿
+    if lo > 0 and (hi - lo) / lo >= float(min_width_pct) * 0.9:
+        return round(lo, 4), round(hi, 4)
+
+    candidates = [hi]
+    if ma20 is not None:
+        candidates.append(float(ma20))
+    base = float(support) if support is not None else lo
+    if base > 0:
+        candidates.append(base * (1.0 + float(min_width_pct)))
+    hi2 = max(candidates)
+    if close is not None:
+        hi2 = min(hi2, float(close))
+    if hi2 < lo:
+        hi2 = lo
+    if lo > 0 and (hi2 - lo) / lo < float(min_width_pct) * 0.5 and close is not None:
+        hi2 = min(float(close), lo * (1.0 + float(min_width_pct)))
+        if hi2 < lo:
+            hi2 = lo
+    return round(lo, 4), round(hi2, 4)
+
+
+def _urt_stop_with_buffer(
+    ref_price: float,
+    *,
+    buffer_pct: float = URT_STOP_BUFFER_PCT,
+    basis: str,
+    ref_label: str,
+) -> Dict[str, Any]:
+    """止损参考下移缓冲，避免与承接区下限重合被噪声扫损。"""
+    ref = float(ref_price)
+    buf = max(0.0, float(buffer_pct))
+    stop_px = round(ref * (1.0 - buf), 4)
+    z = _zone(
+        price=stop_px,
+        label=(
+            f"有效跌破{ref_label}（参考 {_fmt_px(stop_px)}，"
+            f"相对{_fmt_px(ref)}约下移{buf * 100:.0f}%缓冲；"
+            f"亦可以收盘跌破{_fmt_px(ref)}作确认）"
+        ),
+        basis=f"{basis}+buffer",
+    )
+    z["ref_price"] = round(ref, 4)
+    z["buffer_pct"] = buf
+    return z
+
+
 def build_trade_advice(
     strategy: str,
     row: Dict[str, Any],
@@ -306,15 +376,13 @@ def build_trade_advice(
                 entry_low = float(ma20)
 
             if prefer_pullback and entry_low is not None:
-                # 回踩区：MA20 与结构支撑之间（若仅一侧有效则在该位附近）
-                if entry_high is None:
-                    entry_high = (
-                        min(float(close), float(entry_low) * 1.02)
-                        if close is not None
-                        else float(entry_low)
-                    )
-                elif close is not None and entry_high > float(close):
-                    entry_high = float(close)
+                entry_low, entry_high = _urt_widen_entry_band(
+                    low=entry_low,
+                    high=entry_high,
+                    close=close,
+                    support=kde_s,
+                    ma20=ma20,
+                )
                 buy_zone = _zone(
                     low=entry_low,
                     high=entry_high,
@@ -326,21 +394,24 @@ def build_trade_advice(
                     "URT买点成立：价离支撑偏远或存在过热软提示，建议回踩支撑/MA20 承接，不追涨"
                 )
             else:
+                # 贴近跟进时也给可执行带宽：支撑/MA20～现价
+                if entry_low is not None:
+                    entry_low, entry_high = _urt_widen_entry_band(
+                        low=entry_low,
+                        high=close if close is not None else entry_high,
+                        close=close,
+                        support=kde_s,
+                        ma20=ma20,
+                    )
                 buy_zone = _zone(
                     low=entry_low,
-                    high=close,
+                    high=entry_high if entry_high is not None else close,
                     price=close or entry_low or ma20,
                     label="上升趋势买点：现价附近跟进，或回踩支撑/MA20 不破加仓",
                     basis="urt_buy+kde" if kde_s else "urt_buy",
                 )
                 summary_bits.append("URT买点成立：现价附近可跟，回踩支撑/MA20 不破可持有或加仓")
 
-            if rr is not None:
-                summary_bits.append(f"结构盈亏比 RR≈{rr:.2f}")
-            if kde_s is not None and kde_r is not None and close is not None:
-                summary_bits.append(
-                    f"关键位：支撑{_fmt_px(kde_s)} / 现价{_fmt_px(close)} / 阻力{_fmt_px(kde_r)}"
-                )
             if overheat_soft and not overheat_hard:
                 confidence = "medium"
                 summary_bits.append("过热软提示：控制仓位、分批，优先等回踩")
@@ -351,9 +422,13 @@ def build_trade_advice(
                 summary_bits.append(f"关注回踩结构支撑{_fmt_px(kde_s)}附近是否企稳")
 
         if kde_s is not None:
-            stop_zone = _zone(price=kde_s, label="跌破最近结构支撑止损", basis="kde")
+            stop_zone = _urt_stop_with_buffer(
+                kde_s, basis="kde", ref_label="最近结构支撑"
+            )
         elif ma20 is not None:
-            stop_zone = _zone(price=ma20, label="有效跌破 MA20 减仓/离场", basis="ma20")
+            stop_zone = _urt_stop_with_buffer(
+                ma20, basis="ma20", ref_label="MA20"
+            )
         if kde_r is not None:
             take_profit = {
                 "label": "靠近结构压力减仓/止盈",
@@ -489,6 +564,19 @@ def build_trade_advice(
     if take_profit and "prices" not in take_profit and take_profit.get("price") is not None:
         take_profit["prices"] = [take_profit["price"]]
 
+    structure_rr = _f(row.get("structure_rr"))
+    if structure_rr is None:
+        st0 = row.get("structure") if isinstance(row.get("structure"), dict) else {}
+        structure_rr = _f(st0.get("rr"))
+
+    key_levels: Dict[str, Any] = {}
+    if kde_s is not None:
+        key_levels["support"] = round(float(kde_s), 2)
+    if close is not None:
+        key_levels["close"] = round(float(close), 2)
+    if kde_r is not None:
+        key_levels["resistance"] = round(float(kde_r), 2)
+
     return {
         "action": action,
         "buy_zone": buy_zone,
@@ -499,5 +587,7 @@ def build_trade_advice(
         "confidence": confidence,
         "kde_support": round(float(kde_s), 2) if kde_s is not None else None,
         "kde_resistance": round(float(kde_r), 2) if kde_r is not None else None,
+        "structure_rr": round(float(structure_rr), 2) if structure_rr is not None else None,
+        "key_levels": key_levels or None,
         "reference_levels": ref,
     }

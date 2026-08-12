@@ -1452,6 +1452,65 @@
 .gms-risk-info { background: #e3f2fd; color: #1565c0; }
 .gms-risk-warn { background: #fff3e0; color: #e65100; }
 .gms-risk-danger { background: #ffebee; color: #c62828; }
+
+.urt-advice-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.45rem;
+    margin: 0.4rem 0 0.65rem;
+}
+.urt-advice-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+}
+.urt-advice-badge--buy {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fdba74;
+}
+.urt-advice-badge--watch {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+.urt-advice-badge--avoid {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+.urt-advice-badge--conf-high {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #6ee7b7;
+}
+.urt-advice-badge--conf-mid {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+}
+.urt-advice-badge--conf-low {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+}
+.urt-advice-badge--rr,
+.urt-advice-badge--levels {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    font-weight: 500;
+}
+.urt-trade-advice-section .urt-buy-logic-detail {
+    margin-top: 0.45rem;
+    color: #64748b;
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
 .gms-penalty-section {
     flex: 1 1 100%;
 }
