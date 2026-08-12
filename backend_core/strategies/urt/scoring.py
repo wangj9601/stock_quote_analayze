@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""URT 打分：连阳强度 + 量能超额 + 中期阳线/多头轻度加分 + 可选换手/量比。"""
+"""URT 打分：连阳强度 + 量能超额 + 中期阳线/多头加分 + 空头减分 + 可选换手/量比。"""
 
 from __future__ import annotations
 
@@ -20,10 +20,20 @@ def _yang_score(ya: int, yb: int) -> float:
     return max(0.0, ya * 8.0)
 
 
-def _volume_score(vm: float, need: float) -> float:
+def _volume_score(vm: float, need: float, full_multiple: float) -> float:
+    """
+    量能原始分（满分 40，再缩放为 34）。
+    - vm < need：按比例给基础分
+    - need ≤ vm < full_multiple：从 30 过渡到 40
+    - vm ≥ full_multiple：满分 40
+    """
     need = max(need, 0.1)
+    full = max(float(full_multiple or need), need)
+    if vm >= full:
+        return 40.0
     if vm >= need:
-        return 30.0 + min(10.0, (vm - need) / need * 10.0)
+        span = max(full - need, 0.1)
+        return 30.0 + min(10.0, (vm - need) / span * 10.0)
     return max(0.0, vm / need * 30.0)
 
 
@@ -86,14 +96,19 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
     }
     score += yang_part
 
-    # 量能主分上限略降为 34，腾出中期阳线/多头空间（总分仍封顶 100）
+    # 量能主分上限 34；full_multiple 拉满极端放量排序差距
     vm = float(ind.get("volume_multiple") or 0)
-    need = float(cfg.get("volume_multiple") or 2.5)
-    vol_raw = _volume_score(vm, need)
+    need = float(cfg.get("volume_multiple") or 3.0)
+    try:
+        full_mult = float(cfg.get("volume_score_full_multiple") or 4.0)
+    except (TypeError, ValueError):
+        full_mult = 4.0
+    vol_raw = _volume_score(vm, need, full_mult)
     vol_part = round(vol_raw * 34.0 / 40.0, 2)
     parts["volume"] = {
         "volume_multiple": vm,
         "threshold": need,
+        "full_multiple": full_mult,
         "score": vol_part,
         "max": 34,
     }
@@ -104,11 +119,20 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
     score += mid_part
 
     bull_ok = bool(ind.get("ma_bull_ok"))
-    bull_part = 4.0 if bull_ok else 0.0
+    bear_ok = bool(ind.get("ma_bear_ok"))
+    # 多头 +6；空头 -8；中性 0（互斥）
+    if bull_ok:
+        bull_part = 6.0
+    elif bear_ok:
+        bull_part = -8.0
+    else:
+        bull_part = 0.0
     parts["ma_bull"] = {
         "ok": bull_ok,
+        "bear_ok": bear_ok,
         "score": bull_part,
-        "max": 4,
+        "max": 6,
+        "min": -8,
         "periods": ind.get("ma_bull_periods") or [5, 10, 20],
         "values": ind.get("ma_bull_values"),
         "ma5": ind.get("ma5"),
@@ -117,6 +141,12 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
         "hard_filter": bool(cfg.get("require_ma_bull")),
     }
     score += bull_part
+    parts["ma_bear"] = {
+        "ok": bear_ok,
+        "score": -8.0 if bear_ok and not bull_ok else 0.0,
+        "max": 0,
+        "min": -8,
+    }
 
     use_to = bool(cfg.get("use_turnover"))
     use_vr = bool(cfg.get("use_volume_ratio"))
@@ -146,7 +176,7 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
     }
     score += vr_part
 
-    total = round(min(100.0, score), 2)
+    total = round(max(0.0, min(100.0, score)), 2)
     detail = {
         "total": total,
         "min_score": float(cfg.get("min_score") or 70),
@@ -163,6 +193,7 @@ def compute_score_breakdown(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[f
             "volume": ind.get("volume"),
             "avg_volume_20": ind.get("avg_volume_20"),
             "date": ind.get("date"),
+            "ma_bear_ok": bear_ok,
         },
     }
     return total, detail

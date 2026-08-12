@@ -37,34 +37,38 @@ class URTConfigManager:
             "ma_period": 20,
             "yang_rule_a": {"window": 4, "min_up_days": 3},
             "yang_rule_b": {"window": 5, "min_up_days": 4},
-            # 中期阳线：默认仅展示/打分；use_yang_medium=true 时参与硬筛（须全部满足）
+            # 中期阳线：use_yang_medium=true 时参与硬筛（须全部满足）
             "yang_medium_rules": [
                 {"window": 10, "min_up_days": 6},
                 {"window": 15, "min_up_days": 8},
                 {"window": 20, "min_up_days": 10},
             ],
-            "use_yang_medium": False,
-            # 均线多头：默认仅展示/打分；require_ma_bull=true 时硬筛
-            "require_ma_bull": False,
+            "use_yang_medium": True,
+            # 均线多头：require_ma_bull=true 时硬筛
+            "require_ma_bull": True,
             "ma_bull_periods": [5, 10, 20],
             "volume_lookback": 20,
-            "volume_multiple": 2.5,
+            "volume_multiple": 3.0,
+            # 量能分项拉满阈值（≥ 此倍数得满分 34）
+            "volume_score_full_multiple": 4.0,
             "min_score": 70,
-            "use_turnover": False,
+            "use_turnover": True,
             "use_volume_ratio": False,
-            "min_turnover": 0.0,
+            "min_turnover": 3.0,
             "min_volume_ratio": 0.0,
             "history_calendar_days": 120,
-            # KDE 支撑/阻力（与 RPE / 个股关键价位同口径；不参与硬筛）
+            # KDE 支撑/阻力（与 RPE / 个股关键价位同口径）
             "kde_lookback_days": 250,
             "kde_lookback_step": 250,
             "kde_lookback_max": 750,
             "kde_base_factor": 1.0,
             "kde_grid_points": 200,
-            # 结构盈亏比风险提示（软标签，不硬筛、不减分）
+            # 结构盈亏比：RR 偏低仅软标签；破位/贴阻力/悬空可硬闸
             "structure_rr_warn_enabled": True,
-            "structure_rr_min_rr": 1.5,
+            "structure_rr_min_rr": 2.0,
             "structure_rr_min_downside_pct": 0.015,
+            "structure_rr_hard_gate_enabled": True,
+            "structure_hang_min_upside_pct": 0.08,
             "risk": {
                 "stop_loss_pct_min": 5,
                 "stop_loss_pct_max": 10,
@@ -142,6 +146,12 @@ class URTConfigManager:
             "require_ma_bull",
             "ma_bull_periods",
             "yang_medium_rules",
+            "volume_score_full_multiple",
+            "structure_rr_warn_enabled",
+            "structure_rr_min_rr",
+            "structure_rr_min_downside_pct",
+            "structure_rr_hard_gate_enabled",
+            "structure_hang_min_upside_pct",
         ):
             if key in overrides and overrides[key] is not None:
                 cfg[key] = overrides[key]

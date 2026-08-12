@@ -68,8 +68,25 @@ def test_avg_volume_prev():
     assert avg_volume_prev(vols, 20) == 1000.0
 
 
-def test_hard_filter_and_score_pass():
+def _loose_cfg(**extra):
+    """旧口径宽松硬筛，便于单测聚焦单项逻辑。"""
     cfg = URTConfigManager().get_default_config()
+    cfg.update(
+        {
+            "use_yang_medium": False,
+            "require_ma_bull": False,
+            "use_turnover": False,
+            "use_volume_ratio": False,
+            "volume_multiple": 2.5,
+            "structure_rr_hard_gate_enabled": False,
+        }
+    )
+    cfg.update(extra)
+    return cfg
+
+
+def test_hard_filter_and_score_pass():
+    cfg = _loose_cfg()
     # 最新 4 根：阳阳阳阴 → 3/4；量 3x
     yang = [True, True, True, False, True]
     bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
@@ -87,7 +104,7 @@ def test_hard_filter_and_score_pass():
 
 
 def test_reject_when_below_ma():
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     bars = _bars(40, yang_pattern=[True] * 5, vol_spike=True, above_ma=True)
     # 最新收盘压到明显低于近 20 日均价
     for i, b in enumerate(bars):
@@ -109,7 +126,7 @@ def test_reject_when_below_ma():
 
 
 def test_reject_low_volume_multiple():
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     yang = [True, True, True, True, True]
     bars = _bars(40, yang_pattern=yang, vol_spike=False, above_ma=True)
     for b in bars:
@@ -125,7 +142,7 @@ def test_buy_signal_includes_kde_structure():
     """买点结果应带 KDE 支撑/阻力（展示用，不参与硬筛）。"""
     import random
 
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     yang = [True, True, True, False, True]
     bars = _bars(80, yang_pattern=yang, vol_spike=True, above_ma=True)
     # 在约 13/15/17 堆量，便于形成密度峰
@@ -192,7 +209,7 @@ def test_exit_trailing_take_profit():
 def test_score_breakdown_and_detail_payload():
     from backend_core.strategies.urt.scoring import compute_score_breakdown
 
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     yang = [True, True, True, False, True]
     bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
     ind = build_indicators(bars, cfg)
@@ -204,7 +221,7 @@ def test_score_breakdown_and_detail_payload():
 
 
 def test_evaluate_buy_signal_require_pass_false_returns_detail():
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     # 量能不足：仍返回明细
     yang = [True, True, True, False, True]
     bars = _bars(40, yang_pattern=yang, vol_spike=False, above_ma=True)
@@ -227,7 +244,7 @@ def test_screen_universe_require_pass_false_keeps_failed_signal():
     """单股模式：不按筛选过滤，未过硬筛也返回信号明细。"""
     from backend_core.strategies.urt.strategy_engine import URTStrategyEngine
 
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     yang = [True, True, True, False, True]
     bars = _bars(40, yang_pattern=yang, vol_spike=False, above_ma=True)
     for b in bars:
@@ -256,21 +273,24 @@ def test_backtest_progress_helpers_import():
 
 def test_medium_yang_and_ma_bull_fields_always_present():
     cfg = URTConfigManager().get_default_config()
-    assert cfg.get("use_yang_medium") is False
-    assert cfg.get("require_ma_bull") is False
+    assert cfg.get("use_yang_medium") is True
+    assert cfg.get("require_ma_bull") is True
+    assert float(cfg.get("volume_multiple") or 0) == 3.0
+    assert cfg.get("structure_rr_hard_gate_enabled") is True
+    assert abs(float(cfg.get("structure_rr_min_rr") or 0) - 2.0) < 1e-9
     yang = [True] * 5
     bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
     ind = build_indicators(bars, cfg)
     assert ind is not None
     assert "yang_count_10" in ind and "yang_count_15" in ind and "yang_count_20" in ind
-    assert "ma_bull_ok" in ind and "ma5" in ind and "ma10" in ind
+    assert "ma_bull_ok" in ind and "ma_bear_ok" in ind and "ma5" in ind and "ma10" in ind
+    # 默认硬筛开启：升序构造通常可过
     ok, _ = hard_filter_pass(ind, cfg)
-    assert ok is True  # 默认开关关闭，不否决
+    assert ok is True
 
 
 def test_use_yang_medium_hard_filter_rejects():
-    cfg = URTConfigManager().get_default_config()
-    cfg["use_yang_medium"] = True
+    cfg = _loose_cfg(use_yang_medium=True)
     # 短窗全阳，但中期阈值极高 → 构造近期大量阴线
     bars = _bars(40, yang_pattern=[True] * 5, vol_spike=True, above_ma=True)
     for i in range(5, 25):
@@ -284,8 +304,7 @@ def test_use_yang_medium_hard_filter_rejects():
 
 
 def test_require_ma_bull_hard_filter_rejects():
-    cfg = URTConfigManager().get_default_config()
-    cfg["require_ma_bull"] = True
+    cfg = _loose_cfg(require_ma_bull=True)
     bars = _bars(40, yang_pattern=[True] * 5, vol_spike=True, above_ma=True)
     # 强制下跌序列使短均线低于长均线
     for i, b in enumerate(bars):
@@ -312,7 +331,7 @@ def test_require_ma_bull_hard_filter_rejects():
 def test_score_includes_yang_medium_and_ma_bull_parts():
     from backend_core.strategies.urt.scoring import compute_score_breakdown
 
-    cfg = URTConfigManager().get_default_config()
+    cfg = _loose_cfg()
     yang = [True] * 5
     bars = _bars(40, yang_pattern=yang, vol_spike=True, above_ma=True)
     ind = build_indicators(bars, cfg)
@@ -322,6 +341,33 @@ def test_score_includes_yang_medium_and_ma_bull_parts():
     assert "yang_medium" in parts
     assert parts["yang_medium"]["max"] == 6
     assert "ma_bull" in parts
-    assert parts["ma_bull"]["max"] == 4
+    assert parts["ma_bull"]["max"] == 6
     assert parts["volume"]["max"] == 34
     assert total <= 100
+
+
+def test_volume_score_full_multiple_and_ma_bear_penalty():
+    from backend_core.strategies.urt.scoring import compute_score_breakdown
+
+    cfg = _loose_cfg(volume_multiple=3.0, volume_score_full_multiple=4.0)
+    ind = {
+        "above_ma20": True,
+        "yang_count_4": 3,
+        "yang_count_5": 4,
+        "volume_multiple": 4.0,
+        "yang_medium_ok": True,
+        "yang_medium_detail": [
+            {"window": 10, "min_up_days": 6, "count": 6},
+            {"window": 15, "min_up_days": 8, "count": 8},
+            {"window": 20, "min_up_days": 10, "count": 10},
+        ],
+        "ma_bull_ok": False,
+        "ma_bear_ok": True,
+        "ma_bull_periods": [5, 10, 20],
+        "turnover_rate": None,
+        "volume_ratio": None,
+    }
+    total, detail = compute_score_breakdown(ind, cfg)
+    assert detail["parts"]["volume"]["score"] == 34.0
+    assert detail["parts"]["ma_bull"]["score"] == -8.0
+    assert total >= 0

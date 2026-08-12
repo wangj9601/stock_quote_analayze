@@ -144,12 +144,17 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
         mid_oks.append(cnt >= int(rule["min_up_days"]))
     yang_medium_ok = all(mid_oks) if mid_oks else True
 
-    # 多头排列：默认 MA5 > MA10 > MA20
+    # 多头排列：默认 MA5 > MA10 > MA20；空头对称 MA5 < MA10 < MA20
     ma_values: List[Optional[float]] = [sma(closes, p) for p in bull_periods]
     ma_bull_ok = False
+    ma_bear_ok = False
     if all(v is not None and v > 0 for v in ma_values) and len(ma_values) >= 2:
         ma_bull_ok = all(
             float(ma_values[i]) > float(ma_values[i + 1])  # type: ignore[arg-type]
+            for i in range(len(ma_values) - 1)
+        )
+        ma_bear_ok = all(
+            float(ma_values[i]) < float(ma_values[i + 1])  # type: ignore[arg-type]
             for i in range(len(ma_values) - 1)
         )
 
@@ -188,6 +193,7 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
             round(float(v), 4) if v is not None else None for v in ma_values
         ],
         "ma_bull_ok": ma_bull_ok,
+        "ma_bear_ok": ma_bear_ok,
         "avg_volume_20": round(avg_vol, 2),
         "volume_multiple": round(vol_mult, 4),
         "volume_ratio": round(vratio, 4) if vratio is not None else None,
@@ -203,7 +209,7 @@ def hard_filter_pass(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool, st
         return False, "未站上MA20"
     if not (ind.get("rule_a_ok") or ind.get("rule_b_ok")):
         return False, "连阳条件不满足"
-    need_mult = float(cfg.get("volume_multiple") or 2.5)
+    need_mult = float(cfg.get("volume_multiple") or 3.0)
     if float(ind.get("volume_multiple") or 0) < need_mult:
         return False, "量能倍数不足"
     if cfg.get("use_turnover"):

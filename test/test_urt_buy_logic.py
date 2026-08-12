@@ -13,6 +13,7 @@ def test_build_buy_logic_pass():
         "yang_rule_b": {"window": 5, "min_up_days": 4},
         "use_turnover": False,
         "use_volume_ratio": False,
+        "structure_rr_hard_gate_enabled": False,
     }
     detail = {
         "close": 10.5,
@@ -52,6 +53,7 @@ def test_build_buy_logic_fail_volume():
         "yang_rule_b": {"window": 5, "min_up_days": 4},
         "use_turnover": False,
         "use_volume_ratio": False,
+        "structure_rr_hard_gate_enabled": False,
     }
     detail = {
         "close": 10.5,
@@ -86,6 +88,7 @@ def test_build_buy_logic_medium_yang_and_ma_bull_hard():
             {"window": 20, "min_up_days": 10},
         ],
         "ma_bull_periods": [5, 10, 20],
+        "structure_rr_hard_gate_enabled": False,
     }
     detail = {
         "close": 10.5,
@@ -114,3 +117,36 @@ def test_build_buy_logic_medium_yang_and_ma_bull_hard():
     assert bull["required"] is True and bull["pass"] is False
     assert "中期阳线" in logic["formula_detail"]
     assert "多头" in logic["formula_detail"]
+
+
+def test_build_buy_logic_structure_hard_gate_blocks():
+    cfg = {
+        "ma_period": 20,
+        "volume_multiple": 3.0,
+        "min_score": 70,
+        "yang_rule_a": {"window": 4, "min_up_days": 3},
+        "yang_rule_b": {"window": 5, "min_up_days": 4},
+        "structure_rr_hard_gate_enabled": True,
+        "structure_hang_min_upside_pct": 0.08,
+    }
+    detail = {
+        "close": 10.5,
+        "ma20": 10.0,
+        "above_ma20": True,
+        "yang_count_4": 3,
+        "yang_count_5": 4,
+        "rule_a_ok": True,
+        "rule_b_ok": True,
+        "volume_multiple": 3.5,
+        "score": 86,
+        "filter_ok": True,
+        "score_ok": True,
+        "structure_gate_ok": False,
+        "structure_hard_gate": {"blocked": True, "reasons": ["悬空离支撑"]},
+    }
+    logic = build_buy_logic(detail, cfg)
+    assert logic["buy_signal"] is False
+    assert logic["structure_gate_ok"] is False
+    gate = next(s for s in logic["steps"] if s["id"] == "structure_hard_gate")
+    assert gate["required"] is True and gate["pass"] is False
+    assert "悬空" in gate["actual"]

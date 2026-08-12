@@ -10,7 +10,11 @@ from backend_core.strategies.urt.signal_detector import evaluate_buy_signal
 
 
 def test_build_tags_rr_low_warn():
-    cfg = {"structure_rr_warn_enabled": True, "structure_rr_min_rr": 1.5}
+    cfg = {
+        "structure_rr_warn_enabled": True,
+        "structure_rr_min_rr": 1.5,
+        "structure_hang_min_upside_pct": 0.20,  # 抬高悬空阈值，避免本例同时打悬空标签
+    }
     st = {"nearest_support": 14.0, "nearest_resistance": 16.47}
     enriched = enrich_structure_with_rr(st, price=15.84, cfg=cfg)
     assert enriched["structure"]["rr"] is not None
@@ -53,10 +57,12 @@ def test_enrich_near_support_applies_downside_floor():
 def test_default_config_has_min_downside_pct():
     cfg = URTConfigManager().get_default_config()
     assert abs(float(cfg.get("structure_rr_min_downside_pct")) - 0.015) < 1e-9
+    assert abs(float(cfg.get("structure_rr_min_rr")) - 2.0) < 1e-9
+    assert cfg.get("structure_rr_hard_gate_enabled") is True
 
 
 def test_build_tags_below_support_danger():
-    cfg = {"structure_rr_warn_enabled": True, "structure_rr_min_rr": 1.5}
+    cfg = {"structure_rr_warn_enabled": True, "structure_rr_min_rr": 2.0}
     tags = build_structure_rr_risk_tags(
         {"nearest_support": 16.0, "nearest_resistance": 18.0},
         cfg,
@@ -118,6 +124,10 @@ def test_evaluate_buy_signal_attaches_rr_and_risk_tags_without_changing_score_lo
     cfg = URTConfigManager().get_default_config()
     cfg["structure_rr_warn_enabled"] = True
     cfg["structure_rr_min_rr"] = 1.5
+    cfg["structure_rr_hard_gate_enabled"] = False
+    cfg["use_yang_medium"] = False
+    cfg["require_ma_bull"] = False
+    cfg["use_turnover"] = False
     bars = _bars_with_clusters(90)
     detail = evaluate_buy_signal(bars, cfg, require_pass=False)
     assert detail is not None

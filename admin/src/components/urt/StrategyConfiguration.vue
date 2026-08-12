@@ -69,6 +69,11 @@
             </el-row>
             <el-row :gutter="12">
               <el-col :span="8">
+                <el-form-item label="量能满分倍数">
+                  <el-input-number v-model="form.volume_score_full_multiple" :min="1" :max="30" :step="0.1" :precision="2" class="w-full" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
                 <el-form-item label="最低得分">
                   <el-input-number v-model="form.min_score" :min="0" :max="100" class="w-full" />
                 </el-form-item>
@@ -78,6 +83,8 @@
                   <el-input-number v-model="form.yang_rule_a.min_up_days" :min="1" :max="4" class="w-full" />
                 </el-form-item>
               </el-col>
+            </el-row>
+            <el-row :gutter="12">
               <el-col :span="8">
                 <el-form-item label="5日最少阳线">
                   <el-input-number v-model="form.yang_rule_b.min_up_days" :min="1" :max="5" class="w-full" />
@@ -85,7 +92,7 @@
               </el-col>
             </el-row>
 
-            <el-divider content-position="left">中期阳线（默认不硬筛，参与展示/打分）</el-divider>
+            <el-divider content-position="left">中期阳线（默认开启硬筛）</el-divider>
             <el-alert
               type="info"
               :closable="false"
@@ -114,19 +121,56 @@
               </el-col>
             </el-row>
 
-            <el-divider content-position="left">均线多头（默认不硬筛，参与展示/打分）</el-divider>
+            <el-divider content-position="left">均线多头（默认开启硬筛）</el-divider>
             <el-alert
               type="info"
               :closable="false"
               show-icon
               class="mb-3"
-              title="多头排列默认 MA5>MA10>MA20。开启硬筛后，回调再起形态更容易被过滤。"
+              title="多头排列默认 MA5>MA10>MA20。关闭硬筛时仍可打分：多头+6、空头-8。"
             />
             <el-form-item label="多头排列硬筛">
               <el-switch v-model="form.require_ma_bull" active-text="开启" inactive-text="关闭" />
             </el-form-item>
 
-            <el-divider content-position="left">精细化（可选）</el-divider>
+            <el-divider content-position="left">结构盈亏比 / KDE（混合）</el-divider>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="mb-3"
+              title="RR 偏低仅风险提示；破位支撑、贴/超阻力、悬空离支撑在硬闸开启时否决正式买点。KDE 无效不硬闸。"
+            />
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-form-item label="结构风险提示">
+                  <el-switch v-model="form.structure_rr_warn_enabled" active-text="开" inactive-text="关" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="结构硬闸">
+                  <el-switch v-model="form.structure_rr_hard_gate_enabled" active-text="开" inactive-text="关" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="最低 RR">
+                  <el-input-number v-model="form.structure_rr_min_rr" :min="0.5" :max="10" :step="0.1" :precision="2" class="w-full" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item label="悬空阈值%">
+              <el-input-number
+                v-model="form.structure_hang_min_upside_pct_ui"
+                :min="1"
+                :max="50"
+                :step="0.5"
+                :precision="1"
+                @change="onHangPctUiChange"
+              />
+              <span class="hang-hint">相对支撑距离 ≥ 此% 视为悬空（写入 structure_hang_min_upside_pct）</span>
+            </el-form-item>
+
+            <el-divider content-position="left">精细化（换手默认开）</el-divider>
             <el-row :gutter="12">
               <el-col :span="8">
                 <el-form-item label="启用换手率">
@@ -218,7 +262,8 @@ const editMeta = reactive({
 const form = reactive<any>({
   ma_period: 20,
   volume_lookback: 20,
-  volume_multiple: 2.5,
+  volume_multiple: 3.0,
+  volume_score_full_multiple: 4.0,
   min_score: 70,
   yang_rule_a: { window: 4, min_up_days: 3 },
   yang_rule_b: { window: 5, min_up_days: 4 },
@@ -227,14 +272,19 @@ const form = reactive<any>({
     { window: 15, min_up_days: 8 },
     { window: 20, min_up_days: 10 },
   ],
-  use_yang_medium: false,
-  require_ma_bull: false,
+  use_yang_medium: true,
+  require_ma_bull: true,
   ma_bull_periods: [5, 10, 20],
-  use_turnover: false,
+  use_turnover: true,
   use_volume_ratio: false,
-  min_turnover: 0,
+  min_turnover: 3.0,
   min_volume_ratio: 0,
   history_calendar_days: 120,
+  structure_rr_warn_enabled: true,
+  structure_rr_hard_gate_enabled: true,
+  structure_rr_min_rr: 2.0,
+  structure_hang_min_upside_pct: 0.08,
+  structure_hang_min_upside_pct_ui: 8.0,
   risk: {
     stop_loss_pct_min: 5,
     stop_loss_pct_max: 10,
@@ -245,10 +295,17 @@ const form = reactive<any>({
   },
 })
 
+function onHangPctUiChange(v: number | undefined) {
+  const pct = Number(v)
+  if (!Number.isFinite(pct)) return
+  form.structure_hang_min_upside_pct = Math.max(0, pct) / 100
+}
+
 function applyParams(params: Record<string, any> = {}) {
   form.ma_period = params.ma_period ?? 20
   form.volume_lookback = params.volume_lookback ?? 20
-  form.volume_multiple = params.volume_multiple ?? 2.5
+  form.volume_multiple = params.volume_multiple ?? 3.0
+  form.volume_score_full_multiple = params.volume_score_full_multiple ?? 4.0
   form.min_score = params.min_score ?? 70
   form.yang_rule_a = { window: 4, min_up_days: 3, ...(params.yang_rule_a || {}) }
   form.yang_rule_b = { window: 5, min_up_days: 4, ...(params.yang_rule_b || {}) }
@@ -265,16 +322,22 @@ function applyParams(params: Record<string, any> = {}) {
       min_up_days: Number(hit.min_up_days ?? d.min_up_days),
     }
   })
-  form.use_yang_medium = !!params.use_yang_medium
-  form.require_ma_bull = !!params.require_ma_bull
+  form.use_yang_medium = params.use_yang_medium !== false
+  form.require_ma_bull = params.require_ma_bull !== false
   form.ma_bull_periods = Array.isArray(params.ma_bull_periods) && params.ma_bull_periods.length >= 2
     ? params.ma_bull_periods.map((x: any) => Number(x))
     : [5, 10, 20]
-  form.use_turnover = !!params.use_turnover
+  form.use_turnover = params.use_turnover !== false
   form.use_volume_ratio = !!params.use_volume_ratio
-  form.min_turnover = params.min_turnover ?? 0
+  form.min_turnover = params.min_turnover ?? 3.0
   form.min_volume_ratio = params.min_volume_ratio ?? 0
   form.history_calendar_days = params.history_calendar_days ?? 120
+  form.structure_rr_warn_enabled = params.structure_rr_warn_enabled !== false
+  form.structure_rr_hard_gate_enabled = params.structure_rr_hard_gate_enabled !== false
+  form.structure_rr_min_rr = params.structure_rr_min_rr ?? 2.0
+  const hang = Number(params.structure_hang_min_upside_pct)
+  form.structure_hang_min_upside_pct = Number.isFinite(hang) ? hang : 0.08
+  form.structure_hang_min_upside_pct_ui = Math.round(form.structure_hang_min_upside_pct * 1000) / 10
   form.risk = {
     stop_loss_pct_min: 5,
     stop_loss_pct_max: 10,
@@ -323,9 +386,14 @@ async function saveVersion() {
   if (!selectedId.value) return
   saving.value = true
   try {
-    let params = { ...form }
+    let params: Record<string, any>
     if (showJson.value) {
       params = JSON.parse(jsonText.value)
+    } else {
+      const { structure_hang_min_upside_pct_ui, ...rest } = form
+      onHangPctUiChange(structure_hang_min_upside_pct_ui)
+      params = { ...rest }
+      delete params.structure_hang_min_upside_pct_ui
     }
     await urtApiService.updateStrategyConfig(selectedId.value, {
       version_label: editMeta.version_label,
@@ -414,5 +482,10 @@ onMounted(loadVersions)
 }
 .json-editor {
   font-family: ui-monospace, monospace;
+}
+.hang-hint {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

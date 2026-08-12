@@ -108,17 +108,18 @@ def _compute_structure_levels(
 def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
     结构化买点判断逻辑（供信号明细页展示）。
-    买点 = 硬筛全部通过 AND 得分 ≥ min_score。
+    买点 = 硬筛全部通过 AND 结构硬闸通过 AND 得分 ≥ min_score。
     """
     rule_a = cfg.get("yang_rule_a") or {}
     rule_b = cfg.get("yang_rule_b") or {}
     ma_period = int(cfg.get("ma_period") or 20)
-    vol_need = float(cfg.get("volume_multiple") or 2.5)
+    vol_need = float(cfg.get("volume_multiple") or 3.0)
     min_score = float(cfg.get("min_score") or 70)
     use_turnover = bool(cfg.get("use_turnover"))
     use_volume_ratio = bool(cfg.get("use_volume_ratio"))
     use_yang_medium = bool(cfg.get("use_yang_medium"))
     require_ma_bull = bool(cfg.get("require_ma_bull"))
+    hard_gate_enabled = cfg.get("structure_rr_hard_gate_enabled") is not False
     min_turn = float(cfg.get("min_turnover") or 0) if use_turnover else None
     min_vr = float(cfg.get("min_volume_ratio") or 0) if use_volume_ratio else None
     a_w = int(rule_a.get("window") or 4)
@@ -151,6 +152,7 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         else True
     )
     ma_bull_ok = bool(detail.get("ma_bull_ok")) if detail.get("ma_bull_ok") is not None else False
+    ma_bear_ok = bool(detail.get("ma_bear_ok")) if detail.get("ma_bear_ok") is not None else False
     vm = detail.get("volume_multiple")
     try:
         vm_f = float(vm) if vm is not None else None
@@ -187,7 +189,20 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         filter_ok = bool(filter_ok)
     score = float(detail.get("score") or 0)
     score_ok = bool(detail.get("score_ok")) if detail.get("score_ok") is not None else (score >= min_score)
-    buy = bool(detail.get("buy_signal")) if detail.get("buy_signal") is not None else (filter_ok and score_ok)
+
+    gate = detail.get("structure_hard_gate") or {}
+    structure_gate_ok = True
+    if hard_gate_enabled:
+        if detail.get("structure_gate_ok") is not None:
+            structure_gate_ok = bool(detail.get("structure_gate_ok"))
+        elif isinstance(gate, dict) and gate.get("blocked"):
+            structure_gate_ok = False
+
+    buy = (
+        bool(detail.get("buy_signal"))
+        if detail.get("buy_signal") is not None
+        else (filter_ok and structure_gate_ok and score_ok)
+    )
 
     mid_rules = cfg.get("yang_medium_rules") or []
     mid_rule_txt = "、".join(
@@ -197,6 +212,17 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
     ) or "10日≥6阳、15日≥8阳、20日≥10阳"
     bull_periods = detail.get("ma_bull_periods") or cfg.get("ma_bull_periods") or [5, 10, 20]
     bull_label = ">".join(f"MA{p}" for p in bull_periods)
+    hang_thr = cfg.get("structure_hang_min_upside_pct")
+    try:
+        hang_thr_pct = float(hang_thr) * 100.0 if hang_thr is not None else 8.0
+    except (TypeError, ValueError):
+        hang_thr_pct = 8.0
+    gate_reasons = gate.get("reasons") if isinstance(gate, dict) else None
+    gate_actual = (
+        "通过"
+        if structure_gate_ok
+        else ("；".join(gate_reasons) if gate_reasons else "结构硬闸未通过")
+    )
 
     steps = [
         {
@@ -232,7 +258,6 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
             "required": True,
         },
     ]
-    # 中期阳线：始终展示；仅开关开启时计入硬筛
     steps.append(
         {
             "id": "yang_medium",
@@ -252,7 +277,7 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
             "actual": (
                 f"MA5={detail.get('ma5')}，MA10={detail.get('ma10')}，"
                 f"MA20={detail.get('ma20_stack') or ma20} → "
-                f"{'多头' if ma_bull_ok else '非多头'}"
+                f"{'多头' if ma_bull_ok else ('空头' if ma_bear_ok else '非多头')}"
             ),
             "pass": ma_bull_ok if require_ma_bull else True,
             "required": require_ma_bull,
@@ -281,6 +306,21 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
                 "required": True,
             }
         )
+    if hard_gate_enabled:
+        steps.append(
+            {
+                "id": "structure_hard_gate",
+                "name": "结构硬闸",
+                "rule": (
+                    f"否决：破位支撑 / 贴·超阻力 / 悬空离支撑"
+                    f"（相对支撑≥{hang_thr_pct:g}%）；RR 偏低仅提示"
+                ),
+                "actual": gate_actual,
+                "pass": structure_gate_ok,
+                "required": True,
+                "note": "KDE 无效时不硬闸",
+            }
+        )
     steps.append(
         {
             "id": "min_score",
@@ -289,7 +329,7 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
             "actual": f"得分={score}",
             "pass": score_ok,
             "required": True,
-            "note": "须在硬筛全部通过后再判定",
+            "note": "须在硬筛与结构硬闸通过后再判定",
         }
     )
 
@@ -299,15 +339,17 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         + (f" ∧ 多头({bull_label})" if require_ma_bull else "")
         + (f" ∧ 换手≥{min_turn}" if use_turnover else "")
         + (f" ∧ 量比≥{min_vr}" if use_volume_ratio else "")
+        + (" ∧ 结构硬闸" if hard_gate_enabled else "")
         + f"；再要求得分≥{min_score}"
     )
 
     return {
-        "formula": "买点 = 硬筛全部通过 AND 得分≥最低得分",
+        "formula": "买点 = 硬筛全部通过 AND 结构硬闸通过 AND 得分≥最低得分",
         "formula_detail": formula_detail,
         "min_score": min_score,
         "score": score,
         "filter_ok": filter_ok,
+        "structure_gate_ok": structure_gate_ok,
         "score_ok": score_ok,
         "buy_signal": buy,
         "filter_reason": detail.get("filter_reason") or "",
@@ -323,8 +365,8 @@ def evaluate_buy_signal(
 ) -> Optional[Dict[str, Any]]:
     """
     对截至最新日的 DESC K 线判定 URT 买点。
-    require_pass=True：仅硬筛+得分通过才返回；False：始终返回指标与得分明细（供明细页）。
-    同时计算成交量加权 KDE 支撑/阻力（展示用，不参与硬筛）。
+    require_pass=True：仅硬筛+结构硬闸+得分通过才返回；False：始终返回指标与得分明细（供明细页）。
+    KDE 支撑/阻力参与混合结构硬闸；RR 偏低仅软标签。
     """
     ind = build_indicators(bars_desc, cfg)
     if not ind:
@@ -333,10 +375,6 @@ def evaluate_buy_signal(
     score, score_detail = compute_score_breakdown(ind, cfg)
     min_score = float(cfg.get("min_score") or 70)
     score_ok = score >= min_score
-    buy = bool(ok and score_ok)
-
-    if require_pass and not buy:
-        return None
 
     yang_rule = "4d3" if ind.get("rule_a_ok") else "5d4"
     if ind.get("rule_a_ok") and ind.get("rule_b_ok"):
@@ -345,11 +383,18 @@ def evaluate_buy_signal(
         yang_rule = "none"
 
     structure = _compute_structure_levels(bars_desc, cfg, price=ind.get("close"))
-    from .risk_tags import enrich_structure_with_rr
+    from .risk_tags import build_trend_risk_tags, enrich_structure_with_rr
 
     enriched = enrich_structure_with_rr(structure, price=ind.get("close"), cfg=cfg)
     structure = enriched["structure"]
-    risk_tags = enriched["risk_tags"]
+    risk_tags = list(enriched.get("risk_tags") or [])
+    risk_tags.extend(build_trend_risk_tags(ind))
+    hard_gate = enriched.get("structure_hard_gate") or {}
+    structure_gate_ok = not bool(hard_gate.get("blocked"))
+    buy = bool(ok and structure_gate_ok and score_ok)
+
+    if require_pass and not buy:
+        return None
 
     # 持久化进 score_detail，预计算重读无需改表
     if isinstance(score_detail, dict):
@@ -371,8 +416,11 @@ def evaluate_buy_signal(
             "rr_min_downside_pct": structure.get("rr_min_downside_pct"),
             "rr_downside_raw": structure.get("rr_downside_raw"),
             "rr_downside": structure.get("rr_downside"),
+            "hanging": structure.get("hanging"),
+            "hang_distance_pct": structure.get("hang_distance_pct"),
         }
         score_detail["risk_tags"] = risk_tags
+        score_detail["structure_hard_gate"] = hard_gate
 
     payload = {
         "signal_date": ind.get("date"),
@@ -384,6 +432,7 @@ def evaluate_buy_signal(
         "ma10": ind.get("ma10"),
         "ma20_stack": ind.get("ma20_stack"),
         "ma_bull_ok": ind.get("ma_bull_ok"),
+        "ma_bear_ok": ind.get("ma_bear_ok"),
         "ma_bull_periods": ind.get("ma_bull_periods"),
         "ma_bull_values": ind.get("ma_bull_values"),
         "yang_count_4": ind.get("yang_count_4"),
@@ -407,6 +456,8 @@ def evaluate_buy_signal(
         "buy_signal": buy,
         "filter_ok": ok,
         "filter_reason": reason,
+        "structure_gate_ok": structure_gate_ok,
+        "structure_hard_gate": hard_gate,
         "score_ok": score_ok,
         "support_levels": structure["support_levels"],
         "resistance_levels": structure["resistance_levels"],
@@ -420,6 +471,8 @@ def evaluate_buy_signal(
         "structure_rr_reason": structure.get("rr_reason"),
         "structure_rr_downside_floored": structure.get("rr_downside_floored"),
         "structure_rr_min_downside_pct": structure.get("rr_min_downside_pct"),
+        "hanging": structure.get("hanging"),
+        "hang_distance_pct": structure.get("hang_distance_pct"),
         "risk_tags": risk_tags,
     }
     payload["buy_logic"] = build_buy_logic(payload, cfg)
