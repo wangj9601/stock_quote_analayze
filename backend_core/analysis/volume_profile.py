@@ -227,6 +227,28 @@ def compare_vp_with_kde(
     vah = _f(vp.get("vah"))
     poc = _f(vp.get("poc"))
 
+    def _side_vp(*, below: bool) -> Optional[float]:
+        """按现价分侧取 VP 对照位：优先 nearest_*，否则在 VAL/VAH/POC 中同侧兜底。"""
+        preferred = vs if below else vr
+        if preferred is not None:
+            if px is None:
+                return preferred
+            if below and preferred < px:
+                return preferred
+            if (not below) and preferred > px:
+                return preferred
+        cands = [x for x in (val, vah, poc) if x is not None]
+        if px is not None:
+            if below:
+                cands = [x for x in cands if x < px]
+                return max(cands) if cands else None
+            cands = [x for x in cands if x > px]
+            return min(cands) if cands else None
+        # 无现价时：支撑偏 VAL/POC，压力偏 VAH/POC
+        if below:
+            return preferred if preferred is not None else (val if val is not None else poc)
+        return preferred if preferred is not None else (vah if vah is not None else poc)
+
     def _pair(kde_v: Optional[float], vp_v: Optional[float], label: str) -> Dict[str, Any]:
         row: Dict[str, Any] = {
             "kde": round(kde_v, PRICE_DECIMALS) if kde_v is not None else None,
@@ -247,8 +269,8 @@ def compare_vp_with_kde(
             out["notes"].append(f"{label}_aligned")
         return row
 
-    out["support"] = _pair(ks, vs if vs is not None else val, "support")
-    out["resistance"] = _pair(kr, vr if vr is not None else vah, "resistance")
+    out["support"] = _pair(ks, _side_vp(below=True), "support")
+    out["resistance"] = _pair(kr, _side_vp(below=False), "resistance")
     out["poc"] = round(poc, PRICE_DECIMALS) if poc is not None else None
     out["val"] = round(val, PRICE_DECIMALS) if val is not None else None
     out["vah"] = round(vah, PRICE_DECIMALS) if vah is not None else None

@@ -552,6 +552,11 @@ const ScreeningPage = {
             risk_tags: Array.isArray(stock.risk_tags) && stock.risk_tags.length
                 ? stock.risk_tags
                 : (Array.isArray(sd && sd.risk_tags) ? sd.risk_tags : []),
+            trade_advice: (stock.trade_advice && typeof stock.trade_advice === 'object')
+                ? stock.trade_advice
+                : ((sd && sd.trade_advice && typeof sd.trade_advice === 'object')
+                    ? sd.trade_advice
+                    : null),
             price_adjust: stock.price_adjust || null,
         };
     },

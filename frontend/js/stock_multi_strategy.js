@@ -312,7 +312,19 @@ const StockMultiStrategy = {
             if (!fetched.httpOk && !fetched.data) {
                 throw new Error(fetched.message || '阻力支撑计算失败');
             }
-            KdeLevelsTool.renderEmbedded(host, fetched.data || {}, fetched.ok, fetched.message);
+            KdeLevelsTool.renderEmbedded(host, fetched.data || {}, fetched.ok, fetched.message, {
+                adjust: 'qfq',
+                factor_source: 'auto',
+                max_levels: 8,
+                onUpdated: (result) => {
+                    this.lastLevels = {
+                        ok: !!result.ok,
+                        data: result.data || {},
+                        error: result.ok ? null : (result.message || '阻力支撑计算失败'),
+                    };
+                    this.updateExportBtn();
+                },
+            });
             this.lastLevels = {
                 ok: !!fetched.ok,
                 data: fetched.data || {},

@@ -60,12 +60,57 @@ def test_compute_from_bars_zigzag_fib_and_cam():
     assert out["atr_pivot"] is not None
     fib = out["fibonacci"]
     assert fib is not None
-    assert fib.get("anchor_method") == "zigzag_fractal"
+    assert fib.get("anchor_method") in ("zigzag_fractal", "zigzag_fractal_running")
     assert fib.get("ok") is True
     assert 0.236 in [x["ratio"] for x in fib["retracements"]]
     assert fib["swing_low"] < fib["swing_high"]
     assert fib["direction"] == "up"
     assert out["nearest_cam_support"] is not None or out["nearest_cam_resistance"] is not None
+
+
+def test_fib_reanchors_when_price_exceeds_confirmed_high():
+    """现价远超确认波段高时，按运行高点重算回撤，并保留确认锚点。"""
+    from datetime import date, timedelta
+
+    bars = _v_shape_bars(80)
+    out0 = compute_classic_levels_from_bars(bars, last_close=bars[-1]["close"])
+    fib0 = out0["fibonacci"]
+    assert fib0 and fib0.get("ok")
+    sh = float(fib0["swing_high"])
+    sl = float(fib0["swing_low"])
+    d0 = date.fromisoformat(str(bars[-1]["date"])[:10])
+    # 先回调形成新谷，再短线冲上旧高之上（ZigZag 可能仍钉旧高）
+    for i in range(1, 12):
+        c = sh - (sh - sl) * 0.4 * (i / 11.0)
+        bars.append(
+            {
+                "date": (d0 + timedelta(days=i)).isoformat(),
+                "high": round(c + 0.3, 2),
+                "low": round(c - 0.3, 2),
+                "close": round(c, 2),
+                "volume": 1_000_000,
+            }
+        )
+    d1 = date.fromisoformat(str(bars[-1]["date"])[:10])
+    for i in range(1, 4):
+        bars.append(
+            {
+                "date": (d1 + timedelta(days=i)).isoformat(),
+                "high": round(sh + 4.0, 2),
+                "low": round(sh + 2.0, 2),
+                "close": round(sh + 3.5, 2),
+                "volume": 1_000_000,
+            }
+        )
+    out = compute_classic_levels_from_bars(bars, last_close=sh + 3.5)
+    fib = out["fibonacci"]
+    assert fib and fib.get("ok") is True
+    assert fib.get("anchor_exceeded") is True
+    assert fib["swing_high"] >= sh + 3.5 - 1e-9
+    assert fib.get("confirmed_swing_high") is not None
+    assert float(fib["confirmed_swing_high"]) <= sh + 1e-9
+    r236 = next(x for x in fib["retracements"] if abs(x["ratio"] - 0.236) < 1e-9)
+    assert r236["price"] > sh * 0.9
 
 
 def test_attach_reference_includes_vp_and_confluence():

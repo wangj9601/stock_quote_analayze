@@ -222,6 +222,48 @@ const UrtScoreDetail = {
         html += `<tr><td>支撑</td><td>${supports.length ? supports.map((x) => this._fmt(x, 2)).join('、') : '--'}</td></tr>`;
         html += '</tbody></table></div>';
 
+        // 【买点建议】基于支撑/阻力的操作区（后端 trade_advice）
+        const advice = (src.trade_advice && typeof src.trade_advice === 'object')
+            ? src.trade_advice
+            : (sd.trade_advice && typeof sd.trade_advice === 'object' ? sd.trade_advice : null);
+        if (advice) {
+            const actionMap = { buy: '买入/承接', watch: '观察', avoid: '回避', sell: '减仓/离场' };
+            const confMap = { high: '高', medium: '中', low: '低' };
+            const action = advice.action || 'watch';
+            const buyZ = advice.buy_zone || {};
+            const stopZ = advice.stop_zone || {};
+            const tp = advice.take_profit || {};
+            const tpPrices = Array.isArray(tp.prices) ? tp.prices : (tp.price != null ? [tp.price] : []);
+            const zoneTxt = (z) => {
+                if (!z || typeof z !== 'object') return '--';
+                if (z.low != null && z.high != null) {
+                    return `${this._fmt(z.low, 2)} – ${this._fmt(z.high, 2)}`;
+                }
+                if (z.price != null) return this._fmt(z.price, 2);
+                return '--';
+            };
+            html += '<div class="gms-score-detail-section urt-trade-advice-section"><strong>【买点建议】</strong>';
+            html += '<div class="gms-version-meta-line">';
+            html += `<span>动作 <strong>${actionMap[action] || action}</strong></span>`;
+            html += `<span>信心 ${confMap[advice.confidence] || advice.confidence || '--'}</span>`;
+            if (advice.kde_support != null) {
+                html += `<span>结构支撑 ${this._fmt(advice.kde_support, 2)}</span>`;
+            }
+            if (advice.kde_resistance != null) {
+                html += `<span>结构阻力 ${this._fmt(advice.kde_resistance, 2)}</span>`;
+            }
+            html += '</div>';
+            html += '<table class="gms-weight-table"><thead><tr><th>项目</th><th>价位/区间</th><th>说明</th></tr></thead><tbody>';
+            html += `<tr><td>买入/承接区</td><td>${zoneTxt(buyZ)}</td><td>${buyZ.label || '--'}</td></tr>`;
+            html += `<tr><td>止损参考</td><td>${zoneTxt(stopZ)}</td><td>${stopZ.label || '--'}</td></tr>`;
+            html += `<tr><td>止盈参考</td><td>${tpPrices.length ? tpPrices.map((x) => this._fmt(x, 2)).join('、') : '--'}</td><td>${tp.label || '--'}</td></tr>`;
+            html += '</tbody></table>';
+            if (advice.summary) {
+                html += `<p class="urt-buy-logic-detail">${String(advice.summary)}</p>`;
+            }
+            html += '</div>';
+        }
+
         const riskTags = Array.isArray(src.risk_tags) && src.risk_tags.length
             ? src.risk_tags
             : (Array.isArray(sd.risk_tags) ? sd.risk_tags : []);

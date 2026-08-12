@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
-from .rules import SLOPE_UNIT_NOTE, breakout_down, breakout_up
+from .rules import SLOPE_UNIT_NOTE, consolidation_status
 from .schema import fmt_px, make_hit
 
 
@@ -75,19 +75,38 @@ def detect_triangles(
     else:
         return []
 
-    # 突破确认：统一缓冲（上破 upper×1.005 / 下破 lower×0.995）
-    confirmed = False
+    # 突破确认：预期方向 → confirmed；反向脱离 → invalidated
     if pattern_type == "ascending_triangle":
-        confirmed = breakout_up(last_c, last_hi)
+        status, st_note = consolidation_status(
+            last_c, last_hi, last_lo, expect_up=True
+        )
     elif pattern_type == "descending_triangle":
-        confirmed = breakout_down(last_c, last_lo)
-    elif pattern_type == "symmetrical_triangle":
-        confirmed = breakout_up(last_c, last_hi) or breakout_down(last_c, last_lo)
+        status, st_note = consolidation_status(
+            last_c, last_hi, last_lo, expect_down=True
+        )
+    else:
+        status, st_note = consolidation_status(
+            last_c, last_hi, last_lo, expect_up=True, expect_down=True
+        )
 
-    status = "confirmed" if confirmed else "forming"
-    conf = 0.65 if confirmed else 0.48
+    if status == "confirmed":
+        conf = 0.65
+    elif status == "invalidated":
+        conf = 0.2
+    else:
+        conf = 0.48
     shrink = 1.0 - (last_width / first_width)
     conf = min(1.0, conf + max(0.0, shrink) * 0.15)
+
+    reason = (
+        f"{label} 收敛约{round(shrink * 100, 1)}%"
+        f" {fmt_px('上沿', round(last_hi, 4), hi[-1].get('date'))}"
+        f" {fmt_px('下沿', round(last_lo, 4), lo[-1].get('date'))}"
+        f" 上沿斜率={round(hs, 6)}{SLOPE_UNIT_NOTE}"
+        f" 下沿斜率={round(ls, 6)}{SLOPE_UNIT_NOTE}"
+    )
+    if st_note:
+        reason = f"{reason} {st_note}"
 
     return [
         make_hit(
@@ -95,13 +114,7 @@ def detect_triangles(
             pattern_type=pattern_type,
             status=status,
             confidence=conf,
-            reason=(
-                f"{label} 收敛约{round(shrink * 100, 1)}%"
-                f" {fmt_px('上沿', round(last_hi, 4), hi[-1].get('date'))}"
-                f" {fmt_px('下沿', round(last_lo, 4), lo[-1].get('date'))}"
-                f" 上沿斜率={round(hs, 6)}{SLOPE_UNIT_NOTE}"
-                f" 下沿斜率={round(ls, 6)}{SLOPE_UNIT_NOTE}"
-            ),
+            reason=reason,
             key_levels={
                 "upper": round(last_hi, 4),
                 "lower": round(last_lo, 4),

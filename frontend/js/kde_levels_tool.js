@@ -153,8 +153,13 @@ const KdeLevelsTool = {
 
     /**
      * 将 levels 结果渲染到任意容器（个股分析嵌入用；口径与技术工具一致）。
+     * @param {object} [options]
+     * @param {string} [options.adjust]
+     * @param {string} [options.factor_source]
+     * @param {number} [options.max_levels]
+     * @param {function} [options.onUpdated]  VP 回看重算后回调 `{ ok, data, message }`
      */
-    renderEmbedded(container, data, ok, message) {
+    renderEmbedded(container, data, ok, message, options = {}) {
         if (!container) return;
         const fmt = (v) => this._fmtPrice(v);
         const d = data || {};
@@ -183,6 +188,8 @@ const KdeLevelsTool = {
         const vaPct = vp.value_area_pct != null
             ? `${Math.round(Number(vp.value_area_pct) * 100)}%`
             : '--';
+        const lookbackInputVal = usedLb != null ? String(usedLb) : '60';
+        const fromInputVal = String(vp.from_date || vp.window_start || '').slice(0, 10);
 
         const cmpCell = (row, field) => {
             const r = row || {};
@@ -251,9 +258,14 @@ const KdeLevelsTool = {
 
         const fibDir = fib && fib.direction;
         const fibDirTxt = fibDir === 'up' ? '上升段回撤' : fibDir === 'down' ? '下降段反弹' : '--';
-        const fibAnchor = (fib && fib.anchor_method) === 'zigzag_fractal'
-            ? 'ZigZag+分形'
-            : (fib && fib.anchor_method ? String(fib.anchor_method) : '--');
+        const fibAnchor = (fib && fib.anchor_method) === 'zigzag_fractal_running'
+            ? 'ZigZag+运行高/低'
+            : ((fib && fib.anchor_method) === 'zigzag_fractal'
+                ? 'ZigZag+分形'
+                : (fib && fib.anchor_method ? String(fib.anchor_method) : '--'));
+        const fibExceedNote = (fib && fib.anchor_exceeded)
+            ? ` · 已越过确认锚点${fib.confirmed_swing_high != null ? `高${fmt(fib.confirmed_swing_high)}` : ''}${fib.confirmed_swing_low != null && fib.direction === 'down' ? `/低${fmt(fib.confirmed_swing_low)}` : ''}，按运行极值重算`
+            : '';
         const fibBits = [];
         if (fib && fib.depth_pct != null) fibBits.push(`深度 ${(Number(fib.depth_pct) * 100).toFixed(1)}%`);
         if (fib && fib.bar_span != null) fibBits.push(`跨度 ${fib.bar_span} 根`);
@@ -330,15 +342,28 @@ const KdeLevelsTool = {
                 </h4>
                 <div class="kde-levels-grid kde-levels-grid--vp">
                     <div class="kde-levels-card vp">
-                        <h4>价值区</h4>
+                        <h4>日线 VP（可调回看）</h4>
                         <div class="kde-levels-near">
                             <div>POC：<strong>${fmt(vp.poc)}</strong></div>
                             <div>VAL：<strong>${fmt(vp.val)}</strong></div>
                             <div>VAH：<strong>${fmt(vp.vah)}</strong></div>
                             <div>最近支撑：<strong>${fmt(vp.nearest_support)}</strong></div>
                             <div>最近压力：<strong>${fmt(vp.nearest_resistance)}</strong></div>
-                            <div class="kde-levels-dir">（实际 <strong>${usedLb != null ? String(usedLb) : '--'}</strong> 日${winText}）
-                                · 价值区 <strong>${vaPct}</strong></div>
+                            <div class="kde-levels-dir kde-vp-lookback-ctrl">
+                                <span>回看</span>
+                                <input type="number" class="kde-vp-lookback-days ssa-vp-lookback-days"
+                                    min="5" max="750" step="1" value="${this._esc(lookbackInputVal)}"
+                                    title="回看交易日数">
+                                <span>日 · 起始</span>
+                                <input type="date" class="kde-vp-from-date ssa-vp-from-date"
+                                    value="${this._esc(fromInputVal)}"
+                                    title="回看起始日期（优先于天数）">
+                                <button type="button" class="btn btn-secondary btn-sm ssa-vp-lookback-apply">应用</button>
+                                <span class="kde-vp-lookback-meta">
+                                    （实际 <strong>${usedLb != null ? String(usedLb) : '--'}</strong> 日${winText}）
+                                    · 价值区 <strong>${vaPct}</strong>
+                                </span>
+                            </div>
                         </div>
                     </div>
                     <div class="kde-levels-card vp-compare">
@@ -372,7 +397,7 @@ const KdeLevelsTool = {
                     <div class="kde-levels-card fib">
                         <h4>黄金分割</h4>
                         <div class="kde-levels-near">
-                            <div class="kde-levels-meta-line">锚定：<strong>${this._esc(fibAnchor)}</strong>${this._esc(fibDepth)}</div>
+                            <div class="kde-levels-meta-line">锚定：<strong>${this._esc(fibAnchor)}</strong>${this._esc(fibDepth)}${this._esc(fibExceedNote)}</div>
                             <div>高点：<strong>${fmt(fib && fib.swing_high)}</strong>
                                 <span class="kde-levels-date">${fib && fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}</span></div>
                             <div>低点：<strong>${fmt(fib && fib.swing_low)}</strong>
@@ -411,6 +436,131 @@ const KdeLevelsTool = {
                 </div>
                 <p class="kde-levels-meta">${this._esc(metaParts.join(' · '))}</p>
             </div>`;
+
+        this._bindEmbeddedVpControls(container, {
+            code,
+            adjust: options.adjust != null
+                ? (options.adjust === 'qfq' ? 'qfq' : 'none')
+                : (d.price_adjust === 'qfq' ? 'qfq' : 'none'),
+            factor_source: options.factor_source || 'auto',
+            max_levels: options.max_levels != null ? options.max_levels : 8,
+            onUpdated: typeof options.onUpdated === 'function' ? options.onUpdated : null,
+        });
+    },
+
+    _readEmbeddedVpParams(container) {
+        const daysEl = container && container.querySelector('.ssa-vp-lookback-days');
+        const fromEl = container && container.querySelector('.ssa-vp-from-date');
+        const fromDate = fromEl && fromEl.value ? String(fromEl.value).trim() : '';
+        let days = null;
+        if (daysEl && daysEl.value !== '') {
+            const n = parseInt(daysEl.value, 10);
+            if (Number.isFinite(n)) {
+                days = Math.max(5, Math.min(750, n));
+            }
+        }
+        return { vp_from_date: fromDate || null, vp_lookback: days };
+    },
+
+    _bindEmbeddedVpControls(container, ctx) {
+        if (!container) return;
+        const applyBtn = container.querySelector('.ssa-vp-lookback-apply');
+        const daysInput = container.querySelector('.ssa-vp-lookback-days');
+        const fromInput = container.querySelector('.ssa-vp-from-date');
+        const run = () => this._applyEmbeddedVpLookback(container, ctx);
+
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => run());
+        }
+        if (daysInput) {
+            daysInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (fromInput) fromInput.value = '';
+                    run();
+                }
+            });
+            daysInput.addEventListener('change', () => {
+                if (fromInput && fromInput.value) fromInput.value = '';
+            });
+        }
+        if (fromInput) {
+            fromInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    run();
+                }
+            });
+        }
+    },
+
+    async _applyEmbeddedVpLookback(container, ctx) {
+        const code = (ctx && ctx.code) || '';
+        if (!code) {
+            if (window.CommonUtils) CommonUtils.showToast('缺少股票代码，请先完成分析', 'warning');
+            return;
+        }
+        if (window.CommonUtils && !CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const params = this._readEmbeddedVpParams(container);
+        const applyBtn = container.querySelector('.ssa-vp-lookback-apply');
+        if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.textContent = '计算中…';
+        }
+        const statusEl = document.getElementById('ssaLevelsStatus');
+        if (statusEl) {
+            statusEl.hidden = false;
+            statusEl.className = 'ssa-block-status is-loading';
+            statusEl.textContent = '正在按回看窗口重算 Volume Profile…';
+        }
+        try {
+            const fetched = await this.fetchLevels(code, {
+                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                factor_source: (ctx && ctx.factor_source) || 'auto',
+                max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
+                vp_from_date: params.vp_from_date || undefined,
+                vp_lookback: params.vp_from_date
+                    ? undefined
+                    : (params.vp_lookback != null ? params.vp_lookback : undefined),
+            });
+            if (fetched.candidates && fetched.candidates.length > 1 && !fetched.data) {
+                throw new Error(fetched.message || '股票代码不唯一');
+            }
+            if (!fetched.httpOk && !fetched.data) {
+                throw new Error(fetched.message || 'VP 回看重算失败');
+            }
+            this.renderEmbedded(container, fetched.data || {}, fetched.ok, fetched.message, {
+                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                factor_source: (ctx && ctx.factor_source) || 'auto',
+                max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
+                onUpdated: ctx && ctx.onUpdated,
+            });
+            if (ctx && typeof ctx.onUpdated === 'function') {
+                ctx.onUpdated({
+                    ok: !!fetched.ok,
+                    data: fetched.data || {},
+                    message: fetched.message || '',
+                });
+            }
+            if (statusEl) {
+                statusEl.hidden = true;
+                statusEl.textContent = '';
+            }
+            if (window.CommonUtils) CommonUtils.showToast('VP 回看已更新', 'success');
+        } catch (e) {
+            console.warn('个股分析·VP 回看重算失败', e);
+            if (applyBtn) {
+                applyBtn.disabled = false;
+                applyBtn.textContent = '应用';
+            }
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.className = 'ssa-block-status is-error';
+                statusEl.textContent = e.message || 'VP 回看重算失败';
+            }
+            if (window.CommonUtils) CommonUtils.showToast(e.message || 'VP 回看重算失败', 'error');
+        }
     },
 
     _esc(s) {
@@ -760,12 +910,14 @@ const KdeLevelsTool = {
                 : '';
         }
         if (fibAnchorEl) {
-            fibAnchorEl.textContent =
-                (fib && fib.anchor_method) === 'zigzag_fractal'
-                    ? 'ZigZag+分形'
-                    : fib && fib.anchor_method
-                      ? String(fib.anchor_method)
-                      : '--';
+            if ((fib && fib.anchor_method) === 'zigzag_fractal_running') {
+                fibAnchorEl.textContent = 'ZigZag+运行高/低';
+            } else if ((fib && fib.anchor_method) === 'zigzag_fractal') {
+                fibAnchorEl.textContent = 'ZigZag+分形';
+            } else {
+                fibAnchorEl.textContent =
+                    fib && fib.anchor_method ? String(fib.anchor_method) : '--';
+            }
         }
         if (fibDepthEl) {
             const bits = [];
@@ -780,6 +932,9 @@ const KdeLevelsTool = {
             }
             if (fib && fib.skipped_short_leg) {
                 bits.push('已跳过过短波段');
+            }
+            if (fib && fib.anchor_exceeded) {
+                bits.push('已越过确认锚点，按运行极值重算');
             }
             fibDepthEl.textContent = bits.length ? ` · ${bits.join(' · ')}` : '';
         }

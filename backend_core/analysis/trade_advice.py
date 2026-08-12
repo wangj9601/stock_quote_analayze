@@ -253,24 +253,114 @@ def build_trade_advice(
                 action = "watch"
 
     elif kind == "urt":
+        ma20 = _f(row.get("ma20"))
+        tags = row.get("risk_tags") or []
+        tag_ids = {
+            (t.get("id") if isinstance(t, dict) else t)
+            for t in tags
+            if t is not None
+        }
+        tag_levels = {
+            (t.get("id") if isinstance(t, dict) else ""): (t.get("level") if isinstance(t, dict) else "")
+            for t in tags
+            if isinstance(t, dict)
+        }
+        overheat_soft = any(
+            tid in ("recent_overheat", "ma20_overheat") and tag_levels.get(tid) == "warn"
+            for tid in tag_ids
+        )
+        overheat_hard = any(
+            tid in ("recent_overheat", "ma20_overheat") and tag_levels.get(tid) == "danger"
+            for tid in tag_ids
+        )
+        rr = _f(row.get("structure_rr"))
+        if rr is None:
+            st = row.get("structure") if isinstance(row.get("structure"), dict) else {}
+            rr = _f(st.get("rr"))
+
         if bool(row.get("buy_signal")):
             action = "buy"
-            ma20 = _f(row.get("ma20"))
-            buy_zone = _zone(
-                price=close or ma20,
-                label="上升趋势买点：信号价附近或回踩MA20/支撑不破",
-                basis="urt_buy+ma20" if ma20 else "urt_buy",
-            )
-            summary_bits.append("URT买点成立：回踩MA20或结构支撑不破可持有/加")
+            # 默认：支撑～现价/MA20 的回踩承接区；已远离支撑或过热软标时强调回踩不追
+            prefer_pullback = False
+            if close is not None and kde_s is not None and close > 0:
+                dist_pct = (float(close) - float(kde_s)) / float(close)
+                if dist_pct >= 0.03 or overheat_soft:
+                    prefer_pullback = True
+            if overheat_hard:
+                prefer_pullback = True
+                confidence = "low"
+
+            entry_low = None
+            entry_high = None
+            anchors = [
+                x
+                for x in (kde_s, ma20)
+                if x is not None and (close is None or float(x) <= float(close) + 1e-12)
+            ]
+            if anchors:
+                entry_low = min(float(x) for x in anchors)
+                entry_high = max(float(x) for x in anchors)
+            elif kde_s is not None:
+                entry_low = float(kde_s)
+            elif ma20 is not None:
+                entry_low = float(ma20)
+
+            if prefer_pullback and entry_low is not None:
+                # 回踩区：MA20 与结构支撑之间（若仅一侧有效则在该位附近）
+                if entry_high is None:
+                    entry_high = (
+                        min(float(close), float(entry_low) * 1.02)
+                        if close is not None
+                        else float(entry_low)
+                    )
+                elif close is not None and entry_high > float(close):
+                    entry_high = float(close)
+                buy_zone = _zone(
+                    low=entry_low,
+                    high=entry_high,
+                    price=kde_s or entry_low,
+                    label="回踩承接：优先在结构支撑～MA20 一带分批，不宜追高",
+                    basis="urt_buy+pullback+kde" if kde_s else "urt_buy+pullback",
+                )
+                summary_bits.append(
+                    "URT买点成立：价离支撑偏远或存在过热软提示，建议回踩支撑/MA20 承接，不追涨"
+                )
+            else:
+                buy_zone = _zone(
+                    low=entry_low,
+                    high=close,
+                    price=close or entry_low or ma20,
+                    label="上升趋势买点：现价附近跟进，或回踩支撑/MA20 不破加仓",
+                    basis="urt_buy+kde" if kde_s else "urt_buy",
+                )
+                summary_bits.append("URT买点成立：现价附近可跟，回踩支撑/MA20 不破可持有或加仓")
+
+            if rr is not None:
+                summary_bits.append(f"结构盈亏比 RR≈{rr:.2f}")
+            if kde_s is not None and kde_r is not None and close is not None:
+                summary_bits.append(
+                    f"关键位：支撑{_fmt_px(kde_s)} / 现价{_fmt_px(close)} / 阻力{_fmt_px(kde_r)}"
+                )
+            if overheat_soft and not overheat_hard:
+                confidence = "medium"
+                summary_bits.append("过热软提示：控制仓位、分批，优先等回踩")
+        else:
+            action = "watch"
+            summary_bits.append("未达正式买点：仅观察，不以现价追入")
+            if kde_s is not None:
+                summary_bits.append(f"关注回踩结构支撑{_fmt_px(kde_s)}附近是否企稳")
+
         if kde_s is not None:
             stop_zone = _zone(price=kde_s, label="跌破最近结构支撑止损", basis="kde")
+        elif ma20 is not None:
+            stop_zone = _zone(price=ma20, label="有效跌破 MA20 减仓/离场", basis="ma20")
         if kde_r is not None:
-            take_profit = {"label": "压力区止盈", "basis": "kde", "prices": [round(kde_r, 4)]}
-        tags = row.get("risk_tags") or []
-        if any(
-            (t.get("id") if isinstance(t, dict) else t) in ("structure_rr_poor", "rr_poor")
-            for t in tags
-        ):
+            take_profit = {
+                "label": "靠近结构压力减仓/止盈",
+                "basis": "kde",
+                "prices": [round(kde_r, 4)],
+            }
+        if "structure_rr_poor" in tag_ids or "rr_poor" in tag_ids:
             confidence = "low"
             if action == "buy":
                 action = "watch"

@@ -99,6 +99,24 @@ def test_compare_vp_with_kde_not_aligned():
     assert cmp_["resistance"]["aligned"] is False
 
 
+def test_compare_vp_does_not_use_vah_below_price_as_resistance():
+    """现价已越过 VAH 时，压力对照不得再兜底塞入现价下方的 VAH。"""
+    vp = {
+        "ok": True,
+        "poc": 2.90,
+        "val": 2.49,
+        "vah": 3.24,
+        "nearest_support": 2.90,
+        "nearest_resistance": None,
+        "last_close": 3.86,
+    }
+    cmp_ = compare_vp_with_kde(
+        vp, kde_support=3.84, kde_resistance=4.04, price=3.86
+    )
+    assert cmp_["resistance"]["vp"] is None
+    assert cmp_["support"]["vp"] == 2.90
+
+
 def test_vp_insufficient_bars():
     out = compute_volume_profile_from_bars(
         [{"high": 1, "low": 1, "close": 1, "volume": 1}] * 3,

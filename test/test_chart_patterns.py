@@ -25,6 +25,7 @@ from backend_core.analysis.chart_patterns.rules import (
     SLOPE_UNIT_NOTE,
     WEDGE_ENDPOINT_REL_EPS,
     breakout_up,
+    consolidation_status,
 )
 from backend_core.analysis.chart_patterns.schema import fmt_px, make_hit
 from backend_core.analysis.chart_patterns.scanner import HARD_SCAN_CAP, DEFAULT_SCAN_LIMIT
@@ -38,7 +39,19 @@ from backend_core.analysis.chart_patterns.wedges_flags import (
 def test_fmt_px_with_and_without_date():
     assert fmt_px("左肩", 44.97, "2026-03-12") == "左肩=44.97(2026-03-12)"
     assert fmt_px("颈线", 40.27, approx=True) == "颈线≈40.27"
-    assert fmt_px("L1", 10, None) == "L1=10"
+    assert fmt_px("L1", 10, None) == "L1=10.00"
+    assert fmt_px("L1", 5.7057, "2026-05-22") == "L1=5.71(2026-05-22)"
+
+
+def test_consolidation_status_bear_flag_up_exit_invalidated():
+    """下降旗形预期下破；现价远破上沿 → invalidated，不再形成中。"""
+    st, note = consolidation_status(3.86, 3.24, 2.72, expect_down=True)
+    assert st == "invalidated"
+    assert "向上脱离" in note
+    st2, _ = consolidation_status(2.70, 3.24, 2.72, expect_down=True)
+    assert st2 == "confirmed"
+    st3, _ = consolidation_status(3.00, 3.24, 2.72, expect_down=True)
+    assert st3 == "forming"
 
 
 def _bars_from_closes(closes, start=None):

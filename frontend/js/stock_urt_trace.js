@@ -317,6 +317,9 @@
                         nearest_resistance: nearRes,
                         support_levels: supports,
                         resistance_levels: resists,
+                        trade_advice: r.trade_advice
+                            || (r.score_detail && r.score_detail.trade_advice)
+                            || null,
                         kde_ok: r.kde_ok != null ? r.kde_ok : st.kde_ok,
                         kde_reason: r.kde_reason || st.kde_reason,
                         kde_lookback_used: r.kde_lookback_used != null ? r.kde_lookback_used : st.kde_lookback_used,

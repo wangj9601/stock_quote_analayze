@@ -536,6 +536,22 @@ def evaluate_buy_signal(
         score_detail["ma20_bias"] = ind.get("ma20_bias")
         score_detail["overheat_lookback_days"] = ind.get("overheat_lookback_days")
 
+    from backend_core.analysis.trade_advice import build_trade_advice
+
+    advice_row = {
+        "buy_signal": buy,
+        "close": ind.get("close"),
+        "ma20": ind.get("ma20"),
+        "nearest_support": structure.get("nearest_support"),
+        "nearest_resistance": structure.get("nearest_resistance"),
+        "structure": structure,
+        "structure_rr": structure.get("rr"),
+        "risk_tags": risk_tags,
+    }
+    trade_advice = build_trade_advice("urt", advice_row)
+    if isinstance(score_detail, dict):
+        score_detail["trade_advice"] = trade_advice
+
     payload = {
         "signal_date": ind.get("date"),
         "close": ind.get("close"),
@@ -587,6 +603,7 @@ def evaluate_buy_signal(
         "kde_reason": structure["kde_reason"],
         "kde_lookback_used": structure["kde_lookback_used"],
         "kde_lookback_expanded": structure["kde_lookback_expanded"],
+        "trade_advice": trade_advice,
         "structure_rr": structure.get("rr"),
         "structure_rr_reason": structure.get("rr_reason"),
         "structure_rr_downside_floored": structure.get("rr_downside_floored"),

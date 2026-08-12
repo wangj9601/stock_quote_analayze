@@ -12,6 +12,9 @@ DEFAULT_LOOKBACK = 60
 OHLC_LOOKBACK = 180  # ZigZag / 批量日线回看
 MIN_RANGE_PCT = 0.01  # (H-L)/L 过窄则跳过 Fib
 PRICE_DECIMALS = 2  # 展示/入库口径：元，两位小数
+# 现价相对确认波段极值：越过则按运行高/低重算 Fib（保留确认锚点元数据）
+ANCHOR_EXCEED_UP_MULT = 1.005
+ANCHOR_EXCEED_DOWN_MULT = 0.995
 
 
 def _f(v: Any) -> Optional[float]:
@@ -222,19 +225,80 @@ def compute_classic_levels_from_bars(
         swing_high_date = swing["swing_high_date"]
         swing_low_date = swing["swing_low_date"]
         if swing_low > 0 and (swing_high - swing_low) / swing_low >= float(min_range_pct):
-            fib = fibonacci_from_swing(swing_high, swing_low, direction=direction)
-            fib["anchor_method"] = "zigzag_fractal"
+            anchor_high = swing_high
+            anchor_low = swing_low
+            anchor_high_date = swing_high_date
+            anchor_low_date = swing_low_date
+            fib_direction = direction
+            exceeded = False
+            running_extreme = None
+
+            if last_c is not None:
+                # 无论原波段方向：现价有效越过确认高点 → 按运行高点重算上升段 Fib
+                if last_c > swing_high * ANCHOR_EXCEED_UP_MULT:
+                    run_hi = swing_high
+                    hi_d = str(swing_high_date or "")[:10]
+                    for d, h, _lo, _c in parsed:
+                        ds = d.isoformat()[:10]
+                        if hi_d and ds < hi_d:
+                            continue
+                        run_hi = max(run_hi, float(h))
+                    run_hi = max(run_hi, float(last_c))
+                    if run_hi > swing_high:
+                        anchor_high = run_hi
+                        anchor_high_date = parsed[-1][0].isoformat()
+                        # 低点：原上升段保留 swing_low；原下降段则用确认低点
+                        anchor_low = swing_low
+                        anchor_low_date = swing_low_date
+                        fib_direction = "up"
+                        exceeded = True
+                        running_extreme = run_hi
+                elif last_c < swing_low * ANCHOR_EXCEED_DOWN_MULT:
+                    run_lo = swing_low
+                    lo_d = str(swing_low_date or "")[:10]
+                    for d, _h, lo, _c in parsed:
+                        ds = d.isoformat()[:10]
+                        if lo_d and ds < lo_d:
+                            continue
+                        run_lo = min(run_lo, float(lo))
+                    run_lo = min(run_lo, float(last_c))
+                    if run_lo < swing_low:
+                        anchor_low = run_lo
+                        anchor_low_date = parsed[-1][0].isoformat()
+                        anchor_high = swing_high
+                        anchor_high_date = swing_high_date
+                        fib_direction = "down"
+                        exceeded = True
+                        running_extreme = run_lo
+
+            fib = fibonacci_from_swing(anchor_high, anchor_low, direction=fib_direction)
+            fib["anchor_method"] = (
+                "zigzag_fractal_running" if exceeded else "zigzag_fractal"
+            )
             fib["ok"] = True
-            fib["reason"] = "ok"
-            fib["swing_high_date"] = swing_high_date
-            fib["swing_low_date"] = swing_low_date
+            fib["reason"] = "anchor_exceeded_running_extreme" if exceeded else "ok"
+            fib["swing_high_date"] = anchor_high_date
+            fib["swing_low_date"] = anchor_low_date
+            fib["confirmed_swing_high"] = round(swing_high, PRICE_DECIMALS)
+            fib["confirmed_swing_low"] = round(swing_low, PRICE_DECIMALS)
+            fib["confirmed_swing_high_date"] = swing_high_date
+            fib["confirmed_swing_low_date"] = swing_low_date
+            fib["confirmed_direction"] = direction
+            if exceeded:
+                fib["anchor_exceeded"] = True
+                fib["running_extreme"] = round(float(running_extreme), PRICE_DECIMALS)
             _fib_zz_meta(fib, swing)
+            # 越过锚点后：回撤 + 全部扩展一并参与最近支撑/压力
             fib_prices = [x["price"] for x in (fib.get("retracements") or [])]
             ext = fib.get("extensions") or []
+            for e in ext:
+                try:
+                    fib_prices.append(float(e["price"]))
+                except (TypeError, ValueError, KeyError):
+                    continue
             if ext and last_c is not None:
                 nearest_ext = min(ext, key=lambda x: abs(float(x["price"]) - last_c))
                 fib["nearest_extension"] = nearest_ext
-                fib_prices.append(float(nearest_ext["price"]))
             if last_c is not None:
                 nearest_fib_s = _nearest_below(fib_prices, last_c)
                 nearest_fib_r = _nearest_above(fib_prices, last_c)
@@ -242,6 +306,8 @@ def compute_classic_levels_from_bars(
                     nearest_fib_s = round(nearest_fib_s, PRICE_DECIMALS)
                 if nearest_fib_r is not None:
                     nearest_fib_r = round(nearest_fib_r, PRICE_DECIMALS)
+            if exceeded:
+                fib_reason = "anchor_exceeded_running_extreme"
         else:
             fib = {
                 "anchor_method": "zigzag_fractal",

@@ -305,7 +305,9 @@ const PatternTool = {
     if (!levels || typeof levels !== 'object') return '--';
     const parts = [];
     ['neckline', 'upper', 'lower', 'head', 'l1', 'l2', 'h1', 'h2', 'last_close'].forEach((k) => {
-      if (levels[k] != null && levels[k] !== '') parts.push(`${k}:${levels[k]}`);
+      if (levels[k] != null && levels[k] !== '') {
+        parts.push(`${k}:${this._fmtPx(levels[k])}`);
+      }
     });
     return parts.slice(0, 4).join(' ') || '--';
   },
@@ -358,7 +360,8 @@ const PatternTool = {
     const parts = priced.map((p) => {
       const name = this.PIVOT_ROLE_LABELS[p.role] || p.role || '';
       const d = String(p.date || '').slice(0, 10);
-      return d ? `${name}=${p.price}(${d})` : `${name}=${p.price}`;
+      const px = this._fmtPx(p.price);
+      return d ? `${name}=${px}(${d})` : `${name}=${px}`;
     });
 
     const levels = r.key_levels || {};
@@ -366,7 +369,7 @@ const PatternTool = {
     const shrink = reason.match(/收敛约[^\s]+/);
     if (shrink) extras.push(shrink[0]);
     if (levels.neckline != null && levels.neckline !== '' && !priced.some((p) => p.role === 'neck')) {
-      extras.push(`颈线≈${levels.neckline}`);
+      extras.push(`颈线≈${this._fmtPx(levels.neckline)}`);
     }
     const slopeUnit =
       levels.slope_unit ||
@@ -579,7 +582,7 @@ const PatternTool = {
     if (n == null) return '--';
     const x = Number(n);
     if (!Number.isFinite(x)) return '--';
-    return Math.abs(x) >= 100 ? x.toFixed(1) : x.toFixed(2);
+    return x.toFixed(2);
   },
 
   /** 置信度偏低或形成中 → 标注「观察中」 */

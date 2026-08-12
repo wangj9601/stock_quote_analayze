@@ -39,6 +39,37 @@ def breakout_down(last_close: float, lower: float) -> bool:
     return lower > 0 and last_close < lower * BREAKOUT_DOWN_MULT
 
 
+def consolidation_status(
+    last_close: float,
+    upper: float,
+    lower: float,
+    *,
+    expect_up: bool = False,
+    expect_down: bool = False,
+) -> tuple[str, str]:
+    """巩固形态状态：预期方向突破→confirmed；反向脱离通道→invalidated；否则 forming。
+
+    返回 (status, note)；note 非空时可拼进 reason。
+    """
+    up = breakout_up(last_close, upper)
+    down = breakout_down(last_close, lower)
+    if expect_up and up:
+        return "confirmed", ""
+    if expect_down and down:
+        return "confirmed", ""
+    if expect_up and expect_down:
+        # 对称三角：任一方向突破均确认
+        if up or down:
+            return "confirmed", ""
+        return "forming", ""
+    # 单边预期：反向有效突破 → 形态假设失效
+    if expect_up and down:
+        return "invalidated", "失效:收盘已向下脱离通道"
+    if expect_down and up:
+        return "invalidated", "失效:收盘已向上脱离通道"
+    return "forming", ""
+
+
 def invalidate_bottom(last_close: float, low_ref: float) -> bool:
     """底部形态：价位跌破参考低点 × 0.99（可用于 close 或 low）。"""
     return low_ref > 0 and last_close < low_ref * INVALIDATE_BOTTOM_MULT
