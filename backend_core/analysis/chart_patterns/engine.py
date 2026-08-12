@@ -33,11 +33,31 @@ FAMILY_ALIASES = {
     "wedge_flag": "wedge_flag",
 }
 
-# 楔/旗重叠对：同向巩固形态易同界误报
+# 同源重叠对：同向巩固形态易同界/同枢轴误报双出
 _NMS_PAIRS = (
     frozenset({"falling_wedge", "bear_flag"}),
     frozenset({"rising_wedge", "bull_flag"}),
+    frozenset({"descending_triangle", "falling_wedge"}),
+    frozenset({"ascending_triangle", "rising_wedge"}),
 )
+
+# 三角↔楔形：用斜率几何定主分类（而非纯置信度）
+_TRIANGLE_WEDGE_PAIRS = frozenset(
+    {
+        frozenset({"descending_triangle", "falling_wedge"}),
+        frozenset({"ascending_triangle", "rising_wedge"}),
+    }
+)
+
+_PATTERN_LABEL_ZH = {
+    "descending_triangle": "下降三角",
+    "ascending_triangle": "上升三角",
+    "symmetrical_triangle": "对称三角",
+    "falling_wedge": "下降楔形",
+    "rising_wedge": "上升楔形",
+    "bear_flag": "下降旗形",
+    "bull_flag": "上升旗形",
+}
 
 
 def normalize_families(types: Optional[Iterable[str]]) -> Set[str]:
@@ -92,23 +112,204 @@ def _spans_overlap(a: Tuple[str, str], b: Tuple[str, str]) -> bool:
     return not (a1 < b0 or b1 < a0)
 
 
+def _hit_status_tier(h: Dict[str, Any]) -> int:
+    st = str(h.get("status") or "")
+    if st == "confirmed":
+        return 2
+    if st == "forming":
+        return 1
+    return 0
+
+
 def _hit_rank_key(h: Dict[str, Any]) -> Tuple[int, float]:
     """优先已确认，其次置信度。"""
-    st = str(h.get("status") or "")
-    conf = float(h.get("confidence") or 0)
-    if st == "confirmed":
-        return (2, conf)
-    if st == "forming":
-        return (1, conf)
-    return (0, conf)
+    return (_hit_status_tier(h), float(h.get("confidence") or 0))
 
 
-def nms_wedge_flag_overlaps(
+def _merged_slopes(
+    ha: Dict[str, Any], hb: Dict[str, Any]
+) -> Tuple[Optional[float], Optional[float], float]:
+    """取上下沿斜率与价格参考（用于走平阈值）。"""
+    la = ha.get("key_levels") or {}
+    lb = hb.get("key_levels") or {}
+    us = la.get("upper_slope")
+    if us is None:
+        us = lb.get("upper_slope")
+    ls = la.get("lower_slope")
+    if ls is None:
+        ls = lb.get("lower_slope")
+    ref = (
+        la.get("upper")
+        or la.get("lower")
+        or lb.get("upper")
+        or lb.get("lower")
+        or 1.0
+    )
+    try:
+        us_f = float(us) if us is not None else None
+    except (TypeError, ValueError):
+        us_f = None
+    try:
+        ls_f = float(ls) if ls is not None else None
+    except (TypeError, ValueError):
+        ls_f = None
+    try:
+        ref_f = abs(float(ref))
+    except (TypeError, ValueError):
+        ref_f = 1.0
+    if ref_f <= 1e-12:
+        ref_f = 1.0
+    return us_f, ls_f, ref_f
+
+
+def _geom_preferred_type(ha: Dict[str, Any], hb: Dict[str, Any]) -> Optional[str]:
+    """三角↔楔形：按下/上沿是否近似走平定主分类；无法判断则 None。"""
+    ta = str(ha.get("pattern_type") or "")
+    tb = str(hb.get("pattern_type") or "")
+    pair = frozenset({ta, tb})
+    if pair not in _TRIANGLE_WEDGE_PAIRS:
+        return None
+    us, ls, ref = _merged_slopes(ha, hb)
+    if us is None or ls is None:
+        return None
+    # 与 triangles.detect_triangles 同量级：价格 × 0.0008 作为斜率「走平」阈值
+    flat_thr = max(ref * 0.0008, 1e-9)
+    if pair == frozenset({"descending_triangle", "falling_wedge"}):
+        # 下沿近似走平 + 上沿下行 → 下降三角；双沿明确下行 → 下降楔形
+        if abs(ls) < flat_thr and us < -flat_thr:
+            return "descending_triangle"
+        if us < -flat_thr and ls < -flat_thr:
+            return "falling_wedge"
+        return None
+    if pair == frozenset({"ascending_triangle", "rising_wedge"}):
+        if abs(us) < flat_thr and ls > flat_thr:
+            return "ascending_triangle"
+        if us > flat_thr and ls > flat_thr:
+            return "rising_wedge"
+        return None
+    return None
+
+
+def _pattern_label_zh(pattern_type: str) -> str:
+    t = str(pattern_type or "")
+    return _PATTERN_LABEL_ZH.get(t, t or "未知形态")
+
+
+def _annotate_nms_suppressed(keeper: Dict[str, Any], dropped: Dict[str, Any]) -> None:
+    """在保留项 reason / nms_suppressed 中记录被抑制的同源形态。"""
+    label = _pattern_label_zh(str(dropped.get("pattern_type") or ""))
+    note = f"同源亦曾匹配{label}"
+    reason = str(keeper.get("reason") or "").strip()
+    if note not in reason:
+        keeper["reason"] = f"{reason}；{note}" if reason else note
+    suppressed = list(keeper.get("nms_suppressed") or [])
+    suppressed.append(
+        {
+            "pattern_type": dropped.get("pattern_type"),
+            "confidence": dropped.get("confidence"),
+            "status": dropped.get("status"),
+            "label": label,
+        }
+    )
+    keeper["nms_suppressed"] = suppressed
+
+
+def _pick_nms_winner(
+    ha: Dict[str, Any],
+    hb: Dict[str, Any],
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """选出保留项与丢弃项：状态优先 → 三角/楔斜率几何 → 置信度。"""
+    sa, sb = _hit_status_tier(ha), _hit_status_tier(hb)
+    if sa != sb:
+        return (ha, hb) if sa > sb else (hb, ha)
+    pref = _geom_preferred_type(ha, hb)
+    if pref:
+        ta = str(ha.get("pattern_type") or "")
+        tb = str(hb.get("pattern_type") or "")
+        if pref == ta and pref != tb:
+            return ha, hb
+        if pref == tb and pref != ta:
+            return hb, ha
+    if _hit_rank_key(ha) >= _hit_rank_key(hb):
+        return ha, hb
+    return hb, ha
+
+
+def _role_pivot_series(
+    hit: Dict[str, Any], role: str
+) -> List[Tuple[str, float]]:
+    out: List[Tuple[str, float]] = []
+    for p in hit.get("pivots") or []:
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("role") or "") != role:
+            continue
+        try:
+            px = float(p.get("price"))
+        except (TypeError, ValueError):
+            continue
+        if px != px:
+            continue
+        out.append((str(p.get("date") or "")[:10], px))
+    return out
+
+
+def _pivot_series_homologous(
+    a: List[Tuple[str, float]],
+    b: List[Tuple[str, float]],
+    *,
+    rel_tol: float,
+) -> bool:
+    """同角色枢轴条数一致且按日期排序后价位相对差均 ≤ rel_tol（日期均有则须相同）。"""
+    if len(a) < 2 or len(b) < 2 or len(a) != len(b):
+        return False
+    sa, sb = sorted(a), sorted(b)
+    for (da, pa), (db, pb) in zip(sa, sb):
+        if da and db and da != db:
+            return False
+        d = _bound_rel_diff(pa, pb)
+        if d is None or d > rel_tol:
+            return False
+    return True
+
+
+def _hits_homologous(
+    ha: Dict[str, Any],
+    hb: Dict[str, Any],
+    *,
+    rel_tol: float,
+) -> bool:
+    """同时间段且（上下沿同界 或 高/低枢轴序列同源）视为同一结构误报双出。"""
+    if not _spans_overlap(_pivot_date_span(ha), _pivot_date_span(hb)):
+        return False
+    la = ha.get("key_levels") or {}
+    lb = hb.get("key_levels") or {}
+    du = _bound_rel_diff(la.get("upper"), lb.get("upper"))
+    dl = _bound_rel_diff(la.get("lower"), lb.get("lower"))
+    if du is not None and dl is not None and du <= rel_tol and dl <= rel_tol:
+        return True
+    return _pivot_series_homologous(
+        _role_pivot_series(ha, "high"),
+        _role_pivot_series(hb, "high"),
+        rel_tol=rel_tol,
+    ) and _pivot_series_homologous(
+        _role_pivot_series(ha, "low"),
+        _role_pivot_series(hb, "low"),
+        rel_tol=rel_tol,
+    )
+
+
+def nms_overlapping_patterns(
     hits: List[Dict[str, Any]],
     *,
     rel_tol: float = NMS_BOUND_REL_TOL,
 ) -> List[Dict[str, Any]]:
-    """下降楔形↔下降旗形、上升楔形↔上升旗形：同界且同时间段只留更优者。"""
+    """巩固形态 NMS：同源重叠对只保留一条，并在 reason 注明被抑制项。
+
+    覆盖：下降楔↔下降旗、上升楔↔上升旗、下降三角↔下降楔、上升三角↔上升楔。
+    选取：已确认优先；三角/楔再按斜率几何；否则高置信。
+    同源判定：上下沿相对差均 ≤ rel_tol，或高/低枢轴价位序列同源；且日期区间重叠。
+    """
     by_type: Dict[str, List[int]] = {}
     for i, h in enumerate(hits):
         if str(h.get("status") or "") == "invalidated":
@@ -124,29 +325,31 @@ def nms_wedge_flag_overlaps(
         for ia in a_idxs:
             if ia in drop:
                 continue
-            ha = hits[ia]
-            la = (ha.get("key_levels") or {})
-            span_a = _pivot_date_span(ha)
             for ib in b_idxs:
-                if ib in drop:
+                if ib in drop or ia in drop:
                     continue
+                ha = hits[ia]
                 hb = hits[ib]
-                lb = (hb.get("key_levels") or {})
-                if not _spans_overlap(span_a, _pivot_date_span(hb)):
+                if not _hits_homologous(ha, hb, rel_tol=rel_tol):
                     continue
-                du = _bound_rel_diff(la.get("upper"), lb.get("upper"))
-                dl = _bound_rel_diff(la.get("lower"), lb.get("lower"))
-                if du is None or dl is None:
-                    continue
-                if du > rel_tol or dl > rel_tol:
-                    continue
-                # 同界：保留 rank 更高者
-                if _hit_rank_key(ha) >= _hit_rank_key(hb):
+                keeper, dropped = _pick_nms_winner(ha, hb)
+                if keeper is ha:
                     drop.add(ib)
+                    _annotate_nms_suppressed(ha, hb)
                 else:
                     drop.add(ia)
+                    _annotate_nms_suppressed(hb, ha)
                     break
     return [h for i, h in enumerate(hits) if i not in drop]
+
+
+def nms_wedge_flag_overlaps(
+    hits: List[Dict[str, Any]],
+    *,
+    rel_tol: float = NMS_BOUND_REL_TOL,
+) -> List[Dict[str, Any]]:
+    """兼容旧名：同 nms_overlapping_patterns。"""
+    return nms_overlapping_patterns(hits, rel_tol=rel_tol)
 
 
 def detect_all(
@@ -159,7 +362,7 @@ def detect_all(
     """对升序日线 bars 跑所选形态族，返回标准化 hit 列表。
 
     默认不返回 status=invalidated（失效）项；传 include_invalidated=True 可保留。
-    后处理：楔/旗同界 NMS。
+    后处理：巩固形态同源 NMS（楔/旗/三角重叠对）。
     """
     seq = [b for b in (bars or []) if isinstance(b, dict)]
     if len(seq) < 30:
@@ -176,7 +379,7 @@ def detect_all(
     if "wedge_flag" in families:
         hits.extend(detect_wedges_flags(seq, pivots))
 
-    hits = nms_wedge_flag_overlaps(hits)
+    hits = nms_overlapping_patterns(hits)
     if not include_invalidated:
         hits = [h for h in hits if str(h.get("status") or "") != "invalidated"]
     hits.sort(key=lambda h: (-float(h.get("confidence") or 0), str(h.get("pattern_type") or "")))

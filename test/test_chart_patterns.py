@@ -11,6 +11,7 @@ from backend_core.analysis.chart_patterns.double_extremes import (
 )
 from backend_core.analysis.chart_patterns.engine import (
     detect_all,
+    nms_overlapping_patterns,
     nms_wedge_flag_overlaps,
     normalize_families,
 )
@@ -450,7 +451,7 @@ def test_hs_bottom_invalidated_after_rs_dip_even_if_above_neck():
 
 
 def test_nms_falling_wedge_bear_flag_keeps_one():
-    """下降楔与下降旗上下沿近同（≤1%）只保留更优者（优先已确认）。"""
+    """下降楔与下降旗上下沿近同（≤1%）只保留更优者（优先已确认），并注明同源。"""
     d0 = "2024-03-01"
     d1 = "2024-03-20"
     wedge = make_hit(
@@ -481,6 +482,143 @@ def test_nms_falling_wedge_bear_flag_keeps_one():
     assert len(out) == 1
     assert out[0]["pattern_type"] == "falling_wedge"
     assert out[0]["status"] == "confirmed"
+    assert "同源亦曾匹配下降旗形" in out[0]["reason"]
+    assert out[0]["nms_suppressed"][0]["pattern_type"] == "bear_flag"
+
+
+def test_nms_descending_triangle_falling_wedge_keeps_by_flat_lower():
+    """下沿近似走平时主分类为下降三角，并在 reason 注明曾匹配下降楔形。"""
+    highs = [
+        {"role": "high", "date": "2026-05-01", "price": 12.55},
+        {"role": "high", "date": "2026-06-10", "price": 11.30},
+        {"role": "high", "date": "2026-07-20", "price": 12.14},
+    ]
+    lows = [
+        {"role": "low", "date": "2026-05-15", "price": 10.49},
+        {"role": "low", "date": "2026-06-25", "price": 10.45},
+        {"role": "low", "date": "2026-08-05", "price": 11.44},
+    ]
+    slopes = {
+        "upper_slope": -0.02,
+        "lower_slope": 0.00001,  # 近似走平 → 三角
+        "upper": 12.14,
+        "lower": 11.44,
+        "last_close": 11.80,
+    }
+    tri = make_hit(
+        pattern_family="triangle",
+        pattern_type="descending_triangle",
+        status="forming",
+        confidence=0.56,
+        reason="下降三角",
+        key_levels=dict(slopes),
+        pivots=[*highs, *lows],
+    )
+    wedge = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="falling_wedge",
+        status="forming",
+        confidence=0.45,
+        reason="下降楔形",
+        key_levels=dict(slopes),
+        pivots=[*highs, *lows],
+    )
+    out = nms_overlapping_patterns([tri, wedge])
+    assert len(out) == 1
+    assert out[0]["pattern_type"] == "descending_triangle"
+    assert "同源亦曾匹配下降楔形" in out[0]["reason"]
+
+
+def test_nms_descending_pair_prefers_wedge_when_both_slopes_down():
+    """双沿明确下行时主分类为下降楔形（即使三角置信度更高）。"""
+    highs = [
+        {"role": "high", "date": "2026-05-01", "price": 12.55},
+        {"role": "high", "date": "2026-06-10", "price": 11.80},
+        {"role": "high", "date": "2026-07-20", "price": 11.20},
+    ]
+    lows = [
+        {"role": "low", "date": "2026-05-15", "price": 11.00},
+        {"role": "low", "date": "2026-06-25", "price": 10.60},
+        {"role": "low", "date": "2026-08-05", "price": 10.20},
+    ]
+    slopes = {
+        "upper_slope": -0.03,
+        "lower_slope": -0.02,  # 双沿下行 → 楔形
+        "upper": 11.20,
+        "lower": 10.20,
+        "last_close": 10.50,
+    }
+    tri = make_hit(
+        pattern_family="triangle",
+        pattern_type="descending_triangle",
+        status="forming",
+        confidence=0.56,
+        reason="下降三角",
+        key_levels=dict(slopes),
+        pivots=[*highs, *lows],
+    )
+    wedge = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="falling_wedge",
+        status="forming",
+        confidence=0.45,
+        reason="下降楔形",
+        key_levels=dict(slopes),
+        pivots=[*highs, *lows],
+    )
+    out = nms_overlapping_patterns([tri, wedge])
+    assert len(out) == 1
+    assert out[0]["pattern_type"] == "falling_wedge"
+    assert "同源亦曾匹配下降三角" in out[0]["reason"]
+
+
+def test_nms_triangle_wedge_by_pivot_homology_without_bound_match():
+    """上下沿略有差异但仍同源枢轴时，亦应 NMS；下沿走平则留三角。"""
+    highs = [
+        {"role": "high", "date": "2026-05-01", "price": 12.55},
+        {"role": "high", "date": "2026-06-10", "price": 11.30},
+        {"role": "high", "date": "2026-07-20", "price": 12.14},
+    ]
+    lows = [
+        {"role": "low", "date": "2026-05-15", "price": 10.49},
+        {"role": "low", "date": "2026-06-25", "price": 10.45},
+        {"role": "low", "date": "2026-08-05", "price": 11.44},
+    ]
+    tri = make_hit(
+        pattern_family="triangle",
+        pattern_type="descending_triangle",
+        status="forming",
+        confidence=0.56,
+        reason="下降三角",
+        key_levels={
+            "upper": 12.14,
+            "lower": 10.45,
+            "last_close": 11.80,
+            "upper_slope": -0.02,
+            "lower_slope": 0.00001,
+        },
+        pivots=[*highs, *lows],
+    )
+    wedge = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="falling_wedge",
+        status="forming",
+        confidence=0.45,
+        reason="下降楔形",
+        # 故意让上下沿差 > 1%，仅靠枢轴同源触发
+        key_levels={
+            "upper": 13.50,
+            "lower": 9.80,
+            "last_close": 11.80,
+            "upper_slope": -0.02,
+            "lower_slope": 0.00001,
+        },
+        pivots=[*highs, *lows],
+    )
+    out = nms_overlapping_patterns([wedge, tri])
+    assert len(out) == 1
+    assert out[0]["pattern_type"] == "descending_triangle"
+    assert "同源亦曾匹配下降楔形" in out[0]["reason"]
 
 
 def test_breakout_threshold_documented():

@@ -16,7 +16,7 @@ BREAKOUT_DOWN_MULT = 0.995  # last_close < lower * 0.995 → 下破已确认
 INVALIDATE_BOTTOM_MULT = 0.99  # price < head/low * 0.99 → invalidated
 INVALIDATE_TOP_MULT = 1.01  # price > head/high * 1.01 → invalidated
 
-# 楔形/旗形 NMS：上下沿相对差 ≤ 该阈值视为同界
+# 巩固形态 NMS：上下沿相对差 ≤ 该阈值视为同界；枢轴价序列亦用此容差判同源
 NMS_BOUND_REL_TOL = 0.01
 
 # 斜率单位说明（linreg 自变量为枢轴的 K 线 index）
