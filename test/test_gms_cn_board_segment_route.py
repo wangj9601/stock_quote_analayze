@@ -36,6 +36,9 @@ class _DummyQuery:
     def first(self):
         return None
 
+    def __iter__(self):
+        return iter(())
+
 
 class _DummyDB:
     def query(self, *args, **kwargs):
@@ -125,8 +128,8 @@ def _make_client():
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
 @patch.object(
     stock_screening_routes,
-    "_gms_cn_stock_pool_by_board_segment",
-    lambda db, target_date, board_segment: ["300001", "600000"],
+    "_gms_cn_stock_pool_by_board_segments",
+    lambda db, target_date, board_segments: ["300001", "600000"],
 )
 def test_gms_strategy_scope_cn_cyb_passes_filtered_stock_pool():
     client = _make_client()
@@ -137,6 +140,7 @@ def test_gms_strategy_scope_cn_cyb_passes_filtered_stock_pool():
     assert _FakeGmsFrontendInterface.last_market == "cn"
     assert _FakeGmsFrontendInterface.last_stock_pool == ["300001", "600000"]
     assert data["parameters"]["cn_board_segment"] == "CYB"
+    assert data["parameters"]["cn_board_segments"] == ["CYB"]
 
 
 @patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
@@ -145,8 +149,8 @@ def test_gms_strategy_scope_cn_cyb_passes_filtered_stock_pool():
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
 @patch.object(
     stock_screening_routes,
-    "_gms_cn_stock_pool_by_board_segment",
-    lambda db, target_date, board_segment: ["430047", "920799"],
+    "_gms_cn_stock_pool_by_board_segments",
+    lambda db, target_date, board_segments: ["430047", "920799"],
 )
 def test_gms_strategy_scope_cn_bj_passes_filtered_stock_pool():
     client = _make_client()
@@ -157,6 +161,7 @@ def test_gms_strategy_scope_cn_bj_passes_filtered_stock_pool():
     assert _FakeGmsFrontendInterface.last_market == "cn"
     assert _FakeGmsFrontendInterface.last_stock_pool == ["430047", "920799"]
     assert data["parameters"]["cn_board_segment"] == "BJ"
+    assert data["parameters"]["cn_board_segments"] == ["BJ"]
 
 
 @patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
@@ -173,7 +178,11 @@ def test_gms_strategy_scope_cn_invalid_segment_returns_400():
 @patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
 @patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
 @patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
-@patch.object(stock_screening_routes, "_gms_cn_stock_pool_by_board_segment", lambda db, target_date, board_segment: [])
+@patch.object(
+    stock_screening_routes,
+    "_gms_cn_stock_pool_by_board_segments",
+    lambda db, target_date, board_segments: [],
+)
 def test_gms_strategy_scope_cn_empty_segment_pool_returns_empty():
     client = _make_client()
     resp = client.get("/api/screening/gms-strategy?scope=cn&cn_board_segment=KCB&date=2026-04-23")
@@ -182,3 +191,26 @@ def test_gms_strategy_scope_cn_empty_segment_pool_returns_empty():
     assert data["success"] is True
     assert data["data"] == []
     assert data["cn_board_segment"] == "KCB"
+    assert data["cn_board_segments"] == ["KCB"]
+
+
+@patch.object(stock_screening_routes, "GMS_AVAILABLE", True)
+@patch.object(stock_screening_routes, "GMSConfigManagerCls", _FakeConfigManager)
+@patch.object(stock_screening_routes, "GMSFrontendInterface", _FakeGmsFrontendInterface)
+@patch.object(stock_screening_routes, "SessionLocal", lambda: _FakeSession())
+@patch.object(
+    stock_screening_routes,
+    "_gms_cn_stock_pool_by_board_segments",
+    lambda db, target_date, board_segments: ["300001", "688001"],
+)
+def test_gms_strategy_scope_cn_multi_segments_union():
+    client = _make_client()
+    resp = client.get(
+        "/api/screening/gms-strategy?scope=cn&cn_board_segment=CYB&cn_board_segment=KCB&date=2026-04-23"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert _FakeGmsFrontendInterface.last_stock_pool == ["300001", "688001"]
+    assert data["parameters"]["cn_board_segment"] == "CYB,KCB"
+    assert data["parameters"]["cn_board_segments"] == ["CYB", "KCB"]

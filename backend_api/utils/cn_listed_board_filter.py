@@ -24,7 +24,7 @@ def normalize_list_board_segment(raw: Optional[str]) -> List[str]:
     if raw is None:
         return []
     k = str(raw).strip().upper()
-    if not k:
+    if not k or k == "ALL":
         return []
     if k == "MAIN":
         return ["SH_MAIN", "SZ_MAIN"]
@@ -33,6 +33,23 @@ def normalize_list_board_segment(raw: Optional[str]) -> List[str]:
     if k in VSB_BOARD_PREFIX_GROUPS:
         return [k]
     return []
+
+
+def normalize_multi_board_segments(raws: Optional[List[str]]) -> List[str]:
+    """合并多个板块参数为去重后的 VSB 键列表；含 ALL/空则视为不限（返回空列表）。"""
+    if not raws:
+        return []
+    keys: List[str] = []
+    seen = set()
+    for raw in raws:
+        s = str(raw or "").strip().upper()
+        if not s or s == "ALL":
+            return []
+        for k in normalize_list_board_segment(raw):
+            if k not in seen:
+                seen.add(k)
+                keys.append(k)
+    return keys
 
 
 def is_cn_listed_equity_code(code: str) -> bool:
@@ -70,9 +87,8 @@ def apply_cn_board_segment_filter(query: Query[_T], code_column: Column, board_s
 
 
 def _is_cn_equity_code_for_segment(code: str) -> bool:
-    """是否应按 A 股代码段规则过滤的 6 位 A 股代码（不含 5 位港股）。"""
-    s = str(code or "").strip()
-    return len(s) == 6 and s.isdigit() and s[0] in "6039"
+    """是否应按 A 股代码段规则过滤（沪深主板/创业/科创/中小 + 北证；不含 5 位港股）。"""
+    return is_cn_listed_equity_code(code)
 
 
 def filter_stock_codes_by_board_segment(
@@ -84,6 +100,15 @@ def filter_stock_codes_by_board_segment(
     board_segment 为空或 ALL 时不做过滤。
     """
     keys = normalize_list_board_segment(board_segment)
+    return filter_stock_codes_by_board_keys(codes, keys)
+
+
+def filter_stock_codes_by_board_keys(
+    codes: List[str],
+    board_keys: Optional[List[str]],
+) -> List[str]:
+    """按已归一的 VSB 板块键并集过滤；keys 空则原样返回。"""
+    keys = [k for k in (board_keys or []) if k]
     if not keys:
         return list(codes)
     out: List[str] = []
@@ -95,6 +120,15 @@ def filter_stock_codes_by_board_segment(
             continue
         out.append(raw)
     return out
+
+
+def filter_stock_codes_by_board_segments(
+    codes: List[str],
+    board_segments: Optional[List[str]],
+) -> List[str]:
+    """多选板块并集过滤；空/含 ALL 则不限。"""
+    keys = normalize_multi_board_segments(board_segments)
+    return filter_stock_codes_by_board_keys(codes, keys)
 
 
 # 3倍量每日爆量推送 Excel：按板块分 sheet（顺序与表头展示名）

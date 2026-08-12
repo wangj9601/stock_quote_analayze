@@ -1314,8 +1314,17 @@ def _gms_cn_stock_pool_by_board_segment(
     board_segment: str,
 ) -> List[str]:
     """从当日 A 股行情池按板块代码段过滤（与 VSB boards 前缀一致）。"""
+    return _gms_cn_stock_pool_by_board_segments(db, target_date, [board_segment])
+
+
+def _gms_cn_stock_pool_by_board_segments(
+    db: Session,
+    target_date: str,
+    board_segments: Optional[List[str]],
+) -> List[str]:
+    """多选板块并集：从当日 A 股行情池过滤。"""
     from backend_api.models import HistoricalQuotes
-    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+    from backend_api.utils.cn_listed_board_filter import normalize_multi_board_segments
     from backend_core.strategies.gms.frontend_interface import (
         _distinct_codes_from_quotes,
         _normalize_cn_pool_code,
@@ -1323,7 +1332,7 @@ def _gms_cn_stock_pool_by_board_segment(
     )
     from backend_core.strategies.volume_shrink_breakout.data_loader import code_matches_vsb_boards
 
-    keys = normalize_list_board_segment(board_segment)
+    keys = normalize_multi_board_segments(board_segments)
     if not keys:
         return []
     eff = _resolve_pool_date_for_quotes(db, target_date, HistoricalQuotes)
@@ -1336,13 +1345,60 @@ def _gms_filter_stock_pool_by_board_segment(
     board_segment: str,
 ) -> List[str]:
     """在已有股票池内按 A 股代码段过滤（用于 GMS 观察股等固定列表）。"""
-    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
-    from backend_core.strategies.volume_shrink_breakout.data_loader import code_matches_vsb_boards
+    return _gms_filter_stock_pool_by_board_segments(stock_pool, [board_segment])
 
-    keys = normalize_list_board_segment(board_segment)
-    if not keys:
-        return stock_pool
-    return [c for c in stock_pool if code_matches_vsb_boards(c, keys)]
+
+def _gms_filter_stock_pool_by_board_segments(
+    stock_pool: List[str],
+    board_segments: Optional[List[str]],
+) -> List[str]:
+    """多选板块并集过滤已有股票池。"""
+    from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segments
+
+    return filter_stock_codes_by_board_segments(stock_pool, board_segments)
+
+
+_GMS_CN_BOARD_SEG_LABELS = {
+    "MAIN": "主板",
+    "CYB": "创业板",
+    "SZ_SME": "中小板",
+    "KCB": "科创板",
+    "BJ": "北证",
+}
+
+
+def _gms_normalize_cn_board_segment_query(
+    cn_board_segment: Optional[List[str]],
+) -> List[str]:
+    """解析多选 A 股板块；空列表=不限。无效值抛 400。"""
+    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+
+    raws: List[str] = []
+    for x in cn_board_segment or []:
+        s = str(x or "").strip()
+        if s:
+            raws.append(s)
+    if not raws:
+        return []
+    if any(s.upper() == "ALL" for s in raws):
+        return []
+    out: List[str] = []
+    seen = set()
+    for one in raws:
+        if not normalize_list_board_segment(one):
+            raise HTTPException(
+                status_code=400,
+                detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ（可多选）",
+            )
+        u = one.upper()
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def _gms_cn_board_seg_label(segs: List[str]) -> str:
+    return "、".join(_GMS_CN_BOARD_SEG_LABELS.get(s, s) for s in segs)
 
 
 def _resolve_gms_stock_code_from_input(db: Session, raw: str) -> Optional[str]:
@@ -1408,9 +1464,9 @@ async def get_gms_strategy(
         "all",
         description="scope=gms_watchlist 时筛选市场: all(全部) / cn(A股) / hk(港股)，对应表字段 market A/HK",
     ),
-    cn_board_segment: Optional[str] = Query(
+    cn_board_segment: Optional[List[str]] = Query(
         None,
-        description="scope=cn/gms_watchlist/industry_board/concept_board 时可选 A 股板块: ALL(全部)/MAIN(主板)/CYB(创业板)/SZ_SME(中小板)/KCB(科创板)/BJ(北证)",
+        description="A 股板块可多选: MAIN/CYB/SZ_SME/KCB/BJ（可重复传参；不传或含 ALL 表示不限）",
     ),
     industry_board_code: Optional[List[str]] = Query(
         None,
@@ -1548,6 +1604,11 @@ async def get_gms_strategy(
                 target_date = datetime.now().strftime("%Y-%m-%d")
                 logger.warning(f"GMS 获取最新日期失败: {e}，使用当天: {target_date}")
 
+        # A 股板块多选：空列表=不限；并集过滤（与 URT 一致）
+        seg_list = _gms_normalize_cn_board_segment_query(cn_board_segment)
+        seg_joined = ",".join(seg_list) if seg_list else ""
+        seg_label = _gms_cn_board_seg_label(seg_list) if seg_list else ""
+
         stock_pool = None
         market = "all"
         resolved_industry_board_codes: Optional[List[str]] = None
@@ -1670,26 +1731,10 @@ async def get_gms_strategy(
                         },
                     }
                 )
-            seg_raw = (cn_board_segment or "").strip().upper()
-            if seg_raw and seg_raw != "ALL":
-                from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
-
-                if not normalize_list_board_segment(cn_board_segment):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
-                    )
+            if seg_list:
                 before = len(stock_pool)
-                stock_pool = _gms_filter_stock_pool_by_board_segment(stock_pool, seg_raw)
+                stock_pool = _gms_filter_stock_pool_by_board_segments(stock_pool, seg_list)
                 if not stock_pool:
-                    seg_labels = {
-                        "MAIN": "主板",
-                        "CYB": "创业板",
-                        "SZ_SME": "中小板",
-                        "KCB": "科创板",
-                        "BJ": "北证",
-                    }
-                    seg_label = seg_labels.get(seg_raw, seg_raw)
                     return JSONResponse(
                         {
                             "success": True,
@@ -1698,7 +1743,8 @@ async def get_gms_strategy(
                             "search_date": target_date,
                             "strategy_name": "GMS均值引力动量策略",
                             "scope": "gms_watchlist",
-                            "cn_board_segment": seg_raw,
+                            "cn_board_segment": seg_joined or None,
+                            "cn_board_segments": seg_list,
                             "message": f"GMS观察股在「{seg_label}」板块下无匹配股票",
                             "paging": {
                                 "enabled": use_pagination,
@@ -1710,8 +1756,8 @@ async def get_gms_strategy(
                         }
                     )
                 logger.info(
-                    "GMS 数据来源=GMS观察股 segment=%s market_filter=%s 股票数=%s->%s",
-                    seg_raw,
+                    "GMS 数据来源=GMS观察股 segments=%s market_filter=%s 股票数=%s->%s",
+                    seg_list,
                     mraw,
                     before,
                     len(stock_pool),
@@ -1768,27 +1814,11 @@ async def get_gms_strategy(
                         },
                     }
                 )
-            seg_raw = (cn_board_segment or "").strip().upper()
-            if seg_raw and seg_raw != "ALL":
-                from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
-
-                if not normalize_list_board_segment(cn_board_segment):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
-                    )
+            if seg_list:
                 before = len(stock_pool)
-                stock_pool = _gms_filter_stock_pool_by_board_segment(stock_pool, seg_raw)
+                stock_pool = _gms_filter_stock_pool_by_board_segments(stock_pool, seg_list)
                 stock_pool_size = len(stock_pool)
                 if not stock_pool:
-                    seg_labels = {
-                        "MAIN": "主板",
-                        "CYB": "创业板",
-                        "SZ_SME": "中小板",
-                        "KCB": "科创板",
-                        "BJ": "北证",
-                    }
-                    seg_label = seg_labels.get(seg_raw, seg_raw)
                     board_label = "、".join(bcodes)
                     return JSONResponse(
                         {
@@ -1800,7 +1830,8 @@ async def get_gms_strategy(
                             "scope": "industry_board",
                             "industry_board_code": bcodes[0] if len(bcodes) == 1 else None,
                             "industry_board_codes": bcodes,
-                            "cn_board_segment": seg_raw,
+                            "cn_board_segment": seg_joined or None,
+                            "cn_board_segments": seg_list,
                             "message": f"行业板块「{board_label}」在「{seg_label}」下无匹配成分股",
                             "paging": {
                                 "enabled": use_pagination,
@@ -1812,9 +1843,9 @@ async def get_gms_strategy(
                         }
                     )
                 logger.info(
-                    "GMS 数据来源=行业板块 boards=%s segment=%s 股票数=%s->%s",
+                    "GMS 数据来源=行业板块 boards=%s segments=%s 股票数=%s->%s",
                     bcodes,
-                    seg_raw,
+                    seg_list,
                     before,
                     len(stock_pool),
                 )
@@ -1861,27 +1892,11 @@ async def get_gms_strategy(
                         },
                     }
                 )
-            seg_raw = (cn_board_segment or "").strip().upper()
-            if seg_raw and seg_raw != "ALL":
-                from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
-
-                if not normalize_list_board_segment(cn_board_segment):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
-                    )
+            if seg_list:
                 before = len(stock_pool)
-                stock_pool = _gms_filter_stock_pool_by_board_segment(stock_pool, seg_raw)
+                stock_pool = _gms_filter_stock_pool_by_board_segments(stock_pool, seg_list)
                 stock_pool_size = len(stock_pool)
                 if not stock_pool:
-                    seg_labels = {
-                        "MAIN": "主板",
-                        "CYB": "创业板",
-                        "SZ_SME": "中小板",
-                        "KCB": "科创板",
-                        "BJ": "北证",
-                    }
-                    seg_label = seg_labels.get(seg_raw, seg_raw)
                     board_label = "、".join(bcodes)
                     return JSONResponse(
                         {
@@ -1893,7 +1908,8 @@ async def get_gms_strategy(
                             "scope": "concept_board",
                             "concept_board_code": bcodes[0] if len(bcodes) == 1 else None,
                             "concept_board_codes": bcodes,
-                            "cn_board_segment": seg_raw,
+                            "cn_board_segment": seg_joined or None,
+                            "cn_board_segments": seg_list,
                             "message": f"概念板块「{board_label}」在「{seg_label}」下无匹配成分股",
                             "paging": {
                                 "enabled": use_pagination,
@@ -1905,9 +1921,9 @@ async def get_gms_strategy(
                         }
                     )
                 logger.info(
-                    "GMS 数据来源=概念板块 boards=%s segment=%s 股票数=%s->%s",
+                    "GMS 数据来源=概念板块 boards=%s segments=%s 股票数=%s->%s",
                     bcodes,
-                    seg_raw,
+                    seg_list,
                     before,
                     len(stock_pool),
                 )
@@ -1915,26 +1931,10 @@ async def get_gms_strategy(
             logger.info("GMS 数据来源=概念板块 boards=%s 股票数=%s", bcodes, len(stock_pool))
         elif scope == "cn":
             market = "cn"
-            seg_raw = (cn_board_segment or "").strip().upper()
-            if seg_raw and seg_raw != "ALL":
-                from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
-
-                if not normalize_list_board_segment(cn_board_segment):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
-                    )
-                stock_pool = _gms_cn_stock_pool_by_board_segment(db, target_date, seg_raw)
+            if seg_list:
+                stock_pool = _gms_cn_stock_pool_by_board_segments(db, target_date, seg_list)
                 stock_pool_size = len(stock_pool)
                 if not stock_pool:
-                    seg_labels = {
-                        "MAIN": "主板",
-                        "CYB": "创业板",
-                        "SZ_SME": "中小板",
-                        "KCB": "科创板",
-                        "BJ": "北证",
-                    }
-                    seg_label = seg_labels.get(seg_raw, seg_raw)
                     return JSONResponse(
                         {
                             "success": True,
@@ -1943,7 +1943,8 @@ async def get_gms_strategy(
                             "search_date": target_date,
                             "strategy_name": "GMS均值引力动量策略",
                             "scope": "cn",
-                            "cn_board_segment": seg_raw,
+                            "cn_board_segment": seg_joined or None,
+                            "cn_board_segments": seg_list,
                             "message": f"A股「{seg_label}」在 {target_date} 行情池中无可用股票",
                             "paging": {
                                 "enabled": use_pagination,
@@ -1954,7 +1955,7 @@ async def get_gms_strategy(
                             },
                         }
                     )
-                logger.info("GMS 数据来源=全部A股 segment=%s 股票数=%s", seg_raw, len(stock_pool))
+                logger.info("GMS 数据来源=全部A股 segments=%s 股票数=%s", seg_list, len(stock_pool))
         elif scope == "hk":
             market = "hk"
         elif scope == "etf":
@@ -2013,9 +2014,11 @@ async def get_gms_strategy(
 
         scope_key = build_scope_key(
             scope,
-            cn_board_segment=cn_board_segment
-            if scope in ("cn", "gms_watchlist", "industry_board", "concept_board")
-            else None,
+            cn_board_segment=(
+                seg_joined or None
+                if scope in ("cn", "gms_watchlist", "industry_board", "concept_board")
+                else None
+            ),
             industry_board_codes=industry_board_code if scope == "industry_board" else None,
             concept_board_codes=concept_board_code if scope == "concept_board" else None,
             gms_watchlist_market=gms_watchlist_market if scope == "gms_watchlist" else None,
@@ -2570,8 +2573,14 @@ async def get_gms_strategy(
                 ),
                 "exclude_st": exclude_st,
                 "cn_board_segment": (
-                    (cn_board_segment or "").strip().upper() or None
+                    seg_joined or None
                     if scope in ("cn", "gms_watchlist", "industry_board", "concept_board")
+                    else None
+                ),
+                "cn_board_segments": (
+                    list(seg_list)
+                    if scope in ("cn", "gms_watchlist", "industry_board", "concept_board")
+                    and seg_list
                     else None
                 ),
                 "use_pagination": use_pagination,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -24,6 +24,7 @@ class GmsScreeningPreferences(BaseModel):
     config_id: Optional[int] = None
     scope: Optional[str] = None
     cn_board_segment: Optional[str] = None
+    cn_board_segments: Optional[List[str]] = None
     page_size: Optional[int] = Field(None, ge=1, le=500)
     use_pagination: Optional[bool] = None
     exclude_st: Optional[bool] = None

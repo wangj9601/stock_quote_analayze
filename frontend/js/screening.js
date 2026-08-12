@@ -4242,18 +4242,18 @@ const ScreeningPage = {
         if (scope === 'gms_watchlist') {
             const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
-            const segEl = document.querySelector('input[name="gmsWatchlistBoardSegment"]:checked');
-            const seg = segEl ? segEl.value : 'ALL';
-            if (seg && seg !== 'ALL' && (!mEl || mEl.value !== 'hk')) {
-                q.set('cn_board_segment', seg);
+            if (!mEl || mEl.value !== 'hk') {
+                document.querySelectorAll('input[name="gmsWatchlistBoardSegment"]:checked').forEach((cb) => {
+                    const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
+                    if (v && v !== 'ALL') q.append('cn_board_segment', v);
+                });
             }
         }
         if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
-            const segEl = document.querySelector('input[name="gmsCnBoardSegment"]:checked');
-            const seg = segEl ? segEl.value : 'ALL';
-            if (seg && seg !== 'ALL') {
-                q.set('cn_board_segment', seg);
-            }
+            document.querySelectorAll('input[name="gmsCnBoardSegment"]:checked').forEach((cb) => {
+                const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
+                if (v && v !== 'ALL') q.append('cn_board_segment', v);
+            });
         }
         if (scope === 'industry_board') {
             this.getGmsSelectedIndustryBoardCodes().forEach((code) => q.append('industry_board_code', code));
@@ -5280,10 +5280,16 @@ const ScreeningPage = {
     // 保存 GMS 筛选偏好（config_id / scope 等，策略参数以服务端为准）
     async saveGmsParams() {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
+        const cnBoardSegments = Array.from(
+            document.querySelectorAll('input[name="gmsCnBoardSegment"]:checked')
+        )
+            .map((cb) => (cb && cb.value ? String(cb.value).trim().toUpperCase() : ''))
+            .filter((v) => v && v !== 'ALL');
         const prefs = {
             config_id: this.gmsConfigId || undefined,
             scope: document.getElementById('gms-scope')?.value,
-            cn_board_segment: document.getElementById('gms-cn_board_segment')?.value,
+            cn_board_segments: cnBoardSegments,
+            cn_board_segment: cnBoardSegments.length ? cnBoardSegments.join(',') : undefined,
             page_size: parseInt(document.getElementById('gms-page_size')?.value || '100', 10) || 100,
             use_pagination: document.getElementById('gms-use_pagination')?.checked || false,
             exclude_st: document.getElementById('gms-exclude_st')?.checked || false,

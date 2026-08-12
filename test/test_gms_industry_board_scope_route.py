@@ -43,6 +43,9 @@ class _DummyQuery:
     def first(self):
         return None
 
+    def __iter__(self):
+        return iter(self._rows)
+
 
 class _IndustryBoardDB:
     def query(self, *args, **kwargs):

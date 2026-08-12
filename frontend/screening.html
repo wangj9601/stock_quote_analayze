@@ -804,15 +804,15 @@
                         <label for="gmsScopeSingle" style="cursor: pointer;">单只股票</label>
                     </div>
                 </div>
-                <div id="gmsCnBoardWrap" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;">
-                    <span style="color: #666; font-size: 13px;">A股板块：</span>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsCnBoardSegment" value="ALL" checked style="margin-right: 5px;">全部A股</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsCnBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsCnBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsCnBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsCnBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsCnBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
-                    <span id="gmsCnBoardHint" style="color: #888; font-size: 12px;">在 A 股池内按代码段筛选（全部A股为当日有行情池；行业/概念板块为成分股池）</span>
+                <div id="gmsCnBoardWrap" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;"
+                    title="可多选；不勾选表示不限 A 股板块（等同全部 A 股代码段）。">
+                    <span style="color: #666; font-size: 13px;">A股板块（可多选）：</span>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span id="gmsCnBoardHint" style="color: #888; font-size: 12px;">不选=不限；在 A 股池内按代码段筛选（全部A股为当日有行情池；行业/概念板块为成分股池）</span>
                 </div>
                 <div id="gmsIndustryBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
                     <span style="color: #666; font-size: 13px;">行业板块：</span>
@@ -843,15 +843,15 @@
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="cn" style="margin-right: 5px;">仅A股</label>
                     <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="hk" style="margin-right: 5px;">仅港股</label>
                 </div>
-                <div id="gmsWatchlistBoardWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;">
-                    <span style="color: #666; font-size: 13px;">A股板块：</span>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="ALL" checked style="margin-right: 5px;">全部A股</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
-                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
-                    <span style="color: #888; font-size: 12px;">在 GMS 观察股池内按代码段筛选</span>
+                <div id="gmsWatchlistBoardWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;"
+                    title="可多选；不勾选表示不限 A 股板块。">
+                    <span style="color: #666; font-size: 13px;">A股板块（可多选）：</span>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span style="color: #888; font-size: 12px;">不选=不限；在 GMS 观察股池内按代码段筛选</span>
                 </div>
                 <div style="padding: 10px 0 0 0;">
                     <label for="gmsExcludeSt" style="cursor: pointer; font-size: 13px; color: #666;">
