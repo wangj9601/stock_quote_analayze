@@ -538,21 +538,29 @@ const PatternTool = {
     return (bullish.has(a) && bearish.has(b)) || (bearish.has(a) && bullish.has(b));
   },
 
+  /** 已确认巩固形态：上破 / 下破 / 未判明 */
+  _consolBreakDir(h) {
+    const t = h && h.pattern_type;
+    const b = this._hitBounds(h);
+    const c = this._hitClose(h);
+    const up = b.upper;
+    const lo = b.lower;
+    if (c != null && up != null && c > up * 1.005) return 'up';
+    if (c != null && lo != null && c < lo * 0.995) return 'down';
+    if (t === 'falling_wedge' || t === 'bull_flag' || t === 'ascending_triangle') return 'up';
+    if (t === 'rising_wedge' || t === 'bear_flag' || t === 'descending_triangle') return 'down';
+    return 'out';
+  },
+
   /** 已确认巩固形态：按收盘相对上下沿判定上破/下破文案 */
   _confirmedConsolBreakText(h) {
     const t = h.pattern_type;
     const lab = this.typeLabel(t);
     const conf = h.confidence != null ? Number(h.confidence).toFixed(2) : '--';
     const b = this._hitBounds(h);
-    const c = this._hitClose(h);
     const up = b.upper;
     const lo = b.lower;
-    let dir = '';
-    if (c != null && up != null && c > up * 1.005) dir = 'up';
-    else if (c != null && lo != null && c < lo * 0.995) dir = 'down';
-    else if (t === 'falling_wedge' || t === 'bull_flag' || t === 'ascending_triangle') dir = 'up';
-    else if (t === 'rising_wedge' || t === 'bear_flag' || t === 'descending_triangle') dir = 'down';
-    else dir = 'out';
+    const dir = this._consolBreakDir(h);
     if (dir === 'up') {
       return `已确认${lab}上破（置信度 ${conf}${
         up != null ? `，上沿 ${this._fmtPx(up)}` : ''
@@ -637,8 +645,20 @@ const PatternTool = {
       add(lv.neckline, '颈线', '观察站稳');
       add(lv.head, '头部低点', '下方支撑');
     } else if (this.CONSOLIDATION[t]) {
-      add(lv.upper, '上沿', '突破参考');
-      add(lv.lower, '下沿', '突破参考');
+      let upperRole = '突破参考';
+      let lowerRole = '突破参考';
+      if (confirmed) {
+        const dir = this._consolBreakDir(h);
+        if (dir === 'up') {
+          upperRole = '突破后转支撑';
+          lowerRole = '下方支撑';
+        } else if (dir === 'down') {
+          lowerRole = '突破后转阻力';
+          upperRole = '上方压力';
+        }
+      }
+      add(lv.upper, '上沿', upperRole);
+      add(lv.lower, '下沿', lowerRole);
     } else {
       // 兜底：有颈线/上下沿则带出
       add(lv.neckline, '颈线', '关键参考');
@@ -685,6 +705,19 @@ const PatternTool = {
           const prefer = { 颈线: 3, 双峰高点: 2, 双谷低点: 2, 头部高点: 2, 头部低点: 2, 上沿: 1, 下沿: 1 };
           if ((prefer[lv.name] || 0) > (prefer[hit.name] || 0)) {
             hit.name = lv.name;
+            hit.role = lv.role;
+          }
+          const rolePrefer = {
+            突破后转支撑: 6,
+            突破后转阻力: 6,
+            观察站稳: 5,
+            观察失守: 5,
+            下方支撑: 4,
+            上方压力: 4,
+            突破参考: 2,
+            关键参考: 1,
+          };
+          if ((rolePrefer[lv.role] || 0) > (rolePrefer[hit.role] || 0)) {
             hit.role = lv.role;
           }
         }

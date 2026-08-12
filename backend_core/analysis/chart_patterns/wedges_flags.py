@@ -6,8 +6,16 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
-from .rules import SLOPE_UNIT_NOTE, breakout_down, breakout_up
+from .rules import (
+    SLOPE_UNIT_NOTE,
+    WEDGE_ENDPOINT_REL_EPS,
+    breakout_down,
+    breakout_up,
+)
 from .schema import fmt_px, make_hit
+
+# 拟合与展示共用的近端高低枢轴个数（避免「算 4 个、展示 3 个」不一致）
+_WEDGE_PIVOT_N = 3
 
 
 def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
@@ -22,6 +30,43 @@ def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
     return out
 
 
+def wedge_endpoints_direction_ok(
+    hi: Sequence[Dict[str, Any]],
+    lo: Sequence[Dict[str, Any]],
+    *,
+    falling: bool,
+    eps: float = WEDGE_ENDPOINT_REL_EPS,
+) -> bool:
+    """楔形端点方向校验（非严格逐点单调）。
+
+    - 下降楔形：末高不得明显高于首高，末低不得明显高于首低（\(H_n \\le H_1(1+\\epsilon)\) 等）
+    - 上升楔形：末高不得明显低于首高，末低不得明显低于首低
+    """
+    if len(hi) < 2 or len(lo) < 2:
+        return False
+    try:
+        h0 = float(hi[0]["price"])
+        hn = float(hi[-1]["price"])
+        l0 = float(lo[0]["price"])
+        ln = float(lo[-1]["price"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if min(h0, hn, l0, ln) <= 0:
+        return False
+    e = max(float(eps), 0.0)
+    if falling:
+        if hn > h0 * (1.0 + e):
+            return False
+        if ln > l0 * (1.0 + e):
+            return False
+        return True
+    if hn < h0 * (1.0 - e):
+        return False
+    if ln < l0 * (1.0 - e):
+        return False
+    return True
+
+
 def detect_wedges(
     bars: Sequence[Dict[str, Any]],
     pivots: Optional[List[Dict[str, Any]]] = None,
@@ -29,13 +74,17 @@ def detect_wedges(
     piv = pivots if pivots is not None else extract_pivot_sequence(bars)
     highs = [p for p in piv if p["kind"] == "high"]
     lows = [p for p in piv if p["kind"] == "low"]
-    if len(highs) < 3 or len(lows) < 3:
+    if len(highs) < _WEDGE_PIVOT_N or len(lows) < _WEDGE_PIVOT_N:
         return []
 
-    hi, lo = highs[-4:], lows[-4:]
-    # 斜率自变量为枢轴的 K 线 index（约等于交易日序），单位见 SLOPE_UNIT_NOTE
-    hs = linreg_slope([float(p["index"]) for p in hi], [float(p["price"]) for p in hi])
-    ls = linreg_slope([float(p["index"]) for p in lo], [float(p["price"]) for p in lo])
+    # 拟合与报表 pivots 使用同一窗口，避免斜率与列出点位几何矛盾
+    hi, lo = highs[-_WEDGE_PIVOT_N:], lows[-_WEDGE_PIVOT_N:]
+    hs = linreg_slope(
+        [float(p["index"]) for p in hi], [float(p["price"]) for p in hi]
+    )
+    ls = linreg_slope(
+        [float(p["index"]) for p in lo], [float(p["price"]) for p in lo]
+    )
     if hs is None or ls is None:
         return []
 
@@ -50,6 +99,11 @@ def detect_wedges(
     if not (same_up or same_down):
         return []
 
+    if same_down and not wedge_endpoints_direction_ok(hi, lo, falling=True):
+        return []
+    if same_up and not wedge_endpoints_direction_ok(hi, lo, falling=False):
+        return []
+
     closes = _closes(bars)
     if not closes:
         return []
@@ -59,12 +113,10 @@ def detect_wedges(
     if same_up:
         pattern_type = "rising_wedge"
         label = "上升楔形"
-        # 上升楔形偏空：下破确认
         confirmed = breakout_down(last_c, lower)
     else:
         pattern_type = "falling_wedge"
         label = "下降楔形"
-        # 下降楔形偏多：上破确认
         confirmed = breakout_up(last_c, upper)
 
     status = "confirmed" if confirmed else "forming"
@@ -90,8 +142,8 @@ def detect_wedges(
                 "slope_unit": SLOPE_UNIT_NOTE,
             },
             pivots=[
-                *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in hi[-3:]],
-                *[{"role": "low", "date": p.get("date"), "price": p["price"]} for p in lo[-3:]],
+                *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in hi],
+                *[{"role": "low", "date": p.get("date"), "price": p["price"]} for p in lo],
             ],
         )
     ]

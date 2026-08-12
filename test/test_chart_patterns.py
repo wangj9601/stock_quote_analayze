@@ -23,12 +23,16 @@ from backend_core.analysis.chart_patterns.rules import (
     INVALIDATE_BOTTOM_MULT,
     INVALIDATE_TOP_MULT,
     SLOPE_UNIT_NOTE,
+    WEDGE_ENDPOINT_REL_EPS,
     breakout_up,
 )
 from backend_core.analysis.chart_patterns.schema import fmt_px, make_hit
 from backend_core.analysis.chart_patterns.scanner import HARD_SCAN_CAP, DEFAULT_SCAN_LIMIT
 from backend_core.analysis.chart_patterns.triangles import detect_triangles
-from backend_core.analysis.chart_patterns.wedges_flags import detect_wedges
+from backend_core.analysis.chart_patterns.wedges_flags import (
+    detect_wedges,
+    wedge_endpoints_direction_ok,
+)
 
 
 def test_fmt_px_with_and_without_date():
@@ -188,6 +192,62 @@ def test_triangle_and_wedge_smoke():
     # 仅验证不抛异常
     detect_triangles(bars)
     detect_wedges(bars)
+
+
+def test_wedge_endpoints_direction_ok():
+    hi_ok = [{"price": 6.68}, {"price": 6.29}, {"price": 6.10}]
+    lo_ok = [{"price": 5.80}, {"price": 5.60}, {"price": 5.40}]
+    assert wedge_endpoints_direction_ok(hi_ok, lo_ok, falling=True) is True
+
+    # 铜陵有色类误报：末高 7.00 > 首高 6.68
+    hi_bad = [{"price": 6.68}, {"price": 6.29}, {"price": 7.00}]
+    lo_bad = [{"price": 5.80}, {"price": 5.60}, {"price": 5.40}]
+    assert wedge_endpoints_direction_ok(hi_bad, lo_bad, falling=True) is False
+
+    # 容差内不算破坏
+    hi_eps = [{"price": 10.0}, {"price": 9.5}, {"price": 10.0 * (1 + WEDGE_ENDPOINT_REL_EPS * 0.5)}]
+    lo_eps = [{"price": 8.0}, {"price": 7.8}, {"price": 7.6}]
+    assert wedge_endpoints_direction_ok(hi_eps, lo_eps, falling=True) is True
+
+    hi_up = [{"price": 10.0}, {"price": 10.5}, {"price": 11.0}]
+    lo_up = [{"price": 8.0}, {"price": 8.4}, {"price": 8.8}]
+    assert wedge_endpoints_direction_ok(hi_up, lo_up, falling=False) is True
+    assert wedge_endpoints_direction_ok(hi_up, lo_up, falling=True) is False
+
+
+def test_detect_wedges_rejects_last_high_above_first():
+    """末高明显高于首高时不得报下降楔形；拟合枢轴与展示一致为 3 个。"""
+    bars = _bars_from_closes([6.0 + (i % 3) * 0.1 for i in range(40)])
+    pivots = [
+        {"kind": "high", "price": 6.68, "index": 10, "date": "2024-07-06"},
+        {"kind": "low", "price": 5.80, "index": 12, "date": "2024-07-08"},
+        {"kind": "high", "price": 6.29, "index": 14, "date": "2024-07-10"},
+        {"kind": "low", "price": 5.60, "index": 16, "date": "2024-07-12"},
+        {"kind": "high", "price": 7.00, "index": 30, "date": "2024-08-10"},
+        {"kind": "low", "price": 5.40, "index": 32, "date": "2024-08-12"},
+    ]
+    assert detect_wedges(bars, pivots) == []
+
+
+def test_detect_wedges_accepts_declining_endpoints():
+    bars = _bars_from_closes([6.0] * 40)
+    # 高点/低点整体下行且通道收敛，回归同向为负
+    pivots = [
+        {"kind": "high", "price": 12.0, "index": 5, "date": "2024-01-05"},
+        {"kind": "low", "price": 9.0, "index": 8, "date": "2024-01-08"},
+        {"kind": "high", "price": 11.0, "index": 15, "date": "2024-01-15"},
+        {"kind": "low", "price": 8.5, "index": 18, "date": "2024-01-18"},
+        {"kind": "high", "price": 10.0, "index": 25, "date": "2024-01-25"},
+        {"kind": "low", "price": 8.2, "index": 28, "date": "2024-01-28"},
+    ]
+    hits = detect_wedges(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "falling_wedge"
+    highs = [p for p in hits[0]["pivots"] if p.get("role") == "high"]
+    lows = [p for p in hits[0]["pivots"] if p.get("role") == "low"]
+    assert len(highs) == 3 and len(lows) == 3
+    assert highs[-1]["price"] <= highs[0]["price"] * (1 + WEDGE_ENDPOINT_REL_EPS)
+
 
 
 def test_scan_limits_constants():
@@ -697,3 +757,45 @@ def test_expert_analysis_no_wait_breakout_when_confirmed_wedge():
     assert proc2.returncode == 0, proc2.stderr or proc2.stdout
     out2 = json.loads(proc2.stdout.strip().splitlines()[-1])
     assert "冲突" in (out2.get("mediumTerm") or "")
+
+
+def test_expert_key_levels_upper_role_after_up_breakout():
+    """已确认上破后，关键位置中上沿文案应为「突破后转支撑」而非「突破参考」。"""
+    import json
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "test" / "_pattern_expert_node_check.mjs"
+    items = [
+        {
+            "pattern_type": "falling_wedge",
+            "status": "confirmed",
+            "confidence": 0.70,
+            "key_levels": {"upper": 38.88, "lower": 35.0, "last_close": 40.5},
+            "pivots": [{"role": "high", "date": "2026-07-01", "price": 38.88}],
+            "formed_at": "2026-08-01",
+        }
+    ]
+    proc = subprocess.run(
+        ["node", str(script), json.dumps(items, ensure_ascii=False)],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0 and (
+        "not found" in (proc.stderr or "").lower()
+        or "不是内部或外部命令" in (proc.stderr or "")
+        or proc.returncode == 127
+    ):
+        import pytest
+
+        pytest.skip(f"node unavailable: {proc.stderr}")
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    ref = out.get("keyLevelsRef") or ""
+    assert "38.88" in ref or "38.9" in ref
+    assert "突破后转支撑" in ref
+    assert "上沿（突破参考）" not in ref
