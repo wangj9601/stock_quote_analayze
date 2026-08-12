@@ -1336,6 +1336,17 @@
 .ssa-meta {
     margin-top: 1rem;
 }
+.ssa-result-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.75rem 0 0;
+}
+.ssa-exporting {
+    opacity: 0.7;
+    pointer-events: none;
+}
 .ssa-meta-card {
     display: flex;
     flex-wrap: wrap;
@@ -1355,6 +1366,45 @@
     margin-top: 1.25rem;
     color: #64748b;
     font-size: 0.95rem;
+}
+.ssa-block {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #e2e8f0;
+}
+.ssa-block-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.05rem;
+    color: #0f172a;
+    font-weight: 600;
+}
+.ssa-block-status {
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    color: #64748b;
+}
+.ssa-block-status.is-loading {
+    color: #2563eb;
+}
+.ssa-block-status.is-error {
+    color: #dc2626;
+    padding: 0.65rem 0.85rem;
+    background: #fef2f2;
+    border-radius: 6px;
+    border: 1px solid #fecaca;
+}
+.ssa-block-status.is-ok {
+    color: #64748b;
+}
+.ssa-levels-host .kde-levels-result,
+.ssa-pattern-host .pattern-result-wrap {
+    margin-top: 0.25rem;
+}
+.ssa-pattern-host .pattern-meta {
+    margin-bottom: 0.75rem;
+}
+.ssa-pattern-host .pattern-expert-analysis {
+    margin-top: 1rem;
 }
 .ssa-results {
     margin-top: 1.25rem;

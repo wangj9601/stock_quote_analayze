@@ -105,6 +105,9 @@ const PatternTool = {
     return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map((el) => el.value);
   },
 
+  /** 个股分析默认全选形态大类（与技术工具默认勾选一致） */
+  DEFAULT_TYPES: ['double_extremes', 'head_shoulders', 'triangle', 'wedge_flag'],
+
   /** 与 levels 一致：adjust=qfq|none；UI 默认勾选前复权 */
   selectedAdjust() {
     const el = document.getElementById('patternAdjustQfq');
@@ -113,6 +116,144 @@ const PatternTool = {
 
   adjustLabel(adjust) {
     return adjust === 'qfq' ? '前复权 OHLC' : '不复权 OHLC';
+  },
+
+  /**
+   * 个股形态识别（与技术工具「个股识别」同口径）。
+   * @returns {{ items: array, code: string, name: string, asof: string, price_adjust: string, raw: object }}
+   */
+  async fetchSingle(code, options = {}) {
+    const types = (options.types && options.types.length)
+      ? options.types
+      : this.DEFAULT_TYPES;
+    const adjust = options.adjust === 'none' ? 'none' : (options.adjust || 'qfq');
+    const q = new URLSearchParams();
+    q.set('types', types.join(','));
+    q.set('adjust', adjust);
+    if (options.asof) q.set('asof', options.asof);
+    const resp = await authFetch(
+      `${API_BASE_URL}/api/analysis/patterns/${encodeURIComponent(code)}?${q.toString()}`
+    );
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const msg = (data.detail && (data.detail.message || data.detail)) || data.message || '识别失败';
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+    const priceAdjust = data.price_adjust === 'qfq' ? 'qfq' : 'none';
+    const items = (data.items || []).map((h) => ({
+      ...h,
+      code: data.code || code,
+      name: data.name || '',
+    }));
+    return {
+      items,
+      code: data.code || code,
+      name: data.name || '',
+      asof: data.asof || '',
+      price_adjust: priceAdjust,
+      raw: data,
+    };
+  },
+
+  /**
+   * 将个股形态结果渲染到任意容器（个股分析嵌入用）。
+   */
+  renderEmbedded(container, items, metaHtml, priceAdjust) {
+    if (!container) return;
+    const adjust = priceAdjust === 'qfq' ? 'qfq' : 'none';
+    const visible = this._activeHits(items);
+    const metaBlock = metaHtml
+      ? `<div class="pattern-meta">${metaHtml}</div>`
+      : '';
+    if (!visible.length) {
+      const emptyExpert = this._buildExpertHtml([], 'single', adjust);
+      container.innerHTML = `${metaBlock}
+        <div class="kde-levels-empty">未识别到选定形态。</div>
+        ${emptyExpert}`;
+      return;
+    }
+    const rows = visible
+      .map((r) => {
+        const code = r.code || '';
+        const name = r.name || '';
+        const href = code
+          ? `stock.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`
+          : '#';
+        const codeHtml = code
+          ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${this.esc(code)}</a>`
+          : '--';
+        const formed = this.formedAtText(r);
+        const reasonFull = this.reasonText(r);
+        return `<tr>
+          <td>${codeHtml}</td>
+          <td>${this.esc(name || '--')}</td>
+          <td>${this.esc(this.typeLabel(r.pattern_type))}</td>
+          <td>${this.esc(this.statusLabel(r.status))}</td>
+          <td title="${this.esc(this.formedAtTitle(r))}">${this.esc(formed)}</td>
+          <td>${r.confidence != null ? Number(r.confidence).toFixed(2) : '--'}</td>
+          <td class="pattern-col-levels">${this.esc(this.keyLevelsText(r.key_levels))}</td>
+          <td class="pattern-col-reason" title="${this.esc(reasonFull)}">${this.esc(reasonFull)}</td>
+        </tr>`;
+      })
+      .join('');
+    const expert = this._buildExpertHtml(visible, 'single', adjust);
+    container.innerHTML = `${metaBlock}
+      <div class="pattern-result-wrap">
+        <table class="pattern-result-table">
+          <thead>
+            <tr>
+              <th>代码</th><th>名称</th><th>形态</th><th>状态</th>
+              <th>形成日</th><th>置信度</th><th>关键价</th><th>说明</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${expert}`;
+  },
+
+  /** 专家解读 HTML（供原面板与嵌入共用） */
+  _buildExpertHtml(items, mode, priceAdjust) {
+    if (!items || !items.length) return '';
+    const adjustTag = `<span class="kde-levels-adjust-tag ${
+      priceAdjust === 'qfq' ? 'is-qfq' : 'is-raw'
+    }">${this.esc(this.adjustLabel(priceAdjust))}</span>`;
+    if (mode === 'scan') {
+      const n = items.length;
+      const top = this._rankHits(items).slice(0, 3);
+      const brief = top
+        .map((h) => {
+          const code = h.code || '';
+          const label = this.typeLabel(h.pattern_type);
+          const st = this.statusLabel(h.status);
+          const conf = h.confidence != null ? Number(h.confidence).toFixed(2) : '--';
+          return `${code} ${label}（${st} ${conf}）`;
+        })
+        .join('；');
+      return `<div class="pattern-expert-analysis">
+        <div class="pattern-expert-title">形态解读</div>
+        <div class="pattern-expert-body">
+          <p>本页命中 ${n} 条${brief ? `，靠前示例：${this.esc(brief)}` : ''}。扫描模式不展开长文解读，请切换至「个股识别」获取完整专家分析。 ${adjustTag}</p>
+          <p class="pattern-expert-risk">风险提示：以上为日线规则模板摘要，不构成投资建议。</p>
+        </div>
+      </div>`;
+    }
+    const analysis = this.buildExpertAnalysis(items);
+    const levelsHtml = analysis.keyLevelsRef
+      ? `<p><span class="pattern-expert-label">关键位置参考：</span>${this.esc(analysis.keyLevelsRef)}</p>`
+      : '';
+    const tradeHtml = analysis.tradeLevelsHtml || '';
+    return `<div class="pattern-expert-analysis">
+      <div class="pattern-expert-title">形态解读</div>
+      <div class="pattern-expert-body">
+        <p><span class="pattern-expert-label">价格口径：</span>${adjustTag}</p>
+        <p><span class="pattern-expert-label">短期走势：</span>${this.esc(analysis.shortTerm)}</p>
+        <p><span class="pattern-expert-label">中线格局：</span>${this.esc(analysis.mediumTerm)}</p>
+        ${levelsHtml}
+        ${tradeHtml}
+        <p class="pattern-expert-risk">${this.esc(analysis.risk)}</p>
+      </div>
+    </div>`;
   },
 
   async ensureCatalog() {
@@ -315,38 +456,12 @@ const PatternTool = {
       body.innerHTML = '';
       return;
     }
+    const html = this._buildExpertHtml(items, mode || 'single', priceAdjust);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const inner = tmp.querySelector('.pattern-expert-body');
     box.hidden = false;
-    const adjustTag = `<span class="kde-levels-adjust-tag ${
-      priceAdjust === 'qfq' ? 'is-qfq' : 'is-raw'
-    }">${this.esc(this.adjustLabel(priceAdjust))}</span>`;
-    if (mode === 'scan') {
-      const n = items.length;
-      const top = this._rankHits(items).slice(0, 3);
-      const brief = top
-        .map((h) => {
-          const code = h.code || '';
-          const label = this.typeLabel(h.pattern_type);
-          const st = this.statusLabel(h.status);
-          const conf = h.confidence != null ? Number(h.confidence).toFixed(2) : '--';
-          return `${code} ${label}（${st} ${conf}）`;
-        })
-        .join('；');
-      body.innerHTML = `<p>本页命中 ${n} 条${brief ? `，靠前示例：${this.esc(brief)}` : ''}。扫描模式不展开长文解读，请切换至「个股识别」获取完整专家分析。 ${adjustTag}</p>
-        <p class="pattern-expert-risk">风险提示：以上为日线规则模板摘要，不构成投资建议。</p>`;
-      return;
-    }
-    const analysis = this.buildExpertAnalysis(items);
-    const levelsHtml = analysis.keyLevelsRef
-      ? `<p><span class="pattern-expert-label">关键位置参考：</span>${this.esc(analysis.keyLevelsRef)}</p>`
-      : '';
-    const tradeHtml = analysis.tradeLevelsHtml || '';
-    body.innerHTML = `
-      <p><span class="pattern-expert-label">价格口径：</span>${adjustTag}</p>
-      <p><span class="pattern-expert-label">短期走势：</span>${this.esc(analysis.shortTerm)}</p>
-      <p><span class="pattern-expert-label">中线格局：</span>${this.esc(analysis.mediumTerm)}</p>
-      ${levelsHtml}
-      ${tradeHtml}
-      <p class="pattern-expert-risk">${this.esc(analysis.risk)}</p>`;
+    body.innerHTML = inner ? inner.innerHTML : html;
   },
 
   BEARISH_REVERSAL: {
@@ -1012,27 +1127,11 @@ const PatternTool = {
         if (/^\d{4,6}$/.test(firstBody)) {
           code = firstToken;
         }
-        const q = new URLSearchParams();
-        q.set('types', types.join(','));
-        q.set('adjust', adjust);
-        if (asof) q.set('asof', asof);
-        const resp = await authFetch(
-          `${API_BASE_URL}/api/analysis/patterns/${encodeURIComponent(code)}?${q.toString()}`
-        );
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          const msg = (data.detail && (data.detail.message || data.detail)) || data.message || '识别失败';
-          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-        }
-        const priceAdjust = data.price_adjust === 'qfq' ? 'qfq' : 'none';
-        const items = (data.items || []).map((h) => ({
-          ...h,
-          code: data.code || code,
-          name: data.name || '',
-        }));
+        const fetched = await this.fetchSingle(code, { types, adjust, asof: asof || undefined });
+        const priceAdjust = fetched.price_adjust;
         this.renderItems(
-          items,
-          `个股 ${this.esc(data.code)} ${this.esc(data.name || '')} · 基准日 ${this.esc(data.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))} · 命中 ${items.length}`,
+          fetched.items,
+          `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))} · 命中 ${fetched.items.length}`,
           'single',
           priceAdjust
         );
@@ -1083,6 +1182,8 @@ const PatternTool = {
     }
   },
 };
+
+window.PatternTool = PatternTool;
 
 document.addEventListener('DOMContentLoaded', () => {
   try {

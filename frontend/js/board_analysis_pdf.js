@@ -222,6 +222,23 @@
   }
 
   /**
+   * 公共：加载库 + 中文字体，返回已 setFont 的 jsPDF 实例（供板块/个股等复用）。
+   * @param {{ orientation?: string, unit?: string, format?: string }} [opts]
+   */
+  async function createDoc(opts) {
+    await ensureLibs();
+    const fontB64 = await loadFontBase64();
+    const { jsPDF } = global.jspdf;
+    const doc = new jsPDF(
+      Object.assign({ orientation: 'landscape', unit: 'mm', format: 'a4' }, opts || {})
+    );
+    doc.addFileToVFS(FONT_FILE, fontB64);
+    doc.addFont(FONT_FILE, FONT_NAME, 'normal');
+    doc.setFont(FONT_NAME, 'normal');
+    return doc;
+  }
+
+  /**
    * @param {object} host BoardAnalysis（含 lastResult 与表格字段辅助方法）
    * @returns {Promise<string>} 文件名
    */
@@ -229,13 +246,7 @@
     if (!host || !host.lastResult || !host.lastResult.strategies) {
       throw new Error('请先完成板块分析再导出');
     }
-    await ensureLibs();
-    const fontB64 = await loadFontBase64();
-    const { jsPDF } = global.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    doc.addFileToVFS(FONT_FILE, fontB64);
-    doc.addFont(FONT_FILE, FONT_NAME, 'normal');
-    doc.setFont(FONT_NAME, 'normal');
+    const doc = await createDoc({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
     const payload = host.lastResult;
     const boardFallback = host.defaultBoardLabel(payload);
@@ -366,10 +377,14 @@
   }
 
   global.BoardAnalysisPdf = {
+    FONT_NAME,
+    FONT_FILE,
     FONT_LOCAL_URL,
     FONT_CDN_URL,
     ensureLibs,
     loadFontBase64,
+    createDoc,
+    addPageFooters,
     exportFromHost,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

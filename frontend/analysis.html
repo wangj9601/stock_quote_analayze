@@ -84,14 +84,16 @@
                     </div>
                 </div>
 
-                <!-- 个股分析：四策略命中 -->
+                <!-- 个股分析：四策略 + 阻力支撑 + 形态识别 -->
                 <div class="tab-panel" id="stock-ai">
                     <div class="ssa-section" data-perm="channel.analyze.tab.stock_ai">
                         <div class="ssa-header">
                             <h3>个股策略分析</h3>
                             <p class="ssa-hint">
-                                输入股票代码或名称后，判定该股在 <strong>RPE、SBBR、GMS、URT</strong>
-                                四个策略中的命中情况与信号得分（对齐选股页个股评估口径）。
+                                输入股票代码或名称后，一次分析即可得到：
+                                <strong>RPE / SBBR / GMS / URT</strong> 策略命中与得分、
+                                <strong>阻力支撑位</strong>（与技术工具同口径）、
+                                <strong>形态识别</strong>（与技术工具同口径）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
                             </p>
                         </div>
@@ -123,7 +125,30 @@
                             <ul id="ssaCandidateList"></ul>
                         </div>
                         <div class="ssa-meta" id="ssaMeta" hidden></div>
-                        <div class="ssa-results" id="ssaResults" hidden></div>
+
+                        <div class="ssa-result-actions" id="ssaResultActions" hidden>
+                            <button type="button" class="btn btn-secondary" id="ssaExportPdfBtn"
+                                data-perm="channel.analyze.tab.stock_ai.btn.export"
+                                title="将当前策略、阻力支撑与形态识别结果导出为 PDF">导出 PDF</button>
+                        </div>
+
+                        <section class="ssa-block" id="ssaStrategyBlock" hidden>
+                            <h4 class="ssa-block-title">策略分析</h4>
+                            <div class="ssa-results" id="ssaResults"></div>
+                        </section>
+
+                        <section class="ssa-block" id="ssaLevelsBlock" hidden>
+                            <h4 class="ssa-block-title">阻力支撑位</h4>
+                            <div class="ssa-block-status" id="ssaLevelsStatus"></div>
+                            <div class="ssa-levels-host" id="ssaLevelsHost"></div>
+                        </section>
+
+                        <section class="ssa-block" id="ssaPatternBlock" hidden>
+                            <h4 class="ssa-block-title">形态识别</h4>
+                            <div class="ssa-block-status" id="ssaPatternStatus"></div>
+                            <div class="ssa-pattern-host" id="ssaPatternHost"></div>
+                        </section>
+
                         <div class="ssa-empty" id="ssaEmpty">
                             输入股票代码或名称，也可从自选选择后点击「分析」。
                         </div>
@@ -796,6 +821,7 @@
     <script src="js/leader_mid_analysis.js"></script>
     <script src="js/kde_levels_tool.js"></script>
     <script src="js/pattern_tool.js"></script>
+    <script src="js/stock_analysis_pdf.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/analysis.js"></script>
 </body>

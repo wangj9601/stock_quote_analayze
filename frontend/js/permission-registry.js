@@ -54,6 +54,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.analyze.tab.report', name: '分析报告', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 40 },
   { code: 'channel.analyze.tab.stock_ai', name: '个股分析', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 50 },
   { code: 'channel.analyze.tab.stock_ai.btn.analyze', name: '个股四策略分析', level: 3, parent_code: 'channel.analyze.tab.stock_ai', channel_code: 'analyze', sort_order: 10 },
+  { code: 'channel.analyze.tab.stock_ai.btn.export', name: '导出个股分析PDF', level: 3, parent_code: 'channel.analyze.tab.stock_ai', channel_code: 'analyze', sort_order: 15 },
   { code: 'channel.analyze.tab.technical.btn.analyze', name: '开始分析', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 10 },
   { code: 'channel.analyze.tab.technical.btn.calc', name: '计算支撑压力', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 20 },
   { code: 'channel.analyze.tab.technical.btn.calc_qfq', name: '前复权计算支撑压力', level: 3, parent_code: 'channel.analyze.tab.technical', channel_code: 'analyze', sort_order: 30 },

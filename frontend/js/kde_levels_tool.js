@@ -101,6 +101,326 @@ const KdeLevelsTool = {
         return { vp_from_date: fromDate || null, vp_lookback: days };
     },
 
+    /**
+     * 拉取阻力支撑位（与技术工具同口径）。
+     * @returns {{ ok: boolean, data: object, message: string, candidates: array, httpOk: boolean }}
+     */
+    async fetchLevels(query, options = {}) {
+        const adjust = options.adjust === 'none' ? 'none' : (options.adjust || 'qfq');
+        const factorSource = options.factor_source || 'auto';
+        const maxLevels = options.max_levels != null ? String(options.max_levels) : '8';
+        const qs = new URLSearchParams({ max_levels: maxLevels, adjust });
+        if (adjust === 'qfq') qs.set('factor_source', factorSource);
+        if (options.vp_from_date) {
+            qs.set('vp_from_date', options.vp_from_date);
+        } else if (options.vp_lookback != null) {
+            qs.set('vp_lookback', String(options.vp_lookback));
+        }
+        const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
+        const resp = await authFetch(url);
+        const payload = await resp.json().catch(() => ({}));
+        const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+        return {
+            httpOk: resp.ok,
+            ok: payload.success !== false && !!payload.data,
+            data: payload.data || {},
+            message: payload.message || '',
+            candidates,
+            payload,
+        };
+    },
+
+    _fmtPrice(v) {
+        return v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--';
+    },
+
+    _listHtml(values) {
+        const arr = Array.isArray(values) ? values : [];
+        if (!arr.length) return '<li class="muted">暂无</li>';
+        return arr.map((x, i) => `<li><span class="idx">${i + 1}</span>${this._fmtPrice(x)}</li>`).join('');
+    },
+
+    _labeledListHtml(rows) {
+        const arr = Array.isArray(rows) ? rows : [];
+        if (!arr.length) return '<li class="muted">暂无</li>';
+        return arr
+            .map((row) => {
+                const label = row.label != null ? String(row.label) : '';
+                return `<li><span class="idx-label">${label}</span>${this._fmtPrice(row.price)}</li>`;
+            })
+            .join('');
+    },
+
+    /**
+     * 将 levels 结果渲染到任意容器（个股分析嵌入用；口径与技术工具一致）。
+     */
+    renderEmbedded(container, data, ok, message) {
+        if (!container) return;
+        const fmt = (v) => this._fmtPrice(v);
+        const d = data || {};
+        const code = d.stock_code || '';
+        const name = d.stock_name || '';
+        const title = name ? `${code} ${name}` : (code || '结果');
+        const adjustBrief = d.price_adjust === 'qfq' ? '前复权' : '不复权';
+        const summary = ok
+            ? `${title} · ${adjustBrief}`
+            : `${title} · ${adjustBrief}${message ? `（${message}）` : ''}`;
+
+        const vp = d.volume_profile || {};
+        const vpCmp = d.vp_vs_kde || {};
+        const classic = d.classic_levels || {};
+        const fib = classic.fibonacci || null;
+        const pivot = classic.pivot || null;
+        const cam = classic.camarilla || null;
+        const atrPiv = classic.atr_pivot || null;
+        const conf = classic.confluence_zones || d.confluence_zones || null;
+        const vpAdjust = vp.price_adjust || d.price_adjust || 'none';
+        const classicAdjust = classic.price_adjust || d.price_adjust || 'none';
+        const usedLb = vp.bars_used != null ? vp.bars_used : vp.lookback;
+        const ws = vp.window_start ? String(vp.window_start).slice(0, 10) : '';
+        const we = vp.window_end ? String(vp.window_end).slice(0, 10) : '';
+        const winText = ws && we ? ` · ${ws}～${we}` : (ws ? ` · 自 ${ws}` : '');
+        const vaPct = vp.value_area_pct != null
+            ? `${Math.round(Number(vp.value_area_pct) * 100)}%`
+            : '--';
+
+        const cmpCell = (row, field) => {
+            const r = row || {};
+            if (field === 'diff') {
+                if (r.diff == null) return '--';
+                const sign = Number(r.diff) > 0 ? '+' : '';
+                const pct = r.diff_pct != null ? `（${Number(r.diff_pct).toFixed(2)}%）` : '';
+                return `${sign}${fmt(r.diff)}${pct}`;
+            }
+            if (field === 'align') {
+                if (r.kde == null || r.vp == null) return '--';
+                return r.aligned
+                    ? '<span class="is-aligned">是</span>'
+                    : '<span class="not-aligned">否</span>';
+            }
+            return fmt(r[field]);
+        };
+        const alignedNote =
+            (vpCmp.support && vpCmp.support.aligned)
+            || (vpCmp.resistance && vpCmp.resistance.aligned)
+                ? '存在 KDE↔VP 价位共振（相对偏差 ≤1.5%）；短线仍以 KDE 为主，VP 作辅助确认。'
+                : '相对偏差 ≤1.5% 视为价位共振；短线仍以 KDE 为主，VP 作辅助对照。';
+
+        const fibRows = [];
+        if (fib && Array.isArray(fib.retracements)) {
+            fib.retracements.forEach((x) => {
+                fibRows.push({ label: String(x.ratio), price: x.price });
+            });
+        }
+        if (fib && fib.nearest_extension) {
+            const ext = fib.nearest_extension;
+            fibRows.push({
+                label: `扩展${ext.ratio != null ? ext.ratio : ''}`,
+                price: ext.price,
+            });
+        }
+        const pivRows = [];
+        if (pivot) {
+            ['R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3'].forEach((k) => {
+                if (pivot[k] != null) pivRows.push({ label: k, price: pivot[k] });
+            });
+        }
+        const camRows = [];
+        if (cam) {
+            ['R4', 'R3', 'R2', 'R1', 'S1', 'S2', 'S3', 'S4'].forEach((k) => {
+                if (cam[k] != null) camRows.push({ label: k, price: cam[k] });
+            });
+        }
+        const confRows = [];
+        const pushZones = (arr, tag) => {
+            (arr || []).forEach((z, i) => {
+                confRows.push({
+                    label: `${tag}${i + 1}·强度${z.strength != null ? z.strength : '--'}·${(z.sources || []).join('+')}`,
+                    price: z.center,
+                });
+            });
+        };
+        if (conf && conf.ok) {
+            pushZones(conf.supports, '支撑');
+            pushZones(conf.resistances, '压力');
+        }
+        const nzS = conf && conf.nearest_support_zone;
+        const nzR = conf && conf.nearest_resistance_zone;
+        const confNearS = nzS ? `${fmt(nzS.center)} [${fmt(nzS.low)}–${fmt(nzS.high)}]` : '--';
+        const confNearR = nzR ? `${fmt(nzR.center)} [${fmt(nzR.low)}–${fmt(nzR.high)}]` : '--';
+
+        const fibDir = fib && fib.direction;
+        const fibDirTxt = fibDir === 'up' ? '上升段回撤' : fibDir === 'down' ? '下降段反弹' : '--';
+        const fibAnchor = (fib && fib.anchor_method) === 'zigzag_fractal'
+            ? 'ZigZag+分形'
+            : (fib && fib.anchor_method ? String(fib.anchor_method) : '--');
+        const fibBits = [];
+        if (fib && fib.depth_pct != null) fibBits.push(`深度 ${(Number(fib.depth_pct) * 100).toFixed(1)}%`);
+        if (fib && fib.bar_span != null) fibBits.push(`跨度 ${fib.bar_span} 根`);
+        if (fib && fib.min_swing_bars != null) fibBits.push(`≥${fib.min_swing_bars} 根`);
+        if (fib && fib.skipped_short_leg) fibBits.push('已跳过过短波段');
+        const fibDepth = fibBits.length ? ` · ${fibBits.join(' · ')}` : '';
+        const atrTip = atrPiv && atrPiv.atr != null
+            ? `ATR-Pivot：P=${fmt(atrPiv.P)} ±1ATR R1/S1=${fmt(atrPiv.R1)}/${fmt(atrPiv.S1)}`
+              + ` ±2ATR R2/S2=${fmt(atrPiv.R2)}/${fmt(atrPiv.S2)}（ATR=${fmt(atrPiv.atr)}）`
+            : '';
+
+        const srcMap = {
+            akshare_sina_qfq: '新浪（已归一化）',
+            baostock_qfq: 'BaoStock',
+        };
+        const srcText = srcMap[d.adj_factor_source] || d.adj_factor_source || '未知';
+        const adjustLabel = d.price_adjust === 'qfq'
+            ? `前复权（因子：${srcText}${d.adj_factor_asof ? `，截至 ${d.adj_factor_asof}` : ''}${d.factor_fetched ? '，本次已拉取' : '，已用缓存'}）`
+            : '不复权日K';
+        const used = d.kde_lookback_used;
+        const expanded = d.kde_lookback_expanded;
+        const initLb = d.kde_lookback_initial || 250;
+        const maxLb = d.kde_lookback_max || 750;
+        const classicLb = classic.lookback || 180;
+        const classicBasis = classicAdjust === 'qfq' ? '前复权 OHLC' : '不复权 OHLC';
+        const classicNote = classic.ok
+            ? `ZigZag Fib / Cam / Pivot ${classicBasis} · 回看 ${classicLb} 日`
+            : `Fib/Pivot：${classic.reason || '暂无'}`;
+        const confNote = conf && conf.ok
+            ? `共振带 ${(conf.supports || []).length + (conf.resistances || []).length} 条`
+            : conf ? `共振带：${conf.reason || '暂无'}` : null;
+        const vpNote = vp.ok
+            ? `VP 回看 ${vp.lookback || 60} 日 · POC ${fmt(vp.poc)}`
+            : `VP：${vp.reason || '暂无'}`;
+        const metaParts = [
+            adjustLabel,
+            d.description || '成交量加权 KDE 支撑 / 压力',
+            used != null ? `KDE 实际回看 ${used} 日` : null,
+            expanded ? '（已扩窗）' : null,
+            `KDE 初始 ${initLb} / 上限 ${maxLb}`,
+            vpNote,
+            classicNote,
+            confNote,
+            d.kde_reason ? `KDE 状态：${d.kde_reason}` : null,
+        ].filter(Boolean);
+
+        const tagCls = (adj) => (adj === 'qfq' ? 'kde-levels-adjust-tag is-qfq' : 'kde-levels-adjust-tag is-raw');
+        const tagTxt = (adj) => (adj === 'qfq' ? '前复权' : '不复权');
+
+        container.innerHTML = `
+            <div class="kde-levels-result ssa-embedded-levels">
+                <div class="kde-levels-summary">${this._esc(summary)}</div>
+                <h4 class="kde-levels-subtitle">KDE 结构位</h4>
+                <div class="kde-levels-grid">
+                    <div class="kde-levels-card support">
+                        <h4>支撑位</h4>
+                        <ul>${this._listHtml(d.support_levels)}</ul>
+                    </div>
+                    <div class="kde-levels-card current">
+                        <h4>现价</h4>
+                        <div class="kde-levels-price">${fmt(d.current_price)}</div>
+                        <div class="kde-levels-near">
+                            <div>最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
+                            <div>最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
+                        </div>
+                    </div>
+                    <div class="kde-levels-card resistance">
+                        <h4>压力位</h4>
+                        <ul>${this._listHtml(d.resistance_levels)}</ul>
+                    </div>
+                </div>
+                <h4 class="kde-levels-subtitle">Volume Profile（参考）
+                    <span class="${tagCls(vpAdjust)}">${tagTxt(vpAdjust)}</span>
+                </h4>
+                <div class="kde-levels-grid kde-levels-grid--vp">
+                    <div class="kde-levels-card vp">
+                        <h4>价值区</h4>
+                        <div class="kde-levels-near">
+                            <div>POC：<strong>${fmt(vp.poc)}</strong></div>
+                            <div>VAL：<strong>${fmt(vp.val)}</strong></div>
+                            <div>VAH：<strong>${fmt(vp.vah)}</strong></div>
+                            <div>最近支撑：<strong>${fmt(vp.nearest_support)}</strong></div>
+                            <div>最近压力：<strong>${fmt(vp.nearest_resistance)}</strong></div>
+                            <div class="kde-levels-dir">（实际 <strong>${usedLb != null ? String(usedLb) : '--'}</strong> 日${winText}）
+                                · 价值区 <strong>${vaPct}</strong></div>
+                        </div>
+                    </div>
+                    <div class="kde-levels-card vp-compare">
+                        <h4>KDE ↔ VP</h4>
+                        <table class="kde-vp-compare-table">
+                            <thead><tr><th></th><th>KDE</th><th>VP</th><th>差</th><th>共振</th></tr></thead>
+                            <tbody>
+                                <tr>
+                                    <td>支撑</td>
+                                    <td>${cmpCell(vpCmp.support, 'kde')}</td>
+                                    <td>${cmpCell(vpCmp.support, 'vp')}</td>
+                                    <td>${cmpCell(vpCmp.support, 'diff')}</td>
+                                    <td>${cmpCell(vpCmp.support, 'align')}</td>
+                                </tr>
+                                <tr>
+                                    <td>压力</td>
+                                    <td>${cmpCell(vpCmp.resistance, 'kde')}</td>
+                                    <td>${cmpCell(vpCmp.resistance, 'vp')}</td>
+                                    <td>${cmpCell(vpCmp.resistance, 'diff')}</td>
+                                    <td>${cmpCell(vpCmp.resistance, 'align')}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p class="kde-vp-compare-note">${this._esc(alignedNote)}</p>
+                    </div>
+                </div>
+                <h4 class="kde-levels-subtitle">黄金分割（ZigZag）/ Pivot 波动率修正 / 共振带（参考）
+                    <span class="${tagCls(classicAdjust)}">${tagTxt(classicAdjust)}</span>
+                </h4>
+                <div class="kde-levels-grid kde-levels-grid--classic">
+                    <div class="kde-levels-card fib">
+                        <h4>黄金分割</h4>
+                        <div class="kde-levels-near">
+                            <div class="kde-levels-meta-line">锚定：<strong>${this._esc(fibAnchor)}</strong>${this._esc(fibDepth)}</div>
+                            <div>高点：<strong>${fmt(fib && fib.swing_high)}</strong>
+                                <span class="kde-levels-date">${fib && fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}</span></div>
+                            <div>低点：<strong>${fmt(fib && fib.swing_low)}</strong>
+                                <span class="kde-levels-date">${fib && fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}</span></div>
+                            <div>最近支撑：<strong>${fmt(classic.nearest_fib_support)}</strong></div>
+                            <div>最近压力：<strong>${fmt(classic.nearest_fib_resistance)}</strong></div>
+                            <div class="kde-levels-dir">方向：<strong>${fibDirTxt}</strong></div>
+                        </div>
+                        <ul>${this._labeledListHtml(fibRows)}</ul>
+                    </div>
+                    <div class="kde-levels-card pivot">
+                        <h4>经典 Pivot</h4>
+                        <div class="kde-levels-near">
+                            <div>最近支撑：<strong>${fmt(classic.nearest_pivot_support)}</strong></div>
+                            <div>最近压力：<strong>${fmt(classic.nearest_pivot_resistance)}</strong></div>
+                        </div>
+                        <ul>${this._labeledListHtml(pivRows)}</ul>
+                    </div>
+                    <div class="kde-levels-card cam">
+                        <h4>Camarilla <span class="kde-levels-badge">波动率修正</span></h4>
+                        <div class="kde-levels-near">
+                            <div>最近支撑：<strong>${fmt(classic.nearest_cam_support ?? (cam && cam.nearest_support))}</strong></div>
+                            <div>最近压力：<strong>${fmt(classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance))}</strong></div>
+                        </div>
+                        <ul>${this._labeledListHtml(camRows)}</ul>
+                        <p class="kde-levels-atr-tip">${this._esc(atrTip)}</p>
+                    </div>
+                    <div class="kde-levels-card confluence">
+                        <h4>共振带</h4>
+                        <div class="kde-levels-near">
+                            <div>最近支撑带：<strong>${this._esc(confNearS)}</strong></div>
+                            <div>最近压力带：<strong>${this._esc(confNearR)}</strong></div>
+                        </div>
+                        <ul>${this._labeledListHtml(confRows)}</ul>
+                    </div>
+                </div>
+                <p class="kde-levels-meta">${this._esc(metaParts.join(' · '))}</p>
+            </div>`;
+    },
+
+    _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    },
+
     async loadKdeWatchlistOptions() {
         const select = document.getElementById('kdeLevelsWatchlist');
         if (!select || select.dataset.loaded === '1') return;
@@ -218,38 +538,28 @@ const KdeLevelsTool = {
         try {
             const factorSourceEl = document.getElementById('kdeLevelsFactorSource');
             const factorSource = (factorSourceEl && factorSourceEl.value) || 'auto';
-            const qs = new URLSearchParams({
-                max_levels: '8',
-                adjust,
-            });
-            if (adjust === 'qfq') {
-                qs.set('factor_source', factorSource);
-            }
             const vpParams = this.readVpLookbackParams();
-            // 有起始日期优先；否则传回看天数（含默认 60）
-            if (vpParams.vp_from_date) {
-                qs.set('vp_from_date', vpParams.vp_from_date);
-            } else if (vpParams.vp_lookback != null) {
-                qs.set('vp_lookback', String(vpParams.vp_lookback));
-            }
-            const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
-            const resp = await authFetch(url);
-            const payload = await resp.json().catch(() => ({}));
-            const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-            if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
-                this.renderKdeLevelsCandidates(candidates, payload.message);
-                CommonUtils.showToast(payload.message || '请从候选中选择股票', 'warning');
+            const fetched = await this.fetchLevels(query, {
+                adjust,
+                factor_source: factorSource,
+                vp_from_date: vpParams.vp_from_date || undefined,
+                vp_lookback: vpParams.vp_from_date ? undefined : (vpParams.vp_lookback != null ? vpParams.vp_lookback : undefined),
+            });
+            const candidates = fetched.candidates || [];
+            if (candidates.length > 1 || (candidates.length > 0 && !fetched.data)) {
+                this.renderKdeLevelsCandidates(candidates, fetched.message);
+                CommonUtils.showToast(fetched.message || '请从候选中选择股票', 'warning');
                 return;
             }
-            if (!resp.ok && !payload.data) {
-                throw new Error(payload.message || '计算失败');
+            if (!fetched.httpOk && !fetched.data) {
+                throw new Error(fetched.message || '计算失败');
             }
-            const data = payload.data || {};
+            const data = fetched.data || {};
             if (data.stock_code && codeInput) {
                 const name = data.stock_name || '';
                 codeInput.value = name ? `${data.stock_code} ${name}` : data.stock_code;
             }
-            this.renderKdeLevelsResult(data, payload.success !== false, payload.message);
+            this.renderKdeLevelsResult(data, fetched.ok, fetched.message);
         } catch (e) {
             console.error('KDE 支撑压力计算失败:', e);
             CommonUtils.showToast(e.message || '计算失败', 'error');
