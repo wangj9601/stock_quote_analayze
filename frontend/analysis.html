@@ -115,8 +115,14 @@
                                 </div>
                                 <div class="form-group ssa-actions">
                                     <label>&nbsp;</label>
-                                    <button type="button" class="btn btn-primary" id="ssaAnalyzeBtn"
-                                        data-perm="channel.analyze.tab.stock_ai.btn.analyze">分析</button>
+                                    <div class="ssa-action-btns">
+                                        <button type="button" class="btn btn-primary" id="ssaAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.stock_ai.btn.analyze">分析</button>
+                                        <button type="button" class="btn btn-secondary" id="ssaExportPdfBtn"
+                                            data-perm="channel.analyze.tab.stock_ai.btn.analyze"
+                                            title="将当前策略、阻力支撑与形态识别结果导出为 PDF"
+                                            disabled>导出 PDF</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -125,12 +131,6 @@
                             <ul id="ssaCandidateList"></ul>
                         </div>
                         <div class="ssa-meta" id="ssaMeta" hidden></div>
-
-                        <div class="ssa-result-actions" id="ssaResultActions" hidden>
-                            <button type="button" class="btn btn-secondary" id="ssaExportPdfBtn"
-                                data-perm="channel.analyze.tab.stock_ai.btn.export"
-                                title="将当前策略、阻力支撑与形态识别结果导出为 PDF">导出 PDF</button>
-                        </div>
 
                         <section class="ssa-block" id="ssaStrategyBlock" hidden>
                             <h4 class="ssa-block-title">策略分析</h4>

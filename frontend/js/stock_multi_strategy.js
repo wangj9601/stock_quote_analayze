@@ -88,10 +88,8 @@ const StockMultiStrategy = {
     },
 
     updateExportBtn() {
-        const wrap = document.getElementById('ssaResultActions');
         const btn = document.getElementById('ssaExportPdfBtn');
         const ok = this.hasExportableResult();
-        if (wrap) wrap.hidden = !ok;
         if (btn) {
             btn.disabled = !ok || this.exporting;
             if (!this.exporting) btn.textContent = '导出 PDF';
@@ -459,7 +457,19 @@ const StockMultiStrategy = {
             stock.code || stock.stock_code || (this.lastPattern && this.lastPattern.code) || ''
         ).replace(/[^\w.-]/g, '');
         const codePart = code || 'unknown';
-        return `个股分析_${codePart}_${y}${m}${day}.pdf`;
+        const rawName = String(
+            stock.name ||
+                stock.stock_name ||
+                (this.lastPattern && this.lastPattern.name) ||
+                ''
+        ).trim();
+        // 去掉 Windows / 通用文件名非法字符，空白压成下划线
+        const namePart = rawName
+            .replace(/[\\/:*?"<>|]/g, '')
+            .replace(/\s+/g, '_')
+            .slice(0, 40);
+        const mid = namePart ? `${codePart}_${namePart}` : codePart;
+        return `个股分析_${mid}_${y}${m}${day}.pdf`;
     },
 
     buildPdfHtml() {

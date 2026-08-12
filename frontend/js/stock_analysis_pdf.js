@@ -178,6 +178,68 @@
       }
     }
 
+    const cam = classic.camarilla || null;
+    const atrPiv = classic.atr_pivot || null;
+    if (cam) {
+      const camBody = [
+        [
+          '最近支撑',
+          fmtPrice(classic.nearest_cam_support != null ? classic.nearest_cam_support : cam.nearest_support),
+        ],
+        [
+          '最近压力',
+          fmtPrice(
+            classic.nearest_cam_resistance != null
+              ? classic.nearest_cam_resistance
+              : cam.nearest_resistance
+          ),
+        ],
+      ];
+      ['R4', 'R3', 'R2', 'R1', 'S1', 'S2', 'S3', 'S4'].forEach((k) => {
+        if (cam[k] != null) camBody.push([k, fmtPrice(cam[k])]);
+      });
+      if (atrPiv && atrPiv.atr != null) {
+        camBody.push([
+          'ATR-Pivot',
+          `P=${fmtPrice(atrPiv.P)} ±1ATR R1/S1=${fmtPrice(atrPiv.R1)}/${fmtPrice(atrPiv.S1)}`
+            + ` ±2ATR R2/S2=${fmtPrice(atrPiv.R2)}/${fmtPrice(atrPiv.S2)}（ATR=${fmtPrice(atrPiv.atr)}）`,
+        ]);
+      }
+      sections.push({
+        title: 'Camarilla（波动率修正）',
+        head: [['项目', '价格/说明']],
+        body: camBody,
+      });
+    }
+
+    const conf = classic.confluence_zones || d.confluence_zones || null;
+    if (conf && conf.ok) {
+      const zoneTxt = (z) => {
+        if (!z) return '--';
+        return `${fmtPrice(z.center)} [${fmtPrice(z.low)}–${fmtPrice(z.high)}]`;
+      };
+      const confBody = [
+        ['最近支撑带', zoneTxt(conf.nearest_support_zone)],
+        ['最近压力带', zoneTxt(conf.nearest_resistance_zone)],
+      ];
+      const pushZones = (arr, tag) => {
+        (arr || []).forEach((z, i) => {
+          const src = (z.sources || []).join('+') || '--';
+          const strength = z.strength != null ? z.strength : '--';
+          confBody.push([`${tag}${i + 1}·强度${strength}·${src}`, fmtPrice(z.center)]);
+        });
+      };
+      pushZones(conf.supports, '支撑');
+      pushZones(conf.resistances, '压力');
+      sections.push({
+        title: '共振带',
+        head: [['项目', '价格/区间']],
+        body: confBody,
+      });
+    } else if (conf && conf.reason) {
+      sections.push({ note: `共振带：${conf.reason}` });
+    }
+
     if (pack.error) {
       sections.push({ note: `提示：${pack.error}` });
     }
