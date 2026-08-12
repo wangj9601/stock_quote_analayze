@@ -546,6 +546,42 @@ def test_nms_falling_wedge_bear_flag_keeps_one():
     assert out[0]["nms_suppressed"][0]["pattern_type"] == "bear_flag"
 
 
+def test_nms_falling_wedge_bull_flag_mutex():
+    """下降楔与上升旗同界互斥，优先保留楔形。"""
+    d0 = "2024-03-01"
+    d1 = "2024-03-20"
+    wedge = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="falling_wedge",
+        status="forming",
+        confidence=0.45,
+        reason="下降楔形",
+        key_levels={"upper": 146.21, "lower": 116.94, "last_close": 140.0},
+        pivots=[
+            {"role": "high", "date": d0, "price": 146.21},
+            {"role": "low", "date": d1, "price": 116.94},
+        ],
+    )
+    flag = make_hit(
+        pattern_family="wedge_flag",
+        pattern_type="bull_flag",
+        status="forming",
+        confidence=0.42,
+        reason="上升旗形",
+        key_levels={"upper": 146.21, "lower": 116.94, "last_close": 140.0},
+        pivots=[
+            {"role": "high", "date": d0, "price": 146.21},
+            {"role": "low", "date": d1, "price": 116.94},
+        ],
+        extra={"simplified": True},
+    )
+    out = nms_overlapping_patterns([wedge, flag])
+    assert len(out) == 1
+    assert out[0]["pattern_type"] == "falling_wedge"
+    assert "同源亦曾匹配上升旗形" in out[0]["reason"]
+
+
+
 def test_nms_descending_triangle_falling_wedge_keeps_by_flat_lower():
     """下沿近似走平时主分类为下降三角，并在 reason 注明曾匹配下降楔形。"""
     highs = [

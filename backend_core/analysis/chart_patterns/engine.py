@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .double_extremes import detect_double_extremes
 from .head_shoulders import detect_head_shoulders
+from .lifecycle import apply_pattern_lifecycle
 from .pivots import extract_pivot_sequence
 from .rules import NMS_BOUND_REL_TOL
 from .triangles import detect_triangles
@@ -37,6 +38,9 @@ FAMILY_ALIASES = {
 _NMS_PAIRS = (
     frozenset({"falling_wedge", "bear_flag"}),
     frozenset({"rising_wedge", "bull_flag"}),
+    # 几何互斥：收敛楔形 vs 反向旗形（同界时不应并存）
+    frozenset({"falling_wedge", "bull_flag"}),
+    frozenset({"rising_wedge", "bear_flag"}),
     frozenset({"descending_triangle", "falling_wedge"}),
     frozenset({"ascending_triangle", "rising_wedge"}),
 )
@@ -46,6 +50,14 @@ _TRIANGLE_WEDGE_PAIRS = frozenset(
     {
         frozenset({"descending_triangle", "falling_wedge"}),
         frozenset({"ascending_triangle", "rising_wedge"}),
+    }
+)
+
+# 楔形↔反向旗形：同源时优先保留楔形（旗形为简化启发式）
+_WEDGE_OPPOSITE_FLAG_PAIRS = frozenset(
+    {
+        frozenset({"falling_wedge", "bull_flag"}),
+        frozenset({"rising_wedge", "bear_flag"}),
     }
 )
 
@@ -218,7 +230,7 @@ def _pick_nms_winner(
     ha: Dict[str, Any],
     hb: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """选出保留项与丢弃项：状态优先 → 三角/楔斜率几何 → 置信度。"""
+    """选出保留项与丢弃项：状态优先 → 三角/楔斜率几何 → 楔优先于反向旗 → 置信度。"""
     sa, sb = _hit_status_tier(ha), _hit_status_tier(hb)
     if sa != sb:
         return (ha, hb) if sa > sb else (hb, ha)
@@ -229,6 +241,20 @@ def _pick_nms_winner(
         if pref == ta and pref != tb:
             return ha, hb
         if pref == tb and pref != ta:
+            return hb, ha
+    ta = str(ha.get("pattern_type") or "")
+    tb = str(hb.get("pattern_type") or "")
+    pair = frozenset({ta, tb})
+    if pair in _WEDGE_OPPOSITE_FLAG_PAIRS:
+        if ta in ("falling_wedge", "rising_wedge") and tb not in (
+            "falling_wedge",
+            "rising_wedge",
+        ):
+            return ha, hb
+        if tb in ("falling_wedge", "rising_wedge") and ta not in (
+            "falling_wedge",
+            "rising_wedge",
+        ):
             return hb, ha
     if _hit_rank_key(ha) >= _hit_rank_key(hb):
         return ha, hb
@@ -306,13 +332,14 @@ def nms_overlapping_patterns(
 ) -> List[Dict[str, Any]]:
     """巩固形态 NMS：同源重叠对只保留一条，并在 reason 注明被抑制项。
 
-    覆盖：下降楔↔下降旗、上升楔↔上升旗、下降三角↔下降楔、上升三角↔上升楔。
-    选取：已确认优先；三角/楔再按斜率几何；否则高置信。
+    覆盖：下降楔↔下降旗、上升楔↔上升旗、下降楔↔上升旗、上升楔↔下降旗、
+    下降三角↔下降楔、上升三角↔上升楔。
+    选取：已确认优先；三角/楔再按斜率几何；楔形优先于反向简化旗形；否则高置信。
     同源判定：上下沿相对差均 ≤ rel_tol，或高/低枢轴价位序列同源；且日期区间重叠。
     """
     by_type: Dict[str, List[int]] = {}
     for i, h in enumerate(hits):
-        if str(h.get("status") or "") == "invalidated":
+        if str(h.get("status") or "") in ("invalidated", "archived"):
             continue
         t = str(h.get("pattern_type") or "")
         by_type.setdefault(t, []).append(i)
@@ -362,7 +389,7 @@ def detect_all(
     """对升序日线 bars 跑所选形态族，返回标准化 hit 列表。
 
     默认不返回 status=invalidated（失效）项；传 include_invalidated=True 可保留。
-    后处理：巩固形态同源 NMS（楔/旗/三角重叠对）。
+    后处理：反转形态生命周期归档 → 巩固形态同源 NMS。
     """
     seq = [b for b in (bars or []) if isinstance(b, dict)]
     if len(seq) < 30:
@@ -379,8 +406,14 @@ def detect_all(
     if "wedge_flag" in families:
         hits.extend(detect_wedges_flags(seq, pivots))
 
+    hits = apply_pattern_lifecycle(hits, seq)
     hits = nms_overlapping_patterns(hits)
     if not include_invalidated:
         hits = [h for h in hits if str(h.get("status") or "") != "invalidated"]
-    hits.sort(key=lambda h: (-float(h.get("confidence") or 0), str(h.get("pattern_type") or "")))
+    hits.sort(
+        key=lambda h: (
+            -float(h.get("confidence") or 0),
+            str(h.get("pattern_type") or ""),
+        )
+    )
     return hits

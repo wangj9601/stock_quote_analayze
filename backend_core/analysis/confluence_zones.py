@@ -149,6 +149,51 @@ def _cluster_distance_merge(
     return labels
 
 
+def _clip_zone_to_price_side(
+    zone: Dict[str, Any],
+    *,
+    px: float,
+    side: str,
+) -> Optional[Dict[str, Any]]:
+    """按现价裁剪带区间，避免「支撑带上沿 > 现价」等语义越界。
+
+    - support：high 裁到 ≤ px，必要时重算 center
+    - resistance：low 裁到 ≥ px
+    裁剪后若 low >= high（相对容差）则丢弃该带。
+    """
+    z = dict(zone)
+    try:
+        lo = float(z["low"])
+        hi = float(z["high"])
+        center = float(z.get("center") or ((lo + hi) / 2.0))
+    except (KeyError, TypeError, ValueError):
+        return None
+    clipped = False
+    if side == "support":
+        if lo >= px:
+            return None
+        if hi > px:
+            hi = px
+            clipped = True
+    else:
+        if hi <= px:
+            return None
+        if lo < px:
+            lo = px
+            clipped = True
+    if hi - lo <= max(abs(px) * 1e-6, 1e-9):
+        return None
+    if center < lo or center > hi:
+        center = (lo + hi) / 2.0
+        clipped = True
+    z["low"] = round(lo, PRICE_DECIMALS)
+    z["high"] = round(hi, PRICE_DECIMALS)
+    z["center"] = round(center, PRICE_DECIMALS)
+    if clipped:
+        z["clipped_to_price"] = True
+    return z
+
+
 def build_confluence_zones(
     points: Sequence[Dict[str, Any]],
     *,
@@ -233,6 +278,12 @@ def build_confluence_zones(
     else:
         supports = [z for z in zones if z["center"] < px]
         resistances = [z for z in zones if z["center"] > px]
+        supports = [_clip_zone_to_price_side(z, px=px, side="support") for z in supports]
+        resistances = [
+            _clip_zone_to_price_side(z, px=px, side="resistance") for z in resistances
+        ]
+        supports = [z for z in supports if z is not None]
+        resistances = [z for z in resistances if z is not None]
     supports.sort(key=lambda z: (-z["strength"], -z["center"]))
     resistances.sort(key=lambda z: (-z["strength"], z["center"]))
     supports = supports[: max(1, int(max_each))]

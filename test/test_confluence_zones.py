@@ -74,3 +74,42 @@ def test_compute_from_reference():
     )
     assert out["ok"] is True
     assert len(out["supports"]) >= 1 or len(out["resistances"]) >= 1
+
+
+def test_support_zone_high_clipped_to_last_close():
+    """支撑带中心在现价下、原 high 越过现价时，展示 high 应 ≤ 现价。"""
+    from backend_core.analysis.confluence_zones import _clip_zone_to_price_side
+
+    z = {
+        "center": 138.54,
+        "low": 133.10,
+        "high": 144.04,
+        "strength": 38.2,
+        "sources": ["pivot", "fib"],
+        "labels": ["S1", "0.618"],
+        "n_points": 4,
+    }
+    px = 140.57
+    out = _clip_zone_to_price_side(z, px=px, side="support")
+    assert out is not None
+    assert out["high"] <= px + 1e-9
+    assert out["low"] == 133.10
+    assert out.get("clipped_to_price") is True
+    assert out["center"] <= out["high"]
+
+    zones = build_confluence_zones(
+        [
+            {"price": 133.1, "weight": 1.0, "source": "a", "label": "a"},
+            {"price": 138.5, "weight": 1.2, "source": "b", "label": "b"},
+            {"price": 144.0, "weight": 1.0, "source": "c", "label": "c"},
+            {"price": 150.0, "weight": 1.0, "source": "d", "label": "d"},
+            {"price": 151.0, "weight": 1.0, "source": "e", "label": "e"},
+        ],
+        last_close=140.57,
+        atr=2.0,
+    )
+    assert zones["ok"] is True
+    for s in zones["supports"]:
+        assert s["high"] <= 140.57 + 1e-9
+    for r in zones["resistances"]:
+        assert r["low"] >= 140.57 - 1e-9

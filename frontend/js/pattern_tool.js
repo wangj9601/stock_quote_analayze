@@ -390,10 +390,11 @@ const PatternTool = {
   statusLabel(st) {
     if (st === 'confirmed') return '已确认';
     if (st === 'invalidated') return '失效';
+    if (st === 'archived') return '已归档';
     return '形成中';
   },
 
-  /** 列表/专家解读默认忽略失效项 */
+  /** 列表/专家解读默认忽略失效项；归档项列表可见但不进主形态排序（见 _rankHits） */
   _activeHits(items) {
     return (items || []).filter((h) => h && h.status !== 'invalidated');
   },
@@ -513,7 +514,7 @@ const PatternTool = {
 
   _rankHits(items) {
     return (items || [])
-      .filter((h) => h && h.status !== 'invalidated')
+      .filter((h) => h && h.status !== 'invalidated' && h.status !== 'archived')
       .slice()
       .sort((a, b) => {
         const rank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
