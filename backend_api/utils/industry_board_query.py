@@ -612,15 +612,24 @@ def fetch_industry_board_list_with_metrics(
         _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
 
-    # 有涨跌幅的按涨幅降序，其余按名称
-    def _sort_key(x: Dict[str, Any]) -> Tuple[int, float, str]:
-        cp = x.get("change_percent")
-        if cp is None:
-            return (1, 0.0, str(x.get("board_name") or ""))
+    # 走强优先，同档内按板块斜率降序；无斜率靠后
+    def _sort_key(x: Dict[str, Any]) -> Tuple[int, int, float, str]:
+        env = str(x.get("board_env") or "")
+        if env == "strong" or x.get("board_strong"):
+            env_rank = 0
+        elif env == "neutral":
+            env_rank = 1
+        elif env == "weak" or x.get("board_weak"):
+            env_rank = 2
+        else:
+            env_rank = 3
+        slope = x.get("sector_slope")
+        if slope is None:
+            return (env_rank, 1, 0.0, str(x.get("board_name") or ""))
         try:
-            return (0, -float(cp), str(x.get("board_name") or ""))
+            return (env_rank, 0, -float(slope), str(x.get("board_name") or ""))
         except (TypeError, ValueError):
-            return (1, 0.0, str(x.get("board_name") or ""))
+            return (env_rank, 1, 0.0, str(x.get("board_name") or ""))
 
     out.sort(key=_sort_key)
     return out
@@ -677,14 +686,23 @@ def fetch_concept_board_list_with_metrics(
         _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
 
-    def _sort_key(x: Dict[str, Any]) -> Tuple[int, float, str]:
+    def _sort_key(x: Dict[str, Any]) -> Tuple[int, int, float, str]:
+        env = str(x.get("board_env") or "")
+        if env == "strong" or x.get("board_strong"):
+            env_rank = 0
+        elif env == "neutral":
+            env_rank = 1
+        elif env == "weak" or x.get("board_weak"):
+            env_rank = 2
+        else:
+            env_rank = 3
         slope = x.get("sector_slope")
         if slope is None:
-            return (1, 0.0, str(x.get("board_name") or ""))
+            return (env_rank, 1, 0.0, str(x.get("board_name") or ""))
         try:
-            return (0, -float(slope), str(x.get("board_name") or ""))
+            return (env_rank, 0, -float(slope), str(x.get("board_name") or ""))
         except (TypeError, ValueError):
-            return (1, 0.0, str(x.get("board_name") or ""))
+            return (env_rank, 1, 0.0, str(x.get("board_name") or ""))
 
     out.sort(key=_sort_key)
     return out

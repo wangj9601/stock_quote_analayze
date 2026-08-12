@@ -29,10 +29,10 @@ const MarketsPage = {
     total: 0,
     initialized: false, // 是否已经初始化过
 
-    // 行业板块：默认列表（对齐自选股）
+    // 行业板块：默认按板块斜率（走强优先）
     sectorView: 'list',
     sectorData: [],
-    sectorSortKey: 'change_percent',
+    sectorSortKey: 'sector_slope',
     sectorSortAsc: false,
 
     // 概念板块（与行业板块同布局）
@@ -935,13 +935,39 @@ const MarketsPage = {
         }
     },
 
+    _boardEnvSortRank(d) {
+        const env = (d && d.board_env)
+            || (d && d.board_strong ? 'strong' : (d && d.board_weak ? 'weak' : ''));
+        if (env === 'strong') return 0;
+        if (env === 'neutral') return 1;
+        if (env === 'weak') return 2;
+        return 3; // unknown / 无斜率
+    },
+
     _sortedSectors(sectors, kind = 'industry') {
         const list = Array.isArray(sectors) ? sectors.slice() : [];
         const key = kind === 'concept'
             ? (this.conceptSortKey || 'sector_slope')
-            : (this.sectorSortKey || 'change_percent');
+            : (this.sectorSortKey || 'sector_slope');
         const asc = kind === 'concept' ? !!this.conceptSortAsc : !!this.sectorSortAsc;
         list.sort((a, b) => {
+            // 默认/按斜率：走强 → 正常 → 走弱 → 未知，同档内再按斜率
+            if (key === 'sector_slope') {
+                const ra = this._boardEnvSortRank(a);
+                const rb = this._boardEnvSortRank(b);
+                if (ra !== rb) return ra - rb;
+                const na = a.sector_slope == null || a.sector_slope === '' ? null : Number(a.sector_slope);
+                const nb = b.sector_slope == null || b.sector_slope === '' ? null : Number(b.sector_slope);
+                if (na == null && nb == null) {
+                    return String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh');
+                }
+                if (na == null) return 1;
+                if (nb == null) return -1;
+                // 斜率列默认降序（走强内斜率高的更靠前）；升序时反转
+                const cmp = asc ? na - nb : nb - na;
+                if (cmp !== 0) return cmp;
+                return String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh');
+            }
             let va = a[key];
             let vb = b[key];
             if (key === 'board_name' || key === 'board_code') {

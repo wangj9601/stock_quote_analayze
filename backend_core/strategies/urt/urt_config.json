@@ -27,6 +27,7 @@
   "structure_rr_warn_enabled": true,
   "structure_rr_min_rr": 2.0,
   "structure_rr_min_downside_pct": 0.015,
+  "structure_rr_min_upside_pct": 0.03,
   "structure_rr_hard_gate_enabled": true,
   "structure_hang_min_upside_pct": 0.08,
   "risk": {

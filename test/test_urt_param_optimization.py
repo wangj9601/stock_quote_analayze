@@ -97,3 +97,54 @@ def test_bearish_trend_risk_tags():
     assert tags[0]["id"] == "bearish_ma_trend"
     tags2 = build_trend_risk_tags({"ma_bear_ok": False, "above_ma20": False})
     assert any(t["id"] == "below_ma20" for t in tags2)
+
+
+def test_compute_structure_rr_thin_upside():
+    """距阻力上行空间过窄：宁夏建材类 12.58/12.57/12.93。"""
+    from backend_core.strategies.gms.structure_levels import compute_structure_rr
+
+    info = compute_structure_rr(
+        12.58,
+        12.57,
+        12.93,
+        min_downside_pct=0.015,
+        min_upside_pct=0.03,
+    )
+    assert info["reason"] == "thin_upside"
+    assert info["should_penalize"] is True
+    assert info["upside"] is not None and info["upside"] < 0.4
+    assert info["upside_pct"] is not None and info["upside_pct"] < 0.03
+
+    ok = compute_structure_rr(
+        12.58,
+        12.0,
+        14.0,
+        min_downside_pct=0.015,
+        min_upside_pct=0.03,
+    )
+    assert ok["reason"] == "ok"
+    assert ok["should_penalize"] is None
+
+
+def test_urt_hard_gate_blocks_thin_upside():
+    cfg = {
+        "structure_rr_warn_enabled": True,
+        "structure_rr_min_rr": 2.0,
+        "structure_rr_min_downside_pct": 0.015,
+        "structure_rr_min_upside_pct": 0.03,
+        "structure_rr_hard_gate_enabled": True,
+        "structure_hang_min_upside_pct": 0.08,
+    }
+    enriched = enrich_structure_with_rr(
+        {
+            "kde_ok": True,
+            "nearest_support": 12.57,
+            "nearest_resistance": 12.93,
+        },
+        price=12.58,
+        cfg=cfg,
+    )
+    assert enriched["structure"]["rr_reason"] == "thin_upside"
+    assert enriched["structure_hard_gate"]["blocked"] is True
+    assert "上行空间不足" in enriched["structure_hard_gate"]["reasons"]
+    assert any(t.get("label") == "上行空间不足" for t in enriched["risk_tags"])

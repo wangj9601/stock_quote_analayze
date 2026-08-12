@@ -167,8 +167,74 @@ def test_fetch_industry_board_list_with_metrics_merges_quote_and_slope(monkeypat
     bank = by_code["881102"]
     assert bank["sector_slope"] is None
     assert bank.get("change_percent") is None
-    # 有涨幅的板排在前面
+    # 有斜率的板排在无斜率之前（走强优先；本例为走弱但有斜率）
     assert out[0]["board_code"] == "881101"
+
+
+def test_industry_board_list_sorts_strong_before_weak(monkeypatch):
+    """列表默认：走强优先，同档内斜率降序。"""
+    from backend_api.utils import industry_board_query as q
+
+    catalog = [
+        {
+            "board_code": "881A",
+            "board_name": "弱板高涨幅",
+            "trade_observe_flag": False,
+            "board_code_source": "tonghuashun",
+            "board_code_source_label": "同花顺",
+            "stock_count": 10,
+            "member_count": 10,
+        },
+        {
+            "board_code": "881B",
+            "board_name": "强板",
+            "trade_observe_flag": False,
+            "board_code_source": "tonghuashun",
+            "board_code_source_label": "同花顺",
+            "stock_count": 10,
+            "member_count": 10,
+        },
+        {
+            "board_code": "881C",
+            "board_name": "更强板",
+            "trade_observe_flag": False,
+            "board_code_source": "tonghuashun",
+            "board_code_source_label": "同花顺",
+            "stock_count": 10,
+            "member_count": 10,
+        },
+    ]
+    monkeypatch.setattr(q, "fetch_industry_board_catalog", lambda db, **kwargs: catalog)
+    monkeypatch.setattr(
+        q,
+        "_load_industry_realtime_quote_indexes",
+        lambda db: (
+            {
+                "881A": {"change_percent": 5.0, "amount": 1e9, "latest_price": 100.0},
+                "881B": {"change_percent": 1.0, "amount": 1e9, "latest_price": 100.0},
+                "881C": {"change_percent": 0.5, "amount": 1e9, "latest_price": 100.0},
+            },
+            {},
+        ),
+    )
+
+    def _slopes(db, codes, board_kind="industry"):
+        return {
+            "881A": {"sector_slope": -0.0049, "sector_slope_window": 60},
+            "881B": {"sector_slope": 0.0080, "sector_slope_window": 60},
+            "881C": {"sector_slope": 0.0100, "sector_slope_window": 60},
+        }
+
+    monkeypatch.setattr(
+        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
+        _slopes,
+    )
+
+    out = q.fetch_industry_board_list_with_metrics(SimpleNamespace(), board_code_source="tonghuashun")
+    assert [x["board_code"] for x in out] == ["881C", "881B", "881A"]
+    assert out[0]["board_env"] == "strong"
+    assert out[1]["board_env"] == "strong"
+    assert out[2]["board_env"] == "weak"
 
 
 def test_fetch_industry_board_detail_weak_and_roles(monkeypatch):

@@ -312,8 +312,9 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
                 "id": "structure_hard_gate",
                 "name": "结构硬闸",
                 "rule": (
-                    f"否决：破位支撑 / 贴·超阻力 / 悬空离支撑"
-                    f"（相对支撑≥{hang_thr_pct:g}%）；RR 偏低仅提示"
+                    f"否决：破位支撑 / 贴·超阻力 / 上行空间不足"
+                    f"（相对现价<{float(cfg.get('structure_rr_min_upside_pct') or 0.03) * 100:g}%）"
+                    f" / 悬空离支撑（相对支撑≥{hang_thr_pct:g}%）；RR 偏低仅提示"
                 ),
                 "actual": gate_actual,
                 "pass": structure_gate_ok,

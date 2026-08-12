@@ -67,6 +67,8 @@ class URTConfigManager:
             "structure_rr_warn_enabled": True,
             "structure_rr_min_rr": 2.0,
             "structure_rr_min_downside_pct": 0.015,
+            # 相对现价上行空间低于该比例 → 视为贴阻力（硬闸）
+            "structure_rr_min_upside_pct": 0.03,
             "structure_rr_hard_gate_enabled": True,
             "structure_hang_min_upside_pct": 0.08,
             "risk": {
@@ -150,6 +152,7 @@ class URTConfigManager:
             "structure_rr_warn_enabled",
             "structure_rr_min_rr",
             "structure_rr_min_downside_pct",
+            "structure_rr_min_upside_pct",
             "structure_rr_hard_gate_enabled",
             "structure_hang_min_upside_pct",
         ):

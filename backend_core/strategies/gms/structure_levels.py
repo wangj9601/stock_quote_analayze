@@ -33,6 +33,7 @@ def compute_structure_rr(
     nearest_resistance: Optional[float],
     *,
     min_downside_pct: float = 0.015,
+    min_upside_pct: float = 0.0,
 ) -> Dict[str, Any]:
     """
     结构盈亏比（与 RPE structure_filter 同口径，并对分母做下限）。
@@ -42,15 +43,22 @@ def compute_structure_rr(
     贴支撑时原始 downside 极小会导致 RR 虚高；默认至少按现价 1.5% 作为风险分母
     （覆盖滑点/假破缓冲）。min_downside_pct<=0 时关闭下限。
 
+    min_upside_pct>0 时：若 (阻力−价)/价 低于该比例，视为上行空间不足（贴阻力类），
+    should_penalize=True，reason=thin_upside（避免「支撑贴身、阻力仅几毛」仍算可交易）。
+
     返回:
       rr / reason / should_penalize
       downside_raw / downside / downside_floored / min_downside_pct
+      upside / upside_pct / min_upside_pct
     """
     empty_extra = {
         "downside_raw": None,
         "downside": None,
         "downside_floored": False,
         "min_downside_pct": float(min_downside_pct or 0),
+        "upside": None,
+        "upside_pct": None,
+        "min_upside_pct": float(min_upside_pct or 0),
     }
     if price is None:
         return {"rr": None, "reason": "no_price", "should_penalize": False, **empty_extra}
@@ -84,15 +92,29 @@ def compute_structure_rr(
     downside = max(downside_raw, floor) if floor > 0 else downside_raw
     floored = bool(floor > 0 and downside_raw < floor)
 
+    try:
+        up_floor_pct = float(min_upside_pct or 0)
+    except (TypeError, ValueError):
+        up_floor_pct = 0.0
+    if up_floor_pct < 0:
+        up_floor_pct = 0.0
+
+    base_extra = {
+        "downside_raw": round(downside_raw, 6),
+        "downside": round(downside, 6),
+        "downside_floored": floored,
+        "min_downside_pct": floor_pct,
+        "min_upside_pct": up_floor_pct,
+    }
+
     if nearest_resistance is None:
         return {
             "rr": None,
             "reason": "no_resistance",
             "should_penalize": False,
-            "downside_raw": round(downside_raw, 6),
-            "downside": round(downside, 6),
-            "downside_floored": floored,
-            "min_downside_pct": floor_pct,
+            "upside": None,
+            "upside_pct": None,
+            **base_extra,
         }
     try:
         nr = float(nearest_resistance)
@@ -101,33 +123,42 @@ def compute_structure_rr(
             "rr": None,
             "reason": "no_resistance",
             "should_penalize": False,
-            "downside_raw": round(downside_raw, 6),
-            "downside": round(downside, 6),
-            "downside_floored": floored,
-            "min_downside_pct": floor_pct,
+            "upside": None,
+            "upside_pct": None,
+            **base_extra,
         }
 
     upside = nr - px
+    upside_pct = upside / px if px > 0 else None
     if upside <= 0:
         return {
             "rr": 0.0,
             "reason": "at_resistance",
             "should_penalize": True,
-            "downside_raw": round(downside_raw, 6),
-            "downside": round(downside, 6),
-            "downside_floored": floored,
-            "min_downside_pct": floor_pct,
+            "upside": round(upside, 6),
+            "upside_pct": round(upside_pct, 6) if upside_pct is not None else 0.0,
+            **base_extra,
         }
 
     rr = round(upside / downside, 4)
+    # 上行空间相对现价过窄：按贴阻力处理（硬闸/减分），避免「涨几毛就到阻力」虚买点
+    if up_floor_pct > 0 and upside_pct is not None and upside_pct < up_floor_pct:
+        return {
+            "rr": rr,
+            "reason": "thin_upside",
+            "should_penalize": True,
+            "upside": round(upside, 6),
+            "upside_pct": round(upside_pct, 6),
+            **base_extra,
+        }
+
     return {
         "rr": rr,
         "reason": "ok",
         "should_penalize": None,
-        "downside_raw": round(downside_raw, 6),
-        "downside": round(downside, 6),
-        "downside_floored": floored,
-        "min_downside_pct": floor_pct,
+        "upside": round(upside, 6),
+        "upside_pct": round(upside_pct, 6) if upside_pct is not None else None,
+        **base_extra,
     }
 
 
@@ -143,6 +174,21 @@ def resolve_structure_rr_min_downside_pct(cfg: Optional[Dict[str, Any]] = None) 
         v = float(raw) if raw is not None else 0.015
     except (TypeError, ValueError):
         v = 0.015
+    return max(0.0, v)
+
+
+def resolve_structure_rr_min_upside_pct(cfg: Optional[Dict[str, Any]] = None) -> float:
+    """配置键 structure_rr_min_upside_pct；默认 0（关闭）。URT 建议默认 0.03。"""
+    root = cfg if isinstance(cfg, dict) else {}
+    raw = root.get("structure_rr_min_upside_pct")
+    if raw is None and isinstance(root.get("structure"), dict):
+        raw = root["structure"].get("structure_rr_min_upside_pct")
+    if raw is None and isinstance(root.get("scoring"), dict):
+        raw = root["scoring"].get("structure_rr_min_upside_pct")
+    try:
+        v = float(raw) if raw is not None else 0.0
+    except (TypeError, ValueError):
+        v = 0.0
     return max(0.0, v)
 
 

@@ -155,9 +155,11 @@
 - 默认回看：初始 250、步进 250、最大 750；网格 200 等（配置 `kde_*`）。  
 - **结构盈亏比** `RR = (最近阻力 − 现价) / (现价 − 最近支撑)`（分母有下限，复用 GMS `compute_structure_rr`）。  
 - **软标签**：`RR < structure_rr_min_rr`（默认 **2.0**）→「结构盈亏比偏低」warn；**不否决买点、不减分**。  
-- **硬闸**（`structure_rr_hard_gate_enabled`，默认 true）：破位支撑、贴/超阻力、悬空离支撑（`structure_hang_min_upside_pct` 默认 0.08）→ 否决正式买点；对应 danger 标签（悬空 `id=structure_hanging`）。  
+- **硬闸**（`structure_rr_hard_gate_enabled`，默认 true）：破位支撑、贴/超阻力、**上行空间不足**（距阻力相对现价 &lt; `structure_rr_min_upside_pct`，默认 **3%**）、悬空离支撑（`structure_hang_min_upside_pct` 默认 0.08）→ 否决正式买点。  
 - **趋势标签**：空头排列 → `bearish_ma_trend`；跌破 MA20 → `below_ma20`（warn）。  
 - 选股页「按前复权计算」：仅对列表重算 KDE 支撑/阻力，**不改**得分与买卖点。
+
+说明：若最近支撑几乎贴着现价、最近阻力只高几毛（如 12.57 / 12.58 / 12.93），旧口径可能因风险分母下限出现「RR 偏低」软提示但仍买点=是；现已按**最小上行比例**硬否决，避免「涨一点就到阻力」的虚买点。
 
 ---
 
@@ -185,6 +187,7 @@
 | `history_calendar_days` | 120 |
 | `structure_rr_warn_enabled` / `structure_rr_min_rr` | true / **2.0** |
 | `structure_rr_hard_gate_enabled` | **true** |
+| `structure_rr_min_upside_pct` | **0.03**（相对现价最小上行；不足则硬闸） |
 | `structure_hang_min_upside_pct` | **0.08** |
 
 ### 8.2 买后纪律（主要在回测 `risk_exit`）

@@ -158,17 +158,34 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item label="悬空阈值%">
-              <el-input-number
-                v-model="form.structure_hang_min_upside_pct_ui"
-                :min="1"
-                :max="50"
-                :step="0.5"
-                :precision="1"
-                @change="onHangPctUiChange"
-              />
-              <span class="hang-hint">相对支撑距离 ≥ 此% 视为悬空（写入 structure_hang_min_upside_pct）</span>
-            </el-form-item>
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-form-item label="最小上行%">
+                  <el-input-number
+                    v-model="form.structure_rr_min_upside_pct_ui"
+                    :min="0"
+                    :max="20"
+                    :step="0.5"
+                    :precision="1"
+                    @change="onMinUpsidePctUiChange"
+                  />
+                  <span class="hang-hint">距阻力相对现价低于此%视为上行不足（硬闸）</span>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="悬空阈值%">
+                  <el-input-number
+                    v-model="form.structure_hang_min_upside_pct_ui"
+                    :min="1"
+                    :max="50"
+                    :step="0.5"
+                    :precision="1"
+                    @change="onHangPctUiChange"
+                  />
+                  <span class="hang-hint">相对支撑距离 ≥ 此% 视为悬空</span>
+                </el-form-item>
+              </el-col>
+            </el-row>
 
             <el-divider content-position="left">精细化（换手默认开）</el-divider>
             <el-row :gutter="12">
@@ -283,6 +300,8 @@ const form = reactive<any>({
   structure_rr_warn_enabled: true,
   structure_rr_hard_gate_enabled: true,
   structure_rr_min_rr: 2.0,
+  structure_rr_min_upside_pct: 0.03,
+  structure_rr_min_upside_pct_ui: 3.0,
   structure_hang_min_upside_pct: 0.08,
   structure_hang_min_upside_pct_ui: 8.0,
   risk: {
@@ -299,6 +318,12 @@ function onHangPctUiChange(v: number | undefined) {
   const pct = Number(v)
   if (!Number.isFinite(pct)) return
   form.structure_hang_min_upside_pct = Math.max(0, pct) / 100
+}
+
+function onMinUpsidePctUiChange(v: number | undefined) {
+  const pct = Number(v)
+  if (!Number.isFinite(pct)) return
+  form.structure_rr_min_upside_pct = Math.max(0, pct) / 100
 }
 
 function applyParams(params: Record<string, any> = {}) {
@@ -335,6 +360,9 @@ function applyParams(params: Record<string, any> = {}) {
   form.structure_rr_warn_enabled = params.structure_rr_warn_enabled !== false
   form.structure_rr_hard_gate_enabled = params.structure_rr_hard_gate_enabled !== false
   form.structure_rr_min_rr = params.structure_rr_min_rr ?? 2.0
+  const minUp = Number(params.structure_rr_min_upside_pct)
+  form.structure_rr_min_upside_pct = Number.isFinite(minUp) ? minUp : 0.03
+  form.structure_rr_min_upside_pct_ui = Math.round(form.structure_rr_min_upside_pct * 1000) / 10
   const hang = Number(params.structure_hang_min_upside_pct)
   form.structure_hang_min_upside_pct = Number.isFinite(hang) ? hang : 0.08
   form.structure_hang_min_upside_pct_ui = Math.round(form.structure_hang_min_upside_pct * 1000) / 10
@@ -390,10 +418,12 @@ async function saveVersion() {
     if (showJson.value) {
       params = JSON.parse(jsonText.value)
     } else {
-      const { structure_hang_min_upside_pct_ui, ...rest } = form
+      const { structure_hang_min_upside_pct_ui, structure_rr_min_upside_pct_ui, ...rest } = form
       onHangPctUiChange(structure_hang_min_upside_pct_ui)
+      onMinUpsidePctUiChange(structure_rr_min_upside_pct_ui)
       params = { ...rest }
       delete params.structure_hang_min_upside_pct_ui
+      delete params.structure_rr_min_upside_pct_ui
     }
     await urtApiService.updateStrategyConfig(selectedId.value, {
       version_label: editMeta.version_label,

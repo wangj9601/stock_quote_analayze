@@ -76,9 +76,9 @@ def evaluate_structure_hard_gate(
     if reason in ("below_or_no_support", "zero_downside"):
         reasons.append("破位支撑")
 
-    # 贴/超阻力
-    if reason == "at_resistance":
-        reasons.append("贴/超阻力")
+    # 贴/超阻力、上行空间过窄
+    if reason in ("at_resistance", "thin_upside"):
+        reasons.append("贴/超阻力" if reason == "at_resistance" else "上行空间不足")
 
     # 悬空：有支撑且距离过大
     hanging, hang_pct = is_structure_hanging(price, st.get("nearest_support"), cfg)
@@ -106,14 +106,17 @@ def enrich_structure_with_rr(
     from backend_core.strategies.gms.structure_levels import (
         compute_structure_rr,
         resolve_structure_rr_min_downside_pct,
+        resolve_structure_rr_min_upside_pct,
     )
 
     floor_pct = resolve_structure_rr_min_downside_pct(cfg)
+    up_pct = resolve_structure_rr_min_upside_pct(cfg)
     info = compute_structure_rr(
         price,
         st.get("nearest_support"),
         st.get("nearest_resistance"),
         min_downside_pct=floor_pct,
+        min_upside_pct=up_pct,
     )
     st["rr"] = info.get("rr")
     st["rr_reason"] = info.get("reason")
@@ -121,6 +124,9 @@ def enrich_structure_with_rr(
     st["rr_min_downside_pct"] = info.get("min_downside_pct")
     st["rr_downside_raw"] = info.get("downside_raw")
     st["rr_downside"] = info.get("downside")
+    st["rr_upside"] = info.get("upside")
+    st["rr_upside_pct"] = info.get("upside_pct")
+    st["rr_min_upside_pct"] = info.get("min_upside_pct")
 
     hanging, hang_pct = is_structure_hanging(price, st.get("nearest_support"), cfg)
     st["hanging"] = hanging
@@ -158,15 +164,18 @@ def build_structure_rr_risk_tags(
         from backend_core.strategies.gms.structure_levels import (
             compute_structure_rr,
             resolve_structure_rr_min_downside_pct,
+            resolve_structure_rr_min_upside_pct,
         )
 
         px = price
         floor_pct = resolve_structure_rr_min_downside_pct(cfg)
+        up_pct = resolve_structure_rr_min_upside_pct(cfg)
         rr_info = compute_structure_rr(
             px,
             st.get("nearest_support"),
             st.get("nearest_resistance"),
             min_downside_pct=floor_pct,
+            min_upside_pct=up_pct,
         )
 
     rr = rr_info.get("rr") if rr_info else st.get("rr")
@@ -197,6 +206,24 @@ def build_structure_rr_risk_tags(
                     "label": "贴/超阻力",
                     "level": "danger",
                     "reason": f"上行空间不足 RR={rr if rr is not None else 0}（要求 ≥{min_rr:g}）{hint}",
+                }
+            )
+        elif reason == "thin_upside":
+            up = rr_info.get("upside") if rr_info else None
+            up_pct = rr_info.get("upside_pct") if rr_info else None
+            need = rr_info.get("min_upside_pct") if rr_info else None
+            up_txt = f"{up:.2f}元" if isinstance(up, (int, float)) else "—"
+            pct_txt = f"{up_pct * 100:.2f}%" if isinstance(up_pct, (int, float)) else "—"
+            need_txt = f"{float(need) * 100:.1f}%" if isinstance(need, (int, float)) else "3%"
+            tags.append(
+                {
+                    "id": "poor_structure_rr",
+                    "label": "上行空间不足",
+                    "level": "danger",
+                    "reason": (
+                        f"距最近阻力仅约 {up_txt}（{pct_txt}），低于最小上行要求 {need_txt}"
+                        f"；RR={rr if rr is not None else '—'}{hint}"
+                    ),
                 }
             )
         else:
