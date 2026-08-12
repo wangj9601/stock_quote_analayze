@@ -14,6 +14,7 @@ def test_build_buy_logic_pass():
         "use_turnover": False,
         "use_volume_ratio": False,
         "structure_rr_hard_gate_enabled": False,
+        "overheat_hard_gate_enabled": False,
     }
     detail = {
         "close": 10.5,
@@ -54,6 +55,7 @@ def test_build_buy_logic_fail_volume():
         "use_turnover": False,
         "use_volume_ratio": False,
         "structure_rr_hard_gate_enabled": False,
+        "overheat_hard_gate_enabled": False,
     }
     detail = {
         "close": 10.5,
@@ -89,6 +91,7 @@ def test_build_buy_logic_medium_yang_and_ma_bull_hard():
         ],
         "ma_bull_periods": [5, 10, 20],
         "structure_rr_hard_gate_enabled": False,
+        "overheat_hard_gate_enabled": False,
     }
     detail = {
         "close": 10.5,
@@ -127,6 +130,7 @@ def test_build_buy_logic_structure_hard_gate_blocks():
         "yang_rule_a": {"window": 4, "min_up_days": 3},
         "yang_rule_b": {"window": 5, "min_up_days": 4},
         "structure_rr_hard_gate_enabled": True,
+        "overheat_hard_gate_enabled": False,
         "structure_hang_min_upside_pct": 0.08,
     }
     detail = {

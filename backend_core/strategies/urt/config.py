@@ -71,6 +71,14 @@ class URTConfigManager:
             "structure_rr_min_upside_pct": 0.03,
             "structure_rr_hard_gate_enabled": True,
             "structure_hang_min_upside_pct": 0.08,
+            # 近期涨幅过大：近窗相对最低价涨幅 + MA20 乖离
+            "overheat_warn_enabled": True,
+            "overheat_hard_gate_enabled": True,
+            "overheat_lookback_days": 10,
+            "overheat_soft_pct": 0.15,
+            "overheat_hard_pct": 0.25,
+            "overheat_bias_soft_pct": 0.15,
+            "overheat_bias_hard_pct": 0.20,
             "risk": {
                 "stop_loss_pct_min": 5,
                 "stop_loss_pct_max": 10,
@@ -155,6 +163,13 @@ class URTConfigManager:
             "structure_rr_min_upside_pct",
             "structure_rr_hard_gate_enabled",
             "structure_hang_min_upside_pct",
+            "overheat_warn_enabled",
+            "overheat_hard_gate_enabled",
+            "overheat_lookback_days",
+            "overheat_soft_pct",
+            "overheat_hard_pct",
+            "overheat_bias_soft_pct",
+            "overheat_bias_hard_pct",
         ):
             if key in overrides and overrides[key] is not None:
                 cfg[key] = overrides[key]

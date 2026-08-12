@@ -291,3 +291,149 @@ def build_trend_risk_tags(ind: Optional[Dict[str, Any]]) -> List[Dict[str, str]]
             }
         )
     return tags
+
+
+def _cfg_float(cfg: Dict[str, Any], key: str, default: float) -> float:
+    try:
+        return float(cfg.get(key) if cfg.get(key) is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def evaluate_overheat_hard_gate(
+    ind: Optional[Dict[str, Any]],
+    cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    近期涨幅过大硬闸：
+    - 近 N 日相对最低价涨幅 ≥ overheat_hard_pct（默认 25%）
+    - 或相对 MA20 乖离 ≥ overheat_bias_hard_pct（默认 20%）
+    """
+    cfg = cfg or {}
+    ind = ind or {}
+    if cfg.get("overheat_hard_gate_enabled") is False:
+        return {"blocked": False, "reasons": [], "enabled": False}
+
+    soft_pct = _cfg_float(cfg, "overheat_soft_pct", 0.15)
+    hard_pct = _cfg_float(cfg, "overheat_hard_pct", 0.25)
+    bias_soft = _cfg_float(cfg, "overheat_bias_soft_pct", 0.15)
+    bias_hard = _cfg_float(cfg, "overheat_bias_hard_pct", 0.20)
+    if hard_pct < soft_pct:
+        hard_pct = soft_pct
+    if bias_hard < bias_soft:
+        bias_hard = bias_soft
+
+    reasons: List[str] = []
+    ret = ind.get("ret_from_low_n")
+    bias = ind.get("ma20_bias")
+    try:
+        ret_f = float(ret) if ret is not None else None
+    except (TypeError, ValueError):
+        ret_f = None
+    try:
+        bias_f = float(bias) if bias is not None else None
+    except (TypeError, ValueError):
+        bias_f = None
+
+    if ret_f is not None and ret_f >= hard_pct:
+        reasons.append("近期涨幅过大")
+    if bias_f is not None and bias_f >= bias_hard:
+        reasons.append("均线乖离过大")
+
+    return {
+        "blocked": bool(reasons),
+        "reasons": reasons,
+        "enabled": True,
+        "ret_from_low_n": ret_f,
+        "ma20_bias": bias_f,
+        "overheat_hard_pct": hard_pct,
+        "overheat_bias_hard_pct": bias_hard,
+        "overheat_lookback_days": ind.get("overheat_lookback_days")
+        or cfg.get("overheat_lookback_days")
+        or 10,
+    }
+
+
+def build_overheat_risk_tags(
+    ind: Optional[Dict[str, Any]],
+    cfg: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, str]]:
+    """近期涨幅 / 乖离：软提示 + 硬闸对应 danger 标签。"""
+    cfg = cfg or {}
+    ind = ind or {}
+    if cfg.get("overheat_warn_enabled") is False:
+        return []
+
+    soft_pct = _cfg_float(cfg, "overheat_soft_pct", 0.15)
+    hard_pct = _cfg_float(cfg, "overheat_hard_pct", 0.25)
+    bias_soft = _cfg_float(cfg, "overheat_bias_soft_pct", 0.15)
+    bias_hard = _cfg_float(cfg, "overheat_bias_hard_pct", 0.20)
+    if hard_pct < soft_pct:
+        hard_pct = soft_pct
+    if bias_hard < bias_soft:
+        bias_hard = bias_soft
+    lookback = ind.get("overheat_lookback_days") or cfg.get("overheat_lookback_days") or 10
+
+    tags: List[Dict[str, str]] = []
+    try:
+        ret_f = float(ind["ret_from_low_n"]) if ind.get("ret_from_low_n") is not None else None
+    except (TypeError, ValueError):
+        ret_f = None
+    try:
+        bias_f = float(ind["ma20_bias"]) if ind.get("ma20_bias") is not None else None
+    except (TypeError, ValueError):
+        bias_f = None
+
+    if ret_f is not None:
+        if ret_f >= hard_pct:
+            tags.append(
+                {
+                    "id": "recent_overheat",
+                    "label": "近期涨幅过大",
+                    "level": "danger",
+                    "reason": (
+                        f"近{lookback}日相对最低价涨幅 {ret_f * 100:.1f}%"
+                        f" ≥ 硬闸 {hard_pct * 100:.0f}%"
+                    ),
+                }
+            )
+        elif ret_f >= soft_pct:
+            tags.append(
+                {
+                    "id": "recent_overheat",
+                    "label": "近期涨幅偏大",
+                    "level": "warn",
+                    "reason": (
+                        f"近{lookback}日相对最低价涨幅 {ret_f * 100:.1f}%"
+                        f" ≥ 提示阈值 {soft_pct * 100:.0f}%"
+                    ),
+                }
+            )
+
+    if bias_f is not None:
+        if bias_f >= bias_hard:
+            tags.append(
+                {
+                    "id": "ma20_overheat",
+                    "label": "均线乖离过大",
+                    "level": "danger",
+                    "reason": (
+                        f"收盘相对 MA20 乖离 {bias_f * 100:.1f}%"
+                        f" ≥ 硬闸 {bias_hard * 100:.0f}%"
+                    ),
+                }
+            )
+        elif bias_f >= bias_soft:
+            tags.append(
+                {
+                    "id": "ma20_overheat",
+                    "label": "均线乖离偏大",
+                    "level": "warn",
+                    "reason": (
+                        f"收盘相对 MA20 乖离 {bias_f * 100:.1f}%"
+                        f" ≥ 提示阈值 {bias_soft * 100:.0f}%"
+                    ),
+                }
+            )
+
+    return tags

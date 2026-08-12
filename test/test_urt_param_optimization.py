@@ -99,6 +99,74 @@ def test_bearish_trend_risk_tags():
     assert any(t["id"] == "below_ma20" for t in tags2)
 
 
+def test_overheat_soft_and_hard():
+    from backend_core.strategies.urt.risk_tags import (
+        build_overheat_risk_tags,
+        evaluate_overheat_hard_gate,
+    )
+
+    cfg = {
+        "overheat_warn_enabled": True,
+        "overheat_hard_gate_enabled": True,
+        "overheat_lookback_days": 10,
+        "overheat_soft_pct": 0.15,
+        "overheat_hard_pct": 0.25,
+        "overheat_bias_soft_pct": 0.15,
+        "overheat_bias_hard_pct": 0.20,
+    }
+    soft_ind = {"ret_from_low_n": 0.18, "ma20_bias": 0.10, "overheat_lookback_days": 10}
+    tags = build_overheat_risk_tags(soft_ind, cfg)
+    assert any(t["label"] == "近期涨幅偏大" and t["level"] == "warn" for t in tags)
+    assert evaluate_overheat_hard_gate(soft_ind, cfg)["blocked"] is False
+
+    hard_ind = {"ret_from_low_n": 0.30, "ma20_bias": 0.05, "overheat_lookback_days": 10}
+    tags_h = build_overheat_risk_tags(hard_ind, cfg)
+    assert any(t["label"] == "近期涨幅过大" and t["level"] == "danger" for t in tags_h)
+    gate = evaluate_overheat_hard_gate(hard_ind, cfg)
+    assert gate["blocked"] is True
+    assert "近期涨幅过大" in gate["reasons"]
+
+    bias_hard = {"ret_from_low_n": 0.05, "ma20_bias": 0.22, "overheat_lookback_days": 10}
+    assert evaluate_overheat_hard_gate(bias_hard, cfg)["blocked"] is True
+
+
+def test_ret_from_low_in_indicators():
+    from backend_core.strategies.urt.config import URTConfigManager
+    from backend_core.strategies.urt.indicators import build_indicators
+
+    cfg = URTConfigManager().get_default_config()
+    cfg["use_yang_medium"] = False
+    cfg["require_ma_bull"] = False
+    cfg["use_turnover"] = False
+    # DESC: day0 high, previous days lower
+    bars = []
+    for i in range(40):
+        close = 10.0 + (40 - i) * 0.05  # older higher? wait DESC i=0 newest
+        # newest = 13, older = lower → rise from low
+        close = 10.0 + max(0, 10 - i) * 0.3
+        bars.append(
+            {
+                "date": f"2026-07-{30 - (i % 28):02d}",
+                "open": close - 0.1,
+                "close": close,
+                "volume": 3000.0 if i == 0 else 1000.0,
+                "turnover_rate": 5.0,
+            }
+        )
+    # Force: newest 13, min in 10 days = 10 → ret=0.3
+    for i in range(10):
+        bars[i]["close"] = 10.0 + (9 - i) * (3.0 / 9.0)  # 13 .. 10
+        bars[i]["open"] = bars[i]["close"] - 0.1
+    bars[0]["close"] = 13.0
+    bars[0]["open"] = 12.5
+    bars[9]["close"] = 10.0
+    ind = build_indicators(bars, cfg)
+    assert ind is not None
+    assert ind["ret_from_low_n"] is not None
+    assert abs(ind["ret_from_low_n"] - 0.3) < 1e-6
+    assert ind["ma20_bias"] is not None
+
+
 def test_compute_structure_rr_thin_upside():
     """距阻力上行空间过窄：宁夏建材类 12.58/12.57/12.93。"""
     from backend_core.strategies.gms.structure_levels import compute_structure_rr

@@ -187,6 +187,54 @@
               </el-col>
             </el-row>
 
+            <el-divider content-position="left">近期涨幅过大</el-divider>
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              class="mb-3"
+              title="近 N 日相对最低价涨幅：≥软阈值仅提示，≥硬阈值否决买点；相对 MA20 乖离同理。"
+            />
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-form-item label="过热提示">
+                  <el-switch v-model="form.overheat_warn_enabled" active-text="开" inactive-text="关" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="过热硬闸">
+                  <el-switch v-model="form.overheat_hard_gate_enabled" active-text="开" inactive-text="关" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="回看天数">
+                  <el-input-number v-model="form.overheat_lookback_days" :min="3" :max="60" class="w-full" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="12">
+              <el-col :span="6">
+                <el-form-item label="涨幅提示%">
+                  <el-input-number v-model="form.overheat_soft_pct_ui" :min="1" :max="80" :step="1" :precision="0" @change="syncOverheatPctUi" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="涨幅硬闸%">
+                  <el-input-number v-model="form.overheat_hard_pct_ui" :min="1" :max="100" :step="1" :precision="0" @change="syncOverheatPctUi" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="乖离提示%">
+                  <el-input-number v-model="form.overheat_bias_soft_pct_ui" :min="1" :max="80" :step="1" :precision="0" @change="syncOverheatPctUi" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="乖离硬闸%">
+                  <el-input-number v-model="form.overheat_bias_hard_pct_ui" :min="1" :max="100" :step="1" :precision="0" @change="syncOverheatPctUi" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
             <el-divider content-position="left">精细化（换手默认开）</el-divider>
             <el-row :gutter="12">
               <el-col :span="8">
@@ -304,6 +352,17 @@ const form = reactive<any>({
   structure_rr_min_upside_pct_ui: 3.0,
   structure_hang_min_upside_pct: 0.08,
   structure_hang_min_upside_pct_ui: 8.0,
+  overheat_warn_enabled: true,
+  overheat_hard_gate_enabled: true,
+  overheat_lookback_days: 10,
+  overheat_soft_pct: 0.15,
+  overheat_hard_pct: 0.25,
+  overheat_bias_soft_pct: 0.15,
+  overheat_bias_hard_pct: 0.20,
+  overheat_soft_pct_ui: 15,
+  overheat_hard_pct_ui: 25,
+  overheat_bias_soft_pct_ui: 15,
+  overheat_bias_hard_pct_ui: 20,
   risk: {
     stop_loss_pct_min: 5,
     stop_loss_pct_max: 10,
@@ -324,6 +383,13 @@ function onMinUpsidePctUiChange(v: number | undefined) {
   const pct = Number(v)
   if (!Number.isFinite(pct)) return
   form.structure_rr_min_upside_pct = Math.max(0, pct) / 100
+}
+
+function syncOverheatPctUi() {
+  form.overheat_soft_pct = Math.max(0, Number(form.overheat_soft_pct_ui) || 0) / 100
+  form.overheat_hard_pct = Math.max(0, Number(form.overheat_hard_pct_ui) || 0) / 100
+  form.overheat_bias_soft_pct = Math.max(0, Number(form.overheat_bias_soft_pct_ui) || 0) / 100
+  form.overheat_bias_hard_pct = Math.max(0, Number(form.overheat_bias_hard_pct_ui) || 0) / 100
 }
 
 function applyParams(params: Record<string, any> = {}) {
@@ -366,6 +432,21 @@ function applyParams(params: Record<string, any> = {}) {
   const hang = Number(params.structure_hang_min_upside_pct)
   form.structure_hang_min_upside_pct = Number.isFinite(hang) ? hang : 0.08
   form.structure_hang_min_upside_pct_ui = Math.round(form.structure_hang_min_upside_pct * 1000) / 10
+  form.overheat_warn_enabled = params.overheat_warn_enabled !== false
+  form.overheat_hard_gate_enabled = params.overheat_hard_gate_enabled !== false
+  form.overheat_lookback_days = params.overheat_lookback_days ?? 10
+  const soft = Number(params.overheat_soft_pct)
+  form.overheat_soft_pct = Number.isFinite(soft) ? soft : 0.15
+  const hard = Number(params.overheat_hard_pct)
+  form.overheat_hard_pct = Number.isFinite(hard) ? hard : 0.25
+  const bsoft = Number(params.overheat_bias_soft_pct)
+  form.overheat_bias_soft_pct = Number.isFinite(bsoft) ? bsoft : 0.15
+  const bhard = Number(params.overheat_bias_hard_pct)
+  form.overheat_bias_hard_pct = Number.isFinite(bhard) ? bhard : 0.20
+  form.overheat_soft_pct_ui = Math.round(form.overheat_soft_pct * 100)
+  form.overheat_hard_pct_ui = Math.round(form.overheat_hard_pct * 100)
+  form.overheat_bias_soft_pct_ui = Math.round(form.overheat_bias_soft_pct * 100)
+  form.overheat_bias_hard_pct_ui = Math.round(form.overheat_bias_hard_pct * 100)
   form.risk = {
     stop_loss_pct_min: 5,
     stop_loss_pct_max: 10,
@@ -418,12 +499,25 @@ async function saveVersion() {
     if (showJson.value) {
       params = JSON.parse(jsonText.value)
     } else {
-      const { structure_hang_min_upside_pct_ui, structure_rr_min_upside_pct_ui, ...rest } = form
+      const {
+        structure_hang_min_upside_pct_ui,
+        structure_rr_min_upside_pct_ui,
+        overheat_soft_pct_ui,
+        overheat_hard_pct_ui,
+        overheat_bias_soft_pct_ui,
+        overheat_bias_hard_pct_ui,
+        ...rest
+      } = form
       onHangPctUiChange(structure_hang_min_upside_pct_ui)
       onMinUpsidePctUiChange(structure_rr_min_upside_pct_ui)
+      syncOverheatPctUi()
       params = { ...rest }
       delete params.structure_hang_min_upside_pct_ui
       delete params.structure_rr_min_upside_pct_ui
+      delete params.overheat_soft_pct_ui
+      delete params.overheat_hard_pct_ui
+      delete params.overheat_bias_soft_pct_ui
+      delete params.overheat_bias_hard_pct_ui
     }
     await urtApiService.updateStrategyConfig(selectedId.value, {
       version_label: editMeta.version_label,

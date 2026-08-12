@@ -79,6 +79,7 @@ def _loose_cfg(**extra):
             "use_volume_ratio": False,
             "volume_multiple": 2.5,
             "structure_rr_hard_gate_enabled": False,
+            "overheat_hard_gate_enabled": False,
         }
     )
     cfg.update(extra)

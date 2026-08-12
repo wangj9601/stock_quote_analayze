@@ -30,6 +30,13 @@
   "structure_rr_min_upside_pct": 0.03,
   "structure_rr_hard_gate_enabled": true,
   "structure_hang_min_upside_pct": 0.08,
+  "overheat_warn_enabled": true,
+  "overheat_hard_gate_enabled": true,
+  "overheat_lookback_days": 10,
+  "overheat_soft_pct": 0.15,
+  "overheat_hard_pct": 0.25,
+  "overheat_bias_soft_pct": 0.15,
+  "overheat_bias_hard_pct": 0.20,
   "risk": {
     "stop_loss_pct_min": 5,
     "stop_loss_pct_max": 10,

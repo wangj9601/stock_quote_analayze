@@ -91,6 +91,10 @@ def min_bars_needed(cfg: Dict[str, Any]) -> int:
     rule_b = cfg.get("yang_rule_b") or {"window": 5, "min_up_days": 4}
     mid_windows = [int(r.get("window", 0)) for r in normalize_yang_medium_rules(cfg)]
     bull_periods = normalize_ma_bull_periods(cfg)
+    try:
+        overheat_lb = int(cfg.get("overheat_lookback_days") or 10)
+    except (TypeError, ValueError):
+        overheat_lb = 10
     return max(
         ma_period,
         vol_lb + 1,
@@ -98,6 +102,7 @@ def min_bars_needed(cfg: Dict[str, Any]) -> int:
         int(rule_b.get("window", 5)),
         max(mid_windows) if mid_windows else 20,
         max(bull_periods) if bull_periods else 20,
+        max(1, overheat_lb),
     )
 
 
@@ -163,6 +168,20 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
     ma10 = sma(closes, 10)
     ma20_stack = sma(closes, 20)
 
+    # 近期涨幅过大：相对近窗最低价 R_N = close0/min(close[0:N]) - 1
+    try:
+        overheat_lb = max(1, int(cfg.get("overheat_lookback_days") or 10))
+    except (TypeError, ValueError):
+        overheat_lb = 10
+    window = closes[: min(overheat_lb, len(closes))]
+    low_n = min(window) if window else None
+    ret_from_low = None
+    if low_n is not None and low_n > 0:
+        ret_from_low = float(closes[0]) / float(low_n) - 1.0
+    ma20_bias = None
+    if ma20 is not None and ma20 > 0:
+        ma20_bias = float(closes[0]) / float(ma20) - 1.0
+
     out: Dict[str, Any] = {
         "date": bars_desc[0].get("date"),
         "open": opens[0],
@@ -200,6 +219,10 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
         "turnover_rate": float(turnover) if turnover is not None else None,
         "rule_a_ok": yang_a >= int(rule_a.get("min_up_days", 3)),
         "rule_b_ok": yang_b >= int(rule_b.get("min_up_days", 4)),
+        "overheat_lookback_days": overheat_lb,
+        "ret_from_low_n": round(ret_from_low, 6) if ret_from_low is not None else None,
+        "low_n": round(float(low_n), 4) if low_n is not None else None,
+        "ma20_bias": round(ma20_bias, 6) if ma20_bias is not None else None,
     }
     return out
 

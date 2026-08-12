@@ -120,6 +120,7 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
     use_yang_medium = bool(cfg.get("use_yang_medium"))
     require_ma_bull = bool(cfg.get("require_ma_bull"))
     hard_gate_enabled = cfg.get("structure_rr_hard_gate_enabled") is not False
+    overheat_gate_enabled = cfg.get("overheat_hard_gate_enabled") is not False
     min_turn = float(cfg.get("min_turnover") or 0) if use_turnover else None
     min_vr = float(cfg.get("min_volume_ratio") or 0) if use_volume_ratio else None
     a_w = int(rule_a.get("window") or 4)
@@ -198,10 +199,18 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         elif isinstance(gate, dict) and gate.get("blocked"):
             structure_gate_ok = False
 
+    oh_gate = detail.get("overheat_hard_gate") or {}
+    overheat_gate_ok = True
+    if overheat_gate_enabled:
+        if detail.get("overheat_gate_ok") is not None:
+            overheat_gate_ok = bool(detail.get("overheat_gate_ok"))
+        elif isinstance(oh_gate, dict) and oh_gate.get("blocked"):
+            overheat_gate_ok = False
+
     buy = (
         bool(detail.get("buy_signal"))
         if detail.get("buy_signal") is not None
-        else (filter_ok and structure_gate_ok and score_ok)
+        else (filter_ok and structure_gate_ok and overheat_gate_ok and score_ok)
     )
 
     mid_rules = cfg.get("yang_medium_rules") or []
@@ -322,6 +331,33 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
                 "note": "KDE 无效时不硬闸",
             }
         )
+    if overheat_gate_enabled:
+        oh_reasons = oh_gate.get("reasons") if isinstance(oh_gate, dict) else None
+        ret_v = detail.get("ret_from_low_n")
+        bias_v = detail.get("ma20_bias")
+        lb = detail.get("overheat_lookback_days") or cfg.get("overheat_lookback_days") or 10
+        hard_pct = float(cfg.get("overheat_hard_pct") or 0.25) * 100
+        bias_hard = float(cfg.get("overheat_bias_hard_pct") or 0.20) * 100
+        ret_txt = f"{float(ret_v) * 100:.1f}%" if ret_v is not None else "—"
+        bias_txt = f"{float(bias_v) * 100:.1f}%" if bias_v is not None else "—"
+        oh_actual = (
+            "通过"
+            if overheat_gate_ok
+            else ("；".join(oh_reasons) if oh_reasons else "过热硬闸未通过")
+        )
+        steps.append(
+            {
+                "id": "overheat_hard_gate",
+                "name": "近期涨幅硬闸",
+                "rule": (
+                    f"否决：近{lb}日相对最低价涨幅≥{hard_pct:g}%"
+                    f" 或 相对MA20乖离≥{bias_hard:g}%"
+                ),
+                "actual": f"{oh_actual}（涨幅={ret_txt}，乖离={bias_txt}）",
+                "pass": overheat_gate_ok,
+                "required": True,
+            }
+        )
     steps.append(
         {
             "id": "min_score",
@@ -330,7 +366,7 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
             "actual": f"得分={score}",
             "pass": score_ok,
             "required": True,
-            "note": "须在硬筛与结构硬闸通过后再判定",
+            "note": "须在硬筛与风险硬闸通过后再判定",
         }
     )
 
@@ -341,16 +377,18 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         + (f" ∧ 换手≥{min_turn}" if use_turnover else "")
         + (f" ∧ 量比≥{min_vr}" if use_volume_ratio else "")
         + (" ∧ 结构硬闸" if hard_gate_enabled else "")
+        + (" ∧ 过热硬闸" if overheat_gate_enabled else "")
         + f"；再要求得分≥{min_score}"
     )
 
     return {
-        "formula": "买点 = 硬筛全部通过 AND 结构硬闸通过 AND 得分≥最低得分",
+        "formula": "买点 = 硬筛全部通过 AND 结构硬闸通过 AND 过热硬闸通过 AND 得分≥最低得分",
         "formula_detail": formula_detail,
         "min_score": min_score,
         "score": score,
         "filter_ok": filter_ok,
         "structure_gate_ok": structure_gate_ok,
+        "overheat_gate_ok": overheat_gate_ok,
         "score_ok": score_ok,
         "buy_signal": buy,
         "filter_reason": detail.get("filter_reason") or "",
@@ -384,15 +422,23 @@ def evaluate_buy_signal(
         yang_rule = "none"
 
     structure = _compute_structure_levels(bars_desc, cfg, price=ind.get("close"))
-    from .risk_tags import build_trend_risk_tags, enrich_structure_with_rr
+    from .risk_tags import (
+        build_overheat_risk_tags,
+        build_trend_risk_tags,
+        enrich_structure_with_rr,
+        evaluate_overheat_hard_gate,
+    )
 
     enriched = enrich_structure_with_rr(structure, price=ind.get("close"), cfg=cfg)
     structure = enriched["structure"]
     risk_tags = list(enriched.get("risk_tags") or [])
     risk_tags.extend(build_trend_risk_tags(ind))
+    risk_tags.extend(build_overheat_risk_tags(ind, cfg))
     hard_gate = enriched.get("structure_hard_gate") or {}
     structure_gate_ok = not bool(hard_gate.get("blocked"))
-    buy = bool(ok and structure_gate_ok and score_ok)
+    overheat_gate = evaluate_overheat_hard_gate(ind, cfg)
+    overheat_gate_ok = not bool(overheat_gate.get("blocked"))
+    buy = bool(ok and structure_gate_ok and overheat_gate_ok and score_ok)
 
     if require_pass and not buy:
         return None
@@ -422,6 +468,10 @@ def evaluate_buy_signal(
         }
         score_detail["risk_tags"] = risk_tags
         score_detail["structure_hard_gate"] = hard_gate
+        score_detail["overheat_hard_gate"] = overheat_gate
+        score_detail["ret_from_low_n"] = ind.get("ret_from_low_n")
+        score_detail["ma20_bias"] = ind.get("ma20_bias")
+        score_detail["overheat_lookback_days"] = ind.get("overheat_lookback_days")
 
     payload = {
         "signal_date": ind.get("date"),
@@ -459,6 +509,12 @@ def evaluate_buy_signal(
         "filter_reason": reason,
         "structure_gate_ok": structure_gate_ok,
         "structure_hard_gate": hard_gate,
+        "overheat_gate_ok": overheat_gate_ok,
+        "overheat_hard_gate": overheat_gate,
+        "ret_from_low_n": ind.get("ret_from_low_n"),
+        "ma20_bias": ind.get("ma20_bias"),
+        "overheat_lookback_days": ind.get("overheat_lookback_days"),
+        "low_n": ind.get("low_n"),
         "score_ok": score_ok,
         "support_levels": structure["support_levels"],
         "resistance_levels": structure["resistance_levels"],
