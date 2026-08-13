@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from .engine import detect_all, normalize_families
+from .engine import detect_all_counted, normalize_families
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +203,7 @@ def scan_patterns(
     items: List[Dict[str, Any]] = []
     scanned = 0
     timed_out = False
+    invalidated_count = 0
     for code in codes:
         if time.monotonic() - t0 > float(timeout_sec):
             timed_out = True
@@ -227,10 +228,11 @@ def scan_patterns(
                 logger.debug("pattern scan qfq fail %s: %s", code, e)
                 continue
         try:
-            hits = detect_all(bars, types=families)
+            hits, inv_n = detect_all_counted(bars, types=families)
         except Exception as e:
             logger.debug("pattern detect fail %s: %s", code, e)
             continue
+        invalidated_count += int(inv_n or 0)
         for h in hits:
             row = dict(h)
             row["code"] = code
@@ -251,6 +253,7 @@ def scan_patterns(
         "scanned": scanned,
         "pool_size": len(codes),
         "hit_count": len(items),
+        "invalidated_count": invalidated_count,
         "truncated": len(codes) >= lim,
         "timed_out": timed_out,
         "families": families,

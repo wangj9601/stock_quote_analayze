@@ -43,6 +43,88 @@ def _parse_types(raw: Optional[str], lst: Optional[List[str]] = None) -> List[st
     return [p.strip() for p in str(raw).replace(";", ",").split(",") if p.strip()]
 
 
+def _tactical_enrichment(
+    db: Session,
+    bars: List[Dict[str, Any]],
+    stock_code: str,
+    asof: Optional[str],
+) -> tuple:
+    """尽量注入 VP / confluence / RPE；失败则对应项为 None（grade=base）。"""
+    vp = None
+    confluence = None
+    rpe = None
+    last_close = None
+    if bars:
+        try:
+            last_close = float(bars[-1].get("close"))
+        except (TypeError, ValueError, AttributeError, IndexError):
+            last_close = None
+
+    try:
+        from backend_core.analysis.volume_profile import compute_volume_profile_from_bars
+
+        vp = compute_volume_profile_from_bars(bars, last_close=last_close)
+        if isinstance(vp, dict) and not vp.get("ok"):
+            vp = None
+    except Exception as e:
+        logger.debug("tactical VP skip code=%s: %s", stock_code, e)
+        vp = None
+
+    try:
+        from backend_api.stock.stock_analysis import KeyLevels
+        from backend_core.analysis.confluence_zones import compute_confluence_from_reference
+
+        classic = KeyLevels.calculate_classic_reference_levels(
+            bars, last_close if last_close is not None else 0.0
+        )
+        if isinstance(classic, dict):
+            if vp:
+                classic = dict(classic)
+                classic["volume_profile"] = {
+                    "poc": vp.get("poc"),
+                    "vah": vp.get("vah"),
+                    "val": vp.get("val"),
+                    "nearest_support": vp.get("nearest_support"),
+                    "nearest_resistance": vp.get("nearest_resistance"),
+                    "support_note": vp.get("support_note"),
+                    "resistance_note": vp.get("resistance_note"),
+                }
+            conf = compute_confluence_from_reference(
+                classic,
+                last_close=last_close,
+            )
+            if isinstance(conf, dict) and conf.get("ok"):
+                confluence = conf
+    except Exception as e:
+        logger.debug("tactical confluence skip code=%s: %s", stock_code, e)
+        confluence = None
+
+    # RPE 快照：轻量、失败忽略（非硬依赖）
+    try:
+        code_n = str(stock_code or "").strip()
+        if code_n.isdigit() and len(code_n) == 6 and asof:
+            from backend_core.analysis.stock_multi_strategy import _eval_rpe
+
+            pack = _eval_rpe(db, code_n, str(asof)[:10])
+            if isinstance(pack, dict):
+                detail = pack.get("detail") if isinstance(pack.get("detail"), dict) else {}
+                z = pack.get("score")
+                if z is None:
+                    for k in ("z_score", "zscore", "relative_z"):
+                        if detail.get(k) is not None:
+                            z = detail.get(k)
+                            break
+                rpe = {
+                    "z_score": z,
+                    "signal_type": detail.get("signal_type") or pack.get("label"),
+                }
+    except Exception as e:
+        logger.debug("tactical RPE skip code=%s: %s", stock_code, e)
+        rpe = None
+
+    return vp, confluence, rpe
+
+
 @router.get("/meta")
 async def patterns_meta(
     _perm: None = Depends(require_permission("channel.analyze.tab.technical")),
@@ -90,7 +172,7 @@ async def patterns_for_stock(
     _perm: None = Depends(require_permission("channel.analyze.tab.technical.btn.pattern")),
 ):
     from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
-    from backend_core.analysis.chart_patterns.engine import detect_all
+    from backend_core.analysis.chart_patterns.engine import detect_all_counted
     from backend_core.analysis.chart_patterns.scanner import (
         apply_qfq_to_code_bars,
         normalize_price_adjust,
@@ -156,7 +238,22 @@ async def patterns_for_stock(
 
     names = load_names(db, [stock_code])
     type_list = _parse_types(types)
-    hits = detect_all(bars, types=type_list or None) if len(bars) >= 30 else []
+    if len(bars) >= 30:
+        hits, invalidated_count = detect_all_counted(bars, types=type_list or None)
+    else:
+        hits, invalidated_count = [], 0
+
+    vp, confluence, rpe = _tactical_enrichment(db, bars, stock_code, asof_s)
+    from backend_core.analysis.pattern_tactical import build_pattern_tactical
+
+    tactical = build_pattern_tactical(
+        hits,
+        confluence=confluence,
+        vp=vp,
+        rpe=rpe,
+        invalidated_count=invalidated_count,
+    )
+
     payload: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
@@ -165,7 +262,9 @@ async def patterns_for_stock(
         "price_adjust": adjust_n,
         "bar_count": len(bars),
         "hit_count": len(hits),
+        "invalidated_count": invalidated_count,
         "items": hits,
+        "tactical": tactical,
     }
     if adj_meta:
         payload["adj_meta"] = adj_meta

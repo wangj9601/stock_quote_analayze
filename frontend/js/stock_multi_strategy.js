@@ -355,7 +355,8 @@ const StockMultiStrategy = {
                 adjust: 'qfq',
                 asof: asof || undefined,
             });
-            const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · 命中 ${fetched.items.length}`;
+            const invN = fetched.invalidated_count || 0;
+            const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · ${this.esc(PatternTool.formatHitMeta(fetched.items.length, invN))}`;
             const levelsData = (this.lastLevels && this.lastLevels.data) || {};
             const classic = levelsData.classic_levels || levelsData.classic || {};
             const confluence =
@@ -364,6 +365,8 @@ const StockMultiStrategy = {
                 asof: fetched.asof || asof || '',
                 confluenceZones: confluence,
                 classicLevels: classic,
+                invalidatedCount: invN,
+                tactical: fetched.tactical || null,
                 kdeLevels: {
                     nearest_resistance: levelsData.nearest_resistance,
                     nearest_support: levelsData.nearest_support,
@@ -374,10 +377,12 @@ const StockMultiStrategy = {
             this.lastPattern = {
                 ok: true,
                 items: fetched.items || [],
+                invalidated_count: invN,
                 code: fetched.code,
                 name: fetched.name || '',
                 asof: fetched.asof || '',
                 price_adjust: fetched.price_adjust,
+                tactical: fetched.tactical || null,
                 error: null,
             };
             this.setBlockOk('ssaPatternStatus', '');

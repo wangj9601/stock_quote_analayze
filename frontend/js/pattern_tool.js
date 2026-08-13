@@ -120,7 +120,7 @@ const PatternTool = {
 
   /**
    * 个股形态识别（与技术工具「个股识别」同口径）。
-   * @returns {{ items: array, code: string, name: string, asof: string, price_adjust: string, raw: object }}
+   * @returns {{ items: array, code: string, name: string, asof: string, price_adjust: string, invalidated_count: number, raw: object }}
    */
   async fetchSingle(code, options = {}) {
     const types = (options.types && options.types.length)
@@ -145,14 +145,34 @@ const PatternTool = {
       code: data.code || code,
       name: data.name || '',
     }));
+    const invalidatedCount = Number(data.invalidated_count) || 0;
     return {
       items,
       code: data.code || code,
       name: data.name || '',
       asof: data.asof || '',
       price_adjust: priceAdjust,
+      invalidated_count: invalidatedCount,
+      tactical: data.tactical || null,
       raw: data,
     };
+  },
+
+  /** 命中 meta：`命中 M` 或 `命中 M（另有 N 条已失效）` */
+  formatHitMeta(validCount, invalidatedCount) {
+    const m = Number(validCount) || 0;
+    const n = Number(invalidatedCount) || 0;
+    if (n > 0) return `命中 ${m}（另有 ${n} 条已失效）`;
+    return `命中 ${m}`;
+  },
+
+  /** 空结果文案；N>0 时标明有效 0 与失效条数 */
+  formatEmptyPatternMessage(invalidatedCount, { scan = false } = {}) {
+    const n = Number(invalidatedCount) || 0;
+    if (n > 0) {
+      return `未识别到选定形态。有效命中 0（另有 ${n} 条已失效）`;
+    }
+    return scan ? '未识别到选定形态（或扫描无命中）。' : '未识别到选定形态。';
   },
 
   /**
@@ -161,19 +181,21 @@ const PatternTool = {
    * @param {array} items
    * @param {string} metaHtml
    * @param {string} priceAdjust
-   * @param {{asof?:string, confluenceZones?:object}|undefined} options
+   * @param {{asof?:string, confluenceZones?:object, invalidatedCount?:number, tactical?:object}|undefined} options
    */
   renderEmbedded(container, items, metaHtml, priceAdjust, options) {
     if (!container) return;
     const adjust = priceAdjust === 'qfq' ? 'qfq' : 'none';
+    const opts = options || {};
     const visible = this._activeHits(items);
     const metaBlock = metaHtml
       ? `<div class="pattern-meta">${metaHtml}</div>`
       : '';
     if (!visible.length) {
-      const emptyExpert = this._buildExpertHtml([], 'single', adjust, options);
+      const emptyExpert = this._buildExpertHtml([], 'single', adjust, opts);
+      const emptyMsg = this.formatEmptyPatternMessage(opts.invalidatedCount);
       container.innerHTML = `${metaBlock}
-        <div class="kde-levels-empty">未识别到选定形态。</div>
+        <div class="kde-levels-empty">${this.esc(emptyMsg)}</div>
         ${emptyExpert}`;
       return;
     }
@@ -201,7 +223,7 @@ const PatternTool = {
         </tr>`;
       })
       .join('');
-    const expert = this._buildExpertHtml(visible, 'single', adjust, options);
+    const expert = this._buildExpertHtml(visible, 'single', adjust, opts);
     container.innerHTML = `${metaBlock}
       <div class="pattern-result-wrap">
         <table class="pattern-result-table">
@@ -219,13 +241,14 @@ const PatternTool = {
 
   /** 专家解读 HTML（供原面板与嵌入共用） */
   _buildExpertHtml(items, mode, priceAdjust, options) {
-    if (!items || !items.length) return '';
+    const opts = options || {};
     const adjustTag = `<span class="kde-levels-adjust-tag ${
       priceAdjust === 'qfq' ? 'is-qfq' : 'is-raw'
     }">${this.esc(this.adjustLabel(priceAdjust))}</span>`;
     if (mode === 'scan') {
-      const n = items.length;
-      const top = this._rankHits(items, options).slice(0, 3);
+      const n = (items || []).length;
+      if (!n) return '';
+      const top = this._rankHits(items, opts).slice(0, 3);
       const brief = top
         .map((h) => {
           const code = h.code || '';
@@ -243,19 +266,120 @@ const PatternTool = {
         </div>
       </div>`;
     }
-    const analysis = this.buildExpertAnalysis(items, options);
-    // 与 PDF 共用 buildExpertAnalysis 字段：短/中线 + structureHtml（不再拆关键位置/交易点位）
+    const list = items || [];
+    const analysis = this.buildExpertAnalysis(list, opts);
     const structureHtml = analysis.structureHtml || analysis.tradeLevelsHtml || '';
+    const tacticalHtml = this._buildTacticalHtml(opts.tactical);
     return `<div class="pattern-expert-analysis">
       <div class="pattern-expert-title">形态解读</div>
       <div class="pattern-expert-body">
         <p><span class="pattern-expert-label">价格口径：</span>${adjustTag}</p>
+        ${tacticalHtml}
         <p><span class="pattern-expert-label">短期走势：</span>${this.esc(analysis.shortTerm)}</p>
         <p><span class="pattern-expert-label">中线格局：</span>${this.esc(analysis.mediumTerm)}</p>
         ${structureHtml}
         <p class="pattern-expert-risk">${this.esc(analysis.risk)}</p>
       </div>
     </div>`;
+  },
+
+  /**
+   * 短期三态徽章 + 买点列表（看空只显示风险；与 shortTerm NLG 并存）。
+   * @param {object|null|undefined} tactical
+   */
+  _buildTacticalHtml(tactical) {
+    const t = tactical && typeof tactical === 'object' ? tactical : null;
+    if (!t || !t.short_bias) return '';
+    const bias = String(t.short_bias);
+    const grade = t.grade ? String(t.grade) : 'base';
+    const label = t.bias_label ? String(t.bias_label) : '';
+    const conf =
+      t.confidence != null && Number.isFinite(Number(t.confidence))
+        ? Number(t.confidence).toFixed(2)
+        : '--';
+    const badgeClass =
+      bias === '看多'
+        ? 'pattern-tactical-bull'
+        : bias === '看空'
+          ? 'pattern-tactical-bear'
+          : 'pattern-tactical-range';
+    const rationale = t.rationale ? String(t.rationale) : '';
+    let hintsHtml = '';
+    if (bias === '看空') {
+      const risk = t.risk_note ? String(t.risk_note) : '结构破位，无进攻买点。';
+      hintsHtml = `<p class="pattern-tactical-risk"><span class="pattern-expert-label">风险：</span>${this.esc(risk)}</p>`;
+    } else {
+      const hints = Array.isArray(t.buy_hints) ? t.buy_hints : [];
+      if (hints.length) {
+        const lis = hints
+          .map((h) => {
+            const type = h.type || 'watch';
+            const trig = h.trigger || '';
+            const ez = h.entry_zone || {};
+            const zone =
+              ez.low != null && ez.high != null
+                ? `${Number(ez.low).toFixed(2)}–${Number(ez.high).toFixed(2)}`
+                : '--';
+            const inv = h.invalidation != null ? Number(h.invalidation).toFixed(2) : '--';
+            const tgt = h.target != null ? Number(h.target).toFixed(2) : '--';
+            return `<li><strong>${this.esc(type)}</strong> ${this.esc(trig)}；区间 ${this.esc(
+              zone
+            )}；失效 ${this.esc(inv)}；目标 ${this.esc(tgt)}</li>`;
+          })
+          .join('');
+        hintsHtml = `<div class="pattern-tactical-hints"><span class="pattern-expert-label">结构买点：</span><ul>${lis}</ul></div>`;
+      } else if (t.risk_note) {
+        hintsHtml = `<p class="pattern-tactical-risk"><span class="pattern-expert-label">提示：</span>${this.esc(
+          String(t.risk_note)
+        )}</p>`;
+      }
+    }
+    const disc = t.disclaimer ? `<p class="pattern-tactical-disc">${this.esc(String(t.disclaimer))}</p>` : '';
+    return `<div class="pattern-tactical-block">
+      <p>
+        <span class="pattern-expert-label">短期判断：</span>
+        <span class="pattern-tactical-badge ${badgeClass}">${this.esc(bias)}${
+      label ? ` · ${this.esc(label)}` : ''
+    }</span>
+        <span class="pattern-tactical-grade">grade=${this.esc(grade)}</span>
+        <span class="pattern-tactical-conf">置信 ${this.esc(conf)}</span>
+      </p>
+      ${rationale ? `<p class="pattern-tactical-rationale">${this.esc(rationale)}</p>` : ''}
+      ${hintsHtml}
+      ${disc}
+    </div>`;
+  },
+
+  /** 战术块纯文本（PDF） */
+  formatTacticalPlainText(tactical) {
+    const t = tactical && typeof tactical === 'object' ? tactical : null;
+    if (!t || !t.short_bias) return '';
+    const parts = [
+      `短期判断：${t.short_bias}${t.bias_label ? `（${t.bias_label}）` : ''} · grade=${t.grade || 'base'}${
+        t.confidence != null ? ` · 置信 ${Number(t.confidence).toFixed(2)}` : ''
+      }`,
+    ];
+    if (t.rationale) parts.push(String(t.rationale));
+    if (t.short_bias === '看空') {
+      parts.push(t.risk_note ? `风险：${t.risk_note}` : '风险：结构破位，无进攻买点');
+    } else {
+      const hints = Array.isArray(t.buy_hints) ? t.buy_hints : [];
+      hints.forEach((h, i) => {
+        const ez = h.entry_zone || {};
+        const zone =
+          ez.low != null && ez.high != null
+            ? `${Number(ez.low).toFixed(2)}–${Number(ez.high).toFixed(2)}`
+            : '--';
+        parts.push(
+          `买点${i + 1}：${h.type || 'watch'} ${h.trigger || ''}；区间 ${zone}；失效 ${
+            h.invalidation != null ? Number(h.invalidation).toFixed(2) : '--'
+          }；目标 ${h.target != null ? Number(h.target).toFixed(2) : '--'}`
+        );
+      });
+      if (t.risk_note) parts.push(`提示：${t.risk_note}`);
+    }
+    if (t.disclaimer) parts.push(String(t.disclaimer));
+    return parts.join('\n');
   },
 
   /**
@@ -271,6 +395,7 @@ const PatternTool = {
           : '';
       parts.push(`主形态：${a.primaryLabel}${confPart}`);
     }
+    if (a.tacticalPlain) parts.push(a.tacticalPlain);
     if (a.shortTerm) parts.push(`短线：${a.shortTerm}`);
     if (a.mediumTerm) parts.push(`中线：${a.mediumTerm}`);
     if (a.structureText) parts.push(a.structureText);
@@ -425,12 +550,13 @@ const PatternTool = {
     return (items || []).filter((h) => h && h.status !== 'invalidated');
   },
 
-  renderItems(items, metaHtml, mode, priceAdjust) {
+  renderItems(items, metaHtml, mode, priceAdjust, options) {
     const body = document.getElementById('patternResultBody');
     const wrap = document.getElementById('patternResultWrap');
     const empty = document.getElementById('patternEmpty');
     const meta = document.getElementById('patternMeta');
     const adjust = priceAdjust === 'qfq' ? 'qfq' : 'none';
+    const opts = options || {};
     const visible = this._activeHits(items);
     if (meta) {
       meta.hidden = !metaHtml;
@@ -440,9 +566,11 @@ const PatternTool = {
       if (wrap) wrap.hidden = true;
       if (empty) {
         empty.hidden = false;
-        empty.textContent = '未识别到选定形态（或扫描无命中）。';
+        empty.textContent = this.formatEmptyPatternMessage(opts.invalidatedCount, {
+          scan: mode === 'scan',
+        });
       }
-      this.renderExpertAnalysis([], mode || 'single', adjust);
+      this.renderExpertAnalysis([], mode || 'single', adjust, opts);
       return;
     }
     if (empty) empty.hidden = true;
@@ -470,21 +598,28 @@ const PatternTool = {
         </tr>`;
       })
       .join('');
-    this.renderExpertAnalysis(visible, mode || 'single', adjust);
+    this.renderExpertAnalysis(visible, mode || 'single', adjust, opts);
   },
 
-  /** 空结果隐藏；个股完整解读；扫描简要提示 */
-  renderExpertAnalysis(items, mode, priceAdjust) {
+  /** 空结果隐藏；个股完整解读；扫描简要提示。options 可含 tactical / asof 等。 */
+  renderExpertAnalysis(items, mode, priceAdjust, options) {
     const box = document.getElementById('patternExpertAnalysis');
     const body = document.getElementById('patternExpertBody');
     if (!box || !body) return;
-    if (!items || !items.length) {
+    const opts = options || {};
+    const asof =
+      opts.asof ||
+      ((document.getElementById('patternAsof') || {}).value || '').trim();
+    const hasTactical = !!(opts.tactical && opts.tactical.short_bias);
+    if ((!items || !items.length) && !hasTactical) {
       box.hidden = true;
       body.innerHTML = '';
       return;
     }
-    const asof = ((document.getElementById('patternAsof') || {}).value || '').trim();
-    const html = this._buildExpertHtml(items, mode || 'single', priceAdjust, { asof });
+    const html = this._buildExpertHtml(items || [], mode || 'single', priceAdjust, {
+      ...opts,
+      asof,
+    });
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
     const inner = tmp.querySelector('.pattern-expert-body');
@@ -2735,11 +2870,17 @@ const PatternTool = {
         }
         const fetched = await this.fetchSingle(code, { types, adjust, asof: asof || undefined });
         const priceAdjust = fetched.price_adjust;
+        const invN = fetched.invalidated_count || 0;
         this.renderItems(
           fetched.items,
-          `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))} · 命中 ${fetched.items.length}`,
+          `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))} · ${this.esc(this.formatHitMeta(fetched.items.length, invN))}`,
           'single',
-          priceAdjust
+          priceAdjust,
+          {
+            invalidatedCount: invN,
+            asof: fetched.asof || asof || '',
+            tactical: fetched.tactical || null,
+          }
         );
       } else {
         const scope = (document.getElementById('patternScanScope') || {}).value || 'market';
@@ -2770,11 +2911,14 @@ const PatternTool = {
         const flags = [];
         if (data.truncated) flags.push('已截断');
         if (data.timed_out) flags.push('已超时');
+        const invN = Number(data.invalidated_count) || 0;
+        const hitMeta = this.formatHitMeta(data.hit_count || 0, invN);
         this.renderItems(
           data.items || [],
-          `扫描 ${this.esc(data.scope)} · 已扫 ${data.scanned || 0}/${data.pool_size || 0} · 命中 ${data.hit_count || 0} · 基准日 ${this.esc(data.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))}${flags.length ? ' · ' + flags.join('/') : ''}`,
+          `扫描 ${this.esc(data.scope)} · 已扫 ${data.scanned || 0}/${data.pool_size || 0} · ${this.esc(hitMeta)} · 基准日 ${this.esc(data.asof || '--')} · ${this.esc(this.adjustLabel(priceAdjust))}${flags.length ? ' · ' + flags.join('/') : ''}`,
           'scan',
-          priceAdjust
+          priceAdjust,
+          { invalidatedCount: invN }
         );
       }
     } catch (e) {

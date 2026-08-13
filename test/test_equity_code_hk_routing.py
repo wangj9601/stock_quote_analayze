@@ -159,7 +159,7 @@ def test_pattern_route_allows_hk_qfq():
         scanner_mod,
         "apply_qfq_to_code_bars",
         return_value=(qfq_bars, adj_meta),
-    ) as qfq_mock, patch.object(engine_mod, "detect_all", return_value=[]):
+    ) as qfq_mock, patch.object(engine_mod, "detect_all_counted", return_value=([], 0)):
         resp = client.get("/api/analysis/patterns/00700?adjust=qfq")
 
     assert resp.status_code == 200
@@ -212,7 +212,7 @@ def test_pattern_route_loads_hk_bars_for_five_digit():
         dl, "batch_load_ohlc_asc", return_value={"00700": bars}
     ) as load_mock, patch.object(
         dl, "load_names", return_value={"00700": "腾讯"}
-    ), patch.object(engine_mod, "detect_all", return_value=[]):
+    ), patch.object(engine_mod, "detect_all_counted", return_value=([], 0)):
         resp = client.get("/api/analysis/patterns/00700?adjust=none")
 
     assert resp.status_code == 200

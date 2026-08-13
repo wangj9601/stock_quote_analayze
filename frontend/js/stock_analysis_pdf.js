@@ -321,12 +321,17 @@
           resistance_levels: levelsData.resistance_levels,
           support_levels: levelsData.support_levels,
         },
+        tactical: pack.tactical || null,
       });
+      if (typeof PT.formatTacticalPlainText === 'function' && pack.tactical) {
+        a.tacticalPlain = PT.formatTacticalPlainText(pack.tactical);
+      }
       // 与页面 _buildExpertHtml 共用同一套字段（含结构防守与目标 / 测幅）
       expert =
         typeof PT.formatExpertPlainText === 'function'
           ? PT.formatExpertPlainText(a)
           : [
+              a.tacticalPlain || '',
               a.primaryLabel
                 ? `主形态：${a.primaryLabel}${a.primaryConf ? `（置信度 ${a.primaryConf}）` : ''}`
                 : '',
@@ -337,6 +342,9 @@
             ]
               .filter(Boolean)
               .join('\n');
+    }
+    if (!expert && pack.tactical && PT && typeof PT.formatTacticalPlainText === 'function') {
+      expert = PT.formatTacticalPlainText(pack.tactical);
     }
     if (!expert) {
       expert = plainFromEl(document.querySelector('#ssaPatternHost .pattern-expert-analysis'));

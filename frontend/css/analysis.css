@@ -2132,6 +2132,67 @@
     font-size: 0.82rem;
 }
 
+.pattern-tactical-block {
+    margin: 0.35rem 0 0.5rem;
+    padding: 0.45rem 0.55rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+.pattern-tactical-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.pattern-tactical-bull {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.pattern-tactical-bear {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.pattern-tactical-range {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.pattern-tactical-grade,
+.pattern-tactical-conf {
+    margin-left: 0.45rem;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.pattern-tactical-rationale {
+    color: #475569;
+    font-size: 0.84rem;
+}
+
+.pattern-tactical-hints ul {
+    margin: 0.2rem 0 0.15rem 1.1rem;
+    padding: 0;
+}
+
+.pattern-tactical-hints li {
+    margin: 0.15rem 0;
+}
+
+.pattern-tactical-risk {
+    color: #b91c1c;
+}
+
+.pattern-tactical-disc {
+    color: #94a3b8;
+    font-size: 0.78rem;
+}
+
 .pattern-expert-trade-levels {
     margin-top: 0.35rem;
 }

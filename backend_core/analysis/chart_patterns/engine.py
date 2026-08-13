@@ -379,21 +379,22 @@ def nms_wedge_flag_overlaps(
     return nms_overlapping_patterns(hits, rel_tol=rel_tol)
 
 
-def detect_all(
+def detect_all_counted(
     bars: Sequence[Dict[str, Any]],
     *,
     types: Optional[Iterable[str]] = None,
     pattern_cfg: Optional[Dict[str, Any]] = None,
     include_invalidated: bool = False,
-) -> List[Dict[str, Any]]:
-    """对升序日线 bars 跑所选形态族，返回标准化 hit 列表。
+) -> Tuple[List[Dict[str, Any]], int]:
+    """对升序日线 bars 跑所选形态族，返回 (hit 列表, 过滤前 invalidated 条数)。
 
     默认不返回 status=invalidated（失效）项；传 include_invalidated=True 可保留。
+    invalidated_count 始终为过滤前的失效条数（便于 API 提示「另有 N 条已失效」）。
     后处理：反转形态生命周期归档 → 巩固形态同源 NMS。
     """
     seq = [b for b in (bars or []) if isinstance(b, dict)]
     if len(seq) < 30:
-        return []
+        return [], 0
     families = normalize_families(types)
     pivots = extract_pivot_sequence(seq)
     hits: List[Dict[str, Any]] = []
@@ -408,6 +409,9 @@ def detect_all(
 
     hits = apply_pattern_lifecycle(hits, seq)
     hits = nms_overlapping_patterns(hits)
+    invalidated_count = sum(
+        1 for h in hits if str(h.get("status") or "") == "invalidated"
+    )
     if not include_invalidated:
         hits = [h for h in hits if str(h.get("status") or "") != "invalidated"]
     hits.sort(
@@ -415,5 +419,27 @@ def detect_all(
             -float(h.get("confidence") or 0),
             str(h.get("pattern_type") or ""),
         )
+    )
+    return hits, invalidated_count
+
+
+def detect_all(
+    bars: Sequence[Dict[str, Any]],
+    *,
+    types: Optional[Iterable[str]] = None,
+    pattern_cfg: Optional[Dict[str, Any]] = None,
+    include_invalidated: bool = False,
+) -> List[Dict[str, Any]]:
+    """对升序日线 bars 跑所选形态族，返回标准化 hit 列表。
+
+    默认不返回 status=invalidated（失效）项；传 include_invalidated=True 可保留。
+    后处理：反转形态生命周期归档 → 巩固形态同源 NMS。
+    若需失效计数，请用 detect_all_counted。
+    """
+    hits, _ = detect_all_counted(
+        bars,
+        types=types,
+        pattern_cfg=pattern_cfg,
+        include_invalidated=include_invalidated,
     )
     return hits

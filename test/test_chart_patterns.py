@@ -11,6 +11,7 @@ from backend_core.analysis.chart_patterns.double_extremes import (
 )
 from backend_core.analysis.chart_patterns.engine import (
     detect_all,
+    detect_all_counted,
     nms_overlapping_patterns,
     nms_wedge_flag_overlaps,
     normalize_families,
@@ -337,10 +338,55 @@ def test_double_bottom_gap_configurable_filter():
                 assert d in reason
 
 
+def test_detect_all_counted_reports_hidden_invalidated(monkeypatch):
+    """过滤前统计 invalidated_count，默认列表不含失效项。"""
+    import backend_core.analysis.chart_patterns.engine as engine_mod
+
+    bars = _bars_from_closes([10.0] * 40)
+    fake = [
+        {
+            "pattern_type": "head_shoulders_top",
+            "status": "invalidated",
+            "confidence": 0.4,
+            "key_levels": {},
+        },
+        {
+            "pattern_type": "head_shoulders_bottom",
+            "status": "invalidated",
+            "confidence": 0.3,
+            "key_levels": {},
+        },
+        {
+            "pattern_type": "double_bottom",
+            "status": "forming",
+            "confidence": 0.5,
+            "key_levels": {},
+        },
+    ]
+
+    monkeypatch.setattr(engine_mod, "detect_double_extremes", lambda *a, **k: [fake[2]])
+    monkeypatch.setattr(engine_mod, "detect_head_shoulders", lambda *a, **k: fake[:2])
+    monkeypatch.setattr(engine_mod, "detect_triangles", lambda *a, **k: [])
+    monkeypatch.setattr(engine_mod, "detect_wedges_flags", lambda *a, **k: [])
+    monkeypatch.setattr(engine_mod, "apply_pattern_lifecycle", lambda hits, seq: hits)
+    monkeypatch.setattr(engine_mod, "nms_overlapping_patterns", lambda hits, **k: hits)
+    monkeypatch.setattr(engine_mod, "extract_pivot_sequence", lambda seq: [])
+
+    visible, inv_n = detect_all_counted(bars, types=None, include_invalidated=False)
+    assert inv_n == 2
+    assert len(visible) == 1
+    assert visible[0]["status"] == "forming"
+    assert all(h.get("status") != "invalidated" for h in visible)
+
+    all_hits, inv_n2 = detect_all_counted(bars, types=None, include_invalidated=True)
+    assert inv_n2 == 2
+    assert len(all_hits) == 3
+
+
 def test_detect_all_empty_short_bars():
     bars = _bars_from_closes([10, 11, 12])
     assert detect_all(bars) == []
-
+    assert detect_all_counted(bars) == ([], 0)
 
 def test_triangle_and_wedge_smoke():
     # 收敛通道：高点下移 + 低点上移
@@ -568,7 +614,7 @@ def test_patterns_route_adjust_qfq_passthrough():
     ), patch(
         "backend_api.utils.adj_quotes.ensure_adj_factors", return_value=ensured
     ), patch.object(
-        engine_mod, "detect_all", return_value=[fake_hit]
+        engine_mod, "detect_all_counted", return_value=([fake_hit], 0)
     ) as det:
         resp = client.get(
             "/api/analysis/patterns/600519?adjust=qfq&types=double_extremes"
@@ -579,8 +625,73 @@ def test_patterns_route_adjust_qfq_passthrough():
     assert body["success"] is True
     assert body["price_adjust"] == "qfq"
     assert body.get("adj_meta", {}).get("factor_fetched") is True
+    assert body.get("invalidated_count") == 0
     call_bars = det.call_args.args[0]
     assert call_bars[0]["close"] == pytest.approx(5.0)
+
+
+def test_patterns_route_reports_invalidated_count():
+    """默认不返回失效项时，响应仍带 invalidated_count。"""
+    import sys
+    from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root / "backend_api"))
+
+    import backend_api.permissions as perm_mod  # noqa: F401
+    import backend_api.stock.stock_analysis_routes as levels_routes
+    import backend_core.analysis.chart_patterns.engine as engine_mod
+    import backend_core.strategies.double_bottom.data_loader as dl
+    from backend_api.database import get_db
+    from backend_api.stock.pattern_routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+
+    def _fake_db():
+        yield MagicMock()
+
+    app.dependency_overrides[get_db] = _fake_db
+    client = TestClient(app)
+
+    bars = [
+        {
+            "date": f"2024-01-{i + 1:02d}",
+            "open": 10,
+            "high": 11,
+            "low": 9,
+            "close": 10,
+            "volume": 1,
+        }
+        for i in range(31)
+    ]
+
+    with patch.object(perm_mod, "user_has_permission", return_value=True), patch.object(
+        levels_routes,
+        "resolve_levels_stock_identifier",
+        return_value={"status": "ok", "code": "000630", "name": "铜陵有色"},
+    ), patch.object(dl, "batch_load_ohlc_asc", return_value={"000630": bars}), patch.object(
+        dl, "load_names", return_value={"000630": "铜陵有色"}
+    ), patch.object(
+        dl, "resolve_effective_trade_date", return_value="2026-08-12"
+    ), patch.object(
+        engine_mod, "detect_all_counted", return_value=([], 2)
+    ):
+        resp = client.get(
+            "/api/analysis/patterns/000630?adjust=none&types=head_shoulders&asof=2026-08-12"
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["hit_count"] == 0
+    assert body["items"] == []
+    assert body["invalidated_count"] == 2
 
 
 def test_hs_bottom_invalidated_when_close_breaks_head():
@@ -665,9 +776,14 @@ def test_hs_top_invalidated_after_rs_spike_even_if_below_neck():
     assert hits[0]["pattern_type"] == "head_shoulders_top"
     assert hits[0]["status"] == "invalidated"
     assert hits[0]["status"] != "confirmed"
-    # detect_all 默认不返回 invalidated
+    # detect_all 默认不返回 invalidated；detect_all_counted 的计数与全量一致
     shown = detect_all(bars, types=["hs"], include_invalidated=False)
     assert all(h.get("status") != "invalidated" for h in shown)
+    shown2, inv_n = detect_all_counted(bars, types=["hs"], include_invalidated=False)
+    assert shown2 == shown
+    raw = detect_all(bars, types=["hs"], include_invalidated=True)
+    assert inv_n == sum(1 for h in raw if h.get("status") == "invalidated")
+    assert inv_n == len(raw) - len(shown2)
 
 
 def test_hs_bottom_invalidated_after_rs_dip_even_if_above_neck():
