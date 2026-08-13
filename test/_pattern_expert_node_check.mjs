@@ -1,6 +1,6 @@
 /**
  * 加载 frontend/js/pattern_tool.js 并调用 buildExpertAnalysis。
- * 用法: node test/_pattern_expert_node_check.mjs '<json-items-array>'
+ * 用法: node test/_pattern_expert_node_check.mjs '<json-items-array>' ['<json-options>']
  * stdout 最后一行: JSON { shortTerm, mediumTerm, ... }
  */
 import fs from 'node:fs';
@@ -30,5 +30,6 @@ if (!PT || typeof PT.buildExpertAnalysis !== 'function') {
 
 const raw = process.argv[2] || '[]';
 const items = JSON.parse(raw);
-const analysis = PT.buildExpertAnalysis(items);
+const opts = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+const analysis = PT.buildExpertAnalysis(items, opts);
 process.stdout.write(JSON.stringify(analysis) + '\n');

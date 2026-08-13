@@ -23,6 +23,14 @@ LIFECYCLE_GIVEBACK_RATIO = 0.5  # 相对极值回吐至少一半 → 视为周�
 # 测幅目标兑现：触及颈线±形态高度×该比例即归档（不依赖 45 根 / 回吐）
 LIFECYCLE_TARGET_RATIO = 0.9
 
+# 头肩失败破位归档（顶/底对称；默认保守，避免误杀仍在构筑者）
+# 顶：确认后最低 < 颈线×DEPTH，且现价已回到颈线×RECOVER 上方 → 失败破位归档
+# 底：确认后最高 > 颈线/DEPTH，且现价已回到颈线/RECOVER 下方 → 对称
+HS_FAIL_DEPTH_MULT = 0.95
+HS_FAIL_RECOVER_MULT = 1.02
+# 辅：右肩完成后 N 根交易日仍未收盘破颈 → forming 超时归档（0=关闭）
+HS_FORMING_TIMEOUT_BARS = 90
+
 # 楔形端点方向：末高/末低相对首枢轴的相对容差（抗噪声，非严格逐点单调）
 WEDGE_ENDPOINT_REL_EPS = 0.002
 

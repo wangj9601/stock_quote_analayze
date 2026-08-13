@@ -157,8 +157,13 @@ const PatternTool = {
 
   /**
    * 将个股形态结果渲染到任意容器（个股分析嵌入用）。
+   * @param {HTMLElement} container
+   * @param {array} items
+   * @param {string} metaHtml
+   * @param {string} priceAdjust
+   * @param {{asof?:string, confluenceZones?:object}|undefined} options
    */
-  renderEmbedded(container, items, metaHtml, priceAdjust) {
+  renderEmbedded(container, items, metaHtml, priceAdjust, options) {
     if (!container) return;
     const adjust = priceAdjust === 'qfq' ? 'qfq' : 'none';
     const visible = this._activeHits(items);
@@ -166,7 +171,7 @@ const PatternTool = {
       ? `<div class="pattern-meta">${metaHtml}</div>`
       : '';
     if (!visible.length) {
-      const emptyExpert = this._buildExpertHtml([], 'single', adjust);
+      const emptyExpert = this._buildExpertHtml([], 'single', adjust, options);
       container.innerHTML = `${metaBlock}
         <div class="kde-levels-empty">未识别到选定形态。</div>
         ${emptyExpert}`;
@@ -196,7 +201,7 @@ const PatternTool = {
         </tr>`;
       })
       .join('');
-    const expert = this._buildExpertHtml(visible, 'single', adjust);
+    const expert = this._buildExpertHtml(visible, 'single', adjust, options);
     container.innerHTML = `${metaBlock}
       <div class="pattern-result-wrap">
         <table class="pattern-result-table">
@@ -213,14 +218,14 @@ const PatternTool = {
   },
 
   /** 专家解读 HTML（供原面板与嵌入共用） */
-  _buildExpertHtml(items, mode, priceAdjust) {
+  _buildExpertHtml(items, mode, priceAdjust, options) {
     if (!items || !items.length) return '';
     const adjustTag = `<span class="kde-levels-adjust-tag ${
       priceAdjust === 'qfq' ? 'is-qfq' : 'is-raw'
     }">${this.esc(this.adjustLabel(priceAdjust))}</span>`;
     if (mode === 'scan') {
       const n = items.length;
-      const top = this._rankHits(items).slice(0, 3);
+      const top = this._rankHits(items, options).slice(0, 3);
       const brief = top
         .map((h) => {
           const code = h.code || '';
@@ -238,22 +243,40 @@ const PatternTool = {
         </div>
       </div>`;
     }
-    const analysis = this.buildExpertAnalysis(items);
-    const levelsHtml = analysis.keyLevelsRef
-      ? `<p><span class="pattern-expert-label">关键位置参考：</span>${this.esc(analysis.keyLevelsRef)}</p>`
-      : '';
-    const tradeHtml = analysis.tradeLevelsHtml || '';
+    const analysis = this.buildExpertAnalysis(items, options);
+    // 与 PDF 共用 buildExpertAnalysis 字段：短/中线 + structureHtml（不再拆关键位置/交易点位）
+    const structureHtml = analysis.structureHtml || analysis.tradeLevelsHtml || '';
     return `<div class="pattern-expert-analysis">
       <div class="pattern-expert-title">形态解读</div>
       <div class="pattern-expert-body">
         <p><span class="pattern-expert-label">价格口径：</span>${adjustTag}</p>
         <p><span class="pattern-expert-label">短期走势：</span>${this.esc(analysis.shortTerm)}</p>
         <p><span class="pattern-expert-label">中线格局：</span>${this.esc(analysis.mediumTerm)}</p>
-        ${levelsHtml}
-        ${tradeHtml}
+        ${structureHtml}
         <p class="pattern-expert-risk">${this.esc(analysis.risk)}</p>
       </div>
     </div>`;
+  },
+
+  /**
+   * 将 buildExpertAnalysis 输出拼成纯文本（PDF / 调试共用同一字段口径）。
+   */
+  formatExpertPlainText(analysis) {
+    const a = analysis || {};
+    const parts = [];
+    if (a.primaryLabel) {
+      const confPart =
+        a.primaryConf && a.primaryConf !== '--'
+          ? `（置信度 ${a.primaryConf}）`
+          : '';
+      parts.push(`主形态：${a.primaryLabel}${confPart}`);
+    }
+    if (a.shortTerm) parts.push(`短线：${a.shortTerm}`);
+    if (a.mediumTerm) parts.push(`中线：${a.mediumTerm}`);
+    if (a.structureText) parts.push(a.structureText);
+    else if (a.tradeLevelsText) parts.push(a.tradeLevelsText);
+    if (a.risk) parts.push(a.risk);
+    return parts.filter(Boolean).join('\n');
   },
 
   async ensureCatalog() {
@@ -460,7 +483,8 @@ const PatternTool = {
       body.innerHTML = '';
       return;
     }
-    const html = this._buildExpertHtml(items, mode || 'single', priceAdjust);
+    const asof = ((document.getElementById('patternAsof') || {}).value || '').trim();
+    const html = this._buildExpertHtml(items, mode || 'single', priceAdjust, { asof });
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
     const inner = tmp.querySelector('.pattern-expert-body');
@@ -485,6 +509,13 @@ const PatternTool = {
     bull_flag: true,
     bear_flag: true,
   },
+
+  /** 主形态 FinalScore：confidence × W_status × exp(-λ·Δt) */
+  RANK_W_CONFIRMED: 1.2,
+  RANK_W_FORMING: 0.6,
+  RANK_TIME_DECAY_LAMBDA: 0.012,
+  /** 形成中反转超过该日历日龄不进主形态（真空兜底） */
+  PRIMARY_FORMING_MAX_AGE_DAYS: 60,
 
   _num(v) {
     const n = Number(v);
@@ -515,7 +546,51 @@ const PatternTool = {
     return { side: pct < 0 ? 'below' : 'above', pct };
   },
 
-  _rankHits(items) {
+  _parseDateMs(s) {
+    const d = String(s || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const t = Date.parse(`${d}T00:00:00`);
+    return Number.isFinite(t) ? t : null;
+  },
+
+  _daysBetween(fromS, toS) {
+    const a = this._parseDateMs(fromS);
+    const b = this._parseDateMs(toS);
+    if (a == null || b == null) return null;
+    return Math.max(0, Math.round((b - a) / 86400000));
+  },
+
+  _inferAsof(items, opts) {
+    const o = opts || {};
+    if (o.asof) return String(o.asof).slice(0, 10);
+    let best = '';
+    (items || []).forEach((h) => {
+      const fa = String((h && (h.formed_at || h.confirm_date)) || '').slice(0, 10);
+      if (fa > best) best = fa;
+    });
+    return best || '';
+  },
+
+  _statusWeight(st) {
+    if (st === 'confirmed') return this.RANK_W_CONFIRMED;
+    if (st === 'forming') return this.RANK_W_FORMING;
+    return 0;
+  },
+
+  /** FinalScore ≈ confidence × W_status × exp(-λ·Δt) */
+  _finalScore(h, asof) {
+    if (!h) return 0;
+    const conf = Number(h.confidence) || 0;
+    const w = this._statusWeight(h.status);
+    const formed = String(h.formed_at || h.confirm_date || '').slice(0, 10);
+    const dt = this._daysBetween(formed, asof);
+    const decay =
+      dt == null ? 1 : Math.exp(-this.RANK_TIME_DECAY_LAMBDA * Math.max(0, dt));
+    return conf * w * decay;
+  },
+
+  _rankHits(items, opts) {
+    const asof = this._inferAsof(items, opts);
     const list = (items || []).filter(
       (h) => h && h.status !== 'invalidated' && h.status !== 'archived'
     );
@@ -535,15 +610,102 @@ const PatternTool = {
       return hasOlderOppReversal ? 1 : 0;
     };
     return list.slice().sort((a, b) => {
+      const sa = this._finalScore(a, asof);
+      const sb = this._finalScore(b, asof);
+      const sd = sb - sa;
+      if (Math.abs(sd) > 1e-9) return sd;
+      const bd = boost(b) - boost(a);
+      if (bd) return bd;
       const rank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
       const d = rank(b.status) - rank(a.status);
       if (d) return d;
-      const bd = boost(b) - boost(a);
-      if (bd) return bd;
-      const fd = String(b.formed_at || '').localeCompare(String(a.formed_at || ''));
-      if (fd) return fd;
-      return (Number(b.confidence) || 0) - (Number(a.confidence) || 0);
+      return String(b.formed_at || '').localeCompare(String(a.formed_at || ''));
     });
+  },
+
+  /** 过期/失败 forming 反转不进主形态 */
+  _isViablePrimaryCandidate(h, asof) {
+    if (!h) return false;
+    if (h.status === 'confirmed') return true;
+    if (h.status !== 'forming') return false;
+    const isRev =
+      this.BEARISH_REVERSAL[h.pattern_type] || this.BULLISH_REVERSAL[h.pattern_type];
+    if (!isRev) return true;
+    const formed = String(h.formed_at || h.confirm_date || '').slice(0, 10);
+    const dt = this._daysBetween(formed, asof);
+    if (dt != null && dt > this.PRIMARY_FORMING_MAX_AGE_DAYS) return false;
+    const reason = String(h.reason || '');
+    if (/失败破位|已归档|生命周期已结束/.test(reason)) return false;
+    return true;
+  },
+
+  _pickPrimary(ranked, asof) {
+    const list = ranked || [];
+    const confirmed = list.filter((h) => h && h.status === 'confirmed');
+    if (confirmed.length) return confirmed[0];
+    const viable = list.filter((h) => this._isViablePrimaryCandidate(h, asof));
+    return viable[0] || null;
+  },
+
+  /** 最近归档反向/测幅兑现形态：仅作背景一句，不抢主形态 */
+  _archivedBackgroundText(items) {
+    const archived = (items || [])
+      .filter((h) => h && h.status === 'archived')
+      .slice()
+      .sort((a, b) =>
+        String(b.formed_at || b.confirm_date || '').localeCompare(
+          String(a.formed_at || a.confirm_date || '')
+        )
+      );
+    if (!archived.length) return '';
+    const h = archived[0];
+    const lab = this.typeLabel(h.pattern_type);
+    const reason = String(h.reason || '');
+    const why = /测幅目标/.test(reason)
+      ? '测幅已兑现'
+      : /失败破位/.test(reason)
+        ? '失败破位'
+        : '周期已走完';
+    return `背景：近期「${lab}」${why}并已归档，仅作兑现参考，不作为当前主导形态。`;
+  },
+
+  /**
+   * 近端高强度共振带一句（轻量）；无数据则空串。
+   * @param {object|null} confluence confluence_zones 结构
+   * @param {number|null} close
+   */
+  _nearConfluenceHint(confluence, close) {
+    if (!confluence || typeof confluence !== 'object') return '';
+    const zones = [];
+    (confluence.supports || []).forEach((z) => {
+      if (z && z.center != null) zones.push({ ...z, side: 'support' });
+    });
+    (confluence.resistances || []).forEach((z) => {
+      if (z && z.center != null) zones.push({ ...z, side: 'resistance' });
+    });
+    const nearest =
+      confluence.nearest_support_zone || confluence.nearest_resistance_zone || null;
+    if (nearest && nearest.center != null) {
+      zones.push({
+        ...nearest,
+        side: confluence.nearest_support_zone === nearest ? 'support' : 'resistance',
+      });
+    }
+    if (!zones.length) return '';
+    const scored = zones
+      .map((z) => {
+        const c = this._num(z.center);
+        const str = this._num(z.strength) || 0;
+        const dist =
+          close != null && c != null ? Math.abs((close - c) / Math.abs(c || 1)) : 1;
+        return { z, c, str, dist, score: str / (1 + dist * 40) };
+      })
+      .filter((x) => x.c != null && x.str > 0)
+      .sort((a, b) => b.score - a.score);
+    if (!scored.length) return '';
+    const top = scored[0];
+    const role = top.z.side === 'support' ? '支撑' : '压力';
+    return `近端高强度共振带约在 ${this._fmtPx(top.c)}（${role}，强度 ${Number(top.str).toFixed(1)}），可作短线参考。`;
   },
 
   _biasOf(type) {
@@ -595,6 +757,69 @@ const PatternTool = {
       }），短线偏空，突破方向已定。`;
     }
     return `已确认${lab}（置信度 ${conf}），短线围绕其关键价位波动。`;
+  },
+
+  /**
+   * 巩固类简化测幅（前端展示用；后端入库为 P2 TODO）。
+   * H = upper - lower；上破 target ≈ upper + H；下破 target ≈ lower - H。
+   * @returns {{dir:string,upper:number,lower:number,height:number,target:number,label:string}|null}
+   */
+  _consolMeasuredMove(h) {
+    if (!h || h.status !== 'confirmed' || !this.CONSOLIDATION[h.pattern_type]) return null;
+    const b = this._hitBounds(h);
+    if (b.upper == null || b.lower == null) return null;
+    const height = b.upper - b.lower;
+    if (!(height > 0)) return null;
+    const dir = this._consolBreakDir(h);
+    if (dir === 'up') {
+      return {
+        dir: 'up',
+        upper: b.upper,
+        lower: b.lower,
+        height,
+        target: b.upper + height,
+        label: this.typeLabel(h.pattern_type),
+      };
+    }
+    if (dir === 'down') {
+      return {
+        dir: 'down',
+        upper: b.upper,
+        lower: b.lower,
+        height,
+        target: b.lower - height,
+        label: this.typeLabel(h.pattern_type),
+      };
+    }
+    return null;
+  },
+
+  /** 主导已确认巩固突破上下文（供空档文案 / 测幅） */
+  _leadConsolBreakContext(items, opts) {
+    const asof = this._inferAsof(items, opts);
+    const ranked = this._rankHits(items, { asof }).filter(
+      (h) => h.status === 'confirmed' || this._isViablePrimaryCandidate(h, asof)
+    );
+    const lead =
+      ranked.find((h) => h.status === 'confirmed' && this.CONSOLIDATION[h.pattern_type]) || null;
+    const dir = lead ? this._consolBreakDir(lead) : null;
+    const measured = lead ? this._consolMeasuredMove(lead) : null;
+    const hasFormingConsol = ranked.some(
+      (h) => h.status === 'forming' && this.CONSOLIDATION[h.pattern_type]
+    );
+    return { lead, dir, measured, hasFormingConsol };
+  },
+
+  _measuredMoveBulletText(m) {
+    if (!m) return '';
+    if (m.dir === 'up') {
+      return `简化测幅目标 ${this._fmtPx(m.target)} 附近（按边界高度：上沿 ${this._fmtPx(
+        m.upper
+      )} + H≈${this._fmtPx(m.height)}）`;
+    }
+    return `简化测幅目标 ${this._fmtPx(m.target)} 附近（按边界高度：下沿 ${this._fmtPx(
+      m.lower
+    )} − H≈${this._fmtPx(m.height)}）`;
   },
 
   _fmtPx(n) {
@@ -802,10 +1027,13 @@ const PatternTool = {
     return n ? [n] : [];
   },
 
-  _collectMergedLevels(items) {
-    const ranked = this._rankHits(items);
+  _collectMergedLevels(items, opts) {
+    const asof = this._inferAsof(items, opts);
+    const ranked = this._rankHits(items, { asof });
     const raw = [];
     ranked.forEach((h) => {
+      // 过期 forming 反转不进入结构防守（避免旧颈线霸榜）
+      if (h.status === 'forming' && !this._isViablePrimaryCandidate(h, asof)) return;
       this._levelsFromHit(h).forEach((lv) => raw.push(lv));
     });
     return this._mergeNearLevels(raw);
@@ -912,58 +1140,293 @@ const PatternTool = {
   },
 
   /**
-   * 后续交易点位参考 HTML（个股模式）。
-   * 以 last_close 分界；每侧最多 2 档 bullet。
+   * 空档占位：按已确认突破方向分支，禁止上破后仍写「等待形态边界突破」。
+   * 无形态边界可等（真空）时改为共振位口径；形成中巩固仍可「等待突破」。
    */
-  buildTradeLevelsReference(items) {
-    const ranked = this._rankHits(items);
+  _emptyStructureSideText(side, ctx) {
+    const dir = ctx && ctx.dir;
+    if (side === 'resistance') {
+      if (dir === 'up') {
+        return '形态边界已上破；上方暂无形态内阻力档，近端关注简化测幅目标';
+      }
+      if (dir === 'down') {
+        return '形态边界已下破；上方形态内阻力以原边界档为准';
+      }
+      // 形成中巩固或主导巩固未判明突破：保留等待突破口径
+      if (ctx && (ctx.hasFormingConsol || ctx.lead)) {
+        return '暂无明显阻力，等待形态边界突破后再定';
+      }
+      return '暂无活跃形态边界，暂无明显阻力共振位';
+    }
+    if (dir === 'down') {
+      return '形态边界已下破；下方暂无形态内支撑档，近端关注简化测幅目标';
+    }
+    if (dir === 'up') {
+      return '形态边界已上破；下方防守见上沿翻支撑等形态内档';
+    }
+    if (ctx && (ctx.hasFormingConsol || ctx.lead)) {
+      return '暂无明显支撑，等待形态边界突破后再定';
+    }
+    return '暂无活跃形态边界，暂无明显支撑共振位';
+  },
+
+  /**
+   * 从多维共振带取 1～2 档支撑/阻力（真空结构兜底；不编造假价）。
+   * 优先 nearest_*，再按强度/近价综合排序。
+   * @returns {{supports:object[], resistances:object[]}}
+   */
+  _pickConfluenceTradeLevels(confluence, close) {
+    if (!confluence || typeof confluence !== 'object') {
+      return { supports: [], resistances: [] };
+    }
+    const toLevel = (z, side) => {
+      if (!z || typeof z !== 'object') return null;
+      const price = this._num(z.center);
+      if (price == null) return null;
+      return {
+        price,
+        low: this._num(z.low),
+        high: this._num(z.high),
+        strength: this._num(z.strength) || 0,
+        sources: Array.isArray(z.sources) ? z.sources : [],
+        fromConfluence: true,
+        side,
+      };
+    };
+    const score = (lv) => {
+      const dist =
+        close != null && lv.price != null
+          ? Math.abs(close - lv.price) / Math.abs(lv.price || 1)
+          : 0;
+      return (lv.strength || 0) / (1 + dist * 40);
+    };
+    const mergeSide = (list, nearest, side) => {
+      const out = [];
+      const push = (lv) => {
+        if (!lv) return;
+        if (out.some((x) => Math.abs(x.price - lv.price) < 1e-6)) return;
+        out.push(lv);
+      };
+      (list || []).forEach((z) => push(toLevel(z, side)));
+      if (nearest) push(toLevel(nearest, side));
+      return out
+        .sort((a, b) => {
+          const ds = score(b) - score(a);
+          if (Math.abs(ds) > 1e-9) return ds;
+          if (close == null) return 0;
+          return Math.abs(a.price - close) - Math.abs(b.price - close);
+        })
+        .slice(0, 2);
+    };
+    const supports = mergeSide(
+      confluence.supports,
+      confluence.nearest_support_zone,
+      'support'
+    ).sort((a, b) => b.price - a.price);
+    const resistances = mergeSide(
+      confluence.resistances,
+      confluence.nearest_resistance_zone,
+      'resistance'
+    ).sort((a, b) => a.price - b.price);
+    return { supports, resistances };
+  },
+
+  _confluenceLevelExplain(m, side) {
+    const role = side === 'support' ? '支撑' : '阻力';
+    const str =
+      m && m.strength != null && Number.isFinite(Number(m.strength))
+        ? Number(m.strength).toFixed(1)
+        : '--';
+    return `多维共振带${role}，强度 ${str}`;
+  },
+
+  _hasConfluenceZones(confluence) {
+    if (!confluence || typeof confluence !== 'object') return false;
+    if ((confluence.supports || []).some((z) => z && z.center != null)) return true;
+    if ((confluence.resistances || []).some((z) => z && z.center != null)) return true;
+    if (confluence.nearest_support_zone && confluence.nearest_support_zone.center != null)
+      return true;
+    if (
+      confluence.nearest_resistance_zone &&
+      confluence.nearest_resistance_zone.center != null
+    )
+      return true;
+    return false;
+  },
+
+  /**
+   * 结构防守与目标（合并原「关键位置参考」+「后续交易点位参考」）。
+   * 分层：防守/支撑 → 目标/近端形态阻力（含巩固简化测幅）。
+   * 真空（无主形态档）时可用 opts.confluenceZones 共振带兜底；有活跃形态档时不硬盖。
+   * @returns {{html:string,text:string}}
+   */
+  buildStructureLevelsReference(items, opts) {
+    const options = opts || {};
+    const asof = this._inferAsof(items, options);
+    const ranked = this._rankHits(items, { asof });
+    const primary = this._pickPrimary(ranked, asof);
     let close = null;
     for (let i = 0; i < ranked.length; i++) {
       close = this._hitClose(ranked[i]);
       if (close != null) break;
     }
-    const merged = this._collectMergedLevels(items);
-    const { supports, resistances } = this._pickTradeLevels(merged, close);
-
+    // 真空时 ranked 可能只剩过期 forming；再从全量 items（含归档）取收盘
+    if (close == null) {
+      for (let i = 0; i < (items || []).length; i++) {
+        close = this._hitClose(items[i]);
+        if (close != null) break;
+      }
+    }
+    const merged = this._collectMergedLevels(items, { asof });
+    let { supports, resistances } = this._pickTradeLevels(merged, close);
+    const ctx = this._leadConsolBreakContext(items, { asof });
+    const measured = ctx.measured;
+    // 有活跃形态档用形态；真空（无主形态，或两侧皆空且无巩固突破）才共振兜底
+    const useConfluenceFallback =
+      !primary ||
+      (!supports.length && !resistances.length && !measured && !ctx.dir);
+    let supportFromConf = false;
+    let resistFromConf = false;
+    if (useConfluenceFallback && this._hasConfluenceZones(options.confluenceZones)) {
+      const confLv = this._pickConfluenceTradeLevels(options.confluenceZones, close);
+      if (!supports.length && confLv.supports.length) {
+        supports = confLv.supports;
+        supportFromConf = true;
+      }
+      if (!resistances.length && confLv.resistances.length) {
+        resistances = confLv.resistances;
+        resistFromConf = true;
+      }
+    }
     const supportZone = this._tradeZoneText(supports, 'support');
     const resistZone = this._tradeZoneText(resistances, 'resistance');
 
-    let supportBlock = '';
+    const supportLines = [];
+    const supportLis = [];
     if (!supports.length) {
-      supportBlock = `<p>下方核心支撑区：暂无明显支撑，等待形态边界突破后再定</p>`;
+      if (measured && measured.dir === 'down') {
+        const note = '形态边界已下破；下方暂无形态内支撑档';
+        supportLines.push(note);
+        supportLis.push(note);
+      } else {
+        const emptySup = this._emptyStructureSideText('support', ctx);
+        supportLines.push(emptySup);
+        supportLis.push(null);
+      }
     } else {
-      const bullets = supports.map((m, idx) => {
+      supports.forEach((m, idx) => {
         const label = idx === 0 ? '直接支撑' : '强底支撑';
-        return `<li>${label}：${this.esc(this._fmtPx(m.price))} 附近（${this.esc(this._tradeLevelExplain(m, 'support'))}）</li>`;
+        const explain = m.fromConfluence
+          ? this._confluenceLevelExplain(m, 'support')
+          : this._tradeLevelExplain(m, 'support');
+        const line = `${label}：${this._fmtPx(m.price)} 附近（${explain}）`;
+        supportLines.push(line);
+        supportLis.push(line);
       });
-      supportBlock = `<p>下方核心支撑区：${this.esc(supportZone)}</p><ul>${bullets.join('')}</ul>`;
+    }
+    if (measured && measured.dir === 'down') {
+      const line = this._measuredMoveBulletText(measured);
+      supportLines.push(line);
+      supportLis.push(line);
     }
 
-    let resistBlock = '';
+    const resistLines = [];
+    const resistLis = [];
     if (!resistances.length) {
-      resistBlock = `<p>上方核心阻力区：暂无明显阻力，等待形态边界突破后再定</p>`;
+      if (measured && measured.dir === 'up') {
+        const note = '形态边界已上破；上方暂无形态内阻力档';
+        resistLines.push(note);
+        resistLis.push(note);
+      } else {
+        const emptyRes = this._emptyStructureSideText('resistance', ctx);
+        resistLines.push(emptyRes);
+        resistLis.push(null);
+      }
     } else {
-      const bullets = resistances.map((m, idx) => {
+      resistances.forEach((m, idx) => {
         const label = idx === 0 ? '第一阻力' : '第二阻力';
-        return `<li>${label}：${this.esc(this._fmtPx(m.price))} 附近（${this.esc(this._tradeLevelExplain(m, 'resistance'))}）</li>`;
+        const explain = m.fromConfluence
+          ? this._confluenceLevelExplain(m, 'resistance')
+          : this._tradeLevelExplain(m, 'resistance');
+        const line = `${label}：${this._fmtPx(m.price)} 附近（${explain}）`;
+        resistLines.push(line);
+        resistLis.push(line);
       });
-      resistBlock = `<p>上方核心阻力区：${this.esc(resistZone)}</p><ul>${bullets.join('')}</ul>`;
+    }
+    if (measured && measured.dir === 'up') {
+      const line = this._measuredMoveBulletText(measured);
+      resistLines.push(line);
+      resistLis.push(line);
     }
 
-    return `<div class="pattern-expert-trade-levels">
-      <p><span class="pattern-expert-label">后续交易点位参考：</span></p>
-      ${supportBlock}
-      ${resistBlock}
+    const supportHead =
+      supports.length > 0
+        ? `防守/支撑：${supportZone}`
+        : measured && measured.dir === 'down'
+          ? '防守/支撑与下方目标：'
+          : '防守/支撑：';
+    const resistHead =
+      resistances.length > 0
+        ? resistFromConf
+          ? `目标/近端共振阻力：${resistZone}`
+          : `目标/近端形态阻力：${resistZone}`
+        : supportFromConf && !resistances.length
+          ? '目标/近端共振阻力：'
+          : '目标/近端形态阻力：';
+    const supportUl =
+      supportLis.filter((x) => x != null).length > 0
+        ? `<ul>${supportLis
+            .filter((x) => x != null)
+            .map((line) => `<li>${this.esc(line)}</li>`)
+            .join('')}</ul>`
+        : '';
+    const resistUl =
+      resistLis.filter((x) => x != null).length > 0
+        ? `<ul>${resistLis
+            .filter((x) => x != null)
+            .map((line) => `<li>${this.esc(line)}</li>`)
+            .join('')}</ul>`
+        : '';
+
+    const supportEmptyOnly =
+      supportLis.every((x) => x == null) && supportLines.length
+        ? `<p>${this.esc(supportLines[0])}</p>`
+        : '';
+    const resistEmptyOnly =
+      resistLis.every((x) => x == null) && resistLines.length
+        ? `<p>${this.esc(resistLines[0])}</p>`
+        : '';
+
+    const html = `<div class="pattern-expert-trade-levels">
+      <p><span class="pattern-expert-label">结构防守与目标：</span></p>
+      <p>${this.esc(supportHead)}</p>
+      ${supportUl || supportEmptyOnly}
+      <p>${this.esc(resistHead)}</p>
+      ${resistUl || resistEmptyOnly}
     </div>`;
+
+    const textParts = ['结构防守与目标：', supportHead];
+    supportLines.forEach((ln) => textParts.push(`· ${ln}`));
+    textParts.push(resistHead);
+    resistLines.forEach((ln) => textParts.push(`· ${ln}`));
+    const text = textParts.filter(Boolean).join('\n');
+
+    return { html, text };
+  },
+
+  /** @deprecated 兼容旧调用：返回结构块 HTML */
+  buildTradeLevelsReference(items) {
+    return this.buildStructureLevelsReference(items).html;
   },
 
   /**
    * 汇总多形态关键位：近价去重、按价格升序、标注来源与观察中。
    * @returns {string}
    */
-  buildKeyLevelsReference(items) {
-    const ranked = this._rankHits(items);
-    const merged = this._collectMergedLevels(items);
+  buildKeyLevelsReference(items, opts) {
+    const asof = this._inferAsof(items, opts);
+    const ranked = this._rankHits(items, { asof });
+    const merged = this._collectMergedLevels(items, { asof });
     if (!merged.length) return '';
 
     merged.sort((a, b) => a.price - b.price);
@@ -1006,26 +1469,71 @@ const PatternTool = {
    * 前端规则引擎：根据 hits 结构化字段拼装专家口吻分析。
    * 必须直接读取 status：已确认巩固突破时禁止再写「等待边界有效突破」；
    * 已确认偏多巩固 vs 已确认偏空反转写入冲突提示。
+   * @param {array} items
+   * @param {{asof?:string, confluenceZones?:object}|undefined} options
    */
-  buildExpertAnalysis(items) {
-    const ranked = this._rankHits(items);
+  buildExpertAnalysis(items, options) {
+    const opts = options || {};
+    const asof = this._inferAsof(items, opts);
+    const ranked = this._rankHits(items, { asof });
     const confirmed = ranked.filter((h) => h.status === 'confirmed');
     const forming = ranked.filter((h) => h.status === 'forming');
-    const primary = confirmed[0] || ranked[0];
+    const primary = this._pickPrimary(ranked, asof);
+    const bgArchived = this._archivedBackgroundText(items);
+    const closeForHint =
+      (primary && this._hitClose(primary)) ||
+      (ranked[0] && this._hitClose(ranked[0])) ||
+      null;
+    const confHint = this._nearConfluenceHint(opts.confluenceZones, closeForHint);
+
     if (!primary) {
+      const hasConf = this._hasConfluenceZones(opts.confluenceZones);
+      const shortBits = ['暂无主导形态。'];
+      // P1：真空时短线轻改为结构整理期；有共振则结构块承载价位，避免与 confHint 堆砌
+      if (hasConf) shortBits.push('结构整理期，跟踪多维量化共振带。');
+      if (bgArchived) shortBits.push(bgArchived);
+      if (!hasConf) {
+        if (confHint) shortBits.push(confHint);
+        else shortBits.push('短线建议结合量价与近端支撑压力谨慎观察。');
+      }
+      let mediumTerm = hasConf
+        ? '暂无高置信活跃主导形态，结构整理期，跟踪多维量化共振带。'
+        : '暂无高置信活跃主导形态，中线尚不明朗。';
+      if (bgArchived) mediumTerm += bgArchived;
+      if (!hasConf && confHint) mediumTerm += confHint;
+      else if (!hasConf && forming.length) {
+        const names = forming
+          .slice(0, 3)
+          .map(
+            (h) =>
+              `${this.typeLabel(h.pattern_type)}(${
+                h.confidence != null ? Number(h.confidence).toFixed(2) : '--'
+              })`
+          )
+          .join('、');
+        mediumTerm += `形成中信号（${names}）偏旧或置信不足，不强制选作主形态。`;
+      }
+      const structure = this.buildStructureLevelsReference(items, {
+        asof,
+        confluenceZones: opts.confluenceZones,
+      });
       return {
-        shortTerm: '命中形态信息有限，短线建议结合量价与关键支撑压力谨慎观察。',
-        mediumTerm: '暂无有效形态信号。',
-        keyLevelsRef: '',
-        tradeLevelsHtml: '',
+        shortTerm: shortBits.join(''),
+        mediumTerm,
+        keyLevelsRef: this.buildKeyLevelsReference(items, { asof }),
+        structureHtml: structure.html,
+        structureText: structure.text,
+        tradeLevelsHtml: structure.html,
+        tradeLevelsText: structure.text,
         risk:
           '风险提示：以上解读由日线形态规则自动生成，非投资建议；形态识别存在滞后与误报，请结合基本面、量能与自身风险承受能力综合判断。',
-        primaryLabel: '--',
+        primaryLabel: '暂无主导形态',
         primaryConf: '--',
-        closeTxt: null,
+        closeTxt: closeForHint != null ? this._fmtPx(closeForHint) : null,
         neckTxt: null,
       };
     }
+
     const primaryLabel = this.typeLabel(primary.pattern_type);
     const primaryConf =
       primary.confidence != null ? Number(primary.confidence).toFixed(2) : '--';
@@ -1042,8 +1550,8 @@ const PatternTool = {
 
     // —— 短期：形成中 + 最近确认与现价相对关键位 ——
     const shortBits = [];
-    if (confirmed.length) {
-      const top = confirmed[0];
+    if (confirmed.length && primary.status === 'confirmed') {
+      const top = primary;
       const t = top.pattern_type;
       const c = this._hitClose(top);
       const n = this._hitNeck(top);
@@ -1115,47 +1623,28 @@ const PatternTool = {
         .map((h) => this.typeLabel(h.pattern_type))
         .join('、');
       shortBits.push(`另有形成中的${names}，仅作次要观察，不改写已确认突破方向。`);
-    } else if (!confirmed.length && forming.length) {
-      const f0 = forming[0];
+    } else if (!confirmed.length && forming.length && primary.status === 'forming') {
+      const f0 = primary;
       shortBits.push(
         `当前以形成中的${this.typeLabel(f0.pattern_type)}为主，形态尚未确认，短线宜等待结构完成或关键位突破。`
       );
     }
+
+    if (bgArchived) shortBits.push(bgArchived);
+    if (primary.status === 'forming' && confHint) shortBits.push(confHint);
 
     if (!shortBits.length) {
       shortBits.push('命中形态信息有限，短线建议结合量价与关键支撑压力谨慎观察。');
     }
     shortTerm = shortBits.join('');
 
-    // —— 中线：高置信已确认 + 颈线/边界 ——
-    if (confirmed.length) {
-      const lead = confirmed[0];
+    // —— 中线：压短边界/现价堆砌（点位改由「结构防守与目标」承载）——
+    if (confirmed.length && primary.status === 'confirmed') {
+      const lead = primary;
       const leadBias = this._biasOf(lead.pattern_type);
       const leadLab = this.typeLabel(lead.pattern_type);
       const leadConf =
         lead.confidence != null ? Number(lead.confidence).toFixed(2) : '--';
-      const leadNeck = this._hitNeck(lead);
-      const leadClose = this._hitClose(lead);
-      const lv = lead.key_levels || {};
-      const levelParts = [];
-      if (leadNeck != null) levelParts.push(`颈线 ${this._fmtPx(leadNeck)}`);
-      if (lv.h1 != null || lv.h2 != null) {
-        levelParts.push(
-          `峰位 H1/H2≈${this._fmtPx(lv.h1 != null ? lv.h1 : lv.h2)}${lv.h2 != null && lv.h1 != null ? '/' + this._fmtPx(lv.h2) : ''}`
-        );
-      }
-      if (lv.l1 != null || lv.l2 != null) {
-        levelParts.push(
-          `谷位 L1/L2≈${this._fmtPx(lv.l1 != null ? lv.l1 : lv.l2)}${lv.l2 != null && lv.l1 != null ? '/' + this._fmtPx(lv.l2) : ''}`
-        );
-      }
-      if (lv.head != null) levelParts.push(`头部 ${this._fmtPx(lv.head)}`);
-      if (lv.upper != null || lv.lower != null) {
-        levelParts.push(
-          `边界上沿/下沿≈${this._fmtPx(lv.upper)}/${this._fmtPx(lv.lower)}`
-        );
-      }
-      const levelTxt = levelParts.length ? `关键位：${levelParts.join('，')}。` : '';
       const formed = this.formedAtText(lead);
       const formedTxt = formed && formed !== '--' ? `形成/确认参考日 ${formed}。` : '';
 
@@ -1165,8 +1654,7 @@ const PatternTool = {
       else if (leadBias === 'bearish_bias') stance = '中线略偏防守';
       else if (leadBias === 'bullish_bias') stance = '中线略偏积极';
 
-      mediumTerm = `以高置信已确认「${leadLab}」（置信度 ${leadConf}）为主导，${stance}。${levelTxt}${formedTxt}`;
-      if (leadClose != null) mediumTerm += `现价/收盘参考 ${this._fmtPx(leadClose)}。`;
+      mediumTerm = `以高置信已确认「${leadLab}」（置信度 ${leadConf}）为主导，${stance}。${formedTxt}`;
 
       // 冲突：反向已确认（含偏多巩固 vs 偏空反转）
       const opp = confirmed.find((h) => {
@@ -1179,32 +1667,43 @@ const PatternTool = {
         if (this.CONSOLIDATION[lead.pattern_type] && oppIsRev) {
           mediumTerm += `同时存在较早已确认「${this.typeLabel(opp.pattern_type)}」（测幅/时效可能已兑现），冲突时以后续突破的「${leadLab}」为主，旧反转降权观察。`;
         } else {
-          mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」（偏多巩固与偏空反转等冲突），冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
+          mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」，冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
         }
       } else if (formingConsol.length && !hasConfirmedConsolBreak) {
-        mediumTerm += `形成中的巩固/楔旗形为次要信号，突破前不改变以「${leadLab}」为核心的中线框架。`;
+        mediumTerm += `形成中巩固为次要，突破前不改「${leadLab}」框架。`;
       } else if (formingConsol.length && hasConfirmedConsolBreak) {
-        mediumTerm += `形成中巩固仅次要；已确认突破方向已写入短期框架。`;
+        mediumTerm += `形成中巩固仅次要观察。`;
       }
+      if (bgArchived) mediumTerm += bgArchived;
     } else {
       const names = forming
+        .filter((h) => this._isViablePrimaryCandidate(h, asof))
         .slice(0, 4)
         .map((h) => `${this.typeLabel(h.pattern_type)}(${h.confidence != null ? Number(h.confidence).toFixed(2) : '--'})`)
         .join('、');
-      mediumTerm = `暂无高置信已确认反转形态，中线格局尚不明朗；当前形成中信号（${names || '若干'}）需等待边界突破或结构确认后再评估趋势级别。`;
+      mediumTerm = `暂无高置信已确认形态，中线尚不明朗；形成中信号（${names || '若干'}）待边界突破或结构确认。`;
+      if (bgArchived) mediumTerm += bgArchived;
+      if (confHint) mediumTerm += confHint;
     }
 
     const risk =
       '风险提示：以上解读由日线形态规则自动生成，非投资建议；形态识别存在滞后与误报，请结合基本面、量能与自身风险承受能力综合判断。';
 
-    const keyLevelsRef = this.buildKeyLevelsReference(ranked);
-    const tradeLevelsHtml = this.buildTradeLevelsReference(ranked);
+    // keyLevelsRef 仍计算供调试/兼容；UI/PDF 统一走 structure*
+    const keyLevelsRef = this.buildKeyLevelsReference(items, { asof });
+    const structure = this.buildStructureLevelsReference(items, {
+      asof,
+      confluenceZones: opts.confluenceZones,
+    });
 
     return {
       shortTerm,
       mediumTerm,
       keyLevelsRef,
-      tradeLevelsHtml,
+      structureHtml: structure.html,
+      structureText: structure.text,
+      tradeLevelsHtml: structure.html,
+      tradeLevelsText: structure.text,
       risk,
       primaryLabel,
       primaryConf,

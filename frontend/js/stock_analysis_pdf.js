@@ -307,14 +307,29 @@
     });
     let expert = '';
     if (PT && typeof PT.buildExpertAnalysis === 'function' && visible.length) {
-      const a = PT.buildExpertAnalysis(visible);
-      const parts = [];
-      if (a.primaryLabel) parts.push(`主形态：${a.primaryLabel}${a.primaryConf ? `（置信度 ${a.primaryConf}）` : ''}`);
-      if (a.shortTerm) parts.push(`短线：${a.shortTerm}`);
-      if (a.mediumTerm) parts.push(`中线：${a.mediumTerm}`);
-      if (a.keyLevelsRef) parts.push(`关键位置：${a.keyLevelsRef}`);
-      if (a.risk) parts.push(a.risk);
-      expert = parts.filter(Boolean).join('\n');
+      const levelsData = (host.lastLevels && host.lastLevels.data) || {};
+      const classic = levelsData.classic_levels || levelsData.classic || {};
+      const confluence =
+        classic.confluence_zones || levelsData.confluence_zones || null;
+      const a = PT.buildExpertAnalysis(visible, {
+        asof: pack.asof || '',
+        confluenceZones: confluence,
+      });
+      // 与页面 _buildExpertHtml 共用同一套字段（含结构防守与目标 / 测幅）
+      expert =
+        typeof PT.formatExpertPlainText === 'function'
+          ? PT.formatExpertPlainText(a)
+          : [
+              a.primaryLabel
+                ? `主形态：${a.primaryLabel}${a.primaryConf ? `（置信度 ${a.primaryConf}）` : ''}`
+                : '',
+              a.shortTerm ? `短线：${a.shortTerm}` : '',
+              a.mediumTerm ? `中线：${a.mediumTerm}` : '',
+              a.structureText || a.tradeLevelsText || '',
+              a.risk || '',
+            ]
+              .filter(Boolean)
+              .join('\n');
     }
     if (!expert) {
       expert = plainFromEl(document.querySelector('#ssaPatternHost .pattern-expert-analysis'));

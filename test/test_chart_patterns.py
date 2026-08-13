@@ -709,6 +709,89 @@ def test_hs_bottom_invalidated_after_rs_dip_even_if_above_neck():
     assert hits[0]["status"] == "invalidated"
 
 
+def test_hs_top_stays_confirmed_after_rebound_above_neck():
+    """头肩顶：历史上收盘破颈后，即使末日报收回到颈线上方，仍须 confirmed（不得回 forming）。"""
+    head = 20.0
+    ls_px, rs_px = 18.0, 17.8
+    n1_px, n2_px = 16.0, 15.8
+    neck = (n1_px + n2_px) / 2.0
+
+    n = 50
+    bars = _bars_from_closes([17.0] * n)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.05
+        b["low"] = float(b["close"]) - 0.05
+
+    rs_i = 25
+    # 破颈
+    for i in range(30, 40):
+        bars[i]["close"] = neck - 0.5
+        bars[i]["high"] = neck - 0.2
+        bars[i]["low"] = neck - 0.8
+    # 反弹回颈线上方（旧逻辑会改回 forming）
+    for i in range(40, n):
+        bars[i]["close"] = neck + 0.4
+        bars[i]["high"] = neck + 0.6
+        bars[i]["low"] = neck + 0.1
+
+    assert bars[35]["close"] < neck
+    assert bars[-1]["close"] > neck
+
+    pivots = [
+        {"kind": "high", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "low", "price": n1_px, "index": 10, "date": bars[10]["date"]},
+        {"kind": "high", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "low", "price": n2_px, "index": 20, "date": bars[20]["date"]},
+        {"kind": "high", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "head_shoulders_top"
+    assert hits[0]["status"] == "confirmed"
+    assert hits[0]["status"] != "forming"
+    assert hits[0].get("confirm_date")
+
+
+def test_hs_bottom_stays_confirmed_after_pullback_below_neck():
+    """头肩底：历史上收盘破颈后，即使末日报收回落到颈线下方，仍须 confirmed。"""
+    head = 10.0
+    ls_px, rs_px = 12.0, 12.1
+    n1_px, n2_px = 14.0, 14.2
+    neck = (n1_px + n2_px) / 2.0
+
+    n = 50
+    bars = _bars_from_closes([13.0] * n)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.05
+        b["low"] = float(b["close"]) - 0.05
+
+    rs_i = 25
+    for i in range(30, 40):
+        bars[i]["close"] = neck + 0.5
+        bars[i]["high"] = neck + 0.8
+        bars[i]["low"] = neck + 0.2
+    for i in range(40, n):
+        bars[i]["close"] = neck - 0.4
+        bars[i]["high"] = neck - 0.1
+        bars[i]["low"] = neck - 0.6
+
+    assert bars[35]["close"] > neck
+    assert bars[-1]["close"] < neck
+
+    pivots = [
+        {"kind": "low", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": n1_px, "index": 10, "date": bars[10]["date"]},
+        {"kind": "low", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "high", "price": n2_px, "index": 20, "date": bars[20]["date"]},
+        {"kind": "low", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    assert hits[0]["pattern_type"] == "head_shoulders_bottom"
+    assert hits[0]["status"] == "confirmed"
+    assert hits[0]["status"] != "forming"
+
+
 def test_nms_falling_wedge_bear_flag_keeps_one():
     """下降楔与下降旗上下沿近同（≤1%）只保留更优者（优先已确认），并注明同源。"""
     d0 = "2024-03-01"
@@ -1034,3 +1117,88 @@ def test_expert_key_levels_upper_role_after_up_breakout():
     assert "38.88" in ref or "38.9" in ref
     assert "突破后转支撑" in ref
     assert "上沿（突破参考）" not in ref
+
+
+def test_expert_vacuum_skips_stale_forming_hs_top():
+    """仅过期 forming 头肩顶时，主形态应为「暂无主导形态」，并可附归档背景/共振带。"""
+    import json
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "test" / "_pattern_expert_node_check.mjs"
+    items = [
+        {
+            "pattern_type": "head_shoulders_top",
+            "status": "forming",
+            "confidence": 0.55,
+            "key_levels": {"neckline": 13.91, "head": 16.0, "last_close": 14.5},
+            "pivots": [{"role": "RS", "date": "2026-03-01", "price": 15.0}],
+            "formed_at": "2026-03-01",
+        },
+        {
+            "pattern_type": "head_shoulders_bottom",
+            "status": "archived",
+            "confidence": 0.7,
+            "key_levels": {"neckline": 12.0, "head": 10.0, "last_close": 14.5},
+            "pivots": [],
+            "formed_at": "2026-05-01",
+            "reason": "头肩底；生命周期已结束（测幅目标已兑现≥15.00，已归档）",
+        },
+    ]
+    opts = {
+        "asof": "2026-08-12",
+        "confluenceZones": {
+            "supports": [
+                {
+                    "center": 14.2,
+                    "low": 14.0,
+                    "high": 14.4,
+                    "strength": 8.5,
+                    "sources": ["pivot", "ma"],
+                }
+            ],
+            "resistances": [],
+            "nearest_support_zone": {
+                "center": 14.2,
+                "low": 14.0,
+                "high": 14.4,
+                "strength": 8.5,
+            },
+        },
+    }
+    proc = subprocess.run(
+        [
+            "node",
+            str(script),
+            json.dumps(items, ensure_ascii=False),
+            json.dumps(opts, ensure_ascii=False),
+        ],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0 and (
+        "not found" in (proc.stderr or "").lower()
+        or "不是内部或外部命令" in (proc.stderr or "")
+        or proc.returncode == 127
+    ):
+        import pytest
+
+        pytest.skip(f"node unavailable: {proc.stderr}")
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert out.get("primaryLabel") == "暂无主导形态"
+    assert "头肩顶" not in (out.get("primaryLabel") or "")
+    assert "暂无主导形态" in (out.get("shortTerm") or "")
+    assert "已归档" in (out.get("shortTerm") or "") or "测幅" in (out.get("mediumTerm") or "")
+    assert "共振带" in (out.get("shortTerm") or "") or "共振带" in (out.get("mediumTerm") or "")
+    struct = (out.get("structureText") or "") + (out.get("structureHtml") or "")
+    assert "14.20" in struct or "14.2" in struct
+    assert "多维共振带" in struct
+    assert "等待形态边界突破" not in struct
+    assert "结构整理期" in (out.get("shortTerm") or "") or "结构整理期" in (
+        out.get("mediumTerm") or ""
+    )

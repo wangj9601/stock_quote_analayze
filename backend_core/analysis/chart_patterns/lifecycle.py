@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""已确认形态生命周期：测幅兑现 / 反向突破 / 大幅回吐后归档，避免过期主形态霸榜。"""
+"""已确认形态生命周期：测幅兑现 / 反向突破 / 大幅回吐 / 头肩失败破位后归档，避免过期主形态霸榜。"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .rules import (
+    HS_FAIL_DEPTH_MULT,
+    HS_FAIL_RECOVER_MULT,
+    HS_FORMING_TIMEOUT_BARS,
     LIFECYCLE_GIVEBACK_RATIO,
     LIFECYCLE_MIN_BARS,
     LIFECYCLE_MIN_EXCURSION_PCT,
@@ -21,6 +24,8 @@ _REVERSAL_TYPES = frozenset(
         "head_shoulders_top",
     }
 )
+
+_HS_TYPES = frozenset({"head_shoulders_top", "head_shoulders_bottom"})
 
 # 已确认巩固突破：与反转方向冲突时用于降权旧反转
 _BULLISH_CONSOL = frozenset(
@@ -84,6 +89,40 @@ def _is_bullish_reversal(pattern_type: str) -> bool:
 
 def _hit_formed_at(hit: Dict[str, Any]) -> str:
     return str(hit.get("formed_at") or hit.get("confirm_date") or "")[:10]
+
+
+def _rs_pivot_index(hit: Dict[str, Any], bars: Sequence[Dict[str, Any]]) -> Optional[int]:
+    """头肩右肩枢轴对应的 K 线 index。"""
+    for p in hit.get("pivots") or []:
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("role") or "").upper() not in ("RS", "RIGHT_SHOULDER"):
+            continue
+        idx = p.get("index")
+        try:
+            i = int(idx)
+            if 0 <= i < len(bars):
+                return i
+        except (TypeError, ValueError):
+            pass
+        d = str(p.get("date") or "")[:10]
+        if not d:
+            continue
+        for i, b in enumerate(bars):
+            if _bar_date(b) == d:
+                return i
+    return None
+
+
+def _lifecycle_start_index(hit: Dict[str, Any], bars: Sequence[Dict[str, Any]]) -> Optional[int]:
+    formed = _hit_formed_at(hit)
+    start_i = _index_on_or_after(bars, formed) if formed else None
+    if start_i is not None:
+        return start_i
+    rs_i = _rs_pivot_index(hit, bars)
+    if rs_i is not None:
+        return rs_i
+    return 0 if bars else None
 
 
 def _mark_archived(hit: Dict[str, Any], note: str) -> Dict[str, Any]:
@@ -278,6 +317,93 @@ def _giveback_archive_note(
     return "生命周期已结束（目标区兑现后大幅回吐，已归档）"
 
 
+def _hs_failed_break_note(
+    hit: Dict[str, Any],
+    bars: Sequence[Dict[str, Any]],
+    *,
+    depth_mult: float,
+    recover_mult: float,
+) -> Optional[str]:
+    """头肩失败破位：曾深破颈线后又回到颈线另一侧足够远 → 归档。
+
+    顶：最低 < 颈线×depth，且现价 > 颈线×recover
+    底：最高 > 颈线/depth，且现价 < 颈线/recover
+    """
+    ptype = str(hit.get("pattern_type") or "")
+    if ptype not in _HS_TYPES:
+        return None
+    lv = hit.get("key_levels") if isinstance(hit.get("key_levels"), dict) else {}
+    neck = _f(lv.get("neckline"))
+    if neck is None or neck <= 0:
+        return None
+    start_i = _lifecycle_start_index(hit, bars)
+    if start_i is None:
+        return None
+    window = bars[start_i:]
+    if len(window) < 3:
+        return None
+    last_c = _bar_close(bars[-1])
+    if last_c is None or last_c <= 0:
+        return None
+
+    depth = max(0.80, min(0.99, float(depth_mult)))
+    recover = max(1.005, min(1.08, float(recover_mult)))
+
+    if ptype == "head_shoulders_top":
+        lows = [lo for lo in (_bar_low(b) for b in window) if lo is not None]
+        if not lows:
+            return None
+        deepest = min(lows)
+        if deepest >= neck * depth:
+            return None
+        if last_c <= neck * recover:
+            return None
+        return (
+            f"生命周期已结束（失败破位：曾下探≤{deepest:.2f}<颈线×{depth:.2f}，"
+            f"现价已回到颈线上方足够远，已归档）"
+        )
+
+    # head_shoulders_bottom
+    highs = [h for h in (_bar_high(b) for b in window) if h is not None]
+    if not highs:
+        return None
+    highest = max(highs)
+    if highest <= neck / depth:
+        return None
+    if last_c >= neck / recover:
+        return None
+    return (
+        f"生命周期已结束（失败破位：曾上冲≥{highest:.2f}>颈线÷{depth:.2f}，"
+        f"现价已回到颈线下方足够远，已归档）"
+    )
+
+
+def _hs_forming_timeout_note(
+    hit: Dict[str, Any],
+    bars: Sequence[Dict[str, Any]],
+    *,
+    timeout_bars: int,
+) -> Optional[str]:
+    """形成中头肩：右肩后超过 N 根仍未破颈 → 超时归档（辅规则）。"""
+    if str(hit.get("status") or "") != "forming":
+        return None
+    if str(hit.get("pattern_type") or "") not in _HS_TYPES:
+        return None
+    n = int(timeout_bars or 0)
+    if n <= 0:
+        return None
+    rs_i = _rs_pivot_index(hit, bars)
+    if rs_i is None:
+        start_i = _lifecycle_start_index(hit, bars)
+        if start_i is None:
+            return None
+        rs_i = start_i
+    elapsed = len(bars) - 1 - int(rs_i)
+    if elapsed < n:
+        return None
+    return f"生命周期已结束（形成中超时：右肩后≥{n}根仍未收盘破颈，已归档）"
+
+
 def apply_pattern_lifecycle(
     hits: List[Dict[str, Any]],
     bars: Sequence[Dict[str, Any]],
@@ -286,13 +412,20 @@ def apply_pattern_lifecycle(
     min_excursion_pct: float = LIFECYCLE_MIN_EXCURSION_PCT,
     giveback_ratio: float = LIFECYCLE_GIVEBACK_RATIO,
     target_ratio: float = LIFECYCLE_TARGET_RATIO,
+    hs_fail_depth_mult: float = HS_FAIL_DEPTH_MULT,
+    hs_fail_recover_mult: float = HS_FAIL_RECOVER_MULT,
+    hs_forming_timeout_bars: int = HS_FORMING_TIMEOUT_BARS,
 ) -> List[Dict[str, Any]]:
-    """将已走完周期的已确认反转形态标为 archived。
+    """将已走完周期的反转形态标为 archived。
 
-    优先级：
+    优先级（confirmed 反转）：
     1. 测幅目标已兑现（不依赖 45 根 / 回吐）；
     2. 后续出现反向已确认巩固突破 → 降权归档；
     3. 原条件：≥min_bars + 有利方向极值 + 回吐。
+
+    头肩 forming/confirmed 额外：
+    4. 失败破位（深破颈线后又回到另一侧足够远）；
+    5. forming 超时未破颈（辅，默认 90 根）。
     """
     if not hits or not bars:
         return hits
@@ -301,25 +434,38 @@ def apply_pattern_lifecycle(
     out: List[Dict[str, Any]] = []
     for h in hits:
         hit = dict(h)
-        if str(hit.get("status") or "") != "confirmed":
-            out.append(hit)
-            continue
+        status = str(hit.get("status") or "")
         ptype = str(hit.get("pattern_type") or "")
-        if ptype not in _REVERSAL_TYPES:
-            out.append(hit)
-            continue
 
-        note = _target_realized(hit, bars, target_ratio=target_ratio)
-        if not note:
-            note = _newer_opposite_consol_breakout(hit, hits)
-        if not note:
-            note = _giveback_archive_note(
+        note: Optional[str] = None
+        if status == "confirmed" and ptype in _REVERSAL_TYPES:
+            note = _target_realized(hit, bars, target_ratio=target_ratio)
+            if not note:
+                note = _newer_opposite_consol_breakout(hit, hits)
+            if not note:
+                note = _giveback_archive_note(
+                    hit,
+                    bars,
+                    min_bars=min_bars,
+                    min_excursion_pct=min_excursion_pct,
+                    giveback_ratio=giveback_ratio,
+                )
+
+        if not note and ptype in _HS_TYPES and status in ("forming", "confirmed"):
+            note = _hs_failed_break_note(
                 hit,
                 bars,
-                min_bars=min_bars,
-                min_excursion_pct=min_excursion_pct,
-                giveback_ratio=giveback_ratio,
+                depth_mult=hs_fail_depth_mult,
+                recover_mult=hs_fail_recover_mult,
             )
+
+        if not note and ptype in _HS_TYPES and status == "forming":
+            note = _hs_forming_timeout_note(
+                hit,
+                bars,
+                timeout_bars=hs_forming_timeout_bars,
+            )
+
         if note:
             out.append(_mark_archived(hit, note))
         else:

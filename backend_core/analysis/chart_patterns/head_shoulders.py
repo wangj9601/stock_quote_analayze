@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .pivots import extract_pivot_sequence
 from .rules import (
@@ -27,6 +27,18 @@ def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
     return out
 
 
+def _bar_date(b: Dict[str, Any]) -> str:
+    return str(b.get("date") or b.get("trade_date") or "")[:10]
+
+
+def _bar_close(b: Dict[str, Any]) -> Optional[float]:
+    try:
+        c = float(b.get("close"))
+        return c if c == c else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _pivot_bar_index(bars: Sequence[Dict[str, Any]], pivot: Dict[str, Any]) -> int:
     """右肩等枢轴对应的 K 线 index；优先 pivot['index']，否则按 date 回查。"""
     idx = pivot.get("index")
@@ -44,6 +56,27 @@ def _pivot_bar_index(bars: Sequence[Dict[str, Any]], pivot: Dict[str, Any]) -> i
         if str(b.get("date") or "")[:10] == d_s:
             return i
     return -1
+
+
+def _first_close_break(
+    bars: Sequence[Dict[str, Any]],
+    start_i: int,
+    neck: float,
+    *,
+    below: bool,
+) -> Optional[Tuple[int, str]]:
+    """右肩完成后：首次收盘有效破颈（顶=收盘<颈线；底=收盘>颈线）。"""
+    if neck <= 0 or start_i < 0:
+        return None
+    for i in range(int(start_i) + 1, len(bars)):
+        c = _bar_close(bars[i])
+        if c is None:
+            continue
+        if below and c < neck:
+            return i, _bar_date(bars[i])
+        if (not below) and c > neck:
+            return i, _bar_date(bars[i])
+    return None
 
 
 def _detect_hs_top(
@@ -74,16 +107,21 @@ def _detect_hs_top(
         last = closes[-1]
         head_px = float(head["price"])
         rs_i = _pivot_bar_index(bars, rs)
+        confirm_date: Optional[str] = None
         # 右肩完成后：任一高点/收盘 > 头×1.01 → 失效（优先于颈线确认）
         if post_pivot_invalidate_top(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
-        elif last < neck:
-            status = "confirmed"
-            conf = 0.7
         else:
-            status = "forming"
-            conf = 0.5
+            # 历史锁存：任一收盘破颈即 confirmed，反弹不得改回 forming
+            brk = _first_close_break(bars, rs_i, neck, below=True)
+            if brk:
+                status = "confirmed"
+                conf = 0.7
+                confirm_date = brk[1]
+            else:
+                status = "forming"
+                conf = 0.5
         # 右肩略低于左肩略加分（仅对有效形态）
         if status != "invalidated" and rs["price"] <= ls["price"]:
             conf = min(1.0, conf + 0.05)
@@ -96,6 +134,8 @@ def _detect_hs_top(
         if status == "invalidated":
             thr = round(head_px * INVALIDATE_TOP_MULT, 4)
             reason += f" 失效:右肩后高点/收盘>头×{INVALIDATE_TOP_MULT}({thr})"
+        elif status == "confirmed" and confirm_date and last >= neck:
+            reason += f" 破颈确认:{confirm_date}（现价已反抽颈线上方，状态仍锁存）"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_top",
@@ -114,6 +154,7 @@ def _detect_hs_top(
                 {"role": "head", "date": head.get("date"), "price": head["price"]},
                 {"role": "RS", "date": rs.get("date"), "price": rs["price"]},
             ],
+            extra={"confirm_date": confirm_date},
         )
     return None
 
@@ -143,16 +184,20 @@ def _detect_hs_bottom(
         last = closes[-1]
         head_px = float(head["price"])
         rs_i = _pivot_bar_index(bars, rs)
+        confirm_date: Optional[str] = None
         # 右肩完成后：任一低点/收盘 < 头×0.99 → 失效（优先于颈线确认）
         if post_pivot_invalidate_bottom(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
-        elif last > neck:
-            status = "confirmed"
-            conf = 0.7
         else:
-            status = "forming"
-            conf = 0.5
+            brk = _first_close_break(bars, rs_i, neck, below=False)
+            if brk:
+                status = "confirmed"
+                conf = 0.7
+                confirm_date = brk[1]
+            else:
+                status = "forming"
+                conf = 0.5
         if status != "invalidated" and rs["price"] >= ls["price"]:
             conf = min(1.0, conf + 0.05)
         reason = (
@@ -164,6 +209,8 @@ def _detect_hs_bottom(
         if status == "invalidated":
             thr = round(head_px * INVALIDATE_BOTTOM_MULT, 4)
             reason += f" 失效:右肩后低点/收盘<头×{INVALIDATE_BOTTOM_MULT}({thr})"
+        elif status == "confirmed" and confirm_date and last <= neck:
+            reason += f" 破颈确认:{confirm_date}（现价已回落颈线下方，状态仍锁存）"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_bottom",
@@ -182,6 +229,7 @@ def _detect_hs_bottom(
                 {"role": "head", "date": head.get("date"), "price": head["price"]},
                 {"role": "RS", "date": rs.get("date"), "price": rs["price"]},
             ],
+            extra={"confirm_date": confirm_date},
         )
     return None
 

@@ -132,3 +132,89 @@ def test_double_top_archived_on_newer_falling_wedge():
     assert by_type["double_top"]["status"] == "archived"
     assert "反向巩固突破" in by_type["double_top"]["reason"]
     assert by_type["falling_wedge"]["status"] == "confirmed"
+
+
+def test_hs_top_archived_on_failed_break_after_deep_low():
+    """头肩顶：曾深破颈线（<颈×0.95）后又回到颈线上方足够远 → 失败破位归档。"""
+    neck = 100.0
+    # 深破到 94，再回到 103（> 100*1.02）
+    path = [98.0] * 3 + [94.0] * 5 + [103.0] * 8
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) * 0.995
+        b["high"] = float(b["close"]) * 1.005
+    bars[4]["low"] = 94.0
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_top",
+        status="confirmed",
+        confidence=0.7,
+        reason="头肩顶",
+        key_levels={"neckline": neck, "head": 120.0, "last_close": 103.0},
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 110.0},
+            {"role": "head", "date": "2026-05-10", "price": 120.0},
+            {"role": "RS", "date": "2026-05-20", "price": 109.0},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "失败破位" in out[0]["reason"]
+
+
+def test_hs_bottom_archived_on_failed_break_after_high():
+    """头肩底对称：曾深破颈线上沿后又回到颈线下方足够远 → 归档。"""
+    neck = 100.0
+    # 上冲到 106（>100/0.95），再回到 97（<100/1.02）
+    path = [102.0] * 3 + [106.0] * 5 + [97.0] * 8
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) * 0.995
+        b["high"] = float(b["close"]) * 1.005
+    bars[4]["high"] = 106.0
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_bottom",
+        status="confirmed",
+        confidence=0.7,
+        reason="头肩底",
+        key_levels={"neckline": neck, "head": 80.0, "last_close": 97.0},
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 90.0},
+            {"role": "head", "date": "2026-05-10", "price": 80.0},
+            {"role": "RS", "date": "2026-05-20", "price": 91.0},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "失败破位" in out[0]["reason"]
+
+
+def test_hs_forming_timeout_archived():
+    """形成中头肩：右肩后超过超时根数仍未破颈 → 归档。"""
+    from backend_core.analysis.chart_patterns.rules import HS_FORMING_TIMEOUT_BARS
+
+    n = HS_FORMING_TIMEOUT_BARS + 10
+    path = [101.0] * n  # 始终在颈线上方，未破颈
+    bars = _bars_path(n, start=date(2026, 1, 1), path=path)
+    for b in bars:
+        b["low"] = 100.5
+        b["high"] = 101.5
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_top",
+        status="forming",
+        confidence=0.5,
+        reason="头肩顶形成中",
+        key_levels={"neckline": 100.0, "head": 120.0, "last_close": 101.0},
+        pivots=[
+            {"role": "LS", "date": bars[0]["date"], "price": 110.0},
+            {"role": "head", "date": bars[2]["date"], "price": 120.0},
+            {"role": "RS", "date": bars[5]["date"], "price": 109.0},
+        ],
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "形成中超时" in out[0]["reason"]

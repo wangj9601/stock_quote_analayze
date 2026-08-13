@@ -356,7 +356,14 @@ const StockMultiStrategy = {
                 asof: asof || undefined,
             });
             const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · 命中 ${fetched.items.length}`;
-            PatternTool.renderEmbedded(host, fetched.items, meta, fetched.price_adjust);
+            const levelsData = (this.lastLevels && this.lastLevels.data) || {};
+            const classic = levelsData.classic_levels || levelsData.classic || {};
+            const confluence =
+                classic.confluence_zones || levelsData.confluence_zones || null;
+            PatternTool.renderEmbedded(host, fetched.items, meta, fetched.price_adjust, {
+                asof: fetched.asof || asof || '',
+                confluenceZones: confluence,
+            });
             this.lastPattern = {
                 ok: true,
                 items: fetched.items || [],
