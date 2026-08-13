@@ -113,9 +113,10 @@ def test_double_bottom_synthetic():
             "swing_left": 2,
             "swing_right": 2,
             "min_trough_gap_bars": 5,
-            "max_trough_gap_bars": 80,
+            "max_trough_gap_bars": 80,  # 合成序列跨度宽松，显式覆盖默认 50
             "trough_tol_pct": 0.05,
             "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.5,  # 合成深度可能偏大，显式放宽
         },
     )
     assert hit is not None
@@ -158,6 +159,7 @@ def test_double_top_synthetic():
             "max_trough_gap_bars": 80,
             "trough_tol_pct": 0.05,
             "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.5,
         },
     )
     # 合成序列未必总命中，但函数应稳定返回 None 或合法 hit
@@ -166,7 +168,152 @@ def test_double_top_synthetic():
         assert "neckline" in hit["key_levels"]
 
 
-def test_head_shoulders_from_pivots_path():
+def test_double_top_rejects_too_deep_trough():
+    """峰到颈线深度 > max_rise_to_neck_pct 时应硬否决伪双顶。"""
+    from backend_core.strategies.double_bottom.detector import detect_double_bottom
+
+    # 明确构造：两底 10，颈线 13 → depth=30% > 15%
+    bars = []
+    for i in range(8):
+        px = 11.0 - i * 0.05
+        bars.append({"date": f"2025-01-{i+1:02d}", "high": px + 0.1, "low": px - 0.1, "close": px})
+    bars.append({"date": "2025-01-10", "high": 10.3, "low": 10.0, "close": 10.1})  # L1
+    for i in range(1, 6):
+        px = 10.0 + i * 0.6
+        bars.append({"date": f"2025-01-{10+i:02d}", "high": px + 0.1, "low": px - 0.1, "close": px})
+    # neck ~ 13
+    for i in range(1, 6):
+        px = 13.0 - i * 0.55
+        bars.append({"date": f"2025-01-{15+i:02d}", "high": px + 0.1, "low": px - 0.1, "close": px})
+    bars.append({"date": "2025-01-25", "high": 10.4, "low": 10.05, "close": 10.2})  # L2
+    for i in range(1, 4):
+        px = 10.2 + i * 0.3
+        bars.append({"date": f"2025-01-{25+i:02d}", "high": px + 0.1, "low": px - 0.1, "close": px})
+
+    cfg_loose = {
+        "lookback_days": 80,
+        "swing_left": 1,
+        "swing_right": 1,
+        "min_trough_gap_bars": 4,
+        "max_trough_gap_bars": 40,
+        "trough_tol_pct": 0.05,
+        "min_rise_to_neck_pct": 0.03,
+        "max_rise_to_neck_pct": 0.5,
+    }
+    cfg_strict = {**cfg_loose, "max_rise_to_neck_pct": 0.15}
+    assert detect_double_bottom(bars, pattern_cfg=cfg_loose) is not None
+    assert detect_double_bottom(bars, pattern_cfg=cfg_strict) is None
+
+    # 双顶镜像：两峰 20，中间谷 14 → (20-14)/20=30%
+    top_bars = []
+    for i in range(8):
+        px = 18.0 + i * 0.1
+        top_bars.append({"date": f"2025-02-{i+1:02d}", "high": px + 0.1, "low": px - 0.1, "close": px})
+    top_bars.append({"date": "2025-02-10", "high": 20.0, "low": 19.5, "close": 19.8})  # H1
+    for i in range(1, 6):
+        px = 20.0 - i * 1.1
+        top_bars.append({"date": f"2025-02-{10+i:02d}", "high": px + 0.2, "low": px - 0.2, "close": px})
+    for i in range(1, 6):
+        px = 14.5 + i * 1.0
+        top_bars.append({"date": f"2025-02-{15+i:02d}", "high": px + 0.2, "low": px - 0.2, "close": px})
+    top_bars.append({"date": "2025-02-25", "high": 20.0, "low": 19.4, "close": 19.7})  # H2
+    for i in range(1, 4):
+        px = 19.5 - i * 0.4
+        top_bars.append({"date": f"2025-02-{25+i:02d}", "high": px + 0.1, "low": px - 0.1, "close": px})
+
+    top_cfg_loose = {
+        "lookback_days": 80,
+        "swing_left": 1,
+        "swing_right": 1,
+        "min_trough_gap_bars": 4,
+        "max_trough_gap_bars": 40,
+        "trough_tol_pct": 0.05,
+        "min_rise_to_neck_pct": 0.03,
+        "max_rise_to_neck_pct": 0.5,
+    }
+    top_cfg_strict = {**top_cfg_loose, "max_rise_to_neck_pct": 0.15}
+    assert detect_double_top_hit(top_bars, pattern_cfg=top_cfg_loose) is not None
+    assert detect_double_top_hit(top_bars, pattern_cfg=top_cfg_strict) is None
+
+
+def test_double_bottom_gap_configurable_filter():
+    """两谷跨度超过 max_trough_gap_bars 时可配置过滤。"""
+    from backend_core.strategies.double_bottom.detector import detect_double_bottom
+
+    # 与 test_dblb_detector._bars_w 同构：gap=55 → 两谷间隔约 55
+    bars = []
+    for i in range(10):
+        px = 12.0 - i * 0.05
+        bars.append(
+            {
+                "date": f"2025-01-{i+1:02d}",
+                "high": px + 0.1,
+                "low": px - 0.1,
+                "close": px,
+                "volume": 1e6,
+            }
+        )
+    base1 = 10.0
+    bars.append(
+        {"date": "2025-01-11", "high": base1 + 0.3, "low": base1, "close": base1 + 0.15, "volume": 1.2e6}
+    )
+    gap = 55
+    for i in range(1, gap // 2 + 1):
+        px = base1 + i * 0.08
+        bars.append(
+            {
+                "date": f"2025-01-{11+i:02d}" if 11 + i <= 28 else f"2025-02-{11+i-28:02d}",
+                "high": px + 0.15,
+                "low": px - 0.15,
+                "close": px,
+                "volume": 1e6,
+            }
+        )
+    neck = base1 + (gap // 2) * 0.08
+    for i in range(1, gap // 2 + 1):
+        px = neck - i * 0.08
+        bars.append(
+            {
+                "date": f"2025-03-{i:02d}",
+                "high": px + 0.15,
+                "low": px - 0.15,
+                "close": px,
+                "volume": 1e6,
+            }
+        )
+    base2 = base1 * 1.01
+    bars.append(
+        {"date": "2025-03-28", "high": base2 + 0.3, "low": base2, "close": base2 + 0.1, "volume": 1.1e6}
+    )
+    for i in range(1, 6):
+        px = base2 + i * 0.05
+        bars.append(
+            {
+                "date": f"2025-04-{i:02d}",
+                "high": px + 0.1,
+                "low": px - 0.1,
+                "close": px,
+                "volume": 1e6,
+            }
+        )
+
+    cfg_wide = {
+        "lookback_days": 200,
+        "swing_left": 1,
+        "swing_right": 1,
+        "min_trough_gap_bars": 8,
+        "max_trough_gap_bars": 80,
+        "trough_tol_pct": 0.05,
+        "min_rise_to_neck_pct": 0.03,
+        "max_rise_to_neck_pct": 0.5,
+    }
+    cfg_tight = {**cfg_wide, "max_trough_gap_bars": 40}
+    wide_hit = detect_double_bottom(bars, pattern_cfg=cfg_wide)
+    tight_hit = detect_double_bottom(bars, pattern_cfg=cfg_tight)
+    assert wide_hit is not None
+    assert wide_hit["trough_gap_bars"] > 40
+    assert tight_hit is None
+
     # 显式高低摆动：构造更明显的头肩底价格路径
     closes = [30, 28, 26, 24, 22, 20]  # 下行
     closes += [19, 18.5, 19.2, 18.8]  # 左肩低

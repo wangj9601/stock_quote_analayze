@@ -8,6 +8,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 PRICE_DECIMALS = 2
 MAX_ZONES_EACH = 3
 ALIGN_TOL_PCT = 0.015
+# 近端密集簇兜底：现价±near_pct 内，点数≥near_min_points 或 来源数≥near_min_sources
+# 时强制纳入 nearest_* 候选（避免远端高强度带截断 TopN 后近端消失）
+NEAR_PCT = 0.025  # 2.5%
+NEAR_MIN_SOURCES = 2
+NEAR_MIN_POINTS = 3
 
 
 def _f(v: Any) -> Optional[float]:
@@ -194,12 +199,93 @@ def _clip_zone_to_price_side(
     return z
 
 
+def _zone_id(z: Dict[str, Any]) -> Tuple[float, float, float]:
+    return (float(z["center"]), float(z["low"]), float(z["high"]))
+
+
+def _is_near_dense_zone(
+    z: Dict[str, Any],
+    *,
+    px: float,
+    side: str,
+    near_pct: float,
+    near_min_sources: int,
+    near_min_points: int,
+) -> bool:
+    """现价同侧近距离内的多源/多点密集簇。"""
+    try:
+        center = float(z["center"])
+    except (TypeError, ValueError, KeyError):
+        return False
+    if px <= 0:
+        return False
+    if side == "support" and center >= px:
+        return False
+    if side == "resistance" and center <= px:
+        return False
+    if abs(center - px) / abs(px) > float(near_pct):
+        return False
+    n_src = len(z.get("sources") or [])
+    n_pts = int(z.get("n_points") or 0)
+    return n_pts >= int(near_min_points) or n_src >= int(near_min_sources)
+
+
+def _select_zones_with_near_fallback(
+    zones: List[Dict[str, Any]],
+    *,
+    px: Optional[float],
+    side: str,
+    max_each: int,
+    near_pct: float,
+    near_min_sources: int,
+    near_min_points: int,
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """列表 TopN；nearest 在 TopN ∪ 近端密集兜底 集合上计算。"""
+    if not zones:
+        return [], None
+    top_n = max(1, int(max_each))
+    top = list(zones[:top_n])
+    near: List[Dict[str, Any]] = []
+    if px is not None and px > 0 and float(near_pct) > 0:
+        near = [
+            z
+            for z in zones
+            if _is_near_dense_zone(
+                z,
+                px=px,
+                side=side,
+                near_pct=near_pct,
+                near_min_sources=near_min_sources,
+                near_min_points=near_min_points,
+            )
+        ]
+    seen = {_zone_id(z) for z in top}
+    display = list(top)
+    for z in near:
+        zid = _zone_id(z)
+        if zid not in seen:
+            seen.add(zid)
+            display.append(z)
+    # nearest 候选 = TopN ∪ 近端兜底（保证近端多源簇可成为 nearest）
+    pool = display
+    if side == "support":
+        nearest = max(pool, key=lambda z: z["center"]) if pool else None
+        display.sort(key=lambda z: (-z["strength"], -z["center"]))
+    else:
+        nearest = min(pool, key=lambda z: z["center"]) if pool else None
+        display.sort(key=lambda z: (-z["strength"], z["center"]))
+    return display, nearest
+
+
 def build_confluence_zones(
     points: Sequence[Dict[str, Any]],
     *,
     last_close: Optional[float],
     atr: Optional[float] = None,
     max_each: int = MAX_ZONES_EACH,
+    near_pct: float = NEAR_PCT,
+    near_min_sources: int = NEAR_MIN_SOURCES,
+    near_min_points: int = NEAR_MIN_POINTS,
 ) -> Dict[str, Any]:
     pts = [p for p in points if _f(p.get("price")) is not None]
     empty = {
@@ -211,6 +297,12 @@ def build_confluence_zones(
         "nearest_support_zone": None,
         "nearest_resistance_zone": None,
         "eps": None,
+        "params": {
+            "max_each": int(max_each),
+            "near_pct": float(near_pct),
+            "near_min_sources": int(near_min_sources),
+            "near_min_points": int(near_min_points),
+        },
     }
     if len(pts) < 2:
         return empty
@@ -262,12 +354,20 @@ def build_confluence_zones(
             }
         )
 
+    params = {
+        "max_each": int(max_each),
+        "near_pct": float(near_pct),
+        "near_min_sources": int(near_min_sources),
+        "near_min_points": int(near_min_points),
+    }
+
     if not zones:
         return {
             **empty,
             "reason": "no_clusters",
             "eps": round(eps, PRICE_DECIMALS),
             "method": method,
+            "params": params,
         }
 
     if px is None:
@@ -286,17 +386,32 @@ def build_confluence_zones(
         resistances = [z for z in resistances if z is not None]
     supports.sort(key=lambda z: (-z["strength"], -z["center"]))
     resistances.sort(key=lambda z: (-z["strength"], z["center"]))
-    supports = supports[: max(1, int(max_each))]
-    resistances = resistances[: max(1, int(max_each))]
 
-    nearest_s = max(supports, key=lambda z: z["center"]) if supports else None
-    nearest_r = min(resistances, key=lambda z: z["center"]) if resistances else None
+    supports, nearest_s = _select_zones_with_near_fallback(
+        supports,
+        px=px,
+        side="support",
+        max_each=max_each,
+        near_pct=near_pct,
+        near_min_sources=near_min_sources,
+        near_min_points=near_min_points,
+    )
+    resistances, nearest_r = _select_zones_with_near_fallback(
+        resistances,
+        px=px,
+        side="resistance",
+        max_each=max_each,
+        near_pct=near_pct,
+        near_min_sources=near_min_sources,
+        near_min_points=near_min_points,
+    )
 
     return {
         "ok": True,
         "reason": "ok",
         "method": method,
         "eps": round(eps, PRICE_DECIMALS),
+        "params": params,
         "supports": supports,
         "resistances": resistances,
         "nearest_support_zone": nearest_s,
@@ -313,6 +428,10 @@ def compute_confluence_from_reference(
     kde_resistances: Optional[Sequence[float]] = None,
     last_close: Optional[float] = None,
     atr: Optional[float] = None,
+    max_each: int = MAX_ZONES_EACH,
+    near_pct: float = NEAR_PCT,
+    near_min_sources: int = NEAR_MIN_SOURCES,
+    near_min_points: int = NEAR_MIN_POINTS,
 ) -> Dict[str, Any]:
     pts = collect_candidate_points(
         kde_support=kde_support,
@@ -327,4 +446,12 @@ def compute_confluence_from_reference(
     )
     atr_v = atr if atr is not None else (ref.get("atr") or (ref.get("atr_pivot") or {}).get("atr"))
     lc = last_close if last_close is not None else ref.get("last_close")
-    return build_confluence_zones(pts, last_close=lc, atr=atr_v)
+    return build_confluence_zones(
+        pts,
+        last_close=lc,
+        atr=atr_v,
+        max_each=max_each,
+        near_pct=near_pct,
+        near_min_sources=near_min_sources,
+        near_min_points=near_min_points,
+    )

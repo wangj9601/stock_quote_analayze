@@ -10,6 +10,26 @@ from backend_core.strategies.double_bottom.detector import detect_double_bottom
 from .rules import invalidate_bottom, invalidate_top
 from .schema import fmt_px, make_hit
 
+# 形态工具侧默认（与 DBLB 策略 config 可分轨；调用方可显式覆盖）
+DEFAULT_CHART_DOUBLE_EXTREMES_CFG: Dict[str, Any] = {
+    "lookback_days": 120,
+    "swing_left": 3,
+    "swing_right": 3,
+    "min_trough_gap_bars": 8,
+    "max_trough_gap_bars": 50,  # 略收紧两峰/两谷跨度，抑制伪形态
+    "trough_tol_pct": 0.03,
+    "min_rise_to_neck_pct": 0.05,
+    "max_rise_to_neck_pct": 0.15,  # 深度上限 15%，硬否决
+    "confirm_buffer_pct": 0.0,
+}
+
+
+def _merge_pattern_cfg(pattern_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    cfg = dict(DEFAULT_CHART_DOUBLE_EXTREMES_CFG)
+    if pattern_cfg:
+        cfg.update(dict(pattern_cfg))
+    return cfg
+
 
 def _f(v: Any) -> Optional[float]:
     try:
@@ -45,7 +65,7 @@ def detect_double_bottom_hit(
     *,
     pattern_cfg: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
-    raw = detect_double_bottom(bars, pattern_cfg=pattern_cfg)
+    raw = detect_double_bottom(bars, pattern_cfg=_merge_pattern_cfg(pattern_cfg))
     if not raw:
         return None
     status = str(raw.get("status") or "forming")
@@ -97,14 +117,17 @@ def detect_double_top_hit(
     pattern_cfg: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """镜像双底规则：两峰近似等高 + 中间谷为颈线，收盘跌破确认。"""
-    cfg = dict(pattern_cfg or {})
+    cfg = _merge_pattern_cfg(pattern_cfg)
     lookback = max(30, int(cfg.get("lookback_days") or 120))
     swing_left = int(cfg.get("swing_left") or 3)
     swing_right = int(cfg.get("swing_right") or 3)
     min_gap = max(2, int(cfg.get("min_trough_gap_bars") or 8))
-    max_gap = max(min_gap, int(cfg.get("max_trough_gap_bars") or 60))
+    max_gap = max(min_gap, int(cfg.get("max_trough_gap_bars") or 50))
     tol = float(cfg.get("trough_tol_pct") or 0.03)
     min_drop = float(cfg.get("min_rise_to_neck_pct") or 0.05)
+    max_drop = float(
+        cfg.get("max_rise_to_neck_pct") if cfg.get("max_rise_to_neck_pct") is not None else 0.15
+    )
     buffer_pct = float(cfg.get("confirm_buffer_pct") or 0.0)
 
     seq = [b for b in (bars or []) if isinstance(b, dict)]
@@ -150,8 +173,13 @@ def detect_double_top_hit(
             neck = min(neck_slice)
             neck_rel = i1 + 1 + neck_slice.index(neck)
             top = max(p1, p2)
-            if top <= 0 or (top - neck) / top < min_drop:
+            if top <= 0:
                 continue
+            depth = (top - neck) / top
+            if depth < min_drop:
+                continue
+            if max_drop > 0 and depth > max_drop:
+                continue  # 硬否决过深伪双顶
             after_highs = highs[i2 + 1 :]
             if after_highs and max(after_highs) > top * (1.0 + tol):
                 continue

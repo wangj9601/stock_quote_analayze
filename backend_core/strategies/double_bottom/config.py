@@ -19,9 +19,10 @@ def get_default_dblb_config() -> Dict[str, Any]:
             "swing_left": 3,
             "swing_right": 3,
             "min_trough_gap_bars": 8,
-            "max_trough_gap_bars": 60,
+            "max_trough_gap_bars": 60,  # 策略侧保持宽松；形态工具默认见 chart DEFAULT
             "trough_tol_pct": 0.03,
             "min_rise_to_neck_pct": 0.05,
+            "max_rise_to_neck_pct": 0.15,  # 谷→颈线上限，超过硬否决伪双底
             "confirm_close_above": True,
             "confirm_buffer_pct": 0.0,
             "require_volume_expand": False,

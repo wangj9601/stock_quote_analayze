@@ -691,8 +691,58 @@ const PatternTool = {
     return out;
   },
 
-  /** 近价合并（相对 0.8% 内视为同一档） */
+  /**
+   * 近价合并（相对 0.8% 内视为同一档）。
+   * 同价多形态保留各来源语义标签（如「双底:颈线 | 下降楔形:上沿」），
+   * 不再用 prefer 权重把展示名硬并成单一「颈线」；role 仍取最高优先级。
+   */
   _mergeNearLevels(raw) {
+    const namePrefer = {
+      颈线: 3,
+      双峰高点: 2,
+      双谷低点: 2,
+      头部高点: 2,
+      头部低点: 2,
+      上沿: 1,
+      下沿: 1,
+    };
+    const rolePrefer = {
+      突破后转支撑: 6,
+      突破后转阻力: 6,
+      观察站稳: 5,
+      观察失守: 5,
+      下方支撑: 4,
+      上方压力: 4,
+      突破参考: 2,
+      关键参考: 1,
+    };
+    const tagKey = (lv) => `${lv.source || ''}:${lv.name || ''}`;
+    const pushTag = (hit, lv) => {
+      if (!hit.tags) hit.tags = [];
+      const k = tagKey(lv);
+      if (hit.tags.some((t) => `${t.source}:${t.name}` === k)) return;
+      hit.tags.push({ source: lv.source, name: lv.name });
+    };
+    const syncDisplayName = (hit) => {
+      if (hit.tags && hit.tags.length) {
+        hit.name = hit.tags.map((t) => `${t.source}:${t.name}`).join(' | ');
+      }
+    };
+    const bumpPrimaryName = (hit, lvName) => {
+      if (!hit.primaryName) {
+        hit.primaryName = lvName;
+        return;
+      }
+      if ((namePrefer[lvName] || 0) > (namePrefer[hit.primaryName] || 0)) {
+        hit.primaryName = lvName;
+      }
+    };
+    const bumpRole = (hit, role) => {
+      if ((rolePrefer[role] || 0) > (rolePrefer[hit.role] || 0)) {
+        hit.role = role;
+      }
+    };
+
     const merged = [];
     (raw || [])
       .slice()
@@ -705,8 +755,10 @@ const PatternTool = {
         if (!hit) {
           merged.push({
             price: lv.price,
-            name: lv.name,
+            name: `${lv.source}:${lv.name}`,
+            primaryName: lv.name,
             role: lv.role,
+            tags: [{ source: lv.source, name: lv.name }],
             sources: [lv.source],
             observing: lv.observing,
             confirmed: !!lv.confirmed,
@@ -714,41 +766,40 @@ const PatternTool = {
           });
           return;
         }
+        pushTag(hit, lv);
+        bumpPrimaryName(hit, lv.name);
         if (lv.conf > hit.conf) {
           hit.price = lv.price;
           hit.conf = lv.conf;
         }
-        if (!hit.observing && lv.observing) {
-          /* 已有确认档，保留非观察中 */
-        } else if (hit.observing && !lv.observing) {
+        if (hit.observing && !lv.observing) {
           hit.observing = false;
-          hit.name = lv.name;
-          hit.role = lv.role;
-        } else if (hit.observing === lv.observing) {
-          const prefer = { 颈线: 3, 双峰高点: 2, 双谷低点: 2, 头部高点: 2, 头部低点: 2, 上沿: 1, 下沿: 1 };
-          if ((prefer[lv.name] || 0) > (prefer[hit.name] || 0)) {
-            hit.name = lv.name;
-            hit.role = lv.role;
-          }
-          const rolePrefer = {
-            突破后转支撑: 6,
-            突破后转阻力: 6,
-            观察站稳: 5,
-            观察失守: 5,
-            下方支撑: 4,
-            上方压力: 4,
-            突破参考: 2,
-            关键参考: 1,
-          };
-          if ((rolePrefer[lv.role] || 0) > (rolePrefer[hit.role] || 0)) {
-            hit.role = lv.role;
-          }
         }
+        bumpRole(hit, lv.role);
         if (!hit.sources.includes(lv.source)) hit.sources.push(lv.source);
         hit.observing = hit.observing && lv.observing;
         hit.confirmed = hit.confirmed || !!lv.confirmed;
+        syncDisplayName(hit);
       });
     return merged;
+  },
+
+  /** 合并档的价位名 token（用于打分/语义，不含形态前缀） */
+  _levelNameTokens(m) {
+    if (!m) return [];
+    if (m.tags && m.tags.length) return m.tags.map((t) => t.name).filter(Boolean);
+    if (m.primaryName) return [m.primaryName];
+    const n = String(m.name || '');
+    if (n.includes('|') || n.includes(':')) {
+      return n
+        .split('|')
+        .map((s) => {
+          const parts = s.trim().split(':');
+          return (parts.length > 1 ? parts[parts.length - 1] : parts[0] || '').trim();
+        })
+        .filter(Boolean);
+    }
+    return n ? [n] : [];
   },
 
   _collectMergedLevels(items) {
@@ -760,18 +811,20 @@ const PatternTool = {
     return this._mergeNearLevels(raw);
   },
 
-  /** 交易点位「意义」分：优先颈线翻支撑、峰谷/头、通道上下沿 */
+  /** 交易点位「意义」分：优先颈线翻支撑、峰谷/头、通道上下沿（多标签取最高分） */
   _tradeLevelScore(m, side) {
-    let s = 0;
-    const n = m.name || '';
-    if (n === '颈线') s += 50;
-    else if (n === '双谷低点' || n === '双峰高点' || n === '头部低点' || n === '头部高点') s += 42;
-    else if (n === 'L1' || n === 'L2' || n === 'H1' || n === 'H2') s += 38;
-    else if (side === 'support' && n === '下沿') s += 36;
-    else if (side === 'support' && n === '上沿') s += 34; // 突破后翻支撑
-    else if (side === 'resistance' && n === '上沿') s += 36;
-    else if (side === 'resistance' && n === '下沿') s += 28;
-    else s += 20;
+    const tokens = this._levelNameTokens(m);
+    const scoreOne = (n) => {
+      if (n === '颈线') return 50;
+      if (n === '双谷低点' || n === '双峰高点' || n === '头部低点' || n === '头部高点') return 42;
+      if (n === 'L1' || n === 'L2' || n === 'H1' || n === 'H2') return 38;
+      if (side === 'support' && n === '下沿') return 36;
+      if (side === 'support' && n === '上沿') return 34; // 突破后翻支撑
+      if (side === 'resistance' && n === '上沿') return 36;
+      if (side === 'resistance' && n === '下沿') return 28;
+      return 20;
+    };
+    let s = tokens.length ? Math.max(...tokens.map(scoreOne)) : 20;
     if (m.confirmed) s += 12;
     if (!m.observing) s += 6;
     return s;
@@ -782,24 +835,30 @@ const PatternTool = {
    * 已确认且原上沿/颈线落在现价下方 →「突破后翻支撑」。
    */
   _tradeLevelExplain(m, side) {
-    const src = (m.sources && m.sources.length ? m.sources.join('/') : '') || '形态';
-    const n = m.name || '关键位';
+    const tokens = this._levelNameTokens(m);
+    const has = (...names) => tokens.some((t) => names.indexOf(t) >= 0);
+    const display =
+      m.tags && m.tags.length
+        ? m.tags.map((t) => `${t.source}:${t.name}`).join(' | ')
+        : `${(m.sources && m.sources.length ? m.sources.join('/') : '') || '形态'}${
+            m.primaryName || m.name || '关键位'
+          }`;
     let meaning = '';
     if (side === 'support') {
-      if (m.confirmed && (n === '颈线' || n === '上沿')) meaning = '突破后翻支撑';
-      else if (n === '颈线') meaning = '颈线支撑（观察中）';
-      else if (n === '双谷低点' || n === 'L1' || n === 'L2' || n === '头部低点') meaning = '形态低点支撑';
-      else if (n === '下沿') meaning = '通道/形态下沿支撑';
-      else if (n === '上沿') meaning = '上沿翻支撑（待确认）';
+      if (m.confirmed && has('颈线', '上沿')) meaning = '突破后翻支撑';
+      else if (has('颈线')) meaning = '颈线支撑（观察中）';
+      else if (has('双谷低点', 'L1', 'L2', '头部低点')) meaning = '形态低点支撑';
+      else if (has('下沿')) meaning = '通道/形态下沿支撑';
+      else if (has('上沿')) meaning = '上沿翻支撑（待确认）';
       else meaning = '下方支撑';
     } else {
-      if (n === '颈线') meaning = m.confirmed ? '颈线阻力' : '颈线阻力（观察中）';
-      else if (n === '双峰高点' || n === 'H1' || n === 'H2' || n === '头部高点') meaning = '形态高点阻力';
-      else if (n === '上沿') meaning = '通道/形态上沿阻力';
-      else if (n === '下沿') meaning = m.confirmed ? '下沿翻阻力' : '下沿阻力（观察中）';
+      if (has('颈线')) meaning = m.confirmed ? '颈线阻力' : '颈线阻力（观察中）';
+      else if (has('双峰高点', 'H1', 'H2', '头部高点')) meaning = '形态高点阻力';
+      else if (has('上沿')) meaning = '通道/形态上沿阻力';
+      else if (has('下沿')) meaning = m.confirmed ? '下沿翻阻力' : '下沿阻力（观察中）';
       else meaning = '上方阻力';
     }
-    return `${src}${n}，${meaning}`;
+    return `${display}，${meaning}`;
   },
 
   /**
@@ -910,9 +969,9 @@ const PatternTool = {
     merged.sort((a, b) => a.price - b.price);
 
     const parts = merged.map((m) => {
-      const src = m.sources.join('/');
+      // name 已含「形态:价位名」并列标签，不再重复拼接 sources
       const obs = m.observing ? ' · 观察中' : '';
-      return `${this._fmtPx(m.price)} ${m.name}（${m.role}）· ${src}${obs}`;
+      return `${this._fmtPx(m.price)} ${m.name}（${m.role}）${obs}`;
     });
 
     let close = null;
@@ -933,10 +992,11 @@ const PatternTool = {
             ? '上方约'
             : '下方约';
       const pctAbs = Math.abs(pct).toFixed(1);
+      const nearestLabel = nearest.name || nearest.primaryName || '关键位';
       relTxt =
         Math.abs(pct) <= 4
-          ? `现价 ${this._fmtPx(close)} 贴近「${nearest.name}」${this._fmtPx(nearest.price)}。`
-          : `现价 ${this._fmtPx(close)} 相对「${nearest.name}」${this._fmtPx(nearest.price)} ${side}${pctAbs}%。`;
+          ? `现价 ${this._fmtPx(close)} 贴近「${nearestLabel}」${this._fmtPx(nearest.price)}。`
+          : `现价 ${this._fmtPx(close)} 相对「${nearestLabel}」${this._fmtPx(nearest.price)} ${side}${pctAbs}%。`;
     }
 
     return `${parts.join('；')}${relTxt ? `。${relTxt}` : '。'}`;

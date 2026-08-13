@@ -67,6 +67,8 @@ def detect_double_bottom(
     max_gap = max(min_gap, int(cfg.get("max_trough_gap_bars") or 60))
     tol = float(cfg.get("trough_tol_pct") or 0.03)
     min_rise = float(cfg.get("min_rise_to_neck_pct") or 0.05)
+    # 深度上限：谷到颈线过大视为伪双底（默认 15%；传极大值可关闭）
+    max_rise = float(cfg.get("max_rise_to_neck_pct") if cfg.get("max_rise_to_neck_pct") is not None else 0.15)
     confirm_close = bool(cfg.get("confirm_close_above", True))
     buffer_pct = float(cfg.get("confirm_buffer_pct") or 0.0)
     require_vol = bool(cfg.get("require_volume_expand", False))
@@ -126,8 +128,11 @@ def detect_double_bottom(
             base = min(p1, p2)
             if base <= 0:
                 continue
-            if (neck - base) / base < min_rise:
+            depth = (neck - base) / base
+            if depth < min_rise:
                 continue
+            if max_rise > 0 and depth > max_rise:
+                continue  # 硬否决过深伪形态
             # 第二底之后不应再明显破底（容差内）
             after_lows = lows[i2 + 1 :]
             if after_lows and min(after_lows) < base * (1.0 - tol):

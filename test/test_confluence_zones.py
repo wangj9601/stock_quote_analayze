@@ -113,3 +113,80 @@ def test_support_zone_high_clipped_to_last_close():
         assert s["high"] <= 140.57 + 1e-9
     for r in zones["resistances"]:
         assert r["low"] >= 140.57 - 1e-9
+
+
+def test_near_dense_support_becomes_nearest_despite_far_strong_zones():
+    """远端高强度支撑占满 Top3 时，近端多源低强度簇仍应成为 nearest_support。"""
+    px = 100.0
+    # 三个远端高强度簇（约 80 / 70 / 60），各自多点+高权重 → strength 大
+    far_pts = []
+    for center, src_prefix in ((80.0, "farA"), (70.0, "farB"), (60.0, "farC")):
+        for i, src in enumerate(("kde", "vp", "fib", "pivot")):
+            far_pts.append(
+                {
+                    "price": center + i * 0.05,
+                    "weight": 3.0,
+                    "source": f"{src_prefix}_{src}",
+                    "label": f"{src_prefix}_{i}",
+                }
+            )
+    # 近端多源簇（约 98，距现价 2%）：强度较小但 sources≥2
+    near_pts = [
+        {"price": 97.9, "weight": 0.5, "source": "cam", "label": "cam_s1"},
+        {"price": 98.0, "weight": 0.5, "source": "atr", "label": "atr_s1"},
+        {"price": 98.1, "weight": 0.5, "source": "piv", "label": "piv_s1"},
+    ]
+    zones = build_confluence_zones(
+        far_pts + near_pts,
+        last_close=px,
+        atr=1.0,
+        max_each=3,
+        near_pct=0.03,
+        near_min_sources=2,
+        near_min_points=3,
+    )
+    assert zones["ok"] is True
+    nearest = zones["nearest_support_zone"]
+    assert nearest is not None
+    # 近端簇中心应贴近 98，而非远端 80
+    assert abs(nearest["center"] - 98.0) < 1.0
+    assert nearest["center"] > 90.0
+    # 列表仍以 TopN 为主，但近端兜底应出现在 supports 中
+    assert any(abs(s["center"] - 98.0) < 1.0 for s in zones["supports"])
+    assert "params" in zones
+    assert zones["params"]["near_pct"] == 0.03
+
+
+def test_near_fallback_disabled_when_near_pct_zero():
+    """near_pct=0 时不做近端兜底，nearest 退回 TopN 内最近。"""
+    px = 100.0
+    far_pts = []
+    for center, src_prefix in ((80.0, "farA"), (70.0, "farB"), (60.0, "farC")):
+        for i, src in enumerate(("kde", "vp", "fib", "pivot")):
+            far_pts.append(
+                {
+                    "price": center + i * 0.05,
+                    "weight": 3.0,
+                    "source": f"{src_prefix}_{src}",
+                    "label": f"{src_prefix}_{i}",
+                }
+            )
+    near_pts = [
+        {"price": 97.9, "weight": 0.5, "source": "cam", "label": "cam_s1"},
+        {"price": 98.0, "weight": 0.5, "source": "atr", "label": "atr_s1"},
+        {"price": 98.1, "weight": 0.5, "source": "piv", "label": "piv_s1"},
+    ]
+    zones = build_confluence_zones(
+        far_pts + near_pts,
+        last_close=px,
+        atr=1.0,
+        max_each=3,
+        near_pct=0.0,
+        near_min_sources=2,
+        near_min_points=3,
+    )
+    assert zones["ok"] is True
+    nearest = zones["nearest_support_zone"]
+    assert nearest is not None
+    # 无兜底时 Top3 全是远端，nearest 约在 80
+    assert nearest["center"] < 90.0

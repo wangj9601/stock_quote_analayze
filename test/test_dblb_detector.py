@@ -102,6 +102,7 @@ def test_forming_without_breakout():
             "max_trough_gap_bars": 40,
             "trough_tol_pct": 0.05,
             "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.25,
         },
     )
     assert hit is not None
@@ -121,6 +122,7 @@ def test_confirmed_with_breakout():
             "max_trough_gap_bars": 40,
             "trough_tol_pct": 0.05,
             "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.25,
         },
     )
     assert hit is not None
@@ -139,6 +141,40 @@ def test_reject_trough_too_far():
             "max_trough_gap_bars": 40,
             "trough_tol_pct": 0.01,  # 很严
             "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.25,
         },
     )
     assert hit is None
+
+
+def test_reject_rise_to_neck_too_deep():
+    """深度超过 max_rise_to_neck_pct 时硬否决。"""
+    # gap=20 → 上升 10*0.25=2.5 / base10 = 25% > 15%
+    hit = detect_double_bottom(
+        _bars_w(breakout=False, gap=20),
+        pattern_cfg={
+            "lookback_days": 160,
+            "swing_left": 1,
+            "swing_right": 1,
+            "min_trough_gap_bars": 4,
+            "max_trough_gap_bars": 60,
+            "trough_tol_pct": 0.05,
+            "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.15,
+        },
+    )
+    assert hit is None
+    hit_ok = detect_double_bottom(
+        _bars_w(breakout=False, gap=20),
+        pattern_cfg={
+            "lookback_days": 160,
+            "swing_left": 1,
+            "swing_right": 1,
+            "min_trough_gap_bars": 4,
+            "max_trough_gap_bars": 60,
+            "trough_tol_pct": 0.05,
+            "min_rise_to_neck_pct": 0.03,
+            "max_rise_to_neck_pct": 0.40,
+        },
+    )
+    assert hit_ok is not None

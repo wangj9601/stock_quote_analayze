@@ -21,10 +21,11 @@
 
 在最近合法低点对 `(L1 更早, L2 更新)` 上要求：
 
-- 间隔根数 ∈ `[min_trough_gap_bars, max_trough_gap_bars]`（默认 8~60）
+- 间隔根数 ∈ `[min_trough_gap_bars, max_trough_gap_bars]`（默认 8~60；形态工具侧默认跨度更紧，见 `DEFAULT_CHART_DOUBLE_EXTREMES_CFG.max_trough_gap_bars=50`）
 - 两底价差相对均值 ≤ `trough_tol_pct`（默认 3%）
 - 中间最高价为颈线 `neckline`
 - `(neckline - min(L1,L2)) / min(L1,L2) ≥ min_rise_to_neck_pct`（默认 5%）
+- `(neckline - min(L1,L2)) / min(L1,L2) ≤ max_rise_to_neck_pct`（默认 15%；超过硬否决伪双底；双顶对称为 `(top-neck)/top`）
 - L2 之后不出现明显破底（低于谷底再降超过容差）
 
 ### 2.3 状态
