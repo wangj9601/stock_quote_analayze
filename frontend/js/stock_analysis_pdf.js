@@ -314,6 +314,13 @@
       const a = PT.buildExpertAnalysis(visible, {
         asof: pack.asof || '',
         confluenceZones: confluence,
+        classicLevels: classic,
+        kdeLevels: {
+          nearest_resistance: levelsData.nearest_resistance,
+          nearest_support: levelsData.nearest_support,
+          resistance_levels: levelsData.resistance_levels,
+          support_levels: levelsData.support_levels,
+        },
       });
       // 与页面 _buildExpertHtml 共用同一套字段（含结构防守与目标 / 测幅）
       expert =

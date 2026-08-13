@@ -13,7 +13,7 @@
 | [data/](data/) | 数据采集、AKShare/ETF/港股、相关 API 说明 |
 | [notifications/](notifications/) | 推送通知、报表服务 |
 | [indicators/](indicators/) | 技术指标与无穷成本均线等 |
-| [features/](features/) | 成交量异动榜、行业板块等功能说明 |
+| [features/](features/) | 成交量异动榜、行业板块、[支撑/阻力与形态识别算法](features/支撑阻力与形态识别_算法说明.md)（§1.1 四维闭环）、[形态识别工具](features/形态识别工具.md) 等 |
 | [fixed/](fixed/) | 历史问题修复记录与专项说明（归档） |
 | [specs/](specs/) | 规格/任务文档（如一阳穿三线） |
 | [sql/](sql/) | SQL 脚本 |
@@ -51,5 +51,5 @@
 ## 说明
 
 - 目录命名沿用既有英文风格（`prod` / `fixed` / `design` / `specs`）。  
-- 支撑位/阻力位等历史修复文档仍在 `fixed/`，未拆散。  
+- 支撑位/阻力位等历史修复文档仍在 `fixed/`，未拆散；**现行算法**见 `features/支撑阻力与形态识别_算法说明.md`（含形态识别 / 共振带 / 攻防分层 / 盘口自适应 **四维闭环** 场景总览）。  
 - 引用文档时请使用新路径；`.cursor/plans/` 内旧链接未批量改动。  

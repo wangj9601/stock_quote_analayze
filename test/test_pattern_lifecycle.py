@@ -218,3 +218,147 @@ def test_hs_forming_timeout_archived():
     out = apply_pattern_lifecycle([hit], bars)
     assert out[0]["status"] == "archived"
     assert "形成中超时" in out[0]["reason"]
+
+
+def test_hs_top_archived_on_failed_pullback_near_rs():
+    """confirmed 头肩顶：破颈后反抽逼近右肩 → 失败反抽归档（不回 forming）。"""
+    neck = 100.0
+    rs = 109.0
+    # 破颈到 98，再反抽到 108（≥右肩×0.98），未达深破 0.95 路径
+    path = [98.0] * 5 + [108.0] * 8
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) * 0.995
+        b["high"] = float(b["close"]) * 1.005
+    bars[2]["low"] = 97.5
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_top",
+        status="confirmed",
+        confidence=0.7,
+        reason="头肩顶；破颈确认",
+        key_levels={
+            "neckline": neck,
+            "head": 120.0,
+            "right_shoulder": rs,
+            "last_close": 108.0,
+        },
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 110.0},
+            {"role": "head", "date": "2026-05-10", "price": 120.0},
+            {"role": "RS", "date": "2026-05-20", "price": rs},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "失败反抽" in out[0]["reason"]
+    assert out[0]["status"] != "forming"
+
+
+def test_hs_top_mild_return_above_neck_stays_confirmed():
+    """仅小幅回到颈线上方、未逼近右肩且反抽不足 2ATR → 保持 confirmed（不回 forming）。"""
+    neck = 100.0
+    rs = 120.0
+    # 破颈到 99，再回到 101（仅 +1%，远低于右肩，ATR 约 1～2 → 反抽约 2 < 2*ATR）
+    path = [99.0] * 10 + [101.0] * 10
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        # 放大 TR 使 ATR 偏大，确保反抽不足 2ATR
+        b["low"] = float(b["close"]) - 2.0
+        b["high"] = float(b["close"]) + 2.0
+    bars[3]["low"] = 98.5
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_top",
+        status="confirmed",
+        confidence=0.7,
+        reason="头肩顶；破颈确认",
+        key_levels={
+            "neckline": neck,
+            "head": 130.0,
+            "right_shoulder": rs,
+            "last_close": 101.0,
+        },
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 118.0},
+            {"role": "head", "date": "2026-05-10", "price": 130.0},
+            {"role": "RS", "date": "2026-05-20", "price": rs},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "confirmed"
+    assert "失败反抽" not in (out[0].get("reason") or "")
+
+
+def test_hs_bottom_archived_on_failed_pullback_near_rs():
+    """confirmed 头肩底对称：破颈上破后大幅回撤逼近右肩低点 → 归档。"""
+    neck = 100.0
+    rs = 91.0
+    # 上破到 102，再回撤到 92（≤右肩×1.02）
+    path = [102.0] * 5 + [92.0] * 8
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) * 0.995
+        b["high"] = float(b["close"]) * 1.005
+    bars[2]["high"] = 103.0
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_bottom",
+        status="confirmed",
+        confidence=0.7,
+        reason="头肩底；破颈确认",
+        key_levels={
+            "neckline": neck,
+            "head": 80.0,
+            "right_shoulder": rs,
+            "last_close": 92.0,
+        },
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 90.0},
+            {"role": "head", "date": "2026-05-10", "price": 80.0},
+            {"role": "RS", "date": "2026-05-20", "price": rs},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "失败反抽" in out[0]["reason"]
+    assert out[0]["status"] != "forming"
+
+
+def test_hs_top_archived_on_failed_pullback_by_atr():
+    """confirmed 头肩顶：未逼近右肩，但反抽幅度 ≥ 约 2ATR → 归档。"""
+    neck = 100.0
+    rs = 130.0  # 很远，不触发右肩条件
+    # 破颈到 96（未达深破 0.95 路径），再反抽到 105；TR≈1 → ATR≈1，反抽≥2ATR
+    path = [96.0] * 8 + [105.0] * 10
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) - 0.5
+        b["high"] = float(b["close"]) + 0.5
+    bars[2]["low"] = 95.5  # >= neck*0.95，避免走「失败破位」深破分支
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_top",
+        status="confirmed",
+        confidence=0.7,
+        reason="头肩顶；破颈确认",
+        key_levels={
+            "neckline": neck,
+            "head": 140.0,
+            "right_shoulder": rs,
+            "last_close": 105.0,
+        },
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 125.0},
+            {"role": "head", "date": "2026-05-10", "price": 140.0},
+            {"role": "RS", "date": "2026-05-20", "price": rs},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "失败反抽" in out[0]["reason"]
+    assert "ATR" in out[0]["reason"]

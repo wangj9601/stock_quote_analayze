@@ -168,6 +168,8 @@ D = P - S,\quad U = R_{res} - P,\quad
 
 ## 5. KDE 支撑 / 阻力
 
+> 与个股「阻力支撑位」工具共用 `rpe.kde_levels` 内核（含带宽上限与扩窗衰减）。分析频道全量参考位（VP / Fib / 共振带 / 形态）见 [`docs/features/支撑阻力与形态识别_算法说明.md`](../../features/支撑阻力与形态识别_算法说明.md)。
+
 1. 样本：评估日前近 `lookback_days`（默认 **250**）根 K 线的 close、volume；有效点（价&gt;0 且量&gt;0）&lt; 20 → `insufficient_samples`，支撑/阻力为空  
    - **强制口径**：无论日终选股还是追溯全历史重算，KDE/Z 均只使用该窗口，禁止用全历史算密度（全历史带宽过大易抹平低位峰，导致「无支撑」）  
 2. 带宽：\(\mathrm{bw}=\max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma_P/\mu_P)\)  

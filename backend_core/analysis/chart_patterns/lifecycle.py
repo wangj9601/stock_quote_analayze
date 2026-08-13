@@ -7,7 +7,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .rules import (
     HS_FAIL_DEPTH_MULT,
+    HS_FAIL_PULLBACK_ATR_MULT,
     HS_FAIL_RECOVER_MULT,
+    HS_FAIL_RS_NEAR_PCT,
     HS_FORMING_TIMEOUT_BARS,
     LIFECYCLE_GIVEBACK_RATIO,
     LIFECYCLE_MIN_BARS,
@@ -123,6 +125,50 @@ def _lifecycle_start_index(hit: Dict[str, Any], bars: Sequence[Dict[str, Any]]) 
     if rs_i is not None:
         return rs_i
     return 0 if bars else None
+
+
+def _rs_pivot_price(hit: Dict[str, Any]) -> Optional[float]:
+    """头肩右肩价：key_levels.right_shoulder 或 pivots role=RS。"""
+    lv = hit.get("key_levels") if isinstance(hit.get("key_levels"), dict) else {}
+    rs = _f(lv.get("right_shoulder"))
+    if rs is not None:
+        return rs
+    for p in hit.get("pivots") or []:
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("role") or "").upper() not in ("RS", "RIGHT_SHOULDER"):
+            continue
+        px = _f(p.get("price"))
+        if px is not None:
+            return px
+    return None
+
+
+def _bars_atr(bars: Sequence[Dict[str, Any]], *, period: int = 14) -> Optional[float]:
+    """窗口内简易 Wilder ATR（不依赖完整 parse）。"""
+    if len(bars) < 2:
+        return None
+    trs: List[float] = []
+    prev_c: Optional[float] = _bar_close(bars[0])
+    for b in bars[1:]:
+        h = _bar_high(b)
+        lo = _bar_low(b)
+        c = _bar_close(b)
+        if h is None or lo is None or c is None or prev_c is None:
+            prev_c = c if c is not None else prev_c
+            continue
+        tr = max(h - lo, abs(h - prev_c), abs(lo - prev_c))
+        trs.append(tr)
+        prev_c = c
+    if not trs:
+        return None
+    p = max(1, int(period))
+    if len(trs) < p:
+        return sum(trs) / len(trs)
+    atr = sum(trs[:p]) / p
+    for tr in trs[p:]:
+        atr = (atr * (p - 1) + tr) / p
+    return atr
 
 
 def _mark_archived(hit: Dict[str, Any], note: str) -> Dict[str, Any]:
@@ -378,6 +424,100 @@ def _hs_failed_break_note(
     )
 
 
+def _hs_failed_pullback_note(
+    hit: Dict[str, Any],
+    bars: Sequence[Dict[str, Any]],
+    *,
+    atr_mult: float,
+    rs_near_pct: float,
+) -> Optional[str]:
+    """confirmed 头肩：破颈后反抽失败 → 归档（不回 forming）。
+
+    顶：现价回颈线上方，且（逼近/超过右肩 或 自破位低点反抽 ≥ 约 N·ATR）
+    底：现价回颈线下方，且（逼近/跌破右肩低点 或 自破位高点回撤 ≥ 约 N·ATR）
+
+    注意：仅「任意回到颈线另一侧」不足以触发；须右肩或 ATR 条件之一。
+    """
+    if str(hit.get("status") or "") != "confirmed":
+        return None
+    ptype = str(hit.get("pattern_type") or "")
+    if ptype not in _HS_TYPES:
+        return None
+    lv = hit.get("key_levels") if isinstance(hit.get("key_levels"), dict) else {}
+    neck = _f(lv.get("neckline"))
+    if neck is None or neck <= 0:
+        return None
+    start_i = _lifecycle_start_index(hit, bars)
+    if start_i is None:
+        return None
+    window = bars[start_i:]
+    if len(window) < 3:
+        return None
+    last_c = _bar_close(bars[-1])
+    if last_c is None or last_c <= 0:
+        return None
+
+    atr = _bars_atr(window)
+    n_atr = max(0.5, float(atr_mult))
+    near_pct = max(0.005, min(0.08, float(rs_near_pct)))
+    rs = _rs_pivot_price(hit)
+
+    if ptype == "head_shoulders_top":
+        # 须曾有效破颈（窗口内最低 < 颈线），且现价已回到上方
+        lows = [lo for lo in (_bar_low(b) for b in window) if lo is not None]
+        if not lows:
+            return None
+        deepest = min(lows)
+        if deepest >= neck:
+            return None
+        if last_c <= neck:
+            return None
+        near_rs = rs is not None and last_c >= rs * (1.0 - near_pct)
+        pullback = last_c - deepest
+        atr_ok = atr is not None and atr > 0 and pullback >= n_atr * atr
+        if not near_rs and not atr_ok:
+            return None
+        why = []
+        if near_rs:
+            why.append(
+                f"现价逼近/超过右肩{rs:.2f}" if rs is not None else "逼近右肩"
+            )
+        if atr_ok:
+            why.append(f"反抽{pullback:.2f}≥{n_atr:.1f}×ATR({atr:.2f})")
+        return (
+            "生命周期已结束（失败反抽："
+            + "，".join(why)
+            + "，破颈后空头确认削弱，已归档）"
+        )
+
+    # head_shoulders_bottom
+    highs = [h for h in (_bar_high(b) for b in window) if h is not None]
+    if not highs:
+        return None
+    highest = max(highs)
+    if highest <= neck:
+        return None
+    if last_c >= neck:
+        return None
+    near_rs = rs is not None and last_c <= rs * (1.0 + near_pct)
+    pullback = highest - last_c
+    atr_ok = atr is not None and atr > 0 and pullback >= n_atr * atr
+    if not near_rs and not atr_ok:
+        return None
+    why = []
+    if near_rs:
+        why.append(
+            f"现价逼近/跌破右肩低点{rs:.2f}" if rs is not None else "逼近右肩"
+        )
+    if atr_ok:
+        why.append(f"回撤{pullback:.2f}≥{n_atr:.1f}×ATR({atr:.2f})")
+    return (
+        "生命周期已结束（失败反抽："
+        + "，".join(why)
+        + "，破颈后多头确认削弱，已归档）"
+    )
+
+
 def _hs_forming_timeout_note(
     hit: Dict[str, Any],
     bars: Sequence[Dict[str, Any]],
@@ -414,6 +554,8 @@ def apply_pattern_lifecycle(
     target_ratio: float = LIFECYCLE_TARGET_RATIO,
     hs_fail_depth_mult: float = HS_FAIL_DEPTH_MULT,
     hs_fail_recover_mult: float = HS_FAIL_RECOVER_MULT,
+    hs_fail_pullback_atr_mult: float = HS_FAIL_PULLBACK_ATR_MULT,
+    hs_fail_rs_near_pct: float = HS_FAIL_RS_NEAR_PCT,
     hs_forming_timeout_bars: int = HS_FORMING_TIMEOUT_BARS,
 ) -> List[Dict[str, Any]]:
     """将已走完周期的反转形态标为 archived。
@@ -425,6 +567,7 @@ def apply_pattern_lifecycle(
 
     头肩 forming/confirmed 额外：
     4. 失败破位（深破颈线后又回到另一侧足够远）；
+    4b. confirmed 失败反抽（回颈线另一侧且逼近右肩或 ≥约 N·ATR；不回 forming）；
     5. forming 超时未破颈（辅，默认 90 根）。
     """
     if not hits or not bars:
@@ -457,6 +600,14 @@ def apply_pattern_lifecycle(
                 bars,
                 depth_mult=hs_fail_depth_mult,
                 recover_mult=hs_fail_recover_mult,
+            )
+
+        if not note and ptype in _HS_TYPES and status == "confirmed":
+            note = _hs_failed_pullback_note(
+                hit,
+                bars,
+                atr_mult=hs_fail_pullback_atr_mult,
+                rs_near_pct=hs_fail_rs_near_pct,
             )
 
         if not note and ptype in _HS_TYPES and status == "forming":

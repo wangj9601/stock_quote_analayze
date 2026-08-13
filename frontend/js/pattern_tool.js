@@ -510,12 +510,42 @@ const PatternTool = {
     bear_flag: true,
   },
 
-  /** 主形态 FinalScore：confidence × W_status × exp(-λ·Δt) */
+  /**
+   * 主形态竞选（同 status）：Confidence desc →（|Δconf| < eps 时）时间衰减弱 tie-break → formed_at desc。
+   * |Δconf| ≥ RANK_CONF_TIE_EPS 时衰减压不过更高置信度。
+   * 状态层仍 confirmed 优先于 forming（见 _rankHits）。
+   */
   RANK_W_CONFIRMED: 1.2,
   RANK_W_FORMING: 0.6,
   RANK_TIME_DECAY_LAMBDA: 0.012,
+  /** 置信度差超过该阈值时，禁止用时间衰减压过更高 conf */
+  RANK_CONF_TIE_EPS: 0.05,
   /** 形成中反转超过该日历日龄不进主形态（真空兜底） */
   PRIMARY_FORMING_MAX_AGE_DAYS: 60,
+  /**
+   * 有主形态时：夹在「现价 ↔ 形态下沿/上沿」之间的高强共振带，
+   * 可软插入为近端缓冲（默认强度 ≥10；不覆盖形态核心档）。
+   * 选取：近端优先（距现价最近），同分再比强度。
+   */
+  CONFLUENCE_SOFT_BUFFER_MIN_STRENGTH: 10.0,
+  /**
+   * 贴身临界：0 ≤ |center−close|/|close| < 该比例（默认 0.5%），
+   * 且阻力 high>close / 支撑 low<close → 标「贴身临界压制/支撑」。
+   */
+  CONFLUENCE_SOFT_CONTACT_PCT: 0.005,
+  /**
+   * 弱近端「日内/临界压制/支撑」战术门槛（默认 ≥4；不占核心双档席位）。
+   * 与 soft buffer（≥10）区分：后者进档位，前者仅战术说明行。
+   * 贴身带（CONTACT）强度 ≥ 本门槛可走 soft/贴身档并豁免 nearEps；
+   * 非贴身弱带可贴价约 0.3% 过滤；强度≥10 的贴身/近端 soft 不得被该过滤静默丢弃。
+   */
+  CONFLUENCE_TACTICAL_CAP_MIN_STRENGTH: 4.0,
+  /** 战术弱带贴价过滤比例（默认 0.3%）；不作用于 soft≥10 / 贴身带 CONTACT */
+  CONFLUENCE_TACTICAL_NEAR_EPS_PCT: 0.003,
+  /**
+   * primary 强制第一档后：巩固通道上/下沿在距现价该比例内可保送第二席（默认 3%）。
+   */
+  TRADE_LEVEL_NEAR_CHANNEL_PROMOTE_PCT: 0.03,
 
   _num(v) {
     const n = Number(v);
@@ -544,6 +574,91 @@ const PatternTool = {
     const band = nearPct != null ? nearPct : 4;
     if (Math.abs(pct) <= band) return { side: 'near', pct };
     return { side: pct < 0 ? 'below' : 'above', pct };
+  },
+
+  /** 头肩右肩价：key_levels.right_shoulder 或 pivots role=RS */
+  _hitRightShoulder(h) {
+    const lv = (h && h.key_levels) || {};
+    const fromLv = this._num(lv.right_shoulder);
+    if (fromLv != null) return fromLv;
+    const pivots = (h && h.pivots) || [];
+    for (let i = 0; i < pivots.length; i++) {
+      const p = pivots[i];
+      if (!p) continue;
+      const role = String(p.role || '').toUpperCase();
+      if (role === 'RS' || role === 'RIGHT_SHOULDER') {
+        const px = this._num(p.price);
+        if (px != null) return px;
+      }
+    }
+    return null;
+  },
+
+  /**
+   * 空头反转「颈线上方」文案分层：禁止大偏离仍写「附近」；
+   * 逼近/超过右肩或大幅偏离时降偏空语气。
+   */
+  _bearishAboveNeckCopy(lab, c, n, rs, rel) {
+    const pctAbs = Math.abs(rel.pct);
+    const pctTxt = pctAbs.toFixed(1);
+    const nearRsEps = rs != null ? Math.abs(rs) * 0.02 : null;
+    const nearOrAboveRs =
+      rs != null && nearRsEps != null && c >= rs - nearRsEps;
+    // 大幅偏离颈线（默认 >8%）或逼近右肩 → 降偏空
+    if (nearOrAboveRs || pctAbs >= 12) {
+      const rsHint =
+        rs != null
+          ? nearOrAboveRs
+            ? c >= rs
+              ? `并已达到/超过右肩（${this._fmtPx(rs)}）`
+              : `并逼近右肩（${this._fmtPx(rs)}）`
+            : `（距颈线约+${pctTxt}%）`
+          : `（距颈线约+${pctTxt}%）`;
+      return `已确认${lab}，收盘（${this._fmtPx(c)}）已远离颈线（${this._fmtPx(
+        n
+      )}）${rsHint}，反抽削弱空头确认，短线不宜机械偏空；若再度有效跌破颈线再强化空头。`;
+    }
+    if (pctAbs >= 8) {
+      return `已确认${lab}，收盘（${this._fmtPx(c)}）仍在颈线（${this._fmtPx(
+        n
+      )}）上方（偏离约+${pctTxt}%），短线偏观察：关注能否回落失守颈线，或继续反抽逼近右肩。`;
+    }
+    return `已确认${lab}，收盘（${this._fmtPx(c)}）仍在颈线（${this._fmtPx(
+      n
+    )}）上方附近，短线偏防守观察：若再度跌破颈线则确认偏空，若放量站稳则警惕假破/反抽。`;
+  },
+
+  /**
+   * 多头反转「颈线下方」对称分层：禁止大偏离仍写「附近」。
+   */
+  _bullishBelowNeckCopy(lab, c, n, rs, rel) {
+    const pctAbs = Math.abs(rel.pct);
+    const pctTxt = pctAbs.toFixed(1);
+    const nearRsEps = rs != null ? Math.abs(rs) * 0.02 : null;
+    // 头肩底右肩为低点：逼近/跌破右肩 → 降偏多
+    const nearOrBelowRs =
+      rs != null && nearRsEps != null && c <= rs + nearRsEps;
+    if (nearOrBelowRs || pctAbs >= 12) {
+      const rsHint =
+        rs != null
+          ? nearOrBelowRs
+            ? c <= rs
+              ? `并已跌至/跌破右肩低点（${this._fmtPx(rs)}）`
+              : `并逼近右肩低点（${this._fmtPx(rs)}）`
+            : `（距颈线约-${pctTxt}%）`
+          : `（距颈线约-${pctTxt}%）`;
+      return `已确认${lab}，收盘（${this._fmtPx(c)}）已远离颈线（${this._fmtPx(
+        n
+      )}）${rsHint}，回撤削弱多头确认，短线不宜机械偏多；若再度有效站上颈线再强化多头。`;
+    }
+    if (pctAbs >= 8) {
+      return `已确认${lab}，收盘（${this._fmtPx(c)}）仍在颈线（${this._fmtPx(
+        n
+      )}）下方（偏离约-${pctTxt}%），短线偏谨慎观察：关注能否重新站回颈线，或继续回撤逼近右肩。`;
+    }
+    return `已确认${lab}，收盘（${this._fmtPx(c)}）仍在颈线（${this._fmtPx(
+      n
+    )}）下方附近，短线偏谨慎，需等待突破确认。`;
   },
 
   _parseDateMs(s) {
@@ -577,16 +692,24 @@ const PatternTool = {
     return 0;
   },
 
-  /** FinalScore ≈ confidence × W_status × exp(-λ·Δt) */
+  /** 时间衰减因子 e^(-λ·Δt)；缺日期视为 1 */
+  _timeDecayFactor(h, asof) {
+    if (!h) return 1;
+    const formed = String(h.formed_at || h.confirm_date || '').slice(0, 10);
+    const dt = this._daysBetween(formed, asof);
+    if (dt == null) return 1;
+    return Math.exp(-this.RANK_TIME_DECAY_LAMBDA * Math.max(0, dt));
+  },
+
+  /**
+   * 兼容旧口径的综合分（展示/调试）；竞选排序见 _rankHits（不再单靠该分压过更高 conf）。
+   * FinalScore ≈ confidence × W_status × exp(-λ·Δt)
+   */
   _finalScore(h, asof) {
     if (!h) return 0;
     const conf = Number(h.confidence) || 0;
     const w = this._statusWeight(h.status);
-    const formed = String(h.formed_at || h.confirm_date || '').slice(0, 10);
-    const dt = this._daysBetween(formed, asof);
-    const decay =
-      dt == null ? 1 : Math.exp(-this.RANK_TIME_DECAY_LAMBDA * Math.max(0, dt));
-    return conf * w * decay;
+    return conf * w * this._timeDecayFactor(h, asof);
   },
 
   _rankHits(items, opts) {
@@ -609,17 +732,28 @@ const PatternTool = {
       });
       return hasOlderOppReversal ? 1 : 0;
     };
+    const statusRank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
+    const confOf = (h) => Number(h && h.confidence) || 0;
     return list.slice().sort((a, b) => {
-      const sa = this._finalScore(a, asof);
-      const sb = this._finalScore(b, asof);
+      // 1) confirmed > forming（不靠 W_status×衰减间接压过）
+      const dSt = statusRank(b.status) - statusRank(a.status);
+      if (dSt) return dSt;
+      // 2) 同 status：Confidence desc；|Δconf| ≥ eps 时禁止衰减压过
+      const ca = confOf(a);
+      const cb = confOf(b);
+      const confDiff = cb - ca;
+      if (Math.abs(confDiff) >= this.RANK_CONF_TIE_EPS) return confDiff;
+      // 3) conf 接近：λ 衰减作弱 tie-break（conf×decay）
+      const sa = ca * this._timeDecayFactor(a, asof);
+      const sb = cb * this._timeDecayFactor(b, asof);
       const sd = sb - sa;
       if (Math.abs(sd) > 1e-9) return sd;
       const bd = boost(b) - boost(a);
       if (bd) return bd;
-      const rank = (st) => (st === 'confirmed' ? 2 : st === 'forming' ? 1 : 0);
-      const d = rank(b.status) - rank(a.status);
-      if (d) return d;
-      return String(b.formed_at || '').localeCompare(String(a.formed_at || ''));
+      // 4) formed_at desc
+      return String(b.formed_at || b.confirm_date || '').localeCompare(
+        String(a.formed_at || a.confirm_date || '')
+      );
     });
   },
 
@@ -810,8 +944,19 @@ const PatternTool = {
     return { lead, dir, measured, hasFormingConsol };
   },
 
+  /** 测幅是否已兑现/超额：上破 close≥target；下破 close≤target */
+  _isMeasuredAchieved(m, close) {
+    if (!m || close == null || m.target == null) return false;
+    if (m.dir === 'up') return close >= m.target;
+    if (m.dir === 'down') return close <= m.target;
+    return false;
+  },
+
   _measuredMoveBulletText(m) {
     if (!m) return '';
+    if (m.achieved) {
+      return `测幅目标 ${this._fmtPx(m.target)} 已超额达成（背景参考，不再作为结构阻力/支撑档）`;
+    }
     if (m.dir === 'up') {
       return `简化测幅目标 ${this._fmtPx(m.target)} 附近（按边界高度：上沿 ${this._fmtPx(
         m.upper
@@ -889,9 +1034,11 @@ const PatternTool = {
     } else if (t === 'head_shoulders_top') {
       add(lv.neckline, '颈线', '观察失守');
       add(lv.head, '头部高点', '上方压力');
+      add(lv.right_shoulder, '右肩', '上方压力');
     } else if (t === 'head_shoulders_bottom') {
       add(lv.neckline, '颈线', '观察站稳');
       add(lv.head, '头部低点', '下方支撑');
+      add(lv.right_shoulder, '右肩', '下方支撑');
     } else if (this.CONSOLIDATION[t]) {
       let upperRole = '突破参考';
       let lowerRole = '突破参考';
@@ -928,6 +1075,7 @@ const PatternTool = {
       双谷低点: 2,
       头部高点: 2,
       头部低点: 2,
+      右肩: 2,
       上沿: 1,
       下沿: 1,
     };
@@ -1045,6 +1193,7 @@ const PatternTool = {
     const scoreOne = (n) => {
       if (n === '颈线') return 50;
       if (n === '双谷低点' || n === '双峰高点' || n === '头部低点' || n === '头部高点') return 42;
+      if (n === '右肩') return 40;
       if (n === 'L1' || n === 'L2' || n === 'H1' || n === 'H2') return 38;
       if (side === 'support' && n === '下沿') return 36;
       if (side === 'support' && n === '上沿') return 34; // 突破后翻支撑
@@ -1076,12 +1225,14 @@ const PatternTool = {
       if (m.confirmed && has('颈线', '上沿')) meaning = '突破后翻支撑';
       else if (has('颈线')) meaning = '颈线支撑（观察中）';
       else if (has('双谷低点', 'L1', 'L2', '头部低点')) meaning = '形态低点支撑';
+      else if (has('右肩')) meaning = '右肩支撑';
       else if (has('下沿')) meaning = '通道/形态下沿支撑';
       else if (has('上沿')) meaning = '上沿翻支撑（待确认）';
       else meaning = '下方支撑';
     } else {
       if (has('颈线')) meaning = m.confirmed ? '颈线阻力' : '颈线阻力（观察中）';
       else if (has('双峰高点', 'H1', 'H2', '头部高点')) meaning = '形态高点阻力';
+      else if (has('右肩')) meaning = '右肩阻力';
       else if (has('上沿')) meaning = '通道/形态上沿阻力';
       else if (has('下沿')) meaning = m.confirmed ? '下沿翻阻力' : '下沿阻力（观察中）';
       else meaning = '上方阻力';
@@ -1090,36 +1241,245 @@ const PatternTool = {
   },
 
   /**
+   * 主形态几何边界：巩固取 upper/lower；反转取颈线按侧，阻力侧再取最近枢轴高点。
+   * 用于结构档强制第一候选与软融合 patternBound（勿用「全库已选支撑 max」）。
+   * @returns {{patternLower:number|null, patternUpper:number|null, supportSeed:object|null, resistSeed:object|null}}
+   */
+  _primaryGeometryBounds(primary, close) {
+    const empty = {
+      patternLower: null,
+      patternUpper: null,
+      supportSeed: null,
+      resistSeed: null,
+    };
+    if (!primary || close == null) return empty;
+    const eps = Math.abs(close) * 0.001;
+    const lv = (primary && primary.key_levels) || {};
+    const bounds = this._hitBounds(primary);
+    const neck = this._hitNeck(primary);
+    const conf = Number(primary.confidence) || 0;
+    const observing = this._isObserving(primary);
+    const confirmed = primary.status === 'confirmed';
+    const src = this.typeLabel(primary.pattern_type);
+    const mk = (price, name, role) => {
+      const p = this._num(price);
+      if (p == null) return null;
+      return {
+        price: p,
+        name: `${src}:${name}`,
+        primaryName: name,
+        role: role || '关键参考',
+        tags: [{ source: src, name }],
+        sources: [src],
+        observing,
+        confirmed,
+        conf,
+        fromPrimaryGeom: true,
+      };
+    };
+
+    let patternLower = null;
+    let patternUpper = null;
+    let supportSeed = null;
+    let resistSeed = null;
+
+    if (this.CONSOLIDATION[primary.pattern_type]) {
+      const upper = bounds.upper;
+      const lower = bounds.lower;
+      if (lower != null && lower < close - eps) {
+        patternLower = lower;
+        supportSeed = mk(lower, '下沿', '下方支撑');
+      } else if (upper != null && upper < close - eps) {
+        // 已上破：上沿翻支撑
+        patternLower = upper;
+        supportSeed = mk(upper, '上沿', confirmed ? '突破后转支撑' : '下方支撑');
+      }
+      if (upper != null && upper > close + eps) {
+        patternUpper = upper;
+        resistSeed = mk(upper, '上沿', '上方压力');
+      } else if (lower != null && lower > close + eps) {
+        patternUpper = lower;
+        resistSeed = mk(lower, '下沿', confirmed ? '突破后转阻力' : '上方压力');
+      }
+      return { patternLower, patternUpper, supportSeed, resistSeed };
+    }
+
+    // 反转：颈线按侧；阻力侧若颈线已在下方，取最近上方几何（右肩/头/双峰）
+    if (neck != null && neck < close - eps) {
+      patternLower = neck;
+      supportSeed = mk(neck, '颈线', '观察失守');
+    } else if (neck != null && neck > close + eps) {
+      patternUpper = neck;
+      resistSeed = mk(neck, '颈线', '观察站稳');
+    }
+
+    if (patternUpper == null) {
+      const cands = [];
+      const rs = this._hitRightShoulder(primary);
+      const head = this._num(lv.head);
+      const h1 = this._num(lv.h1);
+      const h2 = this._num(lv.h2);
+      if (rs != null && rs > close + eps) cands.push({ p: rs, name: '右肩', role: '上方压力' });
+      if (
+        head != null &&
+        head > close + eps &&
+        (this.BEARISH_REVERSAL[primary.pattern_type] || primary.pattern_type === 'double_top')
+      ) {
+        cands.push({ p: head, name: '头部高点', role: '上方压力' });
+      }
+      if (h1 != null && h1 > close + eps) cands.push({ p: h1, name: 'H1', role: '上方压力' });
+      if (h2 != null && h2 > close + eps) cands.push({ p: h2, name: 'H2', role: '上方压力' });
+      if (cands.length) {
+        cands.sort((a, b) => a.p - b.p);
+        const top = cands[0];
+        patternUpper = top.p;
+        resistSeed = mk(top.p, top.name, top.role);
+      }
+    }
+
+    if (patternLower == null) {
+      const cands = [];
+      const rs = this._hitRightShoulder(primary);
+      const head = this._num(lv.head);
+      const l1 = this._num(lv.l1);
+      const l2 = this._num(lv.l2);
+      if (rs != null && rs < close - eps) cands.push({ p: rs, name: '右肩', role: '下方支撑' });
+      if (
+        head != null &&
+        head < close - eps &&
+        (this.BULLISH_REVERSAL[primary.pattern_type] ||
+          primary.pattern_type === 'head_shoulders_bottom' ||
+          primary.pattern_type === 'double_bottom')
+      ) {
+        cands.push({ p: head, name: '头部低点', role: '下方支撑' });
+      }
+      if (l1 != null && l1 < close - eps) cands.push({ p: l1, name: 'L1', role: '下方支撑' });
+      if (l2 != null && l2 < close - eps) cands.push({ p: l2, name: 'L2', role: '下方支撑' });
+      if (cands.length) {
+        cands.sort((a, b) => b.p - a.p);
+        const top = cands[0];
+        patternLower = top.p;
+        supportSeed = mk(top.p, top.name, top.role);
+      }
+    }
+
+    return { patternLower, patternUpper, supportSeed, resistSeed };
+  },
+
+  /** 是否巩固类通道上沿（阻力）/下沿（支撑） */
+  _isConsolChannelEdge(m, side) {
+    if (!m) return false;
+    const edgeName = side === 'resistance' ? '上沿' : '下沿';
+    const consolLabels = new Set();
+    Object.keys(this.CONSOLIDATION || {}).forEach((t) => {
+      consolLabels.add(this.typeLabel(t));
+    });
+    if (m.tags && m.tags.length) {
+      return m.tags.some(
+        (t) => t && consolLabels.has(t.source) && t.name === edgeName
+      );
+    }
+    const tokens = this._levelNameTokens(m);
+    if (tokens.indexOf(edgeName) < 0) return false;
+    const srcs = m.sources || (m.source ? [m.source] : []);
+    return srcs.some((s) => consolLabels.has(s));
+  },
+
+  /**
    * 从合并关键位中按现价分支撑/阻力，取最有意义的 1～2 档。
+   * 若提供 primaryGeom：主形态几何边界强制为第一候选；
+   * 补第二档时优先距现价更近（同分再语义），并对近端巩固通道沿保送一席。
    * @returns {{supports:object[], resistances:object[]}}
    */
-  _pickTradeLevels(merged, close) {
+  _pickTradeLevels(merged, close, opts) {
     if (close == null || !merged || !merged.length) {
-      return { supports: [], resistances: [] };
+      // 仍可能仅有 primary 种子（merged 空极少见）
+      const geom0 = (opts && opts.primaryGeom) || null;
+      if (!geom0 || close == null) return { supports: [], resistances: [] };
+      const supports = geom0.supportSeed ? [geom0.supportSeed] : [];
+      const resistances = geom0.resistSeed ? [geom0.resistSeed] : [];
+      return {
+        supports: supports.sort((a, b) => b.price - a.price),
+        resistances: resistances.sort((a, b) => a.price - b.price),
+      };
     }
     const eps = Math.abs(close) * 0.001; // 贴近现价忽略
     const below = merged.filter((m) => m.price < close - eps);
     const above = merged.filter((m) => m.price > close + eps);
+    const geom = (opts && opts.primaryGeom) || null;
+    const nearTol = 0.008;
+    const promotePct =
+      this._num(this.TRADE_LEVEL_NEAR_CHANNEL_PROMOTE_PCT) != null
+        ? this._num(this.TRADE_LEVEL_NEAR_CHANNEL_PROMOTE_PCT)
+        : 0.03;
 
-    const pick = (arr, side) => {
-      const scored = arr
+    const resolveSeed = (seed, pool) => {
+      if (!seed || seed.price == null) return null;
+      const hit = (pool || []).find((m) => {
+        const base = Math.abs(m.price) || 1;
+        return Math.abs(m.price - seed.price) / base <= nearTol;
+      });
+      if (hit) return { ...hit, fromPrimaryGeom: true };
+      return seed;
+    };
+
+    const pick = (arr, side, forcedSeed) => {
+      const forced = resolveSeed(forcedSeed, arr);
+      const rest = arr.filter((m) => {
+        if (!forced) return true;
+        const base = Math.abs(m.price) || 1;
+        return Math.abs(m.price - forced.price) / base > nearTol;
+      });
+      const scored = rest
         .slice()
         .sort((a, b) => {
+          // primary 已强制第一档后：近距优先，同分再语义
+          if (forced) {
+            const da = Math.abs(a.price - close);
+            const db = Math.abs(b.price - close);
+            if (Math.abs(da - db) > 1e-12) return da - db;
+            return this._tradeLevelScore(b, side) - this._tradeLevelScore(a, side);
+          }
           const ds = this._tradeLevelScore(b, side) - this._tradeLevelScore(a, side);
           if (ds) return ds;
-          // 同分：更靠近现价优先
           return Math.abs(a.price - close) - Math.abs(b.price - close);
-        })
-        .slice(0, 2);
-      // 展示顺序：支撑由高到低，阻力由低到高
+        });
+      const out = [];
+      if (forced) out.push(forced);
+      scored.forEach((m) => {
+        if (out.length >= 2) return;
+        out.push(m);
+      });
+
+      // 近端巩固通道沿保送：距现价 ≤ promotePct，占第二席（不挤掉 primary 第一档）
+      if (forced && promotePct > 0) {
+        const baseClose = Math.abs(close) || 1;
+        const alreadyHas = out.some((m) => this._isConsolChannelEdge(m, side));
+        if (!alreadyHas) {
+          const edgeCands = rest
+            .filter((m) => {
+              if (!this._isConsolChannelEdge(m, side)) return false;
+              return Math.abs(m.price - close) / baseClose <= promotePct;
+            })
+            .sort(
+              (a, b) => Math.abs(a.price - close) - Math.abs(b.price - close)
+            );
+          if (edgeCands.length) {
+            const edge = edgeCands[0];
+            if (out.length < 2) out.push(edge);
+            else out[1] = edge;
+          }
+        }
+      }
+
       return side === 'support'
-        ? scored.sort((a, b) => b.price - a.price)
-        : scored.sort((a, b) => a.price - b.price);
+        ? out.sort((a, b) => b.price - a.price)
+        : out.sort((a, b) => a.price - b.price);
     };
 
     return {
-      supports: pick(below, 'support'),
-      resistances: pick(above, 'resistance'),
+      supports: pick(below, 'support', geom && geom.supportSeed),
+      resistances: pick(above, 'resistance', geom && geom.resistSeed),
     };
   },
 
@@ -1145,9 +1505,12 @@ const PatternTool = {
    */
   _emptyStructureSideText(side, ctx) {
     const dir = ctx && ctx.dir;
+    const measuredDone = !!(ctx && ctx.measuredAchieved);
     if (side === 'resistance') {
       if (dir === 'up') {
-        return '形态边界已上破；上方暂无形态内阻力档，近端关注简化测幅目标';
+        return measuredDone
+          ? '形态边界已上破；上方暂无形态内阻力档'
+          : '形态边界已上破；上方暂无形态内阻力档，近端关注简化测幅目标';
       }
       if (dir === 'down') {
         return '形态边界已下破；上方形态内阻力以原边界档为准';
@@ -1159,7 +1522,9 @@ const PatternTool = {
       return '暂无活跃形态边界，暂无明显阻力共振位';
     }
     if (dir === 'down') {
-      return '形态边界已下破；下方暂无形态内支撑档，近端关注简化测幅目标';
+      return measuredDone
+        ? '形态边界已下破；下方暂无形态内支撑档'
+        : '形态边界已下破；下方暂无形态内支撑档，近端关注简化测幅目标';
     }
     if (dir === 'up') {
       return '形态边界已上破；下方防守见上沿翻支撑等形态内档';
@@ -1254,10 +1619,382 @@ const PatternTool = {
     return false;
   },
 
+  /** 展开支撑/压力带（含 nearest_*），按 center 去重。 */
+  _iterConfluenceZones(confluence, side) {
+    if (!confluence || typeof confluence !== 'object') return [];
+    const out = [];
+    const push = (z) => {
+      if (!z || typeof z !== 'object') return;
+      const price = this._num(z.center != null ? z.center : z.price);
+      if (price == null) return;
+      if (out.some((x) => Math.abs(x.price - price) < 1e-6)) return;
+      out.push({
+        price,
+        low: this._num(z.low),
+        high: this._num(z.high),
+        strength: this._num(z.strength) || 0,
+        sources: Array.isArray(z.sources) ? z.sources : [],
+        fromConfluence: true,
+        side,
+      });
+    };
+    if (side === 'support') {
+      (confluence.supports || []).forEach(push);
+      if (confluence.nearest_support_zone) push(confluence.nearest_support_zone);
+    } else {
+      (confluence.resistances || []).forEach(push);
+      if (confluence.nearest_resistance_zone) push(confluence.nearest_resistance_zone);
+    }
+    return out;
+  },
+
+  /**
+   * Soft 夹层候选：经典夹层，或贴身带（阻力 high>close / 支撑 low<close，且未越过形态边界）。
+   */
+  _isSoftBufferSandwichCand(lv, side, close, patternBound) {
+    if (!lv || close == null || patternBound == null) return false;
+    const high = lv.high != null ? lv.high : lv.price;
+    const low = lv.low != null ? lv.low : lv.price;
+    if (side === 'support') {
+      if (!(lv.price > patternBound)) return false;
+      // 经典：patternBound < center < close；贴身：low < close 且 center 未明显高于现价
+      if (lv.price < close) return true;
+      return low < close && lv.price <= close;
+    }
+    if (!(lv.price < patternBound)) return false;
+    // 经典：close < center < patternBound；贴身：high > close 且 center≥close（或带 straddling）
+    if (lv.price > close) return true;
+    return high > close && lv.price >= close;
+  },
+
+  /** 贴身临界：距现价 < CONTACT_PCT，且阻力 high>close / 支撑 low<close */
+  _isSoftContactBand(lv, side, close) {
+    if (!lv || close == null) return false;
+    const px = Math.abs(close) || 1;
+    const distPct = Math.abs((lv.price || 0) - close) / px;
+    const maxPct =
+      this._num(this.CONFLUENCE_SOFT_CONTACT_PCT) != null
+        ? this.CONFLUENCE_SOFT_CONTACT_PCT
+        : 0.005;
+    if (!(distPct >= 0 && distPct < maxPct)) return false;
+    if (side === 'support') {
+      const low = lv.low != null ? lv.low : lv.price;
+      return low < close;
+    }
+    const high = lv.high != null ? lv.high : lv.price;
+    return high > close;
+  },
+
+  /**
+   * 有主形态时的受控软融合：在「形态边界 ↔ 现价」夹层内取**近端优先**的一条共振带
+   *（strength≥min；同分再比强度）。勿只取最强更远带。
+   * 支撑/阻力均支持贴身带（high>close / low<close）。
+   * 贴身 CONTACT 带允许强度 ≥ TACTICAL_MIN(4) 进入 soft/贴身档（不必满 10）。
+   * @returns {object|null}
+   */
+  _pickConfluenceSoftBuffer(confluence, opts) {
+    const o = opts || {};
+    const side = o.side === 'resistance' ? 'resistance' : 'support';
+    const close = this._num(o.close);
+    const patternBound = this._num(o.patternBound);
+    const minStr =
+      this._num(o.minStrength) != null
+        ? this._num(o.minStrength)
+        : this.CONFLUENCE_SOFT_BUFFER_MIN_STRENGTH;
+    const contactMin =
+      this._num(o.contactMinStrength) != null
+        ? this._num(o.contactMinStrength)
+        : this.CONFLUENCE_TACTICAL_CAP_MIN_STRENGTH;
+    if (close == null || patternBound == null || !Number.isFinite(minStr)) return null;
+    const byNearThenStr = (a, b) => {
+      const da = Math.abs(a.price - close);
+      const db = Math.abs(b.price - close);
+      if (Math.abs(da - db) > 1e-12) return da - db;
+      return (b.strength || 0) - (a.strength || 0);
+    };
+    const sandwich = this._iterConfluenceZones(confluence, side).filter((lv) =>
+      this._isSoftBufferSandwichCand(lv, side, close, patternBound)
+    );
+    const softCands = sandwich.filter((lv) => (lv.strength || 0) >= minStr);
+    // 贴身强度缝 [tacticalMin, softMin)：可进 soft；若已有 ≥softMin 候选，须更近且强度≥其一半（避免弱贴价带挤掉强近端缓冲）
+    const contactMidCands = sandwich.filter((lv) => {
+      const str = lv.strength || 0;
+      if (str < contactMin || str >= minStr) return false;
+      return this._isSoftContactBand(lv, side, close);
+    });
+    let cands = softCands.slice();
+    if (contactMidCands.length) {
+      if (!softCands.length) {
+        cands = contactMidCands.slice();
+      } else {
+        softCands.sort(byNearThenStr);
+        contactMidCands.sort(byNearThenStr);
+        const bestSoft = softCands[0];
+        const bestContact = contactMidCands[0];
+        const contactNearer =
+          Math.abs(bestContact.price - close) < Math.abs(bestSoft.price - close) - 1e-12;
+        const competitive =
+          (bestContact.strength || 0) >= (bestSoft.strength || 0) * 0.5;
+        if (contactNearer && competitive) cands = [bestContact];
+      }
+    }
+    if (!cands.length) return null;
+    cands.sort(byNearThenStr);
+    const top = cands[0];
+    const softContact = this._isSoftContactBand(top, side, close);
+    return {
+      ...top,
+      softBuffer: true,
+      softContact,
+      fromConfluence: true,
+    };
+  },
+
+  _softBufferExplain(m, side) {
+    const role = side === 'support' ? '支撑' : '阻力';
+    const str =
+      m && m.strength != null && Number.isFinite(Number(m.strength))
+        ? Number(m.strength).toFixed(1)
+        : '--';
+    const contactHint = m && m.softContact ? '，贴身临界' : '';
+    return `超级量化共振带${role}，强度 ${str}${contactHint}`;
+  },
+
+  /**
+   * 同 status、|Δconf|&lt;eps、bias 冲突的近邻形态（文案层「多空交织」用；不改 primary）。
+   */
+  _findNearConflictingPeer(primary, pool, eps) {
+    if (!primary || !Array.isArray(pool)) return null;
+    const pb = this._biasOf(primary.pattern_type);
+    const pc = this._num(primary.confidence);
+    if (pc == null) return null;
+    const epsUse =
+      this._num(eps) != null ? this._num(eps) : this.RANK_CONF_TIE_EPS;
+    const st = String(primary.status || '');
+    for (let i = 0; i < pool.length; i++) {
+      const h = pool[i];
+      if (!h || h === primary) continue;
+      if (String(h.status || '') !== st) continue;
+      if (!this._biasConflicts(pb, this._biasOf(h.pattern_type))) continue;
+      const hc = this._num(h.confidence);
+      if (hc == null) continue;
+      if (Math.abs(pc - hc) < epsUse) return h;
+    }
+    return null;
+  },
+
+  /** 共振带来源是否含 VP VAH（价值区上沿）叠层 */
+  _isVpVahSources(sources) {
+    const srcs = Array.isArray(sources) ? sources : [];
+    return srcs.some((s) => {
+      const t = String(s || '').toLowerCase();
+      return t === 'vah' || t === 'vp_vah' || t.includes('vah');
+    });
+  },
+
+  /**
+   * 贴身/战术判距：取 center 与更近边界（支撑看 high，阻力看 low）的最小间距，
+   * 避免 high≈close / low≈close 时仅因 center 落入 nearEps 被误杀。
+   */
+  _contactEdgeGap(lv, side, close) {
+    if (!lv || close == null || lv.price == null) return null;
+    if (side === 'support') {
+      const toCenter = Math.abs(close - lv.price);
+      const toHigh =
+        lv.high != null && Number.isFinite(lv.high) ? Math.abs(close - lv.high) : toCenter;
+      return Math.min(toCenter, toHigh);
+    }
+    const toCenter = Math.abs(lv.price - close);
+    const toLow =
+      lv.low != null && Number.isFinite(lv.low) ? Math.abs(lv.low - close) : toCenter;
+    return Math.min(toCenter, toLow);
+  },
+
+  /**
+   * 弱近端「日内/临界压制/支撑」：夹层共振强度可低于 soft buffer（默认 ≥4），
+   * 或 VP VAH 叠层单独识别。不占用核心双档席位，仅供战术说明行。
+   * 排除已达 soft buffer 门槛（≥10）或已占 soft/贴身席的带；贴身 CONTACT 豁免 nearEps。
+   * @returns {object|null}
+   */
+  _pickConfluenceTacticalCap(confluence, opts) {
+    const o = opts || {};
+    const side = o.side === 'resistance' ? 'resistance' : 'support';
+    const close = this._num(o.close);
+    const patternBound = this._num(o.patternBound);
+    const minStr =
+      this._num(o.minStrength) != null
+        ? this._num(o.minStrength)
+        : this.CONFLUENCE_TACTICAL_CAP_MIN_STRENGTH;
+    const softMin =
+      this._num(o.softMinStrength) != null
+        ? this._num(o.softMinStrength)
+        : this.CONFLUENCE_SOFT_BUFFER_MIN_STRENGTH;
+    if (close == null || patternBound == null || !Number.isFinite(minStr)) return null;
+    // 弱带贴价约 0.3% 内不提示；soft≥10 / 贴身 CONTACT 不走此过滤
+    const nearEpsPct =
+      this._num(o.nearEpsPct) != null
+        ? this._num(o.nearEpsPct)
+        : this.CONFLUENCE_TACTICAL_NEAR_EPS_PCT;
+    const nearEps =
+      this._num(o.nearEps) != null
+        ? this._num(o.nearEps)
+        : Math.abs(close) * (nearEpsPct != null ? nearEpsPct : 0.003);
+    const exclude = Array.isArray(o.excludePrices) ? o.excludePrices : [];
+    const cands = this._iterConfluenceZones(confluence, side).filter((lv) => {
+      const str = lv.strength || 0;
+      const vpVah = this._isVpVahSources(lv.sources);
+      if (str < minStr && !vpVah) return false;
+      // 已达超级共振 soft 门槛的留给 soft buffer，不在战术行重复
+      if (str >= softMin) return false;
+      if (exclude.some((p) => p != null && Math.abs(p - lv.price) < 1e-6)) return false;
+      const isContact = this._isSoftContactBand(lv, side, close);
+      // 贴身且 ≥tacticalMin：无 soft 席时豁免 nearEps；已有 soft 席则仍按贴价过滤（避免弱贴价噪音）
+      if (isContact && str >= minStr) {
+        const inWin =
+          side === 'support'
+            ? lv.price > patternBound && (lv.low != null ? lv.low : lv.price) < close
+            : lv.price < patternBound && (lv.high != null ? lv.high : lv.price) > close;
+        if (!inWin) return false;
+        if (!exclude.length) return true;
+        const gap = this._contactEdgeGap(lv, side, close);
+        return !(gap != null && gap <= nearEps);
+      }
+      if (side === 'support') {
+        if (!(lv.price > patternBound && lv.price < close)) return false;
+        const gap = this._contactEdgeGap(lv, side, close);
+        if (gap != null && gap <= nearEps) return false;
+        return lv.price - patternBound > nearEps;
+      }
+      if (!(lv.price > close && lv.price < patternBound)) return false;
+      const gap = this._contactEdgeGap(lv, side, close);
+      if (gap != null && gap <= nearEps) return false;
+      return patternBound - lv.price > nearEps;
+    });
+    if (!cands.length) return null;
+    cands.sort((a, b) => {
+      const da = Math.abs(a.price - close);
+      const db = Math.abs(b.price - close);
+      if (Math.abs(da - db) > 1e-12) return da - db;
+      return (b.strength || 0) - (a.strength || 0);
+    });
+    const top = cands[0];
+    return {
+      ...top,
+      tacticalCap: true,
+      fromConfluence: true,
+    };
+  },
+
+  /**
+   * 上破后形态阻力真空：单侧近端降级补 1 档。
+   * 优先 confluence.resistances（标强度）；再 ATR-Pivot R1 / 最近 KDE 阻力。
+   * 仅取现价上方；已跌破的 VAH/Fib 等不得写回上方阻力。
+   * @returns {object|null}
+   */
+  _pickDegradedBreakoutResistance(close, opts) {
+    const o = opts || {};
+    const c = this._num(close);
+    if (c == null) return null;
+    const eps = Math.abs(c) * 0.001;
+    const usableOverhead = (lv) => {
+      if (!lv || lv.price == null) return false;
+      if (!(lv.price > c + eps)) return false;
+      const high = lv.high != null ? lv.high : lv.price;
+      // 整带已落在现价下/贴价：视为已跌破，不写回上方
+      if (!(high > c + eps)) return false;
+      return true;
+    };
+    const confCands = this._iterConfluenceZones(o.confluenceZones, 'resistance')
+      .filter(usableOverhead)
+      .sort((a, b) => {
+        const da = a.price - c;
+        const db = b.price - c;
+        if (Math.abs(da - db) > 1e-12) return da - db;
+        return (b.strength || 0) - (a.strength || 0);
+      });
+    if (confCands.length) {
+      const top = confCands[0];
+      return {
+        ...top,
+        degradedRef: true,
+        fromConfluence: true,
+        degradeSource: 'confluence',
+      };
+    }
+    const classic = o.classicLevels || {};
+    const atr = classic.atr_pivot || classic.atrPivot || null;
+    if (atr && typeof atr === 'object') {
+      const r1 = this._num(atr.R1 != null ? atr.R1 : atr.r1);
+      const atrNear = this._num(atr.nearest_resistance);
+      const px = r1 != null && r1 > c + eps ? r1 : atrNear != null && atrNear > c + eps ? atrNear : null;
+      if (px != null) {
+        return {
+          price: px,
+          strength: null,
+          sources: ['atr_pivot'],
+          degradedRef: true,
+          fromConfluence: false,
+          degradeSource: 'atr_pivot',
+        };
+      }
+    }
+    const kde = o.kdeLevels || {};
+    let kdePx = this._num(kde.nearest_resistance);
+    if (kdePx == null && Array.isArray(kde.resistance_levels)) {
+      const above = kde.resistance_levels
+        .map((x) => this._num(x && x.price != null ? x.price : x))
+        .filter((p) => p != null && p > c + eps)
+        .sort((a, b) => a - b);
+      if (above.length) kdePx = above[0];
+    }
+    if (kdePx != null && kdePx > c + eps) {
+      return {
+        price: kdePx,
+        strength: null,
+        sources: ['kde'],
+        degradedRef: true,
+        fromConfluence: false,
+        degradeSource: 'kde',
+      };
+    }
+    return null;
+  },
+
+  _degradedResistExplain(m) {
+    const src = (m && m.degradeSource) || '';
+    const str =
+      m && m.strength != null && Number.isFinite(Number(m.strength))
+        ? Number(m.strength).toFixed(1)
+        : null;
+    if (src === 'confluence') {
+      return str != null
+        ? `参考/降级：多维共振带阻力，强度 ${str}（非形态几何阻力）`
+        : '参考/降级：多维共振带阻力（非形态几何阻力）';
+    }
+    if (src === 'atr_pivot') {
+      return '参考/降级：ATR-Pivot R1（非形态几何阻力）';
+    }
+    if (src === 'kde') {
+      return '参考/降级：最近 KDE 阻力（非形态几何阻力）';
+    }
+    return '参考/降级阻力（非形态几何阻力）';
+  },
+
+  _tacticalCapExplain(m, side) {
+    const role = side === 'resistance' ? '压制' : '支撑';
+    const str =
+      m && m.strength != null && Number.isFinite(Number(m.strength))
+        ? Number(m.strength).toFixed(1)
+        : '--';
+    const vpHint = this._isVpVahSources(m && m.sources) ? '，含 VP VAH' : '';
+    return `弱共振${role}，强度 ${str}${vpHint}；有别于近端缓冲/第一压制（强度≥${this.CONFLUENCE_SOFT_BUFFER_MIN_STRENGTH}）`;
+  },
+
   /**
    * 结构防守与目标（合并原「关键位置参考」+「后续交易点位参考」）。
    * 分层：防守/支撑 → 目标/近端形态阻力（含巩固简化测幅）。
-   * 真空（无主形态档）时可用 opts.confluenceZones 共振带兜底；有活跃形态档时不硬盖。
+   * 真空（无主形态档）时可用 opts.confluenceZones 共振带整侧兜底；
+   * 有活跃形态档时不硬盖，仅允许「现价↔形态边界」高强夹层作近端缓冲。
    * @returns {{html:string,text:string}}
    */
   buildStructureLevelsReference(items, opts) {
@@ -1278,15 +2015,26 @@ const PatternTool = {
       }
     }
     const merged = this._collectMergedLevels(items, { asof });
-    let { supports, resistances } = this._pickTradeLevels(merged, close);
+    const primaryGeom = primary ? this._primaryGeometryBounds(primary, close) : null;
+    let { supports, resistances } = this._pickTradeLevels(merged, close, {
+      primaryGeom,
+    });
+    // 若合并池未带出 primary 几何（极少），仍用种子兜底
+    if (primaryGeom) {
+      if (!supports.length && primaryGeom.supportSeed) supports = [primaryGeom.supportSeed];
+      if (!resistances.length && primaryGeom.resistSeed) resistances = [primaryGeom.resistSeed];
+    }
     const ctx = this._leadConsolBreakContext(items, { asof });
     const measured = ctx.measured;
-    // 有活跃形态档用形态；真空（无主形态，或两侧皆空且无巩固突破）才共振兜底
+    const measuredAchieved = this._isMeasuredAchieved(measured, close);
+    ctx.measuredAchieved = measuredAchieved;
+    // 有活跃形态档用形态；真空（无主形态，或两侧皆空且无巩固突破）才共振整侧兜底
     const useConfluenceFallback =
       !primary ||
       (!supports.length && !resistances.length && !measured && !ctx.dir);
     let supportFromConf = false;
     let resistFromConf = false;
+    let resistDegraded = false;
     if (useConfluenceFallback && this._hasConfluenceZones(options.confluenceZones)) {
       const confLv = this._pickConfluenceTradeLevels(options.confluenceZones, close);
       if (!supports.length && confLv.supports.length) {
@@ -1298,13 +2046,170 @@ const PatternTool = {
         resistFromConf = true;
       }
     }
+    // 受控软融合：patternBound 取 primary 几何边界（非「已选支撑 max」），夹层近端优先为缓冲/贴身
+    // 贴身 CONTACT≥4 可进 soft；强度≥10 / 贴身不得被战术 0.3% nearEps 静默丢弃
+    let supportSoftFusion = false;
+    let resistSoftFusion = false;
+    if (
+      primary &&
+      primaryGeom &&
+      !supportFromConf &&
+      supports.length &&
+      close != null &&
+      this._hasConfluenceZones(options.confluenceZones)
+    ) {
+      const patternLower =
+        primaryGeom.patternLower != null
+          ? primaryGeom.patternLower
+          : Math.max(...supports.map((m) => m.price));
+      const buf = this._pickConfluenceSoftBuffer(options.confluenceZones, {
+        side: 'support',
+        patternBound: patternLower,
+        close,
+      });
+      if (buf) {
+        const nearTol = 0.008;
+        let core =
+          supports.find((m) => {
+            if (primaryGeom.patternLower == null) return false;
+            const base = Math.abs(m.price) || 1;
+            return Math.abs(m.price - primaryGeom.patternLower) / base <= nearTol;
+          }) ||
+          primaryGeom.supportSeed ||
+          supports.slice().sort((a, b) => b.price - a.price)[0] ||
+          supports[0];
+        supports = [
+          buf,
+          {
+            ...core,
+            softCore: true,
+            fromConfluence: false,
+          },
+        ];
+        supportSoftFusion = true;
+      }
+    }
+    // 阻力侧与支撑同构：patternBound = primary 上沿/近端几何阻力；≤2 档优先贴身/近端 + 核心
+    if (
+      primary &&
+      primaryGeom &&
+      !resistFromConf &&
+      !resistDegraded &&
+      resistances.length &&
+      close != null &&
+      this._hasConfluenceZones(options.confluenceZones)
+    ) {
+      const patternUpper =
+        primaryGeom.patternUpper != null
+          ? primaryGeom.patternUpper
+          : Math.min(...resistances.map((m) => m.price));
+      const buf = this._pickConfluenceSoftBuffer(options.confluenceZones, {
+        side: 'resistance',
+        patternBound: patternUpper,
+        close,
+      });
+      if (buf) {
+        const nearTol = 0.008;
+        let core =
+          resistances.find((m) => {
+            if (primaryGeom.patternUpper == null) return false;
+            const base = Math.abs(m.price) || 1;
+            return Math.abs(m.price - primaryGeom.patternUpper) / base <= nearTol;
+          }) ||
+          primaryGeom.resistSeed ||
+          resistances.slice().sort((a, b) => a.price - b.price)[0] ||
+          resistances[0];
+        resistances = [
+          buf,
+          {
+            ...core,
+            softCore: true,
+            fromConfluence: false,
+          },
+        ];
+        resistSoftFusion = true;
+      }
+    }
+
+    // P1：已确认上破且形态阻力空 → 共振近端 / ATR-Pivot / KDE 单侧降级补 1 档
+    if (
+      primary &&
+      ctx.dir === 'up' &&
+      !resistances.length &&
+      !resistFromConf &&
+      close != null
+    ) {
+      const deg = this._pickDegradedBreakoutResistance(close, options);
+      if (deg) {
+        resistances = [deg];
+        resistDegraded = true;
+      }
+    }
+
+    // P1-B：弱近端「日内/临界压制/支撑」——不占核心双档，仅战术说明行
+    let supportTactical = null;
+    let resistTactical = null;
+    const softExcludeSup = supportSoftFusion && supports[0] ? [supports[0].price] : [];
+    const softExcludeRes = resistSoftFusion && resistances[0] ? [resistances[0].price] : [];
+    if (
+      primary &&
+      primaryGeom &&
+      !supportFromConf &&
+      close != null &&
+      this._hasConfluenceZones(options.confluenceZones)
+    ) {
+      const patternLower =
+        primaryGeom.patternLower != null
+          ? primaryGeom.patternLower
+          : supports.length
+            ? Math.max(...supports.map((m) => m.price))
+            : null;
+      if (patternLower != null) {
+        supportTactical = this._pickConfluenceTacticalCap(options.confluenceZones, {
+          side: 'support',
+          patternBound: patternLower,
+          close,
+          excludePrices: softExcludeSup,
+        });
+      }
+    }
+    if (
+      primary &&
+      primaryGeom &&
+      !resistFromConf &&
+      !resistDegraded &&
+      close != null &&
+      this._hasConfluenceZones(options.confluenceZones)
+    ) {
+      const patternUpper =
+        primaryGeom.patternUpper != null
+          ? primaryGeom.patternUpper
+          : resistances.length
+            ? Math.min(...resistances.map((m) => m.price))
+            : null;
+      // 夹层上界：优先 primary 几何上沿；若第一形态阻力更远，可用其扩大扫描窗
+      let capBound = patternUpper;
+      if (resistances.length) {
+        const firstResist = Math.min(...resistances.map((m) => m.price));
+        if (capBound == null || firstResist > capBound) capBound = firstResist;
+      }
+      if (capBound != null) {
+        resistTactical = this._pickConfluenceTacticalCap(options.confluenceZones, {
+          side: 'resistance',
+          patternBound: capBound,
+          close,
+          excludePrices: softExcludeRes,
+        });
+      }
+    }
+
     const supportZone = this._tradeZoneText(supports, 'support');
     const resistZone = this._tradeZoneText(resistances, 'resistance');
 
     const supportLines = [];
     const supportLis = [];
     if (!supports.length) {
-      if (measured && measured.dir === 'down') {
+      if (measured && measured.dir === 'down' && !measuredAchieved) {
         const note = '形态边界已下破；下方暂无形态内支撑档';
         supportLines.push(note);
         supportLis.push(note);
@@ -1315,17 +2220,34 @@ const PatternTool = {
       }
     } else {
       supports.forEach((m, idx) => {
-        const label = idx === 0 ? '直接支撑' : '强底支撑';
-        const explain = m.fromConfluence
-          ? this._confluenceLevelExplain(m, 'support')
-          : this._tradeLevelExplain(m, 'support');
+        let label;
+        if (m.softBuffer) {
+          label = m.softContact ? '贴身临界支撑' : '近端缓冲防守';
+        } else if (m.softCore || (supportSoftFusion && !m.fromConfluence))
+          label = '核心破位防守';
+        else label = idx === 0 ? '直接支撑' : '强底支撑';
+        const explain = m.softBuffer
+          ? this._softBufferExplain(m, 'support')
+          : m.fromConfluence
+            ? this._confluenceLevelExplain(m, 'support')
+            : this._tradeLevelExplain(m, 'support');
         const line = `${label}：${this._fmtPx(m.price)} 附近（${explain}）`;
         supportLines.push(line);
         supportLis.push(line);
       });
     }
     if (measured && measured.dir === 'down') {
-      const line = this._measuredMoveBulletText(measured);
+      const line = this._measuredMoveBulletText(
+        measuredAchieved ? { ...measured, achieved: true } : measured
+      );
+      supportLines.push(line);
+      supportLis.push(line);
+    }
+    if (supportTactical) {
+      const line = `日内/临界支撑：${this._fmtPx(supportTactical.price)} 附近（${this._tacticalCapExplain(
+        supportTactical,
+        'support'
+      )}）`;
       supportLines.push(line);
       supportLis.push(line);
     }
@@ -1333,7 +2255,7 @@ const PatternTool = {
     const resistLines = [];
     const resistLis = [];
     if (!resistances.length) {
-      if (measured && measured.dir === 'up') {
+      if (measured && measured.dir === 'up' && !measuredAchieved) {
         const note = '形态边界已上破；上方暂无形态内阻力档';
         resistLines.push(note);
         resistLis.push(note);
@@ -1344,17 +2266,39 @@ const PatternTool = {
       }
     } else {
       resistances.forEach((m, idx) => {
-        const label = idx === 0 ? '第一阻力' : '第二阻力';
-        const explain = m.fromConfluence
-          ? this._confluenceLevelExplain(m, 'resistance')
-          : this._tradeLevelExplain(m, 'resistance');
+        let label;
+        if (m.degradedRef) {
+          label = '参考阻力（降级）';
+        } else if (m.softBuffer) {
+          label = m.softContact ? '贴身临界压制' : '近端缓冲/第一压制';
+        } else if (m.softCore || (resistSoftFusion && !m.fromConfluence))
+          label = '核心形态阻力';
+        else label = idx === 0 ? '第一阻力' : '第二阻力';
+        const explain = m.degradedRef
+          ? this._degradedResistExplain(m)
+          : m.softBuffer
+            ? this._softBufferExplain(m, 'resistance')
+            : m.fromConfluence
+              ? this._confluenceLevelExplain(m, 'resistance')
+              : this._tradeLevelExplain(m, 'resistance');
         const line = `${label}：${this._fmtPx(m.price)} 附近（${explain}）`;
         resistLines.push(line);
         resistLis.push(line);
       });
     }
     if (measured && measured.dir === 'up') {
-      const line = this._measuredMoveBulletText(measured);
+      const line = this._measuredMoveBulletText(
+        measuredAchieved ? { ...measured, achieved: true } : measured
+      );
+      // 已兑现：仅背景一句，不作为上方阻力档；未兑现仍输出测幅目标
+      resistLines.push(line);
+      resistLis.push(line);
+    }
+    if (resistTactical) {
+      const line = `日内/临界压制：${this._fmtPx(resistTactical.price)} 附近（${this._tacticalCapExplain(
+        resistTactical,
+        'resistance'
+      )}）`;
       resistLines.push(line);
       resistLis.push(line);
     }
@@ -1362,14 +2306,16 @@ const PatternTool = {
     const supportHead =
       supports.length > 0
         ? `防守/支撑：${supportZone}`
-        : measured && measured.dir === 'down'
+        : measured && measured.dir === 'down' && !measuredAchieved
           ? '防守/支撑与下方目标：'
           : '防守/支撑：';
     const resistHead =
       resistances.length > 0
-        ? resistFromConf
-          ? `目标/近端共振阻力：${resistZone}`
-          : `目标/近端形态阻力：${resistZone}`
+        ? resistDegraded
+          ? `目标/近端参考阻力（降级）：${resistZone}`
+          : resistFromConf
+            ? `目标/近端共振阻力：${resistZone}`
+            : `目标/近端形态阻力：${resistZone}`
         : supportFromConf && !resistances.length
           ? '目标/近端共振阻力：'
           : '目标/近端形态阻力：';
@@ -1470,7 +2416,7 @@ const PatternTool = {
    * 必须直接读取 status：已确认巩固突破时禁止再写「等待边界有效突破」；
    * 已确认偏多巩固 vs 已确认偏空反转写入冲突提示。
    * @param {array} items
-   * @param {{asof?:string, confluenceZones?:object}|undefined} options
+   * @param {{asof?:string, confluenceZones?:object, classicLevels?:object, kdeLevels?:object}|undefined} options
    */
   buildExpertAnalysis(items, options) {
     const opts = options || {};
@@ -1516,6 +2462,8 @@ const PatternTool = {
       const structure = this.buildStructureLevelsReference(items, {
         asof,
         confluenceZones: opts.confluenceZones,
+        classicLevels: opts.classicLevels,
+        kdeLevels: opts.kdeLevels,
       });
       return {
         shortTerm: shortBits.join(''),
@@ -1567,9 +2515,8 @@ const PatternTool = {
             `已确认${lab}，收盘（${this._fmtPx(c)}）贴近颈线（${this._fmtPx(n)}），短线宜观察颈线是否失守；失守则空头动能增强。`
           );
         } else if (rel && rel.side === 'above') {
-          shortBits.push(
-            `已确认${lab}，收盘（${this._fmtPx(c)}）仍在颈线（${this._fmtPx(n)}）上方附近，短线偏防守观察：若再度跌破颈线则确认偏空，若放量站稳则警惕假破/反抽。`
-          );
+          const rs = this._hitRightShoulder(top);
+          shortBits.push(this._bearishAboveNeckCopy(lab, c, n, rs, rel));
         } else {
           shortBits.push(`已确认${lab}，短线关注颈线得失与量能配合。`);
         }
@@ -1583,9 +2530,8 @@ const PatternTool = {
             `已确认${lab}，收盘贴近颈线（${this._fmtPx(n)}），短线观察能否有效突破并站稳颈线。`
           );
         } else if (rel && rel.side === 'below') {
-          shortBits.push(
-            `已确认${lab}，但收盘仍在颈线（${this._fmtPx(n)}）下方，短线偏谨慎，需等待突破确认。`
-          );
+          const rs = this._hitRightShoulder(top);
+          shortBits.push(this._bullishBelowNeckCopy(lab, c, n, rs, rel));
         } else {
           shortBits.push(`已确认${lab}，短线关注颈线突破与回踩。`);
         }
@@ -1654,6 +2600,27 @@ const PatternTool = {
       else if (leadBias === 'bearish_bias') stance = '中线略偏防守';
       else if (leadBias === 'bullish_bias') stance = '中线略偏积极';
 
+      // 已确认反转但现价大幅回到破位前一侧 → 降权中线语气（不改 status）
+      const leadClose = this._hitClose(lead);
+      const leadNeck = this._hitNeck(lead);
+      const leadRel = this._relToLevel(leadClose, leadNeck);
+      const leadRs = this._hitRightShoulder(lead);
+      if (leadRel && this.BEARISH_REVERSAL[lead.pattern_type] && leadRel.side === 'above') {
+        const nearRs =
+          leadRs != null && leadClose >= leadRs - Math.abs(leadRs) * 0.02;
+        if (nearRs || Math.abs(leadRel.pct) >= 12) stance = '中线偏中性（反抽削弱空头）';
+        else if (Math.abs(leadRel.pct) >= 8) stance = '中线偏观察（仍在颈线上方）';
+      } else if (
+        leadRel &&
+        this.BULLISH_REVERSAL[lead.pattern_type] &&
+        leadRel.side === 'below'
+      ) {
+        const nearRs =
+          leadRs != null && leadClose <= leadRs + Math.abs(leadRs) * 0.02;
+        if (nearRs || Math.abs(leadRel.pct) >= 12) stance = '中线偏中性（回撤削弱多头）';
+        else if (Math.abs(leadRel.pct) >= 8) stance = '中线偏谨慎观察（仍在颈线下方）';
+      }
+
       mediumTerm = `以高置信已确认「${leadLab}」（置信度 ${leadConf}）为主导，${stance}。${formedTxt}`;
 
       // 冲突：反向已确认（含偏多巩固 vs 偏空反转）
@@ -1662,12 +2629,23 @@ const PatternTool = {
         return this._biasConflicts(leadBias, this._biasOf(h.pattern_type));
       });
       if (opp) {
-        const oppIsRev =
-          this.BEARISH_REVERSAL[opp.pattern_type] || this.BULLISH_REVERSAL[opp.pattern_type];
-        if (this.CONSOLIDATION[lead.pattern_type] && oppIsRev) {
-          mediumTerm += `同时存在较早已确认「${this.typeLabel(opp.pattern_type)}」（测幅/时效可能已兑现），冲突时以后续突破的「${leadLab}」为主，旧反转降权观察。`;
+        const oppConf = this._num(opp.confidence);
+        const leadC = this._num(lead.confidence);
+        const nearTie =
+          leadC != null &&
+          oppConf != null &&
+          Math.abs(leadC - oppConf) < this.RANK_CONF_TIE_EPS;
+        // 同 status 且置信接近：文案层多空交织，不改 primary
+        if (nearTie) {
+          mediumTerm += `同时存在反向「${this.typeLabel(opp.pattern_type)}」（置信度接近），多空形态交织，宜按宽幅箱体/震荡观察，勿武断单边。`;
         } else {
-          mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」，冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
+          const oppIsRev =
+            this.BEARISH_REVERSAL[opp.pattern_type] || this.BULLISH_REVERSAL[opp.pattern_type];
+          if (this.CONSOLIDATION[lead.pattern_type] && oppIsRev) {
+            mediumTerm += `同时存在较早已确认「${this.typeLabel(opp.pattern_type)}」（测幅/时效可能已兑现），冲突时以后续突破的「${leadLab}」为主，旧反转降权观察。`;
+          } else {
+            mediumTerm += `同时存在反向已确认「${this.typeLabel(opp.pattern_type)}」，冲突时以更高置信的「${leadLab}」为主，另一信号降权观察。`;
+          }
         }
       } else if (formingConsol.length && !hasConfirmedConsolBreak) {
         mediumTerm += `形成中巩固为次要，突破前不改「${leadLab}」框架。`;
@@ -1682,6 +2660,11 @@ const PatternTool = {
         .map((h) => `${this.typeLabel(h.pattern_type)}(${h.confidence != null ? Number(h.confidence).toFixed(2) : '--'})`)
         .join('、');
       mediumTerm = `暂无高置信已确认形态，中线尚不明朗；形成中信号（${names || '若干'}）待边界突破或结构确认。`;
+      // 同 forming 且 |Δconf|<eps、bias 冲突：交织提示（保持置信优先 primary，仅文案）
+      const mixPeer = this._findNearConflictingPeer(primary, forming);
+      if (mixPeer) {
+        mediumTerm += `多空形态交织，宜按宽幅箱体/震荡观察，勿武断单边。`;
+      }
       if (bgArchived) mediumTerm += bgArchived;
       if (confHint) mediumTerm += confHint;
     }
@@ -1694,6 +2677,8 @@ const PatternTool = {
     const structure = this.buildStructureLevelsReference(items, {
       asof,
       confluenceZones: opts.confluenceZones,
+      classicLevels: opts.classicLevels,
+      kdeLevels: opts.kdeLevels,
     });
 
     return {

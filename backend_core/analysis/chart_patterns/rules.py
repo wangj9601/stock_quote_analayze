@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """形态识别统一阈值（突破确认 / 失效 / 重叠过滤）。
 
-文档见 docs/features/形态识别工具.md。
+文档见 docs/features/形态识别工具.md；算法总览见 docs/features/支撑阻力与形态识别_算法说明.md。
 """
 
 from __future__ import annotations
@@ -28,6 +28,10 @@ LIFECYCLE_TARGET_RATIO = 0.9
 # 底：确认后最高 > 颈线/DEPTH，且现价已回到颈线/RECOVER 下方 → 对称
 HS_FAIL_DEPTH_MULT = 0.95
 HS_FAIL_RECOVER_MULT = 1.02
+# 辅：confirmed 破颈后反抽失败——现价回颈线另一侧，且（逼近/超过右肩 或 反抽幅度≥约 N·ATR）
+# 不因「任意回到颈线上方」推翻 confirmed→forming；仅归档/降权
+HS_FAIL_PULLBACK_ATR_MULT = 2.0
+HS_FAIL_RS_NEAR_PCT = 0.02  # 相对右肩 ±2% 视为逼近
 # 辅：右肩完成后 N 根交易日仍未收盘破颈 → forming 超时归档（0=关闭）
 HS_FORMING_TIMEOUT_BARS = 90
 

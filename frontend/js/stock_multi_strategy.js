@@ -363,6 +363,13 @@ const StockMultiStrategy = {
             PatternTool.renderEmbedded(host, fetched.items, meta, fetched.price_adjust, {
                 asof: fetched.asof || asof || '',
                 confluenceZones: confluence,
+                classicLevels: classic,
+                kdeLevels: {
+                    nearest_resistance: levelsData.nearest_resistance,
+                    nearest_support: levelsData.nearest_support,
+                    resistance_levels: levelsData.resistance_levels,
+                    support_levels: levelsData.support_levels,
+                },
             });
             this.lastPattern = {
                 ok: true,
