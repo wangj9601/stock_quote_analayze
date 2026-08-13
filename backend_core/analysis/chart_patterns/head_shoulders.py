@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""头肩顶 / 头肩底（基于 ZigZag 五枢轴）。"""
+"""头肩顶 / 头肩底（基于 ZigZag 五枢轴）。
+
+颈线：两峰（顶）/两谷间高点（底）线性斜颈线；破位按当日斜颈阈值确认。
+几何：头相对两肩须有足够深度；颈线两峰不可过度不对称（抑制双底+虚高颈线误报）。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .pivots import extract_pivot_sequence
 from .rules import (
+    HS_HEAD_MIN_DEPTH_PCT,
+    HS_NECK_ASYMMETRY_MAX,
+    HS_SHOULDER_TOL_PCT,
     INVALIDATE_BOTTOM_MULT,
     INVALIDATE_TOP_MULT,
     post_pivot_invalidate_bottom,
@@ -58,25 +65,78 @@ def _pivot_bar_index(bars: Sequence[Dict[str, Any]], pivot: Dict[str, Any]) -> i
     return -1
 
 
-def _first_close_break(
+def _neck_at(
+    n1_price: float,
+    n1_i: int,
+    n2_price: float,
+    n2_i: int,
+    bar_i: int,
+) -> float:
+    """斜颈线在 bar_i 处的价格（线性插值/外推）。"""
+    if n2_i == n1_i:
+        return float(n1_price)
+    t = (float(bar_i) - float(n1_i)) / (float(n2_i) - float(n1_i))
+    return float(n1_price) + t * (float(n2_price) - float(n1_price))
+
+
+def _first_close_break_slanted(
     bars: Sequence[Dict[str, Any]],
     start_i: int,
-    neck: float,
     *,
+    n1_price: float,
+    n1_i: int,
+    n2_price: float,
+    n2_i: int,
     below: bool,
-) -> Optional[Tuple[int, str]]:
-    """右肩完成后：首次收盘有效破颈（顶=收盘<颈线；底=收盘>颈线）。"""
-    if neck <= 0 or start_i < 0:
+) -> Optional[Tuple[int, str, float]]:
+    """右肩完成后：首次收盘有效破当日斜颈（顶=收盘<颈；底=收盘>颈）。
+
+    返回 (bar_index, date, neck_at_break)。
+    """
+    if start_i < 0:
         return None
     for i in range(int(start_i) + 1, len(bars)):
         c = _bar_close(bars[i])
         if c is None:
             continue
-        if below and c < neck:
-            return i, _bar_date(bars[i])
-        if (not below) and c > neck:
-            return i, _bar_date(bars[i])
+        neck_i = _neck_at(n1_price, n1_i, n2_price, n2_i, i)
+        if neck_i <= 0:
+            continue
+        if below and c < neck_i:
+            return i, _bar_date(bars[i]), neck_i
+        if (not below) and c > neck_i:
+            return i, _bar_date(bars[i]), neck_i
     return None
+
+
+def _shoulder_ok(ls_px: float, rs_px: float, *, tol: float) -> bool:
+    mid_s = (ls_px + rs_px) / 2.0
+    if mid_s <= 0:
+        return False
+    return abs(ls_px - rs_px) / mid_s <= float(tol)
+
+
+def _neck_asymmetry_ok(n1: float, n2: float, *, max_asym: float) -> bool:
+    mid = (n1 + n2) / 2.0
+    if mid <= 0:
+        return False
+    return abs(n1 - n2) / mid <= float(max_asym)
+
+
+def _head_depth_ok_bottom(head: float, ls: float, rs: float, *, depth: float) -> bool:
+    """头须明显低于两肩：head <= shoulder × (1 − depth)。"""
+    if head <= 0 or ls <= 0 or rs <= 0:
+        return False
+    thr = 1.0 - max(0.0, float(depth))
+    return head <= ls * thr and head <= rs * thr
+
+
+def _head_depth_ok_top(head: float, ls: float, rs: float, *, depth: float) -> bool:
+    """头须明显高于两肩：head >= shoulder × (1 + depth)。"""
+    if head <= 0 or ls <= 0 or rs <= 0:
+        return False
+    thr = 1.0 + max(0.0, float(depth))
+    return head >= ls * thr and head >= rs * thr
 
 
 def _detect_hs_top(
@@ -86,56 +146,80 @@ def _detect_hs_top(
     """高-低-更高-低-高：左肩、头、右肩。"""
     if len(pivots) < 5:
         return None
-    # 取末段交替枢轴，找 … H L H L H
+    depth = HS_HEAD_MIN_DEPTH_PCT
+    shoulder_tol = HS_SHOULDER_TOL_PCT
+    neck_asym = HS_NECK_ASYMMETRY_MAX
+
     for end in range(len(pivots), 4, -1):
         win = pivots[end - 5 : end]
         kinds = [p["kind"] for p in win]
         if kinds != ["high", "low", "high", "low", "high"]:
             continue
         ls, n1, head, n2, rs = win
-        # 头应明显高于两肩
-        if head["price"] <= ls["price"] * 1.01 or head["price"] <= rs["price"] * 1.01:
+        if not _head_depth_ok_top(
+            float(head["price"]), float(ls["price"]), float(rs["price"]), depth=depth
+        ):
             continue
-        # 两肩高度接近
-        mid_s = (ls["price"] + rs["price"]) / 2.0
-        if mid_s <= 0 or abs(ls["price"] - rs["price"]) / mid_s > 0.08:
+        if not _shoulder_ok(float(ls["price"]), float(rs["price"]), tol=shoulder_tol):
             continue
-        neck = (n1["price"] + n2["price"]) / 2.0
+        n1_px, n2_px = float(n1["price"]), float(n2["price"])
+        if not _neck_asymmetry_ok(n1_px, n2_px, max_asym=neck_asym):
+            continue
+        n1_i = _pivot_bar_index(bars, n1)
+        n2_i = _pivot_bar_index(bars, n2)
+        if n1_i < 0 or n2_i < 0:
+            continue
         closes = _closes(bars)
         if not closes:
             return None
         last = closes[-1]
+        last_i = len(bars) - 1
         head_px = float(head["price"])
         rs_i = _pivot_bar_index(bars, rs)
+        # 展示/测幅参考：末根斜颈阈值（形成中为当前破位线）
+        neck_disp = _neck_at(n1_px, n1_i, n2_px, n2_i, last_i if last_i >= 0 else n2_i)
         confirm_date: Optional[str] = None
-        # 右肩完成后：任一高点/收盘 > 头×1.01 → 失效（优先于颈线确认）
+        confirm_neck: Optional[float] = None
         if post_pivot_invalidate_top(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
         else:
-            # 历史锁存：任一收盘破颈即 confirmed，反弹不得改回 forming
-            brk = _first_close_break(bars, rs_i, neck, below=True)
+            brk = _first_close_break_slanted(
+                bars,
+                rs_i,
+                n1_price=n1_px,
+                n1_i=n1_i,
+                n2_price=n2_px,
+                n2_i=n2_i,
+                below=True,
+            )
             if brk:
                 status = "confirmed"
                 conf = 0.7
                 confirm_date = brk[1]
+                confirm_neck = brk[2]
             else:
                 status = "forming"
                 conf = 0.5
-        # 右肩略低于左肩略加分（仅对有效形态）
         if status != "invalidated" and rs["price"] <= ls["price"]:
             conf = min(1.0, conf + 0.05)
         reason = (
             f"头肩顶 {fmt_px('左肩', ls['price'], ls.get('date'))} "
             f"{fmt_px('头', head['price'], head.get('date'))} "
             f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
-            f"{fmt_px('颈线', round(neck, 4), approx=True)}"
+            f"{fmt_px('斜颈', round(neck_disp, 4), approx=True)} "
+            f"{fmt_px('峰1', round(n1_px, 4), n1.get('date'))} "
+            f"{fmt_px('峰2', round(n2_px, 4), n2.get('date'))}"
         )
         if status == "invalidated":
             thr = round(head_px * INVALIDATE_TOP_MULT, 4)
             reason += f" 失效:右肩后高点/收盘>头×{INVALIDATE_TOP_MULT}({thr})"
-        elif status == "confirmed" and confirm_date and last >= neck:
-            reason += f" 破颈确认:{confirm_date}（现价已反抽颈线上方，状态仍锁存）"
+        elif status == "confirmed" and confirm_date:
+            cn = confirm_neck if confirm_neck is not None else neck_disp
+            if last >= cn:
+                reason += f" 破颈确认:{confirm_date}（现价已反抽斜颈上方，状态仍锁存）"
+            else:
+                reason += f" 破颈确认:{confirm_date}"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_top",
@@ -146,13 +230,18 @@ def _detect_hs_top(
                 "left_shoulder": ls["price"],
                 "head": head["price"],
                 "right_shoulder": rs["price"],
-                "neckline": round(neck, 4),
+                "neckline": round(neck_disp, 4),
+                "neck_left": round(n1_px, 4),
+                "neck_right": round(n2_px, 4),
+                "neckline_method": "slanted",
                 "last_close": round(last, 4),
             },
             pivots=[
                 {"role": "LS", "date": ls.get("date"), "price": ls["price"]},
                 {"role": "head", "date": head.get("date"), "price": head["price"]},
                 {"role": "RS", "date": rs.get("date"), "price": rs["price"]},
+                {"role": "neck1", "date": n1.get("date"), "price": round(n1_px, 4)},
+                {"role": "neck2", "date": n2.get("date"), "price": round(n2_px, 4)},
             ],
             extra={"confirm_date": confirm_date},
         )
@@ -166,35 +255,57 @@ def _detect_hs_bottom(
     """低-高-更低-高-低。"""
     if len(pivots) < 5:
         return None
+    depth = HS_HEAD_MIN_DEPTH_PCT
+    shoulder_tol = HS_SHOULDER_TOL_PCT
+    neck_asym = HS_NECK_ASYMMETRY_MAX
+
     for end in range(len(pivots), 4, -1):
         win = pivots[end - 5 : end]
         kinds = [p["kind"] for p in win]
         if kinds != ["low", "high", "low", "high", "low"]:
             continue
         ls, n1, head, n2, rs = win
-        if head["price"] >= ls["price"] * 0.99 or head["price"] >= rs["price"] * 0.99:
+        if not _head_depth_ok_bottom(
+            float(head["price"]), float(ls["price"]), float(rs["price"]), depth=depth
+        ):
             continue
-        mid_s = (ls["price"] + rs["price"]) / 2.0
-        if mid_s <= 0 or abs(ls["price"] - rs["price"]) / mid_s > 0.08:
+        if not _shoulder_ok(float(ls["price"]), float(rs["price"]), tol=shoulder_tol):
             continue
-        neck = (n1["price"] + n2["price"]) / 2.0
+        n1_px, n2_px = float(n1["price"]), float(n2["price"])
+        if not _neck_asymmetry_ok(n1_px, n2_px, max_asym=neck_asym):
+            continue
+        n1_i = _pivot_bar_index(bars, n1)
+        n2_i = _pivot_bar_index(bars, n2)
+        if n1_i < 0 or n2_i < 0:
+            continue
         closes = _closes(bars)
         if not closes:
             return None
         last = closes[-1]
+        last_i = len(bars) - 1
         head_px = float(head["price"])
         rs_i = _pivot_bar_index(bars, rs)
+        neck_disp = _neck_at(n1_px, n1_i, n2_px, n2_i, last_i if last_i >= 0 else n2_i)
         confirm_date: Optional[str] = None
-        # 右肩完成后：任一低点/收盘 < 头×0.99 → 失效（优先于颈线确认）
+        confirm_neck: Optional[float] = None
         if post_pivot_invalidate_bottom(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
         else:
-            brk = _first_close_break(bars, rs_i, neck, below=False)
+            brk = _first_close_break_slanted(
+                bars,
+                rs_i,
+                n1_price=n1_px,
+                n1_i=n1_i,
+                n2_price=n2_px,
+                n2_i=n2_i,
+                below=False,
+            )
             if brk:
                 status = "confirmed"
                 conf = 0.7
                 confirm_date = brk[1]
+                confirm_neck = brk[2]
             else:
                 status = "forming"
                 conf = 0.5
@@ -204,13 +315,19 @@ def _detect_hs_bottom(
             f"头肩底 {fmt_px('左肩', ls['price'], ls.get('date'))} "
             f"{fmt_px('头', head['price'], head.get('date'))} "
             f"{fmt_px('右肩', rs['price'], rs.get('date'))} "
-            f"{fmt_px('颈线', round(neck, 4), approx=True)}"
+            f"{fmt_px('斜颈', round(neck_disp, 4), approx=True)} "
+            f"{fmt_px('峰1', round(n1_px, 4), n1.get('date'))} "
+            f"{fmt_px('峰2', round(n2_px, 4), n2.get('date'))}"
         )
         if status == "invalidated":
             thr = round(head_px * INVALIDATE_BOTTOM_MULT, 4)
             reason += f" 失效:右肩后低点/收盘<头×{INVALIDATE_BOTTOM_MULT}({thr})"
-        elif status == "confirmed" and confirm_date and last <= neck:
-            reason += f" 破颈确认:{confirm_date}（现价已回落颈线下方，状态仍锁存）"
+        elif status == "confirmed" and confirm_date:
+            cn = confirm_neck if confirm_neck is not None else neck_disp
+            if last <= cn:
+                reason += f" 破颈确认:{confirm_date}（现价已回落斜颈下方，状态仍锁存）"
+            else:
+                reason += f" 破颈确认:{confirm_date}"
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_bottom",
@@ -221,13 +338,18 @@ def _detect_hs_bottom(
                 "left_shoulder": ls["price"],
                 "head": head["price"],
                 "right_shoulder": rs["price"],
-                "neckline": round(neck, 4),
+                "neckline": round(neck_disp, 4),
+                "neck_left": round(n1_px, 4),
+                "neck_right": round(n2_px, 4),
+                "neckline_method": "slanted",
                 "last_close": round(last, 4),
             },
             pivots=[
                 {"role": "LS", "date": ls.get("date"), "price": ls["price"]},
                 {"role": "head", "date": head.get("date"), "price": head["price"]},
                 {"role": "RS", "date": rs.get("date"), "price": rs["price"]},
+                {"role": "neck1", "date": n1.get("date"), "price": round(n1_px, 4)},
+                {"role": "neck2", "date": n2.get("date"), "price": round(n2_px, 4)},
             ],
             extra={"confirm_date": confirm_date},
         )

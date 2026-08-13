@@ -35,6 +35,14 @@ HS_FAIL_RS_NEAR_PCT = 0.02  # 相对右肩 ±2% 视为逼近
 # 辅：右肩完成后 N 根交易日仍未收盘破颈 → forming 超时归档（0=关闭）
 HS_FORMING_TIMEOUT_BARS = 90
 
+# 头肩几何：头相对两肩最小深度（底：头≤肩×(1−d)；顶：头≥肩×(1+d)）
+# 过松（如仅 1%）易把「近似双底」误报为头肩底（002979 类）
+HS_HEAD_MIN_DEPTH_PCT = 0.03
+# 两肩相对高差上限（与现有 mid_s 口径一致）
+HS_SHOULDER_TOL_PCT = 0.08
+# 颈线两峰相对差上限：过大视为虚高/虚低均价颈线，拒绝（双底冲高后再做肩）
+HS_NECK_ASYMMETRY_MAX = 0.22
+
 # 楔形端点方向：末高/末低相对首枢轴的相对容差（抗噪声，非严格逐点单调）
 WEDGE_ENDPOINT_REL_EPS = 0.002
 
