@@ -240,15 +240,22 @@
         ['最近支撑带', zoneTxt(conf.nearest_support_zone)],
         ['最近压力带', zoneTxt(conf.nearest_resistance_zone)],
       ];
-      const pushZones = (arr, tag) => {
-        (arr || []).forEach((z, i) => {
+      // 支撑：center 降序（近现价=支撑1）；压力：center 升序（近现价=压力1）
+      const pushZones = (arr, tag, desc) => {
+        const sorted = (arr || []).slice().sort((a, b) => {
+          const ca = Number(a && a.center);
+          const cb = Number(b && b.center);
+          if (!Number.isFinite(ca) || !Number.isFinite(cb)) return 0;
+          return desc ? cb - ca : ca - cb;
+        });
+        sorted.forEach((z, i) => {
           const src = (z.sources || []).join('+') || '--';
           const strength = z.strength != null ? z.strength : '--';
           confBody.push([`${tag}${i + 1}·强度${strength}·${src}`, fmtPrice(z.center)]);
         });
       };
-      pushZones(conf.supports, '支撑');
-      pushZones(conf.resistances, '压力');
+      pushZones(conf.supports, '支撑', true);
+      pushZones(conf.resistances, '压力', false);
       sections.push({
         title: '共振带',
         head: [['项目', '价格/区间']],

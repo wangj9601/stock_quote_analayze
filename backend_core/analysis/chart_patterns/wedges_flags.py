@@ -9,6 +9,8 @@ from .pivots import extract_pivot_sequence, linreg_slope
 from .rules import (
     SLOPE_UNIT_NOTE,
     WEDGE_ENDPOINT_REL_EPS,
+    WEDGE_SLOPE_CONV_ABS_EPS,
+    WEDGE_SLOPE_CONV_REL_EPS,
     consolidation_status,
 )
 from .schema import fmt_px, make_hit
@@ -38,7 +40,7 @@ def wedge_endpoints_direction_ok(
 ) -> bool:
     """楔形端点方向校验（非严格逐点单调）。
 
-    - 下降楔形：末高不得明显高于首高，末低不得明显高于首低（\(H_n \\le H_1(1+\\epsilon)\) 等）
+    - 下降楔形：末高不得明显高于首高，末低不得明显高于首低（Hn ≤ H1·(1+ε) 等）
     - 上升楔形：末高不得明显低于首高，末低不得明显低于首低
     """
     if len(hi) < 2 or len(lo) < 2:
@@ -64,6 +66,29 @@ def wedge_endpoints_direction_ok(
     if ln < l0 * (1.0 - e):
         return False
     return True
+
+
+def wedge_slopes_converging(
+    hs: float,
+    ls: float,
+    *,
+    falling: bool,
+    rel_eps: float = WEDGE_SLOPE_CONV_REL_EPS,
+    abs_eps: float = WEDGE_SLOPE_CONV_ABS_EPS,
+) -> bool:
+    """楔形斜率收敛校验。
+
+    - 下降楔形：|upper_slope| > |lower_slope|（上沿更陡下行）
+    - 上升楔形：|lower_slope| > |upper_slope|（下沿更陡上行）
+    容差：``tol = max(abs_eps, rel_eps * max(|hs|, |ls|))``，
+    判定为 ``a > b - tol``（抗数值噪声；明显发散仍拒绝）。
+    """
+    a_hs = abs(float(hs))
+    a_ls = abs(float(ls))
+    tol = max(float(abs_eps), float(rel_eps) * max(a_hs, a_ls))
+    if falling:
+        return a_hs > a_ls - tol
+    return a_ls > a_hs - tol
 
 
 def detect_wedges(
@@ -101,6 +126,12 @@ def detect_wedges(
     if same_down and not wedge_endpoints_direction_ok(hi, lo, falling=True):
         return []
     if same_up and not wedge_endpoints_direction_ok(hi, lo, falling=False):
+        return []
+
+    # 斜率收敛：发散（扩张）同向通道不报 wedge
+    if same_down and not wedge_slopes_converging(hs, ls, falling=True):
+        return []
+    if same_up and not wedge_slopes_converging(hs, ls, falling=False):
         return []
 
     closes = _closes(bars)

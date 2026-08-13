@@ -26,6 +26,10 @@ LIFECYCLE_TARGET_RATIO = 0.9
 # 楔形端点方向：末高/末低相对首枢轴的相对容差（抗噪声，非严格逐点单调）
 WEDGE_ENDPOINT_REL_EPS = 0.002
 
+# 楔形斜率收敛：下降要求 |上沿| > |下沿|；上升对称。相对/绝对容差抗数值噪声
+WEDGE_SLOPE_CONV_REL_EPS = 0.05
+WEDGE_SLOPE_CONV_ABS_EPS = 1e-9
+
 # 巩固形态 NMS：上下沿相对差 ≤ 该阈值视为同界；枢轴价序列亦用此容差判同源
 NMS_BOUND_REL_TOL = 0.01
 

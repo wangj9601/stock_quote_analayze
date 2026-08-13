@@ -22,6 +22,10 @@ def get_default_rpe_config() -> Dict[str, Any]:
         "enable_lead_trade": False,
         "kde_base_factor": 1.0,
         "kde_grid_points": 200,
+        # 带宽上限与扩窗衰减：打断「抹平→扩窗→更平滑」；max_bw≤0 表示不设上限
+        "kde_min_bw": 0.01,
+        "kde_max_bw": 0.08,
+        "kde_expand_factor_decay": 0.85,
         # 支撑缺失时 KDE 回看：250 → +250 → +250，上限约 3 年交易日
         "kde_lookback_step": 250,
         "kde_lookback_max": 750,

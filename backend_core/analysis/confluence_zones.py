@@ -13,6 +13,9 @@ ALIGN_TOL_PCT = 0.015
 NEAR_PCT = 0.025  # 2.5%
 NEAR_MIN_SOURCES = 2
 NEAR_MIN_POINTS = 3
+# 单带最大相对带宽（相对中心）；超出则按簇内最大 gap 拆成近端/远端带（不改全局 eps）
+MAX_ZONE_WIDTH_PCT = 0.025  # 2.5%
+_MAX_ZONE_SPLIT_DEPTH = 4
 
 
 def _f(v: Any) -> Optional[float]:
@@ -154,6 +157,102 @@ def _cluster_distance_merge(
     return labels
 
 
+def _members_center(members: Sequence[Dict[str, Any]]) -> float:
+    wsum = sum(float(m["weight"]) for m in members) or 1.0
+    return sum(float(m["price"]) * float(m["weight"]) for m in members) / wsum
+
+
+def _members_width_pct(members: Sequence[Dict[str, Any]]) -> float:
+    if len(members) < 2:
+        return 0.0
+    lo = min(float(m["price"]) for m in members)
+    hi = max(float(m["price"]) for m in members)
+    center = abs(_members_center(members))
+    if center <= 0:
+        mid = abs((lo + hi) / 2.0)
+        if mid <= 0:
+            return 0.0
+        return (hi - lo) / mid
+    return (hi - lo) / center
+
+
+def _zone_dict_from_members(members: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    wsum = sum(float(m["weight"]) for m in members) or 1.0
+    center = sum(float(m["price"]) * float(m["weight"]) for m in members) / wsum
+    lo = min(float(m["price"]) for m in members)
+    hi = max(float(m["price"]) for m in members)
+    sources = sorted({str(m["source"]) for m in members})
+    labels_u = sorted({str(m.get("label") or m["source"]) for m in members})
+    strength = wsum * len(sources)
+    return {
+        "center": round(center, PRICE_DECIMALS),
+        "low": round(lo, PRICE_DECIMALS),
+        "high": round(hi, PRICE_DECIMALS),
+        "strength": round(strength, 3),
+        "sources": sources,
+        "labels": labels_u,
+        "n_points": len(members),
+    }
+
+
+def _split_members_by_max_gap(
+    members: Sequence[Dict[str, Any]],
+) -> Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
+    """按相邻最大价差二分；两侧均须 ≥2 点，否则不可拆。"""
+    if len(members) < 4:
+        return None
+    ordered = sorted(members, key=lambda m: float(m["price"]))
+    best_i: Optional[int] = None
+    best_gap = -1.0
+    for i in range(len(ordered) - 1):
+        left_n = i + 1
+        right_n = len(ordered) - left_n
+        if left_n < 2 or right_n < 2:
+            continue
+        gap = float(ordered[i + 1]["price"]) - float(ordered[i]["price"])
+        if gap > best_gap:
+            best_gap = gap
+            best_i = i
+    if best_i is None:
+        return None
+    left = list(ordered[: best_i + 1])
+    right = list(ordered[best_i + 1 :])
+    return left, right
+
+
+def _split_wide_members(
+    members: Sequence[Dict[str, Any]],
+    *,
+    max_zone_width_pct: float,
+    depth: int = 0,
+    max_depth: int = _MAX_ZONE_SPLIT_DEPTH,
+) -> List[List[Dict[str, Any]]]:
+    """带宽超限则按最大 gap 递归拆成近端/远端子簇。"""
+    mem = list(members)
+    if len(mem) < 2:
+        return []
+    max_w = float(max_zone_width_pct)
+    if max_w <= 0 or _members_width_pct(mem) <= max_w or depth >= int(max_depth):
+        return [mem]
+    parts = _split_members_by_max_gap(mem)
+    if parts is None:
+        return [mem]
+    left, right = parts
+    # 支撑语义：价高一侧更近现价；压力相反——此处仅拆簇，侧向分类仍走后续 center vs px
+    out: List[List[Dict[str, Any]]] = []
+    out.extend(
+        _split_wide_members(
+            left, max_zone_width_pct=max_w, depth=depth + 1, max_depth=max_depth
+        )
+    )
+    out.extend(
+        _split_wide_members(
+            right, max_zone_width_pct=max_w, depth=depth + 1, max_depth=max_depth
+        )
+    )
+    return out if out else [mem]
+
+
 def _clip_zone_to_price_side(
     zone: Dict[str, Any],
     *,
@@ -270,10 +369,12 @@ def _select_zones_with_near_fallback(
     pool = display
     if side == "support":
         nearest = max(pool, key=lambda z: z["center"]) if pool else None
-        display.sort(key=lambda z: (-z["strength"], -z["center"]))
+        # 展示序：按 center 降序（近现价=支撑1）；TopN 仍按强度选取
+        display.sort(key=lambda z: (-float(z["center"]), -float(z.get("strength") or 0)))
     else:
         nearest = min(pool, key=lambda z: z["center"]) if pool else None
-        display.sort(key=lambda z: (-z["strength"], z["center"]))
+        # 展示序：按 center 升序（近现价=压力1）
+        display.sort(key=lambda z: (float(z["center"]), -float(z.get("strength") or 0)))
     return display, nearest
 
 
@@ -286,6 +387,7 @@ def build_confluence_zones(
     near_pct: float = NEAR_PCT,
     near_min_sources: int = NEAR_MIN_SOURCES,
     near_min_points: int = NEAR_MIN_POINTS,
+    max_zone_width_pct: float = MAX_ZONE_WIDTH_PCT,
 ) -> Dict[str, Any]:
     pts = [p for p in points if _f(p.get("price")) is not None]
     empty = {
@@ -302,6 +404,7 @@ def build_confluence_zones(
             "near_pct": float(near_pct),
             "near_min_sources": int(near_min_sources),
             "near_min_points": int(near_min_points),
+            "max_zone_width_pct": float(max_zone_width_pct),
         },
     }
     if len(pts) < 2:
@@ -332,33 +435,30 @@ def build_confluence_zones(
         clusters.setdefault(int(lab), []).append(p)
 
     zones: List[Dict[str, Any]] = []
-    for lab, members in clusters.items():
+    for _lab, members in clusters.items():
         if len(members) < 2:
             continue
-        wsum = sum(float(m["weight"]) for m in members) or 1.0
-        center = sum(float(m["price"]) * float(m["weight"]) for m in members) / wsum
-        lo = min(float(m["price"]) for m in members)
-        hi = max(float(m["price"]) for m in members)
-        sources = sorted({str(m["source"]) for m in members})
-        labels_u = sorted({str(m.get("label") or m["source"]) for m in members})
-        strength = wsum * len(sources)
-        zones.append(
-            {
-                "center": round(center, PRICE_DECIMALS),
-                "low": round(lo, PRICE_DECIMALS),
-                "high": round(hi, PRICE_DECIMALS),
-                "strength": round(strength, 3),
-                "sources": sources,
-                "labels": labels_u,
-                "n_points": len(members),
-            }
+        was_wide = (
+            float(max_zone_width_pct) > 0
+            and _members_width_pct(members) > float(max_zone_width_pct)
         )
+        parts = _split_wide_members(
+            members, max_zone_width_pct=float(max_zone_width_pct)
+        )
+        for part in parts:
+            if len(part) < 2:
+                continue
+            z = _zone_dict_from_members(part)
+            if was_wide and len(parts) > 1:
+                z["split_from_wide_cluster"] = True
+            zones.append(z)
 
     params = {
         "max_each": int(max_each),
         "near_pct": float(near_pct),
         "near_min_sources": int(near_min_sources),
         "near_min_points": int(near_min_points),
+        "max_zone_width_pct": float(max_zone_width_pct),
     }
 
     if not zones:
@@ -432,6 +532,7 @@ def compute_confluence_from_reference(
     near_pct: float = NEAR_PCT,
     near_min_sources: int = NEAR_MIN_SOURCES,
     near_min_points: int = NEAR_MIN_POINTS,
+    max_zone_width_pct: float = MAX_ZONE_WIDTH_PCT,
 ) -> Dict[str, Any]:
     pts = collect_candidate_points(
         kde_support=kde_support,
@@ -454,4 +555,5 @@ def compute_confluence_from_reference(
         near_pct=near_pct,
         near_min_sources=near_min_sources,
         near_min_points=near_min_points,
+        max_zone_width_pct=max_zone_width_pct,
     )

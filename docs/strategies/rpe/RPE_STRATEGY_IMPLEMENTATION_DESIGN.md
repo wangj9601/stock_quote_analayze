@@ -126,7 +126,10 @@ flowchart TD
 | `sector_slope_window` | int | 60 | 对 \(I_t\) 做线性回归的窗口 | 趋势否决 |
 | `enable_trend_veto` | bool | true | 斜率 &lt; 0 时禁止补涨/领涨入场 | 入场门控 |
 | `enable_lead_trade` | bool | false | 是否允许领涨产生 `entry_signal` | 入场门控 |
-| `kde_base_factor` | float | 1.0 | KDE 带宽 = factor × (σ/μ)，且 ≥ 0.01 | 支撑阻力平滑度 |
+| `kde_base_factor` | float | 1.0 | KDE 带宽因子：raw = factor × (σ/μ) | 支撑阻力平滑度 |
+| `kde_min_bw` | float | 0.01 | 带宽下限 | 过窄峰噪声 |
+| `kde_max_bw` | float | 0.08 | 带宽上限（≤0 关闭）；打断全历史/扩窗过平滑 | 近端峰保留 |
+| `kde_expand_factor_decay` | float | 0.85 | 扩窗每步对 factor 乘该衰减 | 扩窗平滑循环 |
 | `kde_grid_points` | int | 200 | 密度评估网格点数（≥50） | 峰检测精度 |
 | `min_rr_to_resistance` | float | 1.5 | 上行空间/下行空间最低盈亏比 | 结构过滤 |
 
@@ -222,7 +225,7 @@ Z 的分子为 \(R_t-\mu_t\)，分母为 \(\sigma_t\)（总体方差口径，除
 
 1. 使用评估日前近 `lookback_days`（默认 250）根 close、volume；样本数 &lt; 20 → KDE 失败  
 2. `evaluate_in_sector` 在计算前强制截断，避免追溯全历史重算把远古波动计入带宽  
-3. \(\mathrm{bw} = \max(0.01,\ \mathrm{kde\_base\_factor}\cdot \sigma/\mu)\)  
+3. \(\mathrm{bw} = \mathrm{clamp}(\mathrm{kde\_base\_factor}\cdot \sigma/\mu,\ \mathrm{kde\_min\_bw},\ \mathrm{kde\_max\_bw})\)（默认上限 0.08；扩窗时另将 factor 乘 `kde_expand_factor_decay`^步数）  
 4. `scipy.stats.gaussian_kde`（优先 `weights`；不可用则直方图回退）  
 5. 低于现价的峰 → 支撑；不低于现价的峰 → 阻力
 

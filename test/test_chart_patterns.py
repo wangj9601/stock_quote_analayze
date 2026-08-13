@@ -33,6 +33,7 @@ from backend_core.analysis.chart_patterns.triangles import detect_triangles
 from backend_core.analysis.chart_patterns.wedges_flags import (
     detect_wedges,
     wedge_endpoints_direction_ok,
+    wedge_slopes_converging,
 )
 
 
@@ -407,7 +408,45 @@ def test_detect_wedges_accepts_declining_endpoints():
     lows = [p for p in hits[0]["pivots"] if p.get("role") == "low"]
     assert len(highs) == 3 and len(lows) == 3
     assert highs[-1]["price"] <= highs[0]["price"] * (1 + WEDGE_ENDPOINT_REL_EPS)
+    kl = hits[0]["key_levels"]
+    assert wedge_slopes_converging(
+        kl["upper_slope"], kl["lower_slope"], falling=True
+    )
 
+
+def test_detect_wedges_rejects_diverging_slopes():
+    """端点下行且宽度略收敛，但 |下沿斜率| > |上沿|（发散）→ 不报下降楔形。"""
+    bars = _bars_from_closes([9.0] * 45)
+    # 不等距枢轴：端点宽度收敛，但 linreg 下沿更陡（发散）
+    pivots = [
+        {"kind": "high", "price": 11.5, "index": 5, "date": "2024-01-05"},
+        {"kind": "low", "price": 8.0, "index": 8, "date": "2024-01-08"},
+        {"kind": "high", "price": 10.5, "index": 10, "date": "2024-01-10"},
+        {"kind": "low", "price": 6.5, "index": 20, "date": "2024-01-20"},
+        {"kind": "high", "price": 10.0, "index": 30, "date": "2024-01-30"},
+        {"kind": "low", "price": 6.8, "index": 28, "date": "2024-01-28"},
+    ]
+    from backend_core.analysis.chart_patterns.pivots import linreg_slope
+
+    hi = [p for p in pivots if p["kind"] == "high"]
+    lo = [p for p in pivots if p["kind"] == "low"]
+    hs = linreg_slope([float(p["index"]) for p in hi], [float(p["price"]) for p in hi])
+    ls = linreg_slope([float(p["index"]) for p in lo], [float(p["price"]) for p in lo])
+    assert hs is not None and ls is not None
+    assert hs < 0 and ls < 0
+    assert abs(ls) > abs(hs)
+    assert wedge_slopes_converging(hs, ls, falling=True) is False
+    first_w = abs(hi[0]["price"] - lo[0]["price"])
+    last_w = abs(hi[-1]["price"] - lo[-1]["price"])
+    assert last_w < first_w * 0.95  # 宽度条件仍满足，仅斜率发散应拒绝
+    assert detect_wedges(bars, pivots) == []
+
+
+def test_wedge_slopes_converging_rising():
+    assert wedge_slopes_converging(0.05, 0.12, falling=False) is True
+    assert wedge_slopes_converging(0.12, 0.05, falling=False) is False
+    assert wedge_slopes_converging(-0.12, -0.05, falling=True) is True
+    assert wedge_slopes_converging(-0.05, -0.12, falling=True) is False
 
 
 def test_scan_limits_constants():

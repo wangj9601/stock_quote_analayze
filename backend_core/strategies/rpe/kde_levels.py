@@ -12,6 +12,23 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
+# 支撑缺失时回看递推：250 → 500 → 750（约 3 年交易日）
+KDE_LOOKBACK_STEP = 250
+KDE_LOOKBACK_MAX = 750
+# 带宽：min_bw ≤ factor·(σ/μ) ≤ max_bw；扩窗时对 factor 乘 decay，打断「抹平→扩窗→更平滑」
+KDE_MIN_BW = 0.01
+KDE_MAX_BW = 0.08
+KDE_EXPAND_FACTOR_DECAY = 0.85
+
+
+def _clamp_bw(raw_bw: float, *, min_bw: float, max_bw: float) -> float:
+    bw = float(raw_bw)
+    lo = max(0.0, float(min_bw))
+    hi = float(max_bw)
+    if hi > 0:
+        bw = min(bw, hi)
+    return max(bw, lo) if lo > 0 else max(bw, 0.0)
+
 
 def _safe_peaks(y: Sequence[float], x: Sequence[float], *, prominence_ratio: float = 0.05) -> List[float]:
     try:
@@ -97,10 +114,14 @@ def extract_kde_levels(
     *,
     base_factor: float = 1.0,
     grid_points: int = 200,
+    min_bw: float = KDE_MIN_BW,
+    max_bw: float = KDE_MAX_BW,
 ) -> Dict[str, Any]:
     """
     以成交量为权重对价格做 gaussian_kde，提取密度峰作为结构坐标。
     返回 support_levels（低于现价）、resistance_levels（高于现价）。
+
+    带宽：``bw = clamp(base_factor * σ/μ, min_bw, max_bw)``（max_bw≤0 表示不设上限）。
     """
     pairs: List[Tuple[float, float]] = []
     for c, v in zip(closes, volumes):
@@ -138,8 +159,8 @@ def extract_kde_levels(
             "reason": "bad_stats",
         }
 
-    bw = float(base_factor) * (sigma / mu)
-    bw = max(bw, 0.01)
+    raw_bw = float(base_factor) * (sigma / mu)
+    bw = _clamp_bw(raw_bw, min_bw=min_bw, max_bw=max_bw)
     method = "scipy"
     peaks: List[float] = []
 
@@ -191,10 +212,14 @@ def extract_kde_levels(
         "resistance_levels": resistances[:8],
         "all_peaks": peaks,
         "bw": bw,
+        "bw_raw": raw_bw,
         "ok": True,
         "reason": reason,
         "last_price": last_price,
         "method": method,
+        "base_factor": float(base_factor),
+        "min_bw": float(min_bw),
+        "max_bw": float(max_bw),
     }
 
 
@@ -216,11 +241,6 @@ def nearest_levels(
     return {"nearest_support": nearest_support, "nearest_resistance": nearest_resistance}
 
 
-# 支撑缺失时回看递推：250 → 500 → 750（约 3 年交易日）
-KDE_LOOKBACK_STEP = 250
-KDE_LOOKBACK_MAX = 750
-
-
 def _split_peaks_by_price(
     peaks: Sequence[float], price: float
 ) -> Tuple[List[float], List[float]]:
@@ -239,10 +259,16 @@ def extract_kde_levels_expand_support(
     max_lookback: int = KDE_LOOKBACK_MAX,
     base_factor: float = 1.0,
     grid_points: int = 200,
+    min_bw: float = KDE_MIN_BW,
+    max_bw: float = KDE_MAX_BW,
+    expand_factor_decay: float = KDE_EXPAND_FACTOR_DECAY,
 ) -> Dict[str, Any]:
     """
     用近端窗口做成交量加权 KDE；若现价下方无支撑峰，则按 step 扩大回看，
     直至找到支撑或达到 max_lookback（默认 750≈3 年）。
+
+    扩窗时 ``effective_factor = base_factor * expand_factor_decay ** expand_steps``，
+    并受 ``max_bw`` 上限约束，避免窗口变大后带宽膨胀抹掉近端峰。
 
     closes/volumes 须按时间升序；函数内部只取末尾窗口，不会超过传入长度。
     """
@@ -271,16 +297,29 @@ def extract_kde_levels_expand_support(
     init_lb = max(20, int(initial_lookback))
     max_lb = max(init_lb, int(max_lookback))
     step_n = max(1, int(step))
+    decay = float(expand_factor_decay)
+    if decay <= 0 or decay > 1.0:
+        decay = 1.0
 
     last: Dict[str, Any] = empty
     used = init_lb
+    expand_steps = 0
     while True:
         take = min(used, n)
+        # 仅在相对初始窗已扩步时衰减；同窗重复不算步
+        if take > min(init_lb, n):
+            # expand_steps = 已完成的扩窗次数（250→500 为 1）
+            expand_steps = max(1, int(round((take - min(init_lb, n)) / float(step_n))))
+        else:
+            expand_steps = 0
+        eff_factor = float(base_factor) * (decay ** expand_steps)
         kde = extract_kde_levels(
             list(closes[-take:]),
             list(volumes[-take:]),
-            base_factor=base_factor,
+            base_factor=eff_factor,
             grid_points=grid_points,
+            min_bw=min_bw,
+            max_bw=max_bw,
         )
         peaks = [float(p) for p in (kde.get("all_peaks") or []) if p is not None]
         supports, resistances = _split_peaks_by_price(peaks, ref_price)
@@ -291,6 +330,10 @@ def extract_kde_levels_expand_support(
         out["lookback_used"] = take
         out["lookback_expanded"] = take > min(init_lb, n)
         out["last_price"] = ref_price
+        out["base_factor"] = float(base_factor)
+        out["effective_base_factor"] = eff_factor
+        out["expand_factor_decay"] = decay
+        out["expand_steps"] = expand_steps
         last = out
 
         if supports:

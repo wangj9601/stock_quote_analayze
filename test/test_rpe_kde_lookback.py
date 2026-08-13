@@ -14,16 +14,20 @@ def test_bars_for_lookback_keeps_tail():
 
 
 def test_full_history_inflates_bw_vs_lookback_window():
-    """全历史含早期低价时带宽更大；截断 lookback 后带宽下降（与天赐材料案例同机制）。"""
+    """全历史含早期低价时 raw 带宽更大；截断 lookback 后下降；clamp 后不超过 max_bw。"""
     closes = [8.0 + (i % 3) * 0.1 for i in range(2800)]
     closes += [40.0 + (i % 5) * 0.4 for i in range(200)]
     closes += [35.0] * 5
     volumes = [1_000_000.0] * len(closes)
 
-    full = extract_kde_levels(closes, volumes, base_factor=1.0)
-    short = extract_kde_levels(closes[-250:], volumes[-250:], base_factor=1.0)
+    full = extract_kde_levels(closes, volumes, base_factor=1.0, max_bw=0.08)
+    short = extract_kde_levels(closes[-250:], volumes[-250:], base_factor=1.0, max_bw=0.08)
     assert full.get("ok") and short.get("ok")
-    assert float(full["bw"]) > float(short["bw"])
+    assert float(full.get("bw_raw") or 0) > float(short.get("bw_raw") or 0)
+    assert float(full["bw"]) <= 0.08 + 1e-12
+    assert float(short["bw"]) <= 0.08 + 1e-12
+    # 触顶后仍不低于短窗有效带宽
+    assert float(full["bw"]) >= float(short["bw"]) - 1e-12
 
 
 def test_clipping_matches_evaluate_lookback_helper():

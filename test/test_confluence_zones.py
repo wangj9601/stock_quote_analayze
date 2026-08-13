@@ -157,6 +157,65 @@ def test_near_dense_support_becomes_nearest_despite_far_strong_zones():
     assert zones["params"]["near_pct"] == 0.03
 
 
+def test_display_supports_sorted_by_center_desc_after_near_fallback():
+    """TopN∪近端兜底合并后，支撑应按 center 降序（近现价=支撑1），价格单调。"""
+    px = 100.0
+    far_pts = []
+    for center, src_prefix in ((80.0, "farA"), (70.0, "farB"), (60.0, "farC")):
+        for i, src in enumerate(("kde", "vp", "fib", "pivot")):
+            far_pts.append(
+                {
+                    "price": center + i * 0.05,
+                    "weight": 3.0,
+                    "source": f"{src_prefix}_{src}",
+                    "label": f"{src_prefix}_{i}",
+                }
+            )
+    near_pts = [
+        {"price": 97.9, "weight": 0.5, "source": "cam", "label": "cam_s1"},
+        {"price": 98.0, "weight": 0.5, "source": "atr", "label": "atr_s1"},
+        {"price": 98.1, "weight": 0.5, "source": "piv", "label": "piv_s1"},
+    ]
+    # 压力侧：远端高强度 + 近端弱带
+    far_r = []
+    for center, src_prefix in ((120.0, "farRA"), (130.0, "farRB"), (140.0, "farRC")):
+        for i, src in enumerate(("kde", "vp", "fib", "pivot")):
+            far_r.append(
+                {
+                    "price": center + i * 0.05,
+                    "weight": 3.0,
+                    "source": f"{src_prefix}_{src}",
+                    "label": f"{src_prefix}_{i}",
+                }
+            )
+    near_r = [
+        {"price": 101.9, "weight": 0.5, "source": "camr", "label": "cam_r1"},
+        {"price": 102.0, "weight": 0.5, "source": "atrr", "label": "atr_r1"},
+        {"price": 102.1, "weight": 0.5, "source": "pivr", "label": "piv_r1"},
+    ]
+    zones = build_confluence_zones(
+        far_pts + near_pts + far_r + near_r,
+        last_close=px,
+        atr=1.0,
+        max_each=3,
+        near_pct=0.03,
+        near_min_sources=2,
+        near_min_points=3,
+    )
+    assert zones["ok"] is True
+    supports = zones["supports"]
+    resistances = zones["resistances"]
+    assert len(supports) >= 2
+    centers_s = [s["center"] for s in supports]
+    assert centers_s == sorted(centers_s, reverse=True)
+    # 近端弱带应排在支撑1（价最高），而非按强度落到末尾
+    assert abs(supports[0]["center"] - 98.0) < 1.0
+    assert len(resistances) >= 2
+    centers_r = [r["center"] for r in resistances]
+    assert centers_r == sorted(centers_r)
+    assert abs(resistances[0]["center"] - 102.0) < 1.0
+
+
 def test_near_fallback_disabled_when_near_pct_zero():
     """near_pct=0 时不做近端兜底，nearest 退回 TopN 内最近。"""
     px = 100.0
@@ -190,3 +249,48 @@ def test_near_fallback_disabled_when_near_pct_zero():
     assert nearest is not None
     # 无兜底时 Top3 全是远端，nearest 约在 80
     assert nearest["center"] < 90.0
+
+
+def test_wide_cluster_split_by_max_zone_width():
+    """链式 eps 合并出约 10% 宽簇时，应按 max_zone_width_pct 拆带，禁止单条宽支撑顶到现价。"""
+    px = 100.0
+    # 90→99 每隔约 1 元，eps≈max(0.35, 1.2)=1.2 → 链式并成一簇，跨度约 10%
+    pts = [
+        {
+            "price": float(90 + i),
+            "weight": 1.0,
+            "source": f"src{i % 4}",
+            "label": f"lv{i}",
+        }
+        for i in range(10)
+    ]
+    fat = build_confluence_zones(
+        pts, last_close=px, atr=1.0, max_zone_width_pct=0.0, max_each=5
+    )
+    assert fat["ok"] is True
+    # 关闭带宽上限时应出现跨度很大的支撑（约 90→99，相对中心 ~10%）
+    wide = [
+        s
+        for s in fat["supports"]
+        if s["low"] <= 91.0
+        and (s["high"] - s["low"]) / max(abs(s["center"]), 1e-9) >= 0.08
+    ]
+    assert len(wide) >= 1
+    assert any(s["high"] >= 98.5 for s in wide)
+
+    out = build_confluence_zones(
+        pts, last_close=px, atr=1.0, max_zone_width_pct=0.025, max_each=5
+    )
+    assert out["ok"] is True
+    assert out["params"]["max_zone_width_pct"] == 0.025
+    # 不得再出现「上沿≈现价且跨度约 10%」的单条宽支撑
+    for s in out["supports"]:
+        width_pct = (s["high"] - s["low"]) / max(abs(s["center"]), 1e-9)
+        assert not (
+            s["low"] <= 91.0 and s["high"] >= px - 0.5 and width_pct >= 0.08
+        )
+        assert width_pct <= 0.025 + 1e-3
+    assert any(z.get("split_from_wide_cluster") for z in out["supports"])
+    nearest = out["nearest_support_zone"]
+    assert nearest is not None
+    assert nearest["center"] > 90.0

@@ -93,6 +93,9 @@ class RPEStrategyEngine:
             max_lookback=kde_max,
             base_factor=float(cfg.get("kde_base_factor", 1.0)),
             grid_points=int(cfg.get("kde_grid_points", 200)),
+            min_bw=float(cfg.get("kde_min_bw", 0.01)),
+            max_bw=float(cfg.get("kde_max_bw", 0.08)),
+            expand_factor_decay=float(cfg.get("kde_expand_factor_decay", 0.85)),
         )
         near = nearest_levels(price, kde.get("support_levels") or [], kde.get("resistance_levels") or [])
         struct = structure_filter(
@@ -238,6 +241,9 @@ class RPEStrategyEngine:
                     "enable_trend_veto": enable_veto,
                     "enable_lead_trade": enable_lead_trade,
                     "kde_base_factor": float(cfg.get("kde_base_factor", 1.0)),
+                    "kde_min_bw": float(cfg.get("kde_min_bw", 0.01)),
+                    "kde_max_bw": float(cfg.get("kde_max_bw", 0.08)),
+                    "kde_expand_factor_decay": float(cfg.get("kde_expand_factor_decay", 0.85)),
                     "kde_lookback_step": int(cfg.get("kde_lookback_step", 250)),
                     "kde_lookback_max": kde_max,
                     "sector_slope_window": int(cfg.get("sector_slope_window", 60)),

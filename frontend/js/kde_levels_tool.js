@@ -253,8 +253,15 @@ const KdeLevelsTool = {
             });
         }
         const confRows = [];
-        const pushZones = (arr, tag) => {
-            (arr || []).forEach((z, i) => {
+        // 支撑：center 降序（近现价=支撑1）；压力：center 升序（近现价=压力1）
+        const pushZones = (arr, tag, desc) => {
+            const sorted = (arr || []).slice().sort((a, b) => {
+                const ca = Number(a && a.center);
+                const cb = Number(b && b.center);
+                if (!Number.isFinite(ca) || !Number.isFinite(cb)) return 0;
+                return desc ? cb - ca : ca - cb;
+            });
+            sorted.forEach((z, i) => {
                 confRows.push({
                     label: `${tag}${i + 1}·强度${z.strength != null ? z.strength : '--'}·${(z.sources || []).join('+')}`,
                     price: z.center,
@@ -262,8 +269,8 @@ const KdeLevelsTool = {
             });
         };
         if (conf && conf.ok) {
-            pushZones(conf.supports, '支撑');
-            pushZones(conf.resistances, '压力');
+            pushZones(conf.supports, '支撑', true);
+            pushZones(conf.resistances, '压力', false);
         }
         const nzS = conf && conf.nearest_support_zone;
         const nzR = conf && conf.nearest_resistance_zone;
@@ -1071,8 +1078,15 @@ const KdeLevelsTool = {
                 : '--';
         }
         const confRows = [];
-        const pushZones = (arr, tag) => {
-            (arr || []).forEach((z, i) => {
+        // 支撑：center 降序（近现价=支撑1）；压力：center 升序（近现价=压力1）
+        const pushZones = (arr, tag, desc) => {
+            const sorted = (arr || []).slice().sort((a, b) => {
+                const ca = Number(a && a.center);
+                const cb = Number(b && b.center);
+                if (!Number.isFinite(ca) || !Number.isFinite(cb)) return 0;
+                return desc ? cb - ca : ca - cb;
+            });
+            sorted.forEach((z, i) => {
                 confRows.push({
                     label: `${tag}${i + 1}·强度${z.strength != null ? z.strength : '--'}·${(z.sources || []).join('+')}`,
                     price: z.center,
@@ -1080,8 +1094,8 @@ const KdeLevelsTool = {
             });
         };
         if (conf && conf.ok) {
-            pushZones(conf.supports, '支撑');
-            pushZones(conf.resistances, '压力');
+            pushZones(conf.supports, '支撑', true);
+            pushZones(conf.resistances, '压力', false);
         }
         fillLabeledList(confList, confRows);
 
