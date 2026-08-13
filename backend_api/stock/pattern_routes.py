@@ -248,7 +248,10 @@ async def patterns_for_stock(
     hits = [h for h in hits_all if str(h.get("status") or "") != "invalidated"]
 
     vp, confluence, rpe = _tactical_enrichment(db, bars, stock_code, asof_s)
-    from backend_core.analysis.pattern_tactical import build_pattern_tactical
+    from backend_core.analysis.pattern_tactical import (
+        build_pattern_tactical,
+        market_snapshot_from_bars,
+    )
 
     tactical = build_pattern_tactical(
         hits_all,
@@ -256,6 +259,8 @@ async def patterns_for_stock(
         vp=vp,
         rpe=rpe,
         invalidated_count=invalidated_count,
+        asof=asof_s,
+        market=market_snapshot_from_bars(bars),
     )
 
     payload: Dict[str, Any] = {

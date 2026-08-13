@@ -243,3 +243,84 @@ def test_forming_without_pressure_is_range():
     out = build_pattern_tactical(hits)
     assert out["short_bias"] == "震荡"
     assert out["grade"] == "base"
+
+
+def test_archived_double_top_near_neck_is_range_not_bear():
+    """600722 类：归档双顶贴颈回攻 → 震荡/逼近压力，不得结构破位看空。"""
+    hits = [
+        _hit(
+            "double_bottom",
+            "archived",
+            neckline=8.65,
+            lower=7.75,
+            last_close=12.52,
+            confidence=0.72,
+            formed_at="2026-07-20",
+        ),
+        _hit(
+            "double_top",
+            "archived",
+            neckline=12.59,
+            upper=14.80,
+            last_close=12.52,
+            confidence=0.72,
+            formed_at="2026-05-13",
+        ),
+    ]
+    vp = {
+        "ok": True,
+        "vah": 11.49,
+        "last_close": 12.52,
+        "nearest_resistance": None,
+        "resistance_note": "已突破60日VAH(11.49)，上方无60日筹码压制",
+    }
+    market = {"change_pct": 0.0556, "volume_ratio": 3.2}
+    out = build_pattern_tactical(
+        hits, vp=vp, market=market, asof="2026-08-13", invalidated_count=0
+    )
+    assert out["short_bias"] == "震荡"
+    assert out["bias_label"] in ("逼近压力", "蓄势夹击")
+    assert "破位" not in (out.get("rationale") or "") or "而非结构破位" in (
+        out.get("rationale") or ""
+    )
+    assert out["short_bias"] != "看空"
+    assert out["buy_hints"]  # P3 保留观察锚
+
+
+def test_archived_double_top_deep_break_is_bear():
+    """归档双顶且相对颈线深破 ≥3% → 旁路看空。"""
+    hits = [
+        _hit(
+            "double_top",
+            "archived",
+            neckline=20.0,
+            upper=22.0,
+            last_close=18.0,  # 深破 10%
+            confidence=0.72,
+            formed_at="2026-07-01",
+        )
+    ]
+    out = build_pattern_tactical(hits, asof="2026-07-20")
+    assert out["short_bias"] == "看空"
+    assert out["bias_label"] == "结构破位"
+    assert out["buy_hints"] == []
+    assert out["risk_note"]
+
+
+def test_momentum_vetoes_archived_bear_bypass():
+    """深破本可看空，但放量长阳否决 → 震荡。"""
+    hits = [
+        _hit(
+            "double_top",
+            "archived",
+            neckline=20.0,
+            upper=22.0,
+            last_close=18.0,
+            confidence=0.72,
+            formed_at="2026-07-01",
+        )
+    ]
+    market = {"change_pct": 0.06, "volume_ratio": 2.5}
+    out = build_pattern_tactical(hits, market=market, asof="2026-07-20")
+    assert out["short_bias"] == "震荡"
+    assert "否决" in (out.get("rationale") or "") or "长阳" in (out.get("rationale") or "")

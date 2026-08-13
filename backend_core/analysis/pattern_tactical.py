@@ -58,6 +58,16 @@ _BIAS_LABEL = {
     "insufficient": "信息不足",
 }
 
+# 旁路：归档空头「仍在颈线下」收紧（600722：贴颈回攻≠结构破位）
+BYPASS_BEAR_NEAR_PCT = 0.015  # 距颈线 ≤1.5% → 逼近压力（震荡），不看空
+BYPASS_BEAR_DEEP_PCT = 0.03  # 至少深破 3% 才允许旁路看空
+BYPASS_BEAR_STALE_DAYS = 90  # 形成日距 asof 超过该日历日 → 陈旧
+BYPASS_BEAR_STALE_DEEP_PCT = 0.08  # 陈旧归档空头须更深破才看空
+# 放量长阳：否决旁路看空 → 震荡
+MOMENTUM_UP_PCT = 0.04
+MOMENTUM_VOL_RATIO = 1.8
+MOMENTUM_UP_PCT_STRONG = 0.055  # 单日涨幅足够大时可只靠涨幅否决
+
 
 def _f(v: Any) -> Optional[float]:
     try:
@@ -181,21 +191,107 @@ def _reason_downside_invalidate(h: Dict[str, Any]) -> bool:
     return False
 
 
+def _hit_formed_at(h: Dict[str, Any]) -> str:
+    return str(h.get("formed_at") or h.get("confirm_date") or "")[:10]
+
+
+def _calendar_days_between(a: str, b: str) -> Optional[int]:
+    """两日期间隔（日历日）；解析失败返回 None。"""
+    if not a or not b:
+        return None
+    try:
+        from datetime import date
+
+        d0 = date.fromisoformat(str(a)[:10])
+        d1 = date.fromisoformat(str(b)[:10])
+        return abs((d1 - d0).days)
+    except ValueError:
+        return None
+
+
+def _neck_gap_pct_below(close: float, neck: float) -> Optional[float]:
+    """现价在颈线下方的相对距离 (neck-close)/neck；上方则 None。"""
+    if neck is None or neck <= 0 or close is None:
+        return None
+    if close >= neck:
+        return None
+    return (neck - close) / neck
+
+
+def _is_stale_archive(h: Dict[str, Any], asof: Optional[str]) -> bool:
+    formed = _hit_formed_at(h)
+    days = _calendar_days_between(formed, str(asof or "")[:10])
+    if days is None:
+        return False
+    return days >= int(BYPASS_BEAR_STALE_DAYS)
+
+
+def _strong_up_momentum(market: Optional[Dict[str, Any]]) -> bool:
+    """放量长阳：否决旁路看空。"""
+    if not isinstance(market, dict):
+        return False
+    chg = _f(market.get("change_pct"))
+    vol_r = _f(market.get("volume_ratio"))
+    if chg is None or chg < float(MOMENTUM_UP_PCT):
+        return False
+    if chg >= float(MOMENTUM_UP_PCT_STRONG):
+        return True
+    return vol_r is not None and vol_r >= float(MOMENTUM_VOL_RATIO)
+
+
+def market_snapshot_from_bars(bars: Optional[Sequence[Dict[str, Any]]]) -> Dict[str, Any]:
+    """从日线末两根推算涨跌幅与量比（相对前 20 日均量）。"""
+    seq = [b for b in (bars or []) if isinstance(b, dict)]
+    out: Dict[str, Any] = {
+        "change_pct": None,
+        "volume_ratio": None,
+        "last_close": None,
+    }
+    if len(seq) < 2:
+        return out
+    c0 = _f(seq[-1].get("close"))
+    c1 = _f(seq[-2].get("close"))
+    out["last_close"] = c0
+    if c0 is not None and c1 is not None and c1 > 0:
+        out["change_pct"] = round((c0 - c1) / c1, 6)
+    vols: List[float] = []
+    for b in seq[-21:-1]:
+        v = _f(b.get("volume"))
+        if v is not None and v > 0:
+            vols.append(v)
+    v_last = _f(seq[-1].get("volume"))
+    if v_last is not None and vols:
+        avg = sum(vols) / len(vols)
+        if avg > 0:
+            out["volume_ratio"] = round(v_last / avg, 4)
+    return out
+
+
 def _inactive_bypass(
     hits: Optional[Sequence[Dict[str, Any]]],
-) -> Tuple[Optional[str], Optional[Dict[str, Any]], str]:
+    *,
+    asof: Optional[str] = None,
+    market: Optional[Dict[str, Any]] = None,
+    vp: Optional[Dict[str, Any]] = None,
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], str, Optional[str]]:
     """无活跃命中时的结构旁路。
 
-    返回 (short_bias|None, primary_for_hints, rationale_bit)。
+    返回 (short_bias|None, primary_for_hints, rationale_bit, bias_label_override|None)。
+
     - 空头形态向上失效 → 看多
     - 多头形态向下失效 → 看空
     - 归档多头且现价仍在颈线上方 → 看多（测幅兑现后的趋势延伸）
-    - 归档空头且现价仍在颈线下方 → 看空
+    - 归档空头：须深破颈线才看空；贴颈/陈旧回攻 → 震荡（逼近压力）
+    - 旁路冲突：按形成日新旧择主；接近则震荡
+    - 放量长阳 / 破 VAH 贴颈：否决旁路看空 → 震荡
     """
     bull_cand: Optional[Dict[str, Any]] = None
     bear_cand: Optional[Dict[str, Any]] = None
+    range_cand: Optional[Dict[str, Any]] = None
     bull_why = ""
     bear_why = ""
+    range_why = ""
+    range_label: Optional[str] = None
 
     for h in hits or []:
         if not isinstance(h, dict):
@@ -232,29 +328,141 @@ def _inactive_bypass(
                     bull_cand = h
                     bull_why = f"「{lab}」已测幅归档且现价仍在颈线上方，趋势延伸看多"
         elif st == "archived" and t in BEARISH_REVERSAL:
-            if (
-                close is not None
-                and neck is not None
-                and neck > 0
-                and close < neck * BREAKOUT_DOWN_MULT
-            ):
-                if bear_cand is None or float(h.get("confidence") or 0) >= float(
-                    bear_cand.get("confidence") or 0
+            if close is None or neck is None or neck <= 0:
+                continue
+            # 已站上颈线：空头旁路不成立
+            if close >= neck * BREAKOUT_UP_MULT:
+                continue
+            if close >= neck * BREAKOUT_DOWN_MULT:
+                # 极贴颈线上方缓冲区：不算深破
+                gap = 0.0
+            else:
+                gap = _neck_gap_pct_below(close, neck)
+                if gap is None:
+                    continue
+            stale = _is_stale_archive(h, asof)
+            # 贴颈 / 浅破 → 逼近压力（震荡）
+            if gap is not None and gap <= float(BYPASS_BEAR_NEAR_PCT):
+                if range_cand is None or float(h.get("confidence") or 0) >= float(
+                    range_cand.get("confidence") or 0
                 ):
-                    bear_cand = h
-                    bear_why = f"「{lab}」已测幅归档且现价仍在颈线下方，趋势延伸看空"
+                    range_cand = h
+                    range_why = (
+                        f"「{lab}」已归档，现价贴近颈线 {neck:.2f}（下方约 {gap*100:.1f}%），"
+                        f"属回攻压力而非结构破位"
+                    )
+                    range_label = "逼近压力"
+                continue
+            # 浅破但未达深破阈值 → 观望震荡
+            if gap is not None and gap < float(BYPASS_BEAR_DEEP_PCT):
+                if range_cand is None or float(h.get("confidence") or 0) >= float(
+                    range_cand.get("confidence") or 0
+                ):
+                    range_cand = h
+                    range_why = (
+                        f"「{lab}」已归档，现价未有效深破颈线 {neck:.2f}，"
+                        f"观望站稳/失守，不作破位看空"
+                    )
+                    range_label = "逼近压力"
+                continue
+            # 深破：陈旧须更苛刻
+            need = float(BYPASS_BEAR_STALE_DEEP_PCT) if stale else float(BYPASS_BEAR_DEEP_PCT)
+            if gap is not None and gap < need:
+                if range_cand is None or float(h.get("confidence") or 0) >= float(
+                    range_cand.get("confidence") or 0
+                ):
+                    range_cand = h
+                    range_why = (
+                        f"「{lab}」归档已久，深破幅度不足（相对颈线 {gap*100:.1f}%），"
+                        f"降权为观望"
+                    )
+                    range_label = "逼近压力"
+                continue
+            if bear_cand is None or float(h.get("confidence") or 0) >= float(
+                bear_cand.get("confidence") or 0
+            ):
+                bear_cand = h
+                bear_why = (
+                    f"「{lab}」已归档且现价相对颈线深破约 {(gap or 0)*100:.1f}%，"
+                    f"旁路结构破位看空"
+                )
 
-    # 旁路冲突时优先看空（防守优先）；否则看多
+    def _pick_conflict() -> Tuple[Optional[str], Optional[Dict[str, Any]], str, Optional[str]]:
+        """多空旁路并存：较新形成日优先；接近则震荡。"""
+        assert bull_cand is not None and bear_cand is not None
+        bf = _hit_formed_at(bear_cand)
+        uf = _hit_formed_at(bull_cand)
+        bc = float(bear_cand.get("confidence") or 0)
+        uc = float(bull_cand.get("confidence") or 0)
+        if uf and bf and uf != bf:
+            if uf > bf:
+                return "看多", bull_cand, bull_why + "（旁路冲突取较新多头）", None
+            return "看空", bear_cand, bear_why + "（旁路冲突取较新空头）", None
+        if abs(bc - uc) >= float(RANK_CONF_TIE_EPS):
+            if uc > bc:
+                return "看多", bull_cand, bull_why + "（旁路冲突取更高置信多头）", None
+            return "看空", bear_cand, bear_why + "（旁路冲突取更高置信空头）", None
+        # 交织 → 震荡；锚取距现价更近的颈线
+        c_b = _hit_close(bear_cand) or _hit_close(bull_cand)
+        n_b, n_u = _hit_neck(bear_cand), _hit_neck(bull_cand)
+        primary = bear_cand
+        if c_b is not None and n_b is not None and n_u is not None:
+            if abs(c_b - n_u) < abs(c_b - n_b):
+                primary = bull_cand
+        why = f"旁路多空交织（{bull_why}；{bear_why}），改震荡观望"
+        return "震荡", primary, why, "蓄势夹击"
+
+    chosen: Tuple[Optional[str], Optional[Dict[str, Any]], str, Optional[str]]
     if bear_cand is not None and bull_cand is not None:
-        # 同日既有空头上破又有多头下破极少见；取置信更高者
-        if float(bear_cand.get("confidence") or 0) >= float(bull_cand.get("confidence") or 0):
-            return "看空", bear_cand, bear_why
-        return "看多", bull_cand, bull_why
-    if bear_cand is not None:
-        return "看空", bear_cand, bear_why
-    if bull_cand is not None:
-        return "看多", bull_cand, bull_why
-    return None, None, ""
+        chosen = _pick_conflict()
+    elif bear_cand is not None:
+        chosen = ("看空", bear_cand, bear_why, None)
+    elif bull_cand is not None and range_cand is not None:
+        # P2：远端归档多头延伸 vs 近端归档空头贴颈压力 → 震荡（不以趋势延伸盖过遇压）
+        chosen = (
+            "震荡",
+            range_cand,
+            f"{range_why}；另有{bull_why}，近端压力优先故改震荡",
+            range_label or "逼近压力",
+        )
+    elif bull_cand is not None:
+        chosen = ("看多", bull_cand, bull_why, None)
+    elif range_cand is not None:
+        chosen = ("震荡", range_cand, range_why, range_label or "逼近压力")
+    else:
+        return None, None, "", None
+
+    bias, hit, why, label_ov = chosen
+
+    # P1：放量长阳否决旁路看空
+    if bias == "看空" and hit is not None and _strong_up_momentum(market):
+        chg = _f((market or {}).get("change_pct"))
+        vol_r = _f((market or {}).get("volume_ratio"))
+        bits = []
+        if chg is not None:
+            bits.append(f"日涨幅 {chg*100:.1f}%")
+        if vol_r is not None:
+            bits.append(f"量比 {vol_r:.1f}")
+        why2 = (
+            f"{why}；但出现放量长阳（{'、'.join(bits) or '动量偏强'}），"
+            f"否决破位看空，改为逼近/观望"
+        )
+        return "震荡", hit, why2, "逼近压力"
+
+    # 破 VAH 且仅浅贴颈的看空（兜底）：改震荡
+    if bias == "看空" and hit is not None:
+        close = _hit_close(hit)
+        neck = _hit_neck(hit)
+        gap = _neck_gap_pct_below(close, neck) if close is not None and neck is not None else None
+        if (
+            gap is not None
+            and gap <= float(BYPASS_BEAR_DEEP_PCT)
+            and _vp_break_vah_ok(vp, close)
+        ):
+            why2 = f"{why}；已破VAH且深破不足，筹码真空下改为观望"
+            return "震荡", hit, why2, "逼近压力"
+
+    return bias, hit, why, label_ov
 
 
 def _apply_grade_enhancers(
@@ -495,6 +703,8 @@ def classify_short_bias(
     invalidated_count: int = 0,
     resonance_min_strength: float = RESONANCE_PRESSURE_MIN_STRENGTH,
     z_lead: float = DEFAULT_Z_LEAD,
+    asof: Optional[str] = None,
+    market: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """结构主判定 + 增强证据；返回 short_bias / grade / evidence / rationale 等中间结果。"""
     active = _active_hits(hits)
@@ -502,7 +712,9 @@ def classify_short_bias(
     evidence: List[Dict[str, Any]] = []
 
     if not active:
-        bypass_bias, bypass_hit, bypass_why = _inactive_bypass(hits)
+        bypass_bias, bypass_hit, bypass_why, label_ov = _inactive_bypass(
+            hits, asof=asof, market=market, vp=vp
+        )
         evidence.append(
             {
                 "code": "no_active_hits",
@@ -510,7 +722,7 @@ def classify_short_bias(
                 "invalidated_count": inv_n,
             }
         )
-        if bypass_bias in ("看多", "看空") and bypass_hit is not None:
+        if bypass_bias in ("看多", "看空", "震荡") and bypass_hit is not None:
             evidence.append(
                 {
                     "code": "inactive_bypass",
@@ -521,6 +733,17 @@ def classify_short_bias(
                     "reason": bypass_why,
                 }
             )
+            if isinstance(market, dict) and (
+                market.get("change_pct") is not None or market.get("volume_ratio") is not None
+            ):
+                evidence.append(
+                    {
+                        "code": "momentum_veto_bear",
+                        "ok": bypass_bias == "震荡" and _strong_up_momentum(market),
+                        "change_pct": market.get("change_pct"),
+                        "volume_ratio": market.get("volume_ratio"),
+                    }
+                )
             rationale_bits = [bypass_why]
             conf = float(bypass_hit.get("confidence") or 0.0)
             close = _hit_close(bypass_hit)
@@ -534,9 +757,10 @@ def classify_short_bias(
                 rationale_bits=rationale_bits,
                 evidence=evidence,
             )
+            bias_label = label_ov or _BIAS_LABEL.get(bypass_bias, bypass_bias)
             return {
                 "short_bias": bypass_bias,
-                "bias_label": _BIAS_LABEL.get(bypass_bias, bypass_bias),
+                "bias_label": bias_label,
                 "grade": grade,
                 "confidence": confidence,
                 "rationale": "；".join(rationale_bits),
@@ -773,6 +997,7 @@ def build_buy_hints(
     if short_bias == "insufficient" or primary is None:
         return hints, risk_note
 
+    # 震荡且 bias 场景由 classify 标「逼近压力」时：提示观察颈线站稳，保留近端支撑 watch（P3）
     neck = _hit_neck(primary)
     upper, lower = _hit_bounds(primary)
     defense = _core_defense(primary)
@@ -855,6 +1080,24 @@ def build_buy_hints(
     anchor = lower if lower is not None else nearest_support
     if anchor is None and nearest_support is not None:
         anchor = nearest_support
+    # P3：逼近归档空头颈线时，无下沿也可用颈线作观察锚（不编假买点）
+    if anchor is None and neck is not None:
+        band = max(0.02, abs(neck) * 0.008)
+        hints.append(
+            {
+                "type": "watch",
+                "entry_zone": {
+                    "low": round(neck - band * 2, 2),
+                    "high": round(neck + band, 2),
+                    "anchor": "pattern_neckline",
+                },
+                "trigger": f"观察能否放量站稳颈线 {neck:.2f}；未站稳前不追高",
+                "invalidation": round(neck * BREAKOUT_DOWN_MULT, 2),
+                "target": round(target, 2) if target is not None else None,
+                "priority": 2,
+            }
+        )
+        return hints, None
     if anchor is None:
         return hints, risk_note
     band = max(0.02, abs(anchor) * 0.008)
@@ -887,6 +1130,8 @@ def build_pattern_tactical(
     resonance_min_strength: float = RESONANCE_PRESSURE_MIN_STRENGTH,
     z_lead: float = DEFAULT_Z_LEAD,
     trade_advice: Optional[Dict[str, Any]] = None,
+    asof: Optional[str] = None,
+    market: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """统一出口：short_bias + grade + buy_hints + disclaimer。"""
     classified = classify_short_bias(
@@ -897,6 +1142,8 @@ def build_pattern_tactical(
         invalidated_count=invalidated_count,
         resonance_min_strength=resonance_min_strength,
         z_lead=z_lead,
+        asof=asof,
+        market=market,
     )
     evidence = list(classified.get("evidence") or [])
 
