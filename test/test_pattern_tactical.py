@@ -142,9 +142,59 @@ def test_vp_rpe_only_lift_grade_not_bias():
 
 def test_zero_hits_with_invalidated_count():
     out = build_pattern_tactical([], invalidated_count=3)
-    assert out["short_bias"] in ("震荡", "insufficient")
+    assert out["short_bias"] == "insufficient"
+    assert out["bias_label"] == "信息不足"
     assert out["buy_hints"] == []
     assert any(e.get("code") == "no_active_hits" for e in out["evidence"])
+
+
+def test_bear_flag_upside_invalidate_is_bull():
+    """空头旗形向上脱离失效 → 旁路看多（300534 类场景）。"""
+    hits = [
+        _hit(
+            "double_bottom",
+            "archived",
+            neckline=7.84,
+            lower=7.0,
+            last_close=18.92,
+            confidence=0.72,
+        ),
+        {
+            **_hit(
+                "bear_flag",
+                "invalidated",
+                upper=17.0,
+                lower=15.5,
+                last_close=18.92,
+                confidence=0.65,
+            ),
+            "reason": "失效:收盘已向上脱离通道",
+        },
+    ]
+    vp = {
+        "ok": True,
+        "vah": 15.89,
+        "last_close": 18.92,
+        "nearest_resistance": None,
+        "resistance_note": "已突破60日VAH(15.89)，上方无60日筹码压制",
+    }
+    rpe = {"z_score": 3.22, "signal_type": "领涨观察"}
+    out = build_pattern_tactical(hits, vp=vp, rpe=rpe, invalidated_count=1)
+    assert out["short_bias"] == "看多"
+    assert out["grade"] == "strong"
+    assert any(e.get("code") == "inactive_bypass" and e.get("ok") for e in out["evidence"])
+    assert out["buy_hints"]
+    assert out["buy_hints"][0]["type"] == "watch"
+
+
+def test_only_invalidated_count_no_bypass_is_insufficient():
+    """有失效计数但无旁路证据（未传入失效 hit）→ 信息不足，不是震荡。"""
+    out = build_pattern_tactical(
+        [_hit("double_bottom", "archived", neckline=10.0, lower=8.0, last_close=9.5)],
+        invalidated_count=1,
+    )
+    # 归档双底但现价已跌破颈线 → 不构成看多旁路
+    assert out["short_bias"] == "insufficient"
 
 
 def test_consol_confirmed_up_is_bull():

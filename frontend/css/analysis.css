@@ -2163,6 +2163,12 @@
     color: #92400e;
 }
 
+.pattern-tactical-insufficient {
+    background: #e5e7eb;
+    color: #4b5563;
+    border: 1px dashed #9ca3af;
+}
+
 .pattern-tactical-grade,
 .pattern-tactical-conf {
     margin-left: 0.45rem;

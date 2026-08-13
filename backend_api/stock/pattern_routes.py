@@ -239,15 +239,19 @@ async def patterns_for_stock(
     names = load_names(db, [stock_code])
     type_list = _parse_types(types)
     if len(bars) >= 30:
-        hits, invalidated_count = detect_all_counted(bars, types=type_list or None)
+        # tactical 需要看 invalidated（空头上破失效等旁路）；对外 items 仍默认过滤失效项
+        hits_all, invalidated_count = detect_all_counted(
+            bars, types=type_list or None, include_invalidated=True
+        )
     else:
-        hits, invalidated_count = [], 0
+        hits_all, invalidated_count = [], 0
+    hits = [h for h in hits_all if str(h.get("status") or "") != "invalidated"]
 
     vp, confluence, rpe = _tactical_enrichment(db, bars, stock_code, asof_s)
     from backend_core.analysis.pattern_tactical import build_pattern_tactical
 
     tactical = build_pattern_tactical(
-        hits,
+        hits_all,
         confluence=confluence,
         vp=vp,
         rpe=rpe,

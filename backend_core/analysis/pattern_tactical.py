@@ -129,6 +129,193 @@ def _active_hits(hits: Optional[Sequence[Dict[str, Any]]]) -> List[Dict[str, Any
     return out
 
 
+def _is_bullish_side(bias: str) -> bool:
+    return bias in ("bull", "bullish_bias")
+
+
+def _is_bearish_side(bias: str) -> bool:
+    return bias in ("bear", "bearish_bias")
+
+
+def _reason_upside_invalidate(h: Dict[str, Any]) -> bool:
+    """空头巩固/反转因向上脱离而失效（reason 文案或价位）。"""
+    reason = str(h.get("reason") or "")
+    if "向上脱离" in reason or "向上突破" in reason:
+        return True
+    close = _hit_close(h)
+    upper, _lower = _hit_bounds(h)
+    if close is not None and upper is not None and upper > 0 and close > upper * BREAKOUT_UP_MULT:
+        return True
+    # 空头反转：收盘重新站上颈线 → 失效语义偏多
+    neck = _hit_neck(h)
+    t = str(h.get("pattern_type") or "")
+    if (
+        t in BEARISH_REVERSAL
+        and close is not None
+        and neck is not None
+        and neck > 0
+        and close > neck * BREAKOUT_UP_MULT
+    ):
+        return True
+    return False
+
+
+def _reason_downside_invalidate(h: Dict[str, Any]) -> bool:
+    reason = str(h.get("reason") or "")
+    if "向下脱离" in reason or "向下跌破" in reason:
+        return True
+    close = _hit_close(h)
+    _upper, lower = _hit_bounds(h)
+    if close is not None and lower is not None and lower > 0 and close < lower * BREAKOUT_DOWN_MULT:
+        return True
+    neck = _hit_neck(h)
+    t = str(h.get("pattern_type") or "")
+    if (
+        t in BULLISH_REVERSAL
+        and close is not None
+        and neck is not None
+        and neck > 0
+        and close < neck * BREAKOUT_DOWN_MULT
+    ):
+        return True
+    return False
+
+
+def _inactive_bypass(
+    hits: Optional[Sequence[Dict[str, Any]]],
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], str]:
+    """无活跃命中时的结构旁路。
+
+    返回 (short_bias|None, primary_for_hints, rationale_bit)。
+    - 空头形态向上失效 → 看多
+    - 多头形态向下失效 → 看空
+    - 归档多头且现价仍在颈线上方 → 看多（测幅兑现后的趋势延伸）
+    - 归档空头且现价仍在颈线下方 → 看空
+    """
+    bull_cand: Optional[Dict[str, Any]] = None
+    bear_cand: Optional[Dict[str, Any]] = None
+    bull_why = ""
+    bear_why = ""
+
+    for h in hits or []:
+        if not isinstance(h, dict):
+            continue
+        st = str(h.get("status") or "")
+        t = str(h.get("pattern_type") or "")
+        bias = _bias_of(t)
+        lab = _type_label(t)
+        close = _hit_close(h)
+        neck = _hit_neck(h)
+
+        if st == "invalidated" and _is_bearish_side(bias) and _reason_upside_invalidate(h):
+            if bull_cand is None or float(h.get("confidence") or 0) >= float(
+                bull_cand.get("confidence") or 0
+            ):
+                bull_cand = h
+                bull_why = f"空头形态「{lab}」向上脱离失效，视为突破旁路看多"
+        elif st == "invalidated" and _is_bullish_side(bias) and _reason_downside_invalidate(h):
+            if bear_cand is None or float(h.get("confidence") or 0) >= float(
+                bear_cand.get("confidence") or 0
+            ):
+                bear_cand = h
+                bear_why = f"多头形态「{lab}」向下脱离失效，视为破位旁路看空"
+        elif st == "archived" and t in BULLISH_REVERSAL:
+            if (
+                close is not None
+                and neck is not None
+                and neck > 0
+                and close > neck * BREAKOUT_UP_MULT
+            ):
+                if bull_cand is None or float(h.get("confidence") or 0) >= float(
+                    bull_cand.get("confidence") or 0
+                ):
+                    bull_cand = h
+                    bull_why = f"「{lab}」已测幅归档且现价仍在颈线上方，趋势延伸看多"
+        elif st == "archived" and t in BEARISH_REVERSAL:
+            if (
+                close is not None
+                and neck is not None
+                and neck > 0
+                and close < neck * BREAKOUT_DOWN_MULT
+            ):
+                if bear_cand is None or float(h.get("confidence") or 0) >= float(
+                    bear_cand.get("confidence") or 0
+                ):
+                    bear_cand = h
+                    bear_why = f"「{lab}」已测幅归档且现价仍在颈线下方，趋势延伸看空"
+
+    # 旁路冲突时优先看空（防守优先）；否则看多
+    if bear_cand is not None and bull_cand is not None:
+        # 同日既有空头上破又有多头下破极少见；取置信更高者
+        if float(bear_cand.get("confidence") or 0) >= float(bull_cand.get("confidence") or 0):
+            return "看空", bear_cand, bear_why
+        return "看多", bull_cand, bull_why
+    if bear_cand is not None:
+        return "看空", bear_cand, bear_why
+    if bull_cand is not None:
+        return "看多", bull_cand, bull_why
+    return None, None, ""
+
+
+def _apply_grade_enhancers(
+    *,
+    short_bias: str,
+    conf: float,
+    close: Optional[float],
+    vp: Optional[Dict[str, Any]],
+    rpe: Optional[Dict[str, Any]],
+    z_lead: float,
+    rationale_bits: List[str],
+    evidence: List[Dict[str, Any]],
+) -> Tuple[str, float]:
+    """VP/RPE 只抬 grade/confidence，不改 short_bias。返回 (grade, confidence)。"""
+    vp_ok = _vp_break_vah_ok(vp, close)
+    rpe_ok, z_val = _rpe_lead_ok(rpe, z_lead=float(z_lead))
+    evidence.append(
+        {
+            "code": "vp_break_vah",
+            "ok": vp_ok,
+            "vah": _f(vp.get("vah")) if isinstance(vp, dict) else None,
+            "nearest_resistance": (
+                vp.get("nearest_resistance") if isinstance(vp, dict) else None
+            ),
+        }
+    )
+    evidence.append(
+        {
+            "code": "rpe_lead",
+            "ok": rpe_ok,
+            "z_score": z_val,
+            "z_lead": float(z_lead),
+            "signal_type": (rpe.get("signal_type") if isinstance(rpe, dict) else None),
+        }
+    )
+    enhancers = 0
+    if vp_ok:
+        enhancers += 1
+        rationale_bits.append("已破VAH且上方无近端筹码压制")
+    if rpe_ok:
+        enhancers += 1
+        rationale_bits.append(f"RPE Z≥{float(z_lead):.1f}")
+    if enhancers >= 2:
+        grade = "strong"
+    elif enhancers == 1:
+        grade = "enhanced"
+    else:
+        grade = "base"
+
+    base_c = 0.45 + 0.35 * min(1.0, conf)
+    if short_bias == "看空":
+        base_c = 0.5 + 0.3 * min(1.0, conf)
+    elif short_bias == "震荡":
+        base_c = 0.35 + 0.25 * min(1.0, conf)
+    elif short_bias == "insufficient":
+        base_c = 0.2 + 0.1 * min(1.0, conf)
+    base_c += 0.08 * enhancers
+    confidence = round(max(0.05, min(0.95, base_c)), 3)
+    return grade, confidence
+
+
 def _status_rank(st: str) -> int:
     if st == "confirmed":
         return 2
@@ -315,12 +502,7 @@ def classify_short_bias(
     evidence: List[Dict[str, Any]] = []
 
     if not active:
-        short_bias = "insufficient" if inv_n <= 0 else "震荡"
-        rationale = (
-            f"有效命中 0（另有 {inv_n} 条已失效），信息不足，无进攻买点。"
-            if inv_n > 0
-            else "有效命中 0，暂无结构方向。"
-        )
+        bypass_bias, bypass_hit, bypass_why = _inactive_bypass(hits)
         evidence.append(
             {
                 "code": "no_active_hits",
@@ -328,12 +510,66 @@ def classify_short_bias(
                 "invalidated_count": inv_n,
             }
         )
+        if bypass_bias in ("看多", "看空") and bypass_hit is not None:
+            evidence.append(
+                {
+                    "code": "inactive_bypass",
+                    "ok": True,
+                    "short_bias": bypass_bias,
+                    "pattern_type": bypass_hit.get("pattern_type"),
+                    "status": bypass_hit.get("status"),
+                    "reason": bypass_why,
+                }
+            )
+            rationale_bits = [bypass_why]
+            conf = float(bypass_hit.get("confidence") or 0.0)
+            close = _hit_close(bypass_hit)
+            grade, confidence = _apply_grade_enhancers(
+                short_bias=bypass_bias,
+                conf=conf,
+                close=close,
+                vp=vp,
+                rpe=rpe,
+                z_lead=float(z_lead),
+                rationale_bits=rationale_bits,
+                evidence=evidence,
+            )
+            return {
+                "short_bias": bypass_bias,
+                "bias_label": _BIAS_LABEL.get(bypass_bias, bypass_bias),
+                "grade": grade,
+                "confidence": confidence,
+                "rationale": "；".join(rationale_bits),
+                "evidence": evidence,
+                "primary": bypass_hit,
+                "pressure_zone": None,
+            }
+
+        # 无旁路：一律信息不足（不再把 inv_n>0 映射成「震荡」）
+        short_bias = "insufficient"
+        rationale = (
+            f"有效命中 0（另有 {inv_n} 条已失效/归档不可用），信息不足，无进攻买点。"
+            if inv_n > 0
+            else "有效命中 0，暂无结构方向。"
+        )
+        rationale_bits = [rationale]
+        grade, confidence = _apply_grade_enhancers(
+            short_bias=short_bias,
+            conf=0.0,
+            close=None,
+            vp=vp,
+            rpe=rpe,
+            z_lead=float(z_lead),
+            rationale_bits=rationale_bits,
+            evidence=evidence,
+        )
+        # insufficient 不因 VP/RPE 抬成进攻档展示：grade 仍可增强作旁证，但置信压低
         return {
             "short_bias": short_bias,
             "bias_label": _BIAS_LABEL.get(short_bias, short_bias),
-            "grade": "base",
-            "confidence": 0.25 if inv_n else 0.15,
-            "rationale": rationale,
+            "grade": grade,
+            "confidence": min(confidence, 0.35),
+            "rationale": "；".join(rationale_bits) if len(rationale_bits) > 1 else rationale,
             "evidence": evidence,
             "primary": None,
             "pressure_zone": None,
@@ -369,7 +605,6 @@ def classify_short_bias(
             bear_ok = True
             rationale_bits.append(f"已确认{lab}下破")
     # 有效跌破核心防守（多头反转确认后失守颈线 / 巩固下沿）
-    defense = _core_defense(primary)
     if (
         not bear_ok
         and st == "confirmed"
@@ -481,52 +716,16 @@ def classify_short_bias(
         bias_label = _BIAS_LABEL["震荡"]
         rationale_bits.append(f"主导{lab}（{st}）暂无明确突破方向")
 
-    # —— 增强：仅抬 grade，不改 short_bias ——
-    vp_ok = _vp_break_vah_ok(vp, close)
-    rpe_ok, z_val = _rpe_lead_ok(rpe, z_lead=float(z_lead))
-    evidence.append(
-        {
-            "code": "vp_break_vah",
-            "ok": vp_ok,
-            "vah": _f(vp.get("vah")) if isinstance(vp, dict) else None,
-            "nearest_resistance": (
-                vp.get("nearest_resistance") if isinstance(vp, dict) else None
-            ),
-        }
+    grade, confidence = _apply_grade_enhancers(
+        short_bias=short_bias,
+        conf=conf,
+        close=close,
+        vp=vp,
+        rpe=rpe,
+        z_lead=float(z_lead),
+        rationale_bits=rationale_bits,
+        evidence=evidence,
     )
-    evidence.append(
-        {
-            "code": "rpe_lead",
-            "ok": rpe_ok,
-            "z_score": z_val,
-            "z_lead": float(z_lead),
-            "signal_type": (rpe.get("signal_type") if isinstance(rpe, dict) else None),
-        }
-    )
-
-    enhancers = 0
-    if vp_ok:
-        enhancers += 1
-        rationale_bits.append("已破VAH且上方无近端筹码压制")
-    if rpe_ok:
-        enhancers += 1
-        rationale_bits.append(f"RPE Z≥{float(z_lead):.1f}")
-
-    if enhancers >= 2:
-        grade = "strong"
-    elif enhancers == 1:
-        grade = "enhanced"
-    else:
-        grade = "base"
-
-    # 置信：结构底分 + 形态 conf + 增强
-    base_c = 0.45 + 0.35 * min(1.0, conf)
-    if short_bias == "看空":
-        base_c = 0.5 + 0.3 * min(1.0, conf)
-    elif short_bias == "震荡":
-        base_c = 0.35 + 0.25 * min(1.0, conf)
-    base_c += 0.08 * enhancers
-    confidence = round(max(0.05, min(0.95, base_c)), 3)
 
     if not rationale_bits:
         rationale_bits.append(f"主导形态 {lab}（{st}）")
@@ -591,6 +790,35 @@ def build_buy_hints(
             nearest_support = _f(ns.get("center")) or _f(ns.get("high"))
 
     if short_bias == "看多":
+        st_p = str(primary.get("status") or "") if primary else ""
+        # 归档/失效旁路：颈线往往已远离现价，改近端支撑或巩固上沿翻支撑
+        if st_p in ("archived", "invalidated"):
+            anchor_px = nearest_support
+            if anchor_px is None and upper is not None:
+                anchor_px = upper
+            if anchor_px is None:
+                anchor_px = neck if neck is not None else defense
+            if anchor_px is None:
+                return hints, "趋势旁路看多，但缺少近端结构锚点，仅作方向参考。"
+            band = max(0.02, abs(anchor_px) * 0.008)
+            hints.append(
+                {
+                    "type": "watch",
+                    "entry_zone": {
+                        "low": round(anchor_px - band, 2),
+                        "high": round(anchor_px + band, 2),
+                        "anchor": "nearest_support"
+                        if nearest_support is not None
+                        else ("consol_upper" if upper is not None else "structure"),
+                    },
+                    "trigger": "突破/归档后回踩近端支撑企稳（颈线已远离，不作回踩锚）",
+                    "invalidation": round(anchor_px * BREAKOUT_DOWN_MULT, 2),
+                    "target": round(target, 2) if target is not None else None,
+                    "priority": 2 if grade in ("strong", "enhanced") else 3,
+                }
+            )
+            return hints, risk_note
+
         anchor_px = neck if neck is not None else (upper if upper is not None else defense)
         if anchor_px is None:
             return hints, risk_note

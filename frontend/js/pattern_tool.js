@@ -290,7 +290,8 @@ const PatternTool = {
   _buildTacticalHtml(tactical) {
     const t = tactical && typeof tactical === 'object' ? tactical : null;
     if (!t || !t.short_bias) return '';
-    const bias = String(t.short_bias);
+    const biasRaw = String(t.short_bias);
+    const bias = biasRaw === 'insufficient' ? '信息不足' : biasRaw;
     const grade = t.grade ? String(t.grade) : 'base';
     const label = t.bias_label ? String(t.bias_label) : '';
     const conf =
@@ -298,16 +299,20 @@ const PatternTool = {
         ? Number(t.confidence).toFixed(2)
         : '--';
     const badgeClass =
-      bias === '看多'
+      biasRaw === '看多'
         ? 'pattern-tactical-bull'
-        : bias === '看空'
+        : biasRaw === '看空'
           ? 'pattern-tactical-bear'
-          : 'pattern-tactical-range';
+          : biasRaw === 'insufficient'
+            ? 'pattern-tactical-insufficient'
+            : 'pattern-tactical-range';
     const rationale = t.rationale ? String(t.rationale) : '';
     let hintsHtml = '';
-    if (bias === '看空') {
+    if (biasRaw === '看空') {
       const risk = t.risk_note ? String(t.risk_note) : '结构破位，无进攻买点。';
       hintsHtml = `<p class="pattern-tactical-risk"><span class="pattern-expert-label">风险：</span>${this.esc(risk)}</p>`;
+    } else if (biasRaw === 'insufficient') {
+      hintsHtml = '';
     } else {
       const hints = Array.isArray(t.buy_hints) ? t.buy_hints : [];
       if (hints.length) {
@@ -354,14 +359,18 @@ const PatternTool = {
   formatTacticalPlainText(tactical) {
     const t = tactical && typeof tactical === 'object' ? tactical : null;
     if (!t || !t.short_bias) return '';
+    const biasRaw = String(t.short_bias);
+    const biasShow = biasRaw === 'insufficient' ? '信息不足' : biasRaw;
     const parts = [
-      `短期判断：${t.short_bias}${t.bias_label ? `（${t.bias_label}）` : ''} · grade=${t.grade || 'base'}${
+      `短期判断：${biasShow}${t.bias_label ? `（${t.bias_label}）` : ''} · grade=${t.grade || 'base'}${
         t.confidence != null ? ` · 置信 ${Number(t.confidence).toFixed(2)}` : ''
       }`,
     ];
     if (t.rationale) parts.push(String(t.rationale));
-    if (t.short_bias === '看空') {
+    if (biasRaw === '看空') {
       parts.push(t.risk_note ? `风险：${t.risk_note}` : '风险：结构破位，无进攻买点');
+    } else if (biasRaw === 'insufficient') {
+      /* rationale 已含信息不足说明 */
     } else {
       const hints = Array.isArray(t.buy_hints) ? t.buy_hints : [];
       hints.forEach((h, i) => {
