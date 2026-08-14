@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
-# 支撑缺失时回看递推：250 → 500 → 750（约 3 年交易日）
+# 初始回看默认与 VP 对齐；无支撑时按 STEP 递推至 MAX（例：60 → 310 → 560 → 750）
+KDE_LOOKBACK_INITIAL = 60
 KDE_LOOKBACK_STEP = 250
 KDE_LOOKBACK_MAX = 750
 # 带宽：min_bw ≤ factor·(σ/μ) ≤ max_bw；扩窗时对 factor 乘 decay，打断「抹平→扩窗→更平滑」
@@ -254,7 +255,7 @@ def extract_kde_levels_expand_support(
     volumes: Sequence[float],
     *,
     price: Optional[float] = None,
-    initial_lookback: int = KDE_LOOKBACK_STEP,
+    initial_lookback: int = KDE_LOOKBACK_INITIAL,
     step: int = KDE_LOOKBACK_STEP,
     max_lookback: int = KDE_LOOKBACK_MAX,
     base_factor: float = 1.0,

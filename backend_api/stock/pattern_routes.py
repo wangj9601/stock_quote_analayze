@@ -89,9 +89,28 @@ def _tactical_enrichment(
                     "support_note": vp.get("support_note"),
                     "resistance_note": vp.get("resistance_note"),
                 }
+            # 对齐个股分析 PDF：注入 KDE 峰，使突破目标可看见更远共振阻力（如 52.95）
+            kde_kw: dict = {}
+            try:
+                kde = KeyLevels.calculate_key_levels(
+                    bars,
+                    last_close if last_close is not None else 0.0,
+                    max_levels=4,
+                )
+                if isinstance(kde, dict) and kde.get("kde_ok"):
+                    kde_kw = {
+                        "kde_support": kde.get("nearest_support"),
+                        "kde_resistance": kde.get("nearest_resistance"),
+                        "kde_supports": kde.get("support_levels"),
+                        "kde_resistances": kde.get("resistance_levels"),
+                    }
+            except Exception as e:
+                logger.debug("tactical KDE skip code=%s: %s", stock_code, e)
             conf = compute_confluence_from_reference(
                 classic,
                 last_close=last_close,
+                atr=classic.get("atr"),
+                **kde_kw,
             )
             if isinstance(conf, dict) and conf.get("ok"):
                 confluence = conf

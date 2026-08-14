@@ -154,7 +154,7 @@
 ## 7. 支撑 / 阻力与风险提示（混合硬闸 + 软标签）
 
 - **KDE 筹码密度峰**支撑/阻力：与 RPE / 个股关键价位同口径（`signal_detector._compute_structure_levels` → `rpe.kde_levels`）。  
-- 默认回看：初始 250、步进 250、最大 750；网格 200 等（配置 `kde_*`）。  
+- 默认回看：初始 60、步进 250、最大 750；网格 200 等（配置 `kde_*`）。  
 - **结构盈亏比** `RR = (最近阻力 − 现价) / (现价 − 最近支撑)`（分母有下限，复用 GMS `compute_structure_rr`）。  
 - **软标签**：`RR < structure_rr_min_rr`（默认 **2.0**）→「结构盈亏比偏低」warn；**不否决买点、不减分**。  
 - **硬闸**（`structure_rr_hard_gate_enabled`，默认 true）：破位支撑、贴/超阻力、**上行空间不足**（距阻力相对现价 &lt; `structure_rr_min_upside_pct`，默认 **3%**）、悬空离支撑（`structure_hang_min_upside_pct` 默认 0.08）→ 否决正式买点。  

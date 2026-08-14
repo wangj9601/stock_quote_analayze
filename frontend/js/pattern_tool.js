@@ -347,6 +347,12 @@ const PatternTool = {
       }
     }
     const disc = t.disclaimer ? `<p class="pattern-tactical-disc">${this.esc(String(t.disclaimer))}</p>` : '';
+    const nesting =
+      t.nesting_note != null && String(t.nesting_note).trim()
+        ? `<p class="pattern-tactical-nesting"><span class="pattern-expert-label">嵌套：</span>${this.esc(
+            String(t.nesting_note)
+          )}</p>`
+        : '';
     return `<div class="pattern-tactical-block">
       <p>
         <span class="pattern-expert-label">短期判断：</span>
@@ -355,6 +361,7 @@ const PatternTool = {
         <span class="pattern-tactical-conf">置信 ${this.esc(conf)}</span>
       </p>
       ${rationale ? `<p class="pattern-tactical-rationale">${this.esc(rationale)}</p>` : ''}
+      ${nesting}
       ${hintsHtml}
       ${disc}
     </div>`;
@@ -372,6 +379,7 @@ const PatternTool = {
       }`,
     ];
     if (t.rationale) parts.push(String(t.rationale));
+    if (t.nesting_note) parts.push(`嵌套：${String(t.nesting_note)}`);
     if (biasRaw === '看空') {
       parts.push(t.risk_note ? `风险：${t.risk_note}` : '风险：结构破位，无进攻买点');
     } else if (biasRaw === 'insufficient') {
@@ -2841,12 +2849,25 @@ const PatternTool = {
 
       mediumTerm = `以高置信已确认「${leadLab}」（置信度 ${leadConf}）为主导，${stance}。${formedTxt}`;
 
+      // 跨周期嵌套（后端 pattern_hierarchy / nesting_note）优先于置信冲突罗列
+      const nestNoteRaw =
+        opts.tactical && opts.tactical.nesting_note != null
+          ? String(opts.tactical.nesting_note).trim()
+          : '';
+      const nestNote = nestNoteRaw
+        ? nestNoteRaw.endsWith('。')
+          ? nestNoteRaw
+          : `${nestNoteRaw}。`
+        : '';
+
       // 冲突：反向已确认（含偏多巩固 vs 偏空反转）
       const opp = confirmed.find((h) => {
         if (h === lead) return false;
         return this._biasConflicts(leadBias, this._biasOf(h.pattern_type));
       });
-      if (opp) {
+      if (nestNote) {
+        mediumTerm += nestNote;
+      } else if (opp) {
         const oppConf = this._num(opp.confidence);
         const leadC = this._num(lead.confidence);
         const nearTie =
@@ -2889,6 +2910,15 @@ const PatternTool = {
         .map((h) => `${this.typeLabel(h.pattern_type)}(${h.confidence != null ? Number(h.confidence).toFixed(2) : '--'})`)
         .join('、');
       mediumTerm = `暂无高置信已确认形态，中线尚不明朗；形成中信号（${names || '若干'}）待边界突破或结构确认。`;
+      const nestNoteRawElse =
+        opts.tactical && opts.tactical.nesting_note != null
+          ? String(opts.tactical.nesting_note).trim()
+          : '';
+      if (nestNoteRawElse) {
+        mediumTerm += nestNoteRawElse.endsWith('。')
+          ? nestNoteRawElse
+          : `${nestNoteRawElse}。`;
+      }
       // 同 forming 且 |Δconf|<eps、bias 冲突：交织/箱体提示（保持置信优先 primary，仅文案）
       const mixPeer = this._findNearConflictingPeer(primary, forming);
       if (mixPeer) {

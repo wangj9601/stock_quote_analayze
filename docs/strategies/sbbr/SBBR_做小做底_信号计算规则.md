@@ -207,7 +207,7 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - `support_confirm.box_resistance_tol_pct=0.01`, `support_confirm.ma_period=20`
 - `exit.space_pcts=[0.50,0.70,1.00]`, `exit.high_consolidate_days=15`, `exit.turnover_sum_days=5`, `exit.turnover_sum_pct=100`
 - `position.probe_pct=50`, `position.add_pct=30`, `position.reserve_cash_pct=20`, `position.max_open_positions=3`
-- KDE：`kde_lookback_initial/days=250`, `kde_lookback_step=250`, `kde_lookback_max=750`
+- KDE：`kde_lookback_initial/days=60`, `kde_lookback_step=250`, `kde_lookback_max=750`
 
 ## 9. 实战解读（为什么会出现 0 条入场）
 

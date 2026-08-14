@@ -254,14 +254,17 @@ def test_levels_route_uses_lightweight_method():
     }
 
     with patch("stock.stock_analysis_routes.StockAnalysisService") as Cls:
-        Cls.return_value.get_key_levels_only.return_value = fake
+        svc = Cls.return_value
+        svc.__enter__.return_value = svc
+        svc.__exit__.return_value = False
+        svc.get_key_levels_only.return_value = fake
         resp = client.get("/api/analysis/levels/600519?max_levels=8")
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
     assert body["data"]["nearest_support"] == 14.5
-    kwargs = Cls.return_value.get_key_levels_only.call_args
+    kwargs = svc.get_key_levels_only.call_args
     assert kwargs.args[0] == "600519"
     assert kwargs.kwargs.get("max_levels") == 8
     assert kwargs.kwargs.get("price_adjust") == "none"
@@ -310,14 +313,17 @@ def test_levels_route_accepts_name_via_query():
     with patch("stock.stock_analysis_routes.resolve_levels_stock_identifier", return_value=resolved), patch(
         "stock.stock_analysis_routes.StockAnalysisService"
     ) as Cls:
-        Cls.return_value.get_key_levels_only.return_value = fake
+        svc = Cls.return_value
+        svc.__enter__.return_value = svc
+        svc.__exit__.return_value = False
+        svc.get_key_levels_only.return_value = fake
         resp = client.get("/api/analysis/levels?q=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&max_levels=8")
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
     assert body["data"]["stock_code"] == "600519"
-    kwargs = Cls.return_value.get_key_levels_only.call_args
+    kwargs = svc.get_key_levels_only.call_args
     assert kwargs.args[0] == "600519"
     assert kwargs.kwargs.get("max_levels") == 8
     assert kwargs.kwargs.get("price_adjust") == "none"
@@ -562,3 +568,91 @@ def test_vp_lookback_from_date():
     assert vp.get("from_date") == from_date
     assert vp["lookback"] == 30
     assert vp.get("window_start") == from_date
+
+
+def test_kde_lookback_custom_days():
+    """自定义 KDE 初始回看天数；扩窗上限仍为 KDE_LOOKBACK_MAX。"""
+    bars = _fake_bars_with_dates(n=400)
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    with patch.object(svc, "_get_historical_data", return_value=bars), patch.object(
+        svc, "_get_current_price", return_value=15.0
+    ):
+        result = svc.get_key_levels_only("600519", max_levels=8, kde_lookback=100)
+
+    assert result["success"] is True
+    data = result["data"]
+    assert data["kde_lookback_initial"] == 100
+    assert data["kde_lookback_max"] == KeyLevels.KDE_LOOKBACK_MAX
+    assert int(data["kde_lookback_used"] or 0) >= 100
+    # 扩窗：无支撑时可 100→350→600→750，但不得超过 max
+    assert int(data["kde_lookback_used"] or 0) <= KeyLevels.KDE_LOOKBACK_MAX
+
+
+def test_kde_lookback_from_date():
+    bars = _fake_bars_with_dates(n=200)
+    svc = StockAnalysisService.__new__(StockAnalysisService)
+    from_date = bars[-80]["date"]
+    with patch.object(svc, "_get_historical_data", return_value=bars), patch.object(
+        svc, "_get_current_price", return_value=15.0
+    ):
+        result = svc.get_key_levels_only(
+            "600519", max_levels=8, kde_from_date=from_date
+        )
+
+    assert result["success"] is True
+    data = result["data"]
+    assert data.get("kde_from_date") == from_date
+    assert data["kde_lookback_initial"] == 80
+    assert int(data["kde_lookback_used"] or 0) >= 80
+
+
+def test_resolve_kde_lookback_defaults_and_clamp():
+    bars = _fake_bars_with_dates(n=100)
+    assert KeyLevels.KDE_LOOKBACK_DAYS == 60
+    lb, fd = StockAnalysisService._resolve_kde_lookback(bars)
+    assert lb == KeyLevels.KDE_LOOKBACK_DAYS
+    assert fd is None
+    lb2, fd2 = StockAnalysisService._resolve_kde_lookback(bars, kde_lookback=10)
+    assert lb2 == 20  # 低于算法最少样本时抬到 20
+    assert fd2 is None
+    lb3, _ = StockAnalysisService._resolve_kde_lookback(bars, kde_lookback=900)
+    assert lb3 == KeyLevels.KDE_LOOKBACK_MAX
+
+
+def test_levels_route_passes_kde_lookback_params():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import get_db
+    from stock.stock_analysis_routes import router
+
+    app = FastAPI()
+    app.include_router(router)
+
+    def _fake_db():
+        yield None
+
+    app.dependency_overrides[get_db] = _fake_db
+    client = TestClient(app)
+
+    fake = {
+        "success": True,
+        "data": {
+            "stock_code": "600519",
+            "kde_lookback_initial": 120,
+            "kde_lookback_used": 120,
+            "nearest_support": 14.5,
+        },
+    }
+    with patch("stock.stock_analysis_routes.StockAnalysisService") as Cls:
+        svc = Cls.return_value
+        svc.__enter__.return_value = svc
+        svc.__exit__.return_value = False
+        svc.get_key_levels_only.return_value = fake
+        resp = client.get(
+            "/api/analysis/levels/600519?kde_lookback=120&vp_lookback=40"
+        )
+
+    assert resp.status_code == 200
+    kwargs = svc.get_key_levels_only.call_args.kwargs
+    assert kwargs.get("kde_lookback") == 120
+    assert kwargs.get("vp_lookback") == 40

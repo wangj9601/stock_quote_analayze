@@ -55,16 +55,47 @@ def atr_pivot_bands(pivot_p: float, atr: float) -> Dict[str, Any]:
     }
 
 
+def extreme_role_flip_note(
+    *,
+    side: str,
+    level_key: str,
+    price: float,
+    label: str = "Camarilla",
+    decimals: int = PRICE_DECIMALS,
+) -> str:
+    """极端档破位 → 角色反转标准文案。
+
+    side:
+      - below_support：跌破最低支撑档（如 S4）→ 转为阻力
+      - above_resistance：突破最高阻力档（如 R4）→ 转为支撑
+    """
+    d = int(decimals)
+    px = float(price)
+    key = str(level_key)
+    if side == "below_support":
+        return f"已跌破{label}最低档{key}({px:.{d}f})并转为阻力"
+    if side == "above_resistance":
+        return f"已突破{label}最高档{key}({px:.{d}f})并转为支撑"
+    raise ValueError(f"unsupported role-flip side: {side}")
+
+
 def attach_nearest(
     levels: Dict[str, Any],
     last_close: Optional[float],
     keys: Sequence[str],
     *,
     label: str = "同窗",
+    role_flip_extremes: Optional[tuple] = None,
 ) -> Dict[str, Any]:
+    """标注最近支撑/阻力；可选对极端档启用「破位→角色反转」文案。
+
+    role_flip_extremes: (最低支撑键, 最高阻力键)，如 Camarilla 的 ("S4", "R4")。
+    未指定或破的不是该极端档时，仍用「暂无同窗支撑/压力」真空口径。
+    """
     out = dict(levels)
     out["support_note"] = None
     out["resistance_note"] = None
+    out["extreme_role_flip"] = None
     if last_close is None:
         out["nearest_support"] = None
         out["nearest_resistance"] = None
@@ -86,18 +117,53 @@ def attach_nearest(
     out["nearest_resistance"] = round(nr, PRICE_DECIMALS) if nr is not None else None
     d = PRICE_DECIMALS
     px = float(last_close)
+    flip_lo = flip_hi = None
+    if isinstance(role_flip_extremes, (tuple, list)) and len(role_flip_extremes) >= 2:
+        flip_lo, flip_hi = str(role_flip_extremes[0]), str(role_flip_extremes[1])
     if nr is None and keyed:
         top_k, top_v = max(keyed, key=lambda x: x[1])
         if px > top_v:
-            out["resistance_note"] = (
-                f"已突破{label}最高档{top_k}({top_v:.{d}f})，上方暂无同窗压力"
-            )
+            if flip_hi and top_k == flip_hi:
+                out["resistance_note"] = extreme_role_flip_note(
+                    side="above_resistance",
+                    level_key=top_k,
+                    price=top_v,
+                    label=label,
+                    decimals=d,
+                )
+                out["extreme_role_flip"] = {
+                    "level": top_k,
+                    "price": round(top_v, d),
+                    "from_role": "resistance",
+                    "to_role": "support",
+                    "side": "above_resistance",
+                }
+            else:
+                out["resistance_note"] = (
+                    f"已突破{label}最高档{top_k}({top_v:.{d}f})，上方暂无同窗压力"
+                )
     if ns is None and keyed:
         bot_k, bot_v = min(keyed, key=lambda x: x[1])
         if px < bot_v:
-            out["support_note"] = (
-                f"已跌破{label}最低档{bot_k}({bot_v:.{d}f})，下方暂无同窗支撑"
-            )
+            if flip_lo and bot_k == flip_lo:
+                out["support_note"] = extreme_role_flip_note(
+                    side="below_support",
+                    level_key=bot_k,
+                    price=bot_v,
+                    label=label,
+                    decimals=d,
+                )
+                out["extreme_role_flip"] = {
+                    "level": bot_k,
+                    "price": round(bot_v, d),
+                    "from_role": "support",
+                    "to_role": "resistance",
+                    "side": "below_support",
+                }
+            else:
+                out["support_note"] = (
+                    f"已跌破{label}最低档{bot_k}({bot_v:.{d}f})，下方暂无同窗支撑"
+                )
     return out
 
 
@@ -120,6 +186,7 @@ def compute_vol_pivots_from_parsed(
         last_close,
         ("S4", "S3", "S2", "S1", "R1", "R2", "R3", "R4"),
         label="Camarilla",
+        role_flip_extremes=("S4", "R4"),
     )
 
     atr = wilder_atr(parsed)

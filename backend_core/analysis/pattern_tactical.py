@@ -16,8 +16,11 @@ from backend_core.analysis.chart_patterns.rules import (
 
 DISCLAIMER = "规则模板，非投资建议"
 
-# 高强度共振压制门槛（附件示例 >50；可配置）
+# 高强度共振压制门槛（附件示例 >50；可配置）——仅用于 short_bias 震荡旁证，不改买点贴压门槛
 RESONANCE_PRESSURE_MIN_STRENGTH = 50.0
+# 买点侧贴身超强压：与 bias 的 50 解耦，强度≥10 且贴压 → 强制 break_upper
+BUY_PRESSURE_MIN_STRENGTH = 10.0
+BUY_PRESSURE_NEAR_PCT = 0.02  # 现价在带内，或距阻力中心/下沿 ≤约 2%
 # 主形态竞选：置信接近阈值（与前端 RANK_CONF_TIE_EPS 对齐）
 RANK_CONF_TIE_EPS = 0.05
 # RPE 领涨 Z 默认门槛
@@ -72,6 +75,19 @@ MOMENTUM_UP_PCT_STRONG = 0.055  # 单日涨幅足够大时可只靠涨幅否决
 INVALIDATION_BELOW_ENTRY_PCT = 0.01
 INVALIDATION_MIN_GAP_ABS = 0.01
 INVALIDATION_MIN_GAP_PCT = 0.002
+# 近端超强共振优先于远端形态下沿（震荡 watch / 看多旁路可复用）
+NEAR_SUPPORT_PREF_MIN_STRENGTH = 10.0  # A 档：近端共振优先的最低强度
+PATTERN_LOWER_FAR_PCT = 0.25  # 形态下沿相对现价偏离 ≥25% 视为「过远」→ 禁止作 p≤2 主锚
+NEAR_SUPPORT_MAX_BELOW_PCT = 0.06  # A 档：近端支撑须在现价下方且距现价 ≤6%
+# 仅 floor_far 分支启用的 B 档 / 第二档 watch（非 floor_far 仍只用 A 档，避免伤正常路径）
+NEAR_SUPPORT_B_MIN_STRENGTH = 5.0
+NEAR_SUPPORT_B_MAX_BELOW_PCT = 0.08
+NEAR_SUPPORT_WATCH2_MIN_STRENGTH = 5.0
+NEAR_SUPPORT_WATCH2_MAX_BELOW_PCT = 0.15  # 更远近端约 12–15%
+TARGET_MIN_UPSIDE_PCT = 0.02  # 主目标相对现价/突破入场 upside 不足约 2% 时触发 RR 改锚
+BREAK_TARGET_MIN_STRENGTH = 5.0  # 突破后「下一档有效阻力」最低强度（弱 Camarilla 等不抢主目标）
+BREAK_TARGET_MIN_RR = 1.0  # 相对失效的最小盈亏比；形态上沿过薄时不得单独作 target
+FIB_0382_RATIO = 0.382  # 左右侧近端 watch 共用失效位优先对齐 Fib 0.382
 
 
 def _f(v: Any) -> Optional[float]:
@@ -115,6 +131,592 @@ def _with_clamped_invalidation(hint: Dict[str, Any]) -> Dict[str, Any]:
         return hint
     hint["invalidation"] = _clamp_invalidation(low, hint.get("invalidation"))
     return hint
+
+
+def _iter_confluence_supports(confluence: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """合并 nearest_support_zone + supports[]，按 strength 降序去重。"""
+    if not isinstance(confluence, dict):
+        return []
+    raw: List[Dict[str, Any]] = []
+    ns = confluence.get("nearest_support_zone")
+    if isinstance(ns, dict):
+        raw.append(ns)
+    for z in confluence.get("supports") or []:
+        if isinstance(z, dict):
+            raw.append(z)
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for z in raw:
+        center = _f(z.get("center"))
+        lo = _f(z.get("low"))
+        hi = _f(z.get("high"))
+        key = (round(center, 4) if center is not None else None, lo, hi)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(z)
+    out.sort(
+        key=lambda z: (
+            -(_f(z.get("strength")) or 0.0),
+            -(_f(z.get("center")) or 0.0),
+        )
+    )
+    return out
+
+
+def _pick_near_strong_support(
+    confluence: Optional[Dict[str, Any]],
+    close: Optional[float],
+    *,
+    min_strength: Optional[float] = None,
+    max_below_pct: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """现价下方、距现价达标、强度达标的最优近端共振支撑。
+
+    默认 A 档：strength≥10 且 ≤6%。floor_far 分支可放宽为 B 档（5/8%）。
+    """
+    c = _f(close)
+    if c is None or c <= 0:
+        return None
+    min_s = float(
+        NEAR_SUPPORT_PREF_MIN_STRENGTH if min_strength is None else min_strength
+    )
+    max_pct = float(
+        NEAR_SUPPORT_MAX_BELOW_PCT if max_below_pct is None else max_below_pct
+    )
+    for z in _iter_confluence_supports(confluence):
+        center = _f(z.get("center"))
+        high = _f(z.get("high"))
+        strength = _f(z.get("strength")) or 0.0
+        if strength < min_s:
+            continue
+        # center/high 均须在 close 下方
+        if center is not None and center >= c:
+            continue
+        if high is not None and high >= c:
+            continue
+        ref = center if center is not None else high
+        if ref is None:
+            continue
+        below_pct = (c - ref) / c
+        if below_pct < 0 or below_pct > max_pct:
+            continue
+        return z
+    return None
+
+
+def _zone_key(z: Optional[Dict[str, Any]]) -> Tuple[Any, Any, Any]:
+    if not isinstance(z, dict):
+        return (None, None, None)
+    center = _f(z.get("center"))
+    return (
+        round(center, 4) if center is not None else None,
+        _f(z.get("low")),
+        _f(z.get("high")),
+    )
+
+
+def _pick_near_support_floor_far(
+    confluence: Optional[Dict[str, Any]],
+    close: Optional[float],
+) -> Optional[Dict[str, Any]]:
+    """floor_far 专用：先 A 档（10/6%），再 B 档（5/8%）。"""
+    a = _pick_near_strong_support(confluence, close)
+    if a is not None:
+        return a
+    return _pick_near_strong_support(
+        confluence,
+        close,
+        min_strength=float(NEAR_SUPPORT_B_MIN_STRENGTH),
+        max_below_pct=float(NEAR_SUPPORT_B_MAX_BELOW_PCT),
+    )
+
+
+def _pick_near_support_watch2(
+    confluence: Optional[Dict[str, Any]],
+    close: Optional[float],
+    *,
+    primary: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """floor_far 第二档：更远近端（strength≥5，距离可到约 12–15%），排除主近端。"""
+    c = _f(close)
+    if c is None or c <= 0:
+        return None
+    primary_key = _zone_key(primary)
+    primary_ref = None
+    if isinstance(primary, dict):
+        primary_ref = _f(primary.get("center"))
+        if primary_ref is None:
+            primary_ref = _f(primary.get("high"))
+    best: Optional[Dict[str, Any]] = None
+    best_ref = -1.0
+    for z in _iter_confluence_supports(confluence):
+        if _zone_key(z) == primary_key:
+            continue
+        center = _f(z.get("center"))
+        high = _f(z.get("high"))
+        strength = _f(z.get("strength")) or 0.0
+        if strength < float(NEAR_SUPPORT_WATCH2_MIN_STRENGTH):
+            continue
+        if center is not None and center >= c:
+            continue
+        if high is not None and high >= c:
+            continue
+        ref = center if center is not None else high
+        if ref is None:
+            continue
+        below_pct = (c - ref) / c
+        if below_pct <= 0 or below_pct > float(NEAR_SUPPORT_WATCH2_MAX_BELOW_PCT):
+            continue
+        # 须明显远于主近端（若有）
+        if primary_ref is not None and ref >= primary_ref - 1e-9:
+            continue
+        if ref > best_ref:
+            best_ref = ref
+            best = z
+    return best
+
+
+def _iter_confluence_resistances(
+    confluence: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    if not isinstance(confluence, dict):
+        return []
+    raw: List[Dict[str, Any]] = []
+    nz = confluence.get("nearest_resistance_zone")
+    if isinstance(nz, dict):
+        raw.append(nz)
+    for z in confluence.get("resistances") or []:
+        if isinstance(z, dict):
+            raw.append(z)
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for z in raw:
+        key = _zone_key(z)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(z)
+    return out
+
+
+def _pressing_resistance_for_buy(
+    confluence: Optional[Dict[str, Any]],
+    close: Optional[float],
+    *,
+    min_strength: float = BUY_PRESSURE_MIN_STRENGTH,
+    near_pct: float = BUY_PRESSURE_NEAR_PCT,
+) -> Optional[Dict[str, Any]]:
+    """贴身超强压：在带内或距中心/下沿 ≤near_pct，且 strength≥买点门槛。"""
+    c = _f(close)
+    if c is None or c <= 0:
+        return None
+    best: Optional[Dict[str, Any]] = None
+    best_dist = float("inf")
+    for z in _iter_confluence_resistances(confluence):
+        strength = _f(z.get("strength")) or 0.0
+        if strength < float(min_strength):
+            continue
+        lo = _f(z.get("low"))
+        hi = _f(z.get("high"))
+        center = _f(z.get("center"))
+        inside = lo is not None and hi is not None and lo <= c <= hi
+        near = False
+        for ref in (center, lo):
+            if ref is None or ref <= 0:
+                continue
+            if abs(c - ref) / c <= float(near_pct):
+                near = True
+                break
+        if not inside and not near:
+            continue
+        anchor = center if center is not None else (lo if lo is not None else hi)
+        dist = abs(c - anchor) if anchor is not None else float("inf")
+        if dist < best_dist:
+            best_dist = dist
+            best = z
+    return best
+
+
+def _break_level_from_resistance(zone: Dict[str, Any]) -> Optional[float]:
+    """上破观察位：优先带上沿，其次中心。"""
+    hi = _f(zone.get("high"))
+    if hi is not None:
+        return hi
+    return _f(zone.get("center")) or _f(zone.get("low"))
+
+
+def _farther_resistance_target(
+    confluence: Optional[Dict[str, Any]],
+    close: Optional[float],
+    *,
+    above: Optional[float],
+    upper: Optional[float],
+) -> Optional[float]:
+    """突破目标：更远阻力中心，否则形态上沿。"""
+    c = _f(close)
+    floor_ref = _f(above) or (c if c is not None else None)
+    best: Optional[float] = None
+    for z in _iter_confluence_resistances(confluence):
+        center = _f(z.get("center")) or _f(z.get("low"))
+        if center is None or c is None:
+            continue
+        if center <= c:
+            continue
+        if floor_ref is not None and center <= floor_ref * (1.0 + float(TARGET_MIN_UPSIDE_PCT)):
+            continue
+        if best is None or center < best:
+            best = center
+    if best is not None:
+        return best
+    u = _f(upper)
+    if u is not None and c is not None and u > c:
+        return u
+    return u
+
+
+def _break_entry_refs(break_px: float) -> Tuple[float, float, float]:
+    """突破观察入场：中位参考、入场上沿、失效位（与 _hint_watch_break_upper 同口径）。"""
+    bp = float(break_px)
+    band = max(0.02, abs(bp) * 0.008)
+    entry_hi = bp + band
+    inv = bp * float(BREAKOUT_DOWN_MULT)
+    return bp, entry_hi, inv
+
+
+def _target_upside_ok(entry_ref: float, target: float) -> bool:
+    return float(target) > float(entry_ref) * (1.0 + float(TARGET_MIN_UPSIDE_PCT))
+
+
+def _target_rr_ok(entry_hi: float, inv: float, target: float) -> bool:
+    risk = float(entry_hi) - float(inv)
+    reward = float(target) - float(entry_hi)
+    if risk <= 1e-12:
+        return reward > 0
+    return (reward / risk) >= float(BREAK_TARGET_MIN_RR)
+
+
+def _pattern_upper_viable_as_break_target(break_px: float, upper: float) -> bool:
+    """形态上沿可作突破目标：相对入场 upside 足够，且相对失效 RR 不倒挂。"""
+    _, entry_hi, inv = _break_entry_refs(break_px)
+    u = float(upper)
+    if not _target_upside_ok(break_px, u):
+        return False
+    if not _target_upside_ok(entry_hi, u):
+        return False
+    return _target_rr_ok(entry_hi, inv, u)
+
+
+def _next_resistance_above(
+    confluence: Optional[Dict[str, Any]],
+    *,
+    gate: float,
+    entry_ref: float,
+    min_strength: float = BREAK_TARGET_MIN_STRENGTH,
+) -> Optional[float]:
+    """gate 之上最近一档阻力；优先 strength≥门槛，否则退回任意足够 upside 的阻力。"""
+    best_strong: Optional[float] = None
+    best_any: Optional[float] = None
+    g = float(gate)
+    for z in _iter_confluence_resistances(confluence):
+        center = _f(z.get("center")) or _f(z.get("low"))
+        if center is None or center <= g:
+            continue
+        if not _target_upside_ok(entry_ref, center):
+            continue
+        strength = _f(z.get("strength")) or 0.0
+        if best_any is None or center < best_any:
+            best_any = center
+        if strength < float(min_strength):
+            continue
+        if best_strong is None or center < best_strong:
+            best_strong = center
+    return best_strong if best_strong is not None else best_any
+
+
+def _resolve_break_upper_target(
+    confluence: Optional[Dict[str, Any]],
+    close: Optional[float],
+    *,
+    break_px: float,
+    upper: Optional[float],
+    primary_tgt: Optional[float],
+) -> Optional[float]:
+    """break_upper 主目标：优先 max(合格形态上沿, 上沿之上下一档有效阻力)。
+
+    形态上沿是突破确认位，不是默认可单独落袋的盈利目标；
+    相对突破入场区 upside 过薄或 RR 倒挂时，不得单独用形态上沿作唯一 target。
+    """
+    bp = float(break_px)
+    u_pref = _f(upper) if upper is not None else _f(primary_tgt)
+    # 下一档搜索门闸：有形态上沿则从其上方找；否则从突破位+最小 upside 起
+    if u_pref is not None:
+        gate = max(u_pref, bp * (1.0 + float(TARGET_MIN_UPSIDE_PCT)))
+    else:
+        gate = bp * (1.0 + float(TARGET_MIN_UPSIDE_PCT))
+
+    next_res = _next_resistance_above(
+        confluence, gate=gate, entry_ref=bp
+    )
+    upper_cand = None
+    if u_pref is not None and _pattern_upper_viable_as_break_target(bp, u_pref):
+        upper_cand = u_pref
+
+    if next_res is not None and upper_cand is not None:
+        return max(float(next_res), float(upper_cand))
+    if next_res is not None:
+        return float(next_res)
+    if upper_cand is not None:
+        return float(upper_cand)
+
+    alt = _farther_resistance_target(
+        confluence, close, above=bp, upper=upper or primary_tgt
+    )
+    if alt is not None:
+        return alt
+    return u_pref
+
+
+def _fib_ratio_price(
+    confluence: Optional[Dict[str, Any]],
+    *,
+    ratio: float = FIB_0382_RATIO,
+) -> Optional[float]:
+    """从 confluence 带 labels 或嵌套 fibonacci.retracements 取指定回撤价。"""
+    if not isinstance(confluence, dict):
+        return None
+    ratio_f = float(ratio)
+    ratio_tags = (
+        f"fib_{ratio_f}",
+        f"fib_{ratio_f:.3f}",
+        f"fib_{ratio_f:.2f}",
+        "fib_0.382",
+        "fib_0.38",
+    )
+
+    def _from_zone(z: Dict[str, Any]) -> Optional[float]:
+        labels = z.get("labels") or z.get("methods") or []
+        labs = [str(x) for x in labels] if isinstance(labels, (list, tuple)) else []
+        joined = " ".join(labs).lower()
+        hit = any(tag in joined for tag in ratio_tags) or (
+            "fib" in joined and "0.382" in joined
+        )
+        if not hit:
+            return None
+        return _f(z.get("center")) or _f(z.get("low"))
+
+    for z in _iter_confluence_supports(confluence):
+        px = _from_zone(z)
+        if px is not None:
+            return px
+    for z in _iter_confluence_resistances(confluence):
+        px = _from_zone(z)
+        if px is not None:
+            return px
+
+    fib = confluence.get("fibonacci")
+    if isinstance(fib, dict):
+        for x in fib.get("retracements") or []:
+            if not isinstance(x, dict):
+                continue
+            r = _f(x.get("ratio"))
+            if r is None:
+                continue
+            if abs(r - ratio_f) <= 0.01:
+                px = _f(x.get("price"))
+                if px is not None:
+                    return px
+    return None
+
+
+def _apply_shared_near_invalidation(
+    hints: List[Dict[str, Any]],
+    *,
+    fib_px: Optional[float],
+) -> None:
+    """左右侧 near_support_pref watch 共用更紧失效位（优先 Fib 0.382），再经 clamp。"""
+    near_hints = [
+        h
+        for h in hints
+        if isinstance(h, dict)
+        and isinstance(h.get("entry_zone"), dict)
+        and h["entry_zone"].get("anchor") == "near_support_pref"
+    ]
+    if not near_hints:
+        return
+    raw_cands: List[float] = []
+    for h in near_hints:
+        lo = _f(h["entry_zone"].get("low"))
+        if lo is not None:
+            raw_cands.append(lo)
+        inv0 = _f(h.get("invalidation"))
+        if inv0 is not None:
+            raw_cands.append(inv0)
+    fib = _f(fib_px)
+    if fib is not None:
+        raw_cands.append(fib)
+    if not raw_cands:
+        return
+    shared_raw = min(raw_cands)
+    for h in near_hints:
+        lo = _f(h["entry_zone"].get("low"))
+        h["invalidation"] = _clamp_invalidation(lo, shared_raw)
+
+
+def _level_far_below(close: Optional[float], level: Optional[float]) -> bool:
+    c = _f(close)
+    lv = _f(level)
+    if c is None or lv is None or c <= 0:
+        return False
+    if lv >= c:
+        return False
+    return (c - lv) / c >= float(PATTERN_LOWER_FAR_PCT)
+
+
+def _target_thin_upside(close: Optional[float], target: Optional[float]) -> bool:
+    """目标相对现价 upside < 约 2%（或 target <= close*1.02）。"""
+    c = _f(close)
+    t = _f(target)
+    if c is None or t is None or c <= 0:
+        return False
+    return t <= c * (1.0 + float(TARGET_MIN_UPSIDE_PCT))
+
+
+def _nearest_resistance_px(confluence: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not isinstance(confluence, dict):
+        return None
+    nz = confluence.get("nearest_resistance_zone")
+    if isinstance(nz, dict):
+        px = _f(nz.get("center")) or _f(nz.get("low"))
+        if px is not None:
+            return px
+    for z in confluence.get("resistances") or []:
+        if not isinstance(z, dict):
+            continue
+        px = _f(z.get("center")) or _f(z.get("low"))
+        if px is not None:
+            return px
+    return None
+
+
+def _entry_zone_from_support(zone: Dict[str, Any]) -> Dict[str, Any]:
+    """entry 用 zone low/high，否则 center±band。"""
+    center = _f(zone.get("center"))
+    lo = _f(zone.get("low"))
+    hi = _f(zone.get("high"))
+    strength = _f(zone.get("strength"))
+    if lo is not None and hi is not None and lo <= hi:
+        entry_lo, entry_hi = lo, hi
+    else:
+        anchor = center if center is not None else (lo if lo is not None else hi)
+        if anchor is None:
+            return {"low": None, "high": None, "anchor": "near_support_pref"}
+        band = max(0.02, abs(anchor) * 0.008)
+        entry_lo = lo if lo is not None else (anchor - band)
+        entry_hi = hi if hi is not None else (anchor + band)
+    ez: Dict[str, Any] = {
+        "low": round(entry_lo, 2),
+        "high": round(entry_hi, 2),
+        "anchor": "near_support_pref",
+    }
+    if center is not None:
+        ez["center"] = round(center, 2)
+    if strength is not None:
+        ez["strength"] = round(strength, 3)
+    return ez
+
+
+def _hint_near_support_pref(
+    zone: Dict[str, Any],
+    *,
+    target: Optional[float],
+    priority: int = 2,
+    trigger: str = "回踩近端高强度共振支撑企稳（形态下沿过远，优先近端）",
+) -> Dict[str, Any]:
+    ez = _entry_zone_from_support(zone)
+    raw_inv = _f(zone.get("low"))
+    if raw_inv is None:
+        raw_inv = _f(ez.get("low"))
+    return _with_clamped_invalidation(
+        {
+            "type": "watch",
+            "entry_zone": ez,
+            "trigger": trigger,
+            "invalidation": round(raw_inv, 2) if raw_inv is not None else None,
+            "target": round(target, 2) if target is not None else None,
+            "priority": priority,
+        }
+    )
+
+
+def _hint_far_pattern_lower(
+    floor: float,
+    *,
+    target: Optional[float],
+    anchor: str = "pattern_lower_far",
+) -> Dict[str, Any]:
+    band = max(0.02, abs(floor) * 0.008)
+    return _with_clamped_invalidation(
+        {
+            "type": "watch",
+            "entry_zone": {
+                "low": round(floor - band, 2),
+                "high": round(floor + band, 2),
+                "anchor": anchor,
+            },
+            "trigger": "远端形态下沿仅作极限参考",
+            "invalidation": round(floor * BREAKOUT_DOWN_MULT, 2),
+            "target": round(target, 2) if target is not None else None,
+            "priority": 4,
+        }
+    )
+
+
+def _hint_watch_break_upper(
+    upper: float,
+    *,
+    target: Optional[float],
+    trigger: Optional[str] = None,
+    priority: int = 2,
+) -> Dict[str, Any]:
+    band = max(0.02, abs(upper) * 0.008)
+    trig = trigger or (
+        f"观察上破 {upper:.2f} 再跟；远端下沿不作主买点（目标空间不足）"
+    )
+    return _with_clamped_invalidation(
+        {
+            "type": "watch",
+            "entry_zone": {
+                "low": round(upper - band * 0.25, 2),
+                "high": round(upper + band, 2),
+                "anchor": "break_upper",
+            },
+            "trigger": trig,
+            "invalidation": round(upper * BREAKOUT_DOWN_MULT, 2),
+            "target": round(target, 2) if target is not None else None,
+            "priority": priority,
+        }
+    )
+
+
+def _resolve_watch_target(
+    close: Optional[float],
+    primary_target: Optional[float],
+    confluence: Optional[Dict[str, Any]],
+    upper: Optional[float],
+) -> Optional[float]:
+    """主目标 upside 过薄时改用 confluence 上方阻力。"""
+    tgt = primary_target
+    if not _target_thin_upside(close, tgt):
+        return tgt
+    alt = _nearest_resistance_px(confluence)
+    c = _f(close)
+    if alt is not None and c is not None and alt > c * (1.0 + float(TARGET_MIN_UPSIDE_PCT)):
+        return alt
+    # 仍薄则保留 upper / 原 target，由调用方决定是否改「上破再跟」
+    if upper is not None and c is not None and upper > c:
+        return upper
+    return tgt
 
 
 def _hit_box_bounds(
@@ -1085,6 +1687,7 @@ def build_buy_hints(
     neck = _hit_neck(primary)
     upper, lower = _hit_bounds(primary)
     defense = _core_defense(primary)
+    close = _hit_close(primary)
     target = measured_target(primary)
     # 近端阻力作目标候选
     if target is None and isinstance(confluence, dict):
@@ -1093,15 +1696,30 @@ def build_buy_hints(
             target = _f(nz.get("center")) or _f(nz.get("low"))
 
     nearest_support = None
+    near_zone = _pick_near_strong_support(confluence, close)
     if isinstance(confluence, dict):
         ns = confluence.get("nearest_support_zone")
         if isinstance(ns, dict):
             nearest_support = _f(ns.get("center")) or _f(ns.get("high"))
+    if nearest_support is None and near_zone is not None:
+        nearest_support = _f(near_zone.get("center")) or _f(near_zone.get("high"))
 
     if short_bias == "看多":
         st_p = str(primary.get("status") or "") if primary else ""
         # 归档/失效旁路：颈线往往已远离现价，改近端支撑或巩固上沿翻支撑
         if st_p in ("archived", "invalidated"):
+            # 复用近端超强共振：有合格带则用 zone；否则退回点锚
+            if near_zone is not None:
+                tgt = _resolve_watch_target(close, target, confluence, upper)
+                hints.append(
+                    _hint_near_support_pref(
+                        near_zone,
+                        target=tgt,
+                        priority=2 if grade in ("strong", "enhanced") else 3,
+                        trigger="突破/归档后回踩近端共振支撑企稳（颈线已远离，不作回踩锚）",
+                    )
+                )
+                return hints, risk_note
             anchor_px = nearest_support
             if anchor_px is None and upper is not None:
                 anchor_px = upper
@@ -1166,10 +1784,156 @@ def build_buy_hints(
     if pressure_zone is not None:
         risk_note = "近端高强度共振压力压制，不在强压力下追多；等下沿承接或有效突破压力。"
     box_lo, box_hi = _hit_box_bounds(primary)
+    pattern_floor = box_lo if box_lo is not None else lower
+    floor_far = _level_far_below(close, pattern_floor)
+    # 主目标：箱体上沿 > 楔/形态上沿 > measured/confluence
+    primary_tgt = box_hi if box_hi is not None else (
+        upper if upper is not None else target
+    )
+    thin_rr = _target_thin_upside(close, primary_tgt)
+    watch_tgt = _resolve_watch_target(close, primary_tgt, confluence, upper)
+    fib_0382 = _fib_ratio_price(confluence)
+
+    def _append_far_floor_hint(*, with_note: bool = True) -> None:
+        nonlocal risk_note
+        if pattern_floor is None:
+            return
+        hints.append(
+            _hint_far_pattern_lower(
+                pattern_floor,
+                target=watch_tgt,
+                anchor="range_box_low_far" if box_lo is not None else "pattern_lower_far",
+            )
+        )
+        if with_note:
+            note_bit = "远端形态下沿仅作极限参考"
+            risk_note = f"{risk_note}；{note_bit}" if risk_note else note_bit
+
+    # —— floor_far（≥25%）：远端下沿永不为 p≤2 主锚；贴超强压 > 近端 A/B > 上破兜底 ——
+    if floor_far:
+        press_buy = _pressing_resistance_for_buy(confluence, close)
+        near_main = _pick_near_support_floor_far(confluence, close)
+
+        if press_buy is not None:
+            break_px = _break_level_from_resistance(press_buy)
+            if break_px is None and upper is not None:
+                break_px = upper
+            if break_px is not None:
+                # 目标：上沿之上下一档有效阻力优先；薄 upside 形态上沿不得单独作 target
+                bu_tgt = _resolve_break_upper_target(
+                    confluence,
+                    close,
+                    break_px=break_px,
+                    upper=upper,
+                    primary_tgt=primary_tgt,
+                )
+                if bu_tgt is None:
+                    bu_tgt = watch_tgt
+                hints.append(
+                    _hint_watch_break_upper(
+                        break_px,
+                        target=bu_tgt,
+                        trigger=(
+                            f"观察上破 {break_px:.2f} 再跟；贴身超强压下不新开/不追"
+                        ),
+                        priority=2,
+                    )
+                )
+                press_note = "强压下不新开/不追；等有效上破压力或回踩近端承接"
+                risk_note = f"{risk_note}；{press_note}" if risk_note else press_note
+                # 左侧近端降为次级 watch（不盖过 break_upper）
+                if near_main is not None:
+                    hints.append(
+                        _hint_near_support_pref(
+                            near_main,
+                            target=watch_tgt,
+                            priority=3,
+                            trigger="回踩近端共振支撑企稳（贴压时作左侧备选）",
+                        )
+                    )
+                    watch2 = _pick_near_support_watch2(
+                        confluence, close, primary=near_main
+                    )
+                    if watch2 is not None:
+                        hints.append(
+                            _hint_near_support_pref(
+                                watch2,
+                                target=watch_tgt,
+                                priority=3,
+                                trigger="回踩更远近端共振支撑企稳（第二档观察）",
+                            )
+                        )
+                    _apply_shared_near_invalidation(hints, fib_px=fib_0382)
+                _append_far_floor_hint()
+                return hints, risk_note
+
+        if near_main is not None:
+            trig = (
+                "回踩近端共振支撑企稳（远端下沿目标空间不足，改近端）"
+                if thin_rr
+                else "回踩近端高强度共振支撑企稳（形态下沿过远，优先近端）"
+            )
+            # B 档略弱时改文案
+            near_s = _f(near_main.get("strength")) or 0.0
+            if near_s < float(NEAR_SUPPORT_PREF_MIN_STRENGTH):
+                trig = "回踩近端共振支撑企稳（floor 过远，B 档近端优先）"
+            hints.append(
+                _hint_near_support_pref(
+                    near_main,
+                    target=watch_tgt,
+                    priority=2,
+                    trigger=trig,
+                )
+            )
+            watch2 = _pick_near_support_watch2(confluence, close, primary=near_main)
+            if watch2 is not None:
+                hints.append(
+                    _hint_near_support_pref(
+                        watch2,
+                        target=watch_tgt,
+                        priority=3,
+                        trigger="回踩更远近端共振支撑企稳（第二档观察）",
+                    )
+                )
+            _apply_shared_near_invalidation(hints, fib_px=fib_0382)
+            _append_far_floor_hint()
+            return hints, risk_note
+
+        # 无贴压、无近端：改上破再跟，远端下沿仅 p4
+        break_px = upper if upper is not None else (
+            box_hi if box_hi is not None else None
+        )
+        if break_px is not None:
+            bu_tgt = _resolve_break_upper_target(
+                confluence,
+                close,
+                break_px=break_px,
+                upper=upper,
+                primary_tgt=primary_tgt,
+            )
+            if bu_tgt is None:
+                bu_tgt = watch_tgt
+            trig = (
+                f"观察上破 {break_px:.2f} 再跟；远端下沿不作主买点"
+                + ("（目标空间不足）" if thin_rr else "")
+            )
+            hints.append(
+                _hint_watch_break_upper(break_px, target=bu_tgt, trigger=trig)
+            )
+            note_bit = "远端形态下沿仅作极限参考（改观察上破）"
+            risk_note = f"{risk_note}；{note_bit}" if risk_note else note_bit
+            _append_far_floor_hint(with_note=False)
+            return hints, risk_note
+
+        # 连上沿都没有：仅保留 p4 远端参考
+        if pattern_floor is not None:
+            _append_far_floor_hint()
+            return hints, risk_note
+
     if box_lo is not None:
         anchor = box_lo
         if box_hi is not None:
-            target = box_hi
+            watch_tgt = box_hi
         band = max(0.02, abs(anchor) * 0.008)
         hints.append(
             _with_clamped_invalidation(
@@ -1182,7 +1946,7 @@ def build_buy_hints(
                     },
                     "trigger": "回踩箱体下沿企稳",
                     "invalidation": round(anchor * BREAKOUT_DOWN_MULT, 2),
-                    "target": round(target, 2) if target is not None else None,
+                    "target": round(watch_tgt, 2) if watch_tgt is not None else None,
                     "priority": 2,
                 }
             )
@@ -1205,7 +1969,7 @@ def build_buy_hints(
                     },
                     "trigger": f"观察能否放量站稳颈线 {neck:.2f}；未站稳前不追高",
                     "invalidation": round(neck * BREAKOUT_DOWN_MULT, 2),
-                    "target": round(target, 2) if target is not None else None,
+                    "target": round(watch_tgt, 2) if watch_tgt is not None else None,
                     "priority": 2,
                 }
             )
@@ -1226,13 +1990,178 @@ def build_buy_hints(
                 "trigger": "回踩形态下沿/近端支撑企稳",
                 "invalidation": round(anchor * BREAKOUT_DOWN_MULT, 2),
                 "target": round(upper, 2) if upper is not None else (
-                    round(target, 2) if target is not None else None
+                    round(watch_tgt, 2) if watch_tgt is not None else None
                 ),
                 "priority": 2,
             }
         )
     )
     return hints, risk_note
+
+
+def _parse_ymd(v: Any) -> Optional[str]:
+    if v is None or v == "":
+        return None
+    s = str(v).strip()[:10]
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s
+    return None
+
+
+def _hit_span_meta(h: Dict[str, Any]) -> Dict[str, Any]:
+    """用枢轴日估计跨度；形成/确认日仅可向后延长终点，不可早于首枢轴。"""
+    from datetime import datetime
+
+    pivot_dates: List[str] = []
+    for p in h.get("pivots") or []:
+        if not isinstance(p, dict):
+            continue
+        d = _parse_ymd(p.get("date") or p.get("trade_date"))
+        if d:
+            pivot_dates.append(d)
+    fa = _parse_ymd(h.get("formed_at") or h.get("confirm_date"))
+    if pivot_dates:
+        dates = sorted(set(pivot_dates))
+        start, end = dates[0], dates[-1]
+        if fa and fa > end:
+            end = fa
+    elif fa:
+        start = end = fa
+    else:
+        return {"span_days": 0, "start": None, "end": None}
+    try:
+        span = (
+            datetime.strptime(end, "%Y-%m-%d") - datetime.strptime(start, "%Y-%m-%d")
+        ).days
+    except ValueError:
+        span = 0
+    return {"span_days": max(0, int(span)), "start": start, "end": end}
+
+
+def _hierarchy_node(h: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, Any]:
+    lv = _hit_levels(h)
+    return {
+        "pattern_type": h.get("pattern_type"),
+        "label": _TYPE_LABEL_ZH.get(str(h.get("pattern_type") or ""), str(h.get("pattern_type") or "")),
+        "status": h.get("status"),
+        "confidence": h.get("confidence"),
+        "formed_at": h.get("formed_at") or h.get("confirm_date"),
+        "neckline": _f(lv.get("neckline")),
+        "span_days": meta.get("span_days"),
+        "span_start": meta.get("start"),
+        "span_end": meta.get("end"),
+    }
+
+
+def _nesting_note_zh(dom: Dict[str, Any], sub: Dict[str, Any]) -> str:
+    """大周期主导 + 小周期从属的一句中文。"""
+    dlab = _TYPE_LABEL_ZH.get(str(dom.get("pattern_type") or ""), "主导形态")
+    slab = _TYPE_LABEL_ZH.get(str(sub.get("pattern_type") or ""), "从属形态")
+    dn = _f((_hit_levels(dom) or {}).get("neckline"))
+    sn = _f((_hit_levels(sub) or {}).get("neckline"))
+    dneck = f"（颈线{dn:.2f}）" if dn is not None else ""
+    sneck = f"（颈线{sn:.2f}）" if sn is not None else ""
+    db = _bias_of(str(dom.get("pattern_type") or ""))
+    sb = _bias_of(str(sub.get("pattern_type") or ""))
+    if _is_bearish_side(db) and _is_bullish_side(sb):
+        return (
+            f"大周期{dlab}{dneck}下压中，"
+            f"小周期{slab}{sneck}反弹形态受阻"
+        )
+    if _is_bullish_side(db) and _is_bearish_side(sb):
+        return (
+            f"大周期{dlab}{dneck}支撑框架中，"
+            f"小周期{slab}{sneck}回撤形态受压"
+        )
+    return f"大周期{dlab}{dneck}为主导，小周期{slab}{sneck}为从属嵌套"
+
+
+def build_pattern_hierarchy(
+    hits: Optional[Sequence[Dict[str, Any]]] = None,
+    *,
+    min_span_gap_days: int = 14,
+) -> Optional[Dict[str, Any]]:
+    """跨周期层级：按时间跨度挑选反向嵌套对，产出 nesting_note。
+
+    候选含 confirmed / forming / archived（不含 invalidated）。
+    优先头肩顶底对；主导=更长跨度（同跨度取更早起点）。
+    """
+    cand: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    for h in hits or []:
+        if not isinstance(h, dict):
+            continue
+        t = str(h.get("pattern_type") or "")
+        if t not in BEARISH_REVERSAL and t not in BULLISH_REVERSAL:
+            continue
+        st = str(h.get("status") or "")
+        if st not in ("confirmed", "forming", "archived"):
+            continue
+        cand.append((h, _hit_span_meta(h)))
+    if len(cand) < 2:
+        return None
+
+    best: Optional[Tuple[float, Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]] = None
+    for i, (a, ma) in enumerate(cand):
+        for b, mb in cand[i + 1 :]:
+            if not _bias_conflicts(
+                _bias_of(str(a.get("pattern_type") or "")),
+                _bias_of(str(b.get("pattern_type") or "")),
+            ):
+                continue
+            both_hs = str(a.get("pattern_type") or "").startswith("head_shoulders") and str(
+                b.get("pattern_type") or ""
+            ).startswith("head_shoulders")
+            # 头肩对：更早起点=大周期（002300 类时序嵌套）；其它反转对按跨度
+            if both_hs:
+                if str(ma.get("start") or "") <= str(mb.get("start") or ""):
+                    dom, sub, dm, sm = a, b, ma, mb
+                else:
+                    dom, sub, dm, sm = b, a, mb, ma
+            elif int(ma.get("span_days") or 0) >= int(mb.get("span_days") or 0):
+                if int(ma.get("span_days") or 0) == int(mb.get("span_days") or 0) and (
+                    str(ma.get("start") or "") > str(mb.get("start") or "")
+                ):
+                    dom, sub, dm, sm = b, a, mb, ma
+                else:
+                    dom, sub, dm, sm = a, b, ma, mb
+            else:
+                dom, sub, dm, sm = b, a, mb, ma
+            gap = abs(int(dm.get("span_days") or 0) - int(sm.get("span_days") or 0))
+            if gap < int(min_span_gap_days) and not both_hs:
+                continue
+            # 避免两个 forming 空谈嵌套；至少一侧已确认或归档
+            st_pair = {str(dom.get("status") or ""), str(sub.get("status") or "")}
+            if st_pair <= {"forming"}:
+                continue
+            score = float(gap)
+            if both_hs:
+                score += 100.0
+                # 起点越早越像大周期
+                try:
+                    from datetime import datetime
+
+                    sa = datetime.strptime(str(dm.get("start")), "%Y-%m-%d")
+                    sb = datetime.strptime(str(sm.get("start")), "%Y-%m-%d")
+                    score += max(0.0, (sb - sa).days)
+                except Exception:
+                    pass
+            if str(dom.get("status") or "") in ("confirmed", "archived"):
+                score += 30.0
+            if str(sub.get("status") or "") in ("confirmed", "forming"):
+                score += 20.0
+            if best is None or score > best[0]:
+                best = (score, dom, sub, dm, sm)
+    if best is None:
+        return None
+    _score, dom, sub, dm, sm = best
+    note = _nesting_note_zh(dom, sub)
+    return {
+        "dominant": _hierarchy_node(dom, dm),
+        "subordinate": _hierarchy_node(sub, sm),
+        "nesting_note": note,
+        "relation": "nested_opposite",
+        "span_gap_days": abs(int(dm.get("span_days") or 0) - int(sm.get("span_days") or 0)),
+    }
 
 
 def build_pattern_tactical(
@@ -1281,7 +2210,34 @@ def build_pattern_tactical(
         pressure_zone=classified.get("pressure_zone"),
     )
 
-    return {
+    for h in hints:
+        if not isinstance(h, dict):
+            continue
+        ez = h.get("entry_zone") if isinstance(h.get("entry_zone"), dict) else {}
+        if ez.get("anchor") == "near_support_pref":
+            evidence.append(
+                {
+                    "code": "near_support_pref",
+                    "ok": True,
+                    "center": ez.get("center"),
+                    "strength": ez.get("strength"),
+                }
+            )
+            break
+
+    hierarchy = build_pattern_hierarchy(hits)
+    if hierarchy:
+        evidence.append(
+            {
+                "code": "pattern_hierarchy",
+                "ok": True,
+                "dominant": (hierarchy.get("dominant") or {}).get("pattern_type"),
+                "subordinate": (hierarchy.get("subordinate") or {}).get("pattern_type"),
+                "span_gap_days": hierarchy.get("span_gap_days"),
+            }
+        )
+
+    out: Dict[str, Any] = {
         "short_bias": classified.get("short_bias"),
         "bias_label": classified.get("bias_label"),
         "grade": classified.get("grade"),
@@ -1291,4 +2247,7 @@ def build_pattern_tactical(
         "buy_hints": hints,
         "risk_note": risk_note,
         "disclaimer": DISCLAIMER,
+        "pattern_hierarchy": hierarchy,
+        "nesting_note": (hierarchy or {}).get("nesting_note") if hierarchy else None,
     }
+    return out

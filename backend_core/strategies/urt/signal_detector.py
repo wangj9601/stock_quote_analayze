@@ -71,7 +71,7 @@ def _compute_structure_levels(
         nearest_levels,
     )
 
-    init_lb = int(cfg.get("kde_lookback_days") or cfg.get("kde_lookback_initial") or 250)
+    init_lb = int(cfg.get("kde_lookback_days") or cfg.get("kde_lookback_initial") or 60)
     step = int(cfg.get("kde_lookback_step") or 250)
     max_lb = int(cfg.get("kde_lookback_max") or 750)
     base = float(cfg.get("kde_base_factor") or 1.0)

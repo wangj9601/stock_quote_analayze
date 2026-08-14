@@ -280,7 +280,7 @@ admin/  # /urt-management 参数配置页
 
 | 参数 | 含义 | 默认 | 说明 |
 |------|------|------|------|
-| `kde_lookback_days` 等 | KDE 回看 | 250/250/750 | 与 RPE 同口径 |
+| `kde_lookback_days` 等 | KDE 回看 | 60/250/750 | 初始/步进/上限 |
 | `structure_rr_warn_enabled` | 是否打盈亏比风险标签 | `true` | 软提示；关闭后不生成 `risk_tags` |
 | `structure_rr_min_rr` | 最低可接受 RR | `1.5` | RR=(阻力−收盘)/max(收盘−支撑, 收盘×分母下限)；破位/贴阻力为 danger，偏低为 warn |
 | `structure_rr_min_downside_pct` | RR 分母下限（现价比例） | `0.015` | 贴支撑时避免 RR 虚高；设 `0` 关闭；命中时标签/明细可提示「已用分母下限」 |

@@ -395,8 +395,8 @@ class TradingRecommendation:
 class KeyLevels:
     """关键价位分析类（成交量加权 KDE，与 RPE 比价效应结构位同一思路）。"""
 
-    # 与 RPE 默认 lookback / kde 递推上限对齐：250 → 500 → 750（约 3 年）
-    KDE_LOOKBACK_DAYS = 250
+    # 初始回看与 VP 默认对齐（60）；无支撑时按 STEP 递推至 MAX：60 → 310 → 560 → 750
+    KDE_LOOKBACK_DAYS = 60
     KDE_LOOKBACK_STEP = 250
     KDE_LOOKBACK_MAX = 750
     KDE_BASE_FACTOR = 1.0
@@ -418,7 +418,7 @@ class KeyLevels:
         - 带宽 bw = max(0.01, base_factor * sigma/mu)
         - 现价下方峰 -> 支撑（由近到远）
         - 现价上方峰 -> 阻力（由近到远）
-        - 无支撑时按 250 日递推扩大回看，最多约 3 年（750 日）
+        - 无支撑时按 STEP（250）日递推扩大回看，最多约 3 年（750 日）
         展示侧各取最多 max_levels 个（默认 2）；按当前价（可实时）重新划分峰。
         """
         empty = {
@@ -743,6 +743,40 @@ class StockAnalysisService:
             return max(5, min(lb, 750)), None
         return int(DEFAULT_LOOKBACK), None
 
+    @staticmethod
+    def _resolve_kde_lookback(
+        historical_data: Optional[List[Dict]],
+        *,
+        kde_lookback: Optional[int] = None,
+        kde_from_date: Optional[str] = None,
+    ) -> Tuple[int, Optional[str]]:
+        """解析 KDE 初始回看：优先起始日期（按日K根数），否则用天数；默认 60。
+
+        可调的是初始 lookback；无支撑时仍按 STEP（250）递推至 MAX（750）。
+        """
+        default = int(KeyLevels.KDE_LOOKBACK_DAYS)
+        max_cap = int(KeyLevels.KDE_LOOKBACK_MAX)
+        min_lb = 20  # 与 extract_kde_levels 最少有效样本对齐
+
+        bars = [b for b in (historical_data or []) if isinstance(b, dict)]
+        fd = str(kde_from_date or "").strip()[:10]
+        if fd and len(fd) >= 8:
+            n = 0
+            for b in bars:
+                raw = b.get("date") if b.get("date") is not None else b.get("trade_date")
+                ds = str(raw or "").strip()[:10]
+                if ds and ds >= fd:
+                    n += 1
+            if n >= min_lb:
+                return max(min_lb, min(n, max_cap)), fd
+        if kde_lookback is not None:
+            try:
+                lb = int(kde_lookback)
+            except (TypeError, ValueError):
+                lb = default
+            return max(min_lb, min(lb, max_cap)), None
+        return default, None
+
     def get_key_levels_only(
         self,
         stock_code: str,
@@ -753,6 +787,8 @@ class StockAnalysisService:
         adj_meta: Optional[Dict] = None,
         vp_lookback: Optional[int] = None,
         vp_from_date: Optional[str] = None,
+        kde_lookback: Optional[int] = None,
+        kde_from_date: Optional[str] = None,
     ) -> Dict:
         """计算 KDE 支撑/压力，并附带黄金分割与经典 Pivot 参考位（分析-个股分析）。
 
@@ -761,6 +797,9 @@ class StockAnalysisService:
           - qfq: 调用方传入已现算前复权的 historical_data
         vp_lookback / vp_from_date:
           Volume Profile 回看天数，或起始交易日起算（优先日期）。
+        kde_lookback / kde_from_date:
+          KDE 初始回看天数（默认 60），或起始交易日起算（优先日期）；
+          无支撑时仍按 STEP/MAX 扩窗，规则不变。
         """
         try:
             code = str(stock_code or "").strip()
@@ -838,11 +877,20 @@ class StockAnalysisService:
                 current_price = float(realtime_price)
                 price_source = realtime_source
 
+            kde_lb_req, kde_fd = self._resolve_kde_lookback(
+                historical_data,
+                kde_lookback=kde_lookback,
+                kde_from_date=kde_from_date,
+            )
             levels = KeyLevels.calculate_key_levels(
                 historical_data,
                 current_price,
                 max_levels=max(1, int(max_levels or 8)),
+                initial_lookback=kde_lb_req,
+                max_lookback=KeyLevels.KDE_LOOKBACK_MAX,
             )
+            if kde_fd:
+                levels["kde_from_date"] = kde_fd
             classic = KeyLevels.calculate_classic_reference_levels(
                 historical_data,
                 current_price,
@@ -966,7 +1014,7 @@ class StockAnalysisService:
     def get_stock_analysis(self, stock_code: str) -> Dict:
         """获取股票智能分析结果"""
         try:
-            # 获取历史数据（关键价位 KDE：最多约 3 年，支撑缺失时 250→500→750 递推）
+            # 获取历史数据（关键价位 KDE：最多约 3 年，支撑缺失时自初始回看按 STEP 递推至 MAX）
             historical_data = self._get_historical_data(
                 stock_code, days=KeyLevels.KDE_LOOKBACK_MAX
             )

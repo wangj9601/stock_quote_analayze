@@ -58,7 +58,7 @@ class URTConfigManager:
             "min_volume_ratio": 0.0,
             "history_calendar_days": 120,
             # KDE 支撑/阻力（与 RPE / 个股关键价位同口径）
-            "kde_lookback_days": 250,
+            "kde_lookback_days": 60,
             "kde_lookback_step": 250,
             "kde_lookback_max": 750,
             "kde_base_factor": 1.0,
