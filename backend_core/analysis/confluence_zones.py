@@ -16,6 +16,14 @@ NEAR_MIN_POINTS = 3
 # 单带最大相对带宽（相对中心）；超出则按簇内最大 gap 拆成近端/远端带（不改全局 eps）
 MAX_ZONE_WIDTH_PCT = 0.025  # 2.5%
 _MAX_ZONE_SPLIT_DEPTH = 4
+# 支撑位于 VP VAL 下方（筹码真空侧）时：保留原始 strength，另输出折减强度与警示
+CHIPS_VOID_STRENGTH_FACTOR = 0.85
+CHIPS_VOID_ATR_PCT_HIGH = 0.04  # ATR/close ≥4% 时 void_note 强调高 ATR 击穿
+# 阻力与 VP 关键水平（POC/VAH/VAL）重叠时：保留原始 strength，另输出增益强度（与真空折减对称、分边）
+CHIPS_HVZ_GAIN = 1.25
+CHIPS_HVZ_OVERLAP_PCT = 0.01  # 落入带内，或相对距离 ≤1%
+# 多源等距时的来源优先级（数值越小优先）
+_HVZ_SOURCE_PRIORITY = {"poc": 0, "vah": 1, "val": 2}
 
 
 def _f(v: Any) -> Optional[float]:
@@ -302,6 +310,271 @@ def _zone_id(z: Dict[str, Any]) -> Tuple[float, float, float]:
     return (float(z["center"]), float(z["low"]), float(z["high"]))
 
 
+def _zone_void_ref_price(z: Dict[str, Any]) -> Optional[float]:
+    """真空判定参考价：优先 center，否则 high。"""
+    c = _f(z.get("center"))
+    if c is not None:
+        return c
+    return _f(z.get("high"))
+
+
+def _chips_void_note(
+    *,
+    val: float,
+    lookback: Optional[int] = None,
+    atr: Optional[float] = None,
+    last_close: Optional[float] = None,
+) -> str:
+    lb = int(lookback) if lookback and int(lookback) > 0 else 60
+    base = f"位于{lb}日筹码真空区（VAL={round(float(val), PRICE_DECIMALS)}）"
+    a, c = _f(atr), _f(last_close)
+    if a is not None and c is not None and c > 0 and (a / c) >= float(CHIPS_VOID_ATR_PCT_HIGH):
+        atr_pct = a / c * 100.0
+        return f"{base}，ATR≈{atr_pct:.1f}%，需防范高ATR击穿效应"
+    return f"{base}，需防范高ATR击穿效应"
+
+
+def annotate_support_chips_void(
+    zone: Dict[str, Any],
+    *,
+    vp_val: Optional[float],
+    vp_lookback: Optional[int] = None,
+    atr: Optional[float] = None,
+    last_close: Optional[float] = None,
+    factor: float = CHIPS_VOID_STRENGTH_FACTOR,
+) -> Dict[str, Any]:
+    """若支撑带参考价 < VAL，保留 strength，写入 strength_adjusted / chips_void / void_note。
+
+    无 VAL 或带不在真空侧时原样返回（不破坏无 VP 路径）。
+    仅作用于支撑侧；不与阻力 HVZ 增益混用。
+    """
+    z = dict(zone)
+    val = _f(vp_val)
+    if val is None or val <= 0:
+        return z
+    ref = _zone_void_ref_price(z)
+    if ref is None or ref >= val:
+        return z
+    strength = _f(z.get("strength"))
+    fac = float(factor) if factor and float(factor) > 0 else float(CHIPS_VOID_STRENGTH_FACTOR)
+    z["chips_void"] = True
+    z["void_val"] = round(val, PRICE_DECIMALS)
+    if vp_lookback is not None and int(vp_lookback) > 0:
+        z["void_lookback"] = int(vp_lookback)
+    z["void_note"] = _chips_void_note(
+        val=val, lookback=vp_lookback, atr=atr, last_close=last_close
+    )
+    if strength is not None:
+        z["strength_adjusted"] = round(strength * fac, 3)
+    return z
+
+
+def _annotate_supports_chips_void(
+    supports: List[Dict[str, Any]],
+    nearest: Optional[Dict[str, Any]],
+    *,
+    vp_val: Optional[float],
+    vp_lookback: Optional[int] = None,
+    atr: Optional[float] = None,
+    last_close: Optional[float] = None,
+    factor: float = CHIPS_VOID_STRENGTH_FACTOR,
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    kwargs = dict(
+        vp_val=vp_val,
+        vp_lookback=vp_lookback,
+        atr=atr,
+        last_close=last_close,
+        factor=factor,
+    )
+    out = [annotate_support_chips_void(z, **kwargs) for z in supports]
+    nearest_out = (
+        annotate_support_chips_void(nearest, **kwargs)
+        if isinstance(nearest, dict)
+        else None
+    )
+    return out, nearest_out
+
+
+def _zone_hvz_ref_prices(z: Dict[str, Any]) -> List[float]:
+    """HVZ 距离参考：center / low / high（去空）。"""
+    out: List[float] = []
+    for key in ("center", "low", "high"):
+        v = _f(z.get(key))
+        if v is not None and v > 0:
+            out.append(float(v))
+    return out
+
+
+def _zone_overlaps_vp_level(
+    zone: Dict[str, Any],
+    level: float,
+    *,
+    tol_pct: float = CHIPS_HVZ_OVERLAP_PCT,
+) -> Tuple[bool, float]:
+    """阻力带与 VP 水平是否重叠。
+
+    规则：level 落入 [low, high]，或相对最近带边/中心的距离 ≤ tol_pct。
+    返回 (是否重叠, 绝对距离)；不重叠时距离为 +inf。
+    """
+    lv = float(level)
+    if lv <= 0:
+        return False, float("inf")
+    lo, hi = _f(zone.get("low")), _f(zone.get("high"))
+    if lo is not None and hi is not None:
+        a, b = (lo, hi) if lo <= hi else (hi, lo)
+        if a <= lv <= b:
+            return True, 0.0
+    refs = _zone_hvz_ref_prices(zone)
+    if not refs:
+        return False, float("inf")
+    dist = min(abs(r - lv) for r in refs)
+    denom = max(abs(lv), abs(refs[0]), 1e-9)
+    if dist / denom <= float(tol_pct):
+        return True, dist
+    return False, dist
+
+
+def _pick_hvz_source(
+    zone: Dict[str, Any],
+    *,
+    vp_poc: Optional[float] = None,
+    vp_vah: Optional[float] = None,
+    vp_val: Optional[float] = None,
+    tol_pct: float = CHIPS_HVZ_OVERLAP_PCT,
+) -> Optional[Tuple[str, float, float]]:
+    """在 POC/VAH/VAL 中选最近重叠源。返回 (source, level, dist) 或 None。"""
+    candidates: List[Tuple[str, float]] = []
+    for src, raw in (("poc", vp_poc), ("vah", vp_vah), ("val", vp_val)):
+        lv = _f(raw)
+        if lv is not None and lv > 0:
+            candidates.append((src, float(lv)))
+    if not candidates:
+        return None
+    best: Optional[Tuple[str, float, float]] = None
+    for src, lv in candidates:
+        ok, dist = _zone_overlaps_vp_level(zone, lv, tol_pct=tol_pct)
+        if not ok:
+            continue
+        if best is None:
+            best = (src, lv, dist)
+            continue
+        _, _, best_dist = best
+        if dist < best_dist - 1e-12:
+            best = (src, lv, dist)
+        elif abs(dist - best_dist) <= 1e-12:
+            # 等距：POC > VAH > VAL
+            if _HVZ_SOURCE_PRIORITY.get(src, 99) < _HVZ_SOURCE_PRIORITY.get(best[0], 99):
+                best = (src, lv, dist)
+    return best
+
+
+def _chips_hvz_note(
+    *,
+    source: str,
+    level: float,
+    strength: float,
+    adjusted: float,
+    lookback: Optional[int] = None,
+) -> str:
+    lb = int(lookback) if lookback and int(lookback) > 0 else 60
+    src = str(source or "").lower()
+    if src == "poc":
+        tag = "POC/筹码密集峰"
+    elif src == "vah":
+        tag = "VAH/价值区上沿"
+    else:
+        tag = "VAL/密集抛压区"
+    return (
+        f"重叠{lb}日VP {tag}（{round(float(level), PRICE_DECIMALS)}），"
+        f"压制因子放大至{round(float(adjusted), 3)}"
+        f"（原始强度{round(float(strength), 3)}）"
+    )
+
+
+def annotate_resistance_chips_hvz(
+    zone: Dict[str, Any],
+    *,
+    vp_poc: Optional[float] = None,
+    vp_vah: Optional[float] = None,
+    vp_val: Optional[float] = None,
+    vp_lookback: Optional[int] = None,
+    gain: float = CHIPS_HVZ_GAIN,
+    overlap_pct: float = CHIPS_HVZ_OVERLAP_PCT,
+) -> Dict[str, Any]:
+    """若阻力带与 POC/VAH/VAL 重叠，保留 strength，写入 strength_adjusted / chips_hvz 等。
+
+    专家规则（与支撑 chips_void 对称、分边）：
+    - 仅阻力侧；不改写支撑、不与 void 折减叠乘。
+    - 重叠：水平落入 [low,high]，或相对带中心/边距 ≤ overlap_pct（默认 1%）。
+    - 含 VAL：现价常在 VAL 下方时，VAL 为价值区下沿/密集抛压起点（601698: 27.59≈VAL 27.81）。
+    """
+    z = dict(zone)
+    picked = _pick_hvz_source(
+        z,
+        vp_poc=vp_poc,
+        vp_vah=vp_vah,
+        vp_val=vp_val,
+        tol_pct=overlap_pct,
+    )
+    if picked is None:
+        return z
+    src, level, _dist = picked
+    strength = _f(z.get("strength"))
+    g = float(gain) if gain and float(gain) > 0 else float(CHIPS_HVZ_GAIN)
+    z["chips_hvz"] = True
+    z["hvz_source"] = src
+    z["hvz_level"] = round(level, PRICE_DECIMALS)
+    if vp_lookback is not None and int(vp_lookback) > 0:
+        z["hvz_lookback"] = int(vp_lookback)
+    if strength is not None:
+        adj = round(strength * g, 3)
+        z["strength_adjusted"] = adj
+        z["hvz_note"] = _chips_hvz_note(
+            source=src,
+            level=level,
+            strength=strength,
+            adjusted=adj,
+            lookback=vp_lookback,
+        )
+    else:
+        z["hvz_note"] = _chips_hvz_note(
+            source=src,
+            level=level,
+            strength=0.0,
+            adjusted=0.0,
+            lookback=vp_lookback,
+        )
+    return z
+
+
+def _annotate_resistances_chips_hvz(
+    resistances: List[Dict[str, Any]],
+    nearest: Optional[Dict[str, Any]],
+    *,
+    vp_poc: Optional[float] = None,
+    vp_vah: Optional[float] = None,
+    vp_val: Optional[float] = None,
+    vp_lookback: Optional[int] = None,
+    gain: float = CHIPS_HVZ_GAIN,
+    overlap_pct: float = CHIPS_HVZ_OVERLAP_PCT,
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    kwargs = dict(
+        vp_poc=vp_poc,
+        vp_vah=vp_vah,
+        vp_val=vp_val,
+        vp_lookback=vp_lookback,
+        gain=gain,
+        overlap_pct=overlap_pct,
+    )
+    out = [annotate_resistance_chips_hvz(z, **kwargs) for z in resistances]
+    nearest_out = (
+        annotate_resistance_chips_hvz(nearest, **kwargs)
+        if isinstance(nearest, dict)
+        else None
+    )
+    return out, nearest_out
+
+
 def _is_near_dense_zone(
     z: Dict[str, Any],
     *,
@@ -388,6 +661,13 @@ def build_confluence_zones(
     near_min_sources: int = NEAR_MIN_SOURCES,
     near_min_points: int = NEAR_MIN_POINTS,
     max_zone_width_pct: float = MAX_ZONE_WIDTH_PCT,
+    vp_val: Optional[float] = None,
+    vp_poc: Optional[float] = None,
+    vp_vah: Optional[float] = None,
+    vp_lookback: Optional[int] = None,
+    chips_void_factor: float = CHIPS_VOID_STRENGTH_FACTOR,
+    chips_hvz_gain: float = CHIPS_HVZ_GAIN,
+    chips_hvz_overlap_pct: float = CHIPS_HVZ_OVERLAP_PCT,
 ) -> Dict[str, Any]:
     pts = [p for p in points if _f(p.get("price")) is not None]
     empty = {
@@ -405,6 +685,9 @@ def build_confluence_zones(
             "near_min_sources": int(near_min_sources),
             "near_min_points": int(near_min_points),
             "max_zone_width_pct": float(max_zone_width_pct),
+            "chips_void_factor": float(chips_void_factor),
+            "chips_hvz_gain": float(chips_hvz_gain),
+            "chips_hvz_overlap_pct": float(chips_hvz_overlap_pct),
         },
     }
     if len(pts) < 2:
@@ -459,6 +742,9 @@ def build_confluence_zones(
         "near_min_sources": int(near_min_sources),
         "near_min_points": int(near_min_points),
         "max_zone_width_pct": float(max_zone_width_pct),
+        "chips_void_factor": float(chips_void_factor),
+        "chips_hvz_gain": float(chips_hvz_gain),
+        "chips_hvz_overlap_pct": float(chips_hvz_overlap_pct),
     }
 
     if not zones:
@@ -506,6 +792,28 @@ def build_confluence_zones(
         near_min_points=near_min_points,
     )
 
+    # VAL 下方支撑：筹码真空折减（TopN/nearest 已按原始 strength 选定）
+    supports, nearest_s = _annotate_supports_chips_void(
+        supports,
+        nearest_s,
+        vp_val=vp_val,
+        vp_lookback=vp_lookback,
+        atr=atr_v,
+        last_close=px,
+        factor=float(chips_void_factor),
+    )
+    # 阻力与 POC/VAH/VAL 重叠：筹码密集压制增益（与 void 分边，不叠乘）
+    resistances, nearest_r = _annotate_resistances_chips_hvz(
+        resistances,
+        nearest_r,
+        vp_poc=vp_poc,
+        vp_vah=vp_vah,
+        vp_val=vp_val,
+        vp_lookback=vp_lookback,
+        gain=float(chips_hvz_gain),
+        overlap_pct=float(chips_hvz_overlap_pct),
+    )
+
     return {
         "ok": True,
         "reason": "ok",
@@ -533,6 +841,9 @@ def compute_confluence_from_reference(
     near_min_sources: int = NEAR_MIN_SOURCES,
     near_min_points: int = NEAR_MIN_POINTS,
     max_zone_width_pct: float = MAX_ZONE_WIDTH_PCT,
+    chips_void_factor: float = CHIPS_VOID_STRENGTH_FACTOR,
+    chips_hvz_gain: float = CHIPS_HVZ_GAIN,
+    chips_hvz_overlap_pct: float = CHIPS_HVZ_OVERLAP_PCT,
 ) -> Dict[str, Any]:
     pts = collect_candidate_points(
         kde_support=kde_support,
@@ -547,6 +858,16 @@ def compute_confluence_from_reference(
     )
     atr_v = atr if atr is not None else (ref.get("atr") or (ref.get("atr_pivot") or {}).get("atr"))
     lc = last_close if last_close is not None else ref.get("last_close")
+    vp = ref.get("volume_profile") if isinstance(ref.get("volume_profile"), dict) else {}
+    vp_ok = bool(vp.get("ok"))
+    vp_val = _f(vp.get("val")) if vp_ok else None
+    vp_poc = _f(vp.get("poc")) if vp_ok else None
+    vp_vah = _f(vp.get("vah")) if vp_ok else None
+    vp_lb = vp.get("lookback")
+    try:
+        vp_lookback = int(vp_lb) if vp_lb is not None else None
+    except (TypeError, ValueError):
+        vp_lookback = None
     return build_confluence_zones(
         pts,
         last_close=lc,
@@ -556,4 +877,11 @@ def compute_confluence_from_reference(
         near_min_sources=near_min_sources,
         near_min_points=near_min_points,
         max_zone_width_pct=max_zone_width_pct,
+        vp_val=vp_val,
+        vp_poc=vp_poc,
+        vp_vah=vp_vah,
+        vp_lookback=vp_lookback,
+        chips_void_factor=chips_void_factor,
+        chips_hvz_gain=chips_hvz_gain,
+        chips_hvz_overlap_pct=chips_hvz_overlap_pct,
     )

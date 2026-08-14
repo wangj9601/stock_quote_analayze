@@ -1,0 +1,191 @@
+﻿数据库连接URL: 'postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis'
+
+# code=002286 req=2026-08-13 -> effective=2026-08-13 adjust=qfq
+first=2025-12-16 last=2026-08-13 C=7.98 bars=160
+adj_meta= {"source": "akshare_sina_qfq", "adj_factor_asof": "2026-07-14", "factor_fetched": false, "factor_source": "auto"}
+
+===== asof=2026-08-13 bars=160 hits=5 invalidated=1 =====
+{"i": 1, "type": "head_shoulders_top", "status": "archived", "confidence": 0.75, "formed_at": "2026-03-23", "key_levels": {"left_shoulder": 10.67, "head": 11.43, "right_shoulder": 10.58, "neckline": 9.47, "neck_left": 10.15, "neck_right": 9.83, "neckline_method": "slanted", "last_close": 7.98, "confirm_neckline": 9.47}, "reason": "头肩顶 左肩=10.67(2026-02-06) 头=11.43(2026-02-26) 右肩=10.58(2026-03-09) 斜颈≈9.47 峰1=10.15(2026-02-12) 峰2=9.83(2026-03-06) 破颈确认:2026-03-23；生命周期已结束（测幅目标已兑现≤7.71，已归档）"}
+{"i": 2, "type": "double_bottom", "status": "forming", "confidence": 0.45, "formed_at": "2026-08-06", "key_levels": {"l1": 7.75, "l2": 7.88, "neckline": 8.25, "last_close": 7.98, "bias_mix": true}, "reason": "W双底 L1=7.75(2026-07-14) L2=7.88(2026-08-06) 颈线=8.25(2026-07-17)；与反向双顶/双底同窗交织，置信已降权"}
+{"i": 3, "type": "double_top", "status": "forming", "confidence": 0.45, "formed_at": "2026-08-10", "key_levels": {"h1": 8.25, "h2": 8.2, "neckline": 7.15, "last_close": 7.98, "bias_mix": true}, "reason": "M双顶 H1=8.25(2026-07-17) H2=8.20(2026-08-10) 颈线=7.15(2026-07-27)；与反向双顶/双底同窗交织，置信已降权"}
+{"i": 4, "type": "bear_flag", "status": "forming", "confidence": 0.42, "formed_at": "2026-08-10", "key_levels": {"upper": 8.2, "lower": 7.15, "last_close": 7.98, "upper_slope": -0.02137791, "lower_slope": -0.03939444, "slope_unit": "元/K线索引(约交易日)"}, "reason": "下降旗形（简化规则） 通道上沿=8.20(2026-08-10) 下沿=7.15(2026-07-27) 上沿斜率=-0.021378元/K线索引(约交易日) 下沿斜率=-0.039394元/K线索引(约交易日)"}
+{"i": 5, "type": "head_shoulders_bottom", "status": "invalidated", "confidence": 0.2, "formed_at": "2026-04-03", "key_levels": {"left_shoulder": 9.96, "head": 8.87, "right_shoulder": 9.26, "neckline": 0.39, "neck_left": 10.69, "neck_right": 9.88, "neckline_method": "slanted", "last_close": 7.98}, "reason": "头肩底 左肩=9.96(2026-03-13) 头=8.87(2026-03-23) 右肩=9.26(2026-04-03) 斜颈≈0.39 峰1=10.69(2026-03-17) 峰2=9.88(2026-03-27) 失效:右肩后低点/收盘<头×0.99(8.7848)"}
+
+=== HS CHECK asof=2026-08-13 count=2 ===
+{"i": 1, "type": "head_shoulders_top", "status": "archived", "confidence": 0.75, "formed_at": "2026-03-23", "last_date": "2026-08-13", "neckline_disp": 9.47, "neckline_positive": true, "neck_at_last": 6.342, "neck_at_last_positive": true, "n1": {"role": "neck1", "date": "2026-02-12", "price": 10.15}, "n2": {"role": "neck2", "date": "2026-03-06", "price": 9.83}, "n1_i": 40, "n2_i": 50, "forming_stale": false, "formed_bar_lag": 98, "calendar_days_after_formed": 143, "reason": "头肩顶 左肩=10.67(2026-02-06) 头=11.43(2026-02-26) 右肩=10.58(2026-03-09) 斜颈≈9.47 峰1=10.15(2026-02-12) 峰2=9.83(2026-03-06) 破颈确认:2026-03-23；生命周期已结束（测幅目标已兑现≤7.71，已归档）"}
+{"i": 2, "type": "head_shoulders_bottom", "status": "invalidated", "confidence": 0.2, "formed_at": "2026-04-03", "last_date": "2026-08-13", "neckline_disp": 0.39, "neckline_positive": true, "neck_at_last": 0.3625, "neck_at_last_positive": true, "n1": {"role": "neck1", "date": "2026-03-17", "price": 10.69}, "n2": {"role": "neck2", "date": "2026-03-27", "price": 9.88}, "n1_i": 57, "n2_i": 65, "forming_stale": false, "formed_bar_lag": 89, "calendar_days_after_formed": 132, "reason": "头肩底 左肩=9.96(2026-03-13) 头=8.87(2026-03-23) 右肩=9.26(2026-04-03) 斜颈≈0.39 峰1=10.69(2026-03-17) 峰2=9.88(2026-03-27) 失效:右肩后低点/收盘<头×0.99(8.7848)"}
+
+=== TACTICAL asof=2026-08-13 (full) ===
+{
+  "short_bias": "震荡",
+  "bias_label": "蓄势夹击",
+  "grade": "base",
+  "confidence": 0.462,
+  "rationale": "形成中的双底，边界未完全突破；多空形态交织，宜按宽幅箱体观察",
+  "evidence": [
+    {
+      "code": "pattern_breakdown",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "forming",
+      "close": 7.98,
+      "neckline": 8.25,
+      "lower": null
+    },
+    {
+      "code": "pattern_confirmed_neck",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "forming",
+      "close": 7.98,
+      "neckline": 8.25
+    },
+    {
+      "code": "pattern_consol_break_up",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "forming",
+      "dir": null
+    },
+    {
+      "code": "pattern_forming",
+      "ok": true,
+      "pattern_type": "double_bottom"
+    },
+    {
+      "code": "bias_mix",
+      "ok": true
+    },
+    {
+      "code": "resonance_pressure",
+      "ok": false,
+      "min_strength": 50.0,
+      "strength": null,
+      "center": null
+    },
+    {
+      "code": "vp_break_vah",
+      "ok": false,
+      "vah": 8.98,
+      "nearest_resistance": 8.02
+    },
+    {
+      "code": "rpe_lead",
+      "ok": false,
+      "z_score": 0.05041795315621121,
+      "z_lead": 2.0,
+      "signal_type": "--"
+    }
+  ],
+  "buy_hints": [
+    {
+      "type": "watch",
+      "entry_zone": {
+        "low": 7.91,
+        "high": 8.03,
+        "anchor": "nearest_support"
+      },
+      "trigger": "回踩形态下沿/近端支撑企稳",
+      "invalidation": 7.93,
+      "target": 8.12,
+      "priority": 2
+    }
+  ],
+  "risk_note": null,
+  "disclaimer": "规则模板，非投资建议"
+}
+
+# code=002286 req=2026-08-14 -> effective=2026-08-13 adjust=qfq
+first=2025-12-16 last=2026-08-13 C=7.98 bars=160
+adj_meta= {"source": "akshare_sina_qfq", "adj_factor_asof": "2026-07-14", "factor_fetched": false, "factor_source": "auto"}
+
+===== asof=2026-08-13 bars=160 hits=5 invalidated=1 =====
+{"i": 1, "type": "head_shoulders_top", "status": "archived", "confidence": 0.75, "formed_at": "2026-03-23", "key_levels": {"left_shoulder": 10.67, "head": 11.43, "right_shoulder": 10.58, "neckline": 9.47, "neck_left": 10.15, "neck_right": 9.83, "neckline_method": "slanted", "last_close": 7.98, "confirm_neckline": 9.47}, "reason": "头肩顶 左肩=10.67(2026-02-06) 头=11.43(2026-02-26) 右肩=10.58(2026-03-09) 斜颈≈9.47 峰1=10.15(2026-02-12) 峰2=9.83(2026-03-06) 破颈确认:2026-03-23；生命周期已结束（测幅目标已兑现≤7.71，已归档）"}
+{"i": 2, "type": "double_bottom", "status": "forming", "confidence": 0.45, "formed_at": "2026-08-06", "key_levels": {"l1": 7.75, "l2": 7.88, "neckline": 8.25, "last_close": 7.98, "bias_mix": true}, "reason": "W双底 L1=7.75(2026-07-14) L2=7.88(2026-08-06) 颈线=8.25(2026-07-17)；与反向双顶/双底同窗交织，置信已降权"}
+{"i": 3, "type": "double_top", "status": "forming", "confidence": 0.45, "formed_at": "2026-08-10", "key_levels": {"h1": 8.25, "h2": 8.2, "neckline": 7.15, "last_close": 7.98, "bias_mix": true}, "reason": "M双顶 H1=8.25(2026-07-17) H2=8.20(2026-08-10) 颈线=7.15(2026-07-27)；与反向双顶/双底同窗交织，置信已降权"}
+{"i": 4, "type": "bear_flag", "status": "forming", "confidence": 0.42, "formed_at": "2026-08-10", "key_levels": {"upper": 8.2, "lower": 7.15, "last_close": 7.98, "upper_slope": -0.02137791, "lower_slope": -0.03939444, "slope_unit": "元/K线索引(约交易日)"}, "reason": "下降旗形（简化规则） 通道上沿=8.20(2026-08-10) 下沿=7.15(2026-07-27) 上沿斜率=-0.021378元/K线索引(约交易日) 下沿斜率=-0.039394元/K线索引(约交易日)"}
+{"i": 5, "type": "head_shoulders_bottom", "status": "invalidated", "confidence": 0.2, "formed_at": "2026-04-03", "key_levels": {"left_shoulder": 9.96, "head": 8.87, "right_shoulder": 9.26, "neckline": 0.39, "neck_left": 10.69, "neck_right": 9.88, "neckline_method": "slanted", "last_close": 7.98}, "reason": "头肩底 左肩=9.96(2026-03-13) 头=8.87(2026-03-23) 右肩=9.26(2026-04-03) 斜颈≈0.39 峰1=10.69(2026-03-17) 峰2=9.88(2026-03-27) 失效:右肩后低点/收盘<头×0.99(8.7848)"}
+
+=== HS CHECK asof=2026-08-13 count=2 ===
+{"i": 1, "type": "head_shoulders_top", "status": "archived", "confidence": 0.75, "formed_at": "2026-03-23", "last_date": "2026-08-13", "neckline_disp": 9.47, "neckline_positive": true, "neck_at_last": 6.342, "neck_at_last_positive": true, "n1": {"role": "neck1", "date": "2026-02-12", "price": 10.15}, "n2": {"role": "neck2", "date": "2026-03-06", "price": 9.83}, "n1_i": 40, "n2_i": 50, "forming_stale": false, "formed_bar_lag": 98, "calendar_days_after_formed": 143, "reason": "头肩顶 左肩=10.67(2026-02-06) 头=11.43(2026-02-26) 右肩=10.58(2026-03-09) 斜颈≈9.47 峰1=10.15(2026-02-12) 峰2=9.83(2026-03-06) 破颈确认:2026-03-23；生命周期已结束（测幅目标已兑现≤7.71，已归档）"}
+{"i": 2, "type": "head_shoulders_bottom", "status": "invalidated", "confidence": 0.2, "formed_at": "2026-04-03", "last_date": "2026-08-13", "neckline_disp": 0.39, "neckline_positive": true, "neck_at_last": 0.3625, "neck_at_last_positive": true, "n1": {"role": "neck1", "date": "2026-03-17", "price": 10.69}, "n2": {"role": "neck2", "date": "2026-03-27", "price": 9.88}, "n1_i": 57, "n2_i": 65, "forming_stale": false, "formed_bar_lag": 89, "calendar_days_after_formed": 132, "reason": "头肩底 左肩=9.96(2026-03-13) 头=8.87(2026-03-23) 右肩=9.26(2026-04-03) 斜颈≈0.39 峰1=10.69(2026-03-17) 峰2=9.88(2026-03-27) 失效:右肩后低点/收盘<头×0.99(8.7848)"}
+
+=== TACTICAL asof=2026-08-13 (full) ===
+{
+  "short_bias": "震荡",
+  "bias_label": "蓄势夹击",
+  "grade": "base",
+  "confidence": 0.462,
+  "rationale": "形成中的双底，边界未完全突破；多空形态交织，宜按宽幅箱体观察",
+  "evidence": [
+    {
+      "code": "pattern_breakdown",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "forming",
+      "close": 7.98,
+      "neckline": 8.25,
+      "lower": null
+    },
+    {
+      "code": "pattern_confirmed_neck",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "forming",
+      "close": 7.98,
+      "neckline": 8.25
+    },
+    {
+      "code": "pattern_consol_break_up",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "forming",
+      "dir": null
+    },
+    {
+      "code": "pattern_forming",
+      "ok": true,
+      "pattern_type": "double_bottom"
+    },
+    {
+      "code": "bias_mix",
+      "ok": true
+    },
+    {
+      "code": "resonance_pressure",
+      "ok": false,
+      "min_strength": 50.0,
+      "strength": null,
+      "center": null
+    },
+    {
+      "code": "vp_break_vah",
+      "ok": false,
+      "vah": 8.98,
+      "nearest_resistance": 8.02
+    },
+    {
+      "code": "rpe_lead",
+      "ok": false,
+      "z_score": 0.05041795315621121,
+      "z_lead": 2.0,
+      "signal_type": "--"
+    }
+  ],
+  "buy_hints": [
+    {
+      "type": "watch",
+      "entry_zone": {
+        "low": 7.91,
+        "high": 8.03,
+        "anchor": "nearest_support"
+      },
+      "trigger": "回踩形态下沿/近端支撑企稳",
+      "invalidation": 7.93,
+      "target": 8.12,
+      "priority": 2
+    }
+  ],
+  "risk_note": null,
+  "disclaimer": "规则模板，非投资建议"
+}

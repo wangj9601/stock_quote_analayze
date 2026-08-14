@@ -41,7 +41,10 @@ def test_key_levels_uses_kde_peaks():
         [b["volume"] for b in bars],
         base_factor=1.0,
     )
-    out = KeyLevels.calculate_key_levels(bars, current)
+    # 显式传入与样本等长的初始回看，避免默认 60 截断后与全样本峰不一致
+    out = KeyLevels.calculate_key_levels(
+        bars, current, initial_lookback=len(bars)
+    )
 
     assert out["method"] == "kde_volume_weighted"
     assert out["kde_ok"] is True
@@ -61,8 +64,9 @@ def test_key_levels_uses_kde_peaks():
     assert KeyLevels.MAX_LEVELS == 2
     assert out.get("nearest_support") == (expect_s[0] if expect_s else None)
     assert out.get("nearest_resistance") == (expect_r[0] if expect_r else None)
-    assert out.get("kde_lookback_initial") == KeyLevels.KDE_LOOKBACK_DAYS
+    assert out.get("kde_lookback_initial") == len(bars)
     assert out.get("kde_lookback_max") == KeyLevels.KDE_LOOKBACK_MAX
+    assert KeyLevels.KDE_LOOKBACK_DAYS == 60
 
 
 def test_key_levels_insufficient_samples():

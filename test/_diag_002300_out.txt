@@ -1,0 +1,269 @@
+# code=002300 req=2026-08-13 -> effective=2026-08-13 adjust=qfq
+first=2025-09-15 last=2026-08-13 C=7.44 bars=220
+{"i": 1, "type": "head_shoulders_top", "status": "archived", "confidence": 0.75, "formed_at": "2026-01-27", "neckline": 8.83, "last_close": 7.44, "reason": "头肩顶 左肩=9.92(2026-03-02) 头=12.31(2026-03-10) 右肩=9.85(2026-03-25) 斜颈≈8.83 峰1=9.17(2026-03-04) 峰2=8.95(2026-03-23) 破颈确认:2026-01-27；生命周期已结束（测幅目标已兑现≤5.70，已归档）"}
+{"i": 2, "type": "head_shoulders_bottom", "status": "forming", "confidence": 0.5, "formed_at": "2026-08-07", "neckline": 7.94, "last_close": 7.44, "reason": "头肩底 左肩=7.14(2026-06-12) 头=5.59(2026-07-21) 右肩=7.08(2026-08-07) 斜颈≈7.94 峰1=7.73(2026-06-16) 峰2=7.80(2026-07-27)"}
+{"i": 3, "type": "double_bottom", "status": "confirmed", "confidence": 0.45, "formed_at": "2026-08-10", "neckline": 7.8, "last_close": 7.44, "reason": "W双底 L1=7.14(2026-06-12) L2=7.08(2026-08-07) 颈线=7.80(2026-07-27)；与反向双顶/双底同窗交织，置信已降权；同窗多空互斥，合并观察为箱体震荡[6.85–7.80]；同枢轴复用"}
+{"i": 4, "type": "double_top", "status": "forming", "confidence": 0.45, "formed_at": "2026-08-10", "neckline": 6.85, "last_close": 7.44, "reason": "M双顶 H1=7.80(2026-07-27) H2=7.90(2026-08-10) 颈线=6.85(2026-07-28)；与反向双顶/双底同窗交织，置信已降权；同窗多空互斥，合并观察为箱体震荡[6.85–7.80]；同枢轴复用"}
+=== TACTICAL ===
+{
+  "short_bias": "看空",
+  "bias_label": "结构破位",
+  "grade": "base",
+  "confidence": 0.635,
+  "rationale": "已确认双底后有效跌破颈线防守",
+  "evidence": [
+    {
+      "code": "pattern_breakdown",
+      "ok": true,
+      "pattern_type": "double_bottom",
+      "status": "confirmed",
+      "close": 7.44,
+      "neckline": 7.8,
+      "lower": null
+    },
+    {
+      "code": "pattern_confirmed_neck",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "confirmed",
+      "close": 7.44,
+      "neckline": 7.8
+    },
+    {
+      "code": "pattern_consol_break_up",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "confirmed",
+      "dir": null
+    },
+    {
+      "code": "pattern_forming",
+      "ok": false,
+      "pattern_type": "double_bottom"
+    },
+    {
+      "code": "bias_mix",
+      "ok": true
+    },
+    {
+      "code": "resonance_pressure",
+      "ok": false,
+      "min_strength": 50.0,
+      "strength": null,
+      "center": null
+    },
+    {
+      "code": "vp_break_vah",
+      "ok": false,
+      "vah": 7.83,
+      "nearest_resistance": 7.83
+    },
+    {
+      "code": "rpe_lead",
+      "ok": false,
+      "z_score": 0.7205932332034758,
+      "z_lead": 2.0,
+      "signal_type": "--"
+    },
+    {
+      "code": "pattern_hierarchy",
+      "ok": true,
+      "dominant": "head_shoulders_top",
+      "subordinate": "head_shoulders_bottom",
+      "span_gap_days": 1
+    }
+  ],
+  "buy_hints": [],
+  "risk_note": "结构破位，不宜抄底；破位参考 7.80；上方反抽压制关注 7.80。",
+  "disclaimer": "规则模板，非投资建议",
+  "pattern_hierarchy": {
+    "dominant": {
+      "pattern_type": "head_shoulders_top",
+      "label": "头肩顶",
+      "status": "archived",
+      "confidence": 0.75,
+      "formed_at": "2026-01-27",
+      "neckline": 8.83,
+      "span_days": 57,
+      "span_start": "2026-01-27",
+      "span_end": "2026-03-25"
+    },
+    "subordinate": {
+      "pattern_type": "head_shoulders_bottom",
+      "label": "头肩底",
+      "status": "forming",
+      "confidence": 0.5,
+      "formed_at": "2026-08-07",
+      "neckline": 7.94,
+      "span_days": 56,
+      "span_start": "2026-06-12",
+      "span_end": "2026-08-07"
+    },
+    "nesting_note": "大周期头肩顶（颈线8.83）下压中，小周期头肩底（颈线7.94）反弹形态受阻",
+    "relation": "nested_opposite",
+    "span_gap_days": 1
+  },
+  "nesting_note": "大周期头肩顶（颈线8.83）下压中，小周期头肩底（颈线7.94）反弹形态受阻"
+}
+=== CAMARILLA ===
+{
+  "method": "camarilla",
+  "H": 7.67,
+  "L": 7.5,
+  "C": 7.6,
+  "R4": 7.69,
+  "R3": 7.65,
+  "R2": 7.63,
+  "R1": 7.62,
+  "S1": 7.58,
+  "S2": 7.57,
+  "S3": 7.55,
+  "S4": 7.51,
+  "trade_date": "2026-08-12",
+  "support_note": "已跌破Camarilla最低档S4(7.51)并转为阻力",
+  "resistance_note": null,
+  "extreme_role_flip": {
+    "level": "S4",
+    "price": 7.51,
+    "from_role": "support",
+    "to_role": "resistance",
+    "side": "below_support"
+  },
+  "nearest_support": null,
+  "nearest_resistance": 7.51
+}
+
+# code=002300 req=2026-08-14 -> effective=2026-08-14 adjust=qfq
+first=2025-09-16 last=2026-08-14 C=7.26 bars=220
+{"i": 1, "type": "head_shoulders_top", "status": "archived", "confidence": 0.75, "formed_at": "2026-01-27", "neckline": 8.83, "last_close": 7.26, "reason": "头肩顶 左肩=9.92(2026-03-02) 头=12.31(2026-03-10) 右肩=9.85(2026-03-25) 斜颈≈8.83 峰1=9.17(2026-03-04) 峰2=8.95(2026-03-23) 破颈确认:2026-01-27；生命周期已结束（测幅目标已兑现≤5.70，已归档）"}
+{"i": 2, "type": "head_shoulders_bottom", "status": "forming", "confidence": 0.5, "formed_at": "2026-08-07", "neckline": 7.94, "last_close": 7.26, "reason": "头肩底 左肩=7.14(2026-06-12) 头=5.59(2026-07-21) 右肩=7.08(2026-08-07) 斜颈≈7.94 峰1=7.73(2026-06-16) 峰2=7.80(2026-07-27)"}
+{"i": 3, "type": "double_bottom", "status": "confirmed", "confidence": 0.45, "formed_at": "2026-08-10", "neckline": 7.8, "last_close": 7.26, "reason": "W双底 L1=7.14(2026-06-12) L2=7.08(2026-08-07) 颈线=7.80(2026-07-27)；与反向双顶/双底同窗交织，置信已降权；同窗多空互斥，合并观察为箱体震荡[6.85–7.80]；同枢轴复用"}
+{"i": 4, "type": "double_top", "status": "forming", "confidence": 0.45, "formed_at": "2026-08-10", "neckline": 6.85, "last_close": 7.26, "reason": "M双顶 H1=7.80(2026-07-27) H2=7.90(2026-08-10) 颈线=6.85(2026-07-28)；与反向双顶/双底同窗交织，置信已降权；同窗多空互斥，合并观察为箱体震荡[6.85–7.80]；同枢轴复用"}
+=== TACTICAL ===
+{
+  "short_bias": "看空",
+  "bias_label": "结构破位",
+  "grade": "base",
+  "confidence": 0.635,
+  "rationale": "已确认双底后有效跌破颈线防守",
+  "evidence": [
+    {
+      "code": "pattern_breakdown",
+      "ok": true,
+      "pattern_type": "double_bottom",
+      "status": "confirmed",
+      "close": 7.26,
+      "neckline": 7.8,
+      "lower": null
+    },
+    {
+      "code": "pattern_confirmed_neck",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "confirmed",
+      "close": 7.26,
+      "neckline": 7.8
+    },
+    {
+      "code": "pattern_consol_break_up",
+      "ok": false,
+      "pattern_type": "double_bottom",
+      "status": "confirmed",
+      "dir": null
+    },
+    {
+      "code": "pattern_forming",
+      "ok": false,
+      "pattern_type": "double_bottom"
+    },
+    {
+      "code": "bias_mix",
+      "ok": true
+    },
+    {
+      "code": "resonance_pressure",
+      "ok": true,
+      "min_strength": 50.0,
+      "strength": 52.5,
+      "center": 7.45
+    },
+    {
+      "code": "vp_break_vah",
+      "ok": false,
+      "vah": 7.85,
+      "nearest_resistance": 7.85
+    },
+    {
+      "code": "rpe_lead",
+      "ok": false,
+      "z_score": 0.4501878839614307,
+      "z_lead": 2.0,
+      "signal_type": "--"
+    },
+    {
+      "code": "pattern_hierarchy",
+      "ok": true,
+      "dominant": "head_shoulders_top",
+      "subordinate": "head_shoulders_bottom",
+      "span_gap_days": 1
+    }
+  ],
+  "buy_hints": [],
+  "risk_note": "结构破位，不宜抄底；破位参考 7.80；上方反抽压制关注 7.80。",
+  "disclaimer": "规则模板，非投资建议",
+  "pattern_hierarchy": {
+    "dominant": {
+      "pattern_type": "head_shoulders_top",
+      "label": "头肩顶",
+      "status": "archived",
+      "confidence": 0.75,
+      "formed_at": "2026-01-27",
+      "neckline": 8.83,
+      "span_days": 57,
+      "span_start": "2026-01-27",
+      "span_end": "2026-03-25"
+    },
+    "subordinate": {
+      "pattern_type": "head_shoulders_bottom",
+      "label": "头肩底",
+      "status": "forming",
+      "confidence": 0.5,
+      "formed_at": "2026-08-07",
+      "neckline": 7.94,
+      "span_days": 56,
+      "span_start": "2026-06-12",
+      "span_end": "2026-08-07"
+    },
+    "nesting_note": "大周期头肩顶（颈线8.83）下压中，小周期头肩底（颈线7.94）反弹形态受阻",
+    "relation": "nested_opposite",
+    "span_gap_days": 1
+  },
+  "nesting_note": "大周期头肩顶（颈线8.83）下压中，小周期头肩底（颈线7.94）反弹形态受阻"
+}
+=== CAMARILLA ===
+{
+  "method": "camarilla",
+  "H": 7.65,
+  "L": 7.42,
+  "C": 7.44,
+  "R4": 7.57,
+  "R3": 7.5,
+  "R2": 7.48,
+  "R1": 7.46,
+  "S1": 7.42,
+  "S2": 7.4,
+  "S3": 7.38,
+  "S4": 7.31,
+  "trade_date": "2026-08-13",
+  "support_note": "已跌破Camarilla最低档S4(7.31)并转为阻力",
+  "resistance_note": null,
+  "extreme_role_flip": {
+    "level": "S4",
+    "price": 7.31,
+    "from_role": "support",
+    "to_role": "resistance",
+    "side": "below_support"
+  },
+  "nearest_support": null,
+  "nearest_resistance": 7.31
+}

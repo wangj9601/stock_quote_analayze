@@ -32,6 +32,9 @@ HS_FAIL_RECOVER_MULT = 1.02
 # 不因「任意回到颈线上方」推翻 confirmed→forming；仅归档/降权
 HS_FAIL_PULLBACK_ATR_MULT = 2.0
 HS_FAIL_RS_NEAR_PCT = 0.02  # 相对右肩 ±2% 视为逼近
+# confirmed：现价相对确认颈线反向偏离过大 → 强制归档（不依赖右肩/ATR）
+# 顶：last_close ≥ neck×(1+pct)；底：last_close ≤ neck×(1−pct)
+HS_CONFIRM_FAR_RECOVER_PCT = 0.08
 # 辅：右肩完成后 N 根交易日仍未收盘破颈 → forming 超时归档（0=关闭）
 HS_FORMING_TIMEOUT_BARS = 90
 
@@ -42,6 +45,11 @@ HS_HEAD_MIN_DEPTH_PCT = 0.03
 HS_SHOULDER_TOL_PCT = 0.08
 # 颈线两峰相对差上限：过大视为虚高/虚低均价颈线，拒绝（双底冲高后再做肩）
 HS_NECK_ASYMMETRY_MAX = 0.22
+# 斜颈外推下限：≤0 视为崩塌（000533 类陡降外推到负值）；禁止作为展示/破位阈值
+HS_NECK_COLLAPSE_FLOOR = 0.01
+# 外推颈线相对两颈点过分偏离 → 几何失真失效（顶/底均可过低；底另可过高）
+HS_NECK_EXTRAP_LO_FRAC = 0.35  # top/bottom: neck < min(n1,n2)*frac
+HS_NECK_EXTRAP_HI_FRAC = 2.5  # bottom: neck > max(n1,n2)*frac
 
 # 楔形端点方向：末高/末低相对首枢轴的相对容差（抗噪声，非严格逐点单调）
 WEDGE_ENDPOINT_REL_EPS = 0.002

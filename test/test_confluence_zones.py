@@ -294,3 +294,212 @@ def test_wide_cluster_split_by_max_zone_width():
     nearest = out["nearest_support_zone"]
     assert nearest is not None
     assert nearest["center"] > 90.0
+
+
+def test_support_below_val_gets_chips_void_discount():
+    """支撑 center < VAL → 保留 strength，写出 strength_adjusted / chips_void / void_note。"""
+    from backend_core.analysis.confluence_zones import (
+        CHIPS_VOID_STRENGTH_FACTOR,
+        annotate_support_chips_void,
+    )
+
+    z = {
+        "center": 26.27,
+        "low": 26.03,
+        "high": 26.49,
+        "strength": 24.6,
+        "sources": ["atr_pivot", "camarilla", "fib", "pivot"],
+        "labels": ["a"],
+        "n_points": 4,
+    }
+    out = annotate_support_chips_void(
+        z,
+        vp_val=27.81,
+        vp_lookback=60,
+        atr=1.20,
+        last_close=26.49,
+    )
+    assert out["strength"] == 24.6
+    assert out["chips_void"] is True
+    assert out["void_val"] == 27.81
+    assert out["strength_adjusted"] == round(24.6 * CHIPS_VOID_STRENGTH_FACTOR, 3)
+    assert "真空区" in out["void_note"]
+    assert "VAL=27.81" in out["void_note"]
+    assert "ATR" in out["void_note"]
+
+    # VAL 上方：不折减
+    above = annotate_support_chips_void(
+        {**z, "center": 28.5, "low": 28.2, "high": 28.8},
+        vp_val=27.81,
+        vp_lookback=60,
+        atr=1.20,
+        last_close=29.0,
+    )
+    assert above.get("chips_void") is not True
+    assert "strength_adjusted" not in above
+    assert above["strength"] == 24.6
+
+    # 无 VAL：原路径
+    no_vp = annotate_support_chips_void(z, vp_val=None)
+    assert no_vp.get("chips_void") is not True
+    assert "strength_adjusted" not in no_vp
+
+
+def test_build_confluence_annotates_void_via_vp_val():
+    """build_confluence_zones 传入 vp_val 时，VAL 下方支撑带带折减字段。"""
+    pts = [
+        {"price": 26.2, "weight": 1.0, "source": "fib", "label": "f1"},
+        {"price": 26.3, "weight": 1.0, "source": "pivot", "label": "p1"},
+        {"price": 26.25, "weight": 0.65, "source": "camarilla", "label": "c1"},
+        {"price": 26.28, "weight": 0.55, "source": "atr_pivot", "label": "a1"},
+        {"price": 28.0, "weight": 1.0, "source": "kde", "label": "kr"},
+        {"price": 28.1, "weight": 0.85, "source": "vp", "label": "vp"},
+    ]
+    out = build_confluence_zones(
+        pts,
+        last_close=26.49,
+        atr=1.2,
+        vp_val=27.81,
+        vp_lookback=60,
+    )
+    assert out["ok"] is True
+    void_zones = [z for z in out["supports"] if z.get("chips_void")]
+    assert len(void_zones) >= 1
+    z0 = void_zones[0]
+    assert z0["strength_adjusted"] < z0["strength"]
+    assert "真空" in (z0.get("void_note") or "")
+    # 压力侧不应打 chips_void
+    assert all(not z.get("chips_void") for z in out["resistances"])
+
+
+def test_resistance_near_val_gets_chips_hvz_gain():
+    """阻力叠 VAL（601698：27.59≈VAL 27.81）→ strength×1.25，hvz_source=val。"""
+    from backend_core.analysis.confluence_zones import (
+        CHIPS_HVZ_GAIN,
+        annotate_resistance_chips_hvz,
+    )
+
+    z = {
+        "center": 27.59,
+        "low": 27.50,
+        "high": 27.70,
+        "strength": 15.6,
+        "sources": ["atr_pivot", "kde", "pivot", "vp"],
+        "labels": ["a"],
+        "n_points": 4,
+    }
+    out = annotate_resistance_chips_hvz(
+        z,
+        vp_poc=30.40,
+        vp_vah=33.47,
+        vp_val=27.81,
+        vp_lookback=60,
+    )
+    assert out["strength"] == 15.6
+    assert out["chips_hvz"] is True
+    assert out["hvz_source"] == "val"
+    assert out["hvz_level"] == 27.81
+    assert out["strength_adjusted"] == round(15.6 * CHIPS_HVZ_GAIN, 3)
+    assert abs(out["strength_adjusted"] - 19.5) < 1e-9
+    assert "VAL" in out["hvz_note"]
+    assert "密集抛压" in out["hvz_note"]
+    assert "19.5" in out["hvz_note"]
+
+
+def test_resistance_near_poc_or_vah_gets_hvz_gain():
+    """阻力叠 POC / VAH 同样增益；优先最近源。"""
+    from backend_core.analysis.confluence_zones import (
+        CHIPS_HVZ_GAIN,
+        annotate_resistance_chips_hvz,
+    )
+
+    poc_z = annotate_resistance_chips_hvz(
+        {
+            "center": 30.35,
+            "low": 30.20,
+            "high": 30.50,
+            "strength": 8.0,
+            "sources": ["kde", "vp"],
+            "n_points": 2,
+        },
+        vp_poc=30.40,
+        vp_vah=33.47,
+        vp_val=27.81,
+        vp_lookback=60,
+    )
+    assert poc_z["chips_hvz"] is True
+    assert poc_z["hvz_source"] == "poc"
+    assert poc_z["strength_adjusted"] == round(8.0 * CHIPS_HVZ_GAIN, 3)
+
+    vah_z = annotate_resistance_chips_hvz(
+        {
+            "center": 33.40,
+            "low": 33.20,
+            "high": 33.55,
+            "strength": 6.0,
+            "sources": ["kde", "vp"],
+            "n_points": 2,
+        },
+        vp_poc=30.40,
+        vp_vah=33.47,
+        vp_val=27.81,
+        vp_lookback=60,
+    )
+    assert vah_z["chips_hvz"] is True
+    assert vah_z["hvz_source"] == "vah"
+    assert vah_z["strength_adjusted"] == round(6.0 * CHIPS_HVZ_GAIN, 3)
+
+
+def test_resistance_far_from_vp_no_hvz_gain():
+    """不重叠关键 VP 水平 → 不增益。"""
+    from backend_core.analysis.confluence_zones import annotate_resistance_chips_hvz
+
+    z = {
+        "center": 26.72,
+        "low": 26.66,
+        "high": 26.74,
+        "strength": 4.95,
+        "sources": ["camarilla", "fib", "pivot"],
+        "n_points": 3,
+    }
+    out = annotate_resistance_chips_hvz(
+        z,
+        vp_poc=30.40,
+        vp_vah=33.47,
+        vp_val=27.81,
+        vp_lookback=60,
+    )
+    assert out.get("chips_hvz") is not True
+    assert "strength_adjusted" not in out
+    assert out["strength"] == 4.95
+
+
+def test_build_confluence_annotates_hvz_and_keeps_void_side_split():
+    """阻力 HVZ 与支撑 void 分边；支撑不打 hvz，阻力不打 void。"""
+    pts = [
+        {"price": 26.2, "weight": 1.0, "source": "fib", "label": "f1"},
+        {"price": 26.3, "weight": 1.0, "source": "pivot", "label": "p1"},
+        {"price": 26.25, "weight": 0.65, "source": "camarilla", "label": "c1"},
+        {"price": 27.55, "weight": 1.0, "source": "kde", "label": "kr"},
+        {"price": 27.60, "weight": 0.85, "source": "vp", "label": "vp"},
+        {"price": 27.62, "weight": 0.7, "source": "pivot", "label": "pr"},
+        {"price": 27.58, "weight": 0.55, "source": "atr_pivot", "label": "ar"},
+    ]
+    out = build_confluence_zones(
+        pts,
+        last_close=26.49,
+        atr=1.2,
+        vp_val=27.81,
+        vp_poc=30.40,
+        vp_vah=33.47,
+        vp_lookback=60,
+    )
+    assert out["ok"] is True
+    assert any(z.get("chips_void") for z in out["supports"])
+    assert all(not z.get("chips_hvz") for z in out["supports"])
+    hvz = [z for z in out["resistances"] if z.get("chips_hvz")]
+    assert len(hvz) >= 1
+    assert all(not z.get("chips_void") for z in out["resistances"])
+    z0 = hvz[0]
+    assert z0["strength_adjusted"] > z0["strength"]
+    assert z0["hvz_source"] in ("poc", "vah", "val")

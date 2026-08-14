@@ -154,6 +154,8 @@ def _compute_levels_payload(
     factor_source: str = "auto",
     vp_lookback: Optional[int] = None,
     vp_from_date: Optional[str] = None,
+    kde_lookback: Optional[int] = None,
+    kde_from_date: Optional[str] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     """计算单股 KDE 关键价位，返回 (http_status, body)。"""
     try:
@@ -218,6 +220,8 @@ def _compute_levels_payload(
             adj_meta=adj_meta,
             vp_lookback=vp_lookback,
             vp_from_date=vp_from_date,
+            kde_lookback=kde_lookback,
+            kde_from_date=kde_from_date,
         )
 
         if not result.get("success"):
@@ -245,6 +249,8 @@ def _levels_response_for_code(
     factor_source: str = "auto",
     vp_lookback: Optional[int] = None,
     vp_from_date: Optional[str] = None,
+    kde_lookback: Optional[int] = None,
+    kde_from_date: Optional[str] = None,
 ) -> JSONResponse:
     status, content = _compute_levels_payload(
         code,
@@ -255,6 +261,8 @@ def _levels_response_for_code(
         factor_source=factor_source,
         vp_lookback=vp_lookback,
         vp_from_date=vp_from_date,
+        kde_lookback=kde_lookback,
+        kde_from_date=kde_from_date,
     )
     return JSONResponse(status_code=status, content=content)
 
@@ -452,6 +460,26 @@ async def get_key_levels_by_query(
         "auto",
         description="因子源：auto=归一化新浪优先BaoStock备用，sina=仅归一化新浪，baostock=仅BaoStock",
     ),
+    vp_lookback: Optional[int] = Query(
+        None,
+        description="Volume Profile 回看交易日数（默认 60，范围 5–750）",
+        ge=5,
+        le=750,
+    ),
+    vp_from_date: Optional[str] = Query(
+        None,
+        description="Volume Profile 回看起始日期 YYYY-MM-DD（优先于 vp_lookback）",
+    ),
+    kde_lookback: Optional[int] = Query(
+        None,
+        description="KDE 初始回看交易日数（默认 60，范围 20–750；无支撑仍按 STEP/MAX 扩窗）",
+        ge=20,
+        le=750,
+    ),
+    kde_from_date: Optional[str] = Query(
+        None,
+        description="KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback；可调的是初始回看）",
+    ),
     db: Session = Depends(get_db),
 ):
     """按 query 参数 q（代码或名称）计算 KDE 支撑/压力位。"""
@@ -461,6 +489,10 @@ async def get_key_levels_by_query(
         adjust=adjust,
         refresh_factor=refresh_factor,
         factor_source=factor_source,
+        vp_lookback=vp_lookback,
+        vp_from_date=vp_from_date,
+        kde_lookback=kde_lookback,
+        kde_from_date=kde_from_date,
         db=db,
     )
 
@@ -572,6 +604,16 @@ async def get_key_levels(
         None,
         description="Volume Profile 回看起始日期 YYYY-MM-DD（优先于 vp_lookback）",
     ),
+    kde_lookback: Optional[int] = Query(
+        None,
+        description="KDE 初始回看交易日数（默认 60，范围 20–750；无支撑仍按 STEP/MAX 扩窗）",
+        ge=20,
+        le=750,
+    ),
+    kde_from_date: Optional[str] = Query(
+        None,
+        description="KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback；可调的是初始回看）",
+    ),
     db: Session = Depends(get_db)
 ):
     """
@@ -587,6 +629,7 @@ async def get_key_levels(
     adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor
     （A 股：归一化新浪优先、BaoStock 备用；港股：stock_hk_daily qfq-factor，source=akshare_sina_hk_qfq），
     再对不复权日K现算后计算（KDE/VP/Fib/Pivot 同口径）。
+    kde_lookback / kde_from_date 调整的是 KDE 初始回看（默认 60）；无支撑时仍按 STEP=250 递推至 MAX=750。
     """
     try:
         resolved = resolve_levels_stock_identifier(db, stock_code)
@@ -626,6 +669,8 @@ async def get_key_levels(
             factor_source=factor_source,
             vp_lookback=vp_lookback,
             vp_from_date=vp_from_date,
+            kde_lookback=kde_lookback,
+            kde_from_date=kde_from_date,
         )
 
     except Exception as e:

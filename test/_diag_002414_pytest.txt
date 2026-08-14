@@ -1,0 +1,20 @@
+﻿[1m============================= test session starts =============================[0m
+platform win32 -- Python 3.12.10, pytest-8.0.0, pluggy-1.5.0 -- C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: E:\wangxw\鑲＄エ鍒嗘瀽杞欢\缂栫爜\stock_quote_analayze
+configfile: pytest.ini
+plugins: anyio-4.13.0, hypothesis-6.150.2, asyncio-0.23.5, cov-4.1.0, freezegun-0.4.2, mock-3.15.1
+asyncio: mode=Mode.STRICT
+[1mcollecting ... [0mcollected 53 items / 45 deselected / 8 selected
+
+test/test_pattern_tactical.py::test_ultra_squeeze_triggers_when_narrow_and_strong [32mPASSED[0m[32m [ 12%][0m
+test/test_pattern_tactical.py::test_ultra_squeeze_not_when_width_too_wide [32mPASSED[0m[32m [ 25%][0m
+test/test_pattern_tactical.py::test_ultra_squeeze_not_when_strength_insufficient [32mPASSED[0m[32m [ 37%][0m
+test/test_pattern_tactical.py::test_ultra_squeeze_yields_to_wedge_breakout_alert [32mPASSED[0m[32m [ 50%][0m
+test/test_pattern_tactical.py::test_ultra_squeeze_covers_plain_breakout_probe [32mPASSED[0m[32m [ 62%][0m
+test/test_pattern_tactical.py::test_ultra_squeeze_narrows_pullback_entry_to_support_low [32mPASSED[0m[32m [ 75%][0m
+test/test_pattern_tactical.py::test_ultra_squeeze_demotes_break_upper_no_chase [32mPASSED[0m[32m [ 87%][0m
+test/test_pattern_tactical.py::test_non_ultra_squeeze_keeps_wide_entry_zone [32mPASSED[0m[32m [100%][0m
+
+[32m====================== [32m[1m8 passed[0m, [33m45 deselected[0m[32m in 3.85s[0m[32m =======================[0m

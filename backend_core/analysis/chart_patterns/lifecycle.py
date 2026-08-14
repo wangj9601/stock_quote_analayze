@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .rules import (
+    HS_CONFIRM_FAR_RECOVER_PCT,
     HS_FAIL_DEPTH_MULT,
     HS_FAIL_PULLBACK_ATR_MULT,
     HS_FAIL_RECOVER_MULT,
@@ -424,6 +425,54 @@ def _hs_failed_break_note(
     )
 
 
+def _hs_confirm_neck_price(hit: Dict[str, Any]) -> Optional[float]:
+    """确认颈线：优先锁存破位颈，其次展示 neckline。"""
+    lv = hit.get("key_levels") if isinstance(hit.get("key_levels"), dict) else {}
+    for src in (lv, hit):
+        if not isinstance(src, dict):
+            continue
+        for key in ("confirm_neckline", "confirm_neck", "neckline_at_break"):
+            n = _f(src.get(key))
+            if n is not None and n > 0:
+                return n
+    return _f(lv.get("neckline"))
+
+
+def _hs_confirm_far_recover_note(
+    hit: Dict[str, Any],
+    bars: Sequence[Dict[str, Any]],
+    *,
+    far_pct: float = HS_CONFIRM_FAR_RECOVER_PCT,
+) -> Optional[str]:
+    """confirmed 头肩：现价相对确认颈线反向偏离过大 → 强制归档。
+
+    顶：last_close ≥ neck×(1+pct) → 空头确认削弱
+    底：last_close ≤ neck×(1−pct) → 多头确认削弱
+    """
+    if str(hit.get("status") or "") != "confirmed":
+        return None
+    ptype = str(hit.get("pattern_type") or "")
+    if ptype not in _HS_TYPES:
+        return None
+    neck = _hs_confirm_neck_price(hit)
+    if neck is None or neck <= 0:
+        return None
+    if not bars:
+        return None
+    last_c = _bar_close(bars[-1])
+    if last_c is None or last_c <= 0:
+        return None
+    pct = max(0.01, min(0.25, float(far_pct)))
+    if ptype == "head_shoulders_top":
+        if last_c < neck * (1.0 + pct):
+            return None
+        return "破颈后现价已大幅回到颈线上方，空头确认削弱，已归档"
+    # head_shoulders_bottom
+    if last_c > neck * (1.0 - pct):
+        return None
+    return "破颈后现价已大幅回到颈线下方，多头确认削弱，已归档"
+
+
 def _hs_failed_pullback_note(
     hit: Dict[str, Any],
     bars: Sequence[Dict[str, Any]],
@@ -556,6 +605,7 @@ def apply_pattern_lifecycle(
     hs_fail_recover_mult: float = HS_FAIL_RECOVER_MULT,
     hs_fail_pullback_atr_mult: float = HS_FAIL_PULLBACK_ATR_MULT,
     hs_fail_rs_near_pct: float = HS_FAIL_RS_NEAR_PCT,
+    hs_confirm_far_recover_pct: float = HS_CONFIRM_FAR_RECOVER_PCT,
     hs_forming_timeout_bars: int = HS_FORMING_TIMEOUT_BARS,
 ) -> List[Dict[str, Any]]:
     """将已走完周期的反转形态标为 archived。
@@ -567,6 +617,7 @@ def apply_pattern_lifecycle(
 
     头肩 forming/confirmed 额外：
     4. 失败破位（深破颈线后又回到另一侧足够远）；
+    4a. confirmed 远距反抽（现价相对确认颈线反向偏离 ≥ pct，强制归档）；
     4b. confirmed 失败反抽（回颈线另一侧且逼近右肩或 ≥约 N·ATR；不回 forming）；
     5. forming 超时未破颈（辅，默认 90 根）。
     """
@@ -600,6 +651,13 @@ def apply_pattern_lifecycle(
                 bars,
                 depth_mult=hs_fail_depth_mult,
                 recover_mult=hs_fail_recover_mult,
+            )
+
+        if not note and ptype in _HS_TYPES and status == "confirmed":
+            note = _hs_confirm_far_recover_note(
+                hit,
+                bars,
+                far_pct=hs_confirm_far_recover_pct,
             )
 
         if not note and ptype in _HS_TYPES and status == "confirmed":

@@ -1,0 +1,41 @@
+﻿数据库连接URL: 'postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis'
+code=601991 asof=2026-08-14 bars=160 last_close=6.48 date=2026-08-14
+{"gms_hit": false, "gms_score": 70.0, "gms_label": "--", "gms_reason": "未触发左/右侧买点；总分 70.0"}
+{"type": "falling_wedge", "status": "forming", "confidence": 0.45, "upper": 6.46, "lower": 5.72, "last_close": 6.48, "confirm_thr": 6.49, "close_gt_upper": true, "close_gt_confirm": false}
+{"camarilla_S4": 6.54, "camarilla_R1": 6.98, "atr": 0.48}
+{
+  "short_bias": "震荡",
+  "bias_label": "蓄势夹击",
+  "display_status": "楔形蓄势突破预警",
+  "status_note": "楔形蓄势突破预警：现价已上破下降楔形上沿 (6.46)，GMS 70.0>60；关注放量，以及 6.54 元站稳信号",
+  "gms_score": 70.0,
+  "breakout_probe": {
+    "ok": true,
+    "pattern_type": "falling_wedge",
+    "label": "下降楔形",
+    "upper": 6.46,
+    "close": 6.48,
+    "engine_status": "forming",
+    "display_status": "试探突破",
+    "status_note": "现价已微幅上破下降楔形上沿 (6.46)，密切关注确认突破或假突破回落",
+    "text": "现价已微幅上破下降楔形上沿 (6.46)，密切关注确认突破或假突破回落"
+  },
+  "wedge_breakout_alert": {
+    "ok": true,
+    "code": "wedge_breakout_alert",
+    "pattern_type": "falling_wedge",
+    "label": "下降楔形",
+    "upper": 6.46,
+    "close": 6.48,
+    "gms_score": 70.0,
+    "gms_min": 60.0,
+    "hold_level": 6.54,
+    "hold_source": "camarilla_S4",
+    "engine_status": "forming",
+    "display_status": "楔形蓄势突破预警",
+    "status_note": "楔形蓄势突破预警：现价已上破下降楔形上沿 (6.46)，GMS 70.0>60；关注放量，以及 6.54 元站稳信号",
+    "text": "楔形蓄势突破预警：现价已上破下降楔形上沿 (6.46)，GMS 70.0>60；关注放量，以及 6.54 元站稳信号"
+  },
+  "hit_display_status": "楔形蓄势突破预警",
+  "hit_wedge_alert": true
+}

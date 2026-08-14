@@ -306,7 +306,7 @@
                             <h3>支撑 / 压力位</h3>
                             <p class="kde-levels-hint">
                                 主算法复用 RPE 成交量加权 KDE：对日K收盘价按成交量加权提取密度峰；
-                                默认初始回看 250 日，无支撑时递推至最多约 750 日（约 3 年）。
+                                默认初始回看 60 日（与 Volume Profile 一致），无支撑时按 +250 递推至最多约 750 日（约 3 年）。
                                 另附近 60 日<strong>Volume Profile（POC/VAH/VAL）</strong>与 KDE 对照，以及
                                 <strong>黄金分割 / 经典 Pivot</strong>作参考；均不改策略硬门槛。
                                 默认按<strong>前复权</strong>日K计算（可取消勾选用不复权）；勾选前复权时按需拉取复权因子现算（仅 A 股）。
@@ -366,6 +366,21 @@
                                     <div class="kde-levels-near">
                                         <div>最近支撑：<strong id="kdeNearestSupport">--</strong></div>
                                         <div>最近压力：<strong id="kdeNearestResistance">--</strong></div>
+                                        <div class="kde-levels-dir kde-vp-lookback-ctrl">
+                                            <span>回看</span>
+                                            <input type="number" id="kdeLookbackInput" class="kde-vp-lookback-days"
+                                                min="20" max="750" step="1" value="60" title="KDE 初始回看交易日数">
+                                            <span>日 · 起始</span>
+                                            <input type="date" id="kdeFromDateInput" class="kde-vp-from-date"
+                                                title="KDE 回看起始日期（优先于天数；可调初始回看，无支撑仍扩窗）">
+                                            <button type="button" class="btn btn-secondary btn-sm" id="kdeLookbackApplyBtn">应用</button>
+                                            <span class="kde-vp-lookback-meta">
+                                                （初始 <strong id="kdeLookbackInitial">--</strong>
+                                                / 实际 <strong id="kdeLookbackUsed">--</strong> 日
+                                                <span id="kdeLookbackExpandText"></span>
+                                                · 上限 <strong id="kdeLookbackMax">750</strong>）
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="kde-levels-card resistance">

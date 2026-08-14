@@ -13,6 +13,9 @@ from .pivots import extract_pivot_sequence
 from .rules import (
     HS_HEAD_MIN_DEPTH_PCT,
     HS_NECK_ASYMMETRY_MAX,
+    HS_NECK_COLLAPSE_FLOOR,
+    HS_NECK_EXTRAP_HI_FRAC,
+    HS_NECK_EXTRAP_LO_FRAC,
     HS_SHOULDER_TOL_PCT,
     INVALIDATE_BOTTOM_MULT,
     INVALIDATE_TOP_MULT,
@@ -79,6 +82,39 @@ def _neck_at(
     return float(n1_price) + t * (float(n2_price) - float(n1_price))
 
 
+def _neck_ref_display(n1_price: float, n2_price: float, rs_neck: float) -> float:
+    """崩塌后展示用参考颈：优先右肩日斜颈（若正），否则两颈点均值。"""
+    if rs_neck == rs_neck and rs_neck > HS_NECK_COLLAPSE_FLOOR:
+        return float(rs_neck)
+    mid = (float(n1_price) + float(n2_price)) / 2.0
+    return mid if mid == mid else float(n1_price)
+
+
+def _slant_neck_collapsed(
+    neck: float,
+    n1_price: float,
+    n2_price: float,
+    *,
+    is_top: bool,
+) -> bool:
+    """斜颈是否已外推失真（负值/近零，或相对颈点过分偏离）。
+
+    顶/底均可因相对两颈点过低而崩塌；底另可因过高崩塌。
+    """
+    if neck != neck:  # NaN
+        return True
+    floor = float(HS_NECK_COLLAPSE_FLOOR)
+    if neck <= floor:
+        return True
+    lo = min(float(n1_price), float(n2_price))
+    hi = max(float(n1_price), float(n2_price))
+    if lo > 0 and neck < lo * float(HS_NECK_EXTRAP_LO_FRAC):
+        return True
+    if (not is_top) and hi > 0 and neck > hi * float(HS_NECK_EXTRAP_HI_FRAC):
+        return True
+    return False
+
+
 def _first_close_break_slanted(
     bars: Sequence[Dict[str, Any]],
     start_i: int,
@@ -88,24 +124,26 @@ def _first_close_break_slanted(
     n2_price: float,
     n2_i: int,
     below: bool,
-) -> Optional[Tuple[int, str, float]]:
+) -> Optional[Tuple[str, int, str, float]]:
     """右肩完成后：首次收盘有效破当日斜颈（顶=收盘<颈；底=收盘>颈）。
 
-    返回 (bar_index, date, neck_at_break)。
+    返回 ("break", bar_index, date, neck_at_break) 或
+    ("collapse", bar_index, date, neck_at) 当斜颈外推失真。
     """
     if start_i < 0:
         return None
+    is_top = bool(below)
     for i in range(int(start_i) + 1, len(bars)):
         c = _bar_close(bars[i])
         if c is None:
             continue
         neck_i = _neck_at(n1_price, n1_i, n2_price, n2_i, i)
-        if neck_i <= 0:
-            continue
+        if _slant_neck_collapsed(neck_i, n1_price, n2_price, is_top=is_top):
+            return "collapse", i, _bar_date(bars[i]), neck_i
         if below and c < neck_i:
-            return i, _bar_date(bars[i]), neck_i
+            return "break", i, _bar_date(bars[i]), neck_i
         if (not below) and c > neck_i:
-            return i, _bar_date(bars[i]), neck_i
+            return "break", i, _bar_date(bars[i]), neck_i
     return None
 
 
@@ -176,10 +214,11 @@ def _detect_hs_top(
         last_i = len(bars) - 1
         head_px = float(head["price"])
         rs_i = _pivot_bar_index(bars, rs)
-        # 展示/测幅参考：末根斜颈阈值（形成中为当前破位线）
-        neck_disp = _neck_at(n1_px, n1_i, n2_px, n2_i, last_i if last_i >= 0 else n2_i)
+        rs_neck = _neck_at(n1_px, n1_i, n2_px, n2_i, rs_i if rs_i >= 0 else n2_i)
+        raw_last = _neck_at(n1_px, n1_i, n2_px, n2_i, last_i if last_i >= 0 else n2_i)
         confirm_date: Optional[str] = None
         confirm_neck: Optional[float] = None
+        collapse_note: Optional[str] = None
         if post_pivot_invalidate_top(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
@@ -193,14 +232,44 @@ def _detect_hs_top(
                 n2_i=n2_i,
                 below=True,
             )
-            if brk:
+            if brk and brk[0] == "collapse":
+                status = "invalidated"
+                conf = 0.2
+                collapse_note = (
+                    f"失效:斜颈外推失真({round(brk[3], 4)})@{brk[2]}"
+                )
+            elif brk and brk[0] == "break":
                 status = "confirmed"
                 conf = 0.7
-                confirm_date = brk[1]
-                confirm_neck = brk[2]
+                confirm_date = brk[2]
+                confirm_neck = brk[3]
+            elif _slant_neck_collapsed(raw_last, n1_px, n2_px, is_top=True):
+                status = "invalidated"
+                conf = 0.2
+                collapse_note = f"失效:末日斜颈外推失真({round(raw_last, 4)})"
             else:
                 status = "forming"
                 conf = 0.5
+        if status == "confirmed" and confirm_neck is not None:
+            neck_disp = float(confirm_neck)
+        elif status == "invalidated" and (
+            collapse_note
+            or _slant_neck_collapsed(raw_last, n1_px, n2_px, is_top=True)
+        ):
+            neck_disp = _neck_ref_display(n1_px, n2_px, rs_neck)
+        else:
+            neck_disp = float(raw_last)
+        neck_method = (
+            "slanted_ref"
+            if (
+                collapse_note
+                or (
+                    status == "invalidated"
+                    and _slant_neck_collapsed(raw_last, n1_px, n2_px, is_top=True)
+                )
+            )
+            else "slanted"
+        )
         if status != "invalidated" and rs["price"] <= ls["price"]:
             conf = min(1.0, conf + 0.05)
         reason = (
@@ -211,7 +280,9 @@ def _detect_hs_top(
             f"{fmt_px('峰1', round(n1_px, 4), n1.get('date'))} "
             f"{fmt_px('峰2', round(n2_px, 4), n2.get('date'))}"
         )
-        if status == "invalidated":
+        if collapse_note:
+            reason += f" {collapse_note}"
+        elif status == "invalidated":
             thr = round(head_px * INVALIDATE_TOP_MULT, 4)
             reason += f" 失效:右肩后高点/收盘>头×{INVALIDATE_TOP_MULT}({thr})"
         elif status == "confirmed" and confirm_date:
@@ -220,22 +291,25 @@ def _detect_hs_top(
                 reason += f" 破颈确认:{confirm_date}（现价已反抽斜颈上方，状态仍锁存）"
             else:
                 reason += f" 破颈确认:{confirm_date}"
+        kl: Dict[str, Any] = {
+            "left_shoulder": ls["price"],
+            "head": head["price"],
+            "right_shoulder": rs["price"],
+            "neckline": round(neck_disp, 4),
+            "neck_left": round(n1_px, 4),
+            "neck_right": round(n2_px, 4),
+            "neckline_method": neck_method,
+            "last_close": round(last, 4),
+        }
+        if confirm_neck is not None and confirm_neck == confirm_neck:
+            kl["confirm_neckline"] = round(float(confirm_neck), 4)
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_top",
             status=status,
             confidence=conf,
             reason=reason,
-            key_levels={
-                "left_shoulder": ls["price"],
-                "head": head["price"],
-                "right_shoulder": rs["price"],
-                "neckline": round(neck_disp, 4),
-                "neck_left": round(n1_px, 4),
-                "neck_right": round(n2_px, 4),
-                "neckline_method": "slanted",
-                "last_close": round(last, 4),
-            },
+            key_levels=kl,
             pivots=[
                 {"role": "LS", "date": ls.get("date"), "price": ls["price"]},
                 {"role": "head", "date": head.get("date"), "price": head["price"]},
@@ -285,9 +359,11 @@ def _detect_hs_bottom(
         last_i = len(bars) - 1
         head_px = float(head["price"])
         rs_i = _pivot_bar_index(bars, rs)
-        neck_disp = _neck_at(n1_px, n1_i, n2_px, n2_i, last_i if last_i >= 0 else n2_i)
+        rs_neck = _neck_at(n1_px, n1_i, n2_px, n2_i, rs_i if rs_i >= 0 else n2_i)
+        raw_last = _neck_at(n1_px, n1_i, n2_px, n2_i, last_i if last_i >= 0 else n2_i)
         confirm_date: Optional[str] = None
         confirm_neck: Optional[float] = None
+        collapse_note: Optional[str] = None
         if post_pivot_invalidate_bottom(bars, rs_i, head_px):
             status = "invalidated"
             conf = 0.2
@@ -301,14 +377,44 @@ def _detect_hs_bottom(
                 n2_i=n2_i,
                 below=False,
             )
-            if brk:
+            if brk and brk[0] == "collapse":
+                status = "invalidated"
+                conf = 0.2
+                collapse_note = (
+                    f"失效:斜颈外推失真({round(brk[3], 4)})@{brk[2]}"
+                )
+            elif brk and brk[0] == "break":
                 status = "confirmed"
                 conf = 0.7
-                confirm_date = brk[1]
-                confirm_neck = brk[2]
+                confirm_date = brk[2]
+                confirm_neck = brk[3]
+            elif _slant_neck_collapsed(raw_last, n1_px, n2_px, is_top=False):
+                status = "invalidated"
+                conf = 0.2
+                collapse_note = f"失效:末日斜颈外推失真({round(raw_last, 4)})"
             else:
                 status = "forming"
                 conf = 0.5
+        if status == "confirmed" and confirm_neck is not None:
+            neck_disp = float(confirm_neck)
+        elif status == "invalidated" and (
+            collapse_note
+            or _slant_neck_collapsed(raw_last, n1_px, n2_px, is_top=False)
+        ):
+            neck_disp = _neck_ref_display(n1_px, n2_px, rs_neck)
+        else:
+            neck_disp = float(raw_last)
+        neck_method = (
+            "slanted_ref"
+            if (
+                collapse_note
+                or (
+                    status == "invalidated"
+                    and _slant_neck_collapsed(raw_last, n1_px, n2_px, is_top=False)
+                )
+            )
+            else "slanted"
+        )
         if status != "invalidated" and rs["price"] >= ls["price"]:
             conf = min(1.0, conf + 0.05)
         reason = (
@@ -319,7 +425,9 @@ def _detect_hs_bottom(
             f"{fmt_px('峰1', round(n1_px, 4), n1.get('date'))} "
             f"{fmt_px('峰2', round(n2_px, 4), n2.get('date'))}"
         )
-        if status == "invalidated":
+        if collapse_note:
+            reason += f" {collapse_note}"
+        elif status == "invalidated":
             thr = round(head_px * INVALIDATE_BOTTOM_MULT, 4)
             reason += f" 失效:右肩后低点/收盘<头×{INVALIDATE_BOTTOM_MULT}({thr})"
         elif status == "confirmed" and confirm_date:
@@ -328,22 +436,25 @@ def _detect_hs_bottom(
                 reason += f" 破颈确认:{confirm_date}（现价已回落斜颈下方，状态仍锁存）"
             else:
                 reason += f" 破颈确认:{confirm_date}"
+        kl: Dict[str, Any] = {
+            "left_shoulder": ls["price"],
+            "head": head["price"],
+            "right_shoulder": rs["price"],
+            "neckline": round(neck_disp, 4),
+            "neck_left": round(n1_px, 4),
+            "neck_right": round(n2_px, 4),
+            "neckline_method": neck_method,
+            "last_close": round(last, 4),
+        }
+        if confirm_neck is not None and confirm_neck == confirm_neck:
+            kl["confirm_neckline"] = round(float(confirm_neck), 4)
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_bottom",
             status=status,
             confidence=conf,
             reason=reason,
-            key_levels={
-                "left_shoulder": ls["price"],
-                "head": head["price"],
-                "right_shoulder": rs["price"],
-                "neckline": round(neck_disp, 4),
-                "neck_left": round(n1_px, 4),
-                "neck_right": round(n2_px, 4),
-                "neckline_method": "slanted",
-                "last_close": round(last, 4),
-            },
+            key_levels=kl,
             pivots=[
                 {"role": "LS", "date": ls.get("date"), "price": ls["price"]},
                 {"role": "head", "date": head.get("date"), "price": head["price"]},

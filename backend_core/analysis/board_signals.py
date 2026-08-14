@@ -778,7 +778,7 @@ def _levels_for_codes(
     uniq = sorted({_norm_code(c) for c in codes if _norm_code(c)})
     if not uniq:
         return {}
-    # KDE 初始回看约 250；经典/共振用同窗
+    # KDE 初始回看约 60；经典/共振用同窗
     lb = max(OHLC_LOOKBACK, 260)
     bars_by = batch_load_ohlc_bars(db, uniq, lookback=lb)
     last_closes: Dict[str, float] = {}
@@ -790,8 +790,8 @@ def _levels_for_codes(
 
     # 多票时限制 KDE 扩窗，控制「全部」查询耗时
     kde_cfg = {
-        "kde_lookback_days": 250,
-        "kde_lookback_initial": 250,
+        "kde_lookback_days": 60,
+        "kde_lookback_initial": 60,
         "kde_lookback_step": 250,
         "kde_lookback_max": 250 if len(uniq) > 40 else 500,
         "kde_base_factor": 1.0,

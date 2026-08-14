@@ -764,6 +764,176 @@ def test_hs_bottom_slanted_neck_in_key_levels():
     assert "斜颈" in (h.get("reason") or "")
 
 
+def test_hs_top_steep_neck_extrapolation_invalidated():
+    """陡降斜颈外推穿零/过分偏低 → invalidated，展示颈不为负（000533 类）。"""
+    head = 16.78
+    ls_px, rs_px = 16.20, 15.35
+    n1_px, n2_px = 14.74, 12.51  # 8 根内陡降
+    n = 100
+    bars = _bars_from_closes([14.0] * n)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.05
+        b["low"] = float(b["close"]) - 0.05
+    # 右肩后价格维持在 12+，永不破「仍为正」的早期斜颈，直至外推崩塌
+    for i in range(30, n):
+        bars[i]["close"] = 12.5
+        bars[i]["high"] = 12.8
+        bars[i]["low"] = 12.2
+    n1_i, n2_i, rs_i = 10, 18, 25
+    pivots = [
+        {"kind": "high", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "low", "price": n1_px, "index": n1_i, "date": bars[n1_i]["date"]},
+        {"kind": "high", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "low", "price": n2_px, "index": n2_i, "date": bars[n2_i]["date"]},
+        {"kind": "high", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["pattern_type"] == "head_shoulders_top"
+    assert h["status"] == "invalidated"
+    neck = float(h["key_levels"]["neckline"])
+    assert neck > 0
+    assert "斜颈外推失真" in (h.get("reason") or "")
+    assert h["key_levels"].get("neckline_method") == "slanted_ref"
+
+
+def test_hs_bottom_steep_neck_extrapolation_too_low_invalidated():
+    """头肩底斜颈外推相对两颈点过低 → invalidated，展示颈>0（002286 类）。"""
+    head = 1.20
+    ls_px, rs_px = 1.50, 1.55
+    n1_px, n2_px = 2.20, 1.80  # 下降斜颈
+    n = 95
+    bars = _bars_from_closes([1.60] * n)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.02
+        b["low"] = float(b["close"]) - 0.02
+    # 右肩靠后：末日斜颈已外推崩塌，避免途中先破颈确认
+    n1_i, n2_i, rs_i = 10, 18, 90
+    for i in range(rs_i, n):
+        bars[i]["close"] = 1.55
+        bars[i]["high"] = 1.58
+        bars[i]["low"] = 1.52
+    pivots = [
+        {"kind": "low", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": n1_px, "index": n1_i, "date": bars[n1_i]["date"]},
+        {"kind": "low", "price": head, "index": 15, "date": bars[15]["date"]},
+        {"kind": "high", "price": n2_px, "index": n2_i, "date": bars[n2_i]["date"]},
+        {"kind": "low", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["pattern_type"] == "head_shoulders_bottom"
+    assert h["status"] == "invalidated"
+    neck = float(h["key_levels"]["neckline"])
+    assert neck > 0
+    assert "斜颈外推失真" in (h.get("reason") or "")
+    assert h["key_levels"].get("neckline_method") == "slanted_ref"
+
+
+def test_double_top_bottom_same_window_mix_downgrade():
+    """同窗活跃双顶+双底 → confidence cap、箱体震荡 box、tactical bias_label。"""
+    from backend_core.analysis.chart_patterns.engine import annotate_double_extremes_mix
+    from backend_core.analysis.pattern_tactical import (
+        _has_bias_mix,
+        build_pattern_tactical,
+    )
+
+    top = make_hit(
+        pattern_family="double_extremes",
+        pattern_type="double_top",
+        status="confirmed",
+        confidence=0.72,
+        reason="双顶",
+        key_levels={"neckline": 10.0, "h1": 12.0, "h2": 11.8, "last_close": 10.2},
+        pivots=[
+            {"role": "h1", "date": "2026-01-10", "price": 12.0},
+            {"role": "h2", "date": "2026-02-20", "price": 11.8},
+        ],
+        extra={"formed_at": "2026-02-25"},
+    )
+    bottom = make_hit(
+        pattern_family="double_extremes",
+        pattern_type="double_bottom",
+        status="confirmed",
+        confidence=0.70,
+        reason="双底",
+        key_levels={"neckline": 11.0, "l1": 9.0, "l2": 9.1, "last_close": 10.2},
+        pivots=[
+            {"role": "l1", "date": "2026-01-15", "price": 9.0},
+            {"role": "l2", "date": "2026-02-18", "price": 9.1},
+        ],
+        extra={"formed_at": "2026-02-28"},
+    )
+    out = annotate_double_extremes_mix([top, bottom])
+    assert all(float(h["confidence"]) <= 0.45 for h in out)
+    assert all("交织" in (h.get("reason") or "") for h in out)
+    assert all(
+        (h.get("key_levels") or {}).get("bias_mix") is True
+        or h.get("bias_mix") is True
+        for h in out
+    )
+    for h in out:
+        lv = h.get("key_levels") or {}
+        assert lv.get("box_low") == 10.0
+        assert lv.get("box_high") == 11.0
+        assert lv.get("range_label") == "箱体震荡"
+        assert h.get("range_box") is True
+        assert "箱体震荡" in (h.get("reason") or "")
+    primary = out[0]
+    assert _has_bias_mix(primary, out) is True
+    # 现价夹在双顶颈与双底颈之间：无单边破位，交织 → 震荡 / 箱体震荡
+    tac = build_pattern_tactical(out, confluence=None, vp=None)
+    assert tac.get("short_bias") == "震荡"
+    assert tac.get("bias_label") == "箱体震荡"
+    assert "箱体震荡" in (tac.get("rationale") or "")
+    assert any(
+        e.get("code") == "bias_mix" and e.get("ok") for e in (tac.get("evidence") or [])
+    )
+    hints = tac.get("buy_hints") or []
+    assert hints
+    ez = hints[0].get("entry_zone") or {}
+    inv = hints[0].get("invalidation")
+    assert ez.get("low") is not None and inv is not None
+    assert float(inv) < float(ez["low"])
+    assert hints[0].get("target") == 11.0
+
+
+def test_double_top_bottom_shared_pivot_note():
+    """双底颈≈双顶 H1 → reason 注同枢轴复用。"""
+    from backend_core.analysis.chart_patterns.engine import annotate_double_extremes_mix
+
+    top = make_hit(
+        pattern_family="double_extremes",
+        pattern_type="double_top",
+        status="confirmed",
+        confidence=0.7,
+        reason="双顶",
+        key_levels={"neckline": 9.5, "h1": 11.0, "h2": 10.95, "last_close": 10.2},
+        pivots=[
+            {"role": "h1", "date": "2026-01-10", "price": 11.0},
+            {"role": "h2", "date": "2026-02-20", "price": 10.95},
+        ],
+        extra={"formed_at": "2026-02-25"},
+    )
+    bottom = make_hit(
+        pattern_family="double_extremes",
+        pattern_type="double_bottom",
+        status="confirmed",
+        confidence=0.68,
+        reason="双底",
+        key_levels={"neckline": 11.0, "l1": 8.5, "l2": 8.6, "last_close": 10.2},
+        pivots=[
+            {"role": "l1", "date": "2026-01-15", "price": 8.5},
+            {"role": "l2", "date": "2026-02-18", "price": 8.6},
+        ],
+        extra={"formed_at": "2026-02-28"},
+    )
+    out = annotate_double_extremes_mix([top, bottom])
+    assert all("同枢轴复用" in (h.get("reason") or "") for h in out)
+
+
 def test_hs_top_invalidated_when_close_breaks_head():
     """头肩顶：右肩后收盘 > 头×1.01 → invalidated。"""
     head = 20.0
