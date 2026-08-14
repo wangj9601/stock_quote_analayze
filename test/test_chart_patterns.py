@@ -694,26 +694,74 @@ def test_patterns_route_reports_invalidated_count():
     assert body["invalidated_count"] == 2
 
 
-def test_hs_bottom_invalidated_when_close_breaks_head():
-    """头肩底：右肩后收盘 < 头×0.99 → invalidated；detect_all 默认不展示。"""
-    head = 10.0
-    closes = [15.0] * 40 + [head * 0.98]  # 跌破头×0.99
-    bars = _bars_from_closes(closes)
+def test_hs_bottom_rejects_shallow_head_like_double_bottom():
+    """头仅略低于左肩（~1%）→ 不报头肩底（002979 类近似双底）。"""
+    bars = _bars_from_closes([55.0] * 50)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.5
+        b["low"] = float(b["close"]) - 0.5
     pivots = [
-        {"kind": "low", "price": 12.0, "index": 5, "date": bars[5]["date"]},
-        {"kind": "high", "price": 14.0, "index": 10, "date": bars[10]["date"]},
+        {"kind": "low", "price": 49.67, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": 56.02, "index": 10, "date": bars[10]["date"]},
+        {"kind": "low", "price": 49.12, "index": 15, "date": bars[15]["date"]},  # 深约 1.1%
+        {"kind": "high", "price": 56.50, "index": 20, "date": bars[20]["date"]},  # 对称颈线避免先撞不对称
+        {"kind": "low", "price": 51.18, "index": 25, "date": bars[25]["date"]},
+    ]
+    hits = detect_head_shoulders(bars, pivots)
+    assert hits == []
+
+
+def test_hs_bottom_rejects_extreme_neck_asymmetry():
+    """颈线两峰相对差过大（56 vs 76）→ 不报，即使头深度足够。"""
+    bars = _bars_from_closes([55.0] * 50)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.5
+        b["low"] = float(b["close"]) - 0.5
+    pivots = [
+        {"kind": "low", "price": 52.0, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": 56.02, "index": 10, "date": bars[10]["date"]},
+        {"kind": "low", "price": 48.0, "index": 15, "date": bars[15]["date"]},  # 相对肩深 >3%
+        {"kind": "high", "price": 76.20, "index": 20, "date": bars[20]["date"]},
+        {"kind": "low", "price": 51.0, "index": 25, "date": bars[25]["date"]},
+    ]
+    mid = (56.02 + 76.20) / 2.0
+    assert abs(76.20 - 56.02) / mid > 0.22
+    hits = detect_head_shoulders(bars, pivots)
+    assert hits == []
+
+
+def test_hs_bottom_slanted_neck_in_key_levels():
+    """合格头肩底：斜颈字段齐全；近乎水平颈线时仍可破位确认。"""
+    head = 10.0
+    ls_px, rs_px = 12.0, 12.1
+    n1_px, n2_px = 14.0, 14.2
+    neck = (n1_px + n2_px) / 2.0
+    n = 50
+    bars = _bars_from_closes([13.0] * n)
+    for b in bars:
+        b["high"] = float(b["close"]) + 0.05
+        b["low"] = float(b["close"]) - 0.05
+    rs_i = 25
+    for i in range(30, n):
+        bars[i]["close"] = neck + 0.5
+        bars[i]["high"] = neck + 0.8
+        bars[i]["low"] = neck + 0.2
+    pivots = [
+        {"kind": "low", "price": ls_px, "index": 5, "date": bars[5]["date"]},
+        {"kind": "high", "price": n1_px, "index": 10, "date": bars[10]["date"]},
         {"kind": "low", "price": head, "index": 15, "date": bars[15]["date"]},
-        {"kind": "high", "price": 14.2, "index": 20, "date": bars[20]["date"]},
-        {"kind": "low", "price": 12.1, "index": 25, "date": bars[25]["date"]},
+        {"kind": "high", "price": n2_px, "index": 20, "date": bars[20]["date"]},
+        {"kind": "low", "price": rs_px, "index": rs_i, "date": bars[rs_i]["date"]},
     ]
     hits = detect_head_shoulders(bars, pivots)
     assert len(hits) == 1
-    assert hits[0]["pattern_type"] == "head_shoulders_bottom"
-    assert hits[0]["status"] == "invalidated"
-    assert hits[0]["key_levels"]["last_close"] < head * INVALIDATE_BOTTOM_MULT
-
-    # 默认过滤失效（真实枢轴未必命中手工场景，至少不抛）
-    assert isinstance(detect_all(bars, types=["hs"], include_invalidated=False), list)
+    h = hits[0]
+    assert h["status"] == "confirmed"
+    lv = h["key_levels"]
+    assert lv.get("neckline_method") == "slanted"
+    assert lv.get("neck_left") == 14.0
+    assert lv.get("neck_right") == 14.2
+    assert "斜颈" in (h.get("reason") or "")
 
 
 def test_hs_top_invalidated_when_close_breaks_head():

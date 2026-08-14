@@ -11,6 +11,8 @@ PRICE_DECIMALS = 2
 _PRICE_LEVEL_KEYS = frozenset(
     {
         "neckline",
+        "neck_left",
+        "neck_right",
         "upper",
         "lower",
         "mid",
@@ -19,6 +21,8 @@ _PRICE_LEVEL_KEYS = frozenset(
         "l2",
         "h1",
         "h2",
+        "left_shoulder",
+        "right_shoulder",
         "last_close",
     }
 )
