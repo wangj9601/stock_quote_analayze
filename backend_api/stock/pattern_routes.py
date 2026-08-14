@@ -49,10 +49,12 @@ def _tactical_enrichment(
     stock_code: str,
     asof: Optional[str],
 ) -> tuple:
-    """尽量注入 VP / confluence / RPE；失败则对应项为 None（grade=base）。"""
+    """尽量注入 VP / confluence / RPE / GMS / classic；失败则对应项为 None（grade=base）。"""
     vp = None
     confluence = None
     rpe = None
+    gms = None
+    classic_out = None
     last_close = None
     if bars:
         try:
@@ -78,9 +80,13 @@ def _tactical_enrichment(
             bars, last_close if last_close is not None else 0.0
         )
         if isinstance(classic, dict):
+            classic_out = classic
             if vp:
                 classic = dict(classic)
                 classic["volume_profile"] = {
+                    "ok": True,
+                    "lookback": vp.get("lookback"),
+                    "bars_used": vp.get("bars_used"),
                     "poc": vp.get("poc"),
                     "vah": vp.get("vah"),
                     "val": vp.get("val"),
@@ -141,7 +147,34 @@ def _tactical_enrichment(
         logger.debug("tactical RPE skip code=%s: %s", stock_code, e)
         rpe = None
 
-    return vp, confluence, rpe
+    # GMS 分数快照：取总分即可（与选股命中解耦）；失败则字段可选
+    try:
+        code_n = str(stock_code or "").strip()
+        if code_n.isdigit() and len(code_n) == 6 and asof:
+            from backend_core.analysis.stock_multi_strategy import _eval_gms
+
+            pack = _eval_gms(db, code_n, str(asof)[:10])
+            if isinstance(pack, dict):
+                detail = pack.get("detail") if isinstance(pack.get("detail"), dict) else {}
+                sc = pack.get("score")
+                if sc is None and isinstance(detail, dict):
+                    for k in ("score_total", "total_score", "score"):
+                        if detail.get(k) is not None:
+                            sc = detail.get(k)
+                            break
+                if sc is not None:
+                    gms = {
+                        "score": sc,
+                        "score_total": sc,
+                        "hit": bool(pack.get("hit")),
+                        "label": pack.get("label"),
+                        "detail": detail or None,
+                    }
+    except Exception as e:
+        logger.debug("tactical GMS skip code=%s: %s", stock_code, e)
+        gms = None
+
+    return vp, confluence, rpe, gms, classic_out
 
 
 @router.get("/meta")
@@ -266,8 +299,9 @@ async def patterns_for_stock(
         hits_all, invalidated_count = [], 0
     hits = [h for h in hits_all if str(h.get("status") or "") != "invalidated"]
 
-    vp, confluence, rpe = _tactical_enrichment(db, bars, stock_code, asof_s)
+    vp, confluence, rpe, gms, classic = _tactical_enrichment(db, bars, stock_code, asof_s)
     from backend_core.analysis.pattern_tactical import (
+        annotate_hits_breakout_probe,
         build_pattern_tactical,
         market_snapshot_from_bars,
     )
@@ -277,10 +311,13 @@ async def patterns_for_stock(
         confluence=confluence,
         vp=vp,
         rpe=rpe,
+        gms=gms,
         invalidated_count=invalidated_count,
         asof=asof_s,
         market=market_snapshot_from_bars(bars),
+        classic=classic,
     )
+    hits = annotate_hits_breakout_probe(hits, tactical)
 
     payload: Dict[str, Any] = {
         "success": True,

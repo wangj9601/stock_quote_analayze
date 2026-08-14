@@ -18,6 +18,29 @@
     return n || '--';
   }
 
+  function fmtConfluenceStrength(z) {
+    if (!z || typeof z !== 'object') return '--';
+    const s = z.strength != null && Number.isFinite(Number(z.strength)) ? z.strength : null;
+    if (s == null) return '--';
+    if (z.chips_void) {
+      const note = z.void_note
+        ? String(z.void_note)
+        : '位于筹码真空区，需防范高ATR击穿效应';
+      const adj =
+        z.strength_adjusted != null && Number.isFinite(Number(z.strength_adjusted))
+          ? `，折减后${z.strength_adjusted}`
+          : '';
+      return `${s}（注：${note}${adj}）`;
+    }
+    if (z.chips_hvz) {
+      const note = z.hvz_note
+        ? String(z.hvz_note)
+        : '重叠VP密集抛压区，压制因子放大';
+      return `${s}（注：${note}）`;
+    }
+    return String(s);
+  }
+
   function plainFromEl(el) {
     if (!el) return '';
     return String(el.innerText || el.textContent || '')
@@ -250,7 +273,7 @@
         });
         sorted.forEach((z, i) => {
           const src = (z.sources || []).join('+') || '--';
-          const strength = z.strength != null ? z.strength : '--';
+          const strength = fmtConfluenceStrength(z);
           confBody.push([`${tag}${i + 1}·强度${strength}·${src}`, fmtPrice(z.center)]);
         });
       };

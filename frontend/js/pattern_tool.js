@@ -215,7 +215,7 @@ const PatternTool = {
           <td>${codeHtml}</td>
           <td>${this.esc(name || '--')}</td>
           <td>${this._patternTypeCellHtml(r)}</td>
-          <td>${this.esc(this.statusLabel(r.status))}</td>
+          <td>${this.esc(this.statusLabel(r.status, r))}</td>
           <td title="${this.esc(this.formedAtTitle(r))}">${this.esc(formed)}</td>
           <td>${this._confCellHtml(r)}</td>
           <td class="pattern-col-levels">${this.esc(this.keyLevelsText(r.key_levels))}</td>
@@ -253,7 +253,7 @@ const PatternTool = {
         .map((h) => {
           const code = h.code || '';
           const label = this.typeLabel(h.pattern_type);
-          const st = this.statusLabel(h.status);
+          const st = this.statusLabel(h.status, h);
           const conf = h.confidence != null ? Number(h.confidence).toFixed(2) : '--';
           return `${code} ${label}（${st} ${conf}）`;
         })
@@ -314,12 +314,16 @@ const PatternTool = {
         ? `${bias} · ${labelShow}`
         : `${bias}${labelShow ? ` · ${labelShow}` : ''}`;
     const rationale = t.rationale ? String(t.rationale) : '';
+    const statusNote = t.status_note ? String(t.status_note).trim() : '';
+    const displayStatus = t.display_status ? String(t.display_status).trim() : '';
+    const structureNote =
+      (t.structure_note && String(t.structure_note).trim()) ||
+      (t.highlight && t.highlight.text ? String(t.highlight.text).trim() : '');
+    const reboundNote = t.rebound_note ? String(t.rebound_note).trim() : '';
     let hintsHtml = '';
     if (biasRaw === '看空') {
       const risk = t.risk_note ? String(t.risk_note) : '结构破位，无进攻买点。';
       hintsHtml = `<p class="pattern-tactical-risk"><span class="pattern-expert-label">风险：</span>${this.esc(risk)}</p>`;
-    } else if (biasRaw === 'insufficient') {
-      hintsHtml = '';
     } else {
       const hints = Array.isArray(t.buy_hints) ? t.buy_hints : [];
       if (hints.length) {
@@ -334,9 +338,15 @@ const PatternTool = {
                 : '--';
             const inv = h.invalidation != null ? Number(h.invalidation).toFixed(2) : '--';
             const tgt = h.target != null ? Number(h.target).toFixed(2) : '--';
+            const statusBit =
+              h.trigger_status === 'triggered'
+                ? ' [已触发]'
+                : h.trigger_status === 'pending'
+                  ? ' [待触发]'
+                  : '';
             return `<li><strong>${this.esc(type)}</strong> ${this.esc(trig)}；区间 ${this.esc(
               zone
-            )}；失效 ${this.esc(inv)}；目标 ${this.esc(tgt)}</li>`;
+            )}；失效 ${this.esc(inv)}；目标 ${this.esc(tgt)}${this.esc(statusBit)}</li>`;
           })
           .join('');
         hintsHtml = `<div class="pattern-tactical-hints"><span class="pattern-expert-label">结构买点：</span><ul>${lis}</ul></div>`;
@@ -353,15 +363,75 @@ const PatternTool = {
             String(t.nesting_note)
           )}</p>`
         : '';
+    const structureHtml = structureNote
+      ? `<p class="pattern-tactical-highlight"><span class="pattern-expert-label">结构高亮：</span>${this.esc(
+          structureNote
+        )}</p>`
+      : '';
+    const reboundHtml = reboundNote
+      ? `<p class="pattern-tactical-rebound"><span class="pattern-expert-label">前瞻：</span>${this.esc(
+          reboundNote
+        )}</p>`
+      : '';
+    const alertObj =
+      t.wedge_breakout_alert && typeof t.wedge_breakout_alert === 'object'
+        ? t.wedge_breakout_alert
+        : null;
+    const alertTarget =
+      alertObj && alertObj.target != null && Number.isFinite(Number(alertObj.target))
+        ? Number(alertObj.target)
+        : alertObj &&
+            alertObj.alert_target != null &&
+            Number.isFinite(Number(alertObj.alert_target))
+          ? Number(alertObj.alert_target)
+          : null;
+    const alertStr =
+      alertObj &&
+      alertObj.target_strength != null &&
+      Number.isFinite(Number(alertObj.target_strength))
+        ? Number(alertObj.target_strength)
+        : null;
+    const alertTargetHtml =
+      alertTarget != null
+        ? `<p class="pattern-tactical-alert-target"><span class="pattern-expert-label">预警目标：</span>${this.esc(
+            `${alertTarget.toFixed(2)} 附近${
+              alertStr != null ? `（强度 ${alertStr} 共振阻力带）` : '（共振阻力带）'
+            }`
+          )}</p>`
+        : '';
+    const ultraObj =
+      t.ultra_squeeze && typeof t.ultra_squeeze === 'object' ? t.ultra_squeeze : null;
+    const stormObj =
+      t.asymmetry_storm && typeof t.asymmetry_storm === 'object' ? t.asymmetry_storm : null;
+    const probeClass =
+      displayStatus === '高倾角风暴预警' ||
+      (stormObj && stormObj.ok) ||
+      displayStatus === 'asymmetry_storm'
+        ? ' pattern-tactical-asymmetry-storm'
+        : displayStatus === '楔形蓄势突破预警' || t.wedge_breakout_alert
+          ? ' pattern-tactical-wedge-alert'
+          : displayStatus === '极窄箱体变盘临界' || ultraObj
+            ? ' pattern-tactical-ultra-squeeze'
+            : '';
+    const probeHtml =
+      displayStatus || statusNote
+        ? `<p class="pattern-tactical-probe${probeClass}"><span class="pattern-expert-label">盘口态：</span>${this.esc(
+            displayStatus || '试探突破'
+          )}${statusNote ? ` — ${this.esc(statusNote)}` : ''}</p>`
+        : '';
     return `<div class="pattern-tactical-block">
+      ${structureHtml}
       <p>
         <span class="pattern-expert-label">短期判断：</span>
         <span class="pattern-tactical-badge ${badgeClass}">${this.esc(badgeText)}</span>
         <span class="pattern-tactical-grade">grade=${this.esc(grade)}</span>
         <span class="pattern-tactical-conf">置信 ${this.esc(conf)}</span>
       </p>
+      ${probeHtml}
+      ${alertTargetHtml}
       ${rationale ? `<p class="pattern-tactical-rationale">${this.esc(rationale)}</p>` : ''}
       ${nesting}
+      ${reboundHtml}
       ${hintsHtml}
       ${disc}
     </div>`;
@@ -373,17 +443,53 @@ const PatternTool = {
     if (!t || !t.short_bias) return '';
     const biasRaw = String(t.short_bias);
     const biasShow = biasRaw === 'insufficient' ? '信息不足' : biasRaw;
-    const parts = [
+    const structureNote =
+      (t.structure_note && String(t.structure_note).trim()) ||
+      (t.highlight && t.highlight.text ? String(t.highlight.text).trim() : '');
+    const parts = [];
+    if (structureNote) parts.push(`结构高亮：${structureNote}`);
+    parts.push(
       `短期判断：${biasShow}${t.bias_label ? `（${t.bias_label}）` : ''} · grade=${t.grade || 'base'}${
         t.confidence != null ? ` · 置信 ${Number(t.confidence).toFixed(2)}` : ''
-      }`,
-    ];
+      }`
+    );
     if (t.rationale) parts.push(String(t.rationale));
+    if (t.display_status || t.status_note) {
+      parts.push(
+        `盘口态：${t.display_status || '试探突破'}${
+          t.status_note ? ` — ${String(t.status_note)}` : ''
+        }`
+      );
+    }
+    const alertPlain =
+      t.wedge_breakout_alert && typeof t.wedge_breakout_alert === 'object'
+        ? t.wedge_breakout_alert
+        : null;
+    const alertTgtPlain =
+      alertPlain && alertPlain.target != null && Number.isFinite(Number(alertPlain.target))
+        ? Number(alertPlain.target)
+        : alertPlain &&
+            alertPlain.alert_target != null &&
+            Number.isFinite(Number(alertPlain.alert_target))
+          ? Number(alertPlain.alert_target)
+          : null;
+    if (alertTgtPlain != null) {
+      const astr =
+        alertPlain &&
+        alertPlain.target_strength != null &&
+        Number.isFinite(Number(alertPlain.target_strength))
+          ? Number(alertPlain.target_strength)
+          : null;
+      parts.push(
+        `预警目标：${alertTgtPlain.toFixed(2)} 附近${
+          astr != null ? `（强度 ${astr} 共振阻力带）` : '（共振阻力带）'
+        }`
+      );
+    }
     if (t.nesting_note) parts.push(`嵌套：${String(t.nesting_note)}`);
+    if (t.rebound_note) parts.push(`前瞻：${String(t.rebound_note)}`);
     if (biasRaw === '看空') {
       parts.push(t.risk_note ? `风险：${t.risk_note}` : '风险：结构破位，无进攻买点');
-    } else if (biasRaw === 'insufficient') {
-      /* rationale 已含信息不足说明 */
     } else {
       const hints = Array.isArray(t.buy_hints) ? t.buy_hints : [];
       hints.forEach((h, i) => {
@@ -392,10 +498,16 @@ const PatternTool = {
           ez.low != null && ez.high != null
             ? `${Number(ez.low).toFixed(2)}–${Number(ez.high).toFixed(2)}`
             : '--';
+        const statusBit =
+          h.trigger_status === 'triggered'
+            ? ' [已触发]'
+            : h.trigger_status === 'pending'
+              ? ' [待触发]'
+              : '';
         parts.push(
           `买点${i + 1}：${h.type || 'watch'} ${h.trigger || ''}；区间 ${zone}；失效 ${
             h.invalidation != null ? Number(h.invalidation).toFixed(2) : '--'
-          }；目标 ${h.target != null ? Number(h.target).toFixed(2) : '--'}`
+          }；目标 ${h.target != null ? Number(h.target).toFixed(2) : '--'}${statusBit}`
         );
       });
       if (t.risk_note) parts.push(`提示：${t.risk_note}`);
@@ -538,6 +650,17 @@ const PatternTool = {
     const extras = [];
     const shrink = reason.match(/收敛约[^\s]+/);
     if (shrink) extras.push(shrink[0]);
+    else if (levels.shrink_pct != null && levels.shrink_pct !== '') {
+      extras.push(`收敛约${levels.shrink_pct}%`);
+    }
+    if (levels.bars_to_apex != null && levels.bars_to_apex !== '') {
+      const bta = levels.bars_to_apex;
+      const win = levels.apex_window ? `（拐点窗口约${levels.apex_window}）` : '';
+      extras.push(`预计约${bta}根至顶点${win}`);
+    } else {
+      const mApex = reason.match(/预计约[^\s]*根至顶点(?:（[^）]*）)?/);
+      if (mApex) extras.push(mApex[0]);
+    }
     if (levels.neckline != null && levels.neckline !== '' && !priced.some((p) => p.role === 'neck')) {
       extras.push(`颈线≈${this._fmtPx(levels.neckline)}`);
     }
@@ -560,7 +683,12 @@ const PatternTool = {
     return `${label}${simplified} ${parts.join(' ')}${extras.length ? ` ${extras.join(' ')}` : ''}`.trim();
   },
 
-  statusLabel(st) {
+  statusLabel(st, hit) {
+    if (hit && hit.display_status) return String(hit.display_status);
+    if (st === 'asymmetry_storm' || st === '高倾角风暴预警') return '高倾角风暴预警';
+    if (st === 'wedge_breakout_alert' || st === '楔形蓄势突破预警') return '楔形蓄势突破预警';
+    if (st === 'ultra_squeeze' || st === '极窄箱体变盘临界') return '极窄箱体变盘临界';
+    if (st === 'breakout_probe' || st === '试探突破') return '试探突破';
     if (st === 'confirmed') return '已确认';
     if (st === 'invalidated') return '失效';
     if (st === 'archived') return '已归档';
@@ -677,7 +805,7 @@ const PatternTool = {
           <td>${codeHtml}</td>
           <td>${this.esc(name || '--')}</td>
           <td>${this._patternTypeCellHtml(r)}</td>
-          <td>${this.esc(this.statusLabel(r.status))}</td>
+          <td>${this.esc(this.statusLabel(r.status, r))}</td>
           <td title="${this.esc(this.formedAtTitle(r))}">${this.esc(formed)}</td>
           <td>${this._confCellHtml(r)}</td>
           <td class="pattern-col-levels">${this.esc(this.keyLevelsText(r.key_levels))}</td>
@@ -1055,7 +1183,7 @@ const PatternTool = {
     const scored = zones
       .map((z) => {
         const c = this._num(z.center);
-        const str = this._num(z.strength) || 0;
+        const str = this._effectiveZoneStrength(z) || 0;
         const dist =
           close != null && c != null ? Math.abs((close - c) / Math.abs(c || 1)) : 1;
         return { z, c, str, dist, score: str / (1 + dist * 40) };
@@ -1065,7 +1193,25 @@ const PatternTool = {
     if (!scored.length) return '';
     const top = scored[0];
     const role = top.z.side === 'support' ? '支撑' : '压力';
-    return `近端高强度共振带约在 ${this._fmtPx(top.c)}（${role}，强度 ${Number(top.str).toFixed(1)}），可作短线参考。`;
+    const raw =
+      this._num(top.z.strength) != null
+        ? Number(top.z.strength).toFixed(1)
+        : Number(top.str).toFixed(1);
+    let msg = `近端高强度共振带约在 ${this._fmtPx(top.c)}（${role}，强度 ${raw}），可作短线参考。`;
+    if (top.z.chips_void && top.z.void_note) {
+      msg += `注：${top.z.void_note}`;
+    } else if (top.z.chips_hvz && top.z.hvz_note) {
+      msg += `注：${top.z.hvz_note}`;
+    }
+    return msg;
+  },
+
+  /** 支撑/阻力选型用有效强度：优先 strength_adjusted（真空折减 / HVZ 增益） */
+  _effectiveZoneStrength(z) {
+    if (!z || typeof z !== 'object') return null;
+    const adj = this._num(z.strength_adjusted);
+    if (adj != null) return adj;
+    return this._num(z.strength);
   },
 
   _biasOf(type) {
@@ -1774,15 +1920,32 @@ const PatternTool = {
       if (!z || typeof z !== 'object') return null;
       const price = this._num(z.center);
       if (price == null) return null;
-      return {
+      const rawStr = this._num(z.strength) || 0;
+      const eff = this._effectiveZoneStrength(z) || rawStr;
+      const lv = {
         price,
         low: this._num(z.low),
         high: this._num(z.high),
-        strength: this._num(z.strength) || 0,
+        strength: eff,
+        strengthRaw: rawStr,
         sources: Array.isArray(z.sources) ? z.sources : [],
         fromConfluence: true,
         side,
       };
+      if (z.chips_void) {
+        lv.chips_void = true;
+        if (z.void_note) lv.void_note = z.void_note;
+        const adj = this._num(z.strength_adjusted);
+        if (adj != null) lv.strength_adjusted = adj;
+      }
+      if (z.chips_hvz) {
+        lv.chips_hvz = true;
+        if (z.hvz_note) lv.hvz_note = z.hvz_note;
+        if (z.hvz_source) lv.hvz_source = z.hvz_source;
+        const adj = this._num(z.strength_adjusted);
+        if (adj != null) lv.strength_adjusted = adj;
+      }
+      return lv;
     };
     const score = (lv) => {
       const dist =
@@ -1825,10 +1988,18 @@ const PatternTool = {
   _confluenceLevelExplain(m, side) {
     const role = side === 'support' ? '支撑' : '阻力';
     const str =
-      m && m.strength != null && Number.isFinite(Number(m.strength))
-        ? Number(m.strength).toFixed(1)
-        : '--';
-    return `多维共振带${role}，强度 ${str}`;
+      m && m.strengthRaw != null && Number.isFinite(Number(m.strengthRaw))
+        ? Number(m.strengthRaw).toFixed(1)
+        : m && m.strength != null && Number.isFinite(Number(m.strength))
+          ? Number(m.strength).toFixed(1)
+          : '--';
+    let text = `多维共振带${role}，强度 ${str}`;
+    if (m && m.chips_void && m.void_note) {
+      text += `（注：${m.void_note}）`;
+    } else if (m && m.chips_hvz && m.hvz_note) {
+      text += `（注：${m.hvz_note}）`;
+    }
+    return text;
   },
 
   _hasConfluenceZones(confluence) {
@@ -1858,10 +2029,17 @@ const PatternTool = {
         price,
         low: this._num(z.low),
         high: this._num(z.high),
-        strength: this._num(z.strength) || 0,
+        strength: this._effectiveZoneStrength(z) || 0,
+        strengthRaw: this._num(z.strength) || 0,
         sources: Array.isArray(z.sources) ? z.sources : [],
         fromConfluence: true,
         side,
+        chips_void: !!z.chips_void,
+        void_note: z.void_note || null,
+        chips_hvz: !!z.chips_hvz,
+        hvz_note: z.hvz_note || null,
+        hvz_source: z.hvz_source || null,
+        strength_adjusted: this._num(z.strength_adjusted),
       });
     };
     if (side === 'support') {
@@ -1979,11 +2157,19 @@ const PatternTool = {
   _softBufferExplain(m, side) {
     const role = side === 'support' ? '支撑' : '阻力';
     const str =
-      m && m.strength != null && Number.isFinite(Number(m.strength))
-        ? Number(m.strength).toFixed(1)
-        : '--';
+      m && m.strengthRaw != null && Number.isFinite(Number(m.strengthRaw))
+        ? Number(m.strengthRaw).toFixed(1)
+        : m && m.strength != null && Number.isFinite(Number(m.strength))
+          ? Number(m.strength).toFixed(1)
+          : '--';
     const contactHint = m && m.softContact ? '，贴身临界' : '';
-    return `超级量化共振带${role}，强度 ${str}${contactHint}`;
+    let text = `超级量化共振带${role}，强度 ${str}${contactHint}`;
+    if (m && m.chips_void && m.void_note) {
+      text += `（注：${m.void_note}）`;
+    } else if (m && m.chips_hvz && m.hvz_note) {
+      text += `（注：${m.hvz_note}）`;
+    }
+    return text;
   },
 
   /**
@@ -2254,13 +2440,14 @@ const PatternTool = {
     const measured = ctx.measured;
     const measuredAchieved = this._isMeasuredAchieved(measured, close);
     ctx.measuredAchieved = measuredAchieved;
-    // 有活跃形态档用形态；真空（无主形态，或两侧皆空且无巩固突破）才共振整侧兜底
+    // 真空（无主形态，或两侧皆空且无巩固突破）才共振整侧兜底
     const useConfluenceFallback =
       !primary ||
       (!supports.length && !resistances.length && !measured && !ctx.dir);
     let supportFromConf = false;
     let resistFromConf = false;
     let resistDegraded = false;
+    let resistFromWedgeAlert = false;
     if (useConfluenceFallback && this._hasConfluenceZones(options.confluenceZones)) {
       const confLv = this._pickConfluenceTradeLevels(options.confluenceZones, close);
       if (!supports.length && confLv.supports.length) {
@@ -2270,6 +2457,46 @@ const PatternTool = {
       if (!resistances.length && confLv.resistances.length) {
         resistances = confLv.resistances;
         resistFromConf = true;
+      }
+    }
+    // P0：楔形蓄势突破预警已给出上方共振目标时，结构阻力侧优先挂预警目标（避免「等待突破」真空占位）
+    if (!resistances.length) {
+      const tactical = options.tactical && typeof options.tactical === 'object' ? options.tactical : null;
+      const alert =
+        tactical && tactical.wedge_breakout_alert && typeof tactical.wedge_breakout_alert === 'object'
+          ? tactical.wedge_breakout_alert
+          : null;
+      const alertOk =
+        alert &&
+        (alert.ok === true ||
+          tactical.display_status === '楔形蓄势突破预警' ||
+          alert.display_status === '楔形蓄势突破预警');
+      const alertPx =
+        alertOk && alert.target != null && Number.isFinite(Number(alert.target))
+          ? Number(alert.target)
+          : alertOk &&
+              alert.alert_target != null &&
+              Number.isFinite(Number(alert.alert_target))
+            ? Number(alert.alert_target)
+            : null;
+      if (alertPx != null) {
+        const astr =
+          alert.target_strength != null && Number.isFinite(Number(alert.target_strength))
+            ? Number(alert.target_strength)
+            : null;
+        resistances = [
+          {
+            price: alertPx,
+            strength: astr,
+            strengthRaw: astr,
+            fromConfluence: true,
+            fromWedgeAlert: true,
+            side: 'resistance',
+            sources: ['wedge_breakout_alert'],
+          },
+        ];
+        resistFromConf = true;
+        resistFromWedgeAlert = true;
       }
     }
     // 受控软融合：patternBound 取 primary 几何边界（非「已选支撑 max」），夹层近端优先为缓冲/贴身
@@ -2493,14 +2720,18 @@ const PatternTool = {
     } else {
       resistances.forEach((m, idx) => {
         let label;
-        if (m.degradedRef) {
+        if (m.fromWedgeAlert) {
+          label = '预警目标';
+        } else if (m.degradedRef) {
           label = '参考阻力（降级）';
         } else if (m.softBuffer) {
           label = m.softContact ? '贴身临界压制' : '近端缓冲/第一压制';
         } else if (m.softCore || (resistSoftFusion && !m.fromConfluence))
           label = '核心形态阻力';
         else label = idx === 0 ? '第一阻力' : '第二阻力';
-        const explain = m.degradedRef
+        const explain = m.fromWedgeAlert
+          ? this._confluenceLevelExplain(m, 'resistance')
+          : m.degradedRef
           ? this._degradedResistExplain(m)
           : m.softBuffer
             ? this._softBufferExplain(m, 'resistance')
@@ -2539,9 +2770,11 @@ const PatternTool = {
       resistances.length > 0
         ? resistDegraded
           ? `目标/近端参考阻力（降级）：${resistZone}`
-          : resistFromConf
-            ? `目标/近端共振阻力：${resistZone}`
-            : `目标/近端形态阻力：${resistZone}`
+          : resistFromWedgeAlert
+            ? `目标/预警共振阻力：${resistZone}`
+            : resistFromConf
+              ? `目标/近端共振阻力：${resistZone}`
+              : `目标/近端形态阻力：${resistZone}`
         : supportFromConf && !resistances.length
           ? '目标/近端共振阻力：'
           : '目标/近端形态阻力：';
@@ -2690,6 +2923,7 @@ const PatternTool = {
         confluenceZones: opts.confluenceZones,
         classicLevels: opts.classicLevels,
         kdeLevels: opts.kdeLevels,
+        tactical: opts.tactical,
       });
       return {
         shortTerm: shortBits.join(''),
@@ -2949,6 +3183,7 @@ const PatternTool = {
       confluenceZones: opts.confluenceZones,
       classicLevels: opts.classicLevels,
       kdeLevels: opts.kdeLevels,
+      tactical: opts.tactical,
     });
 
     return {
