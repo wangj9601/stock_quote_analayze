@@ -13,6 +13,7 @@ _PRICE_LEVEL_KEYS = frozenset(
         "neckline",
         "neck_left",
         "neck_right",
+        "confirm_neckline",
         "upper",
         "lower",
         "mid",

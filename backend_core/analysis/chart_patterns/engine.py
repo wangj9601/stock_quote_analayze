@@ -124,6 +124,176 @@ def _spans_overlap(a: Tuple[str, str], b: Tuple[str, str]) -> bool:
     return not (a1 < b0 or b1 < a0)
 
 
+_MIX_INACTIVE = frozenset({"invalidated", "archived"})
+_DOUBLE_MIX_NOTE = "与反向双顶/双底同窗交织，置信已降权"
+_DOUBLE_MIX_CONF_CAP = 0.45
+_SHARED_PIVOT_REL = 0.005  # 共用枢轴相对差 <0.5%
+
+
+def _mix_f(v: Any) -> Optional[float]:
+    try:
+        if v is None or v == "":
+            return None
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    if x != x:
+        return None
+    return x
+
+
+def _mix_neck(hit: Dict[str, Any]) -> Optional[float]:
+    lv = hit.get("key_levels") if isinstance(hit.get("key_levels"), dict) else {}
+    return _mix_f(lv.get("neckline"))
+
+
+def _shared_pivot_reuse(top: Dict[str, Any], bottom: Dict[str, Any]) -> bool:
+    """双底颈≈双顶 H1/H2，或双顶颈≈双底 L1/L2（相对差 <0.5%）。"""
+    lv_t = top.get("key_levels") if isinstance(top.get("key_levels"), dict) else {}
+    lv_b = bottom.get("key_levels") if isinstance(bottom.get("key_levels"), dict) else {}
+    n_b = _mix_f(lv_b.get("neckline"))
+    for k in ("h1", "h2"):
+        hx = _mix_f(lv_t.get(k))
+        if n_b is not None and hx is not None and hx > 0:
+            if abs(n_b - hx) / hx < _SHARED_PIVOT_REL:
+                return True
+    n_t = _mix_f(lv_t.get("neckline"))
+    for k in ("l1", "l2"):
+        lx = _mix_f(lv_b.get(k))
+        if n_t is not None and lx is not None and max(abs(n_t), abs(lx)) > 0:
+            ref = max(abs(n_t), abs(lx))
+            if abs(n_t - lx) / ref < _SHARED_PIVOT_REL:
+                return True
+    return False
+
+
+def _compute_range_box(
+    top: Dict[str, Any], bottom: Dict[str, Any]
+) -> Tuple[Optional[float], Optional[float]]:
+    """箱体：min/max(两颈线)；缺颈线则用 key_levels 合理兜底。"""
+    n_t = _mix_neck(top)
+    n_b = _mix_neck(bottom)
+    if n_t is not None and n_b is not None:
+        return min(n_t, n_b), max(n_t, n_b)
+    lows: List[float] = []
+    highs: List[float] = []
+    for h, side in ((top, "top"), (bottom, "bottom")):
+        lv = h.get("key_levels") if isinstance(h.get("key_levels"), dict) else {}
+        neck = _mix_f(lv.get("neckline"))
+        if side == "top":
+            for k in ("h1", "h2", "upper", "neckline"):
+                v = _mix_f(lv.get(k))
+                if v is not None:
+                    highs.append(v)
+            if neck is not None:
+                lows.append(neck)
+        else:
+            for k in ("l1", "l2", "lower", "neckline"):
+                v = _mix_f(lv.get(k))
+                if v is not None:
+                    lows.append(v)
+            if neck is not None:
+                highs.append(neck)
+    if not lows or not highs:
+        # 最后兜底：两边全部价位
+        all_px: List[float] = []
+        for h in (top, bottom):
+            lv = h.get("key_levels") if isinstance(h.get("key_levels"), dict) else {}
+            for v in lv.values():
+                fv = _mix_f(v)
+                if fv is not None and fv > 0:
+                    all_px.append(fv)
+        if len(all_px) < 2:
+            return None, None
+        return min(all_px), max(all_px)
+    return min(lows), max(highs)
+
+
+def _mark_double_mix(
+    hit: Dict[str, Any],
+    *,
+    box_low: Optional[float] = None,
+    box_high: Optional[float] = None,
+    shared_pivot: bool = False,
+) -> None:
+    """同窗双顶+双底交织：降权、bias_mix，并写入箱体震荡上下沿。"""
+    conf = float(hit.get("confidence") or 0.0)
+    hit["confidence"] = round(min(conf, _DOUBLE_MIX_CONF_CAP), 3)
+    reason = str(hit.get("reason") or "").strip()
+    bits: List[str] = []
+    if _DOUBLE_MIX_NOTE not in reason:
+        bits.append(_DOUBLE_MIX_NOTE)
+    if box_low is not None and box_high is not None:
+        box_note = (
+            f"同窗多空互斥，合并观察为箱体震荡[{box_low:.2f}–{box_high:.2f}]"
+        )
+        if box_note not in reason:
+            bits.append(box_note)
+        if shared_pivot and "同枢轴复用" not in reason:
+            bits.append("同枢轴复用")
+    if bits:
+        hit["reason"] = f"{reason}；{'；'.join(bits)}" if reason else "；".join(bits)
+    lv = hit.get("key_levels") if isinstance(hit.get("key_levels"), dict) else {}
+    lv = dict(lv)
+    lv["bias_mix"] = True
+    if box_low is not None and box_high is not None:
+        lv["box_low"] = round(float(box_low), 4)
+        lv["box_high"] = round(float(box_high), 4)
+        lv["range_label"] = "箱体震荡"
+        lv["range_box"] = True
+        hit["range_box"] = True
+        hit["box_low"] = lv["box_low"]
+        hit["box_high"] = lv["box_high"]
+    hit["key_levels"] = lv
+    extra = hit.get("extra") if isinstance(hit.get("extra"), dict) else {}
+    # make_hit 常把 extra 摊到顶层；同时写顶层与 extra 便于下游读取
+    hit["bias_mix"] = True
+    if extra:
+        extra = dict(extra)
+        extra["bias_mix"] = True
+        if box_low is not None and box_high is not None:
+            extra["range_box"] = True
+            extra["box_low"] = lv.get("box_low")
+            extra["box_high"] = lv.get("box_high")
+        hit["extra"] = extra
+
+
+def annotate_double_extremes_mix(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """同窗活跃双顶+双底：强制交织降权（cap confidence），合并箱体震荡，供 tactical bias_mix。"""
+    if not hits:
+        return hits
+    tops: List[Dict[str, Any]] = []
+    bottoms: List[Dict[str, Any]] = []
+    for h in hits:
+        st = str(h.get("status") or "")
+        if st in _MIX_INACTIVE:
+            continue
+        pt = str(h.get("pattern_type") or "")
+        if pt == "double_top":
+            tops.append(h)
+        elif pt == "double_bottom":
+            bottoms.append(h)
+    if not tops or not bottoms:
+        return hits
+    touched: Set[int] = set()
+    for t in tops:
+        ts = _pivot_date_span(t)
+        for b in bottoms:
+            if not _spans_overlap(ts, _pivot_date_span(b)):
+                continue
+            box_low, box_high = _compute_range_box(t, b)
+            shared = _shared_pivot_reuse(t, b)
+            for h in (t, b):
+                hid = id(h)
+                if hid in touched:
+                    continue
+                touched.add(hid)
+                _mark_double_mix(
+                    h, box_low=box_low, box_high=box_high, shared_pivot=shared
+                )
+    return hits
+
+
 def _hit_status_tier(h: Dict[str, Any]) -> int:
     st = str(h.get("status") or "")
     if st == "confirmed":
@@ -390,7 +560,7 @@ def detect_all_counted(
 
     默认不返回 status=invalidated（失效）项；传 include_invalidated=True 可保留。
     invalidated_count 始终为过滤前的失效条数（便于 API 提示「另有 N 条已失效」）。
-    后处理：反转形态生命周期归档 → 巩固形态同源 NMS。
+    后处理：反转形态生命周期归档 → 巩固形态同源 NMS → 同窗双顶双底交织降权。
     """
     seq = [b for b in (bars or []) if isinstance(b, dict)]
     if len(seq) < 30:
@@ -409,6 +579,7 @@ def detect_all_counted(
 
     hits = apply_pattern_lifecycle(hits, seq)
     hits = nms_overlapping_patterns(hits)
+    hits = annotate_double_extremes_mix(hits)
     invalidated_count = sum(
         1 for h in hits if str(h.get("status") or "") == "invalidated"
     )

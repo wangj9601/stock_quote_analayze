@@ -214,10 +214,10 @@ const PatternTool = {
         return `<tr>
           <td>${codeHtml}</td>
           <td>${this.esc(name || '--')}</td>
-          <td>${this.esc(this.typeLabel(r.pattern_type))}</td>
+          <td>${this._patternTypeCellHtml(r)}</td>
           <td>${this.esc(this.statusLabel(r.status))}</td>
           <td title="${this.esc(this.formedAtTitle(r))}">${this.esc(formed)}</td>
-          <td>${r.confidence != null ? Number(r.confidence).toFixed(2) : '--'}</td>
+          <td>${this._confCellHtml(r)}</td>
           <td class="pattern-col-levels">${this.esc(this.keyLevelsText(r.key_levels))}</td>
           <td class="pattern-col-reason" title="${this.esc(reasonFull)}">${this.esc(reasonFull)}</td>
         </tr>`;
@@ -270,10 +270,12 @@ const PatternTool = {
     const analysis = this.buildExpertAnalysis(list, opts);
     const structureHtml = analysis.structureHtml || analysis.tradeLevelsHtml || '';
     const tacticalHtml = this._buildTacticalHtml(opts.tactical);
+    const rangeBadge = this._rangeBoxBadgeHtml(list);
     return `<div class="pattern-expert-analysis">
       <div class="pattern-expert-title">形态解读</div>
       <div class="pattern-expert-body">
         <p><span class="pattern-expert-label">价格口径：</span>${adjustTag}</p>
+        ${rangeBadge}
         ${tacticalHtml}
         <p><span class="pattern-expert-label">短期走势：</span>${this.esc(analysis.shortTerm)}</p>
         <p><span class="pattern-expert-label">中线格局：</span>${this.esc(analysis.mediumTerm)}</p>
@@ -306,6 +308,11 @@ const PatternTool = {
           : biasRaw === 'insufficient'
             ? 'pattern-tactical-insufficient'
             : 'pattern-tactical-range';
+    const labelShow = label || '';
+    const badgeText =
+      labelShow === '箱体震荡' || labelShow.indexOf('箱体震荡') >= 0
+        ? `${bias} · ${labelShow}`
+        : `${bias}${labelShow ? ` · ${labelShow}` : ''}`;
     const rationale = t.rationale ? String(t.rationale) : '';
     let hintsHtml = '';
     if (biasRaw === '看空') {
@@ -343,9 +350,7 @@ const PatternTool = {
     return `<div class="pattern-tactical-block">
       <p>
         <span class="pattern-expert-label">短期判断：</span>
-        <span class="pattern-tactical-badge ${badgeClass}">${this.esc(bias)}${
-      label ? ` · ${this.esc(label)}` : ''
-    }</span>
+        <span class="pattern-tactical-badge ${badgeClass}">${this.esc(badgeText)}</span>
         <span class="pattern-tactical-grade">grade=${this.esc(grade)}</span>
         <span class="pattern-tactical-conf">置信 ${this.esc(conf)}</span>
       </p>
@@ -559,6 +564,71 @@ const PatternTool = {
     return (items || []).filter((h) => h && h.status !== 'invalidated');
   },
 
+  /** 命中是否带双顶双底互斥箱体标记 */
+  _isRangeBoxHit(h) {
+    if (!h || typeof h !== 'object') return false;
+    const lv = h.key_levels && typeof h.key_levels === 'object' ? h.key_levels : {};
+    return !!(h.range_box || h.bias_mix || lv.range_box || lv.bias_mix);
+  },
+
+  /**
+   * 从 items 提取箱体震荡上下沿（双顶+双底 bias_mix/range_box）。
+   * @returns {{low:number, high:number}|null}
+   */
+  _findRangeBox(items) {
+    const list = (items || []).filter((h) => h && h.status !== 'invalidated');
+    const tops = list.filter((h) => h.pattern_type === 'double_top' && this._isRangeBoxHit(h));
+    const bottoms = list.filter(
+      (h) => h.pattern_type === 'double_bottom' && this._isRangeBoxHit(h)
+    );
+    if (!tops.length || !bottoms.length) return null;
+    const pick = tops[0] || bottoms[0];
+    const lv = (pick && pick.key_levels) || {};
+    let low = this._num(lv.box_low != null ? lv.box_low : pick.box_low);
+    let high = this._num(lv.box_high != null ? lv.box_high : pick.box_high);
+    if (low == null || high == null) {
+      for (let i = 0; i < list.length; i++) {
+        const h = list[i];
+        if (!this._isRangeBoxHit(h)) continue;
+        const kl = h.key_levels || {};
+        low = this._num(kl.box_low != null ? kl.box_low : h.box_low);
+        high = this._num(kl.box_high != null ? kl.box_high : h.box_high);
+        if (low != null && high != null) break;
+      }
+    }
+    if (low == null || high == null) return null;
+    return { low, high };
+  },
+
+  _rangeBoxBadgeHtml(items) {
+    const box = this._findRangeBox(items);
+    if (!box) return '';
+    const txt = `箱体震荡 ${Number(box.low).toFixed(2)}–${Number(box.high).toFixed(2)}`;
+    return `<p class="pattern-range-box-badge"><span class="pattern-tactical-badge pattern-tactical-range">${this.esc(
+      txt
+    )}</span></p>`;
+  },
+
+  _patternTypeCellHtml(r) {
+    const label = this.typeLabel(r.pattern_type);
+    const mixNote =
+      this._isRangeBoxHit(r) &&
+      (r.pattern_type === 'double_top' || r.pattern_type === 'double_bottom')
+        ? ' <span class="pattern-box-merged" title="双顶双底互斥，已并入箱体观察">已并入箱体观察</span>'
+        : '';
+    return `${this.esc(label)}${mixNote}`;
+  },
+
+  _confCellHtml(r) {
+    const conf = r.confidence != null ? Number(r.confidence).toFixed(2) : '--';
+    const tip =
+      this._isRangeBoxHit(r) &&
+      (r.pattern_type === 'double_top' || r.pattern_type === 'double_bottom')
+        ? ` <span class="pattern-box-merged-tip" title="已并入箱体观察">·箱体</span>`
+        : '';
+    return `${this.esc(conf)}${tip}`;
+  },
+
   renderItems(items, metaHtml, mode, priceAdjust, options) {
     const body = document.getElementById('patternResultBody');
     const wrap = document.getElementById('patternResultWrap');
@@ -598,10 +668,10 @@ const PatternTool = {
         return `<tr>
           <td>${codeHtml}</td>
           <td>${this.esc(name || '--')}</td>
-          <td>${this.esc(this.typeLabel(r.pattern_type))}</td>
+          <td>${this._patternTypeCellHtml(r)}</td>
           <td>${this.esc(this.statusLabel(r.status))}</td>
           <td title="${this.esc(this.formedAtTitle(r))}">${this.esc(formed)}</td>
-          <td>${r.confidence != null ? Number(r.confidence).toFixed(2) : '--'}</td>
+          <td>${this._confCellHtml(r)}</td>
           <td class="pattern-col-levels">${this.esc(this.keyLevelsText(r.key_levels))}</td>
           <td class="pattern-col-reason" title="${this.esc(reasonFull)}">${this.esc(reasonFull)}</td>
         </tr>`;
@@ -939,11 +1009,15 @@ const PatternTool = {
     const h = archived[0];
     const lab = this.typeLabel(h.pattern_type);
     const reason = String(h.reason || '');
-    const why = /测幅目标/.test(reason)
-      ? '测幅已兑现'
-      : /失败破位/.test(reason)
-        ? '失败破位'
-        : '周期已走完';
+    const why = /大幅回到颈线/.test(reason)
+      ? '破颈后现价大幅回到颈线另一侧，确认削弱'
+      : /失败反抽/.test(reason)
+        ? '失败反抽'
+        : /失败破位/.test(reason)
+          ? '失败破位'
+          : /测幅目标/.test(reason)
+            ? '测幅已兑现'
+            : '周期已走完';
     return `背景：近期「${lab}」${why}并已归档，仅作兑现参考，不作为当前主导形态。`;
   },
 
@@ -2779,9 +2853,20 @@ const PatternTool = {
           leadC != null &&
           oppConf != null &&
           Math.abs(leadC - oppConf) < this.RANK_CONF_TIE_EPS;
-        // 同 status 且置信接近：文案层多空交织，不改 primary
+        // 同 status 且置信接近：文案层多空交织 / 箱体震荡，不改 primary
         if (nearTie) {
-          mediumTerm += `同时存在反向「${this.typeLabel(opp.pattern_type)}」（置信度接近），多空形态交织，宜按宽幅箱体/震荡观察，勿武断单边。`;
+          const box = this._findRangeBox(items);
+          if (
+            box &&
+            ((lead.pattern_type === 'double_top' && opp.pattern_type === 'double_bottom') ||
+              (lead.pattern_type === 'double_bottom' && opp.pattern_type === 'double_top'))
+          ) {
+            mediumTerm += `双顶双底互斥，合并观察为箱体震荡 ${Number(box.low).toFixed(2)}–${Number(
+              box.high
+            ).toFixed(2)}，勿武断单边。`;
+          } else {
+            mediumTerm += `同时存在反向「${this.typeLabel(opp.pattern_type)}」（置信度接近），多空形态交织，宜按宽幅箱体/震荡观察，勿武断单边。`;
+          }
         } else {
           const oppIsRev =
             this.BEARISH_REVERSAL[opp.pattern_type] || this.BULLISH_REVERSAL[opp.pattern_type];
@@ -2804,10 +2889,21 @@ const PatternTool = {
         .map((h) => `${this.typeLabel(h.pattern_type)}(${h.confidence != null ? Number(h.confidence).toFixed(2) : '--'})`)
         .join('、');
       mediumTerm = `暂无高置信已确认形态，中线尚不明朗；形成中信号（${names || '若干'}）待边界突破或结构确认。`;
-      // 同 forming 且 |Δconf|<eps、bias 冲突：交织提示（保持置信优先 primary，仅文案）
+      // 同 forming 且 |Δconf|<eps、bias 冲突：交织/箱体提示（保持置信优先 primary，仅文案）
       const mixPeer = this._findNearConflictingPeer(primary, forming);
       if (mixPeer) {
-        mediumTerm += `多空形态交织，宜按宽幅箱体/震荡观察，勿武断单边。`;
+        const box = this._findRangeBox(items);
+        if (
+          box &&
+          ((primary.pattern_type === 'double_top' && mixPeer.pattern_type === 'double_bottom') ||
+            (primary.pattern_type === 'double_bottom' && mixPeer.pattern_type === 'double_top'))
+        ) {
+          mediumTerm += `双顶双底互斥，合并观察为箱体震荡 ${Number(box.low).toFixed(2)}–${Number(
+            box.high
+          ).toFixed(2)}，勿武断单边。`;
+        } else {
+          mediumTerm += `多空形态交织，宜按宽幅箱体/震荡观察，勿武断单边。`;
+        }
       }
       if (bgArchived) mediumTerm += bgArchived;
       if (confHint) mediumTerm += confHint;

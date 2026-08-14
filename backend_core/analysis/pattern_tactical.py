@@ -56,6 +56,7 @@ _BIAS_LABEL = {
     "震荡": "蓄势夹击",
     "看空": "结构破位",
     "insufficient": "信息不足",
+    "箱体震荡": "箱体震荡",
 }
 
 # 旁路：归档空头「仍在颈线下」收紧（600722：贴颈回攻≠结构破位）
@@ -67,6 +68,10 @@ BYPASS_BEAR_STALE_DEEP_PCT = 0.08  # 陈旧归档空头须更深破才看空
 MOMENTUM_UP_PCT = 0.04
 MOMENTUM_VOL_RATIO = 1.8
 MOMENTUM_UP_PCT_STRONG = 0.055  # 单日涨幅足够大时可只靠涨幅否决
+# 失效位须严格低于买入下沿（相对 1%，再与最小价差取严）
+INVALIDATION_BELOW_ENTRY_PCT = 0.01
+INVALIDATION_MIN_GAP_ABS = 0.01
+INVALIDATION_MIN_GAP_PCT = 0.002
 
 
 def _f(v: Any) -> Optional[float]:
@@ -79,6 +84,64 @@ def _f(v: Any) -> Optional[float]:
     if x != x:  # NaN
         return None
     return x
+
+
+def _clamp_invalidation(
+    entry_low: Optional[float], inv: Optional[float]
+) -> Optional[float]:
+    """保证 invalidation < entry_zone.low，且至少低于 low 约 1%（与最小价差取严）。"""
+    low = _f(entry_low)
+    if low is None or low <= 0:
+        return round(_f(inv), 2) if _f(inv) is not None else None
+    cap_pct = low * (1.0 - float(INVALIDATION_BELOW_ENTRY_PCT))
+    gap = max(float(INVALIDATION_MIN_GAP_ABS), abs(low) * float(INVALIDATION_MIN_GAP_PCT))
+    cap_gap = low - gap
+    cap = min(cap_pct, cap_gap)
+    if cap >= low:
+        cap = low * (1.0 - float(INVALIDATION_BELOW_ENTRY_PCT))
+    inv_f = _f(inv)
+    if inv_f is None or inv_f > cap or inv_f >= low:
+        return round(cap, 2)
+    return round(inv_f, 2)
+
+
+def _with_clamped_invalidation(hint: Dict[str, Any]) -> Dict[str, Any]:
+    """就地钳制 buy_hint.invalidation；无 entry_zone.low 则原样返回。"""
+    ez = hint.get("entry_zone")
+    if not isinstance(ez, dict):
+        return hint
+    low = _f(ez.get("low"))
+    if low is None:
+        return hint
+    hint["invalidation"] = _clamp_invalidation(low, hint.get("invalidation"))
+    return hint
+
+
+def _hit_box_bounds(
+    h: Optional[Dict[str, Any]],
+) -> Tuple[Optional[float], Optional[float]]:
+    if not isinstance(h, dict):
+        return None, None
+    lv = _hit_levels(h)
+    bl = _f(lv.get("box_low"))
+    bh = _f(lv.get("box_high"))
+    if bl is None:
+        bl = _f(h.get("box_low"))
+    if bh is None:
+        bh = _f(h.get("box_high"))
+    return bl, bh
+
+
+def _flag_bias_mix(h: Dict[str, Any]) -> bool:
+    if h.get("bias_mix") or h.get("range_box"):
+        return True
+    lv = _hit_levels(h)
+    return bool(lv.get("bias_mix") or lv.get("range_box"))
+
+
+def _has_double_top_bottom(hits: Sequence[Dict[str, Any]]) -> bool:
+    types = {str(h.get("pattern_type") or "") for h in hits if isinstance(h, dict)}
+    return "double_top" in types and "double_bottom" in types
 
 
 def _type_label(pattern_type: str) -> str:
@@ -632,7 +695,9 @@ def _nearest_resistance_pressure(
 
 
 def _has_bias_mix(primary: Dict[str, Any], hits: Sequence[Dict[str, Any]]) -> bool:
-    """同 status、置信接近、多空 bias 冲突 → 交织。"""
+    """同 status、置信接近、多空 bias 冲突 → 交织；或引擎已标 bias_mix/range_box。"""
+    if _flag_bias_mix(primary):
+        return True
     pb = _bias_of(str(primary.get("pattern_type") or ""))
     pst = str(primary.get("status") or "")
     pc = float(primary.get("confidence") or 0.0)
@@ -641,6 +706,10 @@ def _has_bias_mix(primary: Dict[str, Any], hits: Sequence[Dict[str, Any]]) -> bo
             continue
         if str(h.get("status") or "") != pst:
             continue
+        if _flag_bias_mix(h) and _bias_conflicts(
+            pb, _bias_of(str(h.get("pattern_type") or ""))
+        ):
+            return True
         if not _bias_conflicts(pb, _bias_of(str(h.get("pattern_type") or ""))):
             continue
         hc = float(h.get("confidence") or 0.0)
@@ -927,9 +996,24 @@ def classify_short_bias(
     elif forming_ok or mix or pressure_ok:
         short_bias = "震荡"
         bias_label = _BIAS_LABEL["震荡"]
+        box_lo, box_hi = _hit_box_bounds(primary)
+        if box_lo is None or box_hi is None:
+            for h in active:
+                box_lo, box_hi = _hit_box_bounds(h)
+                if box_lo is not None and box_hi is not None:
+                    break
+        double_mix = mix and _has_double_top_bottom(active)
+        if double_mix:
+            bias_label = _BIAS_LABEL["箱体震荡"]
+            if box_lo is not None and box_hi is not None:
+                rationale_bits.insert(
+                    0, f"箱体震荡下沿 {box_lo:.2f}、上沿 {box_hi:.2f}"
+                )
+            else:
+                rationale_bits.append("双顶双底互斥，合并观察为箱体震荡")
         if forming_ok:
             rationale_bits.append(f"形成中的{lab}，边界未完全突破")
-        if mix:
+        if mix and not double_mix:
             rationale_bits.append("多空形态交织，宜按宽幅箱体观察")
         if pressure_ok:
             rationale_bits.append(
@@ -1027,20 +1111,22 @@ def build_buy_hints(
                 return hints, "趋势旁路看多，但缺少近端结构锚点，仅作方向参考。"
             band = max(0.02, abs(anchor_px) * 0.008)
             hints.append(
-                {
-                    "type": "watch",
-                    "entry_zone": {
-                        "low": round(anchor_px - band, 2),
-                        "high": round(anchor_px + band, 2),
-                        "anchor": "nearest_support"
-                        if nearest_support is not None
-                        else ("consol_upper" if upper is not None else "structure"),
-                    },
-                    "trigger": "突破/归档后回踩近端支撑企稳（颈线已远离，不作回踩锚）",
-                    "invalidation": round(anchor_px * BREAKOUT_DOWN_MULT, 2),
-                    "target": round(target, 2) if target is not None else None,
-                    "priority": 2 if grade in ("strong", "enhanced") else 3,
-                }
+                _with_clamped_invalidation(
+                    {
+                        "type": "watch",
+                        "entry_zone": {
+                            "low": round(anchor_px - band, 2),
+                            "high": round(anchor_px + band, 2),
+                            "anchor": "nearest_support"
+                            if nearest_support is not None
+                            else ("consol_upper" if upper is not None else "structure"),
+                        },
+                        "trigger": "突破/归档后回踩近端支撑企稳（颈线已远离，不作回踩锚）",
+                        "invalidation": round(anchor_px * BREAKOUT_DOWN_MULT, 2),
+                        "target": round(target, 2) if target is not None else None,
+                        "priority": 2 if grade in ("strong", "enhanced") else 3,
+                    }
+                )
             )
             return hints, risk_note
 
@@ -1063,20 +1149,45 @@ def build_buy_hints(
             priority = 3
             trigger = "回踩结构位企稳（缺 VP/RPE 增强，仅观察）"
         hints.append(
-            {
-                "type": hint_type,
-                "entry_zone": entry,
-                "trigger": trigger,
-                "invalidation": round(defense, 2) if defense is not None else None,
-                "target": round(target, 2) if target is not None else None,
-                "priority": priority,
-            }
+            _with_clamped_invalidation(
+                {
+                    "type": hint_type,
+                    "entry_zone": entry,
+                    "trigger": trigger,
+                    "invalidation": round(defense, 2) if defense is not None else None,
+                    "target": round(target, 2) if target is not None else None,
+                    "priority": priority,
+                }
+            )
         )
         return hints, risk_note
 
-    # 震荡：watch → 下沿/近端支撑；强压下不追多
+    # 震荡：watch → 下沿/近端支撑；强压下不追多；箱体优先用 box 上下沿
     if pressure_zone is not None:
         risk_note = "近端高强度共振压力压制，不在强压力下追多；等下沿承接或有效突破压力。"
+    box_lo, box_hi = _hit_box_bounds(primary)
+    if box_lo is not None:
+        anchor = box_lo
+        if box_hi is not None:
+            target = box_hi
+        band = max(0.02, abs(anchor) * 0.008)
+        hints.append(
+            _with_clamped_invalidation(
+                {
+                    "type": "watch",
+                    "entry_zone": {
+                        "low": round(anchor - band, 2),
+                        "high": round(anchor + band, 2),
+                        "anchor": "range_box_low",
+                    },
+                    "trigger": "回踩箱体下沿企稳",
+                    "invalidation": round(anchor * BREAKOUT_DOWN_MULT, 2),
+                    "target": round(target, 2) if target is not None else None,
+                    "priority": 2,
+                }
+            )
+        )
+        return hints, risk_note
     anchor = lower if lower is not None else nearest_support
     if anchor is None and nearest_support is not None:
         anchor = nearest_support
@@ -1084,38 +1195,42 @@ def build_buy_hints(
     if anchor is None and neck is not None:
         band = max(0.02, abs(neck) * 0.008)
         hints.append(
-            {
-                "type": "watch",
-                "entry_zone": {
-                    "low": round(neck - band * 2, 2),
-                    "high": round(neck + band, 2),
-                    "anchor": "pattern_neckline",
-                },
-                "trigger": f"观察能否放量站稳颈线 {neck:.2f}；未站稳前不追高",
-                "invalidation": round(neck * BREAKOUT_DOWN_MULT, 2),
-                "target": round(target, 2) if target is not None else None,
-                "priority": 2,
-            }
+            _with_clamped_invalidation(
+                {
+                    "type": "watch",
+                    "entry_zone": {
+                        "low": round(neck - band * 2, 2),
+                        "high": round(neck + band, 2),
+                        "anchor": "pattern_neckline",
+                    },
+                    "trigger": f"观察能否放量站稳颈线 {neck:.2f}；未站稳前不追高",
+                    "invalidation": round(neck * BREAKOUT_DOWN_MULT, 2),
+                    "target": round(target, 2) if target is not None else None,
+                    "priority": 2,
+                }
+            )
         )
         return hints, None
     if anchor is None:
         return hints, risk_note
     band = max(0.02, abs(anchor) * 0.008)
     hints.append(
-        {
-            "type": "watch",
-            "entry_zone": {
-                "low": round(anchor - band, 2),
-                "high": round(anchor + band, 2),
-                "anchor": "pattern_lower" if lower is not None else "nearest_support",
-            },
-            "trigger": "回踩形态下沿/近端支撑企稳",
-            "invalidation": round(anchor * BREAKOUT_DOWN_MULT, 2),
-            "target": round(upper, 2) if upper is not None else (
-                round(target, 2) if target is not None else None
-            ),
-            "priority": 2,
-        }
+        _with_clamped_invalidation(
+            {
+                "type": "watch",
+                "entry_zone": {
+                    "low": round(anchor - band, 2),
+                    "high": round(anchor + band, 2),
+                    "anchor": "pattern_lower" if lower is not None else "nearest_support",
+                },
+                "trigger": "回踩形态下沿/近端支撑企稳",
+                "invalidation": round(anchor * BREAKOUT_DOWN_MULT, 2),
+                "target": round(upper, 2) if upper is not None else (
+                    round(target, 2) if target is not None else None
+                ),
+                "priority": 2,
+            }
+        )
     )
     return hints, risk_note
 

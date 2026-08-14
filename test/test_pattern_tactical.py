@@ -324,3 +324,64 @@ def test_momentum_vetoes_archived_bear_bypass():
     out = build_pattern_tactical(hits, market=market, asof="2026-07-20")
     assert out["short_bias"] == "震荡"
     assert "否决" in (out.get("rationale") or "") or "长阳" in (out.get("rationale") or "")
+
+
+def test_invalidation_clamped_below_entry_low():
+    """震荡 watch：失效位须低于买入下沿，且相对 low 至少约 1%（002286 类死锁）。"""
+    from backend_core.analysis.pattern_tactical import (
+        INVALIDATION_BELOW_ENTRY_PCT,
+        _clamp_invalidation,
+        build_buy_hints,
+    )
+
+    # 回归：low≈7.91 时 inv 不得为 7.93
+    low = 7.91
+    bad_inv = 7.93
+    clamped = _clamp_invalidation(low, bad_inv)
+    assert clamped is not None
+    assert clamped < low
+    assert clamped <= low * (1.0 - INVALIDATION_BELOW_ENTRY_PCT) + 1e-9
+
+    hits = [
+        _hit(
+            "ascending_triangle",
+            "forming",
+            upper=8.5,
+            lower=7.91,
+            last_close=8.1,
+            confidence=0.7,
+        )
+    ]
+    # 人为把 defense/inv 抬到 entry 之上：经 build_buy_hints 仍应钳制
+    out = build_pattern_tactical(hits)
+    assert out["short_bias"] == "震荡"
+    assert out["buy_hints"]
+    hint = out["buy_hints"][0]
+    ez = hint["entry_zone"]
+    inv = float(hint["invalidation"])
+    entry_low = float(ez["low"])
+    assert inv < entry_low
+    assert inv <= entry_low * (1.0 - INVALIDATION_BELOW_ENTRY_PCT) + 0.02  # 浮点/round 容忍
+
+    # 直接构造：entry low=7.91，原始 inv=7.93 → clamp 后不可再高于 low
+    hints, _ = build_buy_hints(
+        "震荡",
+        {
+            **_hit(
+                "ascending_triangle",
+                "forming",
+                upper=8.5,
+                lower=7.91,
+                last_close=8.1,
+            ),
+            "key_levels": {
+                "upper": 8.5,
+                "lower": 7.91,
+                "last_close": 8.1,
+            },
+        },
+    )
+    assert hints
+    assert float(hints[0]["invalidation"]) < float(hints[0]["entry_zone"]["low"])
+    assert float(hints[0]["invalidation"]) != 7.93
+    assert float(hints[0]["invalidation"]) < 7.91

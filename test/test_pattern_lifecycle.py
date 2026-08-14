@@ -224,8 +224,8 @@ def test_hs_top_archived_on_failed_pullback_near_rs():
     """confirmed 头肩顶：破颈后反抽逼近右肩 → 失败反抽归档（不回 forming）。"""
     neck = 100.0
     rs = 109.0
-    # 破颈到 98，再反抽到 108（≥右肩×0.98），未达深破 0.95 路径
-    path = [98.0] * 5 + [108.0] * 8
+    # 破颈到 98，再反抽到 107.5（≥右肩×0.98，但 < 颈×1.08 以免走远距反抽）
+    path = [98.0] * 5 + [107.5] * 8
     bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
     for b in bars:
         b["low"] = float(b["close"]) * 0.995
@@ -241,7 +241,7 @@ def test_hs_top_archived_on_failed_pullback_near_rs():
             "neckline": neck,
             "head": 120.0,
             "right_shoulder": rs,
-            "last_close": 108.0,
+            "last_close": 107.5,
         },
         pivots=[
             {"role": "LS", "date": "2026-05-01", "price": 110.0},
@@ -296,8 +296,8 @@ def test_hs_bottom_archived_on_failed_pullback_near_rs():
     """confirmed 头肩底对称：破颈上破后大幅回撤逼近右肩低点 → 归档。"""
     neck = 100.0
     rs = 91.0
-    # 上破到 102，再回撤到 92（≤右肩×1.02）
-    path = [102.0] * 5 + [92.0] * 8
+    # 上破到 102，再回撤到 92.5（≤右肩×1.02，但 > 颈×0.92 以免走远距反抽）
+    path = [102.0] * 5 + [92.5] * 8
     bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
     for b in bars:
         b["low"] = float(b["close"]) * 0.995
@@ -313,7 +313,7 @@ def test_hs_bottom_archived_on_failed_pullback_near_rs():
             "neckline": neck,
             "head": 80.0,
             "right_shoulder": rs,
-            "last_close": 92.0,
+            "last_close": 92.5,
         },
         pivots=[
             {"role": "LS", "date": "2026-05-01", "price": 90.0},
@@ -362,3 +362,71 @@ def test_hs_top_archived_on_failed_pullback_by_atr():
     assert out[0]["status"] == "archived"
     assert "失败反抽" in out[0]["reason"]
     assert "ATR" in out[0]["reason"]
+
+def test_hs_top_archived_on_far_recover_above_neck():
+    """confirmed HS top: last_close >= confirm_neck * 1.08 -> archived."""
+    neck = 100.0
+    path = [99.0] * 5 + [110.0] * 6
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) - 0.3
+        b["high"] = float(b["close"]) + 0.3
+    bars[2]["low"] = 98.0
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_top",
+        status="confirmed",
+        confidence=0.7,
+        reason="hs top confirmed",
+        key_levels={
+            "neckline": 101.0,
+            "confirm_neckline": neck,
+            "head": 140.0,
+            "right_shoulder": 150.0,
+            "last_close": 110.0,
+        },
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 125.0},
+            {"role": "head", "date": "2026-05-10", "price": 140.0},
+            {"role": "RS", "date": "2026-05-20", "price": 150.0},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "大幅回到颈线上方" in out[0]["reason"]
+
+
+def test_hs_bottom_archived_on_far_recover_below_neck():
+    """confirmed HS bottom: last_close <= confirm_neck * 0.92 -> archived."""
+    neck = 100.0
+    path = [101.0] * 5 + [90.0] * 6
+    bars = _bars_path(len(path), start=date(2026, 6, 1), path=path)
+    for b in bars:
+        b["low"] = float(b["close"]) - 0.3
+        b["high"] = float(b["close"]) + 0.3
+    bars[2]["high"] = 102.0
+    hit = make_hit(
+        pattern_family="head_shoulders",
+        pattern_type="head_shoulders_bottom",
+        status="confirmed",
+        confidence=0.7,
+        reason="hs bottom confirmed",
+        key_levels={
+            "neckline": neck,
+            "confirm_neckline": neck,
+            "head": 70.0,
+            "right_shoulder": 80.0,
+            "last_close": 90.0,
+        },
+        pivots=[
+            {"role": "LS", "date": "2026-05-01", "price": 85.0},
+            {"role": "head", "date": "2026-05-10", "price": 70.0},
+            {"role": "RS", "date": "2026-05-20", "price": 80.0},
+        ],
+        extra={"formed_at": "2026-06-01", "confirm_date": "2026-06-01"},
+    )
+    out = apply_pattern_lifecycle([hit], bars)
+    assert out[0]["status"] == "archived"
+    assert "大幅回到颈线下方" in out[0]["reason"]
+
