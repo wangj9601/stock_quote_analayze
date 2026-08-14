@@ -1,0 +1,101 @@
+﻿数据库连接URL: 'postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis'
+code=002971 asof=2026-08-13 bars=160 hits=1 inv=0
+last_close=44.66 date=2026-08-13
+{"type": "falling_wedge", "status": "forming", "confidence": 0.45, "upper": 46.25, "lower": 31.5, "box_low": null, "box_high": null, "last_close": 44.66}
+=== constants ===
+{"NEAR_SUPPORT_PREF_MIN_STRENGTH": 10.0, "NEAR_SUPPORT_MAX_BELOW_PCT": 0.06, "NEAR_SUPPORT_B_MIN_STRENGTH": 5.0, "NEAR_SUPPORT_B_MAX_BELOW_PCT": 0.08, "PATTERN_LOWER_FAR_PCT": 0.25, "TARGET_MIN_UPSIDE_PCT": 0.02, "BUY_PRESSURE_MIN_STRENGTH": 10.0, "BUY_PRESSURE_NEAR_PCT": 0.02}
+=== resistances ===
+{"center": 44.8, "low": 44.66, "high": 45.1, "strength": 28.5, "labels": ["atr_P", "cam_S1", "cam_S2", "cam_S3", "fib_0.236", "kde_nearest_s", "kde_s1", "piv_P"]}
+{"center": 45.61, "low": 45.42, "high": 45.79, "strength": 1.95, "labels": ["cam_R1", "cam_R2", "cam_R3"]}
+{"center": 52.95, "low": 52.54, "high": 53.06, "strength": 5.1, "labels": ["atr_R2", "kde_nearest_r", "kde_r1"]}
+{"center": 68.7, "low": 68.29, "high": 69.28, "strength": 3.4, "labels": ["fib_0.786", "kde_r3"]}
+=== supports ===
+{"center": 37.62, "low": 37.6, "high": 37.66, "strength": 3.1, "labels": ["atr_S2", "kde_s2"]}
+{"center": 43.75, "low": 43.05, "high": 44.14, "strength": 2.9, "labels": ["cam_S4", "piv_S1", "piv_S2"]}
+nearest_resistance_zone= {"center": 44.8, "low": 44.66, "high": 45.1, "strength": 28.5, "sources": ["atr_pivot", "camarilla", "fib", "kde", "pivot"], "labels": ["atr_P", "cam_S1", "cam_S2", "cam_S3", "fib_0.236", "kde_nearest_s", "kde_s1", "piv_P"], "n_points": 8, "split_from_wide_cluster": true, "clipped_to_price": true}
+=== tactical ===
+{
+  "short_bias": "震荡",
+  "bias_label": "蓄势夹击",
+  "grade": "base",
+  "confidence": 0.462,
+  "rationale": "形成中的下降楔形，边界未完全突破",
+  "risk_note": "强压下不新开/不追；等有效上破压力或回踩近端承接；远端形态下沿仅作极限参考",
+  "buy_hints": [
+    {
+      "type": "watch",
+      "entry_zone": {
+        "low": 45.01,
+        "high": 45.46,
+        "anchor": "break_upper"
+      },
+      "trigger": "观察上破 45.10 再跟；贴身超强压下不新开/不追",
+      "invalidation": 44.56,
+      "target": 52.95,
+      "priority": 2
+    },
+    {
+      "type": "watch",
+      "entry_zone": {
+        "low": 31.25,
+        "high": 31.75,
+        "anchor": "pattern_lower_far"
+      },
+      "trigger": "远端形态下沿仅作极限参考",
+      "invalidation": 30.94,
+      "target": 46.25,
+      "priority": 4
+    }
+  ]
+}
+=== raw resistances count=4 ===
+{"center": 44.8, "low": 44.66, "high": 45.1, "strength": 28.5, "labels": ["atr_P", "cam_S1", "cam_S2", "cam_S3", "fib_0.236", "kde_nearest_s", "kde_s1", "piv_P"], "sources": ["atr_pivot", "camarilla", "fib", "kde", "pivot"]}
+{"center": 45.61, "low": 45.42, "high": 45.79, "strength": 1.95, "labels": ["cam_R1", "cam_R2", "cam_R3"], "sources": ["camarilla"]}
+{"center": 52.95, "low": 52.54, "high": 53.06, "strength": 5.1, "labels": ["atr_R2", "kde_nearest_r", "kde_r1"], "sources": ["atr_pivot", "kde"]}
+{"center": 68.7, "low": 68.29, "high": 69.28, "strength": 3.4, "labels": ["fib_0.786", "kde_r3"], "sources": ["fib", "kde"]}
+=== break_upper path ===
+{
+  "close": 44.66,
+  "upper": 46.25,
+  "lower": 31.5,
+  "box_lo": null,
+  "box_hi": null,
+  "pattern_floor": 31.5,
+  "floor_far": true,
+  "floor_far_pct": 0.29467084639498425,
+  "primary_tgt": 46.25,
+  "thin_rr": false,
+  "watch_tgt": 46.25,
+  "press_buy": {
+    "center": 44.8,
+    "low": 44.66,
+    "high": 45.1,
+    "strength": 28.5,
+    "sources": [
+      "atr_pivot",
+      "camarilla",
+      "fib",
+      "kde",
+      "pivot"
+    ],
+    "labels": [
+      "atr_P",
+      "cam_S1",
+      "cam_S2",
+      "cam_S3",
+      "fib_0.236",
+      "kde_nearest_s",
+      "kde_s1",
+      "piv_P"
+    ],
+    "n_points": 8,
+    "split_from_wide_cluster": true,
+    "clipped_to_price": true
+  },
+  "near_main": null,
+  "break_px": 45.1,
+  "u_pref": 46.25,
+  "resolved_break_upper_target": 52.95,
+  "farther_resistance_target": 52.95,
+  "measured": null
+}

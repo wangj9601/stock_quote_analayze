@@ -1,0 +1,11 @@
+﻿[1m============================= test session starts =============================[0m
+platform win32 -- Python 3.12.10, pytest-8.0.0, pluggy-1.5.0
+rootdir: E:\wangxw\股票分析软件\编码\stock_quote_analayze
+configfile: pytest.ini
+plugins: anyio-4.13.0, hypothesis-6.150.2, asyncio-0.23.5, cov-4.1.0, freezegun-0.4.2, mock-3.15.1
+asyncio: mode=Mode.STRICT
+collected 21 items
+
+test\test_pattern_tactical.py [32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m                      [100%][0m
+
+[32m============================= [32m[1m21 passed[0m[32m in 4.18s[0m[32m ==============================[0m

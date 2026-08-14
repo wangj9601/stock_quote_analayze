@@ -92,7 +92,7 @@ def main() -> int:
         try:
             from backend_api.stock.pattern_routes import _tactical_enrichment
 
-            vp, confluence, rpe = _tactical_enrichment(db, bars, code, asof_s)
+            vp, confluence, rpe, *_rest = _tactical_enrichment(db, bars, code, asof_s)
         except Exception as e:
             print("ENRICH_ERR", type(e).__name__, e)
 

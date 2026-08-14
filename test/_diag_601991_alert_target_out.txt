@@ -1,0 +1,81 @@
+﻿数据库连接URL: 'postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis'
+code=601991 asof=2026-08-14 bars=160 last_close=6.48 date=2026-08-14
+{
+  "confluence_resistances_above": [
+    {
+      "center": 6.5,
+      "strength": 4.95,
+      "low": 6.48,
+      "high": 6.54,
+      "sources": [
+        "camarilla",
+        "fib",
+        "pivot"
+      ]
+    },
+    {
+      "center": 6.71,
+      "strength": 5.1,
+      "low": 6.69,
+      "high": 6.73,
+      "sources": [
+        "atr_pivot",
+        "camarilla",
+        "pivot"
+      ]
+    },
+    {
+      "center": 7.14,
+      "strength": 9.6,
+      "low": 7.11,
+      "high": 7.17,
+      "sources": [
+        "atr_pivot",
+        "camarilla",
+        "fib",
+        "pivot"
+      ]
+    }
+  ]
+}
+{
+  "display_status": "楔形蓄势突破预警",
+  "status_note": "楔形蓄势突破预警：现价已上破下降楔形上沿 (6.46)，GMS 70.0>60；关注放量，以及 6.54 元站稳信号；预警目标：7.14 附近（强度 9.6 共振阻力带）",
+  "wedge_breakout_alert": {
+    "ok": true,
+    "code": "wedge_breakout_alert",
+    "pattern_type": "falling_wedge",
+    "label": "下降楔形",
+    "upper": 6.46,
+    "close": 6.48,
+    "gms_score": 70.0,
+    "gms_min": 60.0,
+    "hold_level": 6.54,
+    "hold_source": "camarilla_S4",
+    "target": 7.14,
+    "alert_target": 7.14,
+    "target_strength": 9.6,
+    "target_source": "confluence_resistance",
+    "alert_invalidation": 6.43,
+    "engine_status": "forming",
+    "display_status": "楔形蓄势突破预警",
+    "status_note": "楔形蓄势突破预警：现价已上破下降楔形上沿 (6.46)，GMS 70.0>60；关注放量，以及 6.54 元站稳信号；预警目标：7.14 附近（强度 9.6 共振阻力带）",
+    "text": "楔形蓄势突破预警：现价已上破下降楔形上沿 (6.46)，GMS 70.0>60；关注放量，以及 6.54 元站稳信号；预警目标：7.14 附近（强度 9.6 共振阻力带）"
+  },
+  "buy_hints": [
+    {
+      "type": "watch",
+      "entry_zone": {
+        "low": 5.67,
+        "high": 5.77,
+        "anchor": "pattern_lower"
+      },
+      "trigger": "回踩形态下沿/近端支撑企稳",
+      "invalidation": 5.65,
+      "target": 7.14,
+      "priority": 2
+    }
+  ],
+  "hit_display_status": "楔形蓄势突破预警"
+}
+ALERT_TARGET=7.14 strength=9.6 inv=6.43
