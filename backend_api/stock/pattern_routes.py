@@ -109,6 +109,7 @@ def _tactical_enrichment(
                         "kde_resistance": kde.get("nearest_resistance"),
                         "kde_supports": kde.get("support_levels"),
                         "kde_resistances": kde.get("resistance_levels"),
+                        "kde_multi_windows": kde.get("kde_multi_windows"),
                     }
             except Exception as e:
                 logger.debug("tactical KDE skip code=%s: %s", stock_code, e)

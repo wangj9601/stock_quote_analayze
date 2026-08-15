@@ -63,6 +63,7 @@ def collect_candidate_points(
     kde_resistance: Optional[float] = None,
     kde_supports: Optional[Sequence[float]] = None,
     kde_resistances: Optional[Sequence[float]] = None,
+    kde_multi_windows: Optional[Dict[str, Any]] = None,
     volume_profile: Optional[Dict[str, Any]] = None,
     fibonacci: Optional[Dict[str, Any]] = None,
     pivot: Optional[Dict[str, Any]] = None,
@@ -76,6 +77,26 @@ def collect_candidate_points(
         _add(pts, v, source="kde", weight=1.0, label=f"kde_s{i+1}")
     for i, v in enumerate(list(kde_resistances or [])[:3]):
         _add(pts, v, source="kde", weight=1.0, label=f"kde_r{i+1}")
+
+    # Phase1：多窗同源峰（默认进共振；source=kde_60/120/250）
+    mw_root = kde_multi_windows or {}
+    mw_map = mw_root.get("windows") if isinstance(mw_root.get("windows"), dict) else mw_root
+    if isinstance(mw_map, dict):
+        for key, entry in mw_map.items():
+            if not isinstance(entry, dict) or not entry.get("ok"):
+                continue
+            try:
+                win = int(key)
+            except (TypeError, ValueError):
+                continue
+            wgt = _f(entry.get("weight"))
+            if wgt is None:
+                wgt = {60: 0.55, 120: 0.65, 250: 0.75}.get(win, 0.6)
+            src = f"kde_{win}"
+            for i, v in enumerate(list(entry.get("support_levels") or [])[:3]):
+                _add(pts, v, source=src, weight=float(wgt), label=f"{src}_s{i+1}")
+            for i, v in enumerate(list(entry.get("resistance_levels") or [])[:3]):
+                _add(pts, v, source=src, weight=float(wgt), label=f"{src}_r{i+1}")
 
     vp = volume_profile or {}
     if vp.get("ok"):
@@ -834,6 +855,7 @@ def compute_confluence_from_reference(
     kde_resistance: Optional[float] = None,
     kde_supports: Optional[Sequence[float]] = None,
     kde_resistances: Optional[Sequence[float]] = None,
+    kde_multi_windows: Optional[Dict[str, Any]] = None,
     last_close: Optional[float] = None,
     atr: Optional[float] = None,
     max_each: int = MAX_ZONES_EACH,
@@ -850,6 +872,7 @@ def compute_confluence_from_reference(
         kde_resistance=kde_resistance,
         kde_supports=kde_supports,
         kde_resistances=kde_resistances,
+        kde_multi_windows=kde_multi_windows,
         volume_profile=ref.get("volume_profile"),
         fibonacci=ref.get("fibonacci"),
         pivot=ref.get("pivot"),

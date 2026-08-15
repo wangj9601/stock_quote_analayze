@@ -76,6 +76,38 @@ def test_compute_from_reference():
     assert len(out["supports"]) >= 1 or len(out["resistances"]) >= 1
 
 
+def test_multi_window_kde_sources_in_candidates():
+    pts = collect_candidate_points(
+        kde_support=10.0,
+        kde_resistance=12.0,
+        kde_multi_windows={
+            "ok": True,
+            "windows": {
+                "60": {
+                    "ok": True,
+                    "weight": 0.55,
+                    "support_levels": [9.9],
+                    "resistance_levels": [12.1],
+                },
+                "120": {
+                    "ok": True,
+                    "weight": 0.65,
+                    "support_levels": [9.85],
+                    "resistance_levels": [12.2],
+                },
+                "250": {
+                    "ok": True,
+                    "weight": 0.75,
+                    "support_levels": [9.7],
+                    "resistance_levels": [12.4],
+                },
+            },
+        },
+    )
+    sources = {p["source"] for p in pts}
+    assert sources >= {"kde", "kde_60", "kde_120", "kde_250"}
+
+
 def test_support_zone_high_clipped_to_last_close():
     """支撑带中心在现价下、原 high 越过现价时，展示 high 应 ≤ 现价。"""
     from backend_core.analysis.confluence_zones import _clip_zone_to_price_side

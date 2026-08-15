@@ -448,8 +448,9 @@ def attach_reference_levels_batch(
             ref,
             kde_support=kde.get("support") or kde.get("nearest_support"),
             kde_resistance=kde.get("resistance") or kde.get("nearest_resistance"),
-            kde_supports=kde.get("supports"),
-            kde_resistances=kde.get("resistances"),
+            kde_supports=kde.get("supports") or kde.get("support_levels"),
+            kde_resistances=kde.get("resistances") or kde.get("resistance_levels"),
+            kde_multi_windows=kde.get("kde_multi_windows") or kde.get("multi_windows"),
             last_close=lc if lc is not None else ref.get("last_close"),
             atr=ref.get("atr"),
         )

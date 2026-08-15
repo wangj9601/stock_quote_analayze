@@ -20,6 +20,21 @@ KDE_LOOKBACK_MAX = 750
 KDE_MIN_BW = 0.01
 KDE_MAX_BW = 0.08
 KDE_EXPAND_FACTOR_DECAY = 0.85
+# Phase1：多窗 KDE（默认开启，峰进 confluence）
+KDE_MULTI_WINDOW_ENABLED = True
+KDE_MULTI_WINDOWS = (60, 120, 250)
+KDE_MULTI_WINDOW_WEIGHTS = {60: 0.55, 120: 0.65, 250: 0.75}
+# Phase2：结构锚窗
+KDE_STRUCTURAL_WINDOW_ENABLED = True
+KDE_STRUCTURAL_MIN_LOOKBACK = 40
+KDE_STRUCTURAL_MAX_LOOKBACK = KDE_LOOKBACK_MAX
+KDE_ATR_HIGH_PCT = 0.04
+KDE_ATR_LOW_PCT = 0.015
+KDE_ATR_HIGH_SCALE = 0.85
+KDE_ATR_LOW_SCALE = 1.15
+# Phase3：时间衰减（样本≥阈值时自动启用；半衰期约 40 根）
+KDE_TIME_DECAY_AUTO_MIN_BARS = 120
+KDE_TIME_DECAY_HALFLIFE = 40.0
 
 
 def _clamp_bw(raw_bw: float, *, min_bw: float, max_bw: float) -> float:
@@ -117,12 +132,15 @@ def extract_kde_levels(
     grid_points: int = 200,
     min_bw: float = KDE_MIN_BW,
     max_bw: float = KDE_MAX_BW,
+    time_decay: Optional[bool] = None,
+    time_decay_halflife: float = KDE_TIME_DECAY_HALFLIFE,
 ) -> Dict[str, Any]:
     """
     以成交量为权重对价格做 gaussian_kde，提取密度峰作为结构坐标。
     返回 support_levels（低于现价）、resistance_levels（高于现价）。
 
     带宽：``bw = clamp(base_factor * σ/μ, min_bw, max_bw)``（max_bw≤0 表示不设上限）。
+    time_decay：None=样本数≥KDE_TIME_DECAY_AUTO_MIN_BARS 时自动；True/False 强制开关。
     """
     pairs: List[Tuple[float, float]] = []
     for c, v in zip(closes, volumes):
@@ -142,10 +160,23 @@ def extract_kde_levels(
             "bw": None,
             "ok": False,
             "reason": "insufficient_samples",
+            "time_decay": False,
         }
 
     prices = [p for p, _ in pairs]
     weights = [w for _, w in pairs]
+    n_w = len(weights)
+    use_decay = bool(time_decay) if time_decay is not None else (
+        n_w >= int(KDE_TIME_DECAY_AUTO_MIN_BARS)
+    )
+    if use_decay:
+        hl = float(time_decay_halflife) if float(time_decay_halflife) > 0 else float(
+            KDE_TIME_DECAY_HALFLIFE
+        )
+        lam = math.log(2.0) / hl
+        weights = [
+            float(w) * math.exp(-lam * (n_w - 1 - i)) for i, w in enumerate(weights)
+        ]
     last_price = prices[-1]
     mu = sum(prices) / len(prices)
     var = sum((p - mu) ** 2 for p in prices) / len(prices)
@@ -158,6 +189,7 @@ def extract_kde_levels(
             "bw": None,
             "ok": False,
             "reason": "bad_stats",
+            "time_decay": use_decay,
         }
 
     raw_bw = float(base_factor) * (sigma / mu)
@@ -171,7 +203,18 @@ def extract_kde_levels(
 
         arr = np.asarray(prices, dtype=float)
         warr = np.asarray(weights, dtype=float)
-        warr = warr / warr.sum()
+        wsum = float(warr.sum())
+        if wsum <= 0:
+            return {
+                "support_levels": [],
+                "resistance_levels": [],
+                "all_peaks": [],
+                "bw": bw,
+                "ok": False,
+                "reason": "bad_weights",
+                "time_decay": use_decay,
+            }
+        warr = warr / wsum
         try:
             kde = gaussian_kde(arr, bw_method=bw, weights=warr)
         except TypeError:
@@ -203,6 +246,7 @@ def extract_kde_levels(
                 "bw": bw,
                 "ok": False,
                 "reason": f"kde_error:{e2}",
+                "time_decay": use_decay,
             }
 
     supports = sorted([p for p in peaks if p < last_price], reverse=True)
@@ -221,6 +265,8 @@ def extract_kde_levels(
         "base_factor": float(base_factor),
         "min_bw": float(min_bw),
         "max_bw": float(max_bw),
+        "time_decay": use_decay,
+        "time_decay_halflife": float(time_decay_halflife) if use_decay else None,
     }
 
 
@@ -321,6 +367,7 @@ def extract_kde_levels_expand_support(
             grid_points=grid_points,
             min_bw=min_bw,
             max_bw=max_bw,
+            time_decay=None,
         )
         peaks = [float(p) for p in (kde.get("all_peaks") or []) if p is not None]
         supports, resistances = _split_peaks_by_price(peaks, ref_price)
@@ -355,4 +402,237 @@ def extract_kde_levels_expand_support(
         reason = last.get("reason") or "ok"
         last["reason"] = f"{reason}_no_support_after_expand"
     return last
+
+
+def extract_kde_levels_multi_window(
+    closes: Sequence[float],
+    volumes: Sequence[float],
+    *,
+    price: Optional[float] = None,
+    windows: Sequence[int] = KDE_MULTI_WINDOWS,
+    base_factor: float = 1.0,
+    grid_points: int = 200,
+    min_bw: float = KDE_MIN_BW,
+    max_bw: float = KDE_MAX_BW,
+) -> Dict[str, Any]:
+    """固定多窗 VW-KDE（不做无支撑扩窗）；供 confluence 同源共振。"""
+    n = len(closes)
+    try:
+        ref_price = float(price) if price is not None else float(closes[-1])
+    except (TypeError, ValueError, IndexError):
+        ref_price = None
+    out_windows: Dict[str, Any] = {}
+    any_ok = False
+    for w in windows:
+        try:
+            wi = int(w)
+        except (TypeError, ValueError):
+            continue
+        if wi < 20:
+            continue
+        take = min(wi, n)
+        if take < 20:
+            continue
+        kde = extract_kde_levels(
+            list(closes[-take:]),
+            list(volumes[-take:]),
+            base_factor=base_factor,
+            grid_points=grid_points,
+            min_bw=min_bw,
+            max_bw=max_bw,
+            time_decay=None,
+        )
+        peaks = [float(p) for p in (kde.get("all_peaks") or []) if p is not None]
+        if ref_price is not None and ref_price > 0:
+            supports, resistances = _split_peaks_by_price(peaks, ref_price)
+        else:
+            supports = list(kde.get("support_levels") or [])
+            resistances = list(kde.get("resistance_levels") or [])
+        entry = {
+            "lookback": take,
+            "requested": wi,
+            "ok": bool(kde.get("ok")),
+            "reason": kde.get("reason"),
+            "support_levels": supports[:8],
+            "resistance_levels": resistances[:8],
+            "all_peaks": peaks,
+            "bw": kde.get("bw"),
+            "time_decay": bool(kde.get("time_decay")),
+            "weight": float(KDE_MULTI_WINDOW_WEIGHTS.get(wi, 0.6)),
+        }
+        out_windows[str(wi)] = entry
+        if entry["ok"]:
+            any_ok = True
+    return {
+        "ok": any_ok,
+        "windows": out_windows,
+        "last_price": ref_price,
+    }
+
+
+def resolve_kde_structural_lookback(
+    bars: Sequence[Dict[str, Any]],
+    *,
+    calendar_fallback: int = KDE_LOOKBACK_INITIAL,
+    enabled: bool = KDE_STRUCTURAL_WINDOW_ENABLED,
+) -> Dict[str, Any]:
+    """用与 Fib 相同的 ZigZag 参数锚定结构窗初始回看。
+
+    锚点 = 最近确认波段中较早的一端（段起点）；lookback = 窗口内从锚点到末日的根数。
+    失败时回退 calendar_fallback。高/低波动对 lookback 做轻度缩放。
+    """
+    fb = max(20, int(calendar_fallback or KDE_LOOKBACK_INITIAL))
+    base: Dict[str, Any] = {
+        "lookback": fb,
+        "method": "calendar_fallback",
+        "anchor_date": None,
+        "anchor_index": None,
+        "atr_pct": None,
+        "ok": False,
+    }
+    if not enabled:
+        base["method"] = "calendar_forced"
+        return base
+    if not bars:
+        return base
+
+    try:
+        from backend_core.analysis.classic_levels import OHLC_LOOKBACK
+        from backend_core.analysis.swing_zigzag import (
+            DEFAULT_FRACTAL,
+            DEFAULT_MIN_SWING_BARS,
+            extract_zigzag_swing,
+        )
+    except Exception as e:
+        logger.debug("structural lookback import failed: %s", e)
+        return base
+
+    zz = extract_zigzag_swing(
+        bars,
+        max_bars=OHLC_LOOKBACK,
+        fractal_left=DEFAULT_FRACTAL,
+        fractal_right=DEFAULT_FRACTAL,
+        min_swing_bars=DEFAULT_MIN_SWING_BARS,
+    )
+    swing = zz.get("swing") if zz.get("ok") else None
+    if not isinstance(swing, dict):
+        base["reason"] = zz.get("reason") or "no_confirmed_swing"
+        return base
+
+    try:
+        hi_i = int(swing["swing_high_index"])
+        lo_i = int(swing["swing_low_index"])
+    except (KeyError, TypeError, ValueError):
+        base["reason"] = "bad_swing_index"
+        return base
+
+    # ZigZag 在截断窗口内的 index；段起点取较早端
+    anchor_i = min(hi_i, lo_i)
+    # zigzag 使用的有效根数 ≈ max(hi,lo)+余量；用 bars 截断后长度更稳
+    mb = max(20, int(OHLC_LOOKBACK or 180))
+    n_win = min(len(bars), mb)
+    if n_win < 20:
+        return base
+    # index 相对于截断窗；lookback = 从锚点到窗末日
+    structural = max(1, n_win - anchor_i)
+    lookback = int(
+        max(
+            KDE_STRUCTURAL_MIN_LOOKBACK,
+            min(KDE_STRUCTURAL_MAX_LOOKBACK, structural),
+        )
+    )
+
+    atr = zz.get("atr")
+    atr_pct = None
+    try:
+        last_c = float(bars[-1].get("close") or 0)
+        if atr is not None and last_c > 0:
+            atr_pct = float(atr) / last_c
+            if atr_pct > float(KDE_ATR_HIGH_PCT):
+                lookback = max(
+                    KDE_STRUCTURAL_MIN_LOOKBACK,
+                    int(round(lookback * float(KDE_ATR_HIGH_SCALE))),
+                )
+            elif atr_pct < float(KDE_ATR_LOW_PCT):
+                lookback = min(
+                    KDE_STRUCTURAL_MAX_LOOKBACK,
+                    int(round(lookback * float(KDE_ATR_LOW_SCALE))),
+                )
+    except (TypeError, ValueError, AttributeError, IndexError):
+        atr_pct = None
+
+    if hi_i <= lo_i:
+        anchor_date = swing.get("swing_high_date")
+    else:
+        anchor_date = swing.get("swing_low_date")
+
+    return {
+        "lookback": lookback,
+        "method": "zigzag_fractal",
+        "anchor_date": str(anchor_date)[:10] if anchor_date else None,
+        "anchor_index": anchor_i,
+        "swing_high_date": swing.get("swing_high_date"),
+        "swing_low_date": swing.get("swing_low_date"),
+        "bar_span": swing.get("bar_span"),
+        "atr_pct": round(float(atr_pct), 6) if atr_pct is not None else None,
+        "ok": True,
+        "calendar_fallback": fb,
+    }
+
+
+def compute_kde_bundle(
+    closes: Sequence[float],
+    volumes: Sequence[float],
+    *,
+    price: Optional[float] = None,
+    bars: Optional[Sequence[Dict[str, Any]]] = None,
+    initial_lookback: Optional[int] = None,
+    max_lookback: int = KDE_LOOKBACK_MAX,
+    step: int = KDE_LOOKBACK_STEP,
+    base_factor: float = 1.0,
+    grid_points: int = 200,
+    structural: bool = KDE_STRUCTURAL_WINDOW_ENABLED,
+    multi_window: bool = KDE_MULTI_WINDOW_ENABLED,
+    calendar_fallback: int = KDE_LOOKBACK_INITIAL,
+) -> Dict[str, Any]:
+    """主路径 expand + 结构锚窗元数据 + 多窗峰（默认全开）。"""
+    anchor_meta: Dict[str, Any] = {
+        "lookback": int(initial_lookback or calendar_fallback),
+        "method": "calendar",
+        "ok": False,
+    }
+    init_lb = int(initial_lookback) if initial_lookback is not None else None
+    if init_lb is None and structural and bars is not None:
+        anchor_meta = resolve_kde_structural_lookback(
+            bars, calendar_fallback=calendar_fallback, enabled=True
+        )
+        init_lb = int(anchor_meta.get("lookback") or calendar_fallback)
+    if init_lb is None:
+        init_lb = int(calendar_fallback)
+
+    main = extract_kde_levels_expand_support(
+        closes,
+        volumes,
+        price=price,
+        initial_lookback=init_lb,
+        step=step,
+        max_lookback=max_lookback,
+        base_factor=base_factor,
+        grid_points=grid_points,
+    )
+    multi = None
+    if multi_window:
+        multi = extract_kde_levels_multi_window(
+            closes,
+            volumes,
+            price=price if price is not None else main.get("last_price"),
+            base_factor=base_factor,
+            grid_points=grid_points,
+        )
+    return {
+        "main": main,
+        "multi_windows": multi,
+        "anchor": anchor_meta,
+        "initial_lookback": init_lb,
+    }
 

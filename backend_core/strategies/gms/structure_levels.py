@@ -17,6 +17,11 @@ def empty_structure() -> Dict[str, Any]:
         "kde_bw": None,
         "kde_lookback_used": 0,
         "kde_lookback_expanded": False,
+        "kde_lookback_initial": 60,
+        "kde_multi_windows": None,
+        "kde_anchor": None,
+        "kde_window_mode": "calendar",
+        "kde_time_decay": False,
         "method": "kde_volume_weighted",
         "rr": None,
         "rr_reason": "insufficient_samples",
@@ -259,27 +264,46 @@ def compute_structure_levels(
         return empty
 
     from backend_core.strategies.rpe.kde_levels import (
-        extract_kde_levels_expand_support,
+        KDE_MULTI_WINDOW_ENABLED,
+        KDE_STRUCTURAL_WINDOW_ENABLED,
+        compute_kde_bundle,
         nearest_levels,
     )
 
     kde_cfg = resolve_kde_config(cfg)
-    init_lb = int(kde_cfg.get("kde_lookback_days") or kde_cfg.get("kde_lookback_initial") or 60)
+    init_lb_cfg = kde_cfg.get("kde_lookback_days") or kde_cfg.get("kde_lookback_initial")
+    # 配置显式写了初始回看 → 日历；否则结构锚窗
+    forced_lb = int(init_lb_cfg) if init_lb_cfg is not None else None
+    # 若配置仍是默认 60 且未关结构窗，允许结构锚覆盖（与个股关键价位一致）
+    use_structural = bool(KDE_STRUCTURAL_WINDOW_ENABLED) and (
+        forced_lb is None or int(forced_lb) == 60
+    )
+    # 策略配置若给了非 60 的值，视为强制日历
+    if forced_lb is not None and int(forced_lb) != 60:
+        use_structural = False
     step = int(kde_cfg.get("kde_lookback_step") or 250)
     max_lb = int(kde_cfg.get("kde_lookback_max") or 750)
     base = float(kde_cfg.get("kde_base_factor") or 1.0)
     grid = int(kde_cfg.get("kde_grid_points") or 200)
+    use_multi = bool(KDE_MULTI_WINDOW_ENABLED)
 
-    kde = extract_kde_levels_expand_support(
+    # asc bars as dicts for zigzag
+    bar_dicts = list(asc)
+    bundle = compute_kde_bundle(
         closes,
         volumes,
         price=px,
-        initial_lookback=init_lb,
-        step=step,
+        bars=bar_dicts if use_structural else None,
+        initial_lookback=None if use_structural else (forced_lb or 60),
         max_lookback=max_lb,
+        step=step,
         base_factor=base,
         grid_points=grid,
+        structural=use_structural,
+        multi_window=use_multi,
+        calendar_fallback=int(forced_lb or 60),
     )
+    kde = bundle.get("main") or {}
     supports = [round(float(x), 2) for x in (kde.get("support_levels") or [])[:8]]
     resists = [round(float(x), 2) for x in (kde.get("resistance_levels") or [])[:8]]
     near = nearest_levels(px, supports, resists)
@@ -289,6 +313,7 @@ def compute_structure_levels(
     nr_v = round(float(nr), 2) if nr is not None else None
     floor_pct = resolve_structure_rr_min_downside_pct(cfg)
     rr_info = compute_structure_rr(px, ns_v, nr_v, min_downside_pct=floor_pct)
+    anchor = bundle.get("anchor") or {}
     return {
         "support_levels": supports,
         "resistance_levels": resists,
@@ -299,6 +324,13 @@ def compute_structure_levels(
         "kde_bw": kde.get("bw"),
         "kde_lookback_used": int(kde.get("lookback_used") or 0),
         "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
+        "kde_lookback_initial": int(bundle.get("initial_lookback") or forced_lb or 60),
+        "kde_multi_windows": bundle.get("multi_windows"),
+        "kde_anchor": anchor,
+        "kde_window_mode": (
+            "structural" if use_structural and anchor.get("ok") else "calendar"
+        ),
+        "kde_time_decay": bool(kde.get("time_decay")),
         "method": "kde_volume_weighted",
         "rr": rr_info.get("rr"),
         "rr_reason": rr_info.get("reason"),

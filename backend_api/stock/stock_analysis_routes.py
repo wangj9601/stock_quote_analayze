@@ -472,13 +472,16 @@ async def get_key_levels_by_query(
     ),
     kde_lookback: Optional[int] = Query(
         None,
-        description="KDE 初始回看交易日数（默认 60，范围 20–750；无支撑仍按 STEP/MAX 扩窗）",
+        description=(
+            "强制 KDE 日历初始回看（20–750）；不传则默认 ZigZag 结构锚窗。"
+            "无支撑仍按 STEP/MAX 扩窗"
+        ),
         ge=20,
         le=750,
     ),
     kde_from_date: Optional[str] = Query(
         None,
-        description="KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback；可调的是初始回看）",
+        description="强制日历窗：KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback）",
     ),
     db: Session = Depends(get_db),
 ):
@@ -606,13 +609,16 @@ async def get_key_levels(
     ),
     kde_lookback: Optional[int] = Query(
         None,
-        description="KDE 初始回看交易日数（默认 60，范围 20–750；无支撑仍按 STEP/MAX 扩窗）",
+        description=(
+            "强制 KDE 日历初始回看（20–750）；不传则默认 ZigZag 结构锚窗（与 Fib 同参）。"
+            "无支撑仍按 STEP/MAX 扩窗"
+        ),
         ge=20,
         le=750,
     ),
     kde_from_date: Optional[str] = Query(
         None,
-        description="KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback；可调的是初始回看）",
+        description="强制日历窗：KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback）",
     ),
     db: Session = Depends(get_db)
 ):
@@ -620,16 +626,18 @@ async def get_key_levels(
     获取个股 KDE 支撑 / 压力（阻力）位，并附带参考价：
 
     - classic_levels：ZigZag 锚定 Fib + 经典/Camarilla/ATR Pivot + confluence_zones
-    - confluence_zones：多源共振带（与 classic_levels 内一致）
+    - confluence_zones：多源共振带（含主路径 KDE + 60/120/250 多窗峰 kde_60/120/250）
     - volume_profile：可调回看日线 Volume Profile（POC/VAH/VAL）
     - vp_vs_kde：VP 与 KDE 最近支撑/压力对比（辅助参考，不改策略硬门槛）
+    - kde_window_mode / kde_anchor：结构锚窗元数据；kde_multi_windows：多窗峰；kde_time_decay：是否启用时间衰减
 
     轻量接口：只拉日K并复用 RPE 成交量加权 KDE，不跑完整技术分析。
     stock_code 支持 A股/港股代码，或股票名称（精确唯一则直接计算；多候选返回 candidates）。
     adjust=qfq 时按需拉取前复权因子写入 stock_adj_factor
     （A 股：归一化新浪优先、BaoStock 备用；港股：stock_hk_daily qfq-factor，source=akshare_sina_hk_qfq），
     再对不复权日K现算后计算（KDE/VP/Fib/Pivot 同口径）。
-    kde_lookback / kde_from_date 调整的是 KDE 初始回看（默认 60）；无支撑时仍按 STEP=250 递推至 MAX=750。
+    默认初始回看由 ZigZag 结构锚定；传 kde_lookback / kde_from_date 则强制日历窗。
+    无支撑时仍按 STEP=250 递推至 MAX=750；样本≥120 根自动时间衰减（半衰期约 40）。
     """
     try:
         resolved = resolve_levels_stock_identifier(db, stock_code)

@@ -820,6 +820,7 @@ def _levels_for_codes(
                 "resistances": st.get("resistance_levels") or [],
                 "kde_ok": st.get("kde_ok"),
                 "kde_reason": st.get("kde_reason"),
+                "kde_multi_windows": st.get("kde_multi_windows"),
             }
         except Exception as e:
             logger.debug("kde for %s skip: %s", c, e)

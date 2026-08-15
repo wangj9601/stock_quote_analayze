@@ -411,14 +411,17 @@ class KeyLevels:
         max_levels: int = 2,
         initial_lookback: Optional[int] = None,
         max_lookback: Optional[int] = None,
+        use_structural_window: Optional[bool] = None,
+        use_multi_window: Optional[bool] = None,
     ) -> Dict:
         """
         用收盘价 + 成交量做 gaussian_kde，密度峰作为支撑/阻力。
         口径对齐 backend_core.strategies.rpe.kde_levels：
-        - 带宽 bw = max(0.01, base_factor * sigma/mu)
-        - 现价下方峰 -> 支撑（由近到远）
-        - 现价上方峰 -> 阻力（由近到远）
+        - 默认结构锚窗（ZigZag，与 Fib 同参）定初始回看；可显式 initial_lookback 覆盖
+        - 带宽 bw = max(0.01, base_factor * sigma/mu)；长窗自动时间衰减
+        - 现价下方峰 -> 支撑（由近到远）；上方峰 -> 阻力
         - 无支撑时按 STEP（250）日递推扩大回看，最多约 3 年（750 日）
+        - 另算 60/120/250 多窗峰供共振（默认开）
         展示侧各取最多 max_levels 个（默认 2）；按当前价（可实时）重新划分峰。
         """
         empty = {
@@ -436,6 +439,9 @@ class KeyLevels:
             "kde_lookback_initial": KeyLevels.KDE_LOOKBACK_DAYS,
             "kde_lookback_max": KeyLevels.KDE_LOOKBACK_MAX,
             "kde_base_factor": KeyLevels.KDE_BASE_FACTOR,
+            "kde_multi_windows": None,
+            "kde_anchor": None,
+            "kde_window_mode": "calendar",
         }
         if not historical_data or len(historical_data) < 20:
             return empty
@@ -456,22 +462,40 @@ class KeyLevels:
                 continue
 
         from backend_core.strategies.rpe.kde_levels import (
-            extract_kde_levels_expand_support,
+            KDE_MULTI_WINDOW_ENABLED,
+            KDE_STRUCTURAL_WINDOW_ENABLED,
+            compute_kde_bundle,
             nearest_levels,
         )
 
         factor = KeyLevels.KDE_BASE_FACTOR if kde_base_factor is None else float(kde_base_factor)
-        init_lb = int(initial_lookback or KeyLevels.KDE_LOOKBACK_DAYS)
         max_lb = int(max_lookback or KeyLevels.KDE_LOOKBACK_MAX)
-        kde = extract_kde_levels_expand_support(
+        structural = (
+            KDE_STRUCTURAL_WINDOW_ENABLED
+            if use_structural_window is None
+            else bool(use_structural_window)
+        )
+        multi = (
+            KDE_MULTI_WINDOW_ENABLED if use_multi_window is None else bool(use_multi_window)
+        )
+        # 显式 initial_lookback → 日历窗；否则结构锚窗
+        forced_lb = int(initial_lookback) if initial_lookback is not None else None
+        bundle = compute_kde_bundle(
             closes,
             volumes,
             price=price,
-            initial_lookback=init_lb,
-            step=KeyLevels.KDE_LOOKBACK_STEP,
+            bars=historical_data if forced_lb is None and structural else None,
+            initial_lookback=forced_lb,
             max_lookback=max_lb,
+            step=KeyLevels.KDE_LOOKBACK_STEP,
             base_factor=factor,
+            structural=structural and forced_lb is None,
+            multi_window=multi,
+            calendar_fallback=KeyLevels.KDE_LOOKBACK_DAYS,
         )
+        kde = bundle.get("main") or {}
+        anchor = bundle.get("anchor") or {}
+        init_lb = int(bundle.get("initial_lookback") or KeyLevels.KDE_LOOKBACK_DAYS)
         supports = [float(x) for x in (kde.get("support_levels") or [])]
         resistances = [float(x) for x in (kde.get("resistance_levels") or [])]
         near = nearest_levels(price, supports, resistances)
@@ -479,6 +503,7 @@ class KeyLevels:
         n = max(1, int(max_levels or KeyLevels.MAX_LEVELS))
         ns = near.get("nearest_support")
         nr = near.get("nearest_resistance")
+        window_mode = "structural" if (structural and forced_lb is None and anchor.get("ok")) else "calendar"
         return {
             "resistance_levels": [round(x, 2) for x in resistances[:n]],
             "support_levels": [round(x, 2) for x in supports[:n]],
@@ -494,6 +519,10 @@ class KeyLevels:
             "kde_lookback_initial": init_lb,
             "kde_lookback_max": max_lb,
             "kde_base_factor": factor,
+            "kde_time_decay": bool(kde.get("time_decay")),
+            "kde_multi_windows": bundle.get("multi_windows"),
+            "kde_anchor": anchor,
+            "kde_window_mode": window_mode,
         }
 
     @staticmethod
@@ -798,8 +827,8 @@ class StockAnalysisService:
         vp_lookback / vp_from_date:
           Volume Profile 回看天数，或起始交易日起算（优先日期）。
         kde_lookback / kde_from_date:
-          KDE 初始回看天数（默认 60），或起始交易日起算（优先日期）；
-          无支撑时仍按 STEP/MAX 扩窗，规则不变。
+          若传入任一，则强制日历初始回看；不传则默认 ZigZag 结构锚窗（与 Fib 同参）。
+          无支撑时仍按 STEP/MAX 扩窗；长窗自动时间衰减；另算 60/120/250 多窗峰供共振。
         """
         try:
             code = str(stock_code or "").strip()
@@ -877,18 +906,30 @@ class StockAnalysisService:
                 current_price = float(realtime_price)
                 price_source = realtime_source
 
-            kde_lb_req, kde_fd = self._resolve_kde_lookback(
-                historical_data,
-                kde_lookback=kde_lookback,
-                kde_from_date=kde_from_date,
-            )
-            levels = KeyLevels.calculate_key_levels(
-                historical_data,
-                current_price,
-                max_levels=max(1, int(max_levels or 8)),
-                initial_lookback=kde_lb_req,
-                max_lookback=KeyLevels.KDE_LOOKBACK_MAX,
-            )
+            kde_fd = None
+            if kde_lookback is not None or (kde_from_date and str(kde_from_date).strip()):
+                kde_lb_req, kde_fd = self._resolve_kde_lookback(
+                    historical_data,
+                    kde_lookback=kde_lookback,
+                    kde_from_date=kde_from_date,
+                )
+                levels = KeyLevels.calculate_key_levels(
+                    historical_data,
+                    current_price,
+                    max_levels=max(1, int(max_levels or 8)),
+                    initial_lookback=kde_lb_req,
+                    max_lookback=KeyLevels.KDE_LOOKBACK_MAX,
+                    use_structural_window=False,
+                )
+            else:
+                levels = KeyLevels.calculate_key_levels(
+                    historical_data,
+                    current_price,
+                    max_levels=max(1, int(max_levels or 8)),
+                    initial_lookback=None,
+                    max_lookback=KeyLevels.KDE_LOOKBACK_MAX,
+                    use_structural_window=True,
+                )
             if kde_fd:
                 levels["kde_from_date"] = kde_fd
             classic = KeyLevels.calculate_classic_reference_levels(
@@ -934,6 +975,7 @@ class StockAnalysisService:
                 kde_resistance=levels.get("nearest_resistance"),
                 kde_supports=levels.get("support_levels"),
                 kde_resistances=levels.get("resistance_levels"),
+                kde_multi_windows=levels.get("kde_multi_windows"),
                 last_close=current_price,
                 atr=classic.get("atr"),
             )
@@ -963,22 +1005,38 @@ class StockAnalysisService:
                     break
 
             vp_lb = vp.get("lookback") or 60
+            win_mode = levels.get("kde_window_mode") or "calendar"
+            if win_mode == "structural":
+                win_note = (
+                    f"初始回看由 ZigZag 结构锚窗定为 "
+                    f"{levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日"
+                    "（与 Fib 同参；可用 kde_lookback / kde_from_date 强制日历窗）"
+                )
+            else:
+                win_note = (
+                    f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日"
+                    "（日历窗）"
+                )
+            decay_note = "；长窗样本自动时间衰减（半衰期约 40 根）" if levels.get("kde_time_decay") else ""
+            multi_note = "；另算 60/120/250 多窗峰供共振"
             if adjust == "qfq":
                 desc = (
                     "成交量加权 KDE（前复权现算）：不复权日K × 归一化复权因子 "
                     "(P_qfq = P_raw × f_t / f_T)；volume 不复权；"
-                    f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
+                    f"{win_note}，"
                     f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
-                    f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
+                    f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日"
+                    f"{decay_note}{multi_note}；"
                     "现价下方峰为支撑，上方峰为压力。"
                     f"Volume Profile（近 {vp_lb} 日 POC/VAH/VAL）与 Fib/Pivot 同口径前复权，仅作与 KDE 对比参考，不改策略门槛。"
                 )
             else:
                 desc = (
                     "成交量加权 KDE（与 RPE 结构位同口径）：日K close+volume（不复权）；"
-                    f"初始回看 {levels.get('kde_lookback_initial') or KeyLevels.KDE_LOOKBACK_DAYS} 日，"
+                    f"{win_note}，"
                     f"无支撑则 +{KeyLevels.KDE_LOOKBACK_STEP} 递推，"
-                    f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日；"
+                    f"上限约 {levels.get('kde_lookback_max') or KeyLevels.KDE_LOOKBACK_MAX} 日"
+                    f"{decay_note}{multi_note}；"
                     "现价下方峰为支撑，上方峰为压力（阻力）。"
                     "现价优先实时行情表，无有效价时回退日K收盘。"
                     f"Volume Profile（近 {vp_lb} 日 POC/VAH/VAL）与 Fib/Pivot 并列参考，用于对照 KDE，不改策略门槛。"
