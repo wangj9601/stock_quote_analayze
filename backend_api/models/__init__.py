@@ -103,6 +103,7 @@ try:
         GMSBacktestTask = getattr(models_module, 'GMSBacktestTask', None)
         SBBRStrategyConfig = getattr(models_module, 'SBBRStrategyConfig', None)
         SBBRSignalTrace = getattr(models_module, 'SBBRSignalTrace', None)
+        SBBRTraceRecomputeTask = getattr(models_module, 'SBBRTraceRecomputeTask', None)
         SBBRReserveBox = getattr(models_module, 'SBBRReserveBox', None)
         SBBRTradeObserveStock = getattr(models_module, 'SBBRTradeObserveStock', None)
         SBBRFormalTrade = getattr(models_module, 'SBBRFormalTrade', None)
@@ -243,6 +244,7 @@ except Exception as e:
     GMSBacktestTask = None
     SBBRStrategyConfig = None
     SBBRSignalTrace = None
+    SBBRTraceRecomputeTask = None
     SBBRReserveBox = None
     SBBRTradeObserveStock = None
     SBBRFormalTrade = None
@@ -388,6 +390,7 @@ __all__ = [
     'GMSBacktestTask',
     'SBBRStrategyConfig',
     'SBBRSignalTrace',
+    'SBBRTraceRecomputeTask',
     'SBBRReserveBox',
     'SBBRTradeObserveStock',
     'SBBRFormalTrade',

@@ -216,3 +216,179 @@ def query_traces_by_code(
             }
         )
     return out
+
+
+def delete_traces_for_code_config(db, *, code: str, config_id: int) -> int:
+    """删除某股某参数版本的全部 SBBR trace。"""
+    from backend_api.models import SBBRSignalTrace
+
+    code_n = str(code or "").strip()
+    if code_n.isdigit() and len(code_n) <= 6:
+        code_n = code_n.zfill(6)
+    n = (
+        db.query(SBBRSignalTrace)
+        .filter(
+            SBBRSignalTrace.code == code_n,
+            SBBRSignalTrace.config_id == int(config_id),
+        )
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n or 0)
+
+
+def recompute_trace_for_stock(
+    db,
+    *,
+    code: str,
+    config_id: int,
+    config: Optional[Dict[str, Any]] = None,
+    lookback_calendar_days: Optional[int] = None,
+    progress_cb=None,
+) -> int:
+    """
+    对单股按交易日滚动重算 SBBR 信号并写入 sbbr_signal_trace。
+
+    默认对齐 URT/GMS：使用该股 historical_quotes 中的全部历史行情；
+    仅跳过指标预热不足的最早若干日。若传入 lookback_calendar_days
+    或环境变量 SBBR_TRACE_RECOMPUTE_LOOKBACK_DAYS，则仅重算最近 N 个自然日。
+    返回写入条数。
+    """
+    import os
+    from datetime import datetime, timedelta
+
+    from backend_core.strategies.gms.structure_levels import kde_bars_limit
+    from backend_core.strategies.sbbr.config import SBBRConfigManager
+    from backend_core.strategies.sbbr.data_loader import SBBRDataLoader, _norm_code
+    from backend_core.strategies.sbbr.strategy_engine import SBBRStrategyEngine
+
+    code_n = _norm_code(code)
+    cfg = config or SBBRConfigManager().get_config(int(config_id))
+    scan_cfg = cfg.get("scan") or {}
+    hist_n = int(scan_cfg.get("history_bars", 120))
+    min_need = 30
+
+    if lookback_calendar_days is None:
+        env_raw = (os.getenv("SBBR_TRACE_RECOMPUTE_LOOKBACK_DAYS") or "").strip()
+        if env_raw.isdigit() and int(env_raw) > 0:
+            lookback_calendar_days = int(env_raw)
+
+    delete_traces_for_code_config(db, code=code_n, config_id=int(config_id))
+
+    engine = SBBRStrategyEngine(db_session=db, config=cfg)
+    end_eff = engine.loader.resolve_effective_trade_date(None)
+    try:
+        end_d = datetime.strptime(end_eff, "%Y-%m-%d").date()
+    except ValueError:
+        end_d = datetime.now().date()
+        end_eff = end_d.strftime("%Y-%m-%d")
+
+    if lookback_calendar_days is not None and int(lookback_calendar_days) > 0:
+        fetch_days = int(lookback_calendar_days) + max(60, hist_n * 2)
+        start_fetch = (end_d - timedelta(days=fetch_days)).strftime("%Y-%m-%d")
+        load_n = fetch_days + max(hist_n, kde_bars_limit(cfg)) + 5
+    else:
+        start_fetch = None
+        load_n = 8000
+
+    bars_all = engine.loader.load_bars(code_n, end_date=end_eff, limit=load_n)
+    bars_all = SBBRDataLoader.truncate_bars_asof(bars_all, end_eff)
+    if start_fetch:
+        bars_all = [b for b in bars_all if str(b.get("date") or "")[:10] >= start_fetch]
+    if len(bars_all) < min_need:
+        logger.info(
+            "SBBR 单股重算 %s 历史不足 need=%s bars=%s，跳过写入",
+            code_n,
+            min_need,
+            len(bars_all),
+        )
+        return 0
+
+    trade_dates = [b["date"] for b in bars_all]
+    eval_dates: List[str] = []
+    for i, d in enumerate(trade_dates):
+        if i + 1 < min_need:
+            continue
+        if lookback_calendar_days is not None and int(lookback_calendar_days) > 0:
+            window_start = (end_d - timedelta(days=int(lookback_calendar_days))).strftime("%Y-%m-%d")
+            if d < window_start:
+                continue
+        eval_dates.append(d)
+
+    if not eval_dates:
+        return 0
+
+    mkt_lookback = max(80, int(((cfg.get("entry") or {}).get("market_lookback_days") or 5)) + 20)
+    idx_bars = engine.loader.load_bars(
+        "000001",
+        end_date=end_eff,
+        limit=max(load_n, len(bars_all)) + mkt_lookback,
+    )
+    idx_bars = SBBRDataLoader.truncate_bars_asof(idx_bars, end_eff)
+    dated_mrets = []
+    for i in range(1, len(idx_bars)):
+        p0 = float(idx_bars[i - 1].get("close") or 0)
+        p1 = float(idx_bars[i].get("close") or 0)
+        ret = (p1 - p0) / p0 if p0 > 0 else 0.0
+        dated_mrets.append((idx_bars[i]["date"], ret))
+
+    share_info = engine.loader.load_share_map([code_n], as_of_date=end_eff).get(code_n) or {}
+
+    logger.info(
+        "SBBR 单股全历史重算 %s config_id=%s bars=%s evaluable=%s lookback=%s",
+        code_n,
+        config_id,
+        len(bars_all),
+        len(eval_dates),
+        lookback_calendar_days,
+    )
+
+    rows: List[Dict[str, Any]] = []
+    total = len(eval_dates)
+    batch_size = 80
+    last_date = eval_dates[-1]
+
+    for idx, d in enumerate(eval_dates):
+        if progress_cb:
+            progress_cb(idx + 1, total, f"正在计算 {d}（{idx + 1}/{total}）")
+        try:
+            mrets = [r for dd, r in dated_mrets if dd <= d][-mkt_lookback:]
+            row = engine.evaluate_code(
+                code_n,
+                date=d,
+                config=cfg,
+                share_info=share_info,
+                market_returns=mrets,
+                bars=bars_all,
+            )
+            if not row:
+                continue
+            row["date"] = d
+            if row.get("detail") and isinstance(row["detail"], dict):
+                row["detail"] = dict(row["detail"])
+                row["detail"]["asof_date"] = d
+            rows.append(row)
+        except Exception as e:
+            logger.debug("SBBR 单股重算跳过 %s day=%s: %s", code_n, d, e)
+            continue
+
+        if len(rows) >= batch_size:
+            upsert_signal_traces(db, rows, config_id=int(config_id), trade_date=d)
+            rows = []
+
+    if rows:
+        upsert_signal_traces(db, rows, config_id=int(config_id), trade_date=last_date)
+
+    from backend_api.models import SBBRSignalTrace
+
+    written = (
+        db.query(SBBRSignalTrace)
+        .filter(
+            SBBRSignalTrace.code == code_n,
+            SBBRSignalTrace.config_id == int(config_id),
+        )
+        .count()
+    )
+    if progress_cb:
+        progress_cb(written, written, f"写入完成（{written}/{written}）")
+    return int(written)

@@ -239,6 +239,7 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - 选股结果操作列「历史」→ `stock_sbbr_trace.html`（对齐 URT `stock_urt_trace`）。
 - `GET /api/stock/sbbr-signal-history`：按日 asof 现算（`evaluate_history`），跨度上限 180 自然日 / 120 交易日；一次加载 K 线与大盘收益后按日截断。
 - `GET /api/stock/sbbr-signal-trace`：读 `sbbr_signal_trace` 该股预计算序列。
+- **强制重新计算**：`POST /api/stock/sbbr-signal-trace/recompute`（body: `code`、`config_id`）异步按当前参数版本对该股**全历史**逐日重算并回写 `sbbr_signal_trace`；进度 `GET .../recompute/{task_id}`。任务表 `sbbr_trace_recompute_tasks`。可用环境变量 `SBBR_TRACE_RECOMPUTE_LOOKBACK_DAYS` 限制自然日窗口。
 
 ## 12. 选股范围「个股」（scope=single）
 

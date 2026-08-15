@@ -40,6 +40,30 @@ const StockMultiStrategy = {
         this.bindScrollFab();
     },
 
+    /**
+     * 从 URL ?code=&name= 填入个股分析输入框并自动分析（仅执行一次）。
+     * 供 analysis.html?tab=stock-ai&code=xxx 深链（如龙头/中军标签跳转）使用。
+     */
+    bootstrapFromUrl() {
+        if (this._urlBootstrapped) return;
+        let code = '';
+        let name = '';
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            code = (params.get('code') || '').trim();
+            name = (params.get('name') || '').trim();
+        } catch (e) {
+            return;
+        }
+        if (!code) return;
+        this._urlBootstrapped = true;
+        const input = document.getElementById('ssaStockCode');
+        if (input) {
+            input.value = name ? `${code} ${name}` : code;
+        }
+        void this.analyze();
+    },
+
     bindScrollFab() {
         const btn = document.getElementById('ssaScrollToggleBtn');
         if (!btn || btn.dataset.bound === '1') return;

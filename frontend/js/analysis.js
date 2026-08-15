@@ -118,7 +118,10 @@ const AnalysisPage = {
                 if (window.LeaderMidAnalysis) LeaderMidAnalysis.ensureCatalogs();
                 break;
             case 'stock-ai':
-                if (window.StockMultiStrategy) StockMultiStrategy.loadWatchlistOptions();
+                if (window.StockMultiStrategy) {
+                    StockMultiStrategy.loadWatchlistOptions();
+                    StockMultiStrategy.bootstrapFromUrl();
+                }
                 break;
             case 'market-analysis':
                 this.loadMarketAnalysis();

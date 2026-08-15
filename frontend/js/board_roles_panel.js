@@ -21,6 +21,16 @@
     return '';
   }
 
+  /** 龙头/中军标签 → 智能分析「个股分析」页 */
+  function stockAnalysisHref(code, name) {
+    const q = new URLSearchParams({ tab: 'stock-ai' });
+    const c = String(code || '').trim();
+    const n = String(name || '').trim();
+    if (c) q.set('code', c);
+    if (n) q.set('name', n);
+    return `analysis.html?${q.toString()}`;
+  }
+
   function stockChip(s) {
     const code = esc(s.code || s.stock_code || '');
     const name = esc(s.name || s.stock_name || '');
@@ -30,7 +40,7 @@
     const title = esc(s.role_reason || '');
     const rawCode = s.code || s.stock_code || '';
     const rawName = s.name || s.stock_name || '';
-    const href = `stock.html?code=${encodeURIComponent(rawCode)}&name=${encodeURIComponent(rawName)}`;
+    const href = stockAnalysisHref(rawCode, rawName);
     return `<a class="gms-board-role-chip" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${code} ${name} <span class="gms-board-role-chg">${chg}</span></a>`;
   }
 
@@ -51,7 +61,7 @@
     const pct = formatPct(s.change_percent);
     const pctHtml = pct ? ` (${esc(pct)})` : '';
     const title = esc(s.role_reason || label);
-    const href = `stock.html?code=${encodeURIComponent(rawCode)}&name=${encodeURIComponent(rawName)}`;
+    const href = stockAnalysisHref(rawCode, rawName);
     let show;
     if (rawCode && rawName) show = `${esc(rawCode)} ${esc(rawName)}`;
     else show = esc(rawName || rawCode || '--');

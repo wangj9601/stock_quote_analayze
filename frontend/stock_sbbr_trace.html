@@ -16,7 +16,8 @@
         <div class="gms-trace-card">
             <div class="gms-trace-title">做小做底（SBBR）— 策略信号历史</div>
             <p class="gms-backtest-hint" style="margin:8px 0 12px;">
-                默认按日期区间对该股<strong>按日 asof 现算回溯</strong>（仅用 ≤ 当日 K 线）；也可切换「仅读预计算」查看日终落库记录。跨度上限 180 自然日。
+                默认按日期区间对该股<strong>按日 asof 现算回溯</strong>（仅用 ≤ 当日 K 线）；也可切换「仅读预计算」查看日终落库记录。
+                需要刷新入库记录时可点「强制重新计算」（按当前参数版本全历史重算并写回 trace）。跨度上限 180 自然日。
             </p>
             <div class="toolbar">
                 <div class="toolbar-row">
@@ -35,8 +36,10 @@
                     <label><input type="checkbox" id="entryOnly"> 仅入场</label>
                     <label><input type="checkbox" id="requireBottom"> 仅筑底</label>
                     <button id="searchBtn" type="button">查询</button>
+                    <button id="forceComputeBtn" class="btn-secondary" type="button">强制重新计算</button>
                 </div>
             </div>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
             <div id="metaMsg" class="gms-meta-text" style="margin:6px 0;"></div>
             <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
             <div id="emptyMsg" class="empty-msg" style="display:none;">暂无信号记录</div>

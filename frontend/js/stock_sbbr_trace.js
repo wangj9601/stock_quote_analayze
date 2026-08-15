@@ -38,6 +38,11 @@
       this.currentPage = 1;
       this.pageSize = 30;
       this.totalPages = 0;
+      this.forceComputeRunning = false;
+      this.forceComputePollTimer = null;
+      this.forceComputeTaskId = '';
+      this.forceComputePollCount = 0;
+      this.maxForceComputePolls = 3600;
 
       document.getElementById('stockDisplay').textContent =
         this.code ? `${this.code} ${this.name}` : '--';
@@ -51,8 +56,16 @@
         if (src) src.value = 'trace';
       }
 
-      document.getElementById('searchBtn').addEventListener('click', () => this.fetchData());
+      document.getElementById('searchBtn').addEventListener('click', () => {
+        if (this.forceComputeRunning) return;
+        this.fetchData();
+      });
+      const forceBtn = document.getElementById('forceComputeBtn');
+      if (forceBtn) {
+        forceBtn.addEventListener('click', () => this.forceCompute());
+      }
       document.getElementById('configSelect').addEventListener('change', () => {
+        if (this.forceComputeRunning) return;
         this.configId = Number(document.getElementById('configSelect').value) || null;
         this.fetchData();
       });
@@ -89,6 +102,191 @@
 
     formatDate(d) {
       return d.toISOString().slice(0, 10);
+    }
+
+    getActiveConfigLabel() {
+      const opt = (this.configOptions || []).find((o) => String(o.id) === String(this.configId));
+      if (!opt) return '当前策略版本';
+      const name = opt.name || `配置${opt.id}`;
+      return opt.is_default ? `${name} (默认)` : name;
+    }
+
+    setForceComputeRunning(running) {
+      this.forceComputeRunning = !!running;
+      const btn = document.getElementById('forceComputeBtn');
+      const searchBtn = document.getElementById('searchBtn');
+      const sel = document.getElementById('configSelect');
+      const src = document.getElementById('sourceSelect');
+      if (btn) {
+        btn.disabled = this.forceComputeRunning;
+        btn.textContent = this.forceComputeRunning ? '正在重新计算…' : '强制重新计算';
+      }
+      if (searchBtn) searchBtn.disabled = this.forceComputeRunning;
+      if (sel) sel.disabled = this.forceComputeRunning;
+      if (src) src.disabled = this.forceComputeRunning;
+      ['startDate', 'endDate', 'entryOnly', 'requireBottom'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = this.forceComputeRunning;
+      });
+      ['firstPage', 'prevPage', 'nextPage', 'lastPage'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && this.forceComputeRunning) el.disabled = true;
+      });
+      if (!this.forceComputeRunning) this.updatePagination();
+    }
+
+    clearForceComputePoll() {
+      if (this.forceComputePollTimer) {
+        clearInterval(this.forceComputePollTimer);
+        this.forceComputePollTimer = null;
+      }
+      this.forceComputePollCount = 0;
+    }
+
+    renderForceComputeProgress(task) {
+      const area = document.getElementById('forceComputeProgress');
+      if (!area) return;
+      area.style.display = 'block';
+      const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
+      const msg = task.message || '';
+      const saved = task.saved_count != null ? Number(task.saved_count) : null;
+      const cur = (task.status === 'completed' && saved != null && !Number.isNaN(saved))
+        ? saved
+        : (task.current || 0);
+      const tot = (task.status === 'completed' && saved != null && !Number.isNaN(saved))
+        ? saved
+        : task.total;
+      const total = tot != null && tot > 0 ? ` · ${cur}/${tot}` : '';
+      const statusLabel = task.status === 'completed' ? '已完成'
+        : (task.status === 'failed' ? '失败' : '计算中');
+      area.innerHTML = `
+        <div>SBBR 信号重算: <strong>${escapeHtml(statusLabel)}</strong>${msg ? ` · ${escapeHtml(String(msg))}${total}` : ''}</div>
+        <div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>
+      `;
+    }
+
+    forceCompute() {
+      if (this.forceComputeRunning) return;
+      if (!this.code) {
+        alert('请先选择股票');
+        return;
+      }
+      const label = this.getActiveConfigLabel();
+      if (!confirm(`将按「${label}」重新计算该股全部历史行情的 SBBR 信号并写入预计算表（仅影响该策略版本，耗时可能较长），是否继续？`)) {
+        return;
+      }
+      void this.startForceComputeTask();
+    }
+
+    async startForceComputeTask() {
+      this.clearForceComputePoll();
+      this.setForceComputeRunning(true);
+      const area = document.getElementById('forceComputeProgress');
+      if (area) {
+        area.style.display = 'block';
+        area.innerHTML = '<div>正在提交重算任务…</div><div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:5%"></div></div>';
+      }
+      const loading = document.getElementById('loadingMsg');
+      if (loading) loading.style.display = 'none';
+
+      try {
+        const resp = await fetch(`${apiBase}/api/stock/sbbr-signal-trace/recompute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: this.code,
+            config_id: this.configId,
+          }),
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok || !json.success) {
+          const detail = json.detail;
+          let errMsg = json.message || resp.statusText;
+          if (typeof detail === 'string') errMsg = detail;
+          else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+          throw new Error(errMsg || '提交失败');
+        }
+        this.forceComputeTaskId = json.data?.task_id || '';
+        if (!this.forceComputeTaskId) {
+          throw new Error('未返回任务 ID');
+        }
+        if (json.data?.config_id != null) {
+          this.configId = json.data.config_id;
+        }
+        if (json.data?.already_running) {
+          this.renderForceComputeProgress({
+            status: 'running',
+            progress: 0,
+            message: json.message || '任务进行中',
+          });
+        }
+        await this.pollForceComputeOnce();
+        this.forceComputePollTimer = setInterval(() => this.pollForceComputeOnce(), 1000);
+      } catch (e) {
+        this.clearForceComputePoll();
+        this.setForceComputeRunning(false);
+        if (area) {
+          area.style.display = 'block';
+          area.innerHTML = `<span class="gms-recompute-error">提交失败: ${escapeHtml(e.message || String(e))}</span>`;
+        }
+      }
+    }
+
+    async pollForceComputeOnce() {
+      if (!this.forceComputeTaskId) return;
+      this.forceComputePollCount += 1;
+      if (this.forceComputePollCount > this.maxForceComputePolls) {
+        this.clearForceComputePoll();
+        this.setForceComputeRunning(false);
+        const area = document.getElementById('forceComputeProgress');
+        if (area) {
+          area.innerHTML = '<span class="gms-recompute-error">等待超时，请刷新页面后重试</span>';
+        }
+        return;
+      }
+      const url = `${apiBase}/api/stock/sbbr-signal-trace/recompute/${encodeURIComponent(this.forceComputeTaskId)}`;
+      try {
+        const resp = await fetch(url);
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok || !json.success) {
+          const detail = json.detail;
+          let errMsg = json.message || resp.statusText;
+          if (typeof detail === 'string') errMsg = detail;
+          else if (Array.isArray(detail)) errMsg = detail.map((d) => d.msg || d).join('; ');
+          throw new Error(errMsg || '查询进度失败');
+        }
+        const task = json.data;
+        if (!task) return;
+        this.renderForceComputeProgress(task);
+        const st = task.status;
+        if (st === 'completed' || st === 'failed') {
+          this.clearForceComputePoll();
+          this.setForceComputeRunning(false);
+          if (st === 'completed') {
+            const src = document.getElementById('sourceSelect');
+            if (src) src.value = 'trace';
+            if (window.CommonUtils && task.message) {
+              CommonUtils.showToast(task.message, 'success');
+            }
+            await this.fetchData();
+            if (task.message) {
+              this.renderForceComputeProgress({ ...task, progress: 100 });
+            }
+          } else {
+            const area = document.getElementById('forceComputeProgress');
+            if (area) {
+              area.innerHTML = `<span class="gms-recompute-error">${escapeHtml(task.error || task.message || '计算失败')}</span>`;
+            }
+          }
+        }
+      } catch (e) {
+        this.clearForceComputePoll();
+        this.setForceComputeRunning(false);
+        const area = document.getElementById('forceComputeProgress');
+        if (area) {
+          area.innerHTML = `<span class="gms-recompute-error">查询进度失败: ${escapeHtml(e.message || String(e))}</span>`;
+        }
+      }
     }
 
     renderTable() {
@@ -240,7 +438,7 @@
 
         if (!this.allData.length) {
           empty.textContent = source === 'trace'
-            ? '所选日期范围内暂无预计算信号（可改「现算回溯」或缩短区间后重试）'
+            ? '所选日期范围内暂无预计算信号（可点「强制重新计算」入库，或改「现算回溯」）'
             : '所选日期范围内暂无符合筛选的信号日';
           empty.style.display = '';
           this.updatePagination();
