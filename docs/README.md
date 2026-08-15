@@ -13,7 +13,7 @@
 | [data/](data/) | 数据采集、AKShare/ETF/港股、相关 API 说明 |
 | [notifications/](notifications/) | 推送通知、报表服务 |
 | [indicators/](indicators/) | 技术指标与无穷成本均线等 |
-| [features/](features/) | 成交量异动榜、行业板块、[支撑/阻力与形态识别算法](features/支撑阻力与形态识别_算法说明.md)（§1.1 四维闭环）、[形态识别工具](features/形态识别工具.md) 等 |
+| [features/](features/) | 成交量异动榜、行业板块、[支撑/阻力与形态识别算法](features/支撑阻力与形态识别_算法说明.md)（§1.1 四维闭环）、[形态识别工具](features/形态识别工具.md)（**4 族 / 12 种**日线形态清单）等 |
 | [fixed/](fixed/) | 历史问题修复记录与专项说明（归档） |
 | [specs/](specs/) | 规格/任务文档（如一阳穿三线） |
 | [sql/](sql/) | SQL 脚本 |
