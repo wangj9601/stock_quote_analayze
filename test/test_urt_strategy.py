@@ -238,7 +238,8 @@ def test_min_bars_needed_matches_build_indicators():
     from backend_core.strategies.urt.indicators import min_bars_needed
 
     cfg = URTConfigManager().get_default_config()
-    assert min_bars_needed(cfg) == max(20, 20 + 1, 4, 5) == 21
+    # MA20 + 斜率窗（默认 20+5）抬升最少 K 线根数
+    assert min_bars_needed(cfg) == max(20, 20 + 5, 20 + 1, 4, 5, 20, 20, 10, 5 + 1) == 25
 
 
 def test_screen_universe_require_pass_false_keeps_failed_signal():
@@ -340,10 +341,14 @@ def test_score_includes_yang_medium_and_ma_bull_parts():
     total, detail = compute_score_breakdown(ind, cfg)
     parts = detail["parts"]
     assert "yang_medium" in parts
-    assert parts["yang_medium"]["max"] == 6
+    assert parts["yang_medium"]["max"] == 5
     assert "ma_bull" in parts
-    assert parts["ma_bull"]["max"] == 10
-    assert parts["volume"]["max"] == 31
+    assert parts["ma_bull"]["max"] == 8
+    assert parts["volume"]["max"] == 25
+    assert parts["yang"]["max"] == 20
+    assert "yang_quality" in parts
+    assert "structure_position" in parts
+    assert "overheat_penalty" in parts
     assert total <= 100
 
 
@@ -369,6 +374,6 @@ def test_volume_score_full_multiple_and_ma_bear_penalty():
         "volume_ratio": None,
     }
     total, detail = compute_score_breakdown(ind, cfg)
-    assert detail["parts"]["volume"]["score"] == 31.0
+    assert detail["parts"]["volume"]["score"] == 25.0
     assert detail["parts"]["ma_bull"]["score"] == -8.0
     assert total >= 0

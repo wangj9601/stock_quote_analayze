@@ -63,7 +63,7 @@ def test_prefix_depth_helpers():
 
 def test_tier_score_depth_2_and_6():
     cfg = URTConfigManager().get_default_config()
-    # 深度 2：短多基线 → +4
+    # 深度 2：短多基线 → +3（满分 8 表）
     part, meta = _ma_bull_tier_score(
         _base_ind(
             ma_bull_depth=2,
@@ -71,13 +71,13 @@ def test_tier_score_depth_2_and_6():
         ),
         cfg,
     )
-    assert part == 4.0
-    assert meta["max"] == 10
+    assert part == 3.0
+    assert meta["max"] == 8
     assert meta["depth"] == 2
     assert meta["tip_period"] == 20
 
     part6, meta6 = _ma_bull_tier_score(_base_ind(ma_bull_depth=6), cfg)
-    assert part6 == 10.0
+    assert part6 == 8.0
     assert meta6["depth"] == 6
     assert meta6["tip_period"] == 250
 
@@ -135,8 +135,8 @@ def test_hard_filter_still_only_5_10_20():
     assert ok is True, reason
 
     total, detail = compute_score_breakdown(ind, cfg)
-    assert detail["parts"]["ma_bull"]["max"] == 10
-    assert detail["parts"]["ma_bull"]["score"] >= 4.0
+    assert detail["parts"]["ma_bull"]["max"] == 8
+    assert detail["parts"]["ma_bull"]["score"] >= 3.0
     assert total <= 100.0
 
 
@@ -170,4 +170,4 @@ def test_short_history_depth_truncates_not_fail():
     assert vals[-1] is None  # MA250 算不出
     assert ind["ma_bull_depth"] < 6
     _, detail = compute_score_breakdown(ind, cfg)
-    assert detail["parts"]["ma_bull"]["max"] == 10
+    assert detail["parts"]["ma_bull"]["max"] == 8

@@ -18,6 +18,176 @@ const UrtScoreDetail = {
     },
 
     /**
+     * 分项得分行（页面 / PDF 同源）
+     * @param {object} parts score_detail.parts
+     * @param {object} ctx 展示用上下文字段
+     * @returns {Array<{name:string,score:*,max:*,maxLabel?:string,note:string}>}
+     */
+    _scorePartRows(parts, ctx) {
+        const p = parts && typeof parts === 'object' ? parts : {};
+        const c = ctx && typeof ctx === 'object' ? ctx : {};
+        const ma = p.above_ma20 || {};
+        const yang = p.yang || {};
+        const yq = p.yang_quality || {};
+        const yangMed = p.yang_medium || {};
+        const maBull = p.ma_bull || {};
+        const vol = p.volume || {};
+        const st = p.structure_position || {};
+        const oh = p.overheat_penalty || {};
+        const turnover = p.turnover || {};
+        const vRatio = p.volume_ratio || {};
+
+        const yang4 = c.yang4;
+        const yang5 = c.yang5;
+        const yang10 = c.yang10;
+        const yang15 = c.yang15;
+        const yang20 = c.yang20;
+        const ma5 = c.ma5;
+        const ma10 = c.ma10;
+        const maBullOk = c.maBullOk;
+        const vm = c.vm;
+        const vr = c.vr;
+        const to = c.to;
+
+        const maNote = (() => {
+            if (ma.ok === false) return '未站上';
+            if (ma.ok !== true) return '--';
+            if (ma.mode === 'binary' || ma.mode === 'static' || ma.mode === 'pass') {
+                return '收盘 ≥ MA20（静态满分）';
+            }
+            const biasPct = ma.bias20 != null ? `${(Number(ma.bias20) * 100).toFixed(1)}%` : '--';
+            const slopePct = ma.slope20 != null ? `${(Number(ma.slope20) * 100).toFixed(2)}%` : '--';
+            const days = ma.slope_days != null ? ma.slope_days : '--';
+            return `斜率/发散 · 乖离 ${biasPct} · ${days}日斜率 ${slopePct}`;
+        })();
+
+        const maBullNote = (() => {
+            const depth = maBull.depth != null ? maBull.depth : null;
+            const maxD = maBull.max_depth != null ? maBull.max_depth : 6;
+            const tip = maBull.tip_period != null ? maBull.tip_period : null;
+            const bear = maBull.bear_ok === true;
+            let stance = '--';
+            if (bear) stance = '空头−8';
+            else if (maBull.ok === true || maBullOk === true) stance = '多头';
+            else if (maBull.ok === false || maBullOk === false) stance = '非多头';
+            const depthTxt = depth != null
+                ? `深度 ${depth}/${maxD}${tip != null ? `（至MA${tip}）` : ''}`
+                : '';
+            const pairs = Array.isArray(maBull.pairs_ok) && maBull.pairs_ok.length
+                ? maBull.pairs_ok.slice(0, 4).join(' ')
+                : '';
+            return `MA5 ${this._fmt(maBull.ma5 != null ? maBull.ma5 : ma5, 2)} · MA10 ${this._fmt(maBull.ma10 != null ? maBull.ma10 : ma10, 2)} · ${stance}${depthTxt ? ' · ' + depthTxt : ''}${pairs ? ' · ' + pairs : ''}`;
+        })();
+
+        const turnoverNote = (() => {
+            if (turnover.enabled === false) return '未启用积分';
+            const abs = this._fmt(turnover.turnover_rate != null ? turnover.turnover_rate : to, 2);
+            const med = turnover.median != null ? this._fmt(turnover.median, 2) : '--';
+            const rel = turnover.relative != null ? Number(turnover.relative).toFixed(2) : '--';
+            const mode = turnover.mode === 'relative' ? '相对中位' : (turnover.mode === 'absolute_fallback' ? '绝对回退' : '');
+            const pen = turnover.abs_penalty ? '；绝对熔断减分' : '';
+            const mn = turnover.min != null ? ` / 下限${this._fmt(turnover.min, 1)}` : '';
+            return `换手 ${abs}%（中位 ${med}% · 相对 ${rel}×${mode ? ' · ' + mode : ''}${pen}）${mn}`;
+        })();
+
+        const yqNote = (() => {
+            const avg = yq.avg_body_ratio != null ? Number(yq.avg_body_ratio).toFixed(2) : '--';
+            const br = yq.breakout_body_ratio != null ? Number(yq.breakout_body_ratio).toFixed(2) : '--';
+            const amp = yq.breakout_amplitude != null
+                ? `${(Number(yq.breakout_amplitude) * 100).toFixed(1)}%`
+                : '--';
+            return `近窗实体 ${avg} · 突破实体 ${br} · 突破波幅 ${amp}`;
+        })();
+
+        const stNote = (() => {
+            const prox = st.proximity_score != null ? st.proximity_score : '--';
+            const proxMax = st.proximity_max != null ? st.proximity_max : 8;
+            const rrS = st.rr_score != null ? st.rr_score : '--';
+            const rrMax = st.rr_max != null ? st.rr_max : 7;
+            const rr = st.structure_rr != null ? Number(st.structure_rr).toFixed(2) : '--';
+            const reason = [st.proximity_reason, st.rr_reason].filter(Boolean).join(' / ') || '--';
+            return `贴近 ${prox}/${proxMax} · RR分 ${rrS}/${rrMax}（RR=${rr}）· ${reason}`;
+        })();
+
+        const ohNote = (() => {
+            const ret = oh.ret_from_low_n != null
+                ? `${(Number(oh.ret_from_low_n) * 100).toFixed(1)}%`
+                : '--';
+            const bias = oh.ma20_bias != null
+                ? `${(Number(oh.ma20_bias) * 100).toFixed(1)}%`
+                : '--';
+            const inten = oh.intensity != null ? Number(oh.intensity).toFixed(2) : '--';
+            return `强度 ${inten} · 近窗涨幅 ${ret} · MA20乖离 ${bias}（软阈起扣）`;
+        })();
+
+        const ohMaxLabel = oh.min != null ? `${oh.min}～0` : '−10～0';
+
+        return [
+            {
+                name: 'MA20 趋势',
+                score: ma.score,
+                max: ma.max != null ? ma.max : 10,
+                note: maNote,
+            },
+            {
+                name: '连阳天数',
+                score: yang.score != null ? yang.score : null,
+                max: yang.max != null ? yang.max : 20,
+                note: `4日阳 ${yang.yang_count_4 != null ? yang.yang_count_4 : (yang4 != null ? yang4 : '--')} · 5日阳 ${yang.yang_count_5 != null ? yang.yang_count_5 : (yang5 != null ? yang5 : '--')}`,
+            },
+            {
+                name: 'K线实体质量',
+                score: yq.score,
+                max: yq.max != null ? yq.max : 10,
+                note: yqNote,
+            },
+            {
+                name: '中期阳线',
+                score: yangMed.score,
+                max: yangMed.max != null ? yangMed.max : 5,
+                note: `10日 ${yang10 != null ? yang10 : '--'} · 15日 ${yang15 != null ? yang15 : '--'} · 20日 ${yang20 != null ? yang20 : '--'}${yangMed.ok === true ? '（达标）' : (yangMed.ok === false ? '（未达标）' : '')}`,
+            },
+            {
+                name: '均线多头',
+                score: maBull.score,
+                max: maBull.max != null ? maBull.max : 8,
+                note: maBullNote,
+            },
+            {
+                name: '量能倍数',
+                score: vol.score,
+                max: vol.max != null ? vol.max : 25,
+                note: `倍数 ${this._fmt(vol.volume_multiple != null ? vol.volume_multiple : vm, 2)} / 阈值 ${this._fmt(vol.threshold, 2)}`,
+            },
+            {
+                name: '筹码位置与RR',
+                score: st.score,
+                max: st.max != null ? st.max : 15,
+                note: stNote,
+            },
+            {
+                name: '换手率',
+                score: turnover.score,
+                max: turnover.max != null ? turnover.max : 0,
+                note: turnoverNote,
+            },
+            {
+                name: '量比',
+                score: vRatio.score,
+                max: vRatio.max != null ? vRatio.max : 0,
+                note: vRatio.enabled === false ? '未启用' : `量比 ${this._fmt(vRatio.volume_ratio != null ? vRatio.volume_ratio : vr, 2)}`,
+            },
+            {
+                name: '过热扣分',
+                score: oh.score != null ? oh.score : 0,
+                max: 0,
+                maxLabel: ohMaxLabel,
+                note: ohNote,
+            },
+        ];
+    },
+
+    /**
      * @param {object} stockOrDetail 行数据或 API 返回
      * @returns {string} HTML
      */
@@ -58,14 +228,6 @@ const UrtScoreDetail = {
         const vm = fields.volume_multiple != null ? fields.volume_multiple : src.volume_multiple;
         const vr = fields.volume_ratio != null ? fields.volume_ratio : src.volume_ratio;
         const to = fields.turnover_rate != null ? fields.turnover_rate : src.turnover_rate;
-
-        const ma = parts.above_ma20 || {};
-        const yang = parts.yang || {};
-        const yangMed = parts.yang_medium || {};
-        const maBull = parts.ma_bull || {};
-        const vol = parts.volume || {};
-        const turnover = parts.turnover || {};
-        const vRatio = parts.volume_ratio || {};
 
         const buyLabel = buy === true ? '是' : (buy === false ? '否' : '--');
         const buyClass = buy === true ? 'strength-high' : (buy === false ? 'strength-low' : '');
@@ -119,78 +281,14 @@ const UrtScoreDetail = {
         html += '</div>';
 
         html += '<div class="gms-score-detail-section"><strong>【分项得分】</strong>';
+        html += '<p class="urt-buy-logic-detail">满分≠已贴近买点：硬筛过线后仍按斜率/位置/过热等拉开排序。</p>';
         html += '<table class="gms-weight-table"><thead><tr><th>分项</th><th>得分</th><th>满分</th><th>说明</th></tr></thead><tbody>';
-        const rows = [
-            {
-                name: '站上 MA20',
-                score: ma.score,
-                max: ma.max != null ? ma.max : 10,
-                note: ma.ok === true ? '收盘 ≥ MA20' : (ma.ok === false ? '未站上' : '--'),
-            },
-            {
-                name: '连阳强度',
-                score: yang.score != null ? yang.score : null,
-                max: yang.max != null ? yang.max : 40,
-                note: `4日阳 ${yang.yang_count_4 != null ? yang.yang_count_4 : (yang4 != null ? yang4 : '--')} · 5日阳 ${yang.yang_count_5 != null ? yang.yang_count_5 : (yang5 != null ? yang5 : '--')}`,
-            },
-            {
-                name: '中期阳线',
-                score: yangMed.score,
-                max: yangMed.max != null ? yangMed.max : 6,
-                note: `10日 ${yang10 != null ? yang10 : '--'} · 15日 ${yang15 != null ? yang15 : '--'} · 20日 ${yang20 != null ? yang20 : '--'}${yangMed.ok === true ? '（达标）' : (yangMed.ok === false ? '（未达标）' : '')}`,
-            },
-            {
-                name: '均线多头',
-                score: maBull.score,
-                max: maBull.max != null ? maBull.max : 10,
-                note: (() => {
-                    const depth = maBull.depth != null ? maBull.depth : null;
-                    const maxD = maBull.max_depth != null ? maBull.max_depth : 6;
-                    const tip = maBull.tip_period != null ? maBull.tip_period : null;
-                    const bear = maBull.bear_ok === true;
-                    let stance = '--';
-                    if (bear) stance = '空头−8';
-                    else if (maBull.ok === true || maBullOk === true) stance = '多头';
-                    else if (maBull.ok === false || maBullOk === false) stance = '非多头';
-                    const depthTxt = depth != null
-                        ? `深度 ${depth}/${maxD}${tip != null ? `（至MA${tip}）` : ''}`
-                        : '';
-                    const pairs = Array.isArray(maBull.pairs_ok) && maBull.pairs_ok.length
-                        ? maBull.pairs_ok.slice(0, 4).join(' ')
-                        : '';
-                    return `MA5 ${this._fmt(maBull.ma5 != null ? maBull.ma5 : ma5, 2)} · MA10 ${this._fmt(maBull.ma10 != null ? maBull.ma10 : ma10, 2)} · ${stance}${depthTxt ? ' · ' + depthTxt : ''}${pairs ? ' · ' + pairs : ''}`;
-                })(),
-            },
-            {
-                name: '量能倍数',
-                score: vol.score,
-                max: vol.max != null ? vol.max : 31,
-                note: `倍数 ${this._fmt(vol.volume_multiple != null ? vol.volume_multiple : vm, 2)} / 阈值 ${this._fmt(vol.threshold, 2)}`,
-            },
-            {
-                name: '换手率',
-                score: turnover.score,
-                max: turnover.max != null ? turnover.max : 0,
-                note: (() => {
-                    if (turnover.enabled === false) return '未启用积分';
-                    const abs = this._fmt(turnover.turnover_rate != null ? turnover.turnover_rate : to, 2);
-                    const med = turnover.median != null ? this._fmt(turnover.median, 2) : '--';
-                    const rel = turnover.relative != null ? Number(turnover.relative).toFixed(2) : '--';
-                    const mode = turnover.mode === 'relative' ? '相对中位' : (turnover.mode === 'absolute_fallback' ? '绝对回退' : '');
-                    const pen = turnover.abs_penalty ? '；绝对熔断减分' : '';
-                    const mn = turnover.min != null ? ` / 下限${this._fmt(turnover.min, 1)}` : '';
-                    return `换手 ${abs}%（中位 ${med}% · 相对 ${rel}×${mode ? ' · ' + mode : ''}${pen}）${mn}`;
-                })(),
-            },
-            {
-                name: '量比',
-                score: vRatio.score,
-                max: vRatio.max != null ? vRatio.max : 0,
-                note: vRatio.enabled === false ? '未启用' : `量比 ${this._fmt(vRatio.volume_ratio != null ? vRatio.volume_ratio : vr, 2)}`,
-            },
-        ];
+        const rows = this._scorePartRows(parts, {
+            yang4, yang5, yang10, yang15, yang20, ma5, ma10, maBullOk, vm, vr, to,
+        });
         rows.forEach((r) => {
-            html += `<tr><td>${r.name}</td><td>${this._fmt(r.score, 2)}</td><td>${r.max}</td><td>${r.note}</td></tr>`;
+            const maxCell = r.maxLabel != null ? r.maxLabel : r.max;
+            html += `<tr><td>${r.name}</td><td>${this._fmt(r.score, 2)}</td><td>${maxCell}</td><td>${r.note}</td></tr>`;
         });
         html += '</tbody></table></div>';
 
@@ -205,6 +303,7 @@ const UrtScoreDetail = {
         html += `<span>量能倍数 ${this._fmt(vm, 2)}</span>`;
         html += `<span>量比 ${this._fmt(vr, 2)}</span>`;
         html += `<span>换手 ${this._fmt(to, 2)}%</span>`;
+        const turnover = parts.turnover || {};
         const toMed = (turnover && turnover.median != null)
             ? turnover.median
             : (src.turnover_median_n != null ? src.turnover_median_n : fields.turnover_median_n);
@@ -379,14 +478,6 @@ const UrtScoreDetail = {
         const vr = fields.volume_ratio != null ? fields.volume_ratio : src.volume_ratio;
         const to = fields.turnover_rate != null ? fields.turnover_rate : src.turnover_rate;
 
-        const ma = parts.above_ma20 || {};
-        const yang = parts.yang || {};
-        const yangMed = parts.yang_medium || {};
-        const maBull = parts.ma_bull || {};
-        const vol = parts.volume || {};
-        const turnover = parts.turnover || {};
-        const vRatio = parts.volume_ratio || {};
-
         const yn = (v) => (v === true ? '是' : (v === false ? '否' : '--'));
         const passTxt = (ok) => (ok === true ? '通过' : (ok === false ? '未通过' : '--'));
 
@@ -408,79 +499,16 @@ const UrtScoreDetail = {
             });
         }
 
-        const maBullNote = (() => {
-            const depth = maBull.depth != null ? maBull.depth : null;
-            const maxD = maBull.max_depth != null ? maBull.max_depth : 6;
-            const tip = maBull.tip_period != null ? maBull.tip_period : null;
-            const bear = maBull.bear_ok === true;
-            let stance = '--';
-            if (bear) stance = '空头−8';
-            else if (maBull.ok === true || maBullOk === true) stance = '多头';
-            else if (maBull.ok === false || maBullOk === false) stance = '非多头';
-            const depthTxt = depth != null
-                ? `深度 ${depth}/${maxD}${tip != null ? `（至MA${tip}）` : ''}`
-                : '';
-            const pairs = Array.isArray(maBull.pairs_ok) && maBull.pairs_ok.length
-                ? maBull.pairs_ok.slice(0, 4).join(' ')
-                : '';
-            return `MA5 ${this._fmt(maBull.ma5 != null ? maBull.ma5 : ma5, 2)} · MA10 ${this._fmt(maBull.ma10 != null ? maBull.ma10 : ma10, 2)} · ${stance}${depthTxt ? ' · ' + depthTxt : ''}${pairs ? ' · ' + pairs : ''}`;
-        })();
+        const scoreRows = this._scorePartRows(parts, {
+            yang4, yang5, yang10, yang15, yang20, ma5, ma10, maBullOk, vm, vr, to,
+        }).map((r) => [
+            r.name,
+            this._fmt(r.score, 2),
+            String(r.maxLabel != null ? r.maxLabel : r.max),
+            r.note,
+        ]);
 
-        const turnoverNote = (() => {
-            if (turnover.enabled === false) return '未启用积分';
-            const abs = this._fmt(turnover.turnover_rate != null ? turnover.turnover_rate : to, 2);
-            const med = turnover.median != null ? this._fmt(turnover.median, 2) : '--';
-            const rel = turnover.relative != null ? Number(turnover.relative).toFixed(2) : '--';
-            const mode = turnover.mode === 'relative' ? '相对中位' : (turnover.mode === 'absolute_fallback' ? '绝对回退' : '');
-            const pen = turnover.abs_penalty ? '；绝对熔断减分' : '';
-            const mn = turnover.min != null ? ` / 下限${this._fmt(turnover.min, 1)}` : '';
-            return `换手 ${abs}%（中位 ${med}% · 相对 ${rel}×${mode ? ' · ' + mode : ''}${pen}）${mn}`;
-        })();
-
-        const scoreRows = [
-            [
-                '站上 MA20',
-                this._fmt(ma.score, 2),
-                String(ma.max != null ? ma.max : 10),
-                ma.ok === true ? '收盘 ≥ MA20' : (ma.ok === false ? '未站上' : '--'),
-            ],
-            [
-                '连阳强度',
-                this._fmt(yang.score != null ? yang.score : null, 2),
-                String(yang.max != null ? yang.max : 40),
-                `4日阳 ${yang.yang_count_4 != null ? yang.yang_count_4 : (yang4 != null ? yang4 : '--')} · 5日阳 ${yang.yang_count_5 != null ? yang.yang_count_5 : (yang5 != null ? yang5 : '--')}`,
-            ],
-            [
-                '中期阳线',
-                this._fmt(yangMed.score, 2),
-                String(yangMed.max != null ? yangMed.max : 6),
-                `10日 ${yang10 != null ? yang10 : '--'} · 15日 ${yang15 != null ? yang15 : '--'} · 20日 ${yang20 != null ? yang20 : '--'}${yangMed.ok === true ? '（达标）' : (yangMed.ok === false ? '（未达标）' : '')}`,
-            ],
-            [
-                '均线多头',
-                this._fmt(maBull.score, 2),
-                String(maBull.max != null ? maBull.max : 10),
-                maBullNote,
-            ],
-            [
-                '量能倍数',
-                this._fmt(vol.score, 2),
-                String(vol.max != null ? vol.max : 31),
-                `倍数 ${this._fmt(vol.volume_multiple != null ? vol.volume_multiple : vm, 2)} / 阈值 ${this._fmt(vol.threshold, 2)}`,
-            ],
-            [
-                '换手率',
-                this._fmt(turnover.score, 2),
-                String(turnover.max != null ? turnover.max : 0),
-                turnoverNote,
-            ],
-            [
-                '量比',
-                this._fmt(vRatio.score, 2),
-                String(vRatio.max != null ? vRatio.max : 0),
-                vRatio.enabled === false ? '未启用' : `量比 ${this._fmt(vRatio.volume_ratio != null ? vRatio.volume_ratio : vr, 2)}`,
-            ],
-        ];
+        const turnover = parts.turnover || {};
 
         const toMed = (turnover && turnover.median != null)
             ? turnover.median

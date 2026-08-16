@@ -105,7 +105,7 @@ def test_turnover_score_disabled():
     assert part["score"] == 0.0
 
 
-def test_score_breakdown_volume_max_31_and_turnover_part():
+def test_score_breakdown_volume_max_25_and_turnover_part():
     cfg = _cfg(use_yang_medium=False, require_ma_bull=False)
     ind = {
         "above_ma20": True,
@@ -119,6 +119,6 @@ def test_score_breakdown_volume_max_31_and_turnover_part():
         "yang_medium_detail": [],
     }
     total, detail = compute_score_breakdown(ind, cfg)
-    assert detail["parts"]["volume"]["max"] == 31
+    assert detail["parts"]["volume"]["max"] == 25
     assert detail["parts"]["turnover"]["score"] == -8.0
     assert 0 <= total <= 100

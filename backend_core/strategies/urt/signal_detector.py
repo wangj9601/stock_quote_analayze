@@ -479,15 +479,12 @@ def evaluate_buy_signal(
     """
     对截至最新日的 DESC K 线判定 URT 买点。
     require_pass=True：仅硬筛+结构硬闸+得分通过才返回；False：始终返回指标与得分明细（供明细页）。
-    KDE 支撑/阻力参与混合结构硬闸；RR 偏低仅软标签。
+    KDE 支撑/阻力参与混合结构硬闸；RR 偏低仅软标签（另计入位置与 RR 分项）。
     """
     ind = build_indicators(bars_desc, cfg)
     if not ind:
         return None
     ok, reason = hard_filter_pass(ind, cfg)
-    score, score_detail = compute_score_breakdown(ind, cfg)
-    min_score = float(cfg.get("min_score") or 70)
-    score_ok = score >= min_score
 
     yang_rule = "4d3" if ind.get("rule_a_ok") else "5d4"
     if ind.get("rule_a_ok") and ind.get("rule_b_ok"):
@@ -509,6 +506,18 @@ def evaluate_buy_signal(
     risk_tags = list(enriched.get("risk_tags") or [])
     risk_tags.extend(build_trend_risk_tags(ind))
     risk_tags.extend(build_overheat_risk_tags(ind, cfg))
+
+    # 打分前注入结构字段（位置/RR 分项）
+    ind = dict(ind)
+    ind["nearest_support"] = structure.get("nearest_support")
+    ind["nearest_resistance"] = structure.get("nearest_resistance")
+    ind["structure_rr"] = structure.get("rr")
+    ind["kde_ok"] = structure.get("kde_ok")
+
+    score, score_detail = compute_score_breakdown(ind, cfg)
+    min_score = float(cfg.get("min_score") or 70)
+    score_ok = score >= min_score
+
     to_part = (score_detail.get("parts") or {}).get("turnover") if isinstance(score_detail, dict) else None
     risk_tags.extend(build_turnover_risk_tags(ind, cfg, turnover_part=to_part))
     hard_gate = enriched.get("structure_hard_gate") or {}

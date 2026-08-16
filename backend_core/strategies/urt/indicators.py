@@ -15,6 +15,100 @@ def sma(values: List[float], period: int) -> Optional[float]:
     return sum(float(v) for v in window) / float(period)
 
 
+def ma_relative_slope(
+    closes: List[float],
+    *,
+    ma_period: int = 20,
+    slope_days: int = 5,
+) -> Optional[float]:
+    """MA 近 slope_days 日相对变化：(ma_now - ma_past) / ma_past。bars DESC。"""
+    n = max(1, int(slope_days))
+    ma_now = sma(closes, ma_period)
+    if ma_now is None or ma_now <= 0:
+        return None
+    if len(closes) < ma_period + n:
+        return 0.0
+    ma_past = sma(closes[n:], ma_period)
+    if ma_past is None or ma_past <= 0:
+        return None
+    return (float(ma_now) - float(ma_past)) / float(ma_past)
+
+
+def compute_candle_quality(
+    bars_desc: List[Dict[str, Any]],
+    *,
+    window: int = 5,
+) -> Dict[str, Any]:
+    """近窗阳线实体饱满度与波幅（用于 yang_quality 分项）。"""
+    w = max(1, min(int(window), len(bars_desc or [])))
+    body_ratios: List[float] = []
+    amps: List[float] = []
+    vol_weights: List[float] = []
+    for i in range(w):
+        b = bars_desc[i]
+        try:
+            o = float(b.get("open") or 0)
+            c = float(b.get("close") or 0)
+            hi = float(b.get("high") if b.get("high") is not None else max(o, c))
+            lo = float(b.get("low") if b.get("low") is not None else min(o, c))
+            vol = float(b.get("volume") or 0)
+        except (TypeError, ValueError):
+            continue
+        rng = max(hi - lo, 1e-6)
+        body = abs(c - o)
+        is_yang = c > o
+        br = (body / rng) if is_yang else 0.0
+        body_ratios.append(br)
+        pre = None
+        if i + 1 < len(bars_desc):
+            try:
+                pre = float(bars_desc[i + 1].get("close") or 0)
+            except (TypeError, ValueError):
+                pre = None
+        if pre and pre > 0:
+            amps.append(body / pre if is_yang else 0.0)
+        else:
+            amps.append(0.0)
+        vol_weights.append(max(vol, 0.0))
+
+    if not body_ratios:
+        return {
+            "window": w,
+            "avg_body_ratio": None,
+            "avg_amplitude": None,
+            "breakout_body_ratio": None,
+            "breakout_amplitude": None,
+            "quality_raw": 0.0,
+        }
+
+    # 突破日：窗内量能最大且为阳；否则最新阳
+    bi = 0
+    if vol_weights:
+        bi = max(range(len(vol_weights)), key=lambda j: vol_weights[j])
+    if body_ratios[bi] <= 0:
+        for j, br in enumerate(body_ratios):
+            if br > 0:
+                bi = j
+                break
+
+    avg_br = sum(body_ratios) / len(body_ratios)
+    avg_amp = sum(amps) / len(amps) if amps else 0.0
+    br0 = body_ratios[bi]
+    amp0 = amps[bi] if bi < len(amps) else 0.0
+    # 原始质量 0～1：突破日实体 50% + 窗均实体 30% + 突破波幅（相对 3% 封顶）20%
+    amp_term = min(1.0, amp0 / 0.03) if amp0 > 0 else 0.0
+    quality_raw = 0.5 * br0 + 0.3 * avg_br + 0.2 * amp_term
+    return {
+        "window": w,
+        "avg_body_ratio": round(avg_br, 4),
+        "avg_amplitude": round(avg_amp, 6),
+        "breakout_body_ratio": round(br0, 4),
+        "breakout_amplitude": round(amp0, 6),
+        "breakout_index": bi,
+        "quality_raw": round(max(0.0, min(1.0, quality_raw)), 4),
+    }
+
+
 def yang_count(opens: List[float], closes: List[float], window: int) -> int:
     """bars 下标 0 为最新日；阳线：close > open。"""
     n = min(window, len(opens), len(closes))
@@ -164,8 +258,17 @@ def min_bars_needed(cfg: Dict[str, Any]) -> int:
         to_lb = int(cfg.get("turnover_lookback") or 20)
     except (TypeError, ValueError):
         to_lb = 20
+    try:
+        slope_days = int(cfg.get("ma20_slope_days") or 5)
+    except (TypeError, ValueError):
+        slope_days = 5
+    try:
+        yq_win = int(cfg.get("yang_quality_window") or 5)
+    except (TypeError, ValueError):
+        yq_win = 5
     return max(
         ma_period,
+        ma_period + max(1, slope_days),
         vol_lb + 1,
         to_lb + 1,
         int(rule_a.get("window", 4)),
@@ -173,6 +276,7 @@ def min_bars_needed(cfg: Dict[str, Any]) -> int:
         max(mid_windows) if mid_windows else 20,
         max(bull_periods) if bull_periods else 20,
         max(1, overheat_lb),
+        max(1, yq_win) + 1,
     )
 
 
@@ -275,6 +379,18 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
     if ma20 is not None and ma20 > 0:
         ma20_bias = float(closes[0]) / float(ma20) - 1.0
 
+    try:
+        slope_days = max(1, int(cfg.get("ma20_slope_days") or 5))
+    except (TypeError, ValueError):
+        slope_days = 5
+    ma20_slope = ma_relative_slope(closes, ma_period=ma_period, slope_days=slope_days)
+
+    try:
+        yq_win = max(1, int(cfg.get("yang_quality_window") or 5))
+    except (TypeError, ValueError):
+        yq_win = 5
+    candle_q = compute_candle_quality(bars_desc, window=yq_win)
+
     out: Dict[str, Any] = {
         "date": bars_desc[0].get("date"),
         "open": opens[0],
@@ -282,6 +398,8 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
         "volume": volumes[0],
         "ma20": round(ma20, 4),
         "above_ma20": closes[0] >= ma20,
+        "ma20_slope": round(ma20_slope, 6) if ma20_slope is not None else None,
+        "ma20_slope_days": slope_days,
         "yang_count_4": yang_a,
         "yang_count_5": yang_b,
         "yang_count_10": yang_by_window.get(10, yang_count(opens, closes, 10)),
@@ -297,6 +415,7 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
             }
             for r in mid_rules
         ],
+        "yang_quality": candle_q,
         "ma5": round(ma5, 4) if ma5 is not None else None,
         "ma10": round(ma10, 4) if ma10 is not None else None,
         "ma20_stack": round(ma20_stack, 4) if ma20_stack is not None else None,
