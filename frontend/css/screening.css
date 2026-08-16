@@ -1448,6 +1448,10 @@
     font-size: 11px;
     line-height: 1.4;
     cursor: default;
+    white-space: nowrap;
+    writing-mode: horizontal-tb;
+    max-width: none;
+    word-break: keep-all;
 }
 .gms-risk-info { background: #e3f2fd; color: #1565c0; }
 .gms-risk-warn { background: #fff3e0; color: #e65100; }
@@ -1707,6 +1711,63 @@
 #resultsContainer-urt .results-table td.resistance {
     color: #dc2626;
     font-variant-numeric: tabular-nums;
+}
+
+/* URT 风险列：避免窄列把标签汉字逐字竖排撑高行高 */
+#resultsContainer-urt .results-table {
+    min-width: 1180px;
+    width: max(100%, 1180px);
+}
+
+#resultsContainer-urt .results-table th,
+#resultsContainer-urt .results-table td {
+    padding: 8px 6px;
+    vertical-align: middle;
+}
+
+#resultsContainer-urt .results-table th.gms-col-risk,
+#resultsContainer-urt .results-table td.gms-col-risk {
+    min-width: 10.5rem;
+    width: 12rem;
+    max-width: 16rem;
+    white-space: normal;
+    text-align: left;
+    vertical-align: middle;
+}
+
+#resultsContainer-urt .gms-col-risk .gms-risk-tags-inline {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    max-width: 16rem;
+}
+
+#resultsContainer-urt .gms-col-risk .gms-risk-tag,
+#resultsContainer-urt .gms-col-risk .gms-role-tag {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    writing-mode: horizontal-tb;
+    word-break: keep-all;
+}
+
+/* GMS 风险列同样加宽，避免多标签竖排 */
+#resultsContainer-gms .results-table th.gms-col-risk,
+#resultsContainer-gms .results-table td.gms-col-risk {
+    min-width: 8.5rem;
+    max-width: 14rem;
+    width: auto;
+    white-space: normal;
+    text-align: left;
+}
+
+#resultsContainer-gms .gms-col-risk .gms-risk-tags-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 14rem;
 }
 
 /* 操作列：固定右侧，横向滚动时始终可见 */
